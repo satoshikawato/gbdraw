@@ -7523,7 +7523,9 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
  * Schema 10 writes a record's spans as `windows` (D-01): a stored `region` is
  * one window, and the record its selector names is the record's selector, as
  * Python's decoder reads it (`decode_canonical_request`, D-09). Edited in
- * place; a record that is no object is left to the repair.
+ * place; a record that is no object is left to the repair, and one that names its record on itself and in its
+ * region is refused (OV-3000). A record naming its record twice, on itself and in its
+ * region, is refused as Python refuses it.
  * @param {unknown} records
  */
 const promoteRecordRegionsToWindows = (records) => {
@@ -7533,7 +7535,11 @@ const promoteRecordRegionsToWindows = (records) => {
     const record = /** @type {{ selector?: unknown, region?: unknown, windows?: unknown }} */ (value);
     const region = record.region;
     delete record.region;
-    if (isPlainObject(region) && region.selector != null && record.selector == null) record.selector = region.selector;
+    if (isPlainObject(region) && region.selector != null) {
+      // One selector names the record; Python's RecordInput refuses a record that has it twice (OV-3000).
+      if (record.selector != null) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+      record.selector = region.selector;
+    }
     record.windows = storedRegionWindows(region);
   });
 };

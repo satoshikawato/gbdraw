@@ -89,6 +89,7 @@ from gbdraw.session_request_codec import (
     CanonicalRequestEncodingError,
     EncodedCanonicalRequest,
     _decode_region,
+    _decode_selector,
     _read_typed_json_resource,
     decode_canonical_request,
     encode_canonical_request,
@@ -3788,8 +3789,18 @@ _REGION_WINDOW_VECTORS = json.loads(
 @pytest.mark.parametrize("case", _REGION_WINDOW_VECTORS, ids=lambda case: case["name"])
 def test_a_stored_region_reads_as_the_windows_the_web_promotion_writes(case: dict[str, Any]) -> None:
     """The stored-region twin (tools/twins.json): tests/web/session-request.test.mjs reads the same vectors (OV-2957)."""
-    assert stored_record_windows(case["record"]) == case["windows"]
     region = case["record"].get("region")
+    if case.get("refused"):
+        # OV-3000: the Web refuses this stored form at Load as RecordInput refuses it.
+        decoded_region = _decode_region(region, path="region")
+        with pytest.raises(ValidationError, match="not both"):
+            RecordInput(
+                source=GenBankInputSource(Path("record.gbk")),
+                selector=_decode_selector(case["record"]["selector"], path="selector"),
+                region=decoded_region,
+            )
+        return
+    assert stored_record_windows(case["record"]) == case["windows"]
     if (
         isinstance(region, dict)
         and type(region.get("start")) is int
@@ -3798,17 +3809,15 @@ def test_a_stored_region_reads_as_the_windows_the_web_promotion_writes(case: dic
     ):
         decoded = _decode_region(region, path="region")
         assert decoded is not None
-        # The record's selector once decoded: the region's, which RecordInput lifts onto the record. Python refuses a
-        # record that has both (the Web keeps the record's), so that case has no effective selector to compare.
-        if case["record"].get("selector") is None:
-            selector = decoded.record_selector()
-            assert (
-                None
-                if selector is None
-                else {"kind": "recordId", "value": selector.record_id}
-                if selector.record_id is not None
-                else {"kind": "recordIndex", "index": selector.record_index}
-            ) == case["promotedSelector"]
+        # The record's selector once decoded: the region's, which RecordInput lifts onto the record.
+        selector = decoded.record_selector()
+        assert (
+            None
+            if selector is None
+            else {"kind": "recordId", "value": selector.record_id}
+            if selector.record_id is not None
+            else {"kind": "recordIndex", "index": selector.record_index}
+        ) == case["promotedSelector"]
         window = case["windows"][0]
         assert (decoded.start, decoded.end, decoded.reverse_complement) == (
             window["start"], window["end"], window["reverseComplement"]

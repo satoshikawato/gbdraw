@@ -1,5 +1,5 @@
 {
-  "description": "A stored request record of schema <= 9 (one `region`) and the `windows` schema 10 reads it as. Python: stored_record_windows; Web: promoteCanonicalRenderRequestToCurrent (storedRegionWindows). `promotedSelector` is the selector the Web promotion leaves on the record (Python's decode reads the region selector into the region itself). OV-2957.",
+  "description": "A stored request record of schema <= 9 (one `region`) and the `windows` schema 10 reads it as. Python: stored_record_windows; Web: promoteCanonicalRenderRequestToCurrent (storedRegionWindows). `promotedSelector` is the selector the Web promotion leaves on the record (Python's decode reads the region selector into the region itself). OV-2957. A record with a selector on itself and in its region has no reading: both sides refuse it (`refused`; OV-3000, D-99).",
   "cases": [
     {
       "name": "forward span",
@@ -155,7 +155,7 @@
       }
     },
     {
-      "name": "record selector wins over the region selector",
+      "name": "a selector on the record and in its region is refused",
       "record": {
         "selector": {
           "kind": "recordIndex",
@@ -171,18 +171,7 @@
           "reverseComplement": false
         }
       },
-      "windows": [
-        {
-          "start": 50,
-          "end": 300,
-          "reverseComplement": false,
-          "column": null
-        }
-      ],
-      "promotedSelector": {
-        "kind": "recordIndex",
-        "index": 2
-      }
+      "refused": true
     },
     {
       "name": "region selector with no record selector key",

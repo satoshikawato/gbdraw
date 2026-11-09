@@ -6584,8 +6584,13 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
 const REGION_WINDOW_VECTORS = JSON.parse(
   await readFile(new URL('../fixtures/record-region-windows-vectors.json', import.meta.url), 'utf8')
 ).cases;
-for (const { name, record, windows, promotedSelector } of REGION_WINDOW_VECTORS) {
-  const promoted = promoteCanonicalRenderRequestToCurrent({ schema: 9, records: [structuredClone(record)] }).records[0];
+for (const { name, record, windows, promotedSelector, refused } of REGION_WINDOW_VECTORS) {
+  const promote = () => promoteCanonicalRenderRequestToCurrent({ schema: 9, records: [structuredClone(record)] });
+  if (refused) {
+    assert.throws(promote, (error) => error.code === 'INPUT_INVALID', `${name}: refused`);
+    continue;
+  }
+  const promoted = promote().records[0];
   assert.deepEqual(promoted.windows, windows, `${name}: windows`);
   assert.equal(promoted.region, undefined, `${name}: region is removed`);
   assert.deepEqual(promoted.selector ?? null, promotedSelector, `${name}: selector`);
