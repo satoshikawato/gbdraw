@@ -1018,18 +1018,26 @@ test('a stack without an Axis index places each row on its own side in both mode
     { axisIndex: 0, ids: ['features', 'gc', 'hl'] });
   assert.deepEqual(circular([row('regions', 'annotations', null, { set_id: 'r' }), highlight, row('features', 'features')], 'tuckin'),
     { axisIndex: 2, ids: ['regions', 'hl', 'features'] });
-  // Python paints rows by z, then by place: Overlay set rows of one z keep the request's order among themselves and
-  // against the rows of their z wherever a list can. An overlay never shares a z with the rows it covers.
-  const overlay = (id, z = 1) => ({ ...row(id, 'annotations', 'overlay', { set_id: id, anchor_slot: 'features' }), z });
+  // Python paints rows by z, then by place: an Overlay set row keeps the request's order against the rows of its z it
+  // covers (its anchor, its `to_slot` and the rows between) and against overlays of its z that share a row, wherever
+  // a list can. Other rows of its z lie elsewhere on the figure and move freely.
+  const overlay = (id, z = 1, toSlot = null) => ({
+    ...row(id, 'annotations', 'overlay', { set_id: id, anchor_slot: 'features', ...(toSlot ? { to_slot: toSlot } : {}) }), z
+  });
   const gc = (z) => ({ ...row('gc', 'dinucleotide_content'), z });
   const outer = (z) => ({ ...row('r', 'annotations', 'outside', { set_id: 'r' }), z });
   assert.deepEqual(circular([row('features', 'features'), overlay('a'), gc(0), outer(0), overlay('b')], 'tuckin'),
     { axisIndex: 1, ids: ['r', 'features', 'a', 'gc', 'b'] });
-  assert.deepEqual(circular([row('features', 'features'), gc(1), overlay('a'), outer(0)], 'tuckin'),
-    { axisIndex: 1, ids: ['r', 'features', 'gc', 'a'] });
-  // No list keeps `gc` before `a` before `r` with `r` outside: the overlays keep their own order.
-  assert.deepEqual(circular([row('features', 'features'), gc(1), overlay('a'), outer(1), overlay('b')], 'tuckin'),
-    { axisIndex: 2, ids: ['a', 'r', 'features', 'gc', 'b'] });
+  // `a` spans features to `sk`, so it covers `gc` of its z and stays after it; `r` of its z lies outside the span.
+  assert.deepEqual(circular([row('features', 'features'), gc(1), overlay('a', 1, 'sk'), outer(1), row('sk', 'dinucleotide_skew')], 'tuckin'),
+    { axisIndex: 1, ids: ['r', 'features', 'gc', 'a', 'sk'] });
+  // A span over the Axis that covers rows of its z on both sides in the other order (`y` inside before it, `x`
+  // outside after it) can keep only one of them: no list keeps both. The overlay goes before the row after it.
+  const content = (id, side, z) => ({ ...row(id, 'dinucleotide_content', side), z });
+  assert.deepEqual(circular([row('features', 'features'), content('y', null, 1),
+    { ...row('a', 'annotations', 'overlay', { set_id: 'a', anchor_slot: 'oc', to_slot: 't' }), z: 1 },
+    content('oc', 'outside', 0), content('x', 'outside', 1), content('t', null, 0)], 'tuckin'),
+  { axisIndex: 3, ids: ['a', 'oc', 'x', 'features', 'y', 't'] });
   // Linear, read as a request is (`parseLinearTrackSlotSpec`): a features row without a side draws below.
   const linear = (specs) => ids(stackTrackSlotsBySide(specs.map((spec) => parseLinearTrackSlotSpec(spec)), effectiveLinearSlotPlacement, 'above'));
   assert.deepEqual(linear(['features:features', 'regions:annotations@set_id=regions', 'gc:content', 'up:skew@side=above']),

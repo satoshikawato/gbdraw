@@ -397,12 +397,13 @@ const missingAnnotationTrackSlots = (rows, sets, mode, slotFields = {}) => {
  */
 /**
  * The gap of each Overlay set row among the side-ordered rows: gap g puts it before `fixed[g]`, gap `fixed.length` at
- * the end. Python paints rows by z, then by their place, so two rows of one z keep the order the request gave them.
- * An overlay and the rows it covers never share a z (Python refuses it), so only rows of one z bind each other. Per
- * z, the overlays keep their order among themselves and against the side-ordered rows wherever some list can: each
- * takes its place before the row that followed it in the request (the end when none did), moved into the range those
- * rows of its z leave it. Where no list can keep a z's order, its overlays keep only their own order.
- * @param {readonly { readonly z?: unknown }[]} rows
+ * the end. Python paints rows by z, then by their place, so two rows of one z that overlap on the figure keep the
+ * order the request gave them. An overlay overlaps the rows it covers: its anchor, its `to_slot`, and every row
+ * between them in the side order (the order rows lie in from the outer edge), and two overlays overlap where their
+ * rows meet. Those pairs of one z keep the request's order wherever some list can; other rows move freely. Each
+ * overlay takes its place before the row that followed it in the request (the end when none did), moved into the
+ * range its pairs leave it. Where no list keeps every pair, the overlays keep only their order against each other.
+ * @param {readonly { readonly id?: unknown, readonly z?: unknown, readonly params?: unknown }[]} rows
  * @param {readonly number[]} fixed The request places of the side-ordered rows, in their new order.
  * @param {readonly number[]} overlays The request places of the Overlay set rows, in order.
  * @returns {Map<number, number>} The gap of each overlay, by its request place.
@@ -410,29 +411,45 @@ const missingAnnotationTrackSlots = (rows, sets, mode, slotFields = {}) => {
 const overlayGaps = (rows, fixed, overlays) => {
   const zOf = (/** @type {number} */ index) => Number(rows[index].z ?? 0);
   const placeOf = new Map(fixed.map((index, place) => [index, place]));
+  const placeById = new Map(fixed.map((index, place) => [String(rows[index].id), place]));
+  const covered = new Map(overlays.map((overlay) => {
+    const params = /** @type {Readonly<Record<string, unknown>>} */ (rows[overlay].params ?? {});
+    const ends = [params.anchor_slot, params.to_slot ?? params.anchor_slot].map((id) => placeById.get(String(id)));
+    const [first, last] = ends.includes(undefined) ? [0, -1] : [Math.min(...ends.map(Number)), Math.max(...ends.map(Number))];
+    return [overlay, fixed.filter((_index, place) => place >= first && place <= last)];
+  }));
+  const rowsOf = (/** @type {number} */ overlay) => covered.get(overlay) ?? [];
+  const bound = (/** @type {number} */ overlay) => {
+    const own = rowsOf(overlay).filter((index) => zOf(index) === zOf(overlay)).map((index) => Number(placeOf.get(index)));
+    const next = Math.min(...fixed.filter((index) => index > overlay));
+    return {
+      low: Math.max(0, ...own.filter((place) => fixed[place] < overlay).map((place) => place + 1)),
+      high: Math.min(fixed.length, ...own.filter((place) => fixed[place] > overlay)),
+      home: placeOf.get(next) ?? fixed.length,
+      // The earlier overlays it must follow: one z, a row in common.
+      after: overlays.filter((other) => other < overlay && zOf(other) === zOf(overlay)
+        && rowsOf(other).some((index) => rowsOf(overlay).includes(index)))
+    };
+  };
+  const bounds = new Map(overlays.map((overlay) => [overlay, bound(overlay)]));
+  const of = (/** @type {number} */ overlay) => /** @type {ReturnType<typeof bound>} */ (bounds.get(overlay));
+  /** @type {Map<number, number>} */
+  const earliest = new Map();
+  overlays.forEach((overlay) => earliest.set(overlay, Math.max(of(overlay).low, ...of(overlay).after.map((other) => Number(earliest.get(other))))));
+  /** @type {Map<number, number>} */
+  const latest = new Map(overlays.map((overlay) => [overlay, of(overlay).high]));
+  [...overlays].reverse().forEach((overlay) => of(overlay).after.forEach((other) => {
+    latest.set(other, Math.min(Number(latest.get(other)), Number(latest.get(overlay))));
+  }));
+  const keepsOrder = overlays.every((overlay) => Number(earliest.get(overlay)) <= Number(latest.get(overlay)));
   /** @type {Map<number, number>} */
   const gaps = new Map();
-  for (const z of new Set(overlays.map(zOf))) {
-    const chain = overlays.filter((index) => zOf(index) === z);
-    const bounds = chain.map((overlay) => {
-      const before = fixed.filter((index) => index < overlay && zOf(index) === z).map((index) => Number(placeOf.get(index)) + 1);
-      const after = fixed.filter((index) => index > overlay && zOf(index) === z).map((index) => Number(placeOf.get(index)));
-      const next = Math.min(...fixed.filter((index) => index > overlay));
-      return { low: Math.max(0, ...before), high: Math.min(fixed.length, ...after), home: placeOf.get(next) ?? fixed.length };
-    });
-    const earliest = bounds.map(({ low }) => low);
-    earliest.forEach((low, i) => { earliest[i] = Math.max(low, i > 0 ? earliest[i - 1] : 0); });
-    const latest = bounds.map(({ high }) => high);
-    for (let i = latest.length - 2; i >= 0; i -= 1) latest[i] = Math.min(latest[i], latest[i + 1]);
-    const keepsOrder = earliest.every((low, i) => low <= latest[i]);
-    let previous = 0;
-    chain.forEach((overlay, i) => {
-      previous = keepsOrder
-        ? Math.min(Math.max(bounds[i].home, earliest[i], previous), latest[i])
-        : Math.max(bounds[i].home, previous);
-      gaps.set(overlay, previous);
-    });
-  }
+  overlays.forEach((overlay) => {
+    const floor = Math.max(...of(overlay).after.map((other) => Number(gaps.get(other))), 0);
+    gaps.set(overlay, keepsOrder
+      ? Math.min(Math.max(of(overlay).home, Number(earliest.get(overlay)), floor), Number(latest.get(overlay)))
+      : Math.max(of(overlay).home, floor));
+  });
   return gaps;
 };
 
@@ -443,7 +460,7 @@ const overlayGaps = (rows, fixed, overlays) => {
  * others, each in its order. An Overlay set row draws over its anchor on any side and takes no row: it goes where
  * Python paints it in the request's order (`overlayGaps`). A stack whose sides follow its order comes back unchanged.
  * The Axis index is the place of the first row on the Axis or past it (OV-3079, OV-3155).
- * @template {{ readonly renderer?: unknown, readonly z?: unknown }} T
+ * @template {{ readonly id?: unknown, readonly renderer?: unknown, readonly z?: unknown, readonly params?: unknown }} T
  * @param {readonly T[]} rows
  * @param {(row: T) => string} placementOf The mode's reading of the side a row draws on.
  * @param {'outside' | 'above'} outerSide

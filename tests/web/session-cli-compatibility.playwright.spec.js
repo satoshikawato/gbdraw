@@ -469,7 +469,7 @@ test('Session CLI feature density tracks survive Web Generate', async ({ browser
 // outside or above, a Linear features slot without a side below). The Session it saves, loaded and generated in the
 // Web, draws the CLI's figure: the region set stays outside (above) the Axis, and Overlay set rows of one z keep the
 // order Python paints them in.
-for (const [name, mode, slots, axis, stack] of [
+for (const [name, mode, slots, axis, stack, coveredOfItsZ = []] of [
   ['circular', 'circular', ['features:features', 'regions:annotations@set_id=regions,side=outside'],
     1, [['regions', 'outside'], ['features', 'inside']]],
   ['linear', 'linear', ['features:features', 'regions:annotations@set_id=regions,side=above'],
@@ -478,7 +478,11 @@ for (const [name, mode, slots, axis, stack] of [
     'features:features', 'regions:annotations@set_id=regions'], 2, [['regions', 'outside'], ['hl', 'overlay'], ['features', 'inside']]],
   ['circular overlay tie', 'circular', ['features:features', 'a:annotations@set_id=a,side=overlay,anchor_slot=features,z=1',
     'gc:content', 'regions:annotations@set_id=regions,side=outside', 'b:annotations@set_id=b,side=overlay,anchor_slot=features,z=1'],
-  1, [['regions', 'outside'], ['features', 'inside'], ['a', 'overlay'], ['gc', 'inside'], ['b', 'overlay']]]
+  1, [['regions', 'outside'], ['features', 'inside'], ['a', 'overlay'], ['gc', 'inside'], ['b', 'overlay']]],
+  // `a` spans features to `sk`, so it covers `gc` of its z and paints over it; `regions` of its z lies outside the span.
+  ['circular overlay span', 'circular', ['features:features', 'gc:content@z=1',
+    'a:annotations@set_id=a,side=overlay,anchor_slot=features,to_slot=sk,z=1', 'regions:annotations@set_id=regions,side=outside,z=1',
+    'sk:skew'], 1, [['regions', 'outside'], ['features', 'inside'], ['gc', 'inside'], ['a', 'overlay'], ['sk', 'inside']], ['gc']]
 ]) test(`Session CLI ${name} stack without an Axis index draws its region set where the CLI drew it`, async ({ browser }, testInfo) => {
   test.setTimeout(900_000);
   await fs.writeFile(testInfo.outputPath('regions.tsv'), [
@@ -510,11 +514,12 @@ for (const [name, mode, slots, axis, stack] of [
       const read = await run.page.evaluate(svgSemantics, svg);
       return { ...read, text: [...read.text].sort() };
     };
-    // Overlay set rows overlap: the order of their groups in the document is the order Python paints them in.
-    const overlays = stack.filter(([, drawnSide]) => drawnSide === 'overlay').map(([id]) => id);
+    // Overlay set rows overlap each other and the rows of their z they cover: the order of those groups in the
+    // document is the order Python paints them in.
+    const paintedIds = [...stack.filter(([, drawnSide]) => drawnSide === 'overlay').map(([id]) => id), ...coveredOfItsZ];
     const painted = (svg) => run.page.evaluate(([text, ids]) => [...new DOMParser().parseFromString(text, 'image/svg+xml')
       .querySelectorAll('[data-gbdraw-slot-id]')].map((group) => group.getAttribute('data-gbdraw-slot-id')).filter((id) => ids.includes(id)),
-    [svg, overlays]);
+    [svg, paintedIds]);
     const drawn = await slotGroups(stored.results[0].content);
     const before = await snapshot(run.page);
     expect(await slotGroups(before.selected)).toEqual(drawn);
