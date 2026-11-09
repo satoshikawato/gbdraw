@@ -7,9 +7,7 @@ import { normalizeCaughtError, retryCanSucceed } from '../utils/error-normalizat
 import { cloneJsonValue } from './json-clone.js';
 import { enrichFeatureWithOrthogroup } from './orthogroup-feature-metadata.js';
 import {
-  BIOLOGICAL_FEATURE_ID_KEYS,
   RECORD_INDEX_KEYS,
-  RECORD_KEY_KEYS,
   RENDERED_FEATURE_ID_KEYS,
   STABLE_FEATURE_ID_KEYS,
   nonnegativeIntegerAliasStatus,
@@ -28,7 +26,7 @@ import {
 export { normalizeRenderedFeatureId } from './session-feature-metadata.js';
 
 /** @import { ExtractedFeature, ExtractFeatureMetadataOptions, FeatureRecordInput, LinearRegionSeq } from './feature-metadata-extraction.js' */
-/** @import { AliasSource, IntegerAliasStatus, TextAliasStatus } from './feature-identity.js' */
+/** @import { IntegerAliasStatus, TextAliasStatus } from './feature-identity.js' */
 /** @import { OrthogroupFeatureIndex } from './orthogroup-feature-metadata.js' */
 /** @import { RenderedFeatureIdentity, RenderedIdentityCollection } from './session-feature-metadata.js' */
 /** @import { SvgResultEntry } from './svg-result-ingestion.js' */
@@ -1007,22 +1005,19 @@ const alignFeatureStateToRenderedSvg = ({ snapshot, featureState, selectedResult
 const isClickReadyValidation = (validation) =>
   validation?.state === 'ready' || validation?.state === 'not-needed';
 
-/** @param {AliasSource} feature @param {readonly string[]} keys */
-const hasTextIdentity = (feature, keys) => {
-  const status = textAliasStatus(feature, keys);
-  return status.valid && status.value !== '';
-};
-
-// A catalog row holds no sequence (schema 6): Python reads it on demand by the
-// row's identity, the record key and the biological feature ID, so a row with
-// that identity and a location is one the popup can show.
+// The plan reads the feature rows a Session 27-39 stored (its Results have no
+// catalog). Such a row stored its sequences and no catalog identity: the rows
+// are usable, and Load reads no feature again, when a row stored a sequence, as
+// before D5. The popup reads no stored sequence; an identity-less row's
+// sequences are read after the next Generate (SEQUENCE_REQUIRES_GENERATE).
 /** @param {RecoveryFeatureState | null | undefined} featureState */
 export const hasUsableBiologicalFeatureCatalog = (featureState) => {
   const features = featureState?.biologicalFeatures;
   if (!Array.isArray(features) || features.length === 0) return false;
-  return features.some((feature) => hasTextIdentity(feature, RECORD_KEY_KEYS)
-    && hasTextIdentity(feature, BIOLOGICAL_FEATURE_ID_KEYS)
-    && Number.isInteger(feature.start) && Number.isInteger(feature.end));
+  return features.some((feature) => Boolean(
+    normalizeKey(feature?.nucleotide_sequence || feature?.nucleotideSequence) ||
+    normalizeKey(feature?.amino_acid_sequence || feature?.aminoAcidSequence)
+  ));
 };
 
 /** @param {{ featureIdMap?: MigrationMaps, svgIdMap?: MigrationMaps } | null | undefined} migration */

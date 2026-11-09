@@ -85,6 +85,62 @@ test('a Session 39 Load shows the stored Results Python returns beside its docum
   assert.equal(state.results.value.length, expected.storedResults[expected.document.ui.activeDrawingId].length);
 });
 
+// D5 review r1 (HIGH-2): a Session 27-39 stored its features' rows with their sequences and no catalog identity.
+// Saved with its drawn rows (`extractedFeatures`, the form before the compact catalog), they match the stored figure,
+// and Load reads them as the Load before D5 did: no diagram Worker reads the features again (PD-OI-044, PD-OI-105),
+// and Load lists no repair and shows no warning.
+const expandedSession39 = async () => JSON.parse(await evaluatePython(`
+import json
+from gbdraw.session_io import expand_session_feature_catalog
+result = json.dumps(expand_session_feature_catalog(payload))
+`, fixture('BGC0000708-BGC0000713.v39')));
+const loadCountingFeatureReads = async (session) => {
+  const ImportWorker = globalThis.Worker;
+  const featureReads = [];
+  const repairs = [];
+  globalThis.Worker = class extends ImportWorker {
+    constructor(url) {
+      if (!String(url).endsWith('/session-import-worker.js')) featureReads.push(String(url));
+      super(url);
+    }
+  };
+  try {
+    const loaded = await importSession(await sessionLoadEvent(session), {
+      confirmLoadRepairs: async ({ items }) => { repairs.push(...items); return true; },
+      storedFigurePreview,
+      transformLegacyResultSvg: Object.assign(() => false, { appliesToContent: () => false })
+    });
+    return { loaded, featureReads, repairs };
+  } finally {
+    globalThis.Worker = ImportWorker;
+  }
+};
+
+test('a Session 39 Load reads the stored feature rows of its figure and starts no diagram Worker', async () => {
+  const session = await expandedSession39();
+  assert.ok(session.features.extractedFeatures.length > 0 && !session.features.featureCatalog);
+  const { loaded, featureReads, repairs } = await loadCountingFeatureReads(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(featureReads, []);
+  assert.deepEqual(repairs.filter((line) => line.startsWith('Features:')), []);
+  assert.deepEqual(state.featureEditorStatus.value.error, null);
+  assert.equal(state.featureExtractionPending.value, false);
+});
+
+test('a Session 30 Load without inputs reads the stored feature rows of its figure with no warning', async () => {
+  // A Session 30 holds no request and no input file; this one shows the figure of the Session 39 above, with the
+  // Session 39's stored rows.
+  const session = fixture('BGC0000708-BGC0000713.v30');
+  const { extractedFeatures, biologicalFeatures } = (await expandedSession39()).features;
+  session.features = { ...session.features, extractedFeatures, biologicalFeatures };
+  session.results = fixture('BGC0000708-BGC0000713.v39').results;
+  const { loaded, featureReads, repairs } = await loadCountingFeatureReads(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(featureReads, []);
+  assert.deepEqual(repairs.filter((line) => line.startsWith('Features:')), []);
+  assert.deepEqual(state.featureEditorStatus.value.error, null);
+});
+
 // OV-2072: Python's conversion counts the hash= annotation targets it moved
 // to their source feature (feature_1 of the Session main saved), and the
 // notice after Load names them, as the Load before the Worker route did.

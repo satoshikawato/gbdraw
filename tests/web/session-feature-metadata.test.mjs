@@ -993,21 +993,18 @@ for (const invalidRecordIndex of [
   assert.deepEqual(plan.recoveredFeatureState.extractedFeatures.map((feature) => feature.rendered_svg_id), ['h_record_1', 'h_record_1']);
 }
 
-// A schema 6 catalog row holds no sequence (Python reads it on demand by the
-// row's record key and biological feature ID): the catalog is usable when a
-// row has that identity and a location.
+// The rows a Session 27-39 stored, which the recovery plan reads, kept their
+// sequences and no catalog identity: they are usable when a row stored a
+// sequence, as before D5 (D5 review r1), and an identity alone does not make
+// them usable.
 {
-  const row = { recordKey: 'record-1', biologicalFeatureId: 'fcf4827e2', type: 'CDS', start: 0, end: 576, strand: '-' };
-  assert.equal(hasUsableBiologicalFeatureCatalog({ biologicalFeatures: [row] }), true);
-  assert.equal(hasUsableBiologicalFeatureCatalog({ biologicalFeatures: [{ ...row, recordKey: undefined, record_key: 'record-1' }] }), true);
-  for (const [name, broken] of [
-    ['no biological feature ID', { ...row, biologicalFeatureId: '' }],
-    ['no record key', { ...row, recordKey: '' }],
-    ['no start', { ...row, start: null }],
-    ['no end', { ...row, end: '576' }]
-  ]) {
-    assert.equal(hasUsableBiologicalFeatureCatalog({ biologicalFeatures: [broken] }), false, name);
-  }
+  const row = { record_idx: 0, svg_id: 'stable-a', type: 'CDS', start: 0, end: 576, strand: '-' };
+  assert.equal(hasUsableBiologicalFeatureCatalog({ biologicalFeatures: [{ ...row, nucleotide_sequence: 'ATGA' }] }), true);
+  assert.equal(hasUsableBiologicalFeatureCatalog({ biologicalFeatures: [{ ...row, aminoAcidSequence: 'M' }] }), true);
+  assert.equal(hasUsableBiologicalFeatureCatalog({
+    biologicalFeatures: [{ ...row, recordKey: 'record-1', biologicalFeatureId: 'fcf4827e2' }]
+  }), false);
+  assert.equal(hasUsableBiologicalFeatureCatalog({ biologicalFeatures: [row] }), false);
   assert.equal(hasUsableBiologicalFeatureCatalog({ biologicalFeatures: [] }), false);
   assert.equal(hasUsableBiologicalFeatureCatalog({}), false);
 }
