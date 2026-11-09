@@ -8,7 +8,7 @@
 // so a second read waits for nothing. The replies live only here: never in the catalog, a History step, or a Session.
 // A reply that arrives after the shown Result changed (Generate, Undo, Redo, a drawing switch, a Load) is discarded:
 // the read resolves to `null` and its caller shows nothing of it.
-/** @import { FeatureSequenceInput, FeatureSequencesOf, FeatureSequencesPayload, MatchSpanInput, MatchSpanSequence, MatchSequencesPayload, EmbedSequencesPayload, EmbedPartText, EmbedItemPart, EmbedPartInput } from './diagram-worker-protocol.js' */
+/** @import { FeatureSequenceInput, FeatureSequencesOf, FeatureSequencesPayload, MatchSpanInput, MatchSpanSequence, MatchSequencesPayload, EmbedSequencesPayload, EmbedPartText, EmbedItemPart, EmbedItemFile, EmbedPartInput } from './diagram-worker-protocol.js' */
 /** @import { CommittedCanonicalSession } from './session-request.js' */
 /** @import { FeatureLike } from './feature-utils.js' */
 /** @import { FeatureCatalogItem } from './feature-catalog.js' */
@@ -424,8 +424,10 @@ export const createCatalogSequences = ({
     /** @type {(string | undefined)[] | null} */
     let sources = null;
     for (const part of embedReadParts(item, featureReadBases)) {
+      const itemBytes = new TextEncoder().encode(JSON.stringify(part.item));
+      const files = /** @type {[EmbedItemFile]} */ ([{ role: 'embedItem', bytes: itemBytes.buffer }]);
       const reply = readEmbedSequencesReply(
-        (await helpers.readEmbedSequences({ ...request, ...part }))?.result, part.item.biologicalFeatures);
+        (await helpers.readEmbedSequences({ ...request, files, part: part.part }))?.result, part.item.biologicalFeatures);
       if (getCommittedSession() !== owner.committed) return null;
       sources ??= new Array(reply.sourceCount).fill(undefined);
       if (sources.length !== reply.sourceCount) throw invalid();

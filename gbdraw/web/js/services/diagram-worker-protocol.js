@@ -368,13 +368,20 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
+ * The file of an export read: the JSON of its `EmbedItemPart` as a Blob, like every helper file the Worker stages,
+ * which the Worker stages as a file for Python to read (a long JavaScript string handed to Python takes many times
+ * its size of Worker heap).
+ * @typedef {{ role: 'embedItem', blob: Blob }} EmbedItemFile
+ */
+
+/**
  * The payload of `readEmbedSequences`: the committed request, its resources, and one part of the stored catalog
- * item of the Result to export; the reply is that part in the export encoding as its text (`EmbedPartText`,
- * `read_embed_sequences_json`).
+ * item of the Result to export (`files`); the reply is that part in the export encoding as its text
+ * (`EmbedPartText`, `read_embed_sequences_json`).
  * @typedef {object} EmbedSequencesPayload
  * @property {CanonicalRenderRequest} canonicalRequest
  * @property {CommittedCanonicalSession['resources']} resources
- * @property {EmbedItemPart} item
+ * @property {[EmbedItemFile]} files
  * @property {EmbedPartInput} part
  */
 

@@ -545,7 +545,8 @@ const HELPER_FILE_NAMES = Object.freeze({
   pairs: 'pairs.json',
   visibility: 'feature-visibility.tsv',
   featureOverrides: 'feature-overrides.tsv',
-  rawTsv: 'raw-losatp.tsv'
+  rawTsv: 'raw-losatp.tsv',
+  embedItem: 'embed-item.json'
 });
 
 const requirePayloadObject = (payload, operation) => {
@@ -1358,17 +1359,18 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     )
   },
   // One part of the stored catalog item of the shown Result with every sequence an exported Interactive SVG embeds,
-  // in the export encoding, read from the shown Result's request (D5): the export reads it record by record.
+  // in the export encoding, read from the shown Result's request (D5): the export reads it record by record. The
+  // part's rows come as a file (`embedItem`), not as a string argument.
   [DIAGRAM_HELPER_OPERATIONS.READ_EMBED_SEQUENCES]: {
-    keys: ['canonicalRequest', 'item', 'part'],
-    fileRoles: [],
-    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+    keys: ['files', 'canonicalRequest', 'part'],
+    fileRoles: ['embedItem'],
+    run: async (pyodide, payload, paths, operation, workspace) => callJsonHelper(
       pyodide, 'read_embed_sequences_json', [
         replyBuffersOf(pyodide),
         jsonArgument(payload.canonicalRequest, null),
         jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
         `${workspace}/output`,
-        jsonArgument(payload.item, {}),
+        requireHelperFile(paths, 'embedItem', operation),
         jsonArgument(payload.part, {}),
         jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]

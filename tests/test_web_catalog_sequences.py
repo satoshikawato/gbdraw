@@ -202,10 +202,13 @@ def test_the_worker_reply_of_an_embed_part_is_the_text_the_file_embeds(tmp_path:
             "biologicalFeatures": [row for row in bare["biologicalFeatures"] if row["recordKey"] == key]}
     part = {"sourcesOf": [key], "comparisonSources": True}
 
+    item_file = tmp_path / "embed-item.json"
+    item_file.write_text(json.dumps(item), encoding="utf-8")
+
     with _committed(path, tmp_path) as (request, paths, output):
         objects = read_embed_catalog_part(request, paths, output, item, part)
         reply = json.loads(read_embed_sequences_json(
-            json.dumps(request), json.dumps(paths), output, json.dumps(item), json.dumps(part)
+            json.dumps(request), json.dumps(paths), output, str(item_file), json.dumps(part)
         ))
 
     assert objects["biologicalFeatures"] and objects["sequenceSources"]

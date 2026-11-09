@@ -392,13 +392,16 @@ def read_match_sequences_json(request_json: str, resource_paths_json: str, outpu
 
 
 def read_embed_sequences_json(
-    request_json: str, resource_paths_json: str, output_directory: str, item_json: str, part_json: str
+    request_json: str, resource_paths_json: str, output_directory: str, item_path: str, part_json: str
 ) -> str:
-    """JSON boundary of the diagram Worker: one part of the export encoding, as its text (``EmbedPartText``)."""
+    """JSON boundary of the diagram Worker: one part of the export encoding, as its text (``EmbedPartText``). The
+    part's item comes as the UTF-8 JSON file the Worker staged (``embedItem``)."""
 
+    with open(str(item_path), encoding="utf-8") as file:
+        item = json.load(file)
     part = read_embed_catalog_part(
         json.loads(str(request_json)), json.loads(str(resource_paths_json)), str(output_directory),
-        json.loads(str(item_json)), json.loads(str(part_json)),
+        item, json.loads(str(part_json)),
     )
     reply: EmbedPartText = {
         "biologicalFeatures": ",".join(embed_json_text(row) for row in part["biologicalFeatures"]),

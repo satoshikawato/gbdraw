@@ -29,7 +29,10 @@ const featureReply = ({ recordKey, biologicalFeatureId }) => ({
 const EMBED_SOURCES = [{ key: 'linear:record:0', recordIndex: 0 }, { key: 'linear:record:1', recordIndex: 1 },
   { key: 'homology:comparison:0:C', sourceIndex: 0 }];
 // What the encoder makes of a part, and the reply that carries it as the text the file embeds.
-const embedPartObjects = ({ item, part }) => ({
+// An export read sends the part's item as the JSON file `embedItem`.
+const embedItemOf = (payload) => payload.item ?? JSON.parse(new TextDecoder().decode(payload.files[0].bytes));
+const embedPartObjects = (payload) => embedPartObjectsOf({ item: embedItemOf(payload), part: payload.part });
+const embedPartObjectsOf = ({ item, part }) => ({
   biologicalFeatures: item.biologicalFeatures.map((row) => ({ ...row, nucleotide_sequence: `N${row.biologicalFeatureId}` })),
   sequenceSources: EMBED_SOURCES.map((source, index) => ({ index, source })).filter(({ source }) => (
     source.recordIndex === undefined ? part.comparisonSources : part.sourcesOf.includes(item.recordKeys[source.recordIndex]))),
@@ -237,6 +240,14 @@ test('the parts written as they arrive are the item Python encodes whole, byte f
     helpers: { readEmbedSequences: async (payload) => { sent.push(payload.part); return { result: embedPartReply(payload) }; } }
   });
   const sequences = await door.readEmbedJson(exportItem);
+  const asked = [];
+  await createCatalogSequences({
+    getCommittedSession: () => committed, featureReadBases: 25,
+    helpers: { readEmbedSequences: async (payload) => { asked.push(payload); return { result: embedPartReply(payload) }; } }
+  }).readEmbedJson(exportItem);
+  assert.deepEqual(asked.map((payload) => [Object.keys(payload).sort(), payload.files.map(({ role }) => role)]),
+    asked.map(() => [['canonicalRequest', 'files', 'part', 'resources'], ['embedItem']]));
+  assert.ok(asked.every((payload) => payload.files[0].bytes instanceof ArrayBuffer));
   assert.equal(sent.length, 3);
   const whole = embedPartObjects({ item: exportItem, part: { sourcesOf: ['rec-a', 'rec-b'], comparisonSources: true } });
   assert.equal(embeddedCatalogItemJson(exportItem, sequences), JSON.stringify({
