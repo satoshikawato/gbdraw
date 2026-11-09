@@ -4,6 +4,7 @@
 // captures and installs it (`captureArtifactSlot`, `installArtifactSlot`);
 // Session Save writes it and Session Load builds it (`services/config.js`).
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
+/** @import { PythonLegendKey } from './legend-svg.js' */
 
 /**
  * A drawing's feature-editor status, a runtime field of its artifact slot (never saved in a Session).
@@ -66,7 +67,7 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFAC
  * @typedef {object} ArtifactSlot
  * @property {DrawingId} drawingId The drawing whose artifact it is (its mode is the drawing's).
  * @property {Readonly<Record<string, any>>} values The value of every `ARTIFACT_SLOT_KEYS` key.
- * @property {readonly string[]} legendInventory The selected Result's generated Legend inventory
+ * @property {readonly PythonLegendKey[]} legendInventory The selected Result's generated Legend inventory
  *   (`originalLegendOrder`). The Legend owner keeps each Result's inventory (OV-47), so an install
  *   does not write it: the mode transition hands it to the Legend owner, which adopts it when the
  *   Result is displayed.

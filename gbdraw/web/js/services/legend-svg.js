@@ -107,7 +107,7 @@ export const legendRowShown = (row) => Boolean(row) && row?.getAttribute('displa
 export const legendRowKeys = (svg, key) => [...new Set([key, ...getAllFeatureLegendGroups(svg).flatMap((group) => (
   Array.from(group.querySelectorAll('g[data-legend-key]'))
     .filter((row) => row.getAttribute(LEGEND_MERGED_ROW) === key)
-    .map((row) => /** @type {PythonLegendKey} */ (pythonLegendKey(row)))
+    .map((row) => pythonLegendKey(row))
 ))])];
 
 // The keys of the feature Legend rows a Result shows (a renamed row's key,
@@ -119,13 +119,13 @@ export const shownLegendKeys = (svg) => new Set(getAllFeatureLegendGroups(svg).f
 
 // The order a feature Legend group recorded as Python's (its Python keys,
 // recorded when the rows were first reordered), else null.
-/** @param {Element} group @returns {string[] | null} */
+/** @param {Element} group @returns {PythonLegendKey[] | null} */
 export const recordedGroupOrder = (group) => {
   const recorded = group.getAttribute(LEGEND_ORDER_RECORD);
   if (!recorded) return null;
   try {
     const order = JSON.parse(recorded);
-    return Array.isArray(order) ? order.map(String) : null;
+    return Array.isArray(order) ? order.map((key) => /** @type {PythonLegendKey} */ (String(key))) : null;
   } catch {
     return null;
   }
@@ -180,8 +180,8 @@ export const legendRowTakesPlace = (svg, key, nextKey) => getAllFeatureLegendGro
 
 // Python's key of a Legend row: the key it drew, which a rename keeps as a
 // record; the row of an editor addition has its own key.
-/** @param {Element} row */
-export const pythonLegendKey = (row) => String(pythonDrawnAttribute(row, 'data-legend-key') ?? '').trim();
+/** @param {Element} row @returns {PythonLegendKey} */
+export const pythonLegendKey = (row) => /** @type {PythonLegendKey} */ (String(pythonDrawnAttribute(row, 'data-legend-key') ?? '').trim());
 
 // Whether a Result's bytes hold Python's row of a Legend key (shown or hidden):
 // a Session saved before the executor kept deleted rows lacks it (O-2).
@@ -193,7 +193,7 @@ export const drawsPythonLegendRow = (svg, key) => getAllFeatureLegendGroups(svg)
 
 // Python's order of a Result's feature Legend rows as their Python keys: the
 // order recorded when the rows were first reordered, else null.
-/** @param {SVGSVGElement | null | undefined} svg @returns {string[] | null} */
+/** @param {SVGSVGElement | null | undefined} svg @returns {PythonLegendKey[] | null} */
 export const recordedLegendOrder = (svg) => {
   const group = getAllFeatureLegendGroups(svg).find((each) => each.getAttribute(LEGEND_ORDER_RECORD));
   return group ? recordedGroupOrder(group) : null;
@@ -436,7 +436,7 @@ export const rekeyLegendRecords = (records, rekeyed, dropped = null) => {
 export const pythonLegendRow = (row) => {
   const color = String(pythonDrawnAttribute(getLegendEntrySwatch(row), 'fill') ?? '').trim();
   return {
-    key: /** @type {PythonLegendKey} */ (pythonLegendKey(row)),
+    key: pythonLegendKey(row),
     color: color ? /** @type {SwatchColor} */ (color) : null
   };
 };
@@ -616,7 +616,7 @@ export const resultLegendRows = (svg) => {
     const anchor = legendEntryAnchor(row);
     const recordedKey = row.getAttribute(resultBaseAttribute('data-legend-key'));
     return [{
-      key: /** @type {PythonLegendKey} */ (pythonLegendKey(row)),
+      key: pythonLegendKey(row),
       shownKey,
       name: legendRowName(row),
       swatch: legendRowSwatch(row),

@@ -1169,7 +1169,8 @@ export const normalizeEditorStateData = (editorState = {}, {
       entries: entries.filter((entry) => entry.dormant !== true),
       deletedEntries: normalizeSessionLegendEntries(legend.deletedEntries, 'deletedEntries', legendLoad),
       dormantEntries,
-      originalOrder: normalizeStringArray(legend.originalOrder, 'legend.originalOrder', losses),
+      // A saved inventory is Python's keys of the rows it drew.
+      originalOrder: /** @type {PythonLegendKey[]} */ (normalizeStringArray(legend.originalOrder, 'legend.originalOrder', losses)),
       originalColors: readColors(legend.originalColors, 'legend.originalColors'),
       colorOverrides: readColors(legend.colorOverrides, 'legend.colorOverrides'),
       strokeOverrides: readStrokeOverrides(legend.strokeOverrides, 'legend.strokeOverrides'),
@@ -3209,15 +3210,14 @@ export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sou
 // inventory and Python's colors; none for a mode without a Result).
 /**
  * @param {unknown} rules
- * @param {{ originalOrder: string[], originalColors: Record<string, string> }} kept
+ * @param {{ originalOrder: readonly PythonLegendKey[], originalColors: Record<string, string> }} kept
  * @returns {Map<PythonLegendKey, PythonLegendKey>}
  */
 const savedLegendRekeys = (rules, kept) => {
   /** @type {Map<PythonLegendKey, PythonLegendRow>} */
   const pythonRows = new Map();
-  kept.originalOrder.forEach((caption) => {
-    const key = /** @type {PythonLegendKey} */ (caption);
-    const color = kept.originalColors[caption];
+  kept.originalOrder.forEach((key) => {
+    const color = kept.originalColors[key];
     if (color) pythonRows.set(key, { key, color: /** @type {PythonLegendRow['color']} */ (color) });
   });
   return savedRuleRowRekeys({
