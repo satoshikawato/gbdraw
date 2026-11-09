@@ -1,0 +1,14 @@
+{
+  "purpose": "Positive fixture of Session 51 that the CLI wrote with two feature density tracks: a gene count heatmap and a tRNA coverage histogram. The request's diagramOptions.featureDensityTracks holds both tracks with their queries; the CLI and the Web replay it and draw both tracks.",
+  "sourceCommit": "0c71d1add",
+  "history": "branch feat/feature-density-track (work tree on origin/dev 0c71d1add); request schema 10 and Session 51 are not on main yet (docs/internal/SESSION_FORMAT_HISTORY.md)",
+  "route": "in a directory holding a copy of tests/test_inputs/HmmtDNA.gbk: gbdraw circular --gbk HmmtDNA.gbk -o HmmtDNA -f svg --feature_density_track id=genes type=gene window=1000 step=250 --feature_density_track id=trna type=tRNA metric=coverage style=histogram window=1000 step=250 color=#d9944a --session_output HmmtDNA.gbdraw-session.json.gz, with gbdraw from that branch; the written file was decompressed and written again with gzip -n -9",
+  "inputs": {
+    "tests/test_inputs/HmmtDNA.gbk": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
+  },
+  "values": "drawings[0].renderRequest.diagramOptions.featureDensityTracks: genes (featureType gene, count, heatmap, window 1000, step 250) and trna (featureType tRNA, coverage, histogram, window 1000, step 250, color #d9944a); drawings[0].results[0] holds groups with data-gbdraw-slot-id density_genes and density_trna",
+  "decompressedSha256": "875fb45e05a78460f26ed34d61d3aca8d29360bf5462c658aaa3355236357342",
+  "compression": "gzip -n -9",
+  "sessionVersion": 51,
+  "requestSchema": 10
+}

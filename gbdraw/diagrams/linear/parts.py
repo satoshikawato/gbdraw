@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Sequence
 from Bio.SeqRecord import SeqRecord
 
 from ...analysis.depth_tracks import DepthTrackSpec
+from ...analysis.feature_density import FeatureDensityTrack
 from ...analysis.protein_colinearity import OrthogroupGraphResult, OrthogroupResult
 from ...annotations import AnnotationOptions, ResolvedAnnotationBundle
 from ...layout.record_coordinates import RecordDisplayTransform
@@ -49,6 +50,8 @@ class LinearTrackInputs:
     """The requested track slots, depth tracks and region annotations, before annotation planning."""
 
     record_depth_tracks: list[list[DepthTrackSpec]] | None = None
+    # The feature density tracks: a stack the reader did not write draws each; a written stack those it names.
+    feature_density_tracks: tuple[FeatureDensityTrack, ...] = ()
     linear_track_slots: list[LinearTrackSlot] | None = None
     linear_track_axis_index: int | None = None
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None

@@ -148,6 +148,7 @@ import { liftLegacyRenderRequest } from './legacy-render-request.js';
 /** @import { StoredLeafReadings } from './stored-leaf-readings.js' */
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from './linear-wrap-form.js';
 import { FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH, figureLengthFormValue } from './figure-size-form.js';
+import { projectFeatureDensityTracks, requestFeatureDensityTracks } from './feature-density-tracks.js';
 import { NO_STORED_READINGS } from './stored-leaf-readings.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
@@ -4774,6 +4775,7 @@ const projectCanonicalRenderInput = ({
     depthStep: projectOptionalNumber(drawing.adv.depth_step_size, { field: 'depth_step' }),
     plotTitle: requestPlotTitle(drawing.form),
     plotTitleFontSize: requestPlotTitleFontSize(drawing.adv),
+    ...requestFeatureDensityTracks(drawing.adv),
     ...(comparisonOptionsRequested
       ? projectComparisonThresholds(resolveComparisonThresholds(drawing.adv, mode))
       : {})
@@ -7183,6 +7185,7 @@ export const projectCanonicalSessionRequest = ({
     depth_window_size: options.depthWindow ?? null,
     depth_step_size: options.depthStep ?? null,
     depth_tracks: projectedDepthTracks,
+    feature_density_tracks: projectFeatureDensityTracks(options.featureDensityTracks),
     min_bitscore: options.bitscore ?? sparseComparisonDefaults.bitscore,
     evalue: options.evalue === null || options.evalue === undefined
       ? String(sparseComparisonDefaults.evalue)

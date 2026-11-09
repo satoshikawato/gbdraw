@@ -15,6 +15,7 @@ from svgwrite.container import Group
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
 from ...analysis.conservation import ConservationTrack
+from ...render.drawers.circular.feature_density import FeatureDensityHeatmapGroup
 from ...features.factory import FeatureBuildResult
 from ...labels.circular_types import CircularLabel
 from ...layout.circular import CircularRecordRenderContext
@@ -185,6 +186,22 @@ def add_depth_group_on_canvas(
     )
     return _add_track_content(
         canvas, content, canvas_config, group_key, slot_id=slot_id, slot_renderer=slot_renderer
+    )
+
+
+def add_feature_density_heatmap_on_canvas(
+    canvas: Drawing,
+    heatmap: FeatureDensityHeatmapGroup,
+    canvas_config: CircularCanvasConfigurator,
+    *,
+    group_key: GroupKey,
+    slot_id: str | None = None,
+    slot_renderer: str | None = None,
+) -> Drawing:
+    """Adds a feature density heatmap band (built between two radii) to the circular canvas."""
+
+    return _add_track_content(
+        canvas, GroupContent.of(heatmap.get_group()), canvas_config, group_key, slot_id=slot_id, slot_renderer=slot_renderer
     )
 
 
@@ -539,6 +556,7 @@ def add_labels_group_on_canvas(
 
 __all__ = [
     "add_depth_group_on_canvas",
+    "add_feature_density_heatmap_on_canvas",
     "add_gc_skew_group_on_canvas",
     "add_gc_content_group_on_canvas",
     "add_record_definition_group_on_canvas",

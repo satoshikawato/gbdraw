@@ -112,6 +112,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
           "depth": 37.05,
           "dinucleotide_content": 74.1,
           "dinucleotide_skew": 74.1,
+          "feature_density": 37.05,
           "features": 18.525,
           "sequence_conservation": 18.525,
           "spacer": 74.1
@@ -121,6 +122,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
           "depth": 37.05,
           "dinucleotide_content": 74.1,
           "dinucleotide_skew": 74.1,
+          "feature_density": 37.05,
           "features": 37.05,
           "sequence_conservation": 37.05,
           "spacer": 74.1

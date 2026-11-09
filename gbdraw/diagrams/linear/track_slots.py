@@ -183,7 +183,7 @@ def _slot_height(
         return max(0.0, _resolve_scalar_px(slot.height, 0.0))
     if slot.renderer == "spacer":
         return max(0.0, _resolve_scalar_px(slot.height, 0.0))
-    if slot.renderer == "depth":
+    if slot.renderer in {"depth", "feature_density"}:
         return max(0.0, _resolve_scalar_px(slot.height, canvas_config.default_depth_height))
     return max(0.0, _resolve_scalar_px(slot.height, canvas_config.default_gc_height))
 
@@ -195,7 +195,7 @@ def _slot_spacing(
 ) -> float:
     if slot.spacing is not None:
         return max(0.0, _resolve_scalar_px(slot.spacing, 0.0))
-    if slot.renderer == "depth":
+    if slot.renderer in {"depth", "feature_density"}:
         return max(0.0, float(canvas_config.configured_depth_padding))
     if slot.renderer in {
         "features",
@@ -227,7 +227,7 @@ def _track_extents_for_slot(
         return 0.5 * float(height), 0.5 * float(height)
     if slot.renderer == "dinucleotide_skew":
         return 0.5 * float(height), 0.5 * float(height)
-    if slot.renderer in {"depth", "annotations", "spacer"}:
+    if slot.renderer in {"depth", "feature_density", "annotations", "spacer"}:
         return 0.0, float(height)
     return 0.0, 0.0
 

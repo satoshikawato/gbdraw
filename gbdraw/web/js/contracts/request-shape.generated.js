@@ -584,6 +584,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
                 "dinucleotide_content",
                 "dinucleotide_skew",
                 "depth",
+                "feature_density",
                 "sequence_conservation",
                 "annotations",
                 "spacer"
@@ -644,6 +645,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
                 "dinucleotide_content",
                 "dinucleotide_skew",
                 "depth",
+                "feature_density",
                 "annotations",
                 "spacer"
               ])
@@ -703,6 +705,68 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       }),
       optional: Object.freeze([]),
       open: false
+    }),
+    CanonicalFeatureQuery: Object.freeze({
+      kind: "object",
+      fields: Object.freeze({
+        featureType: Object.freeze({
+          kind: "string",
+          pattern: "[^\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]"
+        }),
+        qualifier: Object.freeze({
+          kind: "union",
+          options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
+        }),
+        value: Object.freeze({
+          kind: "union",
+          options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
+        }),
+        minLength: Object.freeze({
+          kind: "union",
+          options: Object.freeze([Object.freeze({kind: "integer", minimum: 0}), Object.freeze({kind: "null"})])
+        }),
+        maxLength: Object.freeze({
+          kind: "union",
+          options: Object.freeze([Object.freeze({kind: "integer", minimum: 0}), Object.freeze({kind: "null"})])
+        })
+      }),
+      optional: Object.freeze([]),
+      open: false,
+      defaults: Object.freeze({maxLength: null, minLength: null, value: null})
+    }),
+    CanonicalFeatureDensityTrack: Object.freeze({
+      kind: "object",
+      fields: Object.freeze({
+        id: Object.freeze({
+          kind: "string",
+          pattern: "[^\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]"
+        }),
+        query: Object.freeze({kind: "ref", name: "CanonicalFeatureQuery"}),
+        metric: Object.freeze({kind: "literal", values: Object.freeze(["count", "coverage"])}),
+        style: Object.freeze({kind: "literal", values: Object.freeze(["heatmap", "histogram"])}),
+        window: Object.freeze({
+          kind: "union",
+          options: Object.freeze([Object.freeze({kind: "integer", exclusiveMinimum: 0}), Object.freeze({kind: "null"})])
+        }),
+        step: Object.freeze({
+          kind: "union",
+          options: Object.freeze([Object.freeze({kind: "integer", exclusiveMinimum: 0}), Object.freeze({kind: "null"})])
+        }),
+        color: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "ref", name: "CanonicalAnnotationColor"}),
+            Object.freeze({kind: "null"})
+          ])
+        }),
+        caption: Object.freeze({
+          kind: "union",
+          options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
+        })
+      }),
+      optional: Object.freeze([]),
+      open: false,
+      defaults: Object.freeze({caption: null, color: null, step: null, window: null})
     }),
     CanonicalCircularDepthTrack: Object.freeze({
       kind: "object",
@@ -909,6 +973,13 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
           items: Object.freeze({kind: "ref", name: "CanonicalCircularDepthTrack"}),
           minItems: 1
         }),
+        featureDensityTracks: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalFeatureDensityTrack"})}),
+            Object.freeze({kind: "null"})
+          ])
+        }),
         plotTitle: Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
@@ -1000,6 +1071,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         "depthWindow",
         "dinucleotide",
         "evalue",
+        "featureDensityTracks",
         "featureShapes",
         "featureVisibilityTable",
         "featureVisibilityTableFile",
@@ -1234,6 +1306,13 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
           items: Object.freeze({kind: "ref", name: "CanonicalLinearDepthTrack"}),
           minItems: 1
         }),
+        featureDensityTracks: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalFeatureDensityTrack"})}),
+            Object.freeze({kind: "null"})
+          ])
+        }),
         plotTitle: Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
@@ -1293,6 +1372,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         "depthWindow",
         "dinucleotide",
         "evalue",
+        "featureDensityTracks",
         "featureShapes",
         "featureVisibilityTable",
         "featureVisibilityTableFile",

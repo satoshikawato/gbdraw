@@ -20,9 +20,11 @@ from gbdraw.svg.result_records import LEGEND_MERGED_ROW, result_base_attribute
 from gbdraw.legend.sources import (
     ComparisonLegendSource,
     DepthLegendSource,
+    FeatureDensityLegendSource,
     FeatureLegendSource,
     NumericLegendSource,
 )
+from gbdraw.tracks.parsing import SlotView, feature_density_slot_track_id, slot_legend_label
 
 if TYPE_CHECKING:
     from gbdraw.config.models.objects import ObjectsLegendsConfig
@@ -824,6 +826,45 @@ def prepare_legend_table(
     return legend_table
 
 
+def sync_feature_density_legend_entries(
+    out: LegendTable,
+    sources: Sequence[FeatureDensityLegendSource],
+    *,
+    slots: Iterable[SlotView] | None,
+) -> LegendTable:
+    """One row per drawn ``feature_density`` slot, in slot order, named by its slot ``legend_label`` or its track's
+    caption (both modes): a heatmap's gradient from 0 to its scale's top, a histogram's swatch."""
+
+    by_id = {source.track_id: source for source in sources}
+    for slot in slots or ():
+        if not slot.enabled or slot.renderer != "feature_density":
+            continue
+        source = by_id.get(feature_density_slot_track_id(slot.id, slot.params))
+        if source is None:
+            continue
+        label = slot_legend_label(slot, source.caption)
+        if source.style == "heatmap":
+            out.add_source(label, {
+                "type": "gradient",
+                "min_color": source.low_color,
+                "max_color": source.color,
+                "stroke": "none",
+                "width": 0,
+                "min_value": 0,
+                "max_value": source.max_value,
+                "min_label": "0",
+                "max_label": source.max_text,
+            })
+        else:
+            out.add_source(label, {
+                "type": "solid",
+                "fill": source.color,
+                "stroke": source.stroke_color,
+                "width": source.stroke_width,
+            })
+    return out
+
+
 __all__ = [
     "DrawnLegendName",
     "LegendRowEdits",
@@ -834,6 +875,7 @@ __all__ = [
     "apply_legend_row_edits",
     "draws_legend",
     "PairwiseIdentityGradient",
+    "sync_feature_density_legend_entries",
     "PairwiseIdentityLegend",
     "as_legend_table",
     "collect_comparison_collinearity_color_modes",

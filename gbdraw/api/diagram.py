@@ -297,7 +297,8 @@ from gbdraw.tracks import (
     parse_linear_track_slots,
     parse_nonnegative_integer,
 )
-from gbdraw.tracks.parsing import slot_dinucleotide
+from gbdraw.diagrams.feature_density import feature_density_legend, feature_density_record_layers
+from gbdraw.tracks.parsing import check_feature_density_slots, slot_dinucleotide, with_feature_density_slots
 
 from .assembly_inputs import CircularAssemblyInputs, CircularRecordContext, LinearAssemblyInputs
 from .prepared import ResolvedFeatureInputs
@@ -950,6 +951,35 @@ def _depth_track_count_for_render(
     if count > 0:
         return count
     return 1 if precomputed_depth_df is not None else 0
+
+
+def _with_circular_density_slots(
+    slots: list[CircularTrackSlot] | None,
+    inputs: CircularAssemblyInputs,
+    *,
+    implicit: bool,
+    show_ticks: bool,
+    show_depth: bool,
+    depth_track_count: int,
+    show_gc: bool,
+    show_skew: bool,
+) -> list[CircularTrackSlot] | None:
+    """The stack with the feature density tracks: one slot per track after the features slot on a stack the reader
+    did not write (the default stack when there is none yet); a written stack draws only the tracks its slots name.
+    A slot that names no defined track is refused."""
+
+    track_ids = tuple(track.id for track in inputs.feature_density_tracks or ())
+    if implicit and track_ids:
+        slots = with_feature_density_slots(
+            slots if slots is not None else default_circular_track_slots(
+                show_ticks=show_ticks, show_depth=show_depth, depth_track_count=max(1, depth_track_count),
+                show_gc=show_gc, show_skew=show_skew, dinucleotide=inputs.dinucleotide,
+            ),
+            track_ids,
+            lambda track_id: CircularTrackSlot(id=f"density_{track_id}", renderer="feature_density", params={"track": track_id}),
+        )
+    check_feature_density_slots(slots, track_ids)
+    return slots
 
 
 def _default_circular_depth_slots_if_needed(
@@ -2574,11 +2604,9 @@ def assemble_linear_diagram_from_records(
         profile=profile,
         default_colors_df=default_colors,
     )
-    depth_config = DepthConfigurator(
-        window=resolved_depth_window,
-        step=resolved_depth_step,
-        profile=profile,
-    ) if show_depth else None
+    depth_config = (
+        DepthConfigurator(window=resolved_depth_window, step=resolved_depth_step, profile=profile) if show_depth else None
+    )
 
     canvas = assemble_linear_diagram(
         canvas_config=canvas_config,
@@ -2595,6 +2623,7 @@ def assemble_linear_diagram_from_records(
         ),
         track_inputs=LinearTrackInputs(
             record_depth_tracks=record_depth_tracks,
+            feature_density_tracks=tuple(inputs.feature_density_tracks or ()),
             linear_track_slots=parsed_linear_track_slots,
             linear_track_axis_index=resolved_linear_track_axis_index,
             annotations=inputs._resolved_annotations if inputs._resolved_annotations is not None else inputs.annotation_options,
@@ -2778,14 +2807,14 @@ def assemble_circular_diagram_from_record(
         show_skew=bool(show_skew),
         dinucleotide=inputs.dinucleotide,
     )
-    canvas_cfg = cfg.canvas
-    canvas_cfg = replace(
-        canvas_cfg,
-        show_depth=bool(show_depth and show_depth_from_input),
-        show_gc=bool(show_gc),
-        show_skew=bool(show_skew),
+    parsed_circular_track_slots = _with_circular_density_slots(
+        parsed_circular_track_slots, inputs, implicit=inputs.circular_track_slots is None or inputs._implicit_track_stack,
+        show_ticks=bool(cfg.objects.scale.show), show_depth=bool(show_depth and show_depth_from_input),
+        depth_track_count=available_depth_track_count, show_gc=bool(show_gc), show_skew=bool(show_skew),
     )
-    cfg = replace(cfg, canvas=canvas_cfg)
+    cfg = replace(cfg, canvas=replace(
+        cfg.canvas, show_depth=bool(show_depth and show_depth_from_input), show_gc=bool(show_gc), show_skew=bool(show_skew)
+    ))
     profile = CircularRenderProfile(
         cfg, identity_label_overrides=_shows_identity_labels(inputs._resolved_record_features)
     )
@@ -2983,6 +3012,8 @@ def assemble_circular_diagram_from_record(
             conservation_tracks=conservation_tracks,
             conservation_min_identity=float(identity),
             dinucleotide_dataframes=dinucleotide_dataframes,
+            feature_density=context.feature_density if context.feature_density is not None else feature_density_record_layers(
+                [gb_record], inputs.feature_density_tracks, windows=[(int(window), int(step))], transforms=[record_transform])[0],
         ),
         CircularTrackInputs(
             circular_track_slots=parsed_circular_track_slots,
@@ -3215,6 +3246,21 @@ def assemble_circular_diagram_from_records(
         first_record_conservation_legend = resolve_conservation_legend_sources(
             cfg.objects.conservation.color_scheme, parsed_circular_track_slots, first_record_conservation_tracks
         )
+    parsed_circular_track_slots = _with_circular_density_slots(
+        parsed_circular_track_slots, inputs, implicit=implicit_track_stack, show_ticks=bool(cfg.objects.scale.show),
+        show_depth=show_depth, depth_track_count=depth_track_count(record_depth_tracks), show_gc=show_gc, show_skew=show_skew,
+    )
+    # The records share one Legend, so their feature density tracks share one window (the longest record's) and
+    # one scale.
+    density_window = _resolve_circular_window_step(
+        max(records, key=lambda record: len(record.seq)), cfg, window=inputs.window, step=inputs.step
+    )
+    record_feature_density = feature_density_record_layers(
+        records,
+        inputs.feature_density_tracks,
+        windows=[density_window] * len(records),
+        transforms=bind_record_transforms(records, _record_transforms),
+    )
     record_scales = _resolve_multi_record_scales(
         record_lengths,
         mode=layout.multi_record_size_mode,
@@ -3308,6 +3354,7 @@ def assemble_circular_diagram_from_records(
                 center_reserved_radius=inputs.center_reserved_radius,
                 circular_track_slots=parsed_circular_track_slots,
                 _implicit_track_stack=implicit_track_stack,
+                feature_density_tracks=inputs.feature_density_tracks,
                 circular_track_axis_index=circular_track_axis_index,
                 _resolved_annotations=resolved_annotations,
                 evalue=evalue,
@@ -3332,6 +3379,7 @@ def assemble_circular_diagram_from_records(
                     available_depth_track_count if record_depth_track_data is not None else None
                 ),
                 precomputed_conservation_tracks=record_conservation_tracks,
+                feature_density=record_feature_density[record_index],
                 record_transform=(_record_transforms[record_index] if _record_transforms is not None else None),
                 record_presentation=(
                     _record_presentations[record_index] if _record_presentations is not None else None
@@ -3431,7 +3479,12 @@ def assemble_circular_diagram_from_records(
         canvas_config=legend_canvas_config,
         record_features=record_features,
     )
-    legend_sources = LegendSources.of(feature_config, gc_config, skew_config)
+    legend_sources = LegendSources.of(
+        feature_config,
+        gc_config,
+        skew_config,
+        feature_density_legend(record_feature_density[0] if record_feature_density else None, profile),
+    )
     if legend_effective != "none":
         legend_slots, legend_annotations = plan_circular_annotation_slots(
             CircularTrackInputs(parsed_circular_track_slots, implicit_track_stack, annotations=resolved_annotations),
@@ -3864,6 +3917,7 @@ def build_circular_diagram(
                 depth_window=options.depth_window,
                 depth_step=options.depth_step,
                 _resolved_depth_tracks=depth_tracks,
+                feature_density_tracks=options.feature_density_tracks,
                 conservation_blast_files=conservation_inputs,
                 conservation_dataframes=options.conservation_dataframes,
                 conservation_reference=options.conservation_reference,
@@ -4010,6 +4064,7 @@ def _build_linear_diagram(
                 depth_window=options.depth_window,
                 depth_step=options.depth_step,
                 _resolved_depth_tracks=depth_tracks,
+                feature_density_tracks=options.feature_density_tracks,
                 linear_track_slots=tracks.linear_track_slots if tracks else None,
                 linear_track_axis_index=tracks.linear_track_axis_index if tracks else None,
                 annotation_options=annotations,
@@ -4294,6 +4349,7 @@ def build_circular_multi_diagram(
                 depth_window=options.depth_window,
                 depth_step=options.depth_step,
                 _resolved_depth_tracks=depth_tracks,
+                feature_density_tracks=options.feature_density_tracks,
                 species=options.species,
                 strain=options.strain,
                 plot_title=options.plot_title,

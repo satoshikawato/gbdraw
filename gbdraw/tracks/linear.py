@@ -6,6 +6,7 @@ from typing import Any, Literal, Mapping, Sequence
 
 from .parsing import (
     SHARED_SLOT_PARAM_KEYS,
+    feature_density_slot_track_id,
     normalize_dinucleotide_params,
     normalize_dinucleotide_skew_color_params as _normalize_dinucleotide_skew_color_params,
     parse_bool,
@@ -27,6 +28,7 @@ LinearTrackRendererName = Literal[
     "dinucleotide_content",
     "dinucleotide_skew",
     "depth",
+    "feature_density",
     "annotations",
     "spacer",
 ]
@@ -39,13 +41,14 @@ SUPPORTED_LINEAR_TRACK_RENDERERS: frozenset[str] = frozenset(
         "dinucleotide_content",
         "dinucleotide_skew",
         "depth",
+        "feature_density",
         "annotations",
         "spacer",
     }
 )
 
 NUMERIC_LINEAR_TRACK_RENDERERS: frozenset[str] = frozenset(
-    {"dinucleotide_content", "dinucleotide_skew", "depth"}
+    {"dinucleotide_content", "dinucleotide_skew", "depth", "feature_density"}
 )
 
 _RENDERER_ALIASES: dict[str, str] = {
@@ -408,6 +411,8 @@ def _normalize_linear_track_slots(
                     f"depth slot '{slot.id}' has invalid track_index={raw_track_index!r}"
                 ) from exc
             params["track_index"] = track_index
+        elif renderer == "feature_density":
+            params["track"] = feature_density_slot_track_id(str(slot.id), params)
         elif renderer == "annotations":
             annotation_params = annotation_track_params_from_mapping(params)
             validate_annotation_slot_side(str(slot.id), side, annotation_params)

@@ -23,6 +23,7 @@ from gbdraw.analysis.collinearity import (
     CollinearityResult,
     LosslessCollinearityParameters,
 )
+from gbdraw.analysis.feature_density import FeatureDensityTrack
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
 from gbdraw.annotations import (
     AnnotationGradient,
@@ -78,6 +79,7 @@ from gbdraw.layout.similarity_alignment import (
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
+from gbdraw.features.query import FeatureQuery
 from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
 from gbdraw.features.shapes import resolve_feature_rendering
 from gbdraw.features.source import capture_source_features
@@ -789,6 +791,50 @@ def test_a_fasta_source_round_trips_in_both_modes(tmp_path: Path) -> None:
         )
         assert decoded.records[0].source == FastaInputSource(fasta)
         assert encode_canonical_request(decoded).payload == encoded.payload
+
+
+_DENSITY_TRACKS = (
+    FeatureDensityTrack("genes", FeatureQuery("gene")),
+    FeatureDensityTrack(
+        "long", FeatureQuery("CDS", qualifier="product", value="kinase", min_length=20, max_length=5000),
+        metric="coverage", style="histogram", window=500, step=250, color="#d08a3a", caption="Long kinases",
+    ),
+)
+
+
+def test_feature_density_tracks_round_trip_in_both_modes(tmp_path: Path) -> None:
+    gbk = _source_file(tmp_path / "a.gbk")
+    for request_type, options_type in ((CircularDiagramRequest, CircularDiagramOptions),
+                                       (LinearDiagramRequest, LinearDiagramOptions)):
+        request = request_type(
+            records=(RecordInput(source=GenBankInputSource(gbk)),),
+            options=options_type(feature_density_tracks=_DENSITY_TRACKS),
+            output=RenderOutputRequest(output_directory=tmp_path, output_prefix="out"),
+        )
+        encoded = encode_canonical_request(request)
+        tracks = encoded.payload["diagramOptions"]["featureDensityTracks"]
+        assert tracks[1] == {
+            "id": "long",
+            "query": {"featureType": "CDS", "qualifier": "product", "value": "kinase", "minLength": 20,
+                      "maxLength": 5000},
+            "metric": "coverage",
+            "style": "histogram",
+            "window": 500,
+            "step": 250,
+            "color": "#d08a3a",
+            "caption": "Long kinases",
+        }
+        resource_paths = {resource.resource_id: gbk for resource in encoded.resources}
+        decoded = decode_canonical_request(
+            json.loads(json.dumps(encoded.payload)), resource_paths=resource_paths, output_directory=tmp_path
+        )
+        assert decoded.options.feature_density_tracks == _DENSITY_TRACKS
+        assert encode_canonical_request(decoded).payload == encoded.payload
+
+        bad = copy.deepcopy(encoded.payload)
+        bad["diagramOptions"]["featureDensityTracks"][0]["metric"] = "sum"
+        with pytest.raises(CanonicalRequestDecodingError, match="metric must be one of"):
+            decode_canonical_request(bad, resource_paths=resource_paths, output_directory=tmp_path)
 
 
 def test_circular_request_payload_round_trip_uses_stable_resources(tmp_path: Path) -> None:

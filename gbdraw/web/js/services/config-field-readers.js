@@ -19,6 +19,7 @@ import {
 } from './current-option-values.js';
 import { readDefinitionLineStyles } from './definition-line-style-state.js';
 import { readDepthTracks } from './depth-track-state.js';
+import { readFeatureDensityTracks } from './feature-density-tracks.js';
 import { IMPORTED_COMPARISON_ACTIONS } from './imported-comparison-intent.js';
 import { readCircularPlotTitlePosition } from './layout-preferences.js';
 import { isPlainObject } from './losat-cache.js';
@@ -621,6 +622,7 @@ const advRows = (mode) => Object.freeze([
   row('depth_small_tick_interval', positiveNumberOrNull),
   row('depth_tick_font_size', positiveNumberOrNull),
   { field: 'depth_tracks', read: (value, adv) => readDepthTracks(value, adv), inPlace: true },
+  row('feature_density_tracks', readFeatureDensityTracks),
   row('gc_content_mode', textChoice(['percent', 'deviation'], 'deviation')),
   row('gc_content_show_axis', trueUnlessFalse),
   row('gc_content_show_ticks', trueUnlessFalse),

@@ -155,6 +155,7 @@
  * @property {unknown} [depth_width_circular]
  * @property {unknown} [depth_window_size]
  * @property {unknown} [evalue]
+ * @property {unknown} [feature_density_tracks]
  * @property {unknown} [feature_height]
  * @property {unknown} [feature_overlap_tolerance_bp]
  * @property {unknown} [feature_shapes]

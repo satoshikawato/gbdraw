@@ -4671,6 +4671,7 @@
                                             </label>
                                             <help-tip id="help-linear-show-depth" :text="t('Simple mode only. Display depth coverage tracks from uploaded TSV files; use Reset to copy them into the custom stack.')"></help-tip>
                                         </div>
+                                        <p v-if="adv.feature_density_tracks.length" data-feature-density-tracks class="text-[10px] text-slate-500">{{ tn(adv.feature_density_tracks.length, '{count} feature density track from the loaded Session', '{count} feature density tracks from the loaded Session') }}</p>
                                     </div>
                                 </div>
                                 <div data-setting="track-slots" class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
@@ -5018,6 +5019,7 @@
                                             <input type="checkbox" :checked="form.show_depth" @change="setTrackShown('show_depth', $event.target.checked)" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled || !canShowDepthTrack)" class="form-checkbox">
                                             <span>{{ t('Show Depth') }}</span>
                                         </label>
+                                        <p v-if="adv.feature_density_tracks.length" data-feature-density-tracks class="text-[10px] text-slate-500">{{ tn(adv.feature_density_tracks.length, '{count} feature density track from the loaded Session', '{count} feature density tracks from the loaded Session') }}</p>
                                     </div>
                                     <label
                                         class="option-label flex items-center gap-2 text-xs select-none"

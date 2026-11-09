@@ -122,6 +122,7 @@ export const MODE_SCOPED_SETTINGS = deepFreeze({
     {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "depth_large_tick_interval", "since": 46},
     {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "depth_small_tick_interval", "since": 46},
     {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "depth_tick_font_size", "since": 46},
+    {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "feature_density_tracks", "since": 51},
     {"domain": "config.adv", "key": null, "migrate": "own", "modes": "linear", "path": "linear_track_slots_enabled", "since": 46},
     {"domain": "config.adv", "key": null, "migrate": "own", "modes": "linear", "path": "linear_track_slots_schema_version", "since": 46},
     {"domain": "config.adv", "key": null, "migrate": "own", "modes": "linear", "path": "linear_track_slots_axis_index", "since": 46},

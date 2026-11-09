@@ -1219,6 +1219,7 @@
                 "dinucleotide_content",
                 "dinucleotide_skew",
                 "depth",
+                "feature_density",
                 "sequence_conservation",
                 "annotations",
                 "spacer"
@@ -1343,6 +1344,7 @@
                 "dinucleotide_content",
                 "dinucleotide_skew",
                 "depth",
+                "feature_density",
                 "annotations",
                 "spacer"
               ]
@@ -1462,6 +1464,149 @@
         "featureVisibility",
         "labelVisibility",
         "labelText"
+      ],
+      "additionalProperties": false
+    },
+    "CanonicalFeatureQuery": {
+      "type": "object",
+      "properties": {
+        "featureType": {
+          "type": "string",
+          "pattern": "[^\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]"
+        },
+        "qualifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "minLength": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "maxLength": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "featureType",
+        "qualifier",
+        "value",
+        "minLength",
+        "maxLength"
+      ],
+      "additionalProperties": false
+    },
+    "CanonicalFeatureDensityTrack": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "[^\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]"
+        },
+        "query": {
+          "$ref": "#/$defs/CanonicalFeatureQuery"
+        },
+        "metric": {
+          "enum": [
+            "count",
+            "coverage"
+          ]
+        },
+        "style": {
+          "enum": [
+            "heatmap",
+            "histogram"
+          ]
+        },
+        "window": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "step": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanonicalAnnotationColor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "query",
+        "metric",
+        "style",
+        "window",
+        "step",
+        "color",
+        "caption"
       ],
       "additionalProperties": false
     },
@@ -1857,6 +2002,19 @@
             "$ref": "#/$defs/CanonicalCircularDepthTrack"
           },
           "minItems": 1
+        },
+        "featureDensityTracks": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanonicalFeatureDensityTrack"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "plotTitle": {
           "anyOf": [
@@ -2434,6 +2592,19 @@
             "$ref": "#/$defs/CanonicalLinearDepthTrack"
           },
           "minItems": 1
+        },
+        "featureDensityTracks": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanonicalFeatureDensityTrack"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "plotTitle": {
           "anyOf": [

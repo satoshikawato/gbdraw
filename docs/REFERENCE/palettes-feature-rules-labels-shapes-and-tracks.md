@@ -58,6 +58,7 @@ The exact surface controls are listed in the [Web app](web-app.md),
 | `dinucleotide_content` | GC percentage, deviation from the mean, or the configured base-pair content | Can draw its own percentage axis and ticks. |
 | `dinucleotide_skew` | Signed skew for the configured base pair | Requires record sequence. |
 | `depth` | One logical numeric depth series | Requires a mapped source for each record that has data. |
+| `feature_density` | One feature density track: features per window, or the share of each window they cover | Requires `track=<id>` naming a track defined with `--feature_density_track` or `--feature_density_table`. |
 | `annotations` | One named annotation set | Requires `set_id`; an overlay also requires a drawable anchor. |
 
 Circular slots use side, radius or width, gaps, z-order, and renderer
@@ -141,6 +142,18 @@ Linear layout it reserves no painted track space for that record, while the
 series identity remains stable where data exists. On a Circular multi-record
 canvas the record keeps an empty depth slot; without any depth input no depth
 slot is reserved. A logarithmic depth axis requires a positive minimum.
+
+A feature density track counts, in each window along a record, the features
+that a query selects (a type, optionally a qualifier and a pattern searched for in its
+value, and a length range), or gives the percentage of the window they
+cover. A feature split into parts counts once. Windows go round the origin of a
+circular record and stop at the ends of a linear one. The window and step
+follow the GC content window unless the track sets its own. A `heatmap` track
+is one band of colored cells with a gradient row in the Legend; a `histogram`
+track draws like a depth series. With no track list, each track gets a row after
+the features; a track list draws only the tracks its `feature_density` slots
+name. See [`--feature_density_table`](../CLI_Reference.md#--feature_density_table)
+for the track words and columns.
 
 An annotation renderer draws one named `set_id`, not every row in an annotation
 table. Coordinate targets and feature targets are mutually exclusive.

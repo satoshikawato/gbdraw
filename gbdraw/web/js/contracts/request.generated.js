@@ -228,7 +228,7 @@
  * @typedef {object} CanonicalCircularTrackSlot
  * @property {'circularTrackSlot'} kind
  * @property {string} id
- * @property {'features' | 'ticks' | 'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'sequence_conservation' | 'annotations' | 'spacer' | string} renderer
+ * @property {'features' | 'ticks' | 'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'feature_density' | 'sequence_conservation' | 'annotations' | 'spacer' | string} renderer
  * @property {boolean} enabled
  * @property {string | null} side
  * @property {CanonicalScalarSpec | null} radius
@@ -247,7 +247,7 @@
  * @typedef {object} CanonicalLinearTrackSlot
  * @property {'linearTrackSlot'} kind
  * @property {string} id
- * @property {'features' | 'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'annotations' | 'spacer' | string} renderer
+ * @property {'features' | 'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'feature_density' | 'annotations' | 'spacer' | string} renderer
  * @property {boolean} enabled
  * @property {string | null} side
  * @property {CanonicalLinearScalarSpec | null} height
@@ -262,6 +262,25 @@
  * @property {'on' | 'off' | 'exclude_matching' | null} featureVisibility
  * @property {'on' | 'off' | null} labelVisibility
  * @property {string | null} labelText
+ */
+/**
+ * @typedef {object} CanonicalFeatureQuery
+ * @property {string} featureType
+ * @property {string | null} qualifier
+ * @property {string | null} value
+ * @property {number | null} minLength
+ * @property {number | null} maxLength
+ */
+/**
+ * @typedef {object} CanonicalFeatureDensityTrack
+ * @property {string} id
+ * @property {CanonicalFeatureQuery} query
+ * @property {'count' | 'coverage'} metric
+ * @property {'heatmap' | 'histogram'} style
+ * @property {number | null} window
+ * @property {number | null} step
+ * @property {CanonicalAnnotationColor | null} color
+ * @property {string | null} caption
  */
 /**
  * @typedef {object} CanonicalCircularDepthTrack
@@ -316,6 +335,7 @@
  * @property {number | null} [depthWindow]
  * @property {number | null} [depthStep]
  * @property {CanonicalCircularDepthTrack[]} [depthTracks]
+ * @property {CanonicalFeatureDensityTrack[] | null} [featureDensityTracks]
  * @property {string | null} [plotTitle]
  * @property {number | null} [plotTitleFontSize]
  * @property {number | null} [evalue]
@@ -391,6 +411,7 @@
  * @property {number | null} [depthWindow]
  * @property {number | null} [depthStep]
  * @property {CanonicalLinearDepthTrack[]} [depthTracks]
+ * @property {CanonicalFeatureDensityTrack[] | null} [featureDensityTracks]
  * @property {string | null} [plotTitle]
  * @property {number | null} [plotTitleFontSize]
  * @property {number | null} [evalue]

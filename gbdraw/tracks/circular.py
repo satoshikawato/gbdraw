@@ -7,6 +7,7 @@ from typing import Any, Literal, Mapping, Sequence
 from .parsing import (
     SHARED_SLOT_PARAM_KEYS,
     CircularTrackSlotParseError,
+    feature_density_slot_track_id,
     normalize_dinucleotide_params,
     normalize_dinucleotide_skew_color_params as _normalize_dinucleotide_skew_color_params,
     parse_bool,
@@ -29,6 +30,7 @@ CircularTrackRendererName = Literal[
     "dinucleotide_content",
     "dinucleotide_skew",
     "depth",
+    "feature_density",
     "sequence_conservation",
     "annotations",
     "spacer",
@@ -43,6 +45,7 @@ SUPPORTED_CIRCULAR_TRACK_RENDERERS: frozenset[str] = frozenset(
         "dinucleotide_content",
         "dinucleotide_skew",
         "depth",
+        "feature_density",
         "sequence_conservation",
         "annotations",
         "spacer",
@@ -50,7 +53,7 @@ SUPPORTED_CIRCULAR_TRACK_RENDERERS: frozenset[str] = frozenset(
 )
 
 NUMERIC_CIRCULAR_TRACK_RENDERERS: frozenset[str] = frozenset(
-    {"dinucleotide_content", "dinucleotide_skew", "depth", "sequence_conservation"}
+    {"dinucleotide_content", "dinucleotide_skew", "depth", "feature_density", "sequence_conservation"}
 )
 
 CONSERVATION_CIRCULAR_TRACK_RENDERERS: frozenset[str] = frozenset(
@@ -707,6 +710,8 @@ def _normalize_circular_track_slots(
                 params = normalize_dinucleotide_params(params)
             if renderer == "dinucleotide_skew":
                 params = _normalize_dinucleotide_skew_color_params(params)
+            elif renderer == "feature_density":
+                params["track"] = feature_density_slot_track_id(str(slot.id), params)
             elif renderer == "depth" and "track_index" in params:
                 raw_track_index = params["track_index"]
                 try:

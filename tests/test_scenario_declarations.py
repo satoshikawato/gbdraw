@@ -159,6 +159,8 @@ CLI_OPTION_CAPABILITIES: dict[str, str] = {
     "--depth_track_tick_font_size": "track.depth-numeric",
     "--depth_width": "track.depth-numeric",
     "--depth_window": "track.depth-numeric",
+    "--feature_density_table": "track.depth-numeric",
+    "--feature_density_track": "track.depth-numeric",
     "--hide_depth_axis": "track.depth-numeric",
     "--hide_depth_ticks": "track.depth-numeric",
     "--no_depth_log_scale": "track.depth-numeric",

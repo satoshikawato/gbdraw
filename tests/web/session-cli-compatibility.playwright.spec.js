@@ -439,6 +439,32 @@ test('Session 40 early CLI linear tables survives Web Generate', async ({ browse
   }
 });
 
+// OV-3031: a CLI Session with two feature density tracks keeps them at Web Generate: the new Result draws the same
+// density slot groups (paths and fills) as the Result the CLI stored.
+test('Session CLI feature density tracks survive Web Generate', async ({ browser }, testInfo) => {
+  test.setTimeout(600_000);
+  const bytes = gunzipSync(await fs.readFile(path.join(root, 'tests/fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw-session.json.gz')));
+  const file = testInfo.outputPath('feature-density.gbdraw-session.json');
+  await fs.writeFile(file, bytes);
+  const run = await load(browser, file, { width: 1600, height: 1000 });
+  try {
+    const density = (svg) => run.page.evaluate((text) => {
+      const root = new DOMParser().parseFromString(text, 'image/svg+xml');
+      return [...root.querySelectorAll('[data-gbdraw-slot-renderer="feature_density"]')].map((group) => [
+        group.getAttribute('data-gbdraw-slot-id'),
+        [...group.querySelectorAll('path')].map((item) => `${item.getAttribute('fill')}|${item.getAttribute('d')}`).sort()
+      ]);
+    }, svg);
+    const stored = await density(JSON.parse(bytes).drawings[0].results[0].content);
+    expect(stored.map(([id]) => id)).toEqual(['density_genes', 'density_trna']);
+    await generateAndWaitForResult(run.page);
+    expect(await density((await snapshot(run.page)).selected)).toEqual(stored);
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
+
 test('Session schema-1 Web binding control still loads', async ({ browser }, testInfo) => {
   const run = await load(browser, path.join(root, 'tests/fixtures/sessions/single.v41-bindings1.json'), { width: 1600, height: 1000 }, false);
   try {

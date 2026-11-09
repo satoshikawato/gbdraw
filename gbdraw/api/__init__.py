@@ -54,6 +54,8 @@ from gbdraw.analysis.protein_colinearity import (
     normalize_orthogroup_membership_mode,
 )
 from .diagram import LinearDiagramMetadata
+from gbdraw.analysis.feature_density import FeatureDensityTrack
+from gbdraw.features.query import FeatureQuery
 from .options import (
     AnnotationOptions,
     CircularDiagramOptions,
@@ -314,6 +316,8 @@ __all__ = [
     "RecordKey",
     "ColorOptions",
     "DepthTrackInput",
+    "FeatureDensityTrack",
+    "FeatureQuery",
     # render
     "InteractiveSvgContext",
     "build_interactive_svg_context",

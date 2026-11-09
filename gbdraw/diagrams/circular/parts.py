@@ -10,13 +10,14 @@ requested slots.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, NamedTuple, Sequence
+from typing import TYPE_CHECKING, Mapping, NamedTuple, Sequence
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
 from ...analysis.conservation import ConservationTrack
 from ...analysis.depth_tracks import DepthTrackData
+from ...analysis.feature_density import FeatureDensityLayer
 from ...annotations import AnnotationOptions, ResolvedAnnotationBundle, ResolvedAnnotationTrack
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...render.groups.circular.definition import CircularDefinitionProfile
@@ -45,6 +46,8 @@ class CircularRecordData:
     conservation_tracks: Sequence[ConservationTrack] | None = None
     conservation_min_identity: float = 0.0
     dinucleotide_dataframes: dict[str, DataFrame] | None = None
+    # The record's feature density layers by track id.
+    feature_density: Mapping[str, FeatureDensityLayer] | None = None
 
 
 @dataclass(frozen=True, slots=True)
