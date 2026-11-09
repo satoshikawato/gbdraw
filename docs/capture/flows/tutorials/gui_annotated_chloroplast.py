@@ -64,17 +64,25 @@ GALLERY_FEATURE_TYPES = (
     "misc_RNA",
     "rep_origin",
 )
-# The three-slot stack H-GUI-16 still builds with the bracket table.
+# The three-slot stack H-GUI-16 builds with the bracket table (one set).
 GALLERY_SLOT_ORDER = (
     ("features", "features"),
     ("plastome_regions", "annotations"),
     ("gc_content", "dinucleotide_content"),
 )
-# The Gallery figure: the region tint is an Underlay on the features that
-# extends to GC content, listed after the features (as the Gallery command).
-GALLERY_SPAN_SLOT_ORDER = (
+# T-GUI-05 with the span table: the tint set's own row, not yet edited, too.
+GALLERY_REGIONS_SLOT_ORDER = (
+    ("annotations_2", "annotations"),
     ("features", "features"),
+    ("plastome_regions", "annotations"),
+    ("gc_content", "dinucleotide_content"),
+)
+# The Gallery figure: the region tint is an Underlay on the features that
+# extends to GC content. Use custom stack lists the set's Overlay row above
+# the features it covers; an Overlay row cannot move.
+GALLERY_SPAN_SLOT_ORDER = (
     ("plastome_tint", "annotations"),
+    ("features", "features"),
     ("plastome_regions", "annotations"),
     ("gc_content", "dinucleotide_content"),
 )
@@ -321,7 +329,17 @@ def _remove_slot_if_present(page: Page, slot_id: str) -> None:
         run_track_slot_row_action(group, "Remove")
 
 
-def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
+def _rename_slot(page: Page, slot_id: str, new_id: str) -> Any:
+    group = page.get_by_role("group", name=f"Circular track slot {slot_id}", exact=True)
+    group.get_by_label(f"Circular track slot id {slot_id}", exact=True).fill(new_id)
+    return page.get_by_role("group", name=f"Circular track slot {new_id}", exact=True)
+
+
+def _configure_gallery_slots(
+    page: Page, expected: tuple[tuple[str, str], ...] = GALLERY_SLOT_ORDER
+) -> tuple[dict[str, Any], ...]:
+    """Edit the stack Use custom stack starts with: its row for plastome_regions."""
+
     custom_slots = page.locator("button[aria-controls='circular-custom-track-slots-panel']")
     for details in custom_slots.locator("xpath=ancestor::details").all():
         if details.get_attribute("open") is None:
@@ -337,32 +355,17 @@ def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
     )
     feature_slot.locator("select").last.select_option("split")
 
-    renderer = page.get_by_label("New circular track renderer", exact=True)
-    renderer.select_option("annotations")
-    page.get_by_role("button", name=re.compile(r"Add track$"), exact=False).click()
-    annotation_slot = page.get_by_role(
-        "group", name="Circular track slot annotations", exact=True
+    # Use custom stack gives the set its own row, annotations_1, outside the Axis.
+    regions_row = page.get_by_role(
+        "group", name="Circular track slot annotations_1", exact=True
     )
+    expect(regions_row.get_by_label(
+        "Circular track slot annotations_1 Annotation set", exact=True
+    )).to_have_value("plastome_regions")
+    annotation_slot = _rename_slot(page, "annotations_1", "plastome_regions")
     annotation_slot.get_by_label(
-        "Circular track slot annotations Annotation set", exact=True
-    ).select_option(
-        "plastome_regions"
-    )
-    annotation_slot.get_by_label(
-        "Circular track slot annotations Annotation placement", exact=True
-    ).select_option(
-        "inside"
-    )
-    annotation_slot = page.get_by_role(
-        "group", name="Circular track slot annotations", exact=True
-    )
-    annotation_slot.get_by_label(
-        "Circular track slot id annotations", exact=True
-    ).fill("plastome_regions")
-    annotation_slot = page.get_by_role(
-        "group", name="Circular track slot plastome_regions", exact=True
-    )
-    annotation_slot.get_by_title("Move outward", exact=True).click()
+        "Circular track slot plastome_regions Annotation placement", exact=True
+    ).select_option("inside")
     annotation_slot = page.get_by_role(
         "group", name="Circular track slot plastome_regions", exact=True
     )
@@ -372,9 +375,9 @@ def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
     annotation_slot.get_by_role("combobox", name="Circular track slot plastome_regions Radius unit", exact=True).select_option("factor")
     open_ancestor_details(annotation_slot.get_by_title("Inner gap", exact=True)).fill("1")
     annotation_slot.get_by_title("Outer gap", exact=True).fill("1")
-    annotation_slot.get_by_label(
+    expect(annotation_slot.get_by_label(
         "Circular track slot plastome_regions Show annotation labels", exact=True
-    ).check()
+    )).to_be_checked()
     annotation_slot.locator(
         'select:has(option[value="compress"])'
     ).select_option("compress")
@@ -396,34 +399,26 @@ def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
         for slot in slots
         if slot["enabled"]
     )
-    if enabled != GALLERY_SLOT_ORDER:
+    if enabled != expected:
         raise AssertionError(f"Unexpected Gallery slot state: {enabled!r}")
     return slots
 
 
-def _add_region_tint_slot(page: Page) -> tuple[dict[str, Any], ...]:
-    """Add the plastome_tint Underlay after the Gallery three-slot stack."""
+def _configure_region_tint_slot(page: Page) -> tuple[dict[str, Any], ...]:
+    """Extend the tint set's own row, annotations_2, to GC content."""
 
-    renderer = page.get_by_label("New circular track renderer", exact=True)
-    renderer.select_option("annotations")
-    page.get_by_role("button", name=re.compile(r"Add track$"), exact=False).click()
-    tint = page.get_by_role("group", name="Circular track slot annotations", exact=True)
-    tint.get_by_label("Circular track slot id annotations", exact=True).fill("plastome_tint")
-    tint = page.get_by_role("group", name="Circular track slot plastome_tint", exact=True)
+    # Use custom stack gives plastome_tint, a set of highlights, an Underlay
+    # row on the features with its highlights only and padding 0.
+    tint = page.get_by_role("group", name="Circular track slot annotations_2", exact=True)
+    label = "Circular track slot annotations_2"
+    expect(tint.get_by_label(f"{label} Annotation set", exact=True)).to_have_value("plastome_tint")
+    expect(tint.get_by_label(f"{label} Annotation placement", exact=True)).to_have_value("overlay")
+    expect(tint.get_by_label(f"{label} Enabled drawable anchor", exact=True)).to_have_value("features")
+    expect(tint.get_by_label(f"{label} Annotation layer", exact=True)).to_have_value("underlay")
+    tint = _rename_slot(page, "annotations_2", "plastome_tint")
     label = "Circular track slot plastome_tint"
-    # Move the row under the features first: an overlay row's Move outward and
-    # Move inward arrows are disabled.
-    for _ in range(2):
-        tint.get_by_title("Move outward", exact=True).click()
-    tint.get_by_label(f"{label} Annotation set", exact=True).select_option("plastome_tint")
-    tint.get_by_label(f"{label} Annotation placement", exact=True).select_option("overlay")
-    tint.get_by_label(f"{label} Enabled drawable anchor", exact=True).select_option("features")
-    tint.get_by_label(f"{label} Annotation layer", exact=True).select_option("underlay")
     open_ancestor_details(tint.get_by_label(f"{label} Extend to", exact=True)).select_option("gc_content")
     tint.get_by_label(f"{label} Show annotation labels", exact=True).uncheck()
-    tint.get_by_label(f"{label} Padding", exact=True).fill("0")
-    for mark in ("line", "bracket", "band"):
-        tint.get_by_label(f"{label} mark {mark}", exact=True).uncheck()
 
     slots = _track_slot_snapshot(page)
     enabled = tuple((slot["id"], slot["renderer"]) for slot in slots if slot["enabled"])
@@ -525,8 +520,8 @@ def capture_gui_annotated_chloroplast(
             page, output_paths[SCREENSHOT_NAMES[2]]
         )
 
-        _configure_gallery_slots(page)
-        slots = _add_region_tint_slot(page)
+        _configure_gallery_slots(page, GALLERY_REGIONS_SLOT_ORDER)
+        slots = _configure_region_tint_slot(page)
         _dismiss_history_limit_notice(page)
         page.get_by_role(
             "group", name="Circular track slot plastome_tint", exact=True

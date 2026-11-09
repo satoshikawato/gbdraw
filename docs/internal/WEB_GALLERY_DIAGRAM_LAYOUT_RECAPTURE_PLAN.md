@@ -200,7 +200,7 @@ legend.
 
 | Output | Class / decision | Selector or action state | Caption intent | Alt text |
 | --- | --- | --- | --- | --- |
-| `docs/images/h-gui-10/slot-settings.png` | `D-OP`; Keep expected | Import `plastome_regions`; set legend label and lanes; enable custom stack; change `gc_skew` to AT/`AT skew`; add annotations, bind the set, move it outside, enable labels, and scroll group `Circular track slot annotations` into view. | Show annotation and numeric slot placement. | Custom track-slot settings with annotation and numeric tracks |
+| `docs/images/h-gui-10/slot-settings.png` | `D-OP`; Keep expected | Import `plastome_regions`; set legend label and lanes; enable custom stack; change `gc_skew` to AT/`AT skew`; check the set's own row `annotations_1` (bound to the set, outside the Axis), enable its labels, and scroll group `Circular track slot annotations_1` into view. | Show annotation and numeric slot placement. | Custom track-slot settings with annotation and numeric tracks |
 | `docs/images/h-gui-10/annotation-result.png` | `D-RESULT`; Recapture | Generate; assert slot order, outside annotation placement, visible LSC/IRb/SSC/IRa and AT-skew legend, and 145 logical/195 rendered features; fit to 70%. | Verify annotation lanes and visible labels. | Genome diagram with region annotations in custom slots |
 
 Gallery relation: `tobacco-chloroplast` is contextual coverage on the same

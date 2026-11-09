@@ -481,12 +481,22 @@ export const effectiveSlotPlacement = (slot, preset = 'tuckin') => {
 };
 
 /**
+ * Whether a row sits on the Axis. An Annotations row placed as an Overlay is
+ * anchored to another row and is never the row on the Axis.
+ * @param {SlotPlacementSource | null | undefined} slot
+ * @param {unknown} [preset]
+ */
+export const isOnAxisSlot = (slot, preset = 'tuckin') => (
+  slot?.renderer !== 'annotations' && effectiveSlotPlacement(slot, preset) === 'overlay'
+);
+
+/**
  * @param {(SlotPlacementSource | null | undefined)[]} slots
  * @param {unknown} [preset]
  * @returns {number}
  */
 export const inferLegacyAxisIndexFromFeature = (slots, preset = 'tuckin') => {
-  const onAxisIndex = slots.findIndex((slot) => slot?.renderer !== 'annotations' && effectiveSlotPlacement(slot, preset) === 'overlay');
+  const onAxisIndex = slots.findIndex((slot) => isOnAxisSlot(slot, preset));
   if (onAxisIndex >= 0) return onAxisIndex;
   const featureIndex = slots.findIndex((slot) => slot?.enabled !== false && slot?.renderer === 'features');
   if (featureIndex < 0) {
@@ -549,7 +559,7 @@ export const enforceSingleOnAxisSlot = (slots, axisIndex, preset = 'tuckin') => 
   // The filter keeps exactly the integers of the map, which are the non-null indices.
   const onAxisIndices = /** @type {number[]} */ (slots
     .map((slot, index) => (
-      slot?.renderer !== 'annotations' && effectiveSlotPlacement(slot, preset) === 'overlay' ? index : null
+      isOnAxisSlot(slot, preset) ? index : null
     ))
     .filter((index) => Number.isInteger(index)));
   if (onAxisIndices.length === 0) {

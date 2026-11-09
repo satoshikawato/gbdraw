@@ -127,13 +127,11 @@ def test_track_flows_use_visible_accessible_controls_without_state_injection() -
         'get_by_label("Annotation lane", exact=True)',
         'name="Circular track slot gc_skew", exact=True',
         '"Circular track slot gc_skew Track dinucleotide", exact=True',
-        'get_by_label("New circular track renderer", exact=True)',
-        'name=re.compile(r"Add track$")',
-        'name="Circular track slot annotations", exact=True',
-        '"Circular track slot annotations Annotation set", exact=True',
-        '"Circular track slot annotations Annotation placement", exact=True',
-        'run_track_slot_row_action(annotation_slot, "Move outside Axis")',
-        '"Circular track slot annotations Show annotation labels", exact=True',
+        # Use custom stack gives the set its own row, annotations_1.
+        'name="Circular track slot annotations_1", exact=True',
+        '"Circular track slot annotations_1 Annotation set", exact=True',
+        '"Circular track slot annotations_1 Annotation placement", exact=True',
+        '"Circular track slot annotations_1 Show annotation labels", exact=True',
         'get_by_role("button", name="SVG", exact=True)',
         "page.expect_download",
         "download.save_as",
@@ -153,6 +151,8 @@ def test_track_flows_use_visible_accessible_controls_without_state_injection() -
         "region_start",
         "region_end",
         "part_",
+        # A second Annotations row would draw the set twice (OV-3151).
+        'select_option("annotations")',
     ):
         assert forbidden not in source
 

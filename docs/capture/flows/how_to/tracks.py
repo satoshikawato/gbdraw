@@ -26,7 +26,6 @@ from flows.web_capture import (
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
-    run_track_slot_row_action,
     set_feature_search_visible,
     toggle_disclosure,
     wait_for_app_shell,
@@ -90,7 +89,7 @@ EXPECTED_QUANTITATIVE_SLOT_ORDER = (
     ("gc_skew", "dinucleotide_skew"),
 )
 EXPECTED_ANNOTATION_SLOT_ORDER = (
-    ("annotations", "annotations"),
+    ("annotations_1", "annotations"),
     ("features", "features"),
     ("ticks", "ticks"),
     ("gc_content", "dinucleotide_content"),
@@ -460,10 +459,10 @@ def _assert_annotation_svg(report: Mapping[str, Any]) -> None:
     if _slot_pairs(report) != EXPECTED_ANNOTATION_SLOT_ORDER:
         raise AssertionError(f"Unexpected annotation slot order: {_slot_pairs(report)}")
     expected_annotations = {
-        ("lsc", "plastome_regions", "annotations", "NC_001879.2", "bracket", "LSC"),
-        ("irb", "plastome_regions", "annotations", "NC_001879.2", "bracket", "IRb"),
-        ("ssc", "plastome_regions", "annotations", "NC_001879.2", "bracket", "SSC"),
-        ("ira", "plastome_regions", "annotations", "NC_001879.2", "bracket", "IRa"),
+        ("lsc", "plastome_regions", "annotations_1", "NC_001879.2", "bracket", "LSC"),
+        ("irb", "plastome_regions", "annotations_1", "NC_001879.2", "bracket", "IRb"),
+        ("ssc", "plastome_regions", "annotations_1", "NC_001879.2", "bracket", "SSC"),
+        ("ira", "plastome_regions", "annotations_1", "NC_001879.2", "bracket", "IRa"),
     }
     actual_annotations = {
         (
@@ -862,31 +861,22 @@ def capture_gui_annotation_tracks(
         track_legend.fill("AT skew")
         expect(track_legend).to_have_value("AT skew")
 
-        new_renderer = page.get_by_label("New circular track renderer", exact=True)
-        new_renderer.select_option("annotations")
-        expect(new_renderer).to_have_value("annotations")
-        page.get_by_role(
-            "button", name=re.compile(r"Add track$"), exact=False
-        ).click()
+        # Use custom stack gives the set its own row, annotations_1, outside
+        # the Axis, where the figure draws the set without a stack.
         annotation_slot = page.get_by_role(
-            "group", name="Circular track slot annotations", exact=True
+            "group", name="Circular track slot annotations_1", exact=True
         )
         expect(annotation_slot).to_be_visible()
         annotation_set = annotation_slot.get_by_label(
-            "Circular track slot annotations Annotation set", exact=True
+            "Circular track slot annotations_1 Annotation set", exact=True
         )
-        annotation_set.select_option("plastome_regions")
         expect(annotation_set).to_have_value("plastome_regions")
-        run_track_slot_row_action(annotation_slot, "Move outside Axis")
-        annotation_slot = page.get_by_role(
-            "group", name="Circular track slot annotations", exact=True
-        )
         placement = annotation_slot.get_by_label(
-            "Circular track slot annotations Annotation placement", exact=True
+            "Circular track slot annotations_1 Annotation placement", exact=True
         )
         expect(placement).to_have_value("outside")
         show_labels = annotation_slot.get_by_label(
-            "Circular track slot annotations Show annotation labels", exact=True
+            "Circular track slot annotations_1 Show annotation labels", exact=True
         )
         show_labels.check()
         expect(show_labels).to_be_checked()
@@ -895,7 +885,7 @@ def capture_gui_annotation_tracks(
         _assert_slot_snapshot(slots, EXPECTED_ANNOTATION_SLOT_ORDER)
         skew_snapshot = next(slot for slot in slots if slot["id"] == "gc_skew")
         annotation_snapshot = next(
-            slot for slot in slots if slot["id"] == "annotations"
+            slot for slot in slots if slot["id"] == "annotations_1"
         )
         if skew_snapshot["params"].get("nt") != "AT":
             raise AssertionError("The visible custom skew control did not select AT")

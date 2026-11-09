@@ -95,6 +95,31 @@ fresh-upload run element for element.
 | `hepatoplasmataceae_collinear` | `manual-01-01-linear-mode.webp`, `post-01-01-feature-popup.webp` | Recapture | Session alone, as before | Captured at DSF 3; accepted |
 | `hepatoplasmataceae_collinear` | `manual-04-03-advanced-collinear.webp` | Delete | None: it showed Web defaults (Diagonal drift 0, Merge conflicts 1), now named in the step 7 note | Deleted |
 
+## tobacco-chloroplast steps 6 and 7 edit the rows Use custom stack starts with (2026-11-10, OV-3151)
+
+Since #1800, **Use custom stack** starts the stack with one row per region
+set: `annotations_1` for `plastome_regions` outside the Axis, and
+`annotations_2` for `plastome_tint`, an Overlay Underlay row on the features
+with its highlights only and padding 0. Steps 6 and 7 used to add one
+Annotations row for each set; the added rows drew each set twice, and the
+step 6 replay stopped at Generate. Step 6 now renames `annotations_1` to
+`plastome_regions` and sets it Inside (which puts it between features and
+GC content, with no Move); step 7 renames `annotations_2` to `plastome_tint`
+and sets **Extend to** `gc_content` and labels off. The step 6 preview now
+shows the tints on the feature ring; step 7 extends them through GC content.
+The final figure equals the one before apart from generated IDs (checked on
+the docs T-GUI-05 flow: the tint row listed above or below the features, with
+Cover anchor on or off, gives the same SVG after slot and label path IDs are
+set aside). The Gallery Session, source SVG, thumbnail, and `examples.json`
+are unchanged.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `tobacco-chloroplast` | `manual-06-02-region-ring-slots.webp` | Recapture; recipe changed | Replay through step 6 in a 1400x2200 viewport (the sticky Generate button stays below the panel): annotations_2, features, plastome_regions, gc_content | Captured at DSF 3; accepted |
+| `tobacco-chloroplast` | `manual-06-03-regions-preview.webp` | Recapture | Replay through step 6; plastome_regions is row 2 | Captured at DSF 3; accepted |
+| `tobacco-chloroplast` | `manual-07-01-custom-track-slots.webp` | Recapture; recipe changed | Replay through step 7 (it read the Session's stack, whose listing order a reader no longer gets) in a 1400x2200 viewport: plastome_tint, features, plastome_regions, gc_content | Captured at DSF 3; accepted |
+| `tobacco-chloroplast` | `manual-07-02-tint-preview.webp`, `manual-08-02-chloroplast-preview.webp` | Keep | Replay through steps 7 and 8; the recapture differed only by encoding noise | Kept |
+
 ## Progressive HmmtDNA_ATskew, tobacco-chloroplast, and Vnig_TUMSAT-TG-2018 tutorials (2026-10-23)
 
 The three Circular tutorials now start from the Web defaults and Generate after

@@ -516,7 +516,7 @@
     },
     {
       "title": "Import the four regions and put them on a ring",
-      "body": "Open Region Annotations, click Import TSV, and choose nicotiana-tabacum-regions-span.tsv. The import creates two sets with the same four regions: plastome_regions holds the named lines and plastome_tint the tints. Do not generate yet: both sets need a track first. Open Layout, open Custom Track Slots, and check Use custom stack. Remove the ticks and gc_skew rows (Row actions, then Remove), set the features row's Lane direction to split, and add an Annotations track for plastome_regions as in the table; use Move outward once so it sits between features and gc_content. Set gc_content as in the table, then click Generate Diagram.",
+      "body": "Open Region Annotations, click Import TSV, and choose nicotiana-tabacum-regions-span.tsv. The import creates two sets with the same four regions: plastome_regions holds the named lines and plastome_tint the tints. Open Layout, open Custom Track Slots, and check Use custom stack. The stack starts with a row for each set: annotations_1 for plastome_regions, outside the Axis, and annotations_2 for plastome_tint, an overlay on the features. Remove the ticks and gc_skew rows (Row actions, then Remove) and set the features row's Lane direction to split. Rename annotations_1 to plastome_regions and set it as in the table; Inside axis puts it between features and gc_content. Set gc_content as in the table, then click Generate Diagram.",
       "table": {
         "columns": [
           "Slot id",
@@ -553,7 +553,7 @@
           ]
         ]
       },
-      "note": "The four boundaries correspond to JLB, JSB, JSA, and JLA for NC_001879.2; coordinates are 1-based and inclusive. A Generate before the sets have tracks stops with \"Two region annotations overlap in the same lane\", because both sets would share the default lane.",
+      "note": "The four boundaries correspond to JLB, JSB, JSA, and JLA for NC_001879.2; coordinates are 1-based and inclusive. The four named lines are all in lane 0, so a Generate before the plastome_regions row is set to Compress stops with \"Two region annotations overlap in the same lane\".",
       "replay": [
         {
           "type": "evaluate",
@@ -606,32 +606,14 @@
           "value": "split"
         },
         {
-          "type": "select",
-          "selector": "select[aria-label='New circular track renderer']",
-          "value": "annotations"
-        },
-        {
-          "type": "click",
-          "selector": "role=button[name=/Add track$/]"
-        },
-        {
           "type": "fill",
-          "selector": "[role='group'][aria-label^='Circular track slot '] >> nth=2 >> input[placeholder='slot_id']",
-          "value": "plastome_regions"
-        },
-        {
-          "type": "select",
-          "selector": "[aria-label='Circular track slot plastome_regions Annotation set']",
+          "selector": "[role='group'][aria-label='Circular track slot annotations_1'] input[placeholder='slot_id']",
           "value": "plastome_regions"
         },
         {
           "type": "select",
           "selector": "[aria-label='Circular track slot plastome_regions Annotation placement']",
           "value": "inside"
-        },
-        {
-          "type": "click",
-          "selector": "[role='group'][aria-label='Circular track slot plastome_regions'] button[title='Move outward']"
         },
         {
           "type": "select",
@@ -788,8 +770,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/tobacco-chloroplast/manual-06-02-region-ring-slots.webp",
-            "alt": "Circular track stack with features, the plastome_regions annotation row inside it at 0.65 ×R and 20 px, and GC content at 0.56 ×R and 0.08 ×R.",
-            "caption": "The stack after this step: features, plastome_regions, and gc_content, with the numeric Width/Radius values and units from the table."
+            "alt": "Circular track stack with the plastome_tint row annotations_2 over the features, the plastome_regions annotation row inside them at 0.65 ×R and 20 px, and GC content at 0.56 ×R and 0.08 ×R.",
+            "caption": "The stack after this step: annotations_2 over features, plastome_regions, and gc_content, with the numeric Width/Radius values and units from the table."
           },
           "capture": {
             "source": "webapp",
@@ -797,10 +779,11 @@
             "assertAppState": {
               "mode": "circular",
               "adv.circular_track_slots_enabled": true,
-              "adv.circular_track_slots.length": 3,
-              "adv.circular_track_slots.0.id": "features",
-              "adv.circular_track_slots.1.id": "plastome_regions",
-              "adv.circular_track_slots.2.id": "gc_content"
+              "adv.circular_track_slots.length": 4,
+              "adv.circular_track_slots.0.id": "annotations_2",
+              "adv.circular_track_slots.1.id": "features",
+              "adv.circular_track_slots.2.id": "plastome_regions",
+              "adv.circular_track_slots.3.id": "gc_content"
             },
             "visibleControls": [
               {
@@ -844,7 +827,7 @@
             "actions": [],
             "viewport": {
               "width": 1400,
-              "height": 1600
+              "height": 2200
             },
             "cropPadding": 12,
             "waitForSelector": "[data-capture='circular-track-slot-plastome_regions']",
@@ -855,8 +838,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/tobacco-chloroplast/manual-06-03-regions-preview.webp",
-            "alt": "Tobacco chloroplast preview with LSC, IRb, SSC, and IRa named along one ring of lines between the feature ring and GC content.",
-            "caption": "LSC, IRb, SSC, and IRa are named on a ring between the features and GC content."
+            "alt": "Tobacco chloroplast preview with LSC, IRb, SSC, and IRa named along one ring of lines between the feature ring and GC content, and the regions tinted on the feature ring.",
+            "caption": "LSC, IRb, SSC, and IRa are named on a ring between the features and GC content; the tints cover the feature ring."
           },
           "capture": {
             "source": "webapp",
@@ -881,8 +864,8 @@
             "assertAppState": {
               "mode": "circular",
               "adv.circular_track_slots_enabled": true,
-              "adv.circular_track_slots.1.id": "plastome_regions",
-              "annotationSets.0.id": "plastome_regions"
+              "annotationSets.0.id": "plastome_regions",
+              "adv.circular_track_slots.2.id": "plastome_regions"
             },
             "visibleText": [
               "Nicotiana tabacum",
@@ -898,7 +881,7 @@
     },
     {
       "title": "Tint the regions",
-      "body": "Add a second Annotations track for plastome_tint and click Move outward twice so it sits right after features. Then make it an overlay on the feature ring, drawn under the features and extended to GC content, as in the table. Move the row before you set its placement to overlay: an overlay row's Move outward and Move inward are disabled. Click Generate Diagram.",
+      "body": "Rename annotations_2, the row the stack made for plastome_tint, to plastome_tint. It is already an overlay on the feature ring, drawn under the features with its highlights only. Set Extend to gc_content and turn its labels off, as in the table, then click Generate Diagram.",
       "table": {
         "columns": [
           "Slot id",
@@ -915,46 +898,9 @@
       },
       "replay": [
         {
-          "type": "select",
-          "selector": "select[aria-label='New circular track renderer']",
-          "value": "annotations"
-        },
-        {
-          "type": "click",
-          "selector": "role=button[name=/Add track$/]"
-        },
-        {
           "type": "fill",
-          "selector": "[role='group'][aria-label^='Circular track slot '] >> nth=3 >> input[placeholder='slot_id']",
+          "selector": "[role='group'][aria-label='Circular track slot annotations_2'] input[placeholder='slot_id']",
           "value": "plastome_tint"
-        },
-        {
-          "type": "select",
-          "selector": "[aria-label='Circular track slot plastome_tint Annotation set']",
-          "value": "plastome_tint"
-        },
-        {
-          "type": "click",
-          "selector": "[role='group'][aria-label='Circular track slot plastome_tint'] button[title='Move outward']"
-        },
-        {
-          "type": "click",
-          "selector": "[role='group'][aria-label='Circular track slot plastome_tint'] button[title='Move outward']"
-        },
-        {
-          "type": "select",
-          "selector": "[aria-label='Circular track slot plastome_tint Annotation placement']",
-          "value": "overlay"
-        },
-        {
-          "type": "select",
-          "selector": "[aria-label='Circular track slot plastome_tint Enabled drawable anchor']",
-          "value": "features"
-        },
-        {
-          "type": "select",
-          "selector": "[aria-label='Circular track slot plastome_tint Annotation layer']",
-          "value": "underlay"
         },
         {
           "type": "select",
@@ -966,11 +912,6 @@
           "selector": "[aria-label='Circular track slot plastome_tint Show annotation labels']"
         },
         {
-          "type": "fill",
-          "selector": "[aria-label='Circular track slot plastome_tint Padding']",
-          "value": "0"
-        },
-        {
           "type": "generate"
         }
       ],
@@ -980,7 +921,7 @@
           "media": {
             "src": "./media/tobacco-chloroplast/manual-07-01-custom-track-slots.webp",
             "alt": "Circular track stack with the plastome_tint Underlay on features extending to GC content, and separate numeric Width/Radius fields and px/×R units for plastome_regions and GC content.",
-            "caption": "The finished stack: plastome_tint as an Underlay anchored on features that extends to gc_content, above plastome_regions and gc_content."
+            "caption": "The finished stack: plastome_tint as an Underlay anchored on features that extends to gc_content, with plastome_regions and gc_content inside the features."
           },
           "capture": {
             "source": "webapp",
@@ -988,7 +929,8 @@
             "assertAppState": {
               "mode": "circular",
               "adv.circular_track_slots_enabled": true,
-              "adv.circular_track_slots.1.id": "plastome_tint",
+              "adv.circular_track_slots.0.id": "plastome_tint",
+              "adv.circular_track_slots.1.id": "features",
               "adv.circular_track_slots.2.id": "plastome_regions",
               "adv.circular_track_slots.3.id": "gc_content"
             },
@@ -1031,18 +973,14 @@
             "openDetails": [
               "Layout"
             ],
-            "actions": [
-              {
-                "type": "click",
-                "selector": "button[aria-controls='circular-custom-track-slots-panel'][aria-expanded='false']"
-              }
-            ],
+            "actions": [],
             "viewport": {
               "width": 1400,
-              "height": 1600
+              "height": 2200
             },
             "cropPadding": 12,
-            "waitForSelector": "[data-capture='circular-track-slot-plastome_tint']"
+            "waitForSelector": "[data-capture='circular-track-slot-plastome_tint']",
+            "replayThrough": 7
           }
         },
         {
@@ -1074,8 +1012,8 @@
             "cropPadding": 12,
             "assertAppState": {
               "mode": "circular",
-              "adv.circular_track_slots.1.id": "plastome_tint",
-              "adv.circular_track_slots.length": 4
+              "adv.circular_track_slots.length": 4,
+              "adv.circular_track_slots.0.id": "plastome_tint"
             },
             "visibleText": [
               "Nicotiana tabacum",
