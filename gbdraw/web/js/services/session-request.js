@@ -59,7 +59,8 @@ import {
   placeCircularStackForGenerate,
   hasCircularGeometryShortcuts,
   inferLegacyAxisIndexFromFeature,
-  parseCircularTrackSlotSpecs
+  parseCircularTrackSlotSpecs,
+  stackCircularSlotsBySide
 } from './circular-track-slot-model.js';
 import { countGenBankRecords } from './genbank-header.js';
 import { LEGEND_EDIT_CONFIG_PATHS, legendEditConfigLeaves, pythonLegendRowKeys } from './legend-draft-rows.js';
@@ -7077,6 +7078,10 @@ export const projectCanonicalSessionRequest = ({
           ))
         : [])
     : [];
+  // A request without an Axis index draws each slot on its own side; the Web stack holds the sides as places (OV-3079).
+  const circularStack = Array.isArray(tracks.circularTrackSlots) && (tracks.circularTrackAxisIndex ?? null) === null
+    ? stackCircularSlotsBySide(projectedCircularTrackSlots, overrides.track_type || 'tuckin')
+    : { slots: projectedCircularTrackSlots, axisIndex: tracks.circularTrackAxisIndex ?? null };
   const projectedLinearTrackSlots = renderRequest.mode === 'linear'
     // An array of rows migrates to an array of rows.
     ? /** @type {LinearTrackSlot[]} */ (migrateLinearTrackSlotsToCurrentSchema(
@@ -7327,8 +7332,8 @@ export const projectCanonicalSessionRequest = ({
     pairwise_match_style: overrides.pairwise_match_style || options.pairwiseMatchStyle || 'ribbon',
     circular_track_slots_enabled: renderRequest.mode === 'circular' && Array.isArray(tracks.circularTrackSlots),
     circular_track_slots_schema_version: 4,
-    circular_track_slots_axis_index: tracks.circularTrackAxisIndex ?? null,
-    circular_track_slots: projectedCircularTrackSlots,
+    circular_track_slots_axis_index: circularStack.axisIndex,
+    circular_track_slots: circularStack.slots,
     linear_track_slots_enabled: renderRequest.mode === 'linear' && Array.isArray(tracks.linearTrackSlots),
     linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
     linear_track_slots_axis_index: renderRequest.mode === 'linear'

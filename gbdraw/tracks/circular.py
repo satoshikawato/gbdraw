@@ -22,6 +22,7 @@ from .parsing import (
 from .scalars import ScalarSpec, parse_optional_pixel
 from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
+from gbdraw.annotations.planning import AUTOMATIC_ANNOTATION_LANE_SIDES
 
 
 CircularTrackRendererName = Literal[
@@ -688,8 +689,9 @@ def _normalize_circular_track_slots(
         if not slot.enabled:
             continue
         params = dict(raw_params)
+        # A set's row without a side sits where the set's automatic row sits; the Web reads the same constant.
         side = _normalize_side_value(slot.side) if slot.side is not None else (
-            "outside" if renderer == "annotations" else "inside"
+            AUTOMATIC_ANNOTATION_LANE_SIDES["circular"] if renderer == "annotations" else "inside"
         )
         reserve = side == "overlay"
         annotation_params: AnnotationTrackParams | None = None

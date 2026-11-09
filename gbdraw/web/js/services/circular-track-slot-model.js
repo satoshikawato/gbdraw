@@ -10,6 +10,7 @@ import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptional
 import { isUnsetValue, noteReplacedLeaf } from '../utils/field-reading.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
+import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
 import { ownEntry } from '../utils/own-entry.js';
 
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
@@ -468,6 +469,8 @@ export const syncSlotPlacementFromSide = (slot, side) => {
 };
 
 /**
+ * The side a row draws on. A set's row without a side sits where the set's automatic row sits, as Python reads it
+ * (gbdraw/tracks/circular.py, `_normalize_circular_track_slots`).
  * @param {SlotPlacementSource | null | undefined} slot
  * @param {unknown} [preset]
  * @returns {string}
@@ -477,7 +480,7 @@ export const effectiveSlotPlacement = (slot, preset = 'tuckin') => {
   if (slot.renderer === 'features') {
     return sideForLaneDirection(featureLaneForSlot(slot, preset));
   }
-  return normalizePlacement(slot.side, 'inside');
+  return normalizePlacement(slot.side, slot.renderer === 'annotations' ? AUTOMATIC_ANNOTATION_LANE_SIDES.circular : 'inside');
 };
 
 /**
@@ -506,6 +509,23 @@ export const inferLegacyAxisIndexFromFeature = (slots, preset = 'tuckin') => {
   const featureSide = sideForLaneDirection(featureLaneForSlot(slots[featureIndex], preset));
   if (featureSide === 'outside') return featureIndex + 1;
   return featureIndex;
+};
+
+/**
+ * The Web stack of a Circular request that names no Axis index (the CLI's and the Python API's). Python draws each
+ * row of such a request on its own side, in the stack's order on each side; the Web stack holds a side as a place
+ * before or after the Axis. So the rows outside the Axis come first, then the row on the Axis, then the others, each
+ * in its order, and the Axis index is the place of the row on the Axis (OV-3079).
+ * @template {SlotPlacementSource} T
+ * @param {readonly T[]} slots
+ * @param {unknown} [preset]
+ * @returns {{ slots: T[], axisIndex: number }}
+ */
+export const stackCircularSlotsBySide = (slots, preset = 'tuckin') => {
+  const outside = slots.filter((slot) => effectiveSlotPlacement(slot, preset) === 'outside');
+  const onAxis = slots.filter((slot) => slot.renderer !== 'annotations' && effectiveSlotPlacement(slot, preset) === 'overlay').slice(0, 1);
+  const rest = slots.filter((slot) => !outside.includes(slot) && !onAxis.includes(slot));
+  return { slots: [...outside, ...onAxis, ...rest], axisIndex: outside.length };
 };
 
 /**

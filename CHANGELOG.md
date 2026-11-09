@@ -207,6 +207,14 @@ write-up of a release.
   **Use custom stack** had already given a row, so the set got a second row:
   the figure drew it twice, or Generate stopped on the first row's lane
   overflow. They now edit the row the stack starts with (OV-3151, OV-3081).
+- Fixed (Web app): a Session saved by `gbdraw circular` with
+  `--circular_track_slot` rows and no `--circular_track_axis_index` (for
+  example `regions:annotations@set_id=regions,side=outside` after the
+  features row) drew its rows inside the Axis when loaded and generated in the
+  Web app. Load now places each row on the side the CLI drew it, outside rows
+  above the Axis in the stack, and Generate draws the CLI's figure. An
+  Annotations row with no `side=` is read as outside, as the CLI draws it
+  (OV-3079).
 - Fixed (Web app): Run Info gave no Source recipe for a Circular custom stack
   with comparison rings ("semantic field ... params.managed has no current CLI
   projection"). The recipe now leaves out the ring rows' own bookkeeping, which

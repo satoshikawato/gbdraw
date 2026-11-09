@@ -471,6 +471,38 @@ await test('a request whose Circular slot objects name a renderer by alias loads
     [['c', 'content'], ['g', 'content'], ['s', 'skew']]);
 });
 
+// OV-3079: a request without an Axis index (the CLI's and the Python API's) draws each slot on its own side, in the
+// stack's order on each side. The Web stack holds a side as a place before or after the Axis, so Load moves the
+// rows outside the Axis before it, each side in its order, and the next Generate draws the loaded figure.
+await test('a request without an Axis index loads each slot on the side Python draws it (OV-3079)', async () => {
+  const session = JSON.parse(gunzipSync(await readFile(path.join(
+    root, 'tests/fixtures/sessions/HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'
+  ))));
+  const slot = (id, renderer, side = null, params = {}) => ({ kind: 'circularTrackSlot', id, renderer, enabled: true,
+    side, radius: null, width: null, z: 0, params, innerGapPx: null, outerGapPx: null });
+  // `--circular_track_slot features:features --circular_track_slot c:content@side=outside --circular_track_slot s:skew`
+  session.renderRequest.diagramOptions.tracks.circularTrackSlots = [
+    slot('features', 'features'), slot('c', 'dinucleotide_content', 'outside', { nt: 'GC' }),
+    slot('s', 'dinucleotide_skew', null, { nt: 'GC' })
+  ];
+  session.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = null;
+  delete session.config;
+  const result = await load(Buffer.from(JSON.stringify(session)));
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  const drawing = modeDrawing(state, 'circular');
+  const placement = ({ id, side, params }) => [id, side, params.lane_direction ?? null];
+  assert.deepEqual({
+    axis: drawing.adv.circular_track_slots_axis_index, slots: drawing.adv.circular_track_slots.map(placement)
+  }, {
+    // The fixture's preset is Middle: its feature row draws on the Axis.
+    axis: 1, slots: [['c', 'outside', null], ['features', 'overlay', 'split'], ['s', 'inside', null]]
+  });
+  const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
+  const { tracks } = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData }).renderRequest.diagramOptions;
+  assert.deepEqual({ axis: tracks.circularTrackAxisIndex, slots: tracks.circularTrackSlots.map(({ id, side }) => [id, side]) },
+    { axis: 1, slots: [['c', 'outside'], ['features', 'overlay'], ['s', 'inside']] });
+});
+
 // Before the Font setting, a Web Session kept the diagram font as a preserved
 // override (PD-OI-009) in its draft and its request. Load moves it into the
 // setting, so no preserved override names a path the GUI manages. The

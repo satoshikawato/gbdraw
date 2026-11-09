@@ -465,6 +465,52 @@ test('Session CLI feature density tracks survive Web Generate', async ({ browser
   }
 });
 
+// OV-3079: a CLI stack that names no Axis index draws each slot on its own side. The Session it saves, loaded and
+// generated in the Web, draws the CLI's figure: the region set stays outside the Axis.
+test('Session CLI stack without an Axis index draws its region set where the CLI drew it', async ({ browser }, testInfo) => {
+  test.setTimeout(900_000);
+  await fs.writeFile(testInfo.outputPath('regions.tsv'), [
+    'set_id\tid\tmark\tstart\tend\tlabel', 'regions\thead\tline\t1\t9500\tHead genes', 'regions\ttail\tline\t9600\t19000\tTail genes'
+  ].join('\n') + '\n');
+  const file = await cli('circular', ['--gbk', lambda, '--annotation_table', 'regions.tsv', '--circular_track_slot', 'features:features',
+    '--circular_track_slot', 'regions:annotations@set_id=regions,side=outside', '-f', 'svg'], testInfo, 'no-axis');
+  const stored = shownSavedDrawing(await readSession(file));
+  expect(stored.renderRequest.diagramOptions.tracks.circularTrackAxisIndex).toBe(null);
+  const run = await load(browser, file, { width: 1600, height: 1000 });
+  try {
+    // The figure's size and each slot group's place and paths, by slot id (4 decimals, as `svgSemantics`).
+    const slotGroups = (svg) => run.page.evaluate((text) => {
+      const round = (value) => value && value.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, (number) => String(Math.round(Number(number) * 1e4) / 1e4));
+      const root = new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
+      return {
+        size: [round(root.getAttribute('width')), round(root.getAttribute('height'))],
+        slots: [...root.querySelectorAll('[data-gbdraw-slot-id]')].map((group) => [
+          group.getAttribute('data-gbdraw-slot-id'), round(group.getAttribute('transform')),
+          [...group.querySelectorAll('path')].map((item) => round(item.getAttribute('d'))).sort()
+        ]).sort((a, b) => a[0].localeCompare(b[0]))
+      };
+    }, svg);
+    // The Web stack lists the rows outside the Axis first, so its slot groups (and their texts) come in that order.
+    const semantics = async (svg) => {
+      const read = await run.page.evaluate(svgSemantics, svg);
+      return { ...read, text: [...read.text].sort() };
+    };
+    const drawn = await slotGroups(stored.results[0].content);
+    const before = await snapshot(run.page);
+    expect(await slotGroups(before.selected)).toEqual(drawn);
+    await generateAndWaitForResult(run.page);
+    const after = await snapshot(run.page);
+    expect(await slotGroups(after.selected)).toEqual(drawn);
+    expect(await semantics(after.selected)).toEqual(await semantics(before.selected));
+    const { circularTrackSlots, circularTrackAxisIndex } = after.request.diagramOptions.tracks;
+    expect({ axis: circularTrackAxisIndex, slots: circularTrackSlots.map(({ id, side }) => [id, side]) })
+      .toEqual({ axis: 1, slots: [['regions', 'outside'], ['features', 'inside']] });
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
+
 test('Session schema-1 Web binding control still loads', async ({ browser }, testInfo) => {
   const run = await load(browser, path.join(root, 'tests/fixtures/sessions/single.v41-bindings1.json'), { width: 1600, height: 1000 }, false);
   try {

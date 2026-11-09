@@ -76,7 +76,9 @@ const {
 const { buildCircularTrackSlotSpec } = await import(
   pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js'))
 );
-const { buildCircularTrackSlotPayload, normalizeCircularTrackSlot, parseCircularTrackSlotSpec, placeCircularTrackStack } = await import(
+const {
+  buildCircularTrackSlotPayload, normalizeCircularTrackSlot, parseCircularTrackSlotSpec, placeCircularTrackStack, stackCircularSlotsBySide
+} = await import(
   pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js'))
 );
 
@@ -987,6 +989,29 @@ test('invalid depth height remains editable without overwriting its last valid c
 // OV-1263: Generate stores the Axis index the rows' sides were set from, so an Overlay
 // Annotations row neither moves the Axis under the other rows nor leaves a row between it and
 // the split Features row in conflict with the index.
+// OV-3079: a request without an Axis index draws each row on its own side (a set's row without a side outside, as
+// Python reads it), in the stack's order on each side; the Web stack places the rows outside before the Axis.
+test('a Circular stack without an Axis index places each row on its own side (OV-3079)', () => {
+  const row = (id, renderer, side = null, params = {}) => ({ id, renderer, enabled: true, side, z: 0, params });
+  const ids = ({ slots, axisIndex }) => ({ axisIndex, ids: slots.map((slot) => slot.id) });
+  // `features:features regions:annotations@set_id=regions ticks:ticks out:content@side=outside`
+  assert.deepEqual(ids(stackCircularSlotsBySide([
+    row('features', 'features'), row('regions', 'annotations', null, { set_id: 'regions' }), row('ticks', 'ticks'),
+    row('out', 'dinucleotide_content', 'outside')
+  ], 'tuckin')), { axisIndex: 2, ids: ['regions', 'out', 'features', 'ticks'] });
+  // A stack whose sides already follow its order keeps it, with the index Load inferred before.
+  assert.deepEqual(ids(stackCircularSlotsBySide([
+    row('features', 'features'), row('gc', 'dinucleotide_content'), row('skew', 'dinucleotide_skew')
+  ], 'tuckin')), { axisIndex: 0, ids: ['features', 'gc', 'skew'] });
+  assert.deepEqual(ids(stackCircularSlotsBySide([row('features', 'features'), row('gc', 'dinucleotide_content')], 'spreadout')),
+    { axisIndex: 1, ids: ['features', 'gc'] });
+  // The row on the Axis follows the rows outside; an Overlay set row stays with the rest.
+  assert.deepEqual(ids(stackCircularSlotsBySide([
+    row('gc', 'dinucleotide_content'), row('hl', 'annotations', 'overlay', { set_id: 'r', anchor_slot: 'features' }),
+    row('features', 'features'), row('regions', 'annotations', 'outside', { set_id: 'r' })
+  ], 'middle')), { axisIndex: 1, ids: ['regions', 'features', 'gc', 'hl'] });
+});
+
 test('Generate places a Circular stack and keeps the Axis index its sides follow (OV-1263)', () => {
   const annotations = (anchor) => ({
     id: 'annotations', renderer: 'annotations', enabled: true, side: 'overlay', z: 1, params: { set_id: 'r', anchor_slot: anchor }
