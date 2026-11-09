@@ -3653,6 +3653,56 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
   assert.deepEqual([first.seriesHeights, second.seriesHeights], [[null, null], [null, null]]);
 });
 
+// OV-3010: the Run Info replay file of a Generate is built on demand from the
+// request's resources. An input file's bytes stay in its File (the History file
+// store counts them once), so the estimate of what an Undo step keeps for the
+// replay file does not count them again.
+test('the History estimate of the Run Info replay file leaves out the input file bytes (OV-3010)', async () => {
+  const sequence = 'acgtacgtac'.repeat(100_000);
+  const genbank = new AuditFile([`LOCUS largeinput\nORIGIN\n        1 ${sequence}\n//\n`], 'large-input.gb');
+  installShownDrawing('linear');
+  modeDrawing(state, 'linear').inputType.value = 'gb';
+  const drawing = state.activeDrawing();
+  drawing.form.prefix = 'large-input';
+  drawing.form.show_depth = false;
+  drawing.form.multi_record_canvas = false;
+  drawing.linearRecordLayoutEnabled.value = false;
+  drawing.linearRecordRows.splice(0);
+  drawing.linearComparisonPlan.mode = 'none';
+  drawing.linearComparisonPlan.edges.splice(0);
+  drawing.annotationSets.splice(0);
+  drawing.linearSeqs.splice(0, drawing.linearSeqs.length, {
+    uid: 'large-input', gb: bound(genbank), gff: null, fasta: null, depth: null, blast: null, losat_gencode: 1,
+    definition: '', record_subtitle: '', region_record_id: '', region_start: null, region_end: null,
+    region_reverse: false, windows: []
+  });
+  Object.assign(drawing.adv, { linear_track_slots_enabled: false, linear_track_slots: [] });
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    state,
+    encodeSessionResources,
+    serializeCanonicalFiles: (snapshot, recordCatalog, activeDrawing) => (
+      serializeActiveRenderFiles(state, activeDrawing, snapshot)
+    ),
+    prepareLinearRecordCatalog: async () => ({ catalog: { mode: 'linear', status: 'ready', records: [] }, error: '' }),
+    adoptCanonicalRenderArtifacts: () => {},
+    validateAnnotationTargets: () => '',
+    prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides)
+    }),
+    resetPreviewViewport: () => {}
+  }));
+  const generated = result('large-input.svg', 'large-input');
+  workerResponses.push(response(generated, validCatalog(generated.name)));
+  assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+  const runtime = runner.captureGeneratedArtifactRuntimeState();
+  assert.deepEqual(runtime.latestCliHelperFiles.map((file) => file.name), ['large-input.gbdraw-session.json']);
+  assert.ok(genbank.size > 1_000_000);
+  assert.ok(runtime.retainedBytes < genbank.size, `${runtime.retainedBytes} counts the ${genbank.size} input bytes`);
+});
+
 // Circular Generate gives a Depth series without settings the color the
 // series owner gives it, as the editor shows: series 2 the palette, not the
 // Depth color of series 1 (OV-1510).

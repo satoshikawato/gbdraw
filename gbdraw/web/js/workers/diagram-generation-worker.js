@@ -342,13 +342,14 @@ export const buildGeneratedArtifactTransportIdentity = async (
     resultBytes,
     resultNameBytes,
     metadataBytes: metadataBytes.byteLength + catalogBytes,
-    // Parsed metadata retains strings and object structure in addition to the
-    // transferred UTF-8 representation. Two bytes per source byte is a bounded,
-    // deliberately conservative owner estimate; Result UTF-16 strings are added
-    // separately by the main-thread handle. `resultBytes` counts the whole
-    // admitted document, held or sent. The feature catalog counts as metadata
-    // whether it was sent or kept (D-38 OQ-2).
-    retainedBytes: resultBytes + resultNameBytes + (metadataBytes.byteLength + catalogBytes) * 2
+    // The page keeps the metadata and the feature catalog parsed, not their
+    // UTF-8 bytes: one byte per source byte. Measured in Chromium (OV-3010),
+    // the parsed E. coli O157 Sakai ring catalog (36.6 MB of JSON) holds 0.92
+    // bytes per source byte. The page keeps each Result as its sanitized text
+    // and its segments, so the main-thread handle adds `resultBytes` once more.
+    // `resultBytes` counts the whole admitted document, held or sent. The
+    // feature catalog counts as metadata whether it was sent or kept (D-38 OQ-2).
+    retainedBytes: resultBytes + resultNameBytes + metadataBytes.byteLength + catalogBytes
   });
 };
 
