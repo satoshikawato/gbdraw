@@ -33,6 +33,7 @@ from gbdraw._web_assets import (
     PHOSPHOR_REGULAR_FILES,
     PYODIDE_CORE_FILES,
     PYODIDE_LOCAL_WHEELS,
+    PYODIDE_PATCH,
     PYODIDE_RUNTIME_DIR,
     PYODIDE_RUNTIME_PACKAGE_WHEELS,
     REQUIRED_UI_FONT_FILES,
@@ -91,6 +92,47 @@ def _download(key: str, directory: Path) -> Path:
     return target
 
 
+def apply_vendored_patch(patch_text: str, data: bytes) -> bytes:
+    """``data`` with the pairs of a recorded patch applied (the format is in the patch file's header).
+
+    Each "- " line is text that occurs exactly once in ``data``; the "+ " line
+    after it replaces it.
+    """
+    lines = [line for line in patch_text.splitlines() if line and not line.startswith("#")]
+    if not lines or len(lines) % 2 or any(
+        not old.startswith("- ") or not new.startswith("+ ") for old, new in zip(lines[::2], lines[1::2])
+    ):
+        raise ValueError('A recorded patch is pairs of a "- " line and a "+ " line.')
+    for old_line, new_line in zip(lines[::2], lines[1::2]):
+        old, new = old_line[2:].encode("utf-8"), new_line[2:].encode("utf-8")
+        count = data.count(old)
+        if count != 1:
+            raise ValueError(f"{old_line[2:]!r} occurs {count} times, not once.")
+        data = data.replace(old, new)
+    return data
+
+
+def _patched_pyodide_member(archive: Path) -> bytes:
+    """The patched bytes of PYODIDE_PATCH.target from the Pyodide archive, after their SHA-256 matched."""
+    with tarfile.open(archive, "r:bz2") as tar:
+        member = next(
+            member for member in tar.getmembers()
+            if member.isfile() and Path(member.name).name == PYODIDE_PATCH.target
+        )
+        extracted = tar.extractfile(member)
+        if extracted is None:
+            raise FileNotFoundError(f"Missing {PYODIDE_PATCH.target} in {archive.name}")
+        original = extracted.read()
+    patched = apply_vendored_patch((REPO_ROOT / PYODIDE_PATCH.path).read_text(encoding="utf-8"), original)
+    digest = hashlib.sha256(patched).hexdigest()
+    if digest != PYODIDE_PATCH.sha256:
+        raise RuntimeError(
+            f"{PYODIDE_PATCH.target} patched with {PYODIDE_PATCH.path.as_posix()} has SHA-256 {digest}, "
+            f"not the {PYODIDE_PATCH.sha256} that gbdraw/_web_assets.py records; nothing was vendored."
+        )
+    return patched
+
+
 def _extract_tgz_member(archive: Path, member_name: str, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:gz") as tar:
@@ -112,6 +154,7 @@ def vendor_assets() -> None:
         tmp = Path(tmpdir)
         # Every download is checked before any vendored file is written.
         downloaded = {key: _download(key, tmp) for key in ASSET_DOWNLOADS}
+        patched_pyodide_file = _patched_pyodide_member(downloaded["pyodide_core"])
         for path in [
             (WEB_ROOT / VUE_RUNTIME_FILE).parent,
             PYODIDE_RUNTIME_DIR,
@@ -133,6 +176,9 @@ def vendor_assets() -> None:
                     continue
                 name = Path(member.name).name
                 if name not in PYODIDE_CORE_FILES:
+                    continue
+                if name == PYODIDE_PATCH.target:
+                    (PYODIDE_RUNTIME_DIR / name).write_bytes(patched_pyodide_file)
                     continue
                 extracted = tar.extractfile(member)
                 if extracted is None:
@@ -1207,8 +1253,6 @@ def inspect_wheel(wheel_path: Path) -> None:
         "gbdraw/web/wasm/losat/losat-threaded.wasm",
         expected_browser_wheel,
         f"gbdraw/web/{VUE_RUNTIME_FILE.as_posix()}",
-        "gbdraw/web/vendor/pyodide/v0.29.0/full/pyodide.js",
-        "gbdraw/web/vendor/pyodide/v0.29.0/full/pyodide.asm.wasm",
         "gbdraw/web/vendor/jspdf/jspdf.umd.min.js",
         "gbdraw/web/vendor/svg2pdf.js/svg2pdf.umd.min.js",
         "gbdraw/web/vendor/dompurify/purify.min.js",
@@ -1221,13 +1265,10 @@ def inspect_wheel(wheel_path: Path) -> None:
         f"gbdraw/web/{path.as_posix()}" for path in REQUIRED_TUTORIAL_DATA_FILES
     )
     required.update(f"gbdraw/web/{path.as_posix()}" for path in _parse_local_wheel_paths())
+    pyodide_folder = PYODIDE_RUNTIME_DIR.relative_to(REPO_ROOT).as_posix()
     required.update(
-        f"gbdraw/web/vendor/pyodide/v0.29.0/full/{filename}"
-        for filename in PYODIDE_CORE_FILES
-    )
-    required.update(
-        f"gbdraw/web/vendor/pyodide/v0.29.0/full/{filename}"
-        for filename in PYODIDE_RUNTIME_PACKAGE_WHEELS.values()
+        f"{pyodide_folder}/{filename}"
+        for filename in (*PYODIDE_CORE_FILES, *PYODIDE_RUNTIME_PACKAGE_WHEELS.values())
     )
     missing = sorted(required - names)
     if missing:
