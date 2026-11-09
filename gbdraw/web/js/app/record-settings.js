@@ -30,7 +30,8 @@ import { circularRecordEntries, circularRecordRange, circularRecordSelection, re
 import { msg } from '../utils/i18n.js';
 import { fileCardLine } from './file-card.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
-/** @import { CircularRecordEntry } from '../services/drawing/inputs.js' */
+/** @import { CircularRecordEntry, LinearSeqWindow } from '../services/drawing/inputs.js' */
+/** @import { CircularRecordRange } from '../services/record-options.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
 /** @import { CircularRecordDiscovery, SequenceRecord } from '../services/record-discovery.js' */
 /** @import { RecordDrawKey, RecordEditData, RecordIdentitySources, RecordSettingsOwner } from '../services/record-draw-selection.js' */
@@ -90,6 +91,34 @@ const placeRecordChoices = (drawing, entries, identitySources) => {
   const changed = (list, next) => JSON.stringify(list) !== JSON.stringify(next);
   if (changed(drawing.recordsOff, placed.recordsOff)) drawing.recordsOff.splice(0, Infinity, ...placed.recordsOff);
   if (changed(positions, rows)) positions.splice(0, Infinity, ...rows);
+};
+
+/**
+ * The crop a Circular grid or batch keeps for each read record (PD-OI-044 scenario revision 5), by identity,
+ * with the one-record crop fields while they hold it.
+ * @param {{ circular_record_ranges: CircularRecordRange[], circular_range_fields_record: string,
+ *   circular_region_start: number | null, circular_region_end: number | null, circular_reverse: boolean,
+ *   circular_windows: LinearSeqWindow[] }} form the drawing's form
+ * @param {ReturnType<typeof circularRecordEntries>} entries the drawing's read records
+ */
+const circularRangeEdits = (form, entries) => {
+  if (!form.circular_record_ranges.length) return [];
+  return entries.flatMap((entry) => {
+    const range = circularRecordRange(form.circular_record_ranges, entries, entry);
+    return range === null ? [] : [{
+      recordKey: entry.value,
+      remove: () => {
+        form.circular_record_ranges = form.circular_record_ranges.filter((/** @type {unknown} */ row) => row !== range);
+        // The crop fields filled from this crop go with it, so the record draws whole when chosen alone too.
+        if (form.circular_range_fields_record !== entry.value) return;
+        form.circular_region_start = null;
+        form.circular_region_end = null;
+        form.circular_reverse = false;
+        form.circular_windows = [];
+        form.circular_range_fields_record = '';
+      }
+    }];
+  });
 };
 
 /**
@@ -156,32 +185,6 @@ export const createRecordSettingsSources = ({
       displaySource: entry.uid, displaySelector: entry.selector
     }));
   };
-  /**
-   * The crop a Circular grid or batch keeps for each read record (PD-OI-044 scenario revision 5), by identity,
-   * with the one-record crop fields while they hold it.
-   * @param {DrawingState} drawing
-   */
-  const circularRangeEdits = (drawing) => {
-    const { form } = drawing;
-    if (!form.circular_record_ranges.length) return [];
-    const entries = circularEntriesOf(drawing);
-    return entries.flatMap((entry) => {
-      const range = circularRecordRange(form.circular_record_ranges, entries, entry);
-      return range === null ? [] : [{
-        recordKey: entry.value,
-        remove: () => {
-          form.circular_record_ranges = form.circular_record_ranges.filter((/** @type {unknown} */ row) => row !== range);
-          // The crop fields filled from this crop go with it, so the record draws whole when chosen alone too.
-          if (form.circular_range_fields_record !== entry.value) return;
-          form.circular_region_start = null;
-          form.circular_region_end = null;
-          form.circular_reverse = false;
-          form.circular_windows = [];
-          form.circular_range_fields_record = '';
-        }
-      }];
-    });
-  };
   /** The record settings owners of a drawing's records. @param {DrawingState} drawing */
   const recordSettingsOwners = (drawing) => (drawing.mode === 'circular' ? circularRecordSettingsOwners(drawing) : drawing.linearSeqs.map((seq) => linearRecordSettingsOwner(drawing, seq)));
   /** @param {DrawingState} drawing @returns {RecordEditData} */
@@ -198,7 +201,7 @@ export const createRecordSettingsSources = ({
       }] : [];
     }),
     recordDisplayDrafts: drawing.recordDisplayDrafts,
-    recordRangeEdits: drawing.mode === 'circular' ? circularRangeEdits(drawing) : [],
+    recordRangeEdits: drawing.mode === 'circular' ? circularRangeEdits(drawing.form, circularEntriesOf(drawing)) : [],
     comparisonEdges: drawing.mode === 'linear' ? drawing.linearComparisonPlan.edges : [],
     annotationBindingField: ANNOTATION_RECORD_BINDING_KEY
   });
