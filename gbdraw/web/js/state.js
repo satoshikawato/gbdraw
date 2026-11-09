@@ -585,30 +585,33 @@ const originalSvgStroke = ref({ color: null, width: null });
 const legendDragging = ref(false);
 const legendDragStart = reactive({ x: 0, y: 0 });
 const legendOriginalTransform = ref({ x: 0, y: 0 });
-const legendInitialTransform = ref({ x: 0, y: 0 }); // Store SVG's original legend position
-const legendCurrentOffset = reactive({ x: 0, y: 0 });
+const legendInitialTransform = typedRef({ x: 0, y: 0 }); // Store SVG's original legend position
+const legendCurrentOffset = typedReactive({ x: 0, y: 0 });
 
 // Main Diagram Drag state (tick, labels, axis, definition, records as one group)
 const diagramDragging = ref(false);
 const diagramDragStart = reactive({ x: 0, y: 0 });
-const diagramOffset = reactive({ x: 0, y: 0 }); // Cumulative drag offset
+const diagramOffset = typedReactive({ x: 0, y: 0 }); // Cumulative drag offset
 const diagramElementIds = ref([]); // IDs of elements that move together
-const diagramElementOriginalTransforms = ref(new Map()); // Store original transforms for each element
-const diagramElements = ref([]);
+// The automatic translation of each bound primary group, by group.
+const diagramElementOriginalTransforms = typedRef(
+  /** @type {Map<SVGGraphicsElement, { x: number, y: number }>} */ (new Map())
+);
+const diagramElements = typedRef(/** @type {SVGGraphicsElement[]} */ ([]));
 const lengthBarElement = ref(null);
 const lengthBarOriginalTransform = ref({ x: 0, y: 0 });
 const lengthBarUserOffset = reactive({ x: 0, y: 0 });
 const plotTitleElement = ref(null);
 const plotTitleDragging = ref(false);
 const plotTitleDragStart = reactive({ x: 0, y: 0 });
-const plotTitleAutoTransform = ref({ x: 0, y: 0 });
-const plotTitleUserOffset = reactive({ x: 0, y: 0 });
+const plotTitleAutoTransform = typedRef({ x: 0, y: 0 });
+const plotTitleUserOffset = typedReactive({ x: 0, y: 0 });
 
 // Canvas size state
 const showCanvasControls = ref(false);
 
 // Track legend position at generation time (for repositioning without regeneration)
-const generatedLegendPosition = ref('left');
+const generatedLegendPosition = typedRef('left');
 // The drawing the displayed Result belongs to, by ID (S6): the artifact slot
 // installs write it (`installArtifactSlot`, the History owner set), and Load.
 /** @type {import('./utils/reactivity.js').Ref<DrawingId>} */
