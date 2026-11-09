@@ -33,7 +33,7 @@ from gbdraw.annotations.layout import (
     lane_width_px,
 )
 from gbdraw.annotations.models import RegionAnnotationStyle, ResolvedRegionAnnotation, annotation_solid_fill
-from gbdraw.core.text import GlyphOutline, TextRun, italic_markup_runs, text_runs_glyph_outlines
+from gbdraw.core.text import GlyphOutlines, TextRun, italic_markup_runs, text_runs_glyph_outlines
 from gbdraw.layout.circular import RadialBand
 from gbdraw.layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_pad_px
 from gbdraw.layout.spatial import Aabb, union_aabbs
@@ -41,6 +41,7 @@ from gbdraw.layout.text_geometry import (
     Point,
     annular_sector_parts,
     convex_polygons_intersect,
+    glyphs_across_circle,
     glyphs_half_turn_on_circle,
     glyphs_meet_on_circle,
     grown_convex_polygon,
@@ -795,7 +796,7 @@ def _curved_label(
     runs: tuple[TextRun, ...],
     angle: float,
     ink: LabelInk,
-    glyphs: Callable[[tuple[TextRun, ...]], tuple[GlyphOutline, ...]],
+    glyphs: Callable[[tuple[TextRun, ...]], GlyphOutlines],
     clear: Callable[[Callable[[float], tuple[float, float]], Callable[[float], float]], float],
     *,
     outward: bool,
@@ -819,14 +820,22 @@ def _curved_label(
 
         left, right, top, bottom = ink(shown)
         low, high = (top, bottom) if flipped else (-bottom, -top)
+        # Each glyph stands upright and unbent on the circle, so its corners off the ray through its middle reach
+        # farther from the centre than its ink box along the ray (OV-2979). Where no glyph is known, the ink box's
+        # extent moves one for one with the baseline radius.
+        across = glyphs_across_circle(glyphs(shown))
 
         def extent(radius: float) -> tuple[float, float]:
-            return radius + low, radius + high
+            return (radius + low, radius + high) if across is None else across.radii(radius, tops_in=flipped)
 
         def radius_for(target: float) -> float:
-            # The letters' radial extent moves one for one with the baseline radius; the nearest ink stays off the
-            # centre.
-            return max(target - (low if outward else high), 1e-6 - low)
+            reach = (
+                target - (low if outward else high)
+                if across is None
+                else across.radius_reaching(target, tops_in=flipped, nearest=outward)
+            )
+            # The nearest ink stays off the centre.
+            return max(reach, 1e-6 - low)
 
         radius = clear(extent, radius_for)
         return left, right, *extent(radius), radius

@@ -615,6 +615,23 @@ def test_a_fixed_slot_with_overflow_error_rejects_the_room() -> None:
         _packed(available=_BASE + 1.0)
 
 
+def test_a_slot_that_raises_names_the_smallest_size_that_draws_its_lanes() -> None:
+    # Six nested bands labelled above in a Linear slot 40 px high: the lanes and their rooms do not fit, so the slot
+    # raises without drawing. Its rooms are measured where the lanes keep their extent, as at the size it names, not
+    # where a narrower size would squeeze them: the slot draws at that size and not 0.01 px below it.
+    regions = tuple(_region(f"r{index}", 1501 + 120 * index, 3500 - 120 * index, f"Region {index + 1} label text") for index in range(6))
+    slot = "regions:annotations@side=above,set_id=regions,h={}px,overflow=error"
+    with pytest.raises(ValidationError, match="requires") as raised:
+        _svg("linear", regions, slot.format(40))
+    match = re.search(r"requires ([0-9.]+)px", str(raised.value))
+    assert match is not None
+    named = float(match.group(1))
+
+    _svg("linear", regions, slot.format(f"{named:.2f}"))
+    with pytest.raises(ValidationError, match="requires"):
+        _svg("linear", regions, slot.format(f"{named - 0.01:.2f}"))
+
+
 def test_a_fixed_slot_with_overflow_compress_narrows_the_lane_gap() -> None:
     track = _packed(overflow="compress", available=_BASE + _ROOM - 2.0)
 
@@ -1148,9 +1165,11 @@ def _bands_and_left_out(
     orientation: str,
     empty: frozenset[str] = frozenset(),
     size: float = 60,
+    sizes: dict[str, float] | None = None,
 ) -> _LeftOut:
-    """The band radii of ``regions`` (id, start, end, label) labelled at ``size`` pt in ``orientation`` in an inside
-    slot (``slot`` adds settings), the labels of ``empty`` without text, the labels left out because no letter of them
+    """The band radii of ``regions`` (id, start, end, label) labelled at ``size`` pt (or their size in ``sizes``) in
+    ``orientation`` in an inside slot (``slot`` adds settings), the labels of ``empty`` without text, the labels left
+    out because no letter of them
     fits their circle (``CircularAnnotationLabels.without_letters``), as the assembler gets them, the warnings, each
     annotation's group and the labels drawn."""
 
@@ -1173,7 +1192,9 @@ def _bands_and_left_out(
             CoordinateSpan(None, start, end),
             label="" if identity in empty else label,
             mark="band",
-            style=RegionAnnotationStyle(fill="#ffcc00", label_orientation=orientation, label_font_size=size),
+            style=RegionAnnotationStyle(
+                fill="#ffcc00", label_orientation=orientation, label_font_size=(sizes or {}).get(identity, size)
+            ),
         )
         for identity, start, end, label in regions
     )
@@ -1264,6 +1285,52 @@ def test_labels_that_share_a_lane_stay_apart_where_the_rooms_carry_that_lane(
     assert len(drawn) > 1 and not met, met
 
 
+def test_a_label_drawn_where_a_set_width_squeezes_the_lanes_gets_its_room() -> None:
+    # OV-2989: ten nested bands at 24 pt along their circles in an inside slot whose set width reaches past the centre
+    # (``w=600px,overflow=error``). The lanes and their rooms take more than the centre leaves, so the drawer shares
+    # the band up to the centre less the rooms among the lanes, narrower than the extent they take. r6's label keeps
+    # no letter beside its mark where the lanes stand at that extent, but keeps letters where the drawer draws its
+    # lane: it gets its room there, as every label drawn does, and no drawn label's letters come within its label
+    # offset of another lane's painted mark.
+    regions = tuple(
+        (f"r{index}", 1501 + 90 * index, 3500 - 90 * index, f"Region {index + 1} label text") for index in range(10)
+    )
+    drawn = _bands_and_left_out(regions, ",w=600px,overflow=error", "arc", size=24)
+
+    assert "r6" in {label.annotation_id for label in drawn.drawn}, drawn.messages
+    met = [
+        (label.annotation_id, identity, label.ink_radii, band)
+        for label in drawn.drawn
+        for identity, band in drawn.bands.items()
+        if identity != label.annotation_id
+        # The band radii are written to 0.001 px.
+        and label.ink_radii[0] < band[1] + _EDGE - 0.002
+        and band[0] - _EDGE + 0.002 < label.ink_radii[1]
+    ]
+    assert not met, met
+
+
+@pytest.mark.parametrize("size", [96, 150])
+def test_a_label_two_lanes_from_the_mark_it_crosses_gets_its_room_where_a_set_width_squeezes_the_lanes(
+    size: float,
+) -> None:
+    # The set width squeezes the lanes as above, so each lane between a label and the mark it crosses gives it less
+    # than the extent the lanes take. c's large label stands in lane 0 beside its mark and crosses the marks of b (lane
+    # 1) and a (lane 2): its room counts the lanes between where the drawer draws them, and its letters stay a label
+    # offset clear of a's painted mark.
+    regions = (
+        *((f"r{index}", 1501 + 90 * index, 3500 - 90 * index, f"Region {index + 1} label text") for index in range(10)),
+        ("c", 5801, 7200, "G"),
+        ("b", 5900, 6100, ""),
+        ("a", 6050, 7600, ""),
+    )
+    drawn = _bands_and_left_out(regions, ",w=600px,overflow=error", "arc", frozenset({"a", "b"}), 24, {"c": size})
+
+    (label,) = [label for label in drawn.drawn if label.annotation_id == "c"]
+    # The band radii are written to 0.001 px.
+    assert label.ink_radii[0] >= drawn.bands["a"][1] + _EDGE - 0.002, (label.ink_radii, drawn.bands["a"])
+
+
 def test_a_label_left_out_in_an_early_packing_is_drawn_where_the_last_packing_gives_it_letters() -> None:
     # OV-2850: r4 keeps no letter in the lane an early packing round puts it in, so that round packs it without text;
     # the last packing puts it in the outer lane, where its letters fit, and it is drawn there, as before.
@@ -1273,9 +1340,10 @@ def test_a_label_left_out_in_an_early_packing_is_drawn_where_the_last_packing_gi
 
 
 def test_an_inside_slot_stands_nowhere_that_leaves_out_a_label_its_lanes_draw() -> None:
-    # OV-2848: four nested bands at 60 pt in an inside slot without a set width. Further in, where the letters of the
+    # OV-2848: four nested bands at 56 pt in an inside slot without a set width. Further in, where the letters of the
     # other labels find more room, the innermost label keeps no letter; the slot does not move there, so every label
-    # is drawn, and the lanes settle before the assembler's last pass.
+    # is drawn, and the lanes settle before the assembler's last pass. At 60 pt the innermost label keeps no letter
+    # wherever the slot stands: its corners come within its label offset of its mark (OV-2979). It alone is left out.
     import gbdraw.diagrams.circular.assemble as assemble_module
 
     # Whether each packing where the layout draws the slots changed it, for each layout of the drawing.
@@ -1294,11 +1362,15 @@ def test_an_inside_slot_stands_nowhere_that_leaves_out_a_label_its_lanes_draw() 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(assemble_module, "_place_annotation_tracks_where_drawn", placing)
         patch.setattr(assemble_module, "_annotation_tracks_packed_where_drawn", repacking)
-        drawn = _bands_and_left_out(_SEVEN_NESTED[:4], "", "auto")
+        drawn = _bands_and_left_out(_SEVEN_NESTED[:4], "", "auto", size=56)
 
     assert not drawn.without_letters, drawn.messages
     assert all(_labelled(drawn.items[identity]) for identity, *_rest in _SEVEN_NESTED[:4])
     assert layouts and all(changed[-1:] == [False] for changed in layouts), layouts
+
+    larger = _bands_and_left_out(_SEVEN_NESTED[:4], "", "auto")
+    assert larger.without_letters == {"r3"}, larger.messages
+    assert all(_labelled(larger.items[identity]) for identity, *_rest in _SEVEN_NESTED[:3])
 
 
 def test_a_label_left_out_for_want_of_a_letter_keeps_its_band_where_it_stands_without_text() -> None:

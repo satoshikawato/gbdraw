@@ -29,7 +29,7 @@ from gbdraw.exceptions import LabelLeadersCrossWarning, ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from tests.utils.svg_compare import assert_nested_approx
 from gbdraw.api.diagram import build_circular_diagram, build_circular_multi_diagram
-from gbdraw.core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink
+from gbdraw.core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink, text_runs_glyph_outlines
 from gbdraw.tracks import (
     CircularTrackSlot,
     normalize_circular_track_slots,
@@ -796,12 +796,16 @@ def _drawn_label(text, root) -> _DrawnLabel:
     # The middle of the advance sits at the middle of the path, on the alphabetic baseline; tops face out unless the
     # text reads anticlockwise.
     left, right = (ink.left - 0.5 * ink.advance) * size / radius, (ink.right - 0.5 * ink.advance) * size / radius
-    if flipped:
-        near, far = radius - ink.top * size, radius - ink.bottom * size
-        low, high = middle - right, middle - left
-    else:
-        near, far = radius + ink.bottom * size, radius + ink.top * size
-        low, high = middle + left, middle + right
+    low, high = (middle - right, middle - left) if flipped else (middle + left, middle + right)
+    # Each glyph stands upright and unbent where the middle of its advance meets the path (OV-2979): a point x across
+    # the ray there and y up from the baseline stands hypot(x, radius +- y) from the centre, whatever its turn.
+    outlines = text_runs_glyph_outlines(((text_path.text or "", "normal"),), family, size)
+    placed = [(x, radius + (-y if flipped else y)) for x, y in outlines.points.tolist()]
+    near = min(
+        _nearest_distance([placed[index], placed[following]])
+        for index, following in enumerate(outlines.next_index.tolist())
+    )
+    far = max(math.hypot(x, y) for x, y in placed)
     steps = max(1, math.ceil(math.degrees(high - low) / 0.5))
     angles = [low + (high - low) * index / steps for index in range(steps + 1)]
     parts = [
@@ -838,12 +842,15 @@ def _label_ink_corners(text) -> list[tuple[float, float]]:
 
 
 def _nearest_distance(corners: list[tuple[float, float]]) -> float:
-    """The distance from the circle centre to the nearest point of a convex quadrilateral that excludes it."""
+    """The distance from the circle centre to the nearest point of a polygon's edges (a convex quadrilateral that
+    excludes it, or one edge of a glyph outline as its two ends)."""
 
     best = math.inf
     for (x1, y1), (x2, y2) in zip(corners, corners[1:] + corners[:1]):
         dx, dy = x2 - x1, y2 - y1
-        t = max(0.0, min(1.0, -(x1 * dx + y1 * dy) / (dx * dx + dy * dy)))
+        length = dx * dx + dy * dy
+        # A glyph contour may repeat a point.
+        t = max(0.0, min(1.0, -(x1 * dx + y1 * dy) / length)) if length > 0.0 else 0.0
         best = min(best, math.hypot(x1 + t * dx, y1 + t * dy))
     return best
 
@@ -1082,6 +1089,17 @@ def test_circular_region_label_letters_fit_their_innermost_circle(text: str, sta
             # And no two of its letters' ink overlaps where they stand.
             glyphs = text_runs_glyph_outlines(label.runs, "Liberation Sans", font_size)
             assert not glyphs_meet_on_circle(glyphs, label.arc.radius, tops_in=label.arc.flipped), (inner, label.runs)
+            # Its ink radii hold every point of its letters' outlines, each glyph upright and unbent where it stands
+            # (OV-2979): a corner off the ray through a glyph's middle stands farther out than its height says.
+            # Nearest at a point of an edge, farthest at a corner.
+            side = -1.0 if label.arc.flipped else 1.0
+            placed = [(x, label.arc.radius + side * y) for x, y in glyphs.points.tolist()]
+            nearest = min(
+                _nearest_distance([placed[index], placed[following]])
+                for index, following in enumerate(glyphs.next_index.tolist())
+            )
+            assert near == pytest.approx(nearest, abs=1e-6), (inner, label.runs, near)
+            assert far == pytest.approx(max(math.hypot(x, y) for x, y in placed), abs=1e-6), (inner, label.runs, far)
     assert kept == {True, False}
 
 
@@ -1154,16 +1172,15 @@ def test_a_curved_region_labels_shape_turns_as_far_as_its_glyph_ink(start: int, 
 
     corners = [turn_from_anchor(corner) for part in label.parts for corner in part]
     ink = []
-    for glyph in text_runs_glyph_outlines(runs, "Liberation Sans", font_size):
-        turn = math.radians(arc.angle) + sign * (glyph.middle - advance / 2.0) / arc.radius
+    outlines = text_runs_glyph_outlines(runs, "Liberation Sans", font_size)
+    for middle, (x, y) in zip(outlines.middles.tolist(), outlines.points.tolist()):
+        turn = math.radians(arc.angle) + sign * (middle - advance / 2.0) / arc.radius
         radial = (math.cos(turn), math.sin(turn))
         along = (-sign * radial[1], sign * radial[0])
-        for contour in glyph.contours:
-            for x, y in contour:
-                ink.append(turn_from_anchor((
-                    (arc.radius + tops * y) * radial[0] + x * along[0],
-                    (arc.radius + tops * y) * radial[1] + x * along[1],
-                )))
+        ink.append(turn_from_anchor((
+            (arc.radius + tops * y) * radial[0] + x * along[0],
+            (arc.radius + tops * y) * radial[1] + x * along[1],
+        )))
     assert min(corners) - 1e-3 <= min(ink) and max(ink) <= max(corners) + 1e-3, (inner, start, runs, min(ink), max(ink), min(corners), max(corners))
 
 

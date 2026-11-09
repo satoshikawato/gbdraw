@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import functools
 import math
 from dataclasses import dataclass
-from typing import Iterable, Literal, Protocol, Sequence, TypeAlias, cast
+from typing import TYPE_CHECKING, Iterable, Literal, NamedTuple, Sequence, TypeAlias, cast
 
 import numpy as np
 from numpy.typing import NDArray
+
+if TYPE_CHECKING:
+    # Read at run time only by its attributes: an import here would join the module cycle through gbdraw.core.text.
+    from gbdraw.core.text import GlyphOutlines
 
 TextAnchor: TypeAlias = Literal["start", "middle", "end"]
 Point: TypeAlias = tuple[float, float]
@@ -341,31 +346,23 @@ def segment_intersects_polygon(
     )
 
 
-class GlyphInk(Protocol):
-    """One glyph of a text as ``gbdraw.core.text.GlyphOutline`` gives it: the middle of its advance from the start of
-    the text's (px), and its outline as closed polygons, x from that middle and y up from the baseline."""
-
-    @property
-    def middle(self) -> float: ...
-
-    @property
-    def contours(self) -> Sequence[Sequence[Point]]: ...
-
-
-def _edges(contours: Sequence[NDArray[np.float64]]) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """The edges of closed polygons: their start and end points."""
-
-    return np.concatenate(contours), np.concatenate([np.roll(contour, -1, axis=0) for contour in contours])
-
-
 def _cross(a: NDArray[np.float64], b: NDArray[np.float64]) -> NDArray[np.float64]:
     return a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0]
 
 
-def _holds(contours: Sequence[NDArray[np.float64]], points: NDArray[np.float64]) -> bool:
-    """Whether the even-odd fill of ``contours`` holds any of ``points``."""
+class _PlacedGlyph(NamedTuple):
+    """One glyph standing along a circle (``glyphs_meet_on_circle``): its outline's edges (``starts`` to ``ends``) and
+    the first point of each of its contours, turned about the centre."""
 
-    starts, ends = _edges(contours)
+    starts: NDArray[np.float64]
+    ends: NDArray[np.float64]
+    firsts: NDArray[np.float64]
+
+
+def _holds(glyph: _PlacedGlyph, points: NDArray[np.float64]) -> bool:
+    """Whether the even-odd fill of ``glyph`` holds any of ``points``."""
+
+    starts, ends = glyph.starts, glyph.ends
     x, y = points[:, None, 0], points[:, None, 1]
     spans = (starts[None, :, 1] > y) != (ends[None, :, 1] > y)
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -375,17 +372,16 @@ def _holds(contours: Sequence[NDArray[np.float64]], points: NDArray[np.float64])
     return bool(((spans & (x < cross_x)).sum(axis=1) % 2 == 1).any())
 
 
-def _outlines_overlap(first: Sequence[NDArray[np.float64]], second: Sequence[NDArray[np.float64]]) -> bool:
-    """Whether the even-odd fills of two sets of closed polygons overlap: an edge of one crosses an edge of the
-    other, or, when none does, one fill holds a contour of the other."""
+def _outlines_overlap(first: _PlacedGlyph, second: _PlacedGlyph) -> bool:
+    """Whether the even-odd fills of two glyphs overlap: an edge of one crosses an edge of the other, or, when none
+    does, one fill holds a contour of the other."""
 
-    a0, a1 = _edges(first)
-    b0, b1 = _edges(second)
+    a0, a1, b0, b1 = first.starts, first.ends, second.starts, second.ends
     if (
-        min(a0[:, 0].min(), a1[:, 0].min()) > max(b0[:, 0].max(), b1[:, 0].max())
-        or min(b0[:, 0].min(), b1[:, 0].min()) > max(a0[:, 0].max(), a1[:, 0].max())
-        or min(a0[:, 1].min(), a1[:, 1].min()) > max(b0[:, 1].max(), b1[:, 1].max())
-        or min(b0[:, 1].min(), b1[:, 1].min()) > max(a0[:, 1].max(), a1[:, 1].max())
+        a0[:, 0].min() > b0[:, 0].max()
+        or b0[:, 0].min() > a0[:, 0].max()
+        or a0[:, 1].min() > b0[:, 1].max()
+        or b0[:, 1].min() > a0[:, 1].max()
     ):
         return False
     a_dir, b_dir = (a1 - a0)[:, None, :], (b1 - b0)[None, :, :]
@@ -393,75 +389,216 @@ def _outlines_overlap(first: Sequence[NDArray[np.float64]], second: Sequence[NDA
     b_sides = _cross(b_dir, a0[:, None, :] - b0[None, :, :]) * _cross(b_dir, a1[:, None, :] - b0[None, :, :])
     if bool(((a_sides < 0) & (b_sides < 0)).any()):
         return True
-    return _holds(second, np.array([contour[0] for contour in first])) or _holds(
-        first, np.array([contour[0] for contour in second])
-    )
+    return _holds(second, first.firsts) or _holds(first, second.firsts)
 
 
-def _glyphs_on_circle(
-    glyphs: Sequence[GlyphInk], radius: float, *, tops_in: bool, from_px: float = 0.0
-) -> list[tuple[list[NDArray[np.float64]], float, float]]:
-    """Each of ``glyphs`` standing along a circle of ``radius``, its baseline, as an SVG ``textPath`` sets it: upright
-    and unbent at the point of its advance's middle, turned to the circle there, its tops toward the centre when
-    ``tops_in``. For each, its outline turned about the centre, and how far (radians) its ink turns at least and at
-    most from the ray through ``from_px`` along the baseline (the text's start when 0)."""
+def _turns_on_circle(
+    outlines: GlyphOutlines, radius: float, *, tops_in: bool, from_px: float
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    """Every outline point of ``outlines`` standing along a circle of ``radius`` (``glyphs_meet_on_circle``): across
+    the ray through its glyph's middle, out along that ray, and its turn (radians) from the ray through ``from_px``."""
 
-    side = -1.0 if tops_in else 1.0
-    placed: list[tuple[list[NDArray[np.float64]], float, float]] = []
-    for glyph in glyphs:
-        turn = (glyph.middle - from_px) / radius
-        cos, sin = math.cos(turn), math.sin(turn)
-        contours: list[NDArray[np.float64]] = []
-        angles: list[NDArray[np.float64]] = []
-        for contour in glyph.contours:
-            points = np.asarray(contour, dtype=float)
-            x, y = points[:, 0], radius + side * points[:, 1]
-            # Turned clockwise by ``turn`` about the centre, from the glyph standing at the top of the circle.
-            contours.append(np.column_stack((cos * x + sin * y, cos * y - sin * x)))
-            angles.append(np.arctan2(x, y) + turn)
-        every = np.concatenate(angles)
-        placed.append((contours, float(every.min()), float(every.max())))
-    return placed
+    x = outlines.points[:, 0]
+    out = radius + (-1.0 if tops_in else 1.0) * outlines.points[:, 1]
+    return x, out, np.arctan2(x, out) + (outlines.middles - from_px) / radius
 
 
-def glyphs_meet_on_circle(glyphs: Sequence[GlyphInk], radius: float, *, tops_in: bool) -> bool:
-    """Whether the ink of two of ``glyphs`` (one text, ``text_runs_glyph_outlines``) overlaps when the text stands
-    along a circle of ``radius``, its baseline, as an SVG ``textPath`` sets it (``_glyphs_on_circle``). Letters that
-    stand apart on a line close up at their tops on the inner side of a circle."""
+def glyphs_meet_on_circle(outlines: GlyphOutlines, radius: float, *, tops_in: bool) -> bool:
+    """Whether the ink of two glyphs of one text (``text_runs_glyph_outlines``) overlaps when the text stands along a
+    circle of ``radius``, its baseline, as an SVG ``textPath`` sets it: each glyph upright and unbent at the point of
+    its advance's middle, turned to the circle there, its tops toward the centre when ``tops_in``. Letters that stand
+    apart on a line close up at their tops on the inner side of a circle."""
 
-    placed = _glyphs_on_circle(glyphs, radius, tops_in=tops_in)
-    for index, (contours, start, end) in enumerate(placed):
-        for other, other_start, other_end in placed[index + 1 :]:
-            # Glyphs whose turns from the centre are apart, a whole turn either way included, cannot meet.
-            if any(
-                start < other_end + shift and other_start + shift < end for shift in (-2 * math.pi, 0.0, 2 * math.pi)
-            ) and _outlines_overlap(contours, other):
-                return True
-    return False
+    if not outlines.glyph_count:
+        return False
+    x, out, angles = _turns_on_circle(outlines, radius, tops_in=tops_in, from_px=0.0)
+    first_points = list(outlines.glyph_starts[:-1])
+    low, high = np.minimum.reduceat(angles, first_points), np.maximum.reduceat(angles, first_points)
+    # Glyphs whose turns from the centre are apart, a whole turn either way included, cannot meet.
+    turns_meet = np.zeros((len(low), len(low)), dtype=bool)
+    for shift in (-2 * math.pi, 0.0, 2 * math.pi):
+        turns_meet |= (low[:, None] < high[None, :] + shift) & (low[None, :] + shift < high[:, None])
+    pairs = np.argwhere(np.triu(turns_meet, 1))
+    if not len(pairs):
+        return False
+    # Turned clockwise about the centre by its glyph's turn, from the glyph standing at the top of the circle.
+    turn = outlines.middles / radius
+    cos, sin = np.cos(turn), np.sin(turn)
+    placed = np.column_stack((cos * x + sin * out, cos * out - sin * x))
+    ends = placed[outlines.next_index]
+    contour_starts = outlines.contour_starts
+
+    def glyph(index: int) -> _PlacedGlyph:
+        start, end = outlines.glyph_starts[index], outlines.glyph_starts[index + 1]
+        firsts = contour_starts[(contour_starts >= start) & (contour_starts < end)]
+        return _PlacedGlyph(placed[start:end], ends[start:end], placed[firsts])
+
+    return any(_outlines_overlap(glyph(int(first)), glyph(int(second))) for first, second in pairs)
 
 
-def glyphs_half_turn_on_circle(glyphs: Sequence[GlyphInk], radius: float, *, tops_in: bool) -> float | None:
-    """How far (radians) the ink of ``glyphs`` (one text, ``text_runs_glyph_outlines``) reaches about the centre each
-    way from the middle of its ink along the baseline, at most, when the text stands along a circle of ``radius`` as
-    an SVG ``textPath`` sets it (``_glyphs_on_circle``): its widest turn, which its letters take where they come
-    nearest the centre, since a glyph does not bend to the circle (OV-2851). None when no glyph paints."""
+def glyphs_half_turn_on_circle(outlines: GlyphOutlines, radius: float, *, tops_in: bool) -> float | None:
+    """How far (radians) the ink of one text (``text_runs_glyph_outlines``) reaches about the centre each way from the
+    middle of its ink along the baseline, at most, when the text stands along a circle of ``radius`` as an SVG
+    ``textPath`` sets it (``glyphs_meet_on_circle``): its widest turn, which its letters take where they come nearest the
+    centre, since a glyph does not bend to the circle (OV-2851). None when no glyph paints."""
 
-    if not glyphs:
+    if not outlines.glyph_count:
         return None
-    reach = [
-        (glyph.middle + min(x for x, _y in contour), glyph.middle + max(x for x, _y in contour))
-        for glyph in glyphs
-        for contour in glyph.contours
-    ]
-    middle = 0.5 * (min(low for low, _high in reach) + max(high for _low, high in reach))
-    placed = _glyphs_on_circle(glyphs, radius, tops_in=tops_in, from_px=middle)
-    return max(max(-start, end) for _contours, start, end in placed)
+    along = outlines.middles + outlines.points[:, 0]
+    middle = 0.5 * (float(along.min()) + float(along.max()))
+    _x, _out, angles = _turns_on_circle(outlines, radius, tops_in=tops_in, from_px=middle)
+    return max(-float(angles.min()), float(angles.max()))
+
+
+class _EdgesNearBaseline(NamedTuple):
+    """The outline's edges on one side of the baseline (``GlyphsAcrossCircle``), in the order of how near the centre
+    they come along the ray: each edge's least ``u`` (``lowest``, ascending) and its index (``order``); and the point
+    that comes nearest the centre along the ray (``x``, ``u``)."""
+
+    lowest: NDArray[np.float64]
+    order: NDArray[np.intp]
+    x: float
+    u: float
+
+
+# Added to the bounds that leave out edges which cannot hold the nearest ink: rounding never leaves out one that can.
+_EDGE_BOUND_MARGIN = 1e-9
+
+
+def _hull(points: NDArray[np.float64]) -> NDArray[np.float64]:
+    """The corners of the convex hull of ``points`` (monotone chain)."""
+
+    ordered = sorted(set(map(tuple, points.tolist())))
+    if len(ordered) <= 2:
+        return np.asarray(ordered, dtype=float).reshape(-1, 2)
+
+    def half(chain_points: Iterable[tuple[float, float]]) -> list[tuple[float, float]]:
+        chain: list[tuple[float, float]] = []
+        for point in chain_points:
+            while len(chain) >= 2 and (chain[-1][0] - chain[-2][0]) * (point[1] - chain[-2][1]) - (
+                chain[-1][1] - chain[-2][1]
+            ) * (point[0] - chain[-2][0]) <= 0.0:
+                chain.pop()
+            chain.append(point)
+        return chain[:-1]
+
+    return np.asarray(half(ordered) + half(reversed(ordered)), dtype=float)
+
+
+@dataclass(frozen=True, eq=False)
+class GlyphsAcrossCircle:
+    """How near the centre and how far from it the ink of one text (``text_runs_glyph_outlines``) comes when it stands
+    along a circle, its baseline, as an SVG ``textPath`` sets it (``glyphs_meet_on_circle``): each glyph upright and
+    unbent at the point of its advance's middle, so a point ``x`` across the ray through that middle and ``y`` up
+    from the baseline stands ``hypot(x, radius + u)`` from the centre, whatever its turn, ``u`` being ``y``, or ``-y``
+    with its tops toward the centre. A glyph's corners off that ray stand farther from the centre than their height
+    along it says (OV-2979). Built by ``glyphs_across_circle``: the outline's edges from ``x``, ``y`` by ``dx``,
+    ``dy``, with the terms of ``radii`` that depend on neither the radius nor the side (``along``,
+    ``inverse_length``); the corners of the points' convex hull (``hull``), where the ink reaches farthest; and the
+    edges near the baseline on each side (``tops_out``, ``tops_in``), where it comes nearest."""
+
+    x: NDArray[np.float64]
+    y: NDArray[np.float64]
+    dx: NDArray[np.float64]
+    dy: NDArray[np.float64]
+    along: NDArray[np.float64]
+    inverse_length: NDArray[np.float64]
+    hull: NDArray[np.float64]
+    tops_out: _EdgesNearBaseline
+    tops_in: _EdgesNearBaseline
+
+    def radii(self, radius: float, *, tops_in: bool) -> tuple[float, float]:
+        """How near the centre and how far from it the ink comes on a baseline circle of ``radius`` that keeps it off
+        the centre, its tops toward the centre when ``tops_in``: the nearest point of an edge, the farthest corner.
+
+        No point of an edge that stays farther from the baseline along the ray than the point nearest it is from the
+        centre, past the radius, comes nearer the centre than that point: such edges are not measured."""
+
+        side = -1.0 if tops_in else 1.0
+        out = radius + side * self.hull[:, 1]
+        far = math.sqrt(float((self.hull[:, 0] ** 2 + out * out).max()))
+        edges = self.tops_in if tops_in else self.tops_out
+        bound = math.hypot(edges.x, radius + edges.u) - radius + _EDGE_BOUND_MARGIN
+        near_edges = edges.order[: int(np.searchsorted(edges.lowest, bound, side="right"))]
+        dx, dy = self.dx[near_edges], self.dy[near_edges]
+        t = np.minimum(np.maximum(-(self.along[near_edges] + side * radius * dy) * self.inverse_length[near_edges], 0.0), 1.0)
+        x, out = self.x[near_edges] + t * dx, radius + side * (self.y[near_edges] + t * dy)
+        return math.sqrt(float((x * x + out * out).min())), far
+
+    def radius_reaching(self, target: float, *, tops_in: bool, nearest: bool) -> float:
+        """The baseline radius at which the ink comes ``target`` from the centre at its nearest (``nearest``), or
+        reaches ``target`` at its farthest; -inf when no baseline radius that keeps the ink off the centre is
+        needed for it (``nearest``) or works (a corner stands across the ray farther than ``target``).
+
+        A point stands ``target`` out on the baseline radius ``sqrt(target² - x²) - u``. Every corner of the hull
+        within ``target`` puts the farthest reach at the least of those; the ink clears ``target`` from the greatest
+        over its edges, which along an edge is greatest at an end or where the circle of ``target`` touches it. The
+        point that holds the ink off stands at most ``target`` less that radius beyond the baseline, and the radius is
+        at least the one the point nearest the baseline asks for: edges beyond are not measured."""
+
+        side = -1.0 if tops_in else 1.0
+        if not nearest:
+            x, u = self.hull[:, 0], side * self.hull[:, 1]
+            if bool((np.abs(x) > target).any()):
+                return -math.inf
+            return float((np.sqrt(target * target - x * x) - u).min())
+        edges = self.tops_in if tops_in else self.tops_out
+        near_edges = edges.order
+        if abs(edges.x) < target:
+            bound = target - (math.sqrt(target * target - edges.x * edges.x) - edges.u) + _EDGE_BOUND_MARGIN
+            near_edges = near_edges[: int(np.searchsorted(edges.lowest, bound, side="right"))]
+        x, u = self.x[near_edges], side * self.y[near_edges]
+        dx, du = self.dx[near_edges], side * self.dy[near_edges]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            touch = -np.sign(dx) * du * target / np.hypot(dx, du)
+            t = (touch - x) / dx
+        along = (dx != 0.0) & (t > 0.0) & (t < 1.0)
+        x, u = np.concatenate((x, touch[along])), np.concatenate((u, u[along] + t[along] * du[along]))
+        within = np.abs(x) < target
+        if not within.any():
+            return -math.inf
+        return float((np.sqrt(target * target - x[within] ** 2) - u[within]).max())
+
+
+def _edges_near_baseline(
+    x: NDArray[np.float64], u: NDArray[np.float64], next_index: NDArray[np.intp]
+) -> _EdgesNearBaseline:
+    lowest = np.minimum(u, u[next_index])
+    order = np.argsort(lowest, kind="stable")
+    nearest = int(np.argmin(u))
+    return _EdgesNearBaseline(lowest[order], order, float(x[nearest]), float(u[nearest]))
+
+
+@functools.lru_cache(maxsize=2048)
+def glyphs_across_circle(outlines: GlyphOutlines) -> GlyphsAcrossCircle | None:
+    """The radial reach of one text's glyphs standing along a circle (``GlyphsAcrossCircle``), one per text like
+    ``text_runs_glyph_outlines``. None when no glyph paints."""
+
+    if not outlines.glyph_count:
+        return None
+    x, y = outlines.points[:, 0].copy(), outlines.points[:, 1].copy()
+    following = outlines.next_index
+    dx, dy = x[following] - x, y[following] - y
+    lengths = dx * dx + dy * dy
+    # A point repeated along a contour is an edge of no length: its nearest point is its start.
+    inverse_length = np.divide(1.0, lengths, out=np.zeros_like(lengths), where=lengths > 0.0)
+    return GlyphsAcrossCircle(
+        x,
+        y,
+        dx,
+        dy,
+        x * dx + y * dy,
+        inverse_length,
+        _hull(outlines.points),
+        _edges_near_baseline(x, y, following),
+        _edges_near_baseline(x, -y, following),
+    )
 
 
 __all__ = [
     "AabbTuple",
     "GEOMETRY_EPSILON",
-    "GlyphInk",
+    "GlyphsAcrossCircle",
     "OrientedTextBox",
     "Point",
     "SECTOR_PART_DEG",
@@ -470,6 +607,7 @@ __all__ = [
     "anchor_x_bounds",
     "annular_sector_parts",
     "convex_polygons_intersect",
+    "glyphs_across_circle",
     "glyphs_half_turn_on_circle",
     "glyphs_meet_on_circle",
     "grown_convex_polygon",

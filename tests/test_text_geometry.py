@@ -4,8 +4,9 @@ import math
 
 import pytest
 
-from gbdraw.core.text import GlyphOutline, text_runs_glyph_outlines
+from gbdraw.core.text import GlyphOutline, glyph_outlines, text_runs_glyph_outlines
 from gbdraw.layout.text_geometry import (
+    glyphs_across_circle,
     glyphs_meet_on_circle,
     oriented_boxes_intersect,
     oriented_text_box,
@@ -112,7 +113,7 @@ def test_letters_that_stand_apart_on_a_line_close_up_at_their_tops_on_the_inner_
     # toward the centre their top corners cross, and with their tops away from it they part.
     glyphs = text_runs_glyph_outlines((("xx", "normal"),), "Liberation Sans", 60.0)
 
-    assert len(glyphs) == 2
+    assert glyphs.glyph_count == 2
     assert glyphs_meet_on_circle(glyphs, radius, tops_in=tops_in) is meet
 
 
@@ -120,11 +121,58 @@ def test_glyphs_meet_when_one_holds_the_other_or_their_turns_wrap_around() -> No
     square = ((-10.0, 0.0), (10.0, 0.0), (10.0, 20.0), (-10.0, 20.0))
     small = ((-2.0, 5.0), (2.0, 5.0), (2.0, 9.0), (-2.0, 9.0))
     # A glyph inside another's ink with no edge crossing: they meet.
-    assert glyphs_meet_on_circle((GlyphOutline(0.0, (square,)), GlyphOutline(0.0, (small,))), 100.0, tops_in=False)
+    assert glyphs_meet_on_circle(glyph_outlines((GlyphOutline(0.0, (square,)), GlyphOutline(0.0, (small,)))), 100.0, tops_in=False)
     # Inside a hole of the other (even-odd): they do not.
     ring = (square, ((-5.0, 2.0), (5.0, 2.0), (5.0, 18.0), (-5.0, 18.0)))
-    assert not glyphs_meet_on_circle((GlyphOutline(0.0, ring), GlyphOutline(0.0, (small,))), 100.0, tops_in=False)
+    assert not glyphs_meet_on_circle(glyph_outlines((GlyphOutline(0.0, ring), GlyphOutline(0.0, (small,)))), 100.0, tops_in=False)
     # Nearly a whole turn on, overlapping the first.
     turn = 2 * math.pi * 100.0
-    assert glyphs_meet_on_circle((GlyphOutline(0.0, (square,)), GlyphOutline(turn - 5.0, (square,))), 100.0, tops_in=True)
-    assert not glyphs_meet_on_circle((GlyphOutline(0.0, (square,)), GlyphOutline(turn / 2, (square,))), 100.0, tops_in=True)
+    assert glyphs_meet_on_circle(glyph_outlines((GlyphOutline(0.0, (square,)), GlyphOutline(turn - 5.0, (square,)))), 100.0, tops_in=True)
+    assert not glyphs_meet_on_circle(glyph_outlines((GlyphOutline(0.0, (square,)), GlyphOutline(turn / 2, (square,)))), 100.0, tops_in=True)
+
+
+def test_a_glyph_upright_on_a_circle_reaches_past_its_height_at_its_corners() -> None:
+    # OV-2979: a 20 px wide, 20 px high square standing on a circle of 100 px is not bent to it. Tops away from the
+    # centre: its bottom edge touches the circle at its middle and its top corners stand hypot(10, 120) out. Tops
+    # toward the centre: its top edge comes 80 px near and its bottom corners stand hypot(10, 100) out.
+    square = ((-10.0, 0.0), (10.0, 0.0), (10.0, 20.0), (-10.0, 20.0))
+    glyphs = glyph_outlines((GlyphOutline(0.0, (square,)),))
+    across = glyphs_across_circle(glyphs)
+    assert across is not None
+    assert across.radii(100.0, tops_in=False) == pytest.approx((100.0, math.hypot(10.0, 120.0)))
+    assert across.radii(100.0, tops_in=True) == pytest.approx((80.0, math.hypot(10.0, 100.0)))
+    # Two feet apart: the nearest ink is a foot's inner corner, off the ray through the glyph's middle.
+    feet = glyph_outlines(
+        (GlyphOutline(0.0, (((-15.0, 0.0), (-5.0, 0.0), (-5.0, 20.0), (-15.0, 20.0)), ((5.0, 0.0), (15.0, 0.0), (15.0, 20.0), (5.0, 20.0)))),)
+    )
+    across = glyphs_across_circle(feet)
+    assert across is not None and across.radii(100.0, tops_in=False)[0] == pytest.approx(math.hypot(5.0, 100.0))
+    assert glyphs_across_circle(glyph_outlines(())) is None
+
+
+@pytest.mark.parametrize("tops_in", (False, True))
+@pytest.mark.parametrize("text", ("R\u2026", "AVW xx", "Region 3 xxx", "gjpqy"))
+def test_the_baseline_radius_reaching_a_glyph_radius_is_the_radius_it_was_measured_on(text: str, tops_in: bool) -> None:
+    # Slanted and curved edges included: the radius that brings the nearest or farthest ink to a reach is the one
+    # whose ink comes that near or reaches that far.
+    outlines = text_runs_glyph_outlines(((text, "normal"),), "Liberation Sans", 60.0)
+    across = glyphs_across_circle(outlines)
+    assert across is not None
+    points = outlines.points.tolist()
+    side = -1.0 if tops_in else 1.0
+    for radius in (60.0, 99.0, 260.0, 2000.0):
+        near, far = across.radii(radius, tops_in=tops_in)
+        assert near < far
+        # Every edge and corner measured: the edges and corners left out never come nearer or reach farther.
+        placed = [(x, radius + side * y) for x, y in points]
+        nearest = math.inf
+        for (x1, y1), (x2, y2) in zip(placed, (placed[index] for index in outlines.next_index.tolist())):
+            length = (x2 - x1) ** 2 + (y2 - y1) ** 2
+            t = min(1.0, max(0.0, -(x1 * (x2 - x1) + y1 * (y2 - y1)) / length)) if length > 0.0 else 0.0
+            nearest = min(nearest, math.hypot(x1 + t * (x2 - x1), y1 + t * (y2 - y1)))
+        assert near == pytest.approx(nearest, abs=1e-9)
+        assert far == pytest.approx(max(math.hypot(x, y) for x, y in placed), abs=1e-9)
+        assert across.radius_reaching(near, tops_in=tops_in, nearest=True) == pytest.approx(radius, abs=1e-6)
+        assert across.radius_reaching(far, tops_in=tops_in, nearest=False) == pytest.approx(radius, abs=1e-6)
+    # A corner that stands across the ray farther than the reach: no baseline radius brings it within.
+    assert across.radius_reaching(1.0, tops_in=tops_in, nearest=False) == -math.inf

@@ -11,9 +11,11 @@ from dataclasses import dataclass
 from collections.abc import Iterable, Sequence
 from typing import Dict, List, Literal, Mapping, Optional, TypedDict, TypeVar, Union
 
+import numpy as np
 from fontTools.pens.basePen import BasePen
 from fontTools.pens.boundsPen import BoundsPen
 from fontTools.ttLib import TTFont
+from numpy.typing import NDArray
 
 from gbdraw.core.fonts import FontFace, FontWeight, load_font, resolve_font_face
 from gbdraw.core.numeric import compensated_sum
@@ -699,6 +701,50 @@ class GlyphOutline:
     contours: tuple[tuple[tuple[float, float], ...], ...]
 
 
+@dataclass(frozen=True, eq=False)
+class GlyphOutlines:
+    """The painted glyphs of one text (``text_runs_glyph_outlines``), in order, every outline point in one array so
+    that geometry over all of them is one step: ``points`` (x from the middle of its glyph's advance, y up from the
+    alphabetic baseline, px), ``middles`` that middle from the start of the text's advance, ``next_index`` the point
+    after it along its contour (each contour closed), ``glyph_starts`` where each glyph's points start (and where the
+    last ends), and ``contour_starts`` where each contour's do. Built by ``glyph_outlines``."""
+
+    points: NDArray[np.float64]
+    middles: NDArray[np.float64]
+    next_index: NDArray[np.intp]
+    glyph_starts: tuple[int, ...]
+    contour_starts: NDArray[np.intp]
+
+    @property
+    def glyph_count(self) -> int:
+        return len(self.glyph_starts) - 1
+
+
+def glyph_outlines(glyphs: Iterable[GlyphOutline]) -> GlyphOutlines:
+    """``GlyphOutlines`` of ``glyphs``, one text's painted glyphs in order."""
+
+    points: list[tuple[float, float]] = []
+    middles: list[float] = []
+    following: list[int] = []
+    glyph_starts = [0]
+    contour_starts: list[int] = []
+    for glyph in glyphs:
+        for contour in glyph.contours:
+            start = len(points)
+            contour_starts.append(start)
+            points.extend(contour)
+            middles.extend([glyph.middle] * len(contour))
+            following.extend([*range(start + 1, len(points)), start])
+        glyph_starts.append(len(points))
+    return GlyphOutlines(
+        np.asarray(points, dtype=float).reshape(-1, 2),
+        np.asarray(middles, dtype=float),
+        np.asarray(following, dtype=np.intp),
+        tuple(glyph_starts),
+        np.asarray(contour_starts, dtype=np.intp),
+    )
+
+
 class _FlatPen(BasePen):
     """A glyph's contours as polygons, each curve as straight segments."""
 
@@ -751,10 +797,10 @@ def text_runs_glyph_outlines(
     font_family: str,
     font_size: float,
     font_weight: FontWeight = "normal",
-) -> tuple[GlyphOutline, ...]:
+) -> GlyphOutlines:
     """The painted glyphs of one text drawn as styled runs (``tspan``), ``runs`` being ``(text, font_style)``, laid
     out as ``text_runs_ink_offsets`` measures them: each run in its own face, kerned within it, white space collapsed
-    across runs. Empty when a face cannot be read."""
+    across runs. No glyph when a face cannot be read."""
 
     size = float(font_size)
     glyphs: list[GlyphOutline] = []
@@ -763,7 +809,7 @@ def text_runs_glyph_outlines(
         face = resolve_font_face(font_family, font_weight, font_style)
         font = None if face is None else load_font(face)
         if face is None or font is None:
-            return ()
+            return glyph_outlines(())
         scale = size / float(font["head"].unitsPerEm)
         cmap = _measured_cmap(font)
         previous: Optional[str] = None
@@ -789,7 +835,7 @@ def text_runs_glyph_outlines(
                 )
             origin += advance
             previous = glyph_name
-    return tuple(glyphs)
+    return glyph_outlines(glyphs)
 
 
 @dataclass(frozen=True)
@@ -1021,6 +1067,7 @@ __all__ = [
     "FontMetricsTable",
     "FontVerticalMetrics",
     "GlyphOutline",
+    "GlyphOutlines",
     "TextInk",
     "TextRun",
     "TextRunStyle",
@@ -1034,6 +1081,7 @@ __all__ = [
     "font_metrics_table",
     "font_pair_kerning_table",
     "get_font_vertical_metrics",
+    "glyph_outlines",
     "italic_markup_runs",
     "measure_mixed_text_line",
     "measurement_font_file",
