@@ -683,19 +683,22 @@ const terminateWorker = (error = null) => {
 
 /**
  * Replace the engine that ran out of memory (OV-3027, Owner D-42): the Worker's Python heap never shrinks, so the
- * Worker is terminated and the next request builds a new one, which receives every input again. A Generate still
- * waiting on that Worker would never be answered: it ends with the same failure.
+ * Worker is terminated and the next request builds a new one, which receives every input again. A Generate in
+ * progress on that Worker would never be answered: it ends with the same failure. A Generate that waits for a drain
+ * has not reached the Worker; the termination ends the drain, and it starts the new one.
  * @param {Worker} currentWorker The Worker that replied.
  * @param {unknown} serialized The error of its reply, if any.
+ * @returns {boolean} Whether the engine was replaced.
  */
 const replaceEngineOutOfMemory = (currentWorker, serialized) => {
   const code = serialized && typeof serialized === 'object' ? /** @type {{ code?: unknown }} */ (serialized).code : null;
-  if (code !== OUT_OF_MEMORY_CODE || worker !== currentWorker) return;
-  const pending = activeRequest;
+  if (code !== OUT_OF_MEMORY_CODE || worker !== currentWorker) return false;
+  const pending = drainState ? null : activeRequest;
   if (pending) {
     settleActiveRequest(pending, () => pending.reject(deserializeWorkerError({ code: OUT_OF_MEMORY_CODE, operation: 'generate', stage: 'unknown' })));
   }
   terminateWorker();
+  return true;
 };
 
 /**
@@ -714,7 +717,14 @@ const drainWorker = (currentWorker, buffer) => {
   /** @param {MessageEvent} event */
   const handleMessage = (event) => {
     const data = /** @type {Partial<DiagramWorkerCancelReply>} */ (event.data || {});
-    if (data.type === 'cancel' && data.id === id) finish('drained');
+    if (data.type === 'cancel' && data.id === id) {
+      // The Worker dropped a canceled reply that ran out of memory: the termination ends the drain.
+      if (!replaceEngineOutOfMemory(currentWorker, data.error)) finish('drained');
+      return;
+    }
+    // A reply already on its way when the Cancel settled its request.
+    const reply = /** @type {{ ok?: unknown, error?: unknown, results?: { error?: unknown } }} */ (event.data || {});
+    replaceEngineOutOfMemory(currentWorker, reply.ok === false ? reply.error : reply.results?.error);
   };
   const terminate = () => {
     if (worker === currentWorker) terminateWorker();

@@ -9,7 +9,7 @@ import {
   readHeldSegments,
   readSvgDocumentParts
 } from '../services/diagram-worker-protocol.js';
-import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError, OUT_OF_MEMORY_CODE } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { recordSourceFilesOf } from '../services/input-types.js';
@@ -1731,24 +1731,25 @@ const handleWorkerMessage = async (data) => {
       requestId,
       testLifecycleEnabled: data.testLifecycleEnabled
     });
-    if (isCanceled(requestId)) return;
+    if (isCanceled(requestId)) {
+      noteDroppedReply(results?.error);
+      return;
+    }
     self.postMessage(
       { requestId, type: 'run', ok: true, results },
       collectGenerationResultTransferList(results)
     );
   } catch (error) {
-    if (isCanceled(requestId)) return;
-    self.postMessage({
-      id,
-      requestId,
-      type: type || 'run',
-      ok: false,
-      error: serializeError(error, {
-        operation: type === 'run' ? 'generate' : type === 'feature-extraction' ? 'feature-extraction' : data.operation,
-        stage: type === 'init' ? 'initialization' : 'unknown',
-        code: type === 'init' ? 'WORKER_INIT' : 'UNKNOWN'
-      })
+    const serialized = serializeError(error, {
+      operation: type === 'run' ? 'generate' : type === 'feature-extraction' ? 'feature-extraction' : data.operation,
+      stage: type === 'init' ? 'initialization' : 'unknown',
+      code: type === 'init' ? 'WORKER_INIT' : 'UNKNOWN'
     });
+    if (isCanceled(requestId)) {
+      noteDroppedReply(serialized);
+      return;
+    }
+    self.postMessage({ id, requestId, type: type || 'run', ok: false, error: serialized });
   }
 };
 
@@ -1758,13 +1759,34 @@ const enqueue = (step) => {
   operationQueue = scheduled.catch(() => {});
 };
 
+// The out-of-memory error of a canceled request's dropped reply (OV-3027): the
+// drain answer carries it, so the page still replaces this engine.
+/** @type {unknown} */
+let droppedOutOfMemory = null;
+/** @param {unknown} error The error of a reply this Worker drops. */
+export const noteDroppedReply = (error) => {
+  if (error && typeof error === 'object' && /** @type {{ code?: unknown }} */ (error).code === OUT_OF_MEMORY_CODE) {
+    droppedOutOfMemory = error;
+  }
+};
+/**
+ * The answer to a Cancel's drain; it carries a dropped out-of-memory error once.
+ * @param {string} id
+ * @returns {import('../services/diagram-worker-protocol.js').DiagramWorkerCancelReply}
+ */
+export const cancelDrainReply = (id) => {
+  const error = droppedOutOfMemory;
+  droppedOutOfMemory = null;
+  return error === null ? { type: 'cancel', id, ok: true } : { type: 'cancel', id, ok: true, error };
+};
+
 // The drain after a Cancel, once the operation in flight has ended: the
 // interrupt and then Python's cancel flag are cleared, so the next request
 // runs; the page sends none before this answer.
 const drainCancel = (id) => {
   if (interruptBuffer) Atomics.store(interruptBuffer, 0, 0);
   if (runtime) callJsonHelper(runtime.pyodide, 'clear_web_cancel', []);
-  self.postMessage({ type: 'cancel', id, ok: true });
+  self.postMessage(cancelDrainReply(id));
 };
 
 self.onmessage = (event) => {

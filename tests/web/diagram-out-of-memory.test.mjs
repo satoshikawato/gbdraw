@@ -135,3 +135,21 @@ test('a helper operation that runs out of memory replaces the engine and ends th
   again.worker.dispatch('message', { type: 'helper', requestId: again.message.requestId, ok: true, result: { winners: [] } });
   assert.deepEqual((await retry).result, { winners: [] });
 });
+
+test('the other request waiting on an engine that ran out of memory fails as a terminated engine', async () => {
+  const listing = runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, { kind: 'label', features: [], rules: [] });
+  const { worker, message: first } = await sent('helper');
+  const rules = runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, { kind: 'color', features: [], rules: [] });
+  const { message: second } = await sent('helper', first);
+  worker.dispatch('message', { type: 'helper', requestId: second.requestId, ok: false,
+    error: engineError(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, OUT_OF_MEMORY_CODE) });
+  assert.equal((await rules.then(() => assert.fail('the helper succeeded'), (error) => error)).code, OUT_OF_MEMORY_CODE);
+  const other = await listing.then(() => assert.fail('the other helper succeeded'), (error) => error);
+  // A plain Error: each caller words it as UNKNOWN, the failure without recognized diagnostic information.
+  assert.equal(Object.getPrototypeOf(other), Error.prototype);
+  assert.equal(other.message, 'Diagram generation worker was terminated.');
+  assert.equal(other.code, undefined);
+  const worded = normalizeUserFacingError(other, { operation: DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES });
+  assert.equal(worded.code, 'UNKNOWN');
+  assert.equal(worker.terminated, true);
+});

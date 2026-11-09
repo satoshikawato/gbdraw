@@ -290,6 +290,7 @@ test('an engine that runs out of memory is replaced, and Retry Generate draws on
   await expect(alert.getByRole('button', { name: 'Save Session', exact: true })).toBeVisible();
   const retry = alert.getByRole('button', { name: 'Retry Generate', exact: true });
   await expect(retry).toBeVisible();
+  await expect(alert.getByRole('button', { name: /Reload/i })).toHaveCount(0);
   await alert.screenshot({ path: info.outputPath('out-of-memory-alert.png') });
   await inspectSafeDetails(page, alert, failed.error);
   outOfMemory = false;

@@ -33,8 +33,9 @@
  */
 
 /**
- * The Worker's answer to a Cancel: it is ready for the next request.
- * @typedef {{ type: 'cancel', id: string, ok: true }} DiagramWorkerCancelReply
+ * The Worker's answer to a Cancel: it is ready for the next request. `error`: the out-of-memory error of a reply it
+ * dropped (OV-3027), so the page still replaces that engine.
+ * @typedef {{ type: 'cancel', id: string, ok: true, error?: unknown }} DiagramWorkerCancelReply
  */
 
 /** The signal a Cancel writes into the interrupt buffer: SIGINT, as Pyodide's `setInterruptBuffer` reads it. */
