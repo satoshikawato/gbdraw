@@ -3884,44 +3884,104 @@ def test_linear_cli_session_selects_the_drawn_records_of_a_partly_drawn_input_fi
     assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
 
 
+def _varied_cli_session_inputs(tmp_path: Path) -> tuple[Path, Path]:
+    """Circular GenBank files whose GC changes along each record, so a window that reads a crop's flank shows it."""
+
+    import random
+
+    from Bio import SeqIO
+
+    def record(record_id: str, seed: int) -> SeqRecord:
+        rng = random.Random(seed)
+        sequence = "".join(rng.choice(bases) for bases in ("GC", "AT", "GC") for _ in range(1_000))
+        made = SeqRecord(Seq(sequence), id=record_id, name=record_id, description="CLI Session input.",
+                         annotations={"topology": "circular", "molecule_type": "DNA"})
+        made.features = [SeqFeature(FeatureLocation(1_200, 1_500, 1), type="CDS",
+                                    qualifiers={"locus_tag": [f"{record_id}_gene"]})]
+        return made
+
+    single = tmp_path / "single.gbk"
+    SeqIO.write([record("cli_single", 1)], single, "genbank")
+    multi = tmp_path / "multi.gbk"
+    SeqIO.write([record("cli_multi_a", 2), record("cli_multi_b", 3)], multi, "genbank")
+    return single, multi
+
+
+def _replayed_cli_svgs(session_path: Path, tmp_path: Path, prefix: str) -> list[tuple[bytes, bytes]]:
+    """Each SVG the command drew under ``prefix`` beside the SVG of the same name that its Session's replay drew."""
+
+    replay = tmp_path / f"{prefix}-replay"
+    circular_main(["--session", str(session_path), "-o", str(replay), "-f", "svg"])
+    replayed = sorted(tmp_path.glob(f"{prefix}-replay*.svg"))
+    assert replayed
+    return [
+        ((tmp_path / path.name.replace(f"{prefix}-replay", prefix, 1)).read_bytes(), path.read_bytes())
+        for path in replayed
+    ]
+
+
 @pytest.mark.parametrize("canvas", [False, True])
-def test_circular_cli_session_keeps_cropped_and_reversed_records_as_drawn(
+def test_circular_cli_grid_and_batch_sessions_save_crops_as_source_and_range(
     tmp_path: Path, canvas: bool
 ) -> None:
-    """A Circular batch or grid draft has no per-record crop or orientation.
+    """A records-table crop of a Circular grid or batch is saved as its source record and range (PD-OI-044 rev 5).
 
-    So those records keep their drawn copy, which the Web draws as is; only an
-    unchanged record reads its input file. The copy is the replay's source, so
-    its features take the copy's own hashes (OV-415); the rest of the drawing
-    is the same.
+    The replay crops the source again, so the GC windows at a crop's ends read the bases beside it as the command
+    did. A crop reverse-complemented after it is cut is a crop too; a whole record reverse-complemented without a
+    crop keeps its drawn copy, which the Web draws as is.
     """
 
-    single, multi = _cli_session_inputs(tmp_path)
+    single, multi = _varied_cli_session_inputs(tmp_path)
+    table = tmp_path / "records.tsv"
+    table.write_text(
+        "gbk\trecord_id\tregion\treverse_complement\n"
+        "single.gbk\t\t201-1500:rc\t0\n"
+        "multi.gbk\tcli_multi_a\t\t1\n"
+        "multi.gbk\tcli_multi_b\t301-1800\t1\n",
+        encoding="utf-8",
+    )
     session_path = tmp_path / "circular.gbdraw-session.json"
-    prefix = tmp_path / "circular"
-    args = ["--records_table", str(_write_records_table(tmp_path))]
-    circular_main([*args, *(["--multi_record_canvas"] if canvas else []), "-o", str(prefix),
-                   "-f", "svg", "--session_output", str(session_path)])
+    circular_main(["--records_table", str(table), *(["--multi_record_canvas"] if canvas else []),
+                   "-o", str(tmp_path / "circular"), "-f", "svg", "--session_output", str(session_path)])
 
     session = drawing_view(load_session(session_path))
     records = session["renderRequest"]["records"]
     assert session["renderRequest"]["grouping"] == ("grid" if canvas else "batch")
-    assert [(record["windows"], record["presentation"]["reverseComplement"])
-            for record in records] == [([], False)] * 3
-    assert {
-        _resource_bytes(session, record["source"]["resourceId"]) for record in records
-    }.isdisjoint({single.read_bytes(), multi.read_bytes()})
-
-    replay = tmp_path / "circular-replay"
-    circular_main(["--session", str(session_path), "-o", str(replay), "-f", "svg"])
-    replayed = sorted(tmp_path.glob("circular-replay*.svg"))
+    assert [(record["windows"], record["presentation"]["reverseComplement"]) for record in records] == [
+        ([{"start": 201, "end": 1500, "reverseComplement": True, "column": None}], False),
+        ([], False),
+        ([{"start": 301, "end": 1800, "reverseComplement": True, "column": None}], False),
+    ]
+    # The crop of the single-record file reads the file itself; the multi-record file's whole reversed record is
+    # its drawn copy, so its cropped record reads the record it was cut from.
+    assert _resource_bytes(session, records[0]["source"]["resourceId"]) == single.read_bytes()
+    assert _resource_bytes(session, records[1]["source"]["resourceId"]) != multi.read_bytes()
+    assert b"cli_multi_b" in _resource_bytes(session, records[2]["source"]["resourceId"])
+    replayed = _replayed_cli_svgs(session_path, tmp_path, "circular")
     assert len(replayed) == (1 if canvas else 3)
     feature_hash = re.compile(rb"\bf[0-9a-f]{8}\b")
-    for path in replayed:
-        original = tmp_path / path.name.replace("circular-replay", "circular", 1)
-        assert feature_hash.sub(b"f", path.read_bytes()) == feature_hash.sub(
-            b"f", original.read_bytes()
-        )
+    for live, replay in replayed:
+        # The whole reversed record's copy is the replay's source, so its features take the copy's hashes (OV-415).
+        assert feature_hash.sub(b"f", replay) == feature_hash.sub(b"f", live)
+
+
+def test_circular_cli_batch_of_one_saves_its_crop_on_the_input_file(tmp_path: Path) -> None:
+    """One records-table row with a region is a batch of one record; it reads its input file with the range."""
+
+    single, _multi = _varied_cli_session_inputs(tmp_path)
+    table = tmp_path / "records.tsv"
+    table.write_text("gbk\tregion\nsingle.gbk\t201-1500\n", encoding="utf-8")
+    session_path = tmp_path / "one.gbdraw-session.json"
+    circular_main(["--records_table", str(table), "-o", str(tmp_path / "one"), "-f", "svg",
+                   "--session_output", str(session_path)])
+
+    session = drawing_view(load_session(session_path))
+    [record] = session["renderRequest"]["records"]
+    assert session["renderRequest"]["grouping"] == "batch"
+    assert record["windows"] == [{"start": 201, "end": 1500, "reverseComplement": False, "column": None}]
+    assert _resource_bytes(session, record["source"]["resourceId"]) == single.read_bytes()
+    [(live, replay)] = _replayed_cli_svgs(session_path, tmp_path, "one")
+    assert replay == live
 
 
 def test_single_circular_session_records_crop_on_the_unchanged_input_file(

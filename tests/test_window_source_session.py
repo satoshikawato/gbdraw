@@ -18,6 +18,7 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api import (
+    CircularBatchRequest,
     CircularDiagramRequest,
     InMemoryRecordSource,
     LinearDiagramRequest,
@@ -101,6 +102,79 @@ def test_a_session_redraws_an_in_memory_crop_with_its_flanks(
                                     output=_output(tmp_path))
     )
     live, replay = _replayed(request, tmp_path)
+    assert replay == live
+
+
+def _saved_records(tmp_path: Path) -> list[dict]:
+    document = json.loads((tmp_path / "saved.gbdraw-session.json").read_text())
+    return document["drawings"][0]["renderRequest"]["records"]
+
+
+def _circular_grid_or_batch(grouping: str, records: tuple[RecordInput, ...], tmp_path: Path):
+    options = CircularDiagramOptions(config_overrides=_TRACKS)
+    if grouping == "grid":
+        return CircularDiagramRequest(records=records, options=options, output=_output(tmp_path), grouping="grid")
+    return CircularBatchRequest(
+        records=records, options=options,
+        outputs=tuple(RenderOutputRequest(output_prefix=f"live-{index}", output_directory=tmp_path, overwrite=True)
+                      for index in range(len(records))),
+    )
+
+
+@pytest.mark.parametrize("grouping", ["grid", "batch"])
+def test_a_circular_grid_or_batch_session_redraws_in_memory_crops_with_their_flanks(
+    grouping: str, tmp_path: Path
+) -> None:
+    """Crops given in memory to a Circular grid or batch, reversed after the cut or not, are saved as the records
+    they were cut from and their ranges (PD-OI-044 scenario revision 5); a record the caller sliced itself has no
+    source record and is saved as drawn."""
+
+    crop = apply_region_specs([_record("src", "circular")], parse_region_specs(["src:20001-40000"]))[0]
+    reversed_crop = apply_region_specs([_record("rev", "circular", 4)], parse_region_specs(["rev:15001-35000:rc"]))[0]
+    sliced = _record("own", "circular", 5)[20_000:40_000]
+    sliced.annotations = {"topology": "circular", "molecule_type": "DNA"}
+    records = tuple(
+        RecordInput(source=InMemoryRecordSource(record), record_key=key)
+        for key, record in (("a", crop), ("b", reversed_crop), ("c", sliced))
+    )
+    request = _circular_grid_or_batch(grouping, records, tmp_path)
+    render_request(request)
+    path = tmp_path / "saved.gbdraw-session.json"
+    save_session_document(path, request)
+    saved = _saved_records(tmp_path)
+    assert [(record["recordKey"], record["windows"]) for record in saved] == [
+        ("a", [{"start": 20001, "end": 40000, "reverseComplement": False, "column": None}]),
+        ("b", [{"start": 15001, "end": 35000, "reverseComplement": True, "column": None}]),
+        ("c", []),
+    ]
+    replay_dir = tmp_path / "replay"
+    replay_dir.mkdir()
+    with materialize_session(load_session_document(path), output_directory=replay_dir) as materialized:
+        render_session(materialized)
+    live = sorted(tmp_path.glob("live*.svg"))
+    assert len(live) == (1 if grouping == "grid" else 3)
+    for drawn in live:
+        assert (replay_dir / drawn.name).read_text() == drawn.read_text()
+
+
+def test_two_crops_of_one_in_memory_record_store_one_copy_of_it(tmp_path: Path) -> None:
+    """Two crops of one in-memory record (not windows of one record) read one resource of that record."""
+
+    source = _record("src", "linear")
+    first, second = apply_region_specs([source, source], parse_region_specs(["#1:5001-15000", "#2:30001-45000:rc"]))
+    request = LinearDiagramRequest(
+        records=(RecordInput(InMemoryRecordSource(first), record_key="a"),
+                 RecordInput(InMemoryRecordSource(second), record_key="b")),
+        options=LinearDiagramOptions(config_overrides=_TRACKS), layout=LinearMultiRecordOptions(),
+        output=_output(tmp_path),
+    )
+    live, replay = _replayed(request, tmp_path)
+    saved = _saved_records(tmp_path)
+    assert [record["windows"] for record in saved] == [
+        [{"start": 5001, "end": 15000, "reverseComplement": False, "column": None}],
+        [{"start": 30001, "end": 45000, "reverseComplement": True, "column": None}],
+    ]
+    assert saved[0]["source"] == saved[1]["source"]
     assert replay == live
 
 
@@ -234,9 +308,8 @@ def test_a_session_saves_an_edited_copy_of_a_planned_record_as_itself(
     )
     live, replay = _replayed(request, tmp_path)
     assert _feature_ids(live) == _feature_ids(replay) == 1  # the new CDS alone
-    if not windows:
-        assert replay == live
-    # An edited crop is saved as its own bytes and replays from base 1 without its flanks (OV-3034).
+    # An edited crop is saved as the record it was cut from with its edits, and its window (OV-3034).
+    assert replay == live
 
 
 def test_an_edited_copy_of_a_planned_record_names_no_file(tmp_path: Path) -> None:
@@ -275,20 +348,40 @@ def test_a_session_saves_a_planned_record_edited_in_place_as_itself(tmp_path: Pa
     assert replay == live
 
 
-def test_a_session_saves_an_edited_crop_as_itself(tmp_path: Path) -> None:
-    """A crop edited after it was cut is saved as the edited crop, not as the record it was cut from (D-64)."""
+@pytest.mark.parametrize("spec", ["src:20001-40000", "src:20001-40000:rc"], ids=["forward", "reversed"])
+def test_a_session_redraws_an_edited_crop_from_its_source_with_the_edits(spec: str, tmp_path: Path) -> None:
+    """A crop whose features and name were edited after its cut is saved as the record it was cut from, with the
+    edits mapped into the crop's span (reversed back for ``:rc``), and the crop's window, so the replay draws the
+    edited crop with its flanks and its source coordinates (OV-3034)."""
 
-    crop = apply_region_specs([_record("src", "linear")], parse_region_specs(["src:20001-40000"]))[0]
-    crop.features = []
+    crop = apply_region_specs([_record("src", "linear")], parse_region_specs([spec]))[0]
+    _edit(crop)
     request = LinearDiagramRequest(
         records=(RecordInput(source=InMemoryRecordSource(crop), record_key="r"),),
         options=LinearDiagramOptions(config_overrides=_TRACKS), output=_output(tmp_path),
     )
     live, replay = _replayed(request, tmp_path)
-    assert _feature_ids(live) == _feature_ids(replay) == 0
-    saved = json.loads((tmp_path / "saved.gbdraw-session.json").read_text())
-    # Saved as its own bytes, so it replays from base 1 without its flanks (OV-3034).
-    assert not saved["drawings"][0]["renderRequest"]["records"][0].get("windows")
+    assert _feature_ids(live) == 1  # the new CDS alone
+    [saved] = _saved_records(tmp_path)
+    assert saved["windows"] == [
+        {"start": 20001, "end": 40000, "reverseComplement": spec.endswith(":rc"), "column": None}
+    ]
+    assert replay == live
+
+
+def test_a_session_saves_a_crop_whose_bases_were_edited_as_itself(tmp_path: Path) -> None:
+    """A crop whose bases were edited is no longer a span of its source; it is saved as its own bytes."""
+
+    crop = apply_region_specs([_record("src", "linear")], parse_region_specs(["src:20001-40000"]))[0]
+    crop.seq = Seq("A" * 100) + crop.seq[100:]
+    crop.features = []
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(crop), record_key="r"),),
+        options=LinearDiagramOptions(config_overrides=_TRACKS), output=_output(tmp_path),
+    )
+    _live, _replay = _replayed(request, tmp_path)
+    [saved] = _saved_records(tmp_path)
+    assert not saved.get("windows")
 
 
 @pytest.mark.parametrize("case", ["crop", "rc", "wcrop", "wrc"])

@@ -302,3 +302,39 @@ def test_a_circular_area_of_a_linear_record_holds_its_last_value_to_the_end(clos
         assert list(circular.positions) == [0, 400, 800, 1_000] and circular.radii[-1] == circular.radii[0]
     else:
         assert list(circular.positions) == [0, 400, 800]
+
+
+@pytest.mark.parametrize("track", ["gc_content", "gc_skew", "depth", "percent"])
+def test_a_circular_crop_of_a_circular_record_holds_its_last_value_to_12_oclock(track: str) -> None:
+    """A crop of a circular record has no origin in it: its ends are two places on the molecule, so past its last
+    sample its Circular line holds that value to 12 o'clock and steps there, as a linear record's does; it does
+    not ramp to its first sample's value (D-64). The whole circular record still closes on its first sample."""
+
+    from gbdraw.layout.record_transform import unset_record_transform
+    from gbdraw.svg.circular_tracks import circular_gc_content_line, circular_gc_skew_line, circular_scalar_area_line
+
+    source = _run_record((0, 0), "circular", length=10_000)
+    crop = crop_record_to_region(source, _region(3_001, 4_000), circular=True)
+    data = pd.DataFrame({"position": [0, 400, 800], "value_normalized": [0.2, 0.5, 0.9]})
+    frame = pd.DataFrame({"GC content": [0.2, 0.5, 0.9], "GC skew": [-0.2, 0.1, 0.4]}, index=[0, 400, 800])
+    lines = {}
+    for name, record in (("crop", crop), ("whole", _run_record((0, 0), "circular", length=1_000))):
+        transform = unset_record_transform(record)
+        if track == "gc_content":
+            line = circular_gc_content_line(100.0, 1_000, frame, 10.0, 1.0, "GC", transform)
+        elif track == "gc_skew":
+            line = circular_gc_skew_line(100.0, frame, 1_000, 10.0, 1.0, "GC", transform)
+        else:
+            line = circular_scalar_area_line(
+                100.0, 1_000, data, 10.0, 1.0, close_at_record_len=track == "percent", record_transform=transform
+            )
+        assert line is not None
+        lines[name] = (list(line.positions), list(line.radii))
+    positions, radii = lines["crop"]
+    assert positions == [0, 400, 800, 1_000] and radii[-1] == radii[-2], lines["crop"]
+    whole_positions, whole_radii = lines["whole"]
+    if track in ("gc_content", "percent"):
+        assert whole_positions == [0, 400, 800, 1_000] and whole_radii[-1] == whole_radii[0], lines["whole"]
+    else:
+        # The skew line closes along the circle in its path (``_closed_line_desc``); Depth ends at its last sample.
+        assert whole_positions == [0, 400, 800], lines["whole"]

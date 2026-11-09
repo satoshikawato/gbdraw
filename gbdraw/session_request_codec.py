@@ -797,8 +797,8 @@ def _encode_canonical_request(
         if isinstance(request, (CircularDiagramRequest, CircularBatchRequest))
         else "single"
     )
-    # A Circular batch or grid draft has no per-record selection, crop, or
-    # orientation.
+    # A Circular batch or grid draft draws every record of its files and orients none; it holds each record's crop
+    # (PD-OI-044 scenario revision 5).
     records, frames = _encode_records(
         request.records,
         resources=resources,
@@ -1101,16 +1101,13 @@ def _crop_in_source(record: SeqRecord) -> tuple[SeqRecord, RecordWindow] | None:
 
     A crop reads its flanking bases from the record it was cut from (its ``WindowSource``, OV-2890), which a
     GenBank copy of the crop leaves out. Written as that record and the crop's window, it is cropped again on
-    replay and reads the same bases (D-64). Only a source drawn in its own coordinates (forward from base 1, as
-    read) is written so; any other record gives ``None``.
+    replay and reads the same bases (D-64). A crop edited since its cut is written as that record with the edits
+    (``_with_crop_edits``). Only a source drawn in its own coordinates (forward from base 1, as read) is written
+    so; any other record gives ``None``.
     """
 
     stored = record.annotations.get(WINDOW_SOURCE_ANNOTATION)
-    if (
-        not isinstance(stored, WindowSource)
-        or not record.annotations.get("gbdraw_region_applied")
-        or not stored.holds_for(record)
-    ):
+    if not isinstance(stored, WindowSource) or not record.annotations.get("gbdraw_region_applied"):
         return None
     source = stored.record
     if source.annotations.get("gbdraw_region_applied"):
@@ -1127,7 +1124,42 @@ def _crop_in_source(record: SeqRecord) -> tuple[SeqRecord, RecordWindow] | None:
     span, reverse = found
     if span is None:
         return None
-    return source, RecordWindow(span[0], span[1], reverse)
+    window = RecordWindow(span[0], span[1], reverse)
+    if stored.holds_for(record):
+        return source, window
+    edited = _with_crop_edits(source, record, window)
+    return None if edited is None else (edited, window)
+
+
+def _with_crop_edits(source: SeqRecord, crop: SeqRecord, window: RecordWindow) -> SeqRecord | None:
+    """``source`` with the edits of ``crop``, its crop through ``window`` edited since the cut (OV-3034, D-84).
+
+    The crop's features (reversed back for a reverse-complemented crop) replace the source's features that reach
+    into the window, and the crop's names and annotations the source's, so cutting the result through the window
+    again draws the edited crop with its flanks. A crop across the origin, or one whose bases are no longer the
+    source's bases in the window, gives ``None``: it is written as its own bytes.
+    """
+
+    if window.start > window.end:
+        return None
+    start_0, end_0 = window.start - 1, window.end
+    bases = source.seq[start_0:end_0]
+    if bytes(crop.seq) != bytes(bases.reverse_complement() if window.reverse_complement else bases):
+        return None
+    forward = reverse_records((crop,), True)[0] if window.reverse_complement else crop
+    edited = SeqRecord(
+        source.seq,
+        id=crop.id,
+        name=crop.name,
+        description=crop.description,
+        dbxrefs=list(crop.dbxrefs),
+        annotations={key: value for key, value in crop.annotations.items() if not str(key).startswith("gbdraw_")},
+    )
+    edited.features = [
+        feature for feature in source.features
+        if not (feature.location.start < end_0 and feature.location.end > start_0)
+    ] + [feature._shift(start_0) for feature in forward.features]
+    return edited
 
 
 def _source_file_transforms(
@@ -1137,9 +1169,10 @@ def _source_file_transforms(
 
     ``origins`` say which record of the files the planner read each record
     from. Returns ``None`` unless each record of the files is drawn once and
-    each is the file's record. Only when ``per_record`` allows it may some
-    records of the files be left undrawn or drawn by several records (each
-    with its own selector and window, OV-2716), or a record be cropped or
+    each is the file's record, and each is drawn whole or cropped (its crop's
+    window holds its own orientation). Only when ``per_record`` allows it may
+    some records of the files be left undrawn or drawn by several records (each
+    with its own selector and window, OV-2716), or a whole record be
     reverse-complemented.
     """
 
@@ -1162,11 +1195,10 @@ def _source_file_transforms(
         and all(origin.source_kind == kind and origin.source_record_count == count for origin in origins)
     ):
         return None
-    found = [_source_file_transform(record) for record in records]
-    if None in found or not (per_record or all(item == (None, False) for item in found)):
+    found = [transform for record in records if (transform := _source_file_transform(record)) is not None]
+    if len(found) != len(records) or not (per_record or all(span is not None or not reverse for span, reverse in found)):
         return None
-    # None is not in found here.
-    return cast("list[tuple[tuple[int, int] | None, bool]]", found)
+    return found
 
 
 def _encode_records(
@@ -1183,9 +1215,11 @@ def _encode_records(
     orientation are its window and reverse complement, as the Web writes them:
     the CLI binds the same file for the Web draft, so Session Load sees the
     request draw from its bound inputs. ``per_record`` says whether the Web
-    draft selects, crops, and orients each record (every Linear record, and a
-    single Circular record); otherwise only every record of the file, each
-    unchanged, reads the file. Other records whose provenance names one source
+    draft selects and orients each record (every Linear record, and a single
+    Circular record); otherwise (a Circular grid or batch) every record of the
+    file reads the file, each whole or cropped, and a crop given in memory is
+    written as the record it was cut from and its window (PD-OI-044 scenario
+    revision 5). Other records whose provenance names one source
     file are written as drawn to one GenBank resource named after that file.
     Records of a multi-record file are selected by record ID (by index when an
     ID is repeated or unusable), the shape the Web writes for the records it
@@ -1218,7 +1252,7 @@ def _encode_records(
     crops = {
         position: crop
         for position, record in enumerate(records)
-        if per_record and (crop := _in_memory_crop(record)) is not None
+        if (crop := _in_memory_crop(record)) is not None
     }
     for paths, members in groups.items():
         # Only in-memory sources were grouped above.
@@ -1293,7 +1327,7 @@ def _encode_records(
     _encode_crops(
         {position: crop for position, crop in crops.items() if position not in shared and position not in absorbed},
         {position: origin.window_of for position, origin in origins.items()},
-        records, resources, shared, transformed, absorbed,
+        records, resources, shared, transformed, absorbed, per_record=per_record,
     )
     payloads = [
         _encode_record(
@@ -1335,16 +1369,27 @@ def _encode_crops(
     shared: dict[int, tuple[dict[str, Any], RecordSelector | None]],
     transformed: dict[int, RecordInput],
     absorbed: set[int],
+    *,
+    per_record: bool,
 ) -> None:
-    """Write each crop as the record it was cut from; the units of one record with windows share one record (D-01)."""
+    """Write each crop as the record it was cut from; the units of one record with windows share one record (D-01).
+
+    Where the Web draft holds each record apart (``per_record``), the crops of one record read one resource of it;
+    a Circular grid or batch draft reads each resource as one card of one record, so each crop has its own.
+    """
 
     units: dict[tuple[str, int], list[int]] = {}
     for position, (source, _record) in crops.items():
         key = window_of.get(position)
         units.setdefault((key, id(source)) if key is not None else ("", position), []).append(position)
+    # One resource per record cut from, by the identity of that record.
+    payloads: dict[int, dict[str, Any]] = {}
     for (record_key, _identity), positions in units.items():
         source, record = crops[positions[0]]
-        shared[positions[0]] = (_genbank_resource(resources, positions[0] + 1, (), (source,)), None)
+        payload = payloads.get(id(source)) if per_record else None
+        if payload is None:
+            payload = payloads[id(source)] = _genbank_resource(resources, positions[0] + 1, (), (source,))
+        shared[positions[0]] = (payload, None)
         if len(positions) == 1:
             transformed[positions[0]] = record
             continue

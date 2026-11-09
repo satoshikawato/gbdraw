@@ -63,14 +63,16 @@ def record_content_digest(record: SeqRecord) -> str:
     """A digest of what ``record`` draws: its names, sequence, features and annotations other than gbdraw's own.
 
     Two records with one digest draw alike. A planned record carries the digest it had when it was planned or cut,
-    so a later edit of the record shows as a different digest (``RecordOrigin``, ``WindowSource``).
+    so a later edit of the record shows as a different digest (``RecordOrigin``, ``WindowSource``). Qualifiers are
+    read in their order: a copy keeps it, and a reordering that draws alike only ends an origin, which is safe.
     """
 
     digest = hashlib.blake2b(digest_size=16)
     digest.update(f"{record.id}\0{record.name}\0{record.description}\0".encode())
     digest.update(bytes(record.seq))
-    for feature in record.features:
-        digest.update(f"\0{feature.type}\0{feature.location}\0{sorted(feature.qualifiers.items())}".encode())
+    digest.update(
+        "".join(f"\0{feature.type}\0{feature.location}\0{feature.qualifiers!r}" for feature in record.features).encode()
+    )
     annotations = getattr(record, "annotations", None) or {}
     for key in sorted(annotations):
         if not str(key).startswith("gbdraw_"):

@@ -83,6 +83,17 @@ def reversed_window_source(reversed_record: SeqRecord, record: SeqRecord) -> Non
         )
 
 
+def cut_digest(crop: SeqRecord) -> str | None:
+    """The ``record_content_digest`` ``crop`` had when it was cut (or reverse-complemented as a crop), else ``None``.
+
+    Only a caller that knows the crop changed since in nothing but gbdraw's annotations, which the digest leaves
+    out, may take it as the crop's digest now: it saves hashing the crop again.
+    """
+
+    stored = (getattr(crop, "annotations", None) or {}).get(WINDOW_SOURCE_ANNOTATION)
+    return stored.crop_digest if isinstance(stored, WindowSource) else None
+
+
 def window_source(record: SeqRecord) -> WindowSource:
     """The sequence ``record``'s windows read: the source a crop keeps, else the record's own sequence."""
 
@@ -170,6 +181,7 @@ __all__ = [
     "SlidingWindows",
     "SourcePiece",
     "WindowSource",
+    "cut_digest",
     "keep_window_source",
     "sliding_windows",
     "window_source",
