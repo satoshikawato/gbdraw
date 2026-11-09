@@ -56,7 +56,15 @@ write-up of a release.
   window's mean at the window's centre instead of its start (half a Depth window,
   2.5 kb at `--depth_window 5000`, earlier). A record whose file states no
   topology (GFF3 + FASTA, FASTA) counts as linear unless it is marked circular
-  (OV-2890, OV-2919).
+  (`--record_topology circular`, or Circular record in the Web app), also in a
+  Circular figure (OV-2890, OV-2919).
+- Changed: the Auto GC content and GC skew window is now at most a tenth of the
+  drawn length, and the Auto step at most a tenth of the window, so figures
+  shorter than 10 kb keep about a hundred samples: a 671 bp region uses a 67 bp
+  window and a 6 bp step instead of 1 kb and 100 bp. Figures of 10 kb and longer
+  are unchanged, and a window or step you set is kept. The Auto Depth window and
+  step follow from these as before, and the Web app's Auto hints show the same
+  values (OV-2864).
 - Fixed: a Circular figure with one Depth series and no custom track stack
   listed the Depth row last in the Legend, after GC skew, although its ring is
   drawn between the features and GC content. Setting a Depth width (in the Web

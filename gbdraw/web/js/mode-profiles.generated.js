@@ -200,6 +200,10 @@ export const MODE_PROFILE_DATA = deepFreeze({
         ]
       ]
     },
+    "depthWindow": {
+      "divisor": 10,
+      "minWindow": 100
+    },
     "linearLabelSizeRecords": {
       "all": "all",
       "first": "first",
@@ -294,6 +298,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
         100000,
         10000
       ],
+      "divisor": 10,
       "tiers": [
         [
           1000000,

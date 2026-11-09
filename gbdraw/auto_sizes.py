@@ -144,13 +144,23 @@ def determine_length_parameter(record_length: int, length_threshold: int) -> Siz
     return "long"
 
 
+# The Auto GC window is at most this fraction of the drawn length, and the Auto step at most this fraction of the
+# window, so a record shorter than the tier's ten windows keeps about a hundred samples (OV-2864).
+_SLIDING_WINDOW_DIVISOR = 10
+# The Auto Depth window and step are the GC ones divided by this, the window at least _DEPTH_MIN_WINDOW bp.
+_DEPTH_WINDOW_DIVISOR = 10
+_DEPTH_MIN_WINDOW = 100
+
+
 def sliding_window(length: int, cfg: GbdrawConfig) -> tuple[int, int]:
-    """Return the Auto GC content and skew (window, step) for a record length."""
-    for below, window, step in sliding_window_tiers(cfg):
-        if length < below:
-            return window, step
-    window, step = cfg.objects.sliding_window.up10m
-    return int(window), int(step)
+    """Return the Auto GC content and skew (window, step) for a drawn length: the tier's values, the window at most
+    a tenth of the length and the step at most a tenth of the window, each at least 1 bp."""
+    tier_window, tier_step = next(
+        ((window, step) for below, window, step in sliding_window_tiers(cfg) if length < below),
+        (int(cfg.objects.sliding_window.up10m[0]), int(cfg.objects.sliding_window.up10m[1])),
+    )
+    window = max(1, min(tier_window, int(length) // _SLIDING_WINDOW_DIVISOR))
+    return window, max(1, min(tier_step, window // _SLIDING_WINDOW_DIVISOR))
 
 
 def sliding_window_tiers(cfg: GbdrawConfig) -> tuple[tuple[int, int, int], ...]:
@@ -173,7 +183,9 @@ def tick_and_window_tiers(cfg: GbdrawConfig) -> dict[str, object]:
         "slidingWindow": {
             "tiers": [list(row) for row in sliding_window_tiers(cfg)],
             "above": [int(up10m[0]), int(up10m[1])],
+            "divisor": _SLIDING_WINDOW_DIVISOR,
         },
+        "depthWindow": {"divisor": _DEPTH_WINDOW_DIVISOR, "minWindow": _DEPTH_MIN_WINDOW},
         "circularTicks": {
             "tiers": [list(row) for row in _CIRCULAR_TICK_TIERS],
             "above": list(_CIRCULAR_TICKS_ABOVE_TIERS),
@@ -191,7 +203,7 @@ def depth_sliding_window(window: int, step: int) -> tuple[int, int]:
     Depth samples ten times denser than GC, with at least a 100 bp window so the
     default track is not overly noisy.
     """
-    return max(100, int(window) // 10), max(1, int(step) // 10)
+    return max(_DEPTH_MIN_WINDOW, int(window) // _DEPTH_WINDOW_DIVISOR), max(1, int(step) // _DEPTH_WINDOW_DIVISOR)
 
 
 def circular_tick_intervals(length: int) -> tuple[int, int]:

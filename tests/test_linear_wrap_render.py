@@ -351,10 +351,13 @@ def test_gc_percent_plot_data_is_prepared_once_per_record(monkeypatch) -> None:
 
 
 def _half_gc_record(path: Path) -> Path:
-    """20 kb: all GC, then all AT. The record's mean is 0.5, while each half's own mean is its only value."""
+    """20 kb: all GC, then all AT. The record's mean is 0.5, while each half's own mean is its only value.
+    Circular, so every window holds a full window of bases and the two halves mirror each other exactly
+    (a linear record's end windows are clipped, which shifts the mean of the samples off 0.5)."""
 
     record = SeqRecord(Seq("GC" * 5_000 + "AT" * 5_000), id="HALF1", name="HALF1", description="half")
     record.annotations["molecule_type"] = "DNA"
+    record.annotations["topology"] = "circular"
     SeqIO.write(record, path, "genbank")
     return path
 

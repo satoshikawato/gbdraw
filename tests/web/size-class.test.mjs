@@ -237,7 +237,8 @@ test('OV-518: a record cropped to a region is drawn at the length of the region'
   const notes = circularNotes(cropped, MITOGENOME);
   assert.equal(notes.autoValueText('labelFontSize'), '14 px (auto)');
   assert.equal(notes.autoValueText('scaleInterval'), '1 kbp (auto)');
-  assert.equal(notes.autoValueText('dinucleotideWindow'), '1 kbp (auto)');
+  // A tenth of the 5,000 bp region (OV-2864).
+  assert.equal(notes.autoValueText('dinucleotideWindow'), '500 bp (auto)');
 
   // A long record cropped to a short region is drawn short.
   const longCropped = circularDrawing({ circular_record_selector: 'long', circular_region_start: 1, circular_region_end: 30_000 });
@@ -385,5 +386,19 @@ test('the scale interval and sliding window hints follow Python at every length-
     assert.equal(shownBp(display.autoValueText('scaleInterval')), entry.scaleInterval, name);
     assert.equal(shownBp(display.autoValueText('dinucleotideWindow')), entry.window, name);
     assert.equal(shownBp(display.autoValueText('dinucleotideStep')), entry.step, name);
+    assert.equal(shownBp(display.autoValueText('depthWindow')), entry.depthWindow, name);
+    assert.equal(shownBp(display.autoValueText('depthStep')), entry.depthStep, name);
   }
+});
+
+// The Depth hint of a set GC window and step is the Depth window and step Python derives from them
+// (whole base pairs: a 25 bp step gives a 2 bp Depth step, not 2.5).
+test('the Depth hints of a set GC window and step are Python\'s whole base pairs', () => {
+  const display = createAutoValueDisplay(withDrawings({
+    mode: { value: 'circular' },
+    form: {},
+    adv: { window_size: '1010', step_size: '25' }
+  }), { circularDiagramLengths: () => [[50_000]], linearRecordLengths: () => [50_000] });
+  assert.equal(shownBp(display.autoValueText('depthWindow')), 101);
+  assert.equal(shownBp(display.autoValueText('depthStep')), 2);
 });

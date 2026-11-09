@@ -4927,7 +4927,7 @@ def test_a_record_part_is_keyed_by_its_record_index_and_its_renames() -> None:
 # skew clip id, a hash of the skew path: it moved when the skew windows were centred (OV-2870; bc424518... before).
 _GOLDEN_RECORD_ID_PLANS = {
     "whole + region": ("4468945bcd3d089e62a18f8d1bba4010001688935b3327b56341afecb63c10ae", [0, 22]),
-    "lambda twice, radial labels": ("db28d6e60abee6013809ade03344b7b5ec2552efc8f5940bbb21af808b8a1374", [0, 85]),
+    "lambda twice, radial labels": ("12881420377d33e5015d1faef1e1a9271b7856e1e4bca76c3edff0db37890b87", [0, 85]),
 }
 
 

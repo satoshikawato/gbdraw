@@ -79,7 +79,15 @@ def test_packaged_size_class_boundary(cfg: GbdrawConfig, mode: DiagramMode, boun
 @pytest.mark.parametrize(
     ("length", "expected"),
     [
-        (1, (1_000, 100)),
+        # Below 10 kb the window is a tenth of the length and the step a tenth of the window (OV-2864, Owner B).
+        (1, (1, 1)),
+        (671, (67, 6)),
+        (2_501, (250, 25)),
+        (9_000, (900, 90)),
+        (9_999, (999, 99)),
+        # At 10 kb the tier's own values: no step in the window across the boundary.
+        (10_000, (1_000, 100)),
+        (10_001, (1_000, 100)),
         (999_999, (1_000, 100)),
         (1_000_000, (10_000, 1_000)),
         (9_999_999, (10_000, 1_000)),
@@ -537,6 +545,7 @@ def test_auto_hint_vectors_equal_python_tiers(cfg: GbdrawConfig, case: dict[str,
     interval = circular_tick_intervals(length)[0] if case["mode"] == "circular" else linear_tick_interval(length)
     assert interval == case["scaleInterval"]
     assert sliding_window(length, cfg) == (case["window"], case["step"])
+    assert depth_sliding_window(case["window"], case["step"]) == (case["depthWindow"], case["depthStep"])
 
 
 def test_payload_tiers_are_the_python_tiers(cfg: GbdrawConfig) -> None:

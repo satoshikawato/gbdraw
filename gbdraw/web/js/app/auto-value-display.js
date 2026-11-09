@@ -63,15 +63,14 @@ const DEFAULTS = Object.freeze({
   }
 });
 
-// The length tiers of the Auto sliding window and scale ticks, the Auto track
-// widths and the scalar-axis tick font rule are Python's (gbdraw/auto_sizes.py),
-// carried by the generated mode-profile data.
-const { slidingWindow, circularTicks, linearTicks, circularSlots, scalarAxisTickFont } = MODE_PROFILE_DATA.autoSizes;
-// One object per tier: `sharedLengthValue` compares the values of the drawn records by identity.
-const SLIDING_WINDOW_PRESETS = Object.freeze([
-  ...slidingWindow.tiers.map(([maxExclusive, window, step]) => Object.freeze({ maxExclusive, window, step })),
-  Object.freeze({ maxExclusive: Infinity, window: slidingWindow.above[0], step: slidingWindow.above[1] })
-]);
+// The length tiers and divisor of the Auto sliding window, the Depth window rule,
+// the scale tick tiers, the Auto track widths and the scalar-axis tick font rule
+// are Python's (gbdraw/auto_sizes.py), carried by the generated mode-profile data.
+const { slidingWindow, depthWindow, circularTicks, linearTicks, circularSlots, scalarAxisTickFont } = MODE_PROFILE_DATA.autoSizes;
+const SLIDING_WINDOW_TIERS = [...slidingWindow.tiers, [Infinity, ...slidingWindow.above]];
+// One object per (window, step): `sharedLengthValue` compares the values of the drawn records by identity.
+/** @type {Map<string, Readonly<{ window: number, step: number }>>} */
+const SLIDING_WINDOW_VALUES = new Map();
 
 /** @param {unknown} value */
 const parsePositiveNumber = (value) => {
@@ -264,12 +263,34 @@ const tierRow = (length, tiers, inclusive = false) => {
   return tiers.find(([bound]) => (inclusive ? numeric <= bound : numeric < bound)) || null;
 };
 
-/** @param {unknown} length */
+/**
+ * Python's `sliding_window`: the tier's window and step, the window at most the length
+ * divided by the divisor and the step at most the window divided by it, each at least 1 bp.
+ * @param {unknown} length
+ * @returns {Readonly<{ window: number, step: number }> | null}
+ */
 const slidingWindowForLength = (length) => {
   const numeric = Number(length);
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
-  return SLIDING_WINDOW_PRESETS.find((entry) => numeric < entry.maxExclusive) || null;
+  const tier = SLIDING_WINDOW_TIERS.find(([below]) => numeric < below) ?? SLIDING_WINDOW_TIERS[SLIDING_WINDOW_TIERS.length - 1];
+  const window = Math.max(1, Math.min(tier[1], Math.floor(numeric / slidingWindow.divisor)));
+  const step = Math.max(1, Math.min(tier[2], Math.floor(window / slidingWindow.divisor)));
+  const key = `${window}/${step}`;
+  const known = SLIDING_WINDOW_VALUES.get(key);
+  if (known) return known;
+  const value = Object.freeze({ window, step });
+  SLIDING_WINDOW_VALUES.set(key, value);
+  return value;
 };
+
+/**
+ * Python's `depth_sliding_window` for one field: the GC value divided by the divisor, in whole base pairs,
+ * the window at least the minimum window and the step at least 1 bp.
+ * @param {number} source The GC window or step.
+ * @param {'window' | 'step'} field
+ */
+const depthWindowValue = (source, field) =>
+  Math.max(field === 'window' ? depthWindow.minWindow : 1, Math.floor(source / depthWindow.divisor));
 
 /** @param {unknown} length */
 const autoLinearTickInterval = (length) => {
@@ -537,18 +558,10 @@ const dinucleotideWindowText = (state, drawing, field) => {
 const depthWindowText = (state, drawing, field) => {
   const sourceField = field === 'window' ? 'window_size' : 'step_size';
   const manualSource = parsePositiveNumber(drawing?.adv?.[sourceField]);
-  if (manualSource !== null) {
-    const divisor = field === 'window' ? 10 : 10;
-    const minValue = field === 'window' ? 100 : 1;
-    return withAuto(formatBp(Math.max(minValue, manualSource / divisor)));
-  }
+  if (manualSource !== null) return withAuto(formatBp(depthWindowValue(manualSource, field)));
 
   const preset = sharedLengthValue(state, slidingWindowForLength);
-  if (preset) {
-    const source = field === 'window' ? preset.window : preset.step;
-    const minValue = field === 'window' ? 100 : 1;
-    return withAuto(formatBp(Math.max(minValue, source / 10)));
-  }
+  if (preset) return withAuto(formatBp(depthWindowValue(field === 'window' ? preset.window : preset.step, field)));
   return t('Auto (by genome size)');
 };
 
