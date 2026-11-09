@@ -1880,7 +1880,7 @@ const circularRecordPlan = ({ drawing, sources, resources }) => {
       records.push({
         recordKey: entry.identity, cardinality: 'exactly_one', source, selector: cliRecordSelector(entry, listed.length),
         windows: range === null ? [] : range.windows.map((window) => {
-          const span = windowEndpoints(window.start, window.end);
+          const span = windowEndpoints(window.start, window.end, {});
           if (span === null) throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
           return { ...span, reverseComplement: window.reverseComplement, column: null };
         }),
