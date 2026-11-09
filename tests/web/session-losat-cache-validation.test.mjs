@@ -1073,10 +1073,12 @@ ORIGIN
 
 // OV-3019: each ring Generate builds its request from the views the last one
 // bound, adopts a new resource table and binds new views of its comparison
-// FASTA. They hold the bytes of the File the user chose, so the History file
-// estimate counts them once, however many ring Generates the History keeps;
-// a committed resource still names the bound view as its own (OV-1555).
-test('ring Generates over one comparison FASTA count its bytes once in the History file estimate (OV-3019)', async () => {
+// FASTA. They stand for the bytes of the File the user chose, which rest on
+// disk, so the History file estimate counts none of them (OV-2750), however
+// many ring Generates the History keeps; that a payload whose bytes the page
+// holds counts once is pinned in history-file-budget.test.mjs (OV-3019). A
+// committed resource still names the bound view as its own (OV-1555).
+test('ring Generates over one comparison FASTA count none of its bytes in the History file estimate (OV-3019, OV-2750)', async () => {
   const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
   const { resourceIdOwnedBy } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
   const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
@@ -1116,7 +1118,7 @@ test('ring Generates over one comparison FASTA count its bytes once in the Histo
   const [[view]] = drawing.files.c_conservation_fastas;
   assert.ok(fileIds.size > 3, 'every ring Generate bound new views of the comparison FASTA');
   assert.equal(state.inputFiles.estimateBytes([...fileIds].filter((fileId) => (
-    state.inputFiles.fileOf({ fileId })?.name === fasta.name)), sessionConfig.inputFilePayload), fasta.size);
+    state.inputFiles.fileOf({ fileId })?.name === fasta.name)), sessionConfig.inputFilePayload), 0);
   assert.deepEqual(Object.keys(resources).filter((id) => resources[id].kind === 'conservation-fasta-file'), [ringFasta.resourceId],
     'the request holds the comparison FASTA once');
   assert.equal(resourceIdOwnedBy(resources, state.inputFiles.fileOf(view), 'conservation-fasta-file'), ringFasta.resourceId);

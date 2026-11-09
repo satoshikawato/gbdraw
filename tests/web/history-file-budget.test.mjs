@@ -91,6 +91,18 @@ test('a gzip File that expands past the budget before its copy is written leaves
   }
 });
 
+// OV-3019 with OV-2750: files that stand for one payload count once, at the most page memory any of them keeps,
+// whatever order the estimate reads them in.
+test('files of one payload count once, at the most page memory any of them keeps', () => {
+  const resident = new Map([['a-view', 40], ['a-file', 5], ['b-view', 7]]);
+  const payloadOf = (file) => file.name.slice(0, 1);
+  const store = createInputFileStore({ residentBytesOf: (file) => resident.get(file.name) });
+  const ids = ['a-view', 'a-file', 'b-view'].map((name) => store.registerFile(diskFile(name, 1000)).fileId);
+  assert.equal(store.estimateBytes(ids, payloadOf), 47);
+  assert.equal(store.estimateBytes([...ids].reverse(), payloadOf), 47);
+  assert.equal(store.estimateBytes(ids), 52, 'without a payload, each file is its own payload');
+});
+
 test('the project input store counts resident bytes', async () => {
   globalThis.window ??= { Vue: { ref: (value) => ({ value }), reactive: (value) => value,
     computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {} } };
