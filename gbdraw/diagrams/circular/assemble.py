@@ -2157,13 +2157,15 @@ def _circular_scalar_axes(
     depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
 ) -> CircularScalarAxes:
     """The axes the radial layout keeps room for: those of the depth tracks when they are drawn, each in its own
-    settings as its slot draws it (``_slot_depth_source``), and the GC content track's in percent mode."""
+    settings as its slot draws it (``_slot_depth_source``), and the GC content track's in percent mode; and whether
+    the GC content band paints its edges, as its drawer paints them."""
 
     gc = configurators.gc
     return CircularScalarAxes.of(
         configurators.depth if show_depth_track else None,
         gc if str(gc.mode).strip().lower() == "percent" else None,
         None if depth_tracks_by_index is None else {index: track.config for index, track in depth_tracks_by_index.items()},
+        gc_content_paints_edges=GcContentDrawer(gc).paints_percent_band_edges(),
     )
 
 

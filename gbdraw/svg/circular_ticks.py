@@ -33,7 +33,10 @@ class CircularTickLabelGeometry:
     dominant_baseline: str = "middle"
 
 
-def _tick_label_margin_px(font_size: float, tick_width: float) -> float:
+def circular_tick_label_margin_px(font_size: float, tick_width: float) -> float:
+    """The room a Circular tick label keeps from its tick marks, and from a neighbouring track that paints the edge
+    facing it (OV-3116)."""
+
     return max(_TICK_LABEL_MIN_MARGIN_PX, float(font_size) * _TICK_LABEL_MARGIN_FONT_FACTOR) + (
         max(0.0, float(tick_width)) / 2.0
     )
@@ -326,7 +329,7 @@ def _separate_label_path_radius_from_tick_band(
     if desired_side not in {"inside", "outside"}:
         desired_side = "inside" if float(path_radius) <= tick_midpoint else "outside"
 
-    margin_px = _tick_label_margin_px(font_size, tick_width)
+    margin_px = circular_tick_label_margin_px(font_size, tick_width)
     inner = float(path_radius) - float(label_inner_offset_px)
     outer = float(path_radius) + float(label_outer_offset_px)
     adjusted = float(path_radius)
@@ -419,7 +422,7 @@ def resolve_circular_tick_label_geometry(
     normalized_label_side = str(label_side or "legacy").strip().lower()
     normalized_tick_side = str(tick_side or "legacy").strip().lower()
     if normalized_label_side in {"inside", "outside"} and normalized_tick_side in {"inside", "outside", "both"}:
-        margin_px = _tick_label_margin_px(font_size, tick_width)
+        margin_px = circular_tick_label_margin_px(font_size, tick_width)
         if normalized_label_side == "inside":
             path_radius = (
                 float(tick_inner)

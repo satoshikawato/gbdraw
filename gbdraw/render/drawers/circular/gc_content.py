@@ -66,6 +66,18 @@ class GcContentDrawer:
         self.axis_tick_size: float = DEPTH_AXIS_TICK_SIZE_PX
         self.axis_small_tick_size: float = DEPTH_AXIS_SMALL_TICK_SIZE_PX
 
+    def _paints_background(self) -> bool:
+        return paint_shows(self.percent_background_color, self.percent_background_opacity)
+
+    def _paints_border(self) -> bool:
+        return self.percent_border_width > 0 and paint_shows(self.percent_border_color)
+
+    def paints_percent_band_edges(self) -> bool:
+        """Whether the track paints its band's edges: in percent mode, its background ring or its border circles
+        show. The tick labels next to the band keep their margin from it (OV-3116)."""
+
+        return self.mode == "percent" and (self._paints_background() or self._paints_border())
+
     def _tick_font_size(self, track_width: float) -> float:
         return depth_axis_tick_font_size_px(self._gc_config, track_width)
 
@@ -229,9 +241,9 @@ class GcContentDrawer:
                                        pad_px=pad)
         ]
         outer_radius = baseline_radius + float(track_width)
-        if float(track_width) > 0 and paint_shows(self.percent_background_color, self.percent_background_opacity):
+        if float(track_width) > 0 and self._paints_background():
             inks.append(CircularInkRing(RadialBand(baseline_radius, outer_radius)))
-        if self.percent_border_width > 0 and paint_shows(self.percent_border_color):
+        if self._paints_border():
             half = 0.5 * self.percent_border_width
             inks.extend(CircularInkRing(RadialBand(edge - half, edge + half)) for edge in (baseline_radius, outer_radius))
         if self.show_axis:

@@ -30,6 +30,7 @@ from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.render.groups.circular.definition import definition_record_facts
+from gbdraw.svg.circular_ticks import circular_tick_label_margin_px
 from gbdraw.svg.circular_tracks import (
     generate_circular_depth_path_desc,
     generate_circular_scalar_area_path_desc,
@@ -595,3 +596,53 @@ def _circular_transform(length: int) -> RecordDisplayTransform:
     """The transform of a whole record drawn as circular: its lines close round the origin."""
 
     return RecordDisplayTransform(int(length), 1, 1, None, True)
+
+
+def _tick_label_path_radii(svg: str) -> list[float]:
+    """The radii of the circles the scale's tick labels are written along (in the scale's group)."""
+
+    ticks = re.search(r'<g [^>]*id="tick" .*?</g>', svg, re.S)
+    assert ticks is not None
+    return [
+        float(radius)
+        for radius in re.findall(
+            r'<path d="M [^"]* A ([0-9.]+),[0-9.]+ [^"]*" fill="none" id="circular_tick_label_path_', ticks.group(0)
+        )
+    ]
+
+
+def _percent_outer_edge_px(svg: str) -> float:
+    """Where the Percent GC band's paint ends outward: its background ring's outer edge."""
+
+    background = re.search(r'<circle [^>]*id="gc_content_percent_background" r="([0-9.]+)" [^>]*stroke-width="([0-9.]+)"', svg)
+    assert background is not None
+    return float(background.group(1)) + 0.5 * float(background.group(2))
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    ("paint", "clearance"),
+    [
+        ({}, True),
+        # A band that paints no edge (no background, no border) keeps the tick labels' band as before.
+        ({"objects.gc_content.percent_background_color": "none", "objects.gc_content.percent_border_width": 0}, False),
+    ],
+)
+def test_the_tick_labels_keep_their_margin_from_a_percent_gc_band_that_paints_its_edge(paint, clearance) -> None:
+    # OV-3116: the tick labels inside the ticks stood on the Percent GC band's painted outer edge, the descenders of
+    # "Mbp" on its border line. Inside the ticks the labels stand on their path (above it at the top, below it at
+    # the bottom), so the path is their inner edge.
+    overrides = {"objects.gc_content.mode": "percent", **paint}
+    svg = assemble_circular_diagram_from_record(
+        _make_record(length=1_600_000),
+        CircularAssemblyInputs(
+            legend="none", cfg=apply_config_overrides(None, overrides), window=20_000, step=20_000
+        ),
+    ).tostring()
+    cfg = apply_config_overrides(None, overrides)
+    margin = circular_tick_label_margin_px(
+        float(cfg.objects.ticks.tick_labels.font_size), float(cfg.objects.ticks.tick_width)
+    )
+    radii = _tick_label_path_radii(svg)
+    assert radii
+    assert min(radii) - _percent_outer_edge_px(svg) == pytest.approx(margin if clearance else 0.0, abs=1e-3)
