@@ -604,6 +604,11 @@ the current schema. A Linear Session without a stored comparison plan loads
 with **No comparison**. A CLI Session written with `-b` therefore offers
 **Replace with current controls** only after a comparison is set up, and starts
 no LOSAT run before that.
+A saved LOSATP comparison that names its pairs of drawn records or windows but
+holds no search results (the drawing **Find in other files** creates, or a
+request saved before it was rendered) runs through **Inherit saved
+comparison**: Generate runs LOSAT in the browser for exactly those pairs, with
+the saved LOSATP settings and score thresholds.
 **Generate Diagram** before choosing **Inherit saved comparison**, **Replace
 with current controls**, or **Clear comparison** stops with
 `COMPARISON_CHOICE_REQUIRED` ("Choose how to handle the saved comparison in the

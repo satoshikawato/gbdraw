@@ -147,3 +147,61 @@ test('Linear: Find in other files proposes windows from a tblastn search and Cre
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
   await expect.poll(() => drawingIds(page)).toEqual([source, added]);
 });
+
+// OV-2995, OV-3003: a reference span long enough that a File gets two windows of one record. The new drawing's LOSAT
+// pairs join drawn units (one per window) that share a reference gene; Generate runs LOSAT in the browser for exactly
+// those pairs and draws their ribbons, without a choice in the Comparison panel.
+test('Linear: the drawing Create makes with several windows of one record draws with Generate', async ({ page }) => {
+  test.setTimeout(900_000);
+  await openFresh(page);
+  await loadSessionFile(page, SESSION);
+  await generateAndWaitForResult(page);
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  let last = '';
+  await expect.poll(async () => {
+    const now = await page.evaluate(() => JSON.stringify(document.querySelector('.gbdraw-preview-surface').getBoundingClientRect()));
+    const settled = now === last;
+    last = now;
+    return settled;
+  }, { intervals: [250] }).toBe(true);
+  const toggle = page.locator('[data-region-select-toggle]');
+  await toggle.click();
+  const from = await axisPoint(page, 0, 1000.5);
+  const to = await axisPoint(page, 0, 40000.5);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 8 });
+  await page.mouse.up();
+  await page.locator('[data-preview-item-popup="region"] [data-region-find-in-files]').click();
+  const dialog = page.locator('[data-find-files-dialog]');
+  await expect(dialog.locator('[data-find-files-genes]')).toBeVisible({ timeout: 180_000 });
+  await dialog.locator('[data-find-files-search]').click();
+  await expect.poll(() => status(page), { timeout: 600_000 }).toBe('proposal');
+  await dialog.locator('[data-find-files-create]').click();
+  await expect(dialog).toHaveCount(0);
+  // A File of the new drawing draws one record in two or more windows.
+  const windowCounts = await page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().linearSeqs
+    .map((seq) => (Array.isArray(seq.windows) ? seq.windows.length : 0)));
+  expect(Math.max(...windowCounts)).toBeGreaterThan(1);
+  // The window pairs Python kept: the saved pipeline's, as unit indexes.
+  const savedPairs = await page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing()
+    .importedComparisonIntent.source.comparisons.find((comparison) => comparison.kind === 'generatedProteinComparison')
+    .pairs.map((pair) => [pair.queryRecordIndex, pair.subjectRecordIndex]));
+  expect(savedPairs.length).toBeGreaterThan(0);
+  await generateAndWaitForResult(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults().length)).toBeGreaterThan(0);
+  // The request draws one LOSATP table per saved pair, and no other pair; the figure draws their ribbons.
+  const drawn = await page.evaluate(async () => {
+    const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+    const { state } = await import('./js/state.js');
+    return {
+      pairs: getCommittedCanonicalSession().renderRequest.comparisons
+        .filter((comparison) => comparison.kind === 'precomputedProteinComparison')
+        .map((comparison) => [comparison.queryRecordIndex, comparison.subjectRecordIndex]),
+      ribbons: state.svgContainer.value.querySelectorAll('svg [data-gbdraw-match-id]').length
+    };
+  });
+  const order = (pairs) => pairs.map((pair) => pair.join(':')).sort();
+  expect(order(drawn.pairs)).toEqual(order(savedPairs));
+  expect(drawn.ribbons).toBeGreaterThan(0);
+});

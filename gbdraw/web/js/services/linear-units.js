@@ -220,15 +220,24 @@ export const unitRecordsOf = (records, units) => {
 };
 
 /**
- * What `planLinearUnits` is asked: the drawn cards' records, keyed and windowed as the request writes them, and the
- * record pairs of the plan's edges.
+ * The drawn cards' records, keyed and windowed as the request writes them: what Python plans the units of.
+ * @param {readonly LinearSeq[]} cards The drawn cards, in request order.
+ * @param {LinearUnitWindowsOf} windowsOf The windows the request writes for a card.
+ * @returns {LinearUnitRecordInput[]}
+ */
+export const unitRecordInputs = (cards, windowsOf) => cards.map((card, index) => (
+  { recordKey: linearSeqRecordKey(card, index), windows: windowsOf(card) }));
+
+/**
+ * What `planLinearUnits` is asked: the drawn cards' records (`unitRecordInputs`) and the record pairs of the plan's
+ * edges.
  * @param {readonly LinearSeq[]} cards The drawn cards, in request order.
  * @param {LinearComparisonResolution} resolution
  * @param {LinearUnitWindowsOf} windowsOf The windows the request writes for a card.
  * @returns {LinearUnitPlanPayload}
  */
 export const linearUnitPlanPayload = (cards, resolution, windowsOf) => ({
-  records: cards.map((card, index) => ({ recordKey: linearSeqRecordKey(card, index), windows: windowsOf(card) })),
+  records: unitRecordInputs(cards, windowsOf),
   pairs: resolution.edges.map((edge) => ({ queryRecordKey: edge.queryUid, subjectRecordKey: edge.subjectUid, source: edge.source }))
 });
 
@@ -300,6 +309,37 @@ export const planLinearUnitSearch = async (cards, resolution, windowsOf, runHelp
   const payload = linearUnitPlanPayload(cards, resolution, windowsOf);
   const reply = await runHelper(payload);
   return linearUnitSearch(cards, resolution, readLinearUnitPlan(reply?.result, payload));
+};
+
+/**
+ * The searches of saved unit pairs (a saved LOSATP pipeline that Inherit runs, OV-3003): Python plans the units of the
+ * drawn cards, asked for no record pair, and the plan joins exactly `pairs`, each under the record pair its two units
+ * draw. `resolve` gives the comparison plan of those record pairs, one edge per pair in their order.
+ * @param {readonly LinearSeq[]} cards The drawn cards, in request order.
+ * @param {readonly Omit<LinearUnitPair, 'pair'>[]} pairs Indexes of the units Python plans for `cards`.
+ * @param {LinearUnitWindowsOf} windowsOf
+ * @param {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} runHelper Runs the Worker helper.
+ * @param {(pairs: LinearUnitPairInput[]) => LinearComparisonResolution} resolve
+ * @returns {Promise<LinearUnitSearch>}
+ */
+export const savedPairsUnitSearch = async (cards, pairs, windowsOf, runHelper, resolve) => {
+  /** @type {LinearUnitPlanPayload} */
+  const payload = { records: unitRecordInputs(cards, windowsOf), pairs: [] };
+  const { units } = readLinearUnitPlan((await runHelper(payload))?.result, payload);
+  if (pairs.some(({ queryUnit, subjectUnit }) => !units[queryUnit] || !units[subjectUnit])) {
+    throw diagnosticError('RESULT_INVALID', {}, FAILURE);
+  }
+  /** @type {LinearUnitPairInput[]} */
+  const recordPairs = [];
+  /** @type {Map<string, number>} */
+  const pairOf = new Map();
+  const unitPairs = pairs.map(({ queryUnit, subjectUnit }) => {
+    const [queryRecordKey, subjectRecordKey] = [units[queryUnit].recordKey, units[subjectUnit].recordKey];
+    const key = linearComparisonEdgeKey(queryRecordKey, subjectRecordKey);
+    if (!pairOf.has(key)) pairOf.set(key, recordPairs.push({ queryRecordKey, subjectRecordKey, source: 'losat' }) - 1);
+    return { pair: /** @type {number} */ (pairOf.get(key)), queryUnit, subjectUnit };
+  });
+  return linearUnitSearch(cards, resolve(recordPairs), { units, pairs: unitPairs });
 };
 
 /**

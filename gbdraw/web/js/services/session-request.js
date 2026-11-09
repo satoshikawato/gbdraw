@@ -5586,6 +5586,23 @@ const projectGeneratedProteinPipeline = (
   };
 };
 
+/**
+ * The drawing whose LOSAT controls a Generate's searches read when Inherit runs a saved LOSATP pipeline (OV-3003):
+ * `drawing` with the LOSAT program and the LOSATP settings Load projects from the pipeline
+ * (`projectGeneratedProteinPipeline`), so the draft path searches with the saved settings. The drawing's own controls
+ * stay as they are.
+ * @template {{ losatProgram: unknown, losat: { blastp?: object } }} D
+ * @param {D} drawing
+ * @param {UnvalidatedFields<'kind' | 'mode' | 'settings'>} pipeline A generated protein comparison with its settings.
+ * @returns {D}
+ */
+export const savedPipelineSearchDrawing = (drawing, pipeline) => {
+  const projected = projectGeneratedProteinPipeline(pipeline);
+  if (!projected) throw new Error('A saved LOSATP pipeline with settings is required.');
+  const { losatProgram, losat: { blastp } } = projected.config;
+  return { ...drawing, losatProgram: { value: losatProgram }, losat: { ...drawing.losat, blastp: { ...drawing.losat.blastp, ...blastp } } };
+};
+
 const LEGACY_DEPTH_OPTION_FIELDS = Object.freeze([
   'depthTable',
   'depthFile',

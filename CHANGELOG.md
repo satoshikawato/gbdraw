@@ -224,6 +224,12 @@ write-up of a release.
   that **Find in other files** creates draws its LOSAT comparison of the
   windows at the first Generate, with no choice in the Comparison panel, also
   when a File has several windows of one record (OV-3001).
+- Fixed: in the Web, Generate with **Inherit saved comparison** stopped with
+  "Install LOSAT or NCBI BLAST+" when the saved LOSATP comparison named its
+  window pairs but held no results, as the drawing **Find in other files**
+  creates does. Generate now runs LOSAT in the browser for exactly the saved
+  pairs, with the saved settings, and reuses earlier search results as a draft
+  comparison does (OV-3003).
 - Added: a Linear row of windows names itself once and marks its cuts. A row
   with two or more units, at least one a window, shows one name at its left
   (the first record label in the row) and under it a list with one line per

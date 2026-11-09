@@ -174,6 +174,15 @@ const COMPARISON_THRESHOLDS = Object.freeze([
 ]);
 
 /**
+ * The comparison thresholds a saved request sets (its diagram options, by generated domain key), resolved as
+ * `resolveComparisonThresholds` resolves the draft's: a field the request leaves out takes the mode default.
+ * @param {Readonly<Record<string, unknown>>} thresholds
+ * @param {unknown} mode
+ */
+export const savedComparisonThresholds = (thresholds, mode) => resolveComparisonThresholds(Object.fromEntries(
+  COMPARISON_THRESHOLDS.map(([draftKey, domainKey]) => [draftKey, thresholds[domainKey] ?? null])), mode);
+
+/**
  * The comparison thresholds of one Generate: a blank field takes the mode
  * default, and every value is evaluated on the Python-owned domains in
  * mode-profiles.generated.js. A violation is a typed INPUT_INVALID with the
