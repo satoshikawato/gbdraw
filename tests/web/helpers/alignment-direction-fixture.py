@@ -12,6 +12,7 @@ from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResu
 from gbdraw.api import SessionDrawingSpec, build_session_document, materialize_session, save_session_document  # noqa: E402
 from gbdraw.io.regions import RecordWindow  # noqa: E402
 from gbdraw.web_support.request_render import render_canonical_web_request  # noqa: E402
+from tests.utils.web_render_result import web_session_results  # noqa: E402
 from tests.test_alignment_direction_projection import build_fixture  # noqa: E402
 from tests.utils.session_drawing_view import drawing_view  # noqa: E402
 
@@ -57,7 +58,8 @@ def main(directory: Path, variant: str = '') -> None:
         web = render_canonical_web_request(drawing_view(document.to_dict())['renderRequest'],
             resource_paths=materialized.resource_paths, output_directory=directory / 'web')
     save_session_document(directory / 'directions.gbdraw-session.json', drawings=[SessionDrawingSpec(request, state={
-        'results': web['results'], 'editorState': {'featureCatalog': web['featureCatalog']}})])
+        'results': web_session_results(web),
+        'editorState': {'featureCatalog': web['featureCatalog']}})])
 
 
 if __name__ == '__main__':

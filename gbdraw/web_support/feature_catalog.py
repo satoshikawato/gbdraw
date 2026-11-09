@@ -16,6 +16,7 @@ from typing import Any, Iterable, TypeVar, cast
 from svgwrite import Drawing
 
 from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER, ascii_float, parse_ascii_nonnegative_integer
+from gbdraw.render.document import DocumentParts
 from gbdraw.render.drawers.annotation_marks import ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SET_ID_ATTRIBUTE
 from gbdraw.render.group_content import GroupContent, GroupKind, held_group, leaf_groups
 from gbdraw.render_stages import render_stage
@@ -501,9 +502,17 @@ def _record_catalog_metrics(
         metrics[name] = int(metrics.get(name, 0)) + value
 
 
-def _parse_catalog_svg(svg_source: str) -> ET.Element:
+def _parse_catalog_svg(svg_source: str | Iterable[str]) -> ET.Element:
+    """The SVG tree of ``svg_source``, a text or texts in order; texts are fed in turn, never joined (OV-3027)."""
+
     try:
-        root = ET.fromstring(svg_source)
+        if isinstance(svg_source, str):
+            root = ET.fromstring(svg_source)
+        else:
+            parser = ET.XMLParser()
+            for text in svg_source:
+                parser.feed(text)
+            root = parser.close()
     except ET.ParseError as exc:
         raise GbdrawError(
             f"Malformed SVG source for feature catalog: {exc}"
@@ -2305,7 +2314,7 @@ def catalog_content_snapshot(content: GroupContent) -> str:
     from gbdraw.api.prepared import record_prepared_input_metric
 
     traversal = _catalog_element_reads(
-        _parse_catalog_svg(_CATALOG_CONTENTS_ROOT + content.text + "</svg>")
+        _parse_catalog_svg((_CATALOG_CONTENTS_ROOT, *content.texts(), "</svg>"))
     )
     for name, value in _catalog_read_metrics(traversal).items():
         record_prepared_input_metric(name, value)
@@ -2341,7 +2350,7 @@ def feature_catalog_item_from_snapshots(
 
 
 def build_feature_catalog_item(
-    svg_source: str,
+    svg_source: str | DocumentParts,
     context: InteractiveSvgContext | None,
     *,
     result_index: int,
@@ -2354,7 +2363,7 @@ def build_feature_catalog_item(
     In a cache transaction, a ``drawing`` whose groups are all placed contents
     gives one ``catalog_snapshot`` stage per content it reads and the
     ``catalog_item`` stage keyed by their texts; otherwise the catalog reads
-    ``svg_source``.
+    ``svg_source``, a text or a drawing's pieces.
     """
 
     from gbdraw.api.prepared import prepared_input_cache_active
@@ -2384,7 +2393,9 @@ def build_feature_catalog_item(
             result_index=int(result_index),
             result_name=str(result_name),
         )
-    traversal = _catalog_element_reads(_parse_catalog_svg(svg_source))
+    traversal = _catalog_element_reads(
+        _parse_catalog_svg(svg_source.texts() if isinstance(svg_source, DocumentParts) else svg_source)
+    )
     svg_index = _rendered_svg_catalog_index((traversal.reads,))
     _record_catalog_metrics(
         _diagnostics, {**_catalog_read_metrics(traversal), **_catalog_index_metrics(svg_index)}

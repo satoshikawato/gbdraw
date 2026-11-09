@@ -41,6 +41,7 @@ from gbdraw.legend.table import LegendTable, _generated_legend_rows
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, _decode_track_slots
 from gbdraw.tracks.circular import parse_circular_track_slots
 from gbdraw.tracks.linear import default_linear_track_slots, parse_linear_track_slots
+from tests.utils.web_render_result import web_result_svg
 
 _COLOR_COLUMNS = ["feature_type", "qualifier_key", "value", "color", "caption"]
 _VISIBILITY_COLUMNS = ["record_id", "feature_type", "qualifier", "value", "action"]
@@ -292,7 +293,7 @@ def test_the_web_request_carries_the_facts_in_run_metadata(tmp_path):
     [row] = response["metadata"]["legendRows"]
     assert row["resultName"] == response["results"][0]["name"]
     assert "repeat_region" in row["suppressed"] and "repeat_region" not in row["drawn"]
-    keys = re.findall(r'data-legend-key="([^"]*)"', response["results"][0]["content"])
+    keys = re.findall(r'data-legend-key="([^"]*)"', web_result_svg(response["results"][0]))
     assert list(dict.fromkeys(keys)) == row["drawn"]
 
 

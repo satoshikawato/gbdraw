@@ -76,10 +76,13 @@ class WebDocument(TypedDict):
 
 
 class WebRenderResult(TypedDict):
-    """One SVG Result: the drawing's text in px (for Auto, the written file's), and the same text as pieces."""
+    """One SVG Result: the drawing's text in px as pieces (for Auto, the written file's text).
+
+    The text is never joined into one string here: the Worker sends the pieces
+    and the page assembles them (OV-3027).
+    """
 
     name: str
-    content: str
     document: WebDocument
 
 
@@ -315,19 +318,12 @@ def _render_canonical_web_request(
             # The page's text is the px drawing, not the written file: a file fitted to a requested size states
             # it in the requested unit (``write_svg_document``), which only an exported copy carries (OV-2512).
             parts = document_parts(item.drawing)
-            svg_content = parts.prolog + parts.body()
             document = _web_document(parts, held_segments)
-        results.append(
-            {
-                "name": result_name,
-                "content": svg_content,
-                "document": document,
-            }
-        )
+        results.append({"name": result_name, "document": document})
         with _web_render_diagnostic_phase(diagnostics, "featureCatalog"):
             feature_catalog_items.append(
                 build_feature_catalog_item(
-                    svg_content,
+                    parts,
                     item.interactive_context,
                     result_index=result_index,
                     result_name=result_name,

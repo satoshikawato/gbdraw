@@ -141,6 +141,9 @@ def empty_element_markup(xml: Element) -> str | None:
     return markup.encode("utf-8", "xmlcharrefreplace").decode("utf-8")
 
 
+# The characters of a children text encoded at a time for its revision.
+_DIGEST_CHUNK = 1 << 20
+
 _NOT_AN_ELEMENT = (
     "An SVG document piece holds markup that is not an element "
     "(a comment, CDATA or a processing instruction)."
@@ -299,20 +302,32 @@ class GroupContent:
             texts.append(text)
         return require_element_markup("".join(texts))
 
-    @cached_property
-    def text(self) -> str:
-        """The group as its group class built it: its own attributes and children, unplaced."""
+    def texts(self) -> tuple[str, str, str]:
+        """The group as its group class built it, unplaced: its start tag, its children text and ``</g>``."""
 
         group = Group(debug=False)
         if self.parameter is not None:
             group._parameter = self.parameter
         group.attribs = dict(self.attributes)
-        return start_tag(group) + self.children_text + "</g>"
+        return start_tag(group), self.children_text, "</g>"
+
+    @property
+    def text(self) -> str:
+        """``texts`` joined. Not kept: a stored content holds its children text once (OV-3027)."""
+
+        return "".join(self.texts())
 
     @cached_property
     def _children_digest(self) -> tuple[str, int]:
-        data = self.children_text.encode("utf-8")
-        return hashlib.sha256(data).hexdigest(), len(data)
+        # The UTF-8 of the children text a chunk at a time: the same digest and length without a copy of its bytes.
+        digest = hashlib.sha256()
+        length = 0
+        text = self.children_text
+        for start in range(0, len(text), _DIGEST_CHUNK):
+            data = text[start : start + _DIGEST_CHUNK].encode("utf-8")
+            digest.update(data)
+            length += len(data)
+        return digest.hexdigest(), length
 
     @property
     def revision(self) -> str:

@@ -43,6 +43,7 @@ from gbdraw.web_support.request_render import (
 from tests.test_alignment_direction_projection import build_fixture
 from tests.test_web_feature_override_table import FIXTURE as OVERRIDE_FIXTURE
 from tests.test_web_feature_override_table import HEADER as OVERRIDE_HEADER
+from tests.utils.web_render_result import web_result_svg
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -400,7 +401,7 @@ def test_a_second_identical_generate_reads_no_comparison_table(
         if isinstance(entry.value, (pd.DataFrame, tuple))
     ]
     pd.testing.assert_frame_equal(stored, reads[0])
-    assert second["reply"]["results"][0]["content"] == first["reply"]["results"][0]["content"]
+    assert web_result_svg(second["reply"]["results"][0]) == web_result_svg(first["reply"]["results"][0])
 
 
 def test_a_changed_comparison_table_token_is_read_again(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -17,6 +17,7 @@ import pandas as pd
 import pytest
 
 from tests.utils.session_drawing_view import drawing_view
+from tests.utils.web_render_result import web_result_svg
 
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
 from gbdraw.analysis.depth import DEPTH_COLUMNS, DepthCoverage, _read_depth_tsv_cached, clear_depth_tsv_cache
@@ -54,6 +55,7 @@ from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.labels.fit import SEPARATE_FEATURES_PATH
 import gbdraw.api.prepared as prepared_module
 import gbdraw.api.request_render as request_render_module
+import gbdraw.web_support.request_render as web_request_render_module
 from gbdraw.api.request_render import normalize_request_records, plan_request
 from gbdraw.features.overrides import FeatureOverride
 from gbdraw.io.regions import parse_region_spec
@@ -2369,23 +2371,23 @@ def _content_pieces(reply: dict[str, object]) -> list[dict[str, object]]:
     ]
 
 
-def _joined_document(result: dict[str, object]) -> str:
-    document = result["document"]
-    assert isinstance(document, dict)
-    texts = [
-        piece["start"] + piece["children"] + "</g>" if piece["kind"] == "content" else piece["text"]
-        for piece in document["pieces"]
-    ]
-    return document["head"] + "".join(texts) + document["tail"]
+def test_the_reply_document_joins_to_the_drawing_svgwrite_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    drawings: list[object] = []
+    original = web_request_render_module.document_parts
 
+    def capture(drawing, **kwargs):  # type: ignore[no-untyped-def]
+        drawings.append(drawing)
+        return original(drawing, **kwargs)
 
-def test_the_reply_document_joins_to_the_written_svg(tmp_path: Path) -> None:
+    monkeypatch.setattr(web_request_render_module, "document_parts", capture)
     source = tmp_path / "records.gbk"
     _write_genbank(source, (_record("pieces-record"),))
     reply, _ = _render(tmp_path, PreparedBiologicalInputCache(), _document(source, title="Pieces"), request_id=1)
 
     (result,) = reply["results"]
-    assert result["content"] == '<?xml version="1.0" encoding="utf-8" ?>\n' + _joined_document(result)
+    (drawing,) = drawings
+    assert set(result) == {"name", "document"}
+    assert web_result_svg(result) == drawing.tostring()  # type: ignore[attr-defined]
     pieces = _content_pieces(reply)
     assert pieces
     for piece in pieces:
@@ -2411,7 +2413,9 @@ def test_held_revisions_are_named_without_their_text(tmp_path: Path) -> None:
             key: value for key, value in cold_piece.items() if key != "children"
         }
         assert ("children" in piece) == (piece["revision"] not in held)
-    assert partial["results"][0]["content"] == cold["results"][0]["content"]
+    assert [partial["results"][0]["document"][key] for key in ("head", "tail")] == [
+        cold["results"][0]["document"][key] for key in ("head", "tail")
+    ]
 
 
 def test_a_title_position_change_sends_no_children_text(tmp_path: Path) -> None:
@@ -2429,7 +2433,7 @@ def test_a_title_position_change_sends_no_children_text(tmp_path: Path) -> None:
     output["plotTitlePosition"] = "bottom"
     moved, _ = _render(tmp_path, cache, moved_document, request_id=2, held_segments=held)
 
-    assert moved["results"][0]["content"] != cold["results"][0]["content"]
+    assert moved["results"][0]["document"] != cold["results"][0]["document"]
     assert _content_pieces(moved)
     assert not [piece for piece in _content_pieces(moved) if "children" in piece]
 
@@ -3015,7 +3019,7 @@ def _entries_naming(cache: PreparedBiologicalInputCache, token: str) -> set[tupl
 
 def _svg(reply: dict[str, object]) -> str:
     (result,) = reply["results"]
-    return str(result["content"])
+    return web_result_svg(result)
 
 
 def _with_block_stroke(document: dict[str, object]) -> dict[str, object]:

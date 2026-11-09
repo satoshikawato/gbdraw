@@ -46,6 +46,7 @@ from gbdraw.session import (
     session_to_request,
 )
 from gbdraw.web_support.request_render import render_canonical_web_request
+from tests.utils.web_render_result import web_result_svg
 
 
 def table(rows):
@@ -500,7 +501,7 @@ def test_the_web_request_draws_its_rule_captions_as_written(tmp_path):
             output_directory=tmp_path / "web-output",
         )
     svg = tmp_path / "web.svg"
-    svg.write_text(response["results"][0]["content"], encoding="utf-8")
+    svg.write_text(web_result_svg(response["results"][0]), encoding="utf-8")
     assert legend_rows(svg)["Complex IV [#ffe700]"] == (
         "Complex IV [#ffe700]",
         "Complex IV [#ffe700]",

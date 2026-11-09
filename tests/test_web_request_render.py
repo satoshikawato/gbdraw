@@ -22,6 +22,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.session import build_session_document
 from tests.utils.session_drawing_view import drawing_view
 import gbdraw.web_support.request_render as web_request_render
+from tests.utils.web_render_result import web_result_svg
 from gbdraw.web_support.request_render import (
     render_embedded_canonical_web_request,
     render_staged_canonical_web_request,
@@ -49,8 +50,39 @@ def test_embedded_web_request_renders_through_typed_api(tmp_path) -> None:
     )
 
     assert [item["name"] for item in result["results"]] == ["web-result.svg"]
-    assert result["results"][0]["content"].lstrip().startswith("<?xml")
+    assert web_result_svg(result["results"][0]).startswith("<svg")
     assert not workspace.exists()
+
+
+
+def test_a_web_render_never_joins_the_svg_body(tmp_path, monkeypatch) -> None:
+    """OV-3027: the Web render built the whole SVG text as one string three times (the written file, the reply's
+    ``content`` and its prolog copy); a second human chromosome 1 render ran out of memory joining 133 MB. The
+    Worker sends the pieces, so neither the reply nor the file it writes joins them."""
+
+    from gbdraw.render.document import DocumentParts
+
+    def joined(_parts: DocumentParts) -> str:
+        raise AssertionError("the Web render joined the SVG body")
+
+    monkeypatch.setattr(DocumentParts, "body", joined)
+    record = SeqRecord(Seq("ATGC" * 250), id="no-join-record")
+    record.annotations["molecule_type"] = "DNA"
+    record.features.append(SeqFeature(FeatureLocation(10, 400, strand=1), type="CDS", qualifiers={"product": ["p"]}))
+    document = drawing_view(build_session_document(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            output=RenderOutputRequest(output_prefix="no-join", formats=("svg",)),
+        )
+    ).to_dict())
+    result = render_embedded_canonical_web_request(
+        document["renderRequest"], resources=document["resources"], workspace=tmp_path / "render-workspace"
+    )
+
+    (item,) = result["results"]
+    assert set(item) == {"name", "document"}
+    assert web_result_svg(item).startswith("<svg")
+    assert result["featureCatalog"]["items"][0]["features"]
 
 
 def test_staged_web_request_renders_and_cleans_worker_workspace(tmp_path) -> None:
@@ -86,7 +118,7 @@ def test_staged_web_request_renders_and_cleans_worker_workspace(tmp_path) -> Non
     assert [item["name"] for item in result["results"]] == [
         "staged-web-result.svg"
     ]
-    assert result["results"][0]["content"].lstrip().startswith("<?xml")
+    assert web_result_svg(result["results"][0]).startswith("<svg")
     assert not workspace.exists()
     metrics = diagnostics["metrics"]
     assert {
@@ -395,7 +427,7 @@ def test_embedded_web_request_preserves_in_memory_comparison_metadata(
         resources=document["resources"],
         workspace=workspace,
     )
-    svg = result["results"][0]["content"]
+    svg = web_result_svg(result["results"][0])
 
     assert not workspace.exists()
     assert 'data-group-kind="orthogroup"' in svg
@@ -452,7 +484,7 @@ def test_web_request_carries_unmatched_comparison_table_id_warnings(tmp_path) ->
             "resultName": "web-ids.svg",
         }
     ]
-    assert 'data-query-record-id="R2"' in unmatched["results"][0]["content"]
+    assert 'data-query-record-id="R2"' in web_result_svg(unmatched["results"][0])
     assert render("R2", "R3")["metadata"]["comparisonWarnings"] == []
 
 
@@ -694,7 +726,7 @@ def test_web_warning_metadata_reuses_one_resolution_and_one_load_per_source(
     assert warning["code"] == "feature_selector_unmatched"
     assert "PRIVATE-MISSING" not in repr(warnings)
     assert all(
-        "data-gbdraw-annotation-id" not in item["content"] for item in result["results"]
+        "data-gbdraw-annotation-id" not in web_result_svg(item) for item in result["results"]
     )
 
 
@@ -737,8 +769,10 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # drag may cross the origin only of a circular record): with that key
     # removed, the reply has the earlier digest.
     # Updated again when a one-gradient Legend block left a gap between its title and bar (OV-2982): only that block, the Legend bounds and the canvas height moved.
-    "similarity_groups": "a0f0eb2d6adc94833265efc21047d9b96cbfdd59f3edde524ec3ff559f9f4de3",
-    "collinear": "62084ef5b16d27a9fc2f46e6544e6117d62b915d8a839c01c8c4775ee2477d85",
+    # Updated again when each Result dropped `content`, its joined SVG text (OV-3027): with `content` put back as
+    # the prolog and the joined pieces, the reply has the earlier digest.
+    "similarity_groups": "9e322511a6d66e434242c09cde9b66c4f085c0b2a9dcebec539d8d03470bd88e",
+    "collinear": "20703996666abbe21fd53e18f153a515bbac86412c9ea56023ba8865323f0725",
 }
 
 

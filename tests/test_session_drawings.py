@@ -51,6 +51,7 @@ from gbdraw.session_drawings import (
 from gbdraw.session_io import CURRENT_SESSION_VERSION, MODE_SCOPED_SESSION_MAX_VERSION
 from gbdraw.web_support.request_render import render_canonical_web_request
 from tests.utils.session_drawing_view import drawing_view
+from tests.utils.web_render_result import web_session_results
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GENBANK = REPO_ROOT / "tests" / "test_inputs" / "HmmtDNA.gbk"
@@ -84,7 +85,7 @@ def _linear_result_state(request: LinearDiagramRequest, tmp_path: Path) -> dict:
             output_directory=tmp_path / "web-output",
         )
     return {
-        "results": web["results"],
+        "results": web_session_results(web),
         "editorState": {"featureCatalog": web["featureCatalog"]},
     }
 
