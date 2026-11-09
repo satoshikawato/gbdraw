@@ -101,11 +101,45 @@ test('span Copy reads the span when pressed and copies its FASTA; FASTA download
   assert.deepEqual(asked, [[{ kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }]]);
   assert.equal(copied[0], '>m1_query|record=REC|coords=1..4|strand=+\nACGT\n');
   assert.equal(bundle.read.status, '');
-  await reads.spanAction(bundle, bundle.entries, 'download');
+  const both = bundleOf([
+    entryOf('query', { kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }),
+    entryOf('subject', { kind: 'record', recordKey: 'rec-2', start: 1, end: 4 })
+  ]);
+  assert.equal(reads.spansReadable(both.entries), true);
+  await reads.spanAction(both, both.entries, 'download');
   assert.deepEqual(downloaded.map(({ filename }) => filename), ['m1_both.fna'], 'both spans download as one file');
+  assert.equal(downloaded[0].text, '>m1_query|record=REC|coords=1..4|strand=+\nACGT\n>m1_subject|record=REC|coords=1..4|strand=+\nACGT\n');
 });
 
-test('a span Python cannot read shows its reason; a bundle with nothing read says so and copies nothing', async () => {
+// D5 review r1 (MEDIUM-3): Copy both spans and Download both spans write both spans or nothing, as before D5, when
+// the popup opens with a span it cannot read (a BLAST source without its comparison FASTA) and when Python cannot
+// read one when pressed: the unreadable span's row shows its reason.
+test('both spans are offered only when every span can be read, and a span unreadable when pressed writes nothing', async () => {
+  const replies = [];
+  const { reads, copied, downloaded } = harness({ readSpans: async (spans) => replies.shift()(spans) });
+  const partial = bundleOf([entryOf('query', { kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }), entryOf('subject', null)]);
+  assert.equal(reads.spansReadable(partial.entries), false);
+  assert.equal(await reads.spanAction(partial, partial.entries, 'download'), false);
+  assert.deepEqual(downloaded, [], 'no file holds the query span alone');
+  assert.equal(partial.entries[1].unavailableReason, 'never supplied');
+
+  const both = bundleOf([
+    entryOf('query', { kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }),
+    entryOf('subject', { kind: 'record', recordKey: 'rec-2', start: 1, end: 9 })
+  ]);
+  replies.push((spans) => spans.map((span) => (span.recordKey === 'rec-2'
+    ? { status: 'unavailable', reason: 'OUT_OF_RANGE', recordId: 'REC', orientation: '+', length: 0, sequence: '' }
+    : { status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT' })));
+  assert.equal(await reads.spanAction(both, both.entries, 'copy'), false);
+  assert.deepEqual(copied, [], 'the clipboard gets no part of the pair');
+  assert.deepEqual(both.entries.map((entry) => [entry.available, entry.unavailableReason]), [
+    [true, ''], [false, 'Coordinates exceed the sequence length.']
+  ]);
+  assert.equal(both.read.status, '', 'the reason shows in the span\'s row');
+  assert.equal(reads.spansReadable(both.entries), false);
+});
+
+test('a span Python cannot read shows its reason in its row and copies nothing', async () => {
   const { reads, copied } = harness({ readSpans: async (spans) => spans.map(() => ({
     status: 'unavailable', reason: 'OUT_OF_RANGE', recordId: 'REC', orientation: '+', length: 0, sequence: ''
   })) });
@@ -113,7 +147,7 @@ test('a span Python cannot read shows its reason; a bundle with nothing read say
   assert.equal(await reads.spanAction(bundle, bundle.entries, 'copy'), false);
   assert.equal(bundle.entries[0].available, false);
   assert.equal(bundle.entries[0].unavailableReason, 'Coordinates exceed the sequence length.');
-  assert.equal(bundle.read.status, 'empty');
+  assert.equal(bundle.read.status, '', 'the reason shows in the span\'s row');
   assert.deepEqual(copied, []);
 });
 

@@ -26,6 +26,15 @@ import { diagnosticError, normalizeCaughtError } from '../utils/error-normalizat
 const DISCARDED = Symbol('discarded');
 /** The read holds no sequence: the popup says so. */
 const EMPTY = Symbol('empty');
+/** A span asked cannot be read: its row shows why, and nothing is written. */
+const REFUSED = Symbol('refused');
+
+/**
+ * Whether every span of a Copy or FASTA can be read: the popup offers an action for spans only then, so a file or
+ * the clipboard holds all the spans it names or none (both spans, as before D5).
+ * @param {readonly MatchSpanEntry[]} entries
+ */
+export const spansReadable = (entries) => entries.length > 0 && entries.every((entry) => entry.available && entry.read);
 
 /** @param {string | null} text */
 const givenText = (text) => {
@@ -81,7 +90,7 @@ export const createSequenceReads = ({ readFeatures, readSpans, copyPending, down
       Object.assign(state, { status: '' });
       return true;
     } catch (error) {
-      if (error === DISCARDED) Object.assign(state, { status: '' });
+      if (error === DISCARDED || error === REFUSED) Object.assign(state, { status: '' });
       else if (error === EMPTY) Object.assign(state, { status: 'empty' });
       else {
         Object.assign(state, {
@@ -95,21 +104,23 @@ export const createSequenceReads = ({ readFeatures, readSpans, copyPending, down
   };
 
   /**
-   * The FASTA text of match spans, read from Python. A span Python cannot read shows its reason in its row and is
-   * left out of the text. Null when the door discarded the read.
+   * The FASTA text of match spans, read from Python: every span, or none. A span that cannot be read (known when
+   * the popup opened, or from Python's reply) shows its reason in its row, and the text is refused (`REFUSED`), so no
+   * file or clipboard holds part of what the action names. Null when the door discarded the read.
    * @param {readonly MatchSpanEntry[]} entries
    */
   const spansFasta = async (entries) => {
-    const asked = entries.filter((entry) => entry.read);
-    if (!asked.length) return '';
-    const replies = await readSpans(asked.map((entry) => /** @type {MatchSpanInput} */ (entry.read)));
+    if (!spansReadable(entries)) throw REFUSED;
+    const replies = await readSpans(entries.map((entry) => /** @type {MatchSpanInput} */ (entry.read)));
     if (!replies) return null;
-    return asked.map((entry, index) => {
+    entries.forEach((entry, index) => {
       const reply = replies[index];
-      if (reply.status === 'ok') return matchSpanFasta(entry, reply);
-      Object.assign(entry, { available: false, unavailableReason: matchSpanUnavailableReason(entry, reply) });
-      return '';
-    }).join('');
+      if (reply.status !== 'ok') {
+        Object.assign(entry, { available: false, unavailableReason: matchSpanUnavailableReason(entry, reply) });
+      }
+    });
+    if (!spansReadable(entries)) throw REFUSED;
+    return entries.map((entry, index) => matchSpanFasta(entry, replies[index])).join('');
   };
 
   /**
@@ -136,5 +147,5 @@ export const createSequenceReads = ({ readFeatures, readSpans, copyPending, down
     action === 'copy' ? null : filename, 'readFeatureSequences'
   );
 
-  return { showFeatureSequence, spanAction, memberAction };
+  return { showFeatureSequence, spanAction, memberAction, spansReadable };
 };

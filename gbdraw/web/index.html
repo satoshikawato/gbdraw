@@ -8039,8 +8039,8 @@
                                                          { label: t('Download {role} span', { role: entry.span.displayRole.toLowerCase() }), title: entry.available ? t('Download {role} span FASTA', { role: entry.span.displayRole.toLowerCase() }) : entry.unavailableReason, icon: 'ph-download-simple', disabled: !entry.available || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, [entry], 'download') }
                                                        ]),
                                                        ...(clickedPairwiseMatch.sequenceBundle.entries.length > 1 ? [
-                                                         { label: t('Copy both spans'), title: t('Copy both spans FASTA'), icon: 'ph-copy', disabled: !clickedPairwiseMatch.sequenceBundle.entries.some((item) => item.available) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, clickedPairwiseMatch.sequenceBundle.entries, 'copy') },
-                                                         { label: t('Download both spans'), title: t('Download both spans FASTA'), icon: 'ph-download-simple', disabled: !clickedPairwiseMatch.sequenceBundle.entries.some((item) => item.available) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, clickedPairwiseMatch.sequenceBundle.entries, 'download') }
+                                                         { label: t('Copy both spans'), title: t('Copy both spans FASTA'), icon: 'ph-copy', disabled: !sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, clickedPairwiseMatch.sequenceBundle.entries, 'copy') },
+                                                         { label: t('Download both spans'), title: t('Download both spans FASTA'), icon: 'ph-download-simple', disabled: !sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading', run: () => sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, clickedPairwiseMatch.sequenceBundle.entries, 'download') }
                                                        ] : [])
                                                      ]"></action-menu>
                                     </div>
@@ -8140,14 +8140,14 @@
                                         <span class="mr-auto text-[10px] font-semibold uppercase text-slate-500">{{ t('Both spans') }}</span>
                                         <button type="button"
                                                 @click="sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, clickedPairwiseMatch.sequenceBundle.entries, 'copy')"
-                                                :disabled="!clickedPairwiseMatch.sequenceBundle.entries.some((item) => item.available) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading'"
-                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', clickedPairwiseMatch.sequenceBundle.entries.some((item) => item.available) ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
+                                                :disabled="!sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading'"
+                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
                                             <i class="ph ph-copy" aria-hidden="true"></i><span>{{ t('Copy') }}</span>
                                         </button>
                                         <button type="button"
                                                 @click="sequenceReads.spanAction(clickedPairwiseMatch.sequenceBundle, clickedPairwiseMatch.sequenceBundle.entries, 'download')"
-                                                :disabled="!clickedPairwiseMatch.sequenceBundle.entries.some((item) => item.available) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading'"
-                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', clickedPairwiseMatch.sequenceBundle.entries.some((item) => item.available) ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
+                                                :disabled="!sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) || clickedPairwiseMatch.sequenceBundle.read.status === 'reading'"
+                                                :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', sequenceReads.spansReadable(clickedPairwiseMatch.sequenceBundle.entries) ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
                                             <i class="ph ph-download-simple" aria-hidden="true"></i><span>FASTA</span>
                                         </button>
                                     </div>
