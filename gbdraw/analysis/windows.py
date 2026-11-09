@@ -15,7 +15,7 @@ over the same windows, read through the same :class:`SourcePiece` map.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 import numpy as np
@@ -23,32 +23,64 @@ from Bio.Seq import MutableSeq, Seq
 from Bio.SeqRecord import SeqRecord
 from numpy.typing import NDArray
 
-from gbdraw.core.record_metadata import _read_coord_map
+from gbdraw.core.record_metadata import _read_coord_map, record_content_digest
 
 WINDOW_SOURCE_ANNOTATION = "gbdraw_window_source"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class WindowSource:
-    """The whole sequence a record's windows read: its own, or for a crop the record it was cut from.
+    """The whole record a record's windows read: itself, or for a crop the record it was cut from.
 
-    Index ``i`` of ``sequence`` is the source coordinate ``base + step * i`` (the coordinate map of the record
-    the sequence belongs to, ``gbdraw.core.record_metadata``).
+    Index ``i`` of ``sequence`` is the source coordinate ``base + step * i`` (the coordinate map of ``record``,
+    ``gbdraw.core.record_metadata``). A crop holds its source by reference: a copy of the crop shares it, and a
+    Session writes a crop of an in-memory record as that record and the crop's window
+    (``gbdraw.session_request_codec``), so a replay reads the same flanking bases.
     """
 
-    sequence: Seq | MutableSeq
+    record: SeqRecord
     base: int
     step: Literal[-1, 1]
+    # The crop's ``record_content_digest`` when it was cut, while it is a crop of ``record`` as cut: ``None`` when
+    # it was cut from a crop changed since that crop was cut.
+    crop_digest: str | None = None
+
+    @property
+    def sequence(self) -> Seq | MutableSeq:
+        return self.record.seq
+
+    def holds_for(self, crop: SeqRecord) -> bool:
+        """Whether ``crop`` is still ``record``'s crop as it was cut, so cutting ``record`` again redraws it."""
+        return self.crop_digest is not None and self.crop_digest == record_content_digest(crop)
+
+    def __deepcopy__(self, _memo: object) -> WindowSource:
+        # Nothing writes a source record after it is cut: copies of a crop share it, as they share its sequence.
+        return self
 
 
 def keep_window_source(crop: SeqRecord, record: SeqRecord) -> None:
-    """Let ``crop``, cut from ``record``, read its flanking bases from ``record``.
+    """Let ``crop``, cut from ``record`` (and reverse-complemented when the cut says so), read its flanking bases
+    from ``record``, and mark it as ``record``'s crop as cut.
 
-    A crop of a crop already holds the first record's source (its annotations are copied), and keeps it.
+    A crop of a crop reads the first record's bases; it is that record's crop as cut only while the crop it was
+    cut from is.
     """
 
-    if not isinstance(crop.annotations.get(WINDOW_SOURCE_ANNOTATION), WindowSource):
-        crop.annotations[WINDOW_SOURCE_ANNOTATION] = window_source(record)
+    stored = record.annotations.get(WINDOW_SOURCE_ANNOTATION)
+    as_cut = not isinstance(stored, WindowSource) or stored.holds_for(record)
+    crop.annotations[WINDOW_SOURCE_ANNOTATION] = replace(
+        window_source(record), crop_digest=record_content_digest(crop) if as_cut else None
+    )
+
+
+def reversed_window_source(reversed_record: SeqRecord, record: SeqRecord) -> None:
+    """Keep ``reversed_record``, the reverse complement of the crop ``record``, a crop as cut while ``record`` is."""
+
+    stored = record.annotations.get(WINDOW_SOURCE_ANNOTATION)
+    if isinstance(stored, WindowSource):
+        reversed_record.annotations[WINDOW_SOURCE_ANNOTATION] = replace(
+            stored, crop_digest=record_content_digest(reversed_record) if stored.holds_for(record) else None
+        )
 
 
 def window_source(record: SeqRecord) -> WindowSource:
@@ -58,7 +90,7 @@ def window_source(record: SeqRecord) -> WindowSource:
     if isinstance(stored, WindowSource):
         return stored
     base, step = _read_coord_map(record)
-    return WindowSource(record.seq, base, 1 if step > 0 else -1)
+    return WindowSource(record, base, 1 if step > 0 else -1)
 
 
 @dataclass(frozen=True)

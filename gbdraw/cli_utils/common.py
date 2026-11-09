@@ -154,7 +154,7 @@ def _add_window_step_args(parser: argparse.ArgumentParser) -> None:
         '--step',
         help=(
             'step size (optional; default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb, '
-            'and at most a tenth of the window)'
+            'and at most a tenth of the Auto window)'
         ),
         type=argparse_integer)
 

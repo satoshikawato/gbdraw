@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Iterable, Iterator
 from xml.sax.saxutils import escape
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, NamedTuple, TypedDict, TypeVar
 
 from Bio.SeqFeature import ExactPosition, SeqFeature
@@ -22,6 +24,58 @@ _SOURCE_FEATURE_PARTS_ATTR = "_gbdraw_source_feature_location_parts"
 _SOURCE_FEATURE_ANCHOR_PROFILE_ATTR = "_gbdraw_source_feature_anchor_profile"
 _SOURCE_FEATURE_HASH_ATTR = "_gbdraw_source_feature_hash"
 _SourceBase = TypeVar("_SourceBase", int, "NDArray[np.int64]")
+
+
+RecordSourceKind = Literal["genbank", "gff_fasta", "fasta", "memory"]
+RECORD_ORIGIN_ANNOTATION = "gbdraw_record_origin"
+
+
+@dataclass(frozen=True)
+class RecordOrigin:
+    """Where the request planner read a planned record from, kept on the record (``RECORD_ORIGIN_ANNOTATION``).
+
+    Only the planner writes it, when it projects a planned record (``request_render._projected_source``).
+    ``content_digest`` is the record's :func:`record_content_digest` then: the origin holds only while the record
+    still has that digest (:func:`held_record_origin`), so a copy of the record keeps it and an edit ends it.
+    ``window_of`` is the key of the record whose window the record draws (D-01).
+    """
+
+    content_digest: str
+    source_kind: RecordSourceKind
+    source_paths: tuple[str, ...]
+    source_record_index: int
+    source_record_count: int
+    source_record_id: str
+    source_record_id_unique: bool
+    window_of: str | None = None
+
+
+def held_record_origin(record: SeqRecord) -> RecordOrigin | None:
+    """Where the planner read ``record`` from, while ``record`` is unchanged since; else ``None`` (OV-2923)."""
+
+    origin = (getattr(record, "annotations", None) or {}).get(RECORD_ORIGIN_ANNOTATION)
+    if isinstance(origin, RecordOrigin) and origin.content_digest == record_content_digest(record):
+        return origin
+    return None
+
+
+def record_content_digest(record: SeqRecord) -> str:
+    """A digest of what ``record`` draws: its names, sequence, features and annotations other than gbdraw's own.
+
+    Two records with one digest draw alike. A planned record carries the digest it had when it was planned or cut,
+    so a later edit of the record shows as a different digest (``RecordOrigin``, ``WindowSource``).
+    """
+
+    digest = hashlib.blake2b(digest_size=16)
+    digest.update(f"{record.id}\0{record.name}\0{record.description}\0".encode())
+    digest.update(bytes(record.seq))
+    for feature in record.features:
+        digest.update(f"\0{feature.type}\0{feature.location}\0{sorted(feature.qualifiers.items())}".encode())
+    annotations = getattr(record, "annotations", None) or {}
+    for key in sorted(annotations):
+        if not str(key).startswith("gbdraw_"):
+            digest.update(f"\0{key}\0{annotations[key]}".encode())
+    return digest.hexdigest()
 
 
 class _SourceFeatureAnchorProfile(NamedTuple):

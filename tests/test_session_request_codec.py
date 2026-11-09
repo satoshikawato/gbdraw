@@ -16,6 +16,7 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.core.record_metadata import RECORD_ORIGIN_ANNOTATION, RecordOrigin, record_content_digest
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
@@ -3249,10 +3250,13 @@ def test_in_memory_records_of_one_source_file_share_one_genbank_resource(
     """The Web shape: one file is one resource named after it, records by ID."""
 
     def record(record_id: str, source: str | None) -> SeqRecord:
-        annotations: dict[str, Any] = {"molecule_type": "DNA"}
+        item = SeqRecord(Seq("ATGC"), id=record_id, annotations={"molecule_type": "DNA"})
         if source is not None:
-            annotations["gbdraw_source_paths"] = (source,)
-        return SeqRecord(Seq("ATGC"), id=record_id, annotations=annotations)
+            # Where the planner read the record (a file no longer at hand).
+            item.annotations[RECORD_ORIGIN_ANNOTATION] = RecordOrigin(
+                record_content_digest(item), "genbank", (source,), 0, 1, record_id, True
+            )
+        return item
 
     records = (
         record("A1", "in/a.gbk"),

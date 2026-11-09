@@ -30,7 +30,8 @@ _COMPLEMENT = str.maketrans("ACGT", "TGCA")
 
 
 def _sequence() -> str:
-    return "".join(random.Random(2890).choice("ACGT") for _ in range(LENGTH))
+    rng = random.Random(2890)
+    return "".join(rng.choice("ACGT") for _ in range(LENGTH))
 
 
 def _record(sequence: str, topology: str) -> SeqRecord:
@@ -67,38 +68,47 @@ def _expected_gc(source: str, first: int, length: int, *, reverse: bool, circula
     return rows
 
 
-# (topology, region, first source index of the drawn record, reverse)
+# id, topology, the regions cropped one after the other, the first source index of the drawn record, whether it is
+# reverse-complemented, and the window.
 _CASES = [
-    ("circular", None, 0, False),
-    ("linear", None, 0, False),
-    ("circular", (1001, 3500, False), 1000, False),
-    ("linear", (1001, 3500, False), 1000, False),
-    ("linear", (1001, 3500, True), 3499, True),
+    ("circular", "circular", (), 0, False, 600),
+    ("linear", "linear", (), 0, False, 600),
+    ("crop-circular", "circular", ((1001, 3500, False),), 1000, False, 600),
+    ("crop-linear", "linear", ((1001, 3500, False),), 1000, False, 600),
+    ("crop-linear-rc", "linear", ((1001, 3500, True),), 3499, True, 600),
+    ("crop-circular-rc", "circular", ((1001, 3500, True),), 3499, True, 600),
     # A crop whose start lies less than half a window after the start of a linear record: its first windows read
     # the 200 bases before it and stop at the record's start.
-    ("linear", (201, 2000, False), 200, False),
-    ("circular", (201, 2000, False), 200, False),
-    # A crop across the origin of a circular record reads on round the origin.
-    ("circular", (4501, 500, False), 4500, False),
+    ("crop-near-start-linear", "linear", ((201, 2000, False),), 200, False, 600),
+    ("crop-near-start-circular", "circular", ((201, 2000, False),), 200, False, 600),
+    # A crop across the origin of a circular record reads on round the origin, also reverse-complemented.
+    ("crop-across-origin", "circular", ((4501, 500, False),), 4500, False, 600),
+    ("crop-across-origin-rc", "circular", ((4501, 500, True),), 499, True, 600),
+    # A crop of a crop reads the flanks of the first record: local 501..1500 of the crop 1001..3500.
+    ("crop-of-crop-linear", "linear", ((1001, 3500, False), (501, 1500, False)), 1500, False, 600),
+    ("crop-of-crop-circular", "circular", ((1001, 3500, False), (501, 1500, False)), 1500, False, 600),
+    # A window longer than the drawn record: a crop of 400 bases, and a whole record of 5,000 with 7,001-base
+    # windows (round a circular record more than once).
+    ("long-window-crop", "linear", ((2001, 2400, False),), 2000, False, 1_001),
+    ("long-window-linear", "linear", (), 0, False, 7_001),
+    ("long-window-circular", "circular", (), 0, False, 7_001),
 ]
-_IDS = ["circular", "linear", "crop-circular", "crop-linear", "crop-linear-rc", "crop-near-start-linear",
-        "crop-near-start-circular", "crop-across-origin"]
+_IDS = [case[0] for case in _CASES]
 
 
-def _drawn(topology: str, region: tuple[int, int, bool] | None) -> tuple[str, SeqRecord]:
+def _drawn(topology: str, regions: tuple[tuple[int, int, bool], ...]) -> tuple[str, SeqRecord]:
     source = _sequence()
     record = _record(source, topology)
-    if region is not None:
+    for region in regions:
         record = crop_record_to_region(record, _region(*region), circular=topology == "circular")
     return source, record
 
 
-@pytest.mark.parametrize("topology,region,first,reverse", _CASES, ids=_IDS)
-def test_gc_windows_read_the_bases_next_to_them_on_the_molecule(
-    topology: str, region: tuple[int, int, bool] | None, first: int, reverse: bool
-) -> None:
-    window, step = 600, 50
-    source, record = _drawn(topology, region)
+@pytest.mark.parametrize("case", _CASES, ids=_IDS)
+def test_gc_windows_read_the_bases_next_to_them_on_the_molecule(case) -> None:
+    _id, topology, regions, first, reverse, window = case
+    step = 50
+    source, record = _drawn(topology, regions)
     frame = skew_df(record, window, step, "GC", circular=topology == "circular")
     expected = _expected_gc(
         source, first, len(record.seq), reverse=reverse, circular=topology == "circular", window=window, step=step
@@ -106,6 +116,13 @@ def test_gc_windows_read_the_bases_next_to_them_on_the_molecule(
     assert frame.index.tolist() == list(expected)
     assert frame["GC content"].tolist() == pytest.approx([content for content, _ in expected.values()], abs=1e-12)
     assert frame["GC skew"].tolist() == pytest.approx([skew for _, skew in expected.values()], abs=1e-12)
+
+
+def test_the_test_sequence_is_mixed() -> None:
+    """The brute-force cases above see a wrong window only on a sequence whose windows differ."""
+
+    source = _sequence()
+    assert {source.count(base) for base in "ACGT"} != {0} and min(source.count(base) for base in "ACGT") > 1_000
 
 
 def test_a_crops_windows_equal_the_same_windows_of_its_source() -> None:
@@ -122,31 +139,54 @@ def test_a_crops_windows_equal_the_same_windows_of_its_source() -> None:
 
 
 def _depths() -> np.ndarray:
-    return np.array([random.Random(2919 + i).randint(0, 60) for i in range(LENGTH)], dtype=np.int64)
+    rng = random.Random(2919)
+    return np.array([rng.randint(0, 60) for _ in range(LENGTH)], dtype=np.int64)
 
 
-def _depth_table(depths: np.ndarray) -> pd.DataFrame:
+def _depth_table(depths: np.ndarray, rows: range | None = None) -> pd.DataFrame:
+    positions = np.arange(1, len(depths) + 1) if rows is None else np.array(rows) + 1
     return pd.DataFrame(
-        {"reference_name": ["src"] * len(depths), "position": np.arange(1, len(depths) + 1), "depth": depths}
+        {"reference_name": ["src"] * len(positions), "position": positions, "depth": depths[positions - 1]}
     )
 
 
-@pytest.mark.parametrize("topology,region,first,reverse", _CASES, ids=_IDS)
-def test_depth_windows_follow_the_same_rule(
-    topology: str, region: tuple[int, int, bool] | None, first: int, reverse: bool
-) -> None:
-    window, step = 600, 50
+def _expected_depths(depths, rows: range, drawn: set[int], case) -> dict[int, float]:
+    """Each window's mean over the bases it reads: a drawn base, or a flank base within ``rows`` (the source
+    indexes from the first to the last row); a base inside both with no row adds 0 (D-64)."""
+
+    _id, topology, _regions, first, reverse, window = case
+    held = np.zeros(LENGTH)
+    held[list(rows)] = depths[list(rows)]
+    expected = {}
+    length = len(drawn)
+    for p, indices in _window_indices(first, length, reverse, topology == "circular", LENGTH, window, 50):
+        read = [i for i in indices if i in drawn or rows.start <= i < rows.stop]
+        expected[p] = float(held[read].sum()) / len(read)
+    return expected
+
+
+@pytest.mark.parametrize("rows", [range(0, LENGTH), range(0, 3_200), range(1_200, 3_300)], ids=["all", "to-3200", "1200-3300"])
+@pytest.mark.parametrize("case", _CASES, ids=_IDS)
+def test_depth_windows_follow_the_same_rule(case, rows: range) -> None:
+    """Depth reads the same windows; past the drawn record it reads only where the rows of the file reach, so the
+    rows of the drawn region alone draw no fall at its ends (D-64)."""
+
+    _id, topology, regions, first, reverse, window = case
     depths = _depths()
-    _source, record = _drawn(topology, region)
-    frame = depth_df(record, _depth_table(depths), window, step, circular=topology == "circular")
-    expected = {
-        p: float(depths[indices].sum()) / len(indices)
-        for p, indices in _window_indices(
-            first, len(record.seq), reverse, topology == "circular", LENGTH, window, step
-        )
-    }
+    _source, record = _drawn(topology, regions)
+    drawn = {(first - x if reverse else first + x) % LENGTH for x in range(len(record.seq))}
+    frame = depth_df(record, _depth_table(depths, rows), window, 50, circular=topology == "circular")
+    expected = _expected_depths(depths, rows, drawn, case)
     assert frame["position"].tolist() == list(expected)
     assert frame["depth"].tolist() == pytest.approx(list(expected.values()), rel=1e-12)
+
+
+def test_rows_of_the_drawn_region_alone_draw_a_flat_line() -> None:
+    """A flat region-only depth file (``samtools depth -r``) draws flat, as before the flanks were read (D-64)."""
+
+    record = crop_record_to_region(_record("A" * 100_000, "linear"), _region(40_001, 60_000))
+    rows = pd.DataFrame({"reference_name": "src", "position": np.arange(40_001, 60_001), "depth": 50})
+    assert set(depth_df(record, rows, 2_000, 200, circular=False)["depth"]) == {50.0}
 
 
 # Through the drawing: the samples whose windows see a G run stand out from an all-A record.

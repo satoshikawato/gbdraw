@@ -327,7 +327,7 @@ def test_window_sums_equal_the_per_base_running_sums(
 
     rng = np.random.default_rng([base & 0xFFFF, coord_step + 1, len(kind)])
     depths = _random_depths(rng, kind, 1000)
-    coverage = DepthCoverage(depths={"chr": depths})
+    coverage = DepthCoverage(depths={"chr": depths}, extents={"chr": (1, len(depths))})
     for chunk in (1, 7, 64, 1 << 20):
         monkeypatch.setattr(depth_module, "_SUM_CHUNK_BASES", chunk)
         for record_len, window, step in ((1, 1, 1), (999, 10, 3), (1200, 97, 97), (640, 1000, 50)):
@@ -351,7 +351,7 @@ def test_binning_a_record_holds_no_per_base_float_array() -> None:
     depths = np.ones(length, dtype=np.uint8)
     depths.flags.writeable = False
     record = SeqRecord(Seq(None, length=length), id="chr")
-    coverage = DepthCoverage(depths={"chr": depths})
+    coverage = DepthCoverage(depths={"chr": depths}, extents={"chr": (1, len(depths))})
 
     tracemalloc.start()
     try:
