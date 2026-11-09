@@ -810,14 +810,14 @@ def _across_centre(
     track: ResolvedAnnotationTrack, band: _LaneBand, labels: LabelSizing, params: AnnotationTrackParams, *, labelled: bool
 ) -> ResolvedAnnotationTrack:
     """``track``, leaving out (``ResolvedAnnotationTrack.without_room``) the labels whose letters the drawer draws over
-    the centre of the circle onto a mark (``LabelSizing.across_centre``; OV-2991): no room keeps such letters clear of
-    the marks they meet there, so they are left out as a label whose room would carry its lanes past the centre is
-    (LBL-ROOM-STOP-AT-CENTRE-OMIT; in a clipped slot of set size, LBL-ROOM-CLIP-FIT-OMIT), and counted where the
-    track's rooms stop (``rooms_stop``). Unchanged where the slot draws no labels of its own (not ``labelled``), its
-    letters cannot pass the centre, or its rooms have no stop (``band.limit_px``: a set size with overflow error or
-    compress, which the Contract does not name for such a label; OV-2991-B)."""
+    the centre of the circle onto a mark (``LabelSizing.across_centre``; LBL-ACROSS-CENTRE-OMIT, OV-2991, OV-3035): no
+    room keeps such letters clear of the marks they meet there. They are left out whatever the slot's width and
+    overflow (OV-2991-B), and counted where the track's rooms stop (``rooms_stop``): with the labels left out at the
+    centre of the circle, or in a clipped slot with those left out there (``band.stop``; a set size with overflow
+    error or compress stops at the centre). Unchanged where the slot draws no labels of its own (not ``labelled``) or
+    its letters cannot pass the centre."""
 
-    if not labelled or labels.across_centre is None or band.limit_px is None:
+    if not labelled or labels.across_centre is None:
         return track
     met = labels.across_centre(track, params, band.drawn_extent_px(lane_count_of(track.placements), track.lane_room_px))
     if not met:

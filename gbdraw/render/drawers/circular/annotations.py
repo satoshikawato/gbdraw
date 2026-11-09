@@ -667,11 +667,12 @@ def circular_annotation_labels_across_centre(
     clearance_px: float,
 ) -> frozenset[tuple[int, str]]:
     """The labels (record index, annotation id) of an inside track whose letters ``circular_annotation_labels`` draws
-    over the centre of the circle and within their ``label_offset`` of another annotation's painted mark
-    (``_mark_ink``), its lanes taking ``extent_px`` toward the centre from ``lanes_from_px`` and its labels placed as
-    ``circular_annotation_lanes_meeting`` places them. Letters too wide for the circle their mark leaves them are
-    centred on the centre of the circle and come back across it, where no room keeps them clear of the marks they meet
-    (OV-2991). The lane packer's measure (``LabelSizing.across_centre``)."""
+    over the centre of the circle and within their ``label_offset`` of another annotation's painted mark, or across the
+    paint of their own mark (``_mark_ink``), its lanes taking ``extent_px`` toward the centre from ``lanes_from_px`` and
+    its labels placed as ``circular_annotation_lanes_meeting`` places them. Letters too wide for the circle their mark
+    leaves them are centred on the centre of the circle and come back across it, where no room keeps them clear of the
+    marks they meet (LBL-ACROSS-CENTRE-OMIT; OV-2991, OV-3035). Letters that only come nearer their own mark than their
+    ``label_offset`` are not counted. The lane packer's measure (``LabelSizing.across_centre``)."""
 
     ring = AnnotationRing(max(0.0, lanes_from_px - extent_px), lanes_from_px, "inside")
     met: set[tuple[int, str]] = set()
@@ -706,10 +707,9 @@ def circular_annotation_labels_across_centre(
             (record_index, label.annotation_id)
             for label in across
             if any(
-                convex_polygons_intersect(grown_convex_polygon(part, label.label_offset), mark)
+                convex_polygons_intersect(part if identity == label.annotation_id else grown_convex_polygon(part, label.label_offset), mark)
                 for part in label.parts
                 for identity, parts in marks.items()
-                if identity != label.annotation_id
                 for mark in parts
             )
         )

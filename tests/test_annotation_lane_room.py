@@ -1556,25 +1556,42 @@ def test_an_inside_label_whose_letters_pass_the_centre_onto_other_marks_is_left_
 
 
 @pytest.mark.parametrize("slot", (",w=345px,overflow=error", ",w=340px,overflow=error", ",w=345px,overflow=compress"))
-def test_an_inside_label_whose_letters_pass_the_centre_in_a_set_width_that_errors_or_compresses_is_drawn(slot: str) -> None:
-    # OV-2991-B: a slot whose width is set with overflow error or compress has no room stop: the Contract leaves out a
-    # label across the centre only without a set width (LBL-ROOM-STOP-AT-CENTRE-OMIT) or in a clipped slot
-    # (LBL-ROOM-CLIP-FIT-OMIT). Seven nested bands, only r6 labelled at 24 pt, in a set width that fits before the
-    # centre: r6 is drawn across the centre, as before, until the Owner decides that case.
+def test_an_inside_label_whose_letters_pass_the_centre_in_a_set_width_that_errors_or_compresses_is_left_out(slot: str) -> None:
+    # OV-2991-B (Owner 2026-11-09: A), LBL-ACROSS-CENTRE-OMIT: whatever an inside slot's width and overflow, a label
+    # drawn across the centre whose letters come within their label offset of another mark is left out. Seven nested
+    # bands, only r6 labelled at 24 pt, in a set width that fits before the centre: r6's letters, centred on the
+    # centre, come back over r5 and r4. It is not drawn, every mark is, the warning counts it with the labels left out
+    # for want of room before the centre, and the slot raises no error.
     drawn = _bands_and_left_out(_SEVEN_NESTED, slot, "horizontal", empty=frozenset(f"r{index}" for index in range(6)), size=24)
 
-    assert [label.annotation_id for label in drawn.drawn] == ["r6"], drawn.drawn
-    assert not any("left out for want of room" in message for message in drawn.messages), drawn.messages
+    assert not drawn.drawn, drawn.drawn
+    assert all(_marked(drawn.items[identity]) for identity, *_rest in _SEVEN_NESTED)
+    assert any("1 region label left out for want of room before the centre" in message for message in drawn.messages), (
+        drawn.messages
+    )
 
 
-def test_an_inside_label_whose_letters_pass_the_centre_onto_no_other_mark_is_drawn() -> None:
-    # OV-2991: a label whose letters pass the centre but meet no other annotation's mark is drawn, as before (over
-    # the centre definition it is drawn and warned, Q21=A). Its letters come within their label offset of its own
-    # mark; whether that leaves it out is a question for the Owner, not this fix.
-    drawn = _bands_and_left_out(_SEVEN_NESTED[:1], "", "horizontal", size=60)
+@pytest.mark.parametrize(("size", "is_drawn"), ((60, True), (96, False)))
+@pytest.mark.parametrize("slot", ("", ",w=20px,overflow=error", ",w=20px,overflow=compress", ",w=20px,overflow=clip"))
+def test_an_inside_label_whose_letters_pass_the_centre_onto_its_own_mark_is_left_out(
+    size: float, is_drawn: bool, slot: str
+) -> None:
+    # OV-3035 (Owner 2026-11-09: C), LBL-ACROSS-CENTRE-OMIT: one band, labelled, in an inside slot without a set
+    # width or one about as wide as the band (14 px) with each overflow. Its letters are wider than the circle its band
+    # leaves them, so the drawer centres them on the centre of the circle. At 60 pt they stop short of the band, nearer
+    # it than their label offset (4 px; 3 px clears it): the label is drawn, as before. At 96 pt they cross the band:
+    # the label is left out, its band is drawn, and the warning counts it.
+    drawn = _bands_and_left_out(_SEVEN_NESTED[:1], slot, "horizontal", size=size)
+    counted = any("1 region label left out" in message for message in drawn.messages)
 
-    (label,) = drawn.drawn
-    assert label.annotation_id == "r0" and label.ink_radii[0] == 0.0, label.ink_radii
+    assert _marked(drawn.items["r0"])
+    if is_drawn:
+        (label,) = drawn.drawn
+        assert label.annotation_id == "r0" and label.ink_radii[0] == 0.0, label.ink_radii
+        assert not counted, drawn.messages
+    else:
+        assert not drawn.drawn, drawn.drawn
+        assert counted, drawn.messages
 
 
 def test_an_inside_slot_adds_each_room_that_fits_before_the_centre() -> None:
