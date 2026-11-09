@@ -453,7 +453,7 @@ test('a loaded Result with a cropped wrapped record: a PDF over the limit makes 
   // Review 1 M2: the edited card would cut nothing, but the Result shown drew 5001..35000.
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.setLinearRecordCrop(app.linearSeqs[0], 'region_end', 5100);
+    app.setLinearCardWindow(app.linearSeqs[0], 0, 'end', 5100);
   });
   await settle(page);
   expect(await cardRegion()).toEqual([5001, 5100]);

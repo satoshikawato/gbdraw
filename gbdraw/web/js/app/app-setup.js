@@ -1398,7 +1398,7 @@ export const createAppSetup = () => {
   };
   const losatSettings = createLosatSettings({ state, planLinearUnits, windowsOf: linearDrawingWindowsOf });
   const {
-    linearRegionNote, linearCardWindowRows, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
+    linearRegionNote, linearCardWindowView, linearLayoutCellRows, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
     committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds,
     shownLinearWrapLeaf, shownLinearWrapReading
   } = createShownDrawingReaders({
@@ -3263,12 +3263,12 @@ export const createAppSetup = () => {
     state, linearSourceGroups, shownAction, shownDrawingOfMode, runUndoable: history.runUndoable, applyLinearSeqMutation
   });
   const {
-    setLinearRecordSelector, setLinearRecordCrop, resetLinearRecordDefinition, resetLinearRecordSubtitle
+    setLinearRecordSelector, setLinearCardWindow, addLinearCardWindow, removeLinearCardWindow, resetLinearRecordDefinition, resetLinearRecordSubtitle
   } = createLinearRecordEdits({
     sessionOperationAvailability, shownDrawingOfMode, runUndoable: history.runUndoable,
     clearAlignmentForMutation: similarityAlignmentActions.clearForMutation,
     linearRecordsFor: linearRecordSelector.recordsFor, linearRecordStatusFor: linearRecordSelector.statusFor,
-    rebindAnnotationRecords
+    rebindAnnotationRecords, applyLinearSeqMutation
   });
   const { setCircularInputType, setLinearInputType } = createInputTypeEdits({
     sessionOperationAvailability, shownDrawingOfMode, changeRecordSources, discoverDrawingRecords,
@@ -3635,7 +3635,7 @@ export const createAppSetup = () => {
     setLinearSeqPrimaryFile,
     setLinearInputType,
     setLinearRecordSelector,
-    setLinearRecordCrop,
+    setLinearCardWindow, addLinearCardWindow, removeLinearCardWindow,
     linearSourceMoveBlockedReason,
     canMoveLinearSource,
     moveLinearSource,
@@ -4274,7 +4274,7 @@ export const createAppSetup = () => {
     circularRegionNote,
     circularWindowRows,
     linearRegionNote,
-    linearCardWindowRows,
+    linearCardWindowView, linearLayoutCellRows,
     notice: noticeBanner.notice,
     dismissNotice: noticeBanner.dismiss,
     circularRecordPresentationPanel,

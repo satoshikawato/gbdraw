@@ -3299,7 +3299,7 @@
                             <linear-record-names v-if="!linearFileCardRecord(source)" :seq="seq" :idx="idx" :source="source" :disabled="!semanticMutationAvailable" @reset-definition="resetLinearRecordDefinition" @reset-subtitle="resetLinearRecordSubtitle"></linear-record-names>
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-                                    <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">{{ t('Region') }}</span>
+                                    <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">{{ seq.windows.length > 1 ? t('Windows') : t('Region') }}</span>
                                     <help-tip :id="`help-linear-region-${seq.uid}`" :text="t('Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #<number>. A region that reaches past the record end is drawn to the record end.')"></help-tip>
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
@@ -3328,35 +3328,67 @@
                                                 {{ linearRecordSelectorWarning(seq) }}
                                             </p>
                                         </div>
-                                        <label v-if="!seq.windows.length" class="flex shrink-0 items-center gap-2 text-[10px] text-slate-600">
-                                            <input type="checkbox"
-                                                   v-model="seq.region_reverse"
-                                                   :aria-label="t('Reverse complement for sequence {n}', { n: idx + 1 })"
-                                                   class="form-checkbox" :disabled="!semanticMutationAvailable"> {{ t('Reverse complement') }}
-                                        </label>
-                                    </div>
-                                    <div v-if="seq.windows.length" data-record-windows class="space-y-1">
-                                        <div class="flex items-center justify-between text-[10px] text-slate-600">
-                                            <span class="font-semibold">{{ t('Windows') }}</span>
-                                            <span>{{ tn(seq.windows.length, '{count} window of this record', '{count} windows of this record') }}</span>
                                         </div>
-                                        <ol class="space-y-0.5" :aria-label="t('Windows of sequence {n}', { n: idx + 1 })">
-                                            <li v-for="row in linearCardWindowRows(seq)" :key="row.number" data-record-window class="flex items-center justify-between gap-2 text-xs text-slate-700">
-                                                <span>{{ row.number }}. {{ row.span }}<span v-if="row.reverseComplement" class="text-[10px] text-slate-500"> ({{ t('Reverse complement') }})</span></span>
-                                                <span class="text-[10px] text-slate-500">{{ row.length }}</span>
-                                            </li>
-                                        </ol>
-                                    </div>
-                                    <div v-else class="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <label class="text-[9px] block">{{ t('Start') }}</label>
-                                            <input type="number" min="1" :value="seq.region_start ?? ''" @change="setLinearRecordCrop(seq, 'region_start', $event.target.value)" :aria-label="t('Region start for sequence {n}', { n: idx + 1 })" :aria-describedby="`help-linear-region-${seq.uid}`" :placeholder="t('Start (1)')" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
-                                        </div>
-                                        <div>
-                                            <label class="text-[9px] block">{{ t('End') }}</label>
-                                            <input type="number" min="1" :value="seq.region_end ?? ''" @change="setLinearRecordCrop(seq, 'region_end', $event.target.value)" :aria-label="t('Region end for sequence {n}', { n: idx + 1 })" :aria-describedby="`help-linear-region-${seq.uid}${linearRegionNote(seq) ? ` linear-region-note-${seq.uid}` : ''}`" :placeholder="t('Record end')" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
-                                        </div>
-                                    </div>
+                                        <template v-for="view in [linearCardWindowView(seq)]" :key="`windows-${seq.uid}`">
+                                            <div v-if="view.windows.length < 2" data-record-region-fields class="grid grid-cols-1 gap-1">
+                                                <label class="flex shrink-0 items-center gap-2 text-[10px] text-slate-600">
+                                                    <input type="checkbox"
+                                                           :checked="view.windows[0].reverseComplement"
+                                                           @change="setLinearCardWindow(seq, 0, 'reverseComplement', $event.target.checked)"
+                                                           :aria-label="t('Reverse complement for sequence {n}', { n: idx + 1 })"
+                                                           class="form-checkbox" :disabled="!semanticMutationAvailable"> {{ t('Reverse complement') }}
+                                                </label>
+                                                <label v-if="view.circular || view.windows[0].acrossOrigin" class="flex shrink-0 items-center gap-2 text-[10px] text-slate-600">
+                                                    <input type="checkbox"
+                                                           :checked="view.windows[0].acrossOrigin"
+                                                           @change="setLinearCardWindow(seq, 0, 'acrossOrigin', $event.target.checked)"
+                                                           :aria-label="t('Across the origin for sequence {n}', { n: idx + 1 })"
+                                                           class="form-checkbox" :disabled="!semanticMutationAvailable"> {{ t('Across the origin') }}
+                                                </label>
+                                                <div class="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label class="text-[9px] block">{{ t('Start') }}</label>
+                                                        <input type="number" min="1" :value="view.windows[0].start ?? ''" @change="setLinearCardWindow(seq, 0, 'start', $event.target.value)" :aria-label="t('Region start for sequence {n}', { n: idx + 1 })" :aria-describedby="`help-linear-region-${seq.uid}`" :placeholder="t('Start (1)')" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                                    </div>
+                                                    <div>
+                                                        <label class="text-[9px] block">{{ t('End') }}</label>
+                                                        <input type="number" min="1" :value="view.windows[0].end ?? ''" @change="setLinearCardWindow(seq, 0, 'end', $event.target.value)" :aria-label="t('Region end for sequence {n}', { n: idx + 1 })" :aria-describedby="`help-linear-region-${seq.uid}${linearRegionNote(seq) ? ` linear-region-note-${seq.uid}` : ''}`" :placeholder="t('Record end')" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                                    </div>
+                                                </div>
+                                                <p v-if="view.windows[0].originText" data-record-window-origin class="text-[9px] text-slate-600">{{ view.windows[0].originText }}</p>
+                                            </div>
+                                            <div v-else data-record-windows class="space-y-1">
+                                            <p data-record-window-count class="text-[10px] text-slate-600">{{ tn(view.windows.length, '{count} window of this record', '{count} windows of this record') }}</p>
+                                            <ol class="space-y-1" :aria-label="t('Windows of sequence {n}', { n: idx + 1 })">
+                                                <li v-for="row in view.windows" :key="row.index" data-record-window :data-window-number="row.number" class="space-y-1">
+                                                    <div class="rounded border border-slate-200 bg-white/70 p-1.5 space-y-1">
+                                                        <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-1.5">
+                                                            <span class="mb-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-600 text-[9px] font-bold text-slate-700" :aria-label="t('Window {n}', { n: row.number })">{{ row.number }}</span>
+                                                            <div class="min-w-0">
+                                                                <label class="text-[9px] block">{{ t('Start') }}</label>
+                                                                <input type="number" min="1" :value="row.start ?? ''" @change="setLinearCardWindow(seq, row.index, 'start', $event.target.value)" :aria-label="t('Window {w} start for sequence {n}', { w: row.number, n: idx + 1 })" :placeholder="t('Start (1)')" class="form-input w-full min-w-0 px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                                            </div>
+                                                            <div class="min-w-0">
+                                                                <label class="text-[9px] block">{{ t('End') }}</label>
+                                                                <input type="number" min="1" :value="row.end ?? ''" @change="setLinearCardWindow(seq, row.index, 'end', $event.target.value)" :aria-label="t('Window {w} end for sequence {n}', { w: row.number, n: idx + 1 })" :placeholder="t('Record end')" class="form-input w-full min-w-0 px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                                            </div>
+                                                            <button type="button" data-history-managed data-record-window-remove @click="removeLinearCardWindow(seq, row.index)" :aria-label="t('Remove window {w} of sequence {n}', { w: row.number, n: idx + 1 })" class="mb-1 text-[10px] text-red-600 hover:text-red-700" :disabled="!semanticMutationAvailable">{{ t('Remove') }}</button>
+                                                        </div>
+                                                        <label class="flex items-center gap-2 text-[10px] text-slate-600">
+                                                            <input type="checkbox" :checked="row.reverseComplement" @change="setLinearCardWindow(seq, row.index, 'reverseComplement', $event.target.checked)" :aria-label="t('Window {w} reverse complement for sequence {n}', { w: row.number, n: idx + 1 })" class="form-checkbox" :disabled="!semanticMutationAvailable"> {{ t('Reverse complement') }}
+                                                        </label>
+                                                        <label v-if="view.circular || row.acrossOrigin" class="flex items-center gap-2 text-[10px] text-slate-600">
+                                                            <input type="checkbox" :checked="row.acrossOrigin" @change="setLinearCardWindow(seq, row.index, 'acrossOrigin', $event.target.checked)" :aria-label="t('Window {w} across the origin for sequence {n}', { w: row.number, n: idx + 1 })" class="form-checkbox" :disabled="!semanticMutationAvailable"> {{ t('Across the origin') }}
+                                                        </label>
+                                                        <p v-if="row.originText" data-record-window-origin class="text-[9px] text-slate-600">{{ row.originText }}</p>
+                                                        <p v-if="row.start === null && row.end === null" class="text-[9px] text-slate-500">{{ t('The whole record until Start and End are set.') }}</p>
+                                                    </div>
+                                                    <p v-if="row.gapText" data-record-window-gap class="px-1 text-[9px] text-slate-600">{{ row.gapText }}</p>
+                                                </li>
+                                            </ol>
+                                            </div>
+                                            <button type="button" data-history-managed data-record-window-add @click="addLinearCardWindow(seq)" :aria-label="t('Add window to sequence {n}', { n: idx + 1 })" class="justify-self-start text-[10px] font-semibold text-blue-600 hover:text-blue-700" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add window') }}</button>
+                                        </template>
                                     <p v-if="linearRegionNote(seq)" :id="`linear-region-note-${seq.uid}`" data-region-clamp-note class="text-[9px] text-amber-700">{{ linearRegionNote(seq) }}</p>
                                 </div>
                             </div>
@@ -4020,14 +4052,16 @@
                                     {{ t('Arrange in rows') }}
                                 </label>
                                 <div v-if="linearRecordLayoutEnabled" class="min-w-0 space-y-1.5">
-                                    <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem] gap-1" v-for="(seq, idx) in linearSeqs" :key="`layout-${seq.uid}`" :class="{ 'opacity-60': !recordSelection.isDrawn('linear', seq.uid) }">
-                                        <div class="flex min-w-0 items-center self-center text-[10px] font-semibold text-slate-600" data-linear-record-layout-name><record-name :prefix="`#${idx + 1}`" v-bind="linearComparisonRecordName(seq.uid)"></record-name><span v-if="!recordSelection.isDrawn('linear', seq.uid)" data-record-off-badge class="ml-1 shrink-0 rounded bg-slate-200 px-1 text-[9px] text-slate-700">{{ t('OFF') }}</span></div>
-                                        <input type="number" min="1" :value="linearRecordRowFor(seq.uid, idx + 1)" @input="setLinearRecordRow(seq.uid, $event.target.value)" class="form-input form-input-compact min-w-0" :aria-label="t('Linear record row for sequence {n}', { n: idx + 1 })" :disabled="!semanticMutationAvailable">
-                                        <div class="col-span-2 grid min-w-0 grid-cols-2 gap-1">
-                                            <button type="button" class="btn btn-secondary min-w-0 px-1 py-0.5 text-[10px]" @click="moveLinearRecordWithinRow(seq.uid, -1)" :disabled="!semanticMutationAvailable">{{ t('Up') }}</button>
-                                            <button type="button" class="btn btn-secondary min-w-0 px-1 py-0.5 text-[10px]" @click="moveLinearRecordWithinRow(seq.uid, 1)" :disabled="!semanticMutationAvailable">{{ t('Down') }}</button>
+                                    <template v-for="cell in linearLayoutCellRows()" :key="`layout-${cell.key}`">
+                                        <div v-for="seq in [linearSeqs[cell.cardIndex]]" :key="`layout-cell-${cell.key}`" class="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem] gap-1" data-linear-record-layout-cell :data-layout-window="cell.window ?? ''" :class="{ 'opacity-60': !recordSelection.isDrawn('linear', seq.uid) }">
+                                            <div class="flex min-w-0 items-center self-center gap-1 text-[10px] font-semibold text-slate-600" data-linear-record-layout-name><record-name :prefix="`#${cell.cardIndex + 1}`" v-bind="linearComparisonRecordName(seq.uid)"></record-name><span v-if="cell.number !== null" data-linear-record-layout-window class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-600 text-[9px] font-bold text-slate-700" :aria-label="t('Window {n}', { n: cell.number })">{{ cell.number }}</span><span v-if="!recordSelection.isDrawn('linear', seq.uid)" data-record-off-badge class="ml-1 shrink-0 rounded bg-slate-200 px-1 text-[9px] text-slate-700">{{ t('OFF') }}</span></div>
+                                            <input type="number" min="1" :value="linearRecordRowFor(seq.uid, cell.cardIndex + 1)" @input="setLinearRecordRow(seq.uid, $event.target.value)" class="form-input form-input-compact min-w-0" :aria-label="t('Linear record row for sequence {n}', { n: cell.cardIndex + 1 })" :disabled="!semanticMutationAvailable">
+                                            <div class="col-span-2 grid min-w-0 grid-cols-2 gap-1">
+                                                <button type="button" class="btn btn-secondary min-w-0 px-1 py-0.5 text-[10px]" @click="moveLinearRecordWithinRow(seq.uid, -1, cell.window)" :disabled="!semanticMutationAvailable">{{ t('Up') }}</button>
+                                                <button type="button" class="btn btn-secondary min-w-0 px-1 py-0.5 text-[10px]" @click="moveLinearRecordWithinRow(seq.uid, 1, cell.window)" :disabled="!semanticMutationAvailable">{{ t('Down') }}</button>
+                                            </div>
                                         </div>
-                                    </div>
+                                    </template>
                                     <label class="linear-primary-label block">{{ t('Record gap (px)') }}
                                         <input type="number" min="0" step="1" v-model.number="linearRecordGap" :aria-label="t('Linear record gap')" class="form-input mt-1 min-w-0 px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </label>

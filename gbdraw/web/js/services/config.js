@@ -306,6 +306,7 @@ import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } fr
 import { LABEL_TABLES_SLICE, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
 import { drawsSeveralUnits, planLinearUnitSearch } from './linear-units.js';
+import { catalogRecordLength, resolveWholeRecordWindows } from './linear-card-windows.js';
 /** @import { LinearUnitPlanPayload, LinearUnitWindowsOf } from './linear-units.js' */
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
@@ -4200,10 +4201,10 @@ export const assertDrawingInputs = (drawing) => {
 // `sequences`: the drawn record files, in request order. `cards`: every
 // Linear card, OFF cards included; an error names its card number among them.
 /**
- * @template {{ uid?: unknown, region_start?: unknown, region_end?: unknown, windows?: unknown }} S
+ * @template {{ uid?: unknown, region_start?: unknown, region_end?: unknown, windows?: readonly LinearSeqWindow[] }} S
  * @param {S[]} sequences
  * @param {{ mode?: unknown, status?: unknown, issues?: { code: string, context?: DiagnosticContext }[],
- *   records?: { sourceIndex?: unknown }[] } | null | undefined} catalog
+ *   records?: { sourceIndex?: unknown, recordLength?: unknown }[] } | null | undefined} catalog
  * @param {{ cards?: { uid: string }[] }} [options]
  * @returns {S[]}
  */
@@ -4238,7 +4239,8 @@ export const materializeLinearRecordFiles = (
       throw diagnosticError('REGION_INVALID', { inputOrdinal, reason: 'SELECT_RECORD_FOR_REGION' });
     }
   });
-  return sourceSequences;
+  // A listed window with Start and End empty draws its card's whole record (PD-OI-124).
+  return sourceSequences.map((source, sourceIndex) => resolveWholeRecordWindows(source, catalogRecordLength(catalog, sourceIndex)));
 };
 
 /**

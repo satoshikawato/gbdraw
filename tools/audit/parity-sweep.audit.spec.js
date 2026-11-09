@@ -77,7 +77,7 @@ const LINEAR_PROBES = [
   ['label_placement_above', 'a.form.show_labels_linear="all"; a.adv.label_placement="above_feature";'],
   // The uploaded BLAST table has full-record coordinates, so a crop rejects it (COMPARISON_INPUT
   // SEARCH_FRAME, correct). No comparison keeps the probe about the crop and reverse complement.
-  ['region_rc', 'return (async () => { await a.setLinearComparisonGlobalAction("none"); a.setLinearRecordCrop(a.linearSeqs[0], "region_start", 1000); a.setLinearRecordCrop(a.linearSeqs[0], "region_end", 60000); a.linearSeqs[0].region_reverse=true; })();']
+  ['region_rc', 'return (async () => { await a.setLinearComparisonGlobalAction("none"); a.setLinearCardWindow(a.linearSeqs[0], 0, "start", 1000); a.setLinearCardWindow(a.linearSeqs[0], 0, "end", 60000); a.linearSeqs[0].region_reverse=true; })();']
 ];
 
 // Every probe starts from a freshly opened app with the inputs loaded, so no option leaks

@@ -252,3 +252,129 @@ export const moveLinearRecordInRow = (sequences, entries, uid, direction) => {
   }
   return reconcileLinearRecordLayout(sequenceList, layout);
 };
+
+/**
+ * A record slot as the Record Layout cells read it: its uid and its windows (a card drawn in several windows has one
+ * cell per window, PD-OI-124).
+ * @typedef {{ uid?: unknown, windows: readonly { column: number | null }[] }} LayoutCard
+ */
+/**
+ * One cell of the Record Layout: a card drawn whole or in one window (`window` null), or one window of a card drawn
+ * in several (its index in the card's list). `row` is the card's row, shared by its cells; `position` is the cell's
+ * place in its row (from 1), the order the request writes and the drawing numbers its windows by; `placed`, whether
+ * the cell has a stored place, `column`.
+ * @typedef {{ uid: string, cardIndex: number, window: number | null, row: number, position: number, placed: boolean, column: number | null }} LinearLayoutCell
+ */
+
+/**
+ * The Record Layout's cells in drawing order: by row, then by their stored place in the row (a window's `column`, a
+ * whole card's `canonicalColumn`), then cards and windows in list order. A cell without a stored place follows those
+ * with one, so cards that never moved keep the list order of the rows they share.
+ * @param {readonly LayoutCard[]} cards
+ * @param {LayoutEntry[] | null | undefined} entries
+ * @returns {LinearLayoutCell[]}
+ */
+export const linearLayoutCells = (cards, entries) => {
+  const layout = reconcileLinearRecordLayout(cards, entries);
+  const placed = cards.flatMap((card, cardIndex) => {
+    const { uid, row, canonicalColumn } = layout[cardIndex];
+    return card.windows.length > 1
+      ? card.windows.map((window, index) => ({ uid, cardIndex, window: /** @type {number | null} */ (index), row, column: window.column }))
+      : [{ uid, cardIndex, window: /** @type {number | null} */ (null), row, column: canonicalColumn ?? null }];
+  }).sort((left, right) => left.row - right.row
+    || (left.column ?? Infinity) - (right.column ?? Infinity)
+    || left.cardIndex - right.cardIndex
+    || (left.window ?? -1) - (right.window ?? -1));
+  /** @type {Map<number, number>} */
+  const filled = new Map();
+  return placed.map(({ uid, cardIndex, window, row, column }) => {
+    const position = (filled.get(row) || 0) + 1;
+    filled.set(row, position);
+    return { uid, cardIndex, window, row, position, placed: column !== null, column };
+  });
+};
+
+/**
+ * The place the request writes for each cell of an arranged layout (`grid_column` of a whole card, `column` of a
+ * window), keyed by `layoutCellKey`, when the stored places cannot be written as they are: only some cells have one
+ * (Python reads a place for every cell or none), or two cells of a row hold the same. Null otherwise: the cells keep
+ * the places they hold, or none.
+ * @param {readonly LinearLayoutCell[]} cells
+ * @returns {Map<string, number> | null}
+ */
+export const linearLayoutPlaces = (cells) => {
+  const placed = cells.filter((cell) => cell.placed);
+  const taken = new Set(placed.map((cell) => `${cell.row}:${cell.column}`));
+  return placed.length === 0 || (placed.length === cells.length && taken.size === cells.length) ? null
+    : new Map(cells.map((cell) => [layoutCellKey(cell.uid, cell.window), cell.position]));
+};
+/** @param {string} uid @param {number | null} window */
+export const layoutCellKey = (uid, window) => `${uid}\u0000${window ?? ''}`;
+
+/**
+ * Writes the places of `rowCells`, one row's cells in their new order: each window's `column` and a whole card's
+ * `canonicalRow`/`canonicalColumn` in its layout entry.
+ * @param {readonly { windows: { column: number | null }[] }[]} cards
+ * @param {{ uid: string, row: number, canonicalRow?: number, canonicalColumn?: number }[]} entries reconciled entries
+ * @param {readonly LinearLayoutCell[]} rowCells
+ */
+const placeRowCells = (cards, entries, rowCells) => rowCells.forEach((cell, index) => {
+  if (cell.window !== null) {
+    cards[cell.cardIndex].windows[cell.window].column = index + 1;
+    return;
+  }
+  const entry = entries.find((candidate) => candidate.uid === cell.uid);
+  if (entry) Object.assign(entry, { canonicalRow: cell.row, canonicalColumn: index + 1 });
+});
+
+/**
+ * Moves one cell a place up or down within its row (Up and Down of a drawing that has a card drawn in several
+ * windows; PD-OI-124): every cell of that row gets its place. Returns the reconciled entries, or null when the cell
+ * is at the end of its row.
+ * @param {readonly { uid?: unknown, windows: { column: number | null }[] }[]} cards
+ * @param {LayoutEntry[] | null | undefined} entries
+ * @param {{ uid: string, window: number | null }} target
+ * @param {number} direction
+ * @returns {LinearRecordRow[] | null}
+ */
+export const moveLinearLayoutCell = (cards, entries, target, direction) => {
+  const layout = reconcileLinearRecordLayout(cards, entries);
+  const cells = linearLayoutCells(cards, layout);
+  const at = cells.find((cell) => cell.uid === target.uid && cell.window === target.window);
+  if (!at) return null;
+  const rowCells = cells.filter((cell) => cell.row === at.row);
+  const from = rowCells.indexOf(at);
+  const to = from + (direction < 0 ? -1 : 1);
+  if (to < 0 || to >= rowCells.length) return null;
+  [rowCells[from], rowCells[to]] = [rowCells[to], rowCells[from]];
+  placeRowCells(cards, layout, rowCells);
+  return layout;
+};
+
+/**
+ * The place a new window of card `uid` takes in its row: right after the card's last cell, the cells after it moving
+ * one place on (PD-OI-124 "+ Add window"). Writes the places of that row's other cells and returns the new window's
+ * column, `lastColumn`, the place of the card's last cell (the column of its window when the card held one), and the
+ * reconciled entries.
+ * @param {readonly { uid?: unknown, windows: { column: number | null }[] }[]} cards
+ * @param {LayoutEntry[] | null | undefined} entries
+ * @param {string} uid
+ * @returns {{ column: number, lastColumn: number, entries: LinearRecordRow[] } | null}
+ */
+export const placeNewLayoutWindow = (cards, entries, uid) => {
+  const layout = reconcileLinearRecordLayout(cards, entries);
+  const cells = linearLayoutCells(cards, layout);
+  const last = cells.filter((cell) => cell.uid === uid).at(-1);
+  if (!last) return null;
+  const rowCells = cells.filter((cell) => cell.row === last.row);
+  placeRowCells(cards, layout, rowCells);
+  // The cells after the new window move one place on.
+  rowCells.slice(last.position).forEach((cell) => {
+    if (cell.window !== null) cards[cell.cardIndex].windows[cell.window].column = cell.position + 1;
+    else {
+      const entry = layout.find((candidate) => candidate.uid === cell.uid);
+      if (entry) entry.canonicalColumn = cell.position + 1;
+    }
+  });
+  return { column: last.position + 1, lastColumn: last.position, entries: layout };
+};

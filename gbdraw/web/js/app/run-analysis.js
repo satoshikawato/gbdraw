@@ -32,6 +32,7 @@ import {
 } from '../services/feature-placement.js';
 import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
 import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
+import { catalogRecordLength, resolveWholeRecordWindows } from '../services/linear-card-windows.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatJobsByFile, runLosatPairsParallel, runUntilCanceled } from '../services/losat.js';
 import {
@@ -3568,7 +3569,10 @@ export const createRunAnalysis = ({
         // writes is a unit's (OV-2738).
         const unitSearch = await generateUnitSearch(
           linearSeqs, comparisonResolution,
-          (card) => linearWindowsPayload(card, { arranged: Boolean(drawing.linearRecordLayoutEnabled.value) }),
+          (card) => linearWindowsPayload(
+            resolveWholeRecordWindows(card, catalogRecordLength(linearRecordCatalog, linearSeqs.indexOf(card))),
+            { arranged: Boolean(drawing.linearRecordLayoutEnabled.value), ordinal: drawing.linearSeqs.indexOf(card) + 1 }
+          ),
           (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload)
         );
         const { resolution: unitResolution, sequences: unitSeqs } = unitSearch;

@@ -12,8 +12,9 @@ import { inputSummaryOf } from '../services/input-summary.js';
 import { readRegionAxisRecords } from '../services/region-axis.js';
 import { requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
 import {
-  circularDrawingRegionNote, circularDrawingWindowRows, linearCardRegion, linearRecordWindowRows, regionClampNote, resolveDisambiguatedRecordSelection
+  circularDrawingRegionNote, circularDrawingWindowRows, linearCardRegion, regionClampNote, resolveDisambiguatedRecordSelection
 } from '../services/record-options.js';
+import { createLinearCardWindowReaders } from './linear-card-window-readers.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearDraftRecord } from '../services/linear-wrap-form.js' */
@@ -91,14 +92,7 @@ export const createShownDrawingReaders = ({
     const region = linearCardRegion(seq, 1, linearSeqRecord(state.activeDrawing(), seq)?.recordLength);
     return region && !('error' in region) ? regionClampNote(region.drawn) : '';
   };
-  /**
-   * The window list of a Linear card of the shown drawing (`linearRecordWindowRows`), with the length of its record.
-   * @param {LinearSeq} seq
-   */
-  const linearCardWindowRows = (seq) => {
-    const recordLength = linearSeqRecord(state.activeDrawing(), seq)?.recordLength;
-    return linearRecordWindowRows(seq.windows, typeof recordLength === 'number' ? recordLength : null);
-  };
+  const { linearCardWindowView, linearLayoutCellRows } = createLinearCardWindowReaders({ state, shownDrawingOfMode, linearSeqRecord });
   const circularRegionNote = computed(() => {
     const drawing = shownDrawingOfMode('circular');
     return drawing ? circularDrawingRegionNote(drawing.circularRecordList.value, drawing) : '';
@@ -205,7 +199,7 @@ export const createShownDrawingReaders = ({
     });
   });
   return {
-    linearRegionNote, linearCardWindowRows, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
+    linearRegionNote, linearCardWindowView, linearLayoutCellRows, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
     committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds,
     shownLinearWrapLeaf, shownLinearWrapReading
   };

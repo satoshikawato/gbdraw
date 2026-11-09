@@ -43,8 +43,8 @@ const openLinear = async (page, texts, configure) => {
 
 const cropTesta = () => {
   const app = window.__GBDRAW_APP__;
-  app.setLinearRecordCrop(app.linearSeqs[0], 'region_start', 201);
-  app.setLinearRecordCrop(app.linearSeqs[0], 'region_end', 3800);
+  app.setLinearCardWindow(app.linearSeqs[0], 0, 'start', 201);
+  app.setLinearCardWindow(app.linearSeqs[0], 0, 'end', 3800);
   if (!app.adv.features.includes('misc_feature')) app.adv.features.push('misc_feature');
 };
 
@@ -120,7 +120,7 @@ test('OV-03: an annotation of a selected feature on a cropped record stays on it
 
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.setLinearRecordCrop(app.linearSeqs[0], 'region_start', 101);
+    app.setLinearCardWindow(app.linearSeqs[0], 0, 'start', 101);
   });
   await settle(page);
   await generate(page);
@@ -387,8 +387,8 @@ test('R-7: a Session 44 hash annotation of one untransformed feature moves to it
 
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.setLinearRecordCrop(app.linearSeqs[0], 'region_start', 701);
-    app.setLinearRecordCrop(app.linearSeqs[0], 'region_end', 3800);
+    app.setLinearCardWindow(app.linearSeqs[0], 0, 'start', 701);
+    app.setLinearCardWindow(app.linearSeqs[0], 0, 'end', 3800);
   });
   await settle(page);
   await generate(page);

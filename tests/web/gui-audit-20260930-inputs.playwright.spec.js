@@ -187,8 +187,8 @@ test('replacing a one-record Linear file with another record ID keeps the region
     const app = window.__GBDRAW_APP__;
     const sequence = app.linearSeqs[0];
     app.setLinearRecordSelector(sequence, 'TESTA');
-    app.setLinearRecordCrop(sequence, 'region_start', 100);
-    app.setLinearRecordCrop(sequence, 'region_end', 3000);
+    app.setLinearCardWindow(sequence, 0, 'start', 100);
+    app.setLinearCardWindow(sequence, 0, 'end', 3000);
     sequence.definition = 'Genome A custom';
   });
   await settle(page);
@@ -212,8 +212,8 @@ test('replacing a cropped Linear file with a multi-record file expands it and cl
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const sequence = app.linearSeqs[0];
-    app.setLinearRecordCrop(sequence, 'region_start', 100);
-    app.setLinearRecordCrop(sequence, 'region_end', 3000);
+    app.setLinearCardWindow(sequence, 0, 'start', 100);
+    app.setLinearCardWindow(sequence, 0, 'end', 3000);
     sequence.definition = 'Genome A custom';
   });
   await generateAndWaitForResult(page);

@@ -432,8 +432,8 @@ test('the match popup and its FASTA header report source coordinates of a croppe
     task: 'blastn',
     configure: () => {
       const app = window.__GBDRAW_APP__;
-      app.setLinearRecordCrop(app.linearSeqs[0], 'region_start', 1001);
-      app.setLinearRecordCrop(app.linearSeqs[0], 'region_end', 3000);
+      app.setLinearCardWindow(app.linearSeqs[0], 0, 'start', 1001);
+      app.setLinearCardWindow(app.linearSeqs[0], 0, 'end', 3000);
     }
   });
   await generateAndWaitForResult(page);
@@ -647,8 +647,8 @@ test('a Web Similarity groups Generate stores a cropped reversed record in its s
     proteinMode: 'orthogroup',
     configure: () => {
       const app = window.__GBDRAW_APP__;
-      app.setLinearRecordCrop(app.linearSeqs[1], 'region_start', 2001);
-      app.setLinearRecordCrop(app.linearSeqs[1], 'region_end', 29000);
+      app.setLinearCardWindow(app.linearSeqs[1], 0, 'start', 2001);
+      app.setLinearCardWindow(app.linearSeqs[1], 0, 'end', 29000);
       app.linearSeqs[1].region_reverse = true;
     }
   });

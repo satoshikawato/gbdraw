@@ -149,7 +149,7 @@ test('the Reverse complement of a record drawn through its window list reads and
   circular.state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
   assert.equal(circular.popup.view.value.draft.reverse, false);
   circular.popup.setRecordField(circular.popup.view.value, 'reverse', true);
-  assert.deepEqual([circular.form.circular_windows, circular.form.circular_reverse], [[{ ...across, reverseComplement: true }], false]);
+  assert.deepEqual([circular.form.circular_windows, circular.form.circular_reverse], [[{ ...across, reverseComplement: true, acrossOrigin: true }], false]);
   assert.equal(circular.popup.view.value.draft.reverse, true);
   assert.deepEqual(circular.steps, ['Change Reverse complement']);
 
@@ -158,7 +158,8 @@ test('the Reverse complement of a record drawn through its window list reads and
   linear.state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
   assert.equal(linear.popup.view.value.draft.reverse, false);
   linear.popup.setRecordField(linear.popup.view.value, 'reverse', true);
-  assert.deepEqual(linear.sequence.windows, several.map((window) => ({ ...window, reverseComplement: true })));
+  // The slot marks a window that starts after it ends as across the origin (PD-OI-124).
+  assert.deepEqual(linear.sequence.windows, several.map((window) => ({ ...window, reverseComplement: true, acrossOrigin: window.start > window.end })));
   assert.equal(linear.sequence.region_reverse, false);
   linear.popup.setRecordField(linear.popup.view.value, 'reverse', true);
   assert.deepEqual(linear.steps, ['Change Reverse complement']);

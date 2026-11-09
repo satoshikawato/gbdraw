@@ -43,8 +43,8 @@ const MODES = [
       await settle(page);
       await page.evaluate(() => {
         const app = window.__GBDRAW_APP__;
-        app.setLinearRecordCrop(app.linearSeqs[0], 'region_start', 201);
-        app.setLinearRecordCrop(app.linearSeqs[0], 'region_end', 3800);
+        app.setLinearCardWindow(app.linearSeqs[0], 0, 'start', 201);
+        app.setLinearCardWindow(app.linearSeqs[0], 0, 'end', 3800);
         app.linearSeqs[1].region_reverse = true;
         app.form.show_labels_linear = 'all';
       });

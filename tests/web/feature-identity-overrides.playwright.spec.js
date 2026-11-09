@@ -114,8 +114,8 @@ const replayOnCli = (sessionPath, outputPrefix) => {
 
 const cropTesta = () => {
   const app = window.__GBDRAW_APP__;
-  app.setLinearRecordCrop(app.linearSeqs[0], 'region_start', 201);
-  app.setLinearRecordCrop(app.linearSeqs[0], 'region_end', 3800);
+  app.setLinearCardWindow(app.linearSeqs[0], 0, 'start', 201);
+  app.setLinearCardWindow(app.linearSeqs[0], 0, 'end', 3800);
   app.form.show_labels_linear = 'all';
   if (!app.adv.features.includes('misc_feature')) app.adv.features.push('misc_feature');
 };
@@ -223,8 +223,8 @@ test('OV-11: edits stay on their feature after the crop and reverse complement c
   test.setTimeout(300_000);
   await openLinear(page, [TESTA, TESTB], () => {
     const app = window.__GBDRAW_APP__;
-    app.setLinearRecordCrop(app.linearSeqs[0], 'region_start', 201);
-    app.setLinearRecordCrop(app.linearSeqs[0], 'region_end', 3800);
+    app.setLinearCardWindow(app.linearSeqs[0], 0, 'start', 201);
+    app.setLinearCardWindow(app.linearSeqs[0], 0, 'end', 3800);
     app.linearSeqs[1].region_reverse = true;
     app.form.show_labels_linear = 'all';
     if (!app.adv.features.includes('misc_feature')) app.adv.features.push('misc_feature');
@@ -249,7 +249,7 @@ test('OV-11: edits stay on their feature after the crop and reverse complement c
 
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.setLinearRecordCrop(app.linearSeqs[0], 'region_start', 101);
+    app.setLinearCardWindow(app.linearSeqs[0], 0, 'start', 101);
     app.linearSeqs[1].region_reverse = false;
   });
   await settle(page);
