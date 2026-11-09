@@ -87,9 +87,9 @@ import { toRaw } from '../utils/vue-raw.js';
  * @typedef {{ pipeline: SavedPipeline, unitSearch: LinearUnitSearch, thresholds: SavedComparisonSource['thresholds'] }} InheritedPipelineSearch
  */
 /**
- * A History checkpoint of a commit that carries the saved comparison: the caller's checkpoint and what Inherit copied
- * at that point (`withComparisonSourceCheckpoint`).
- * @typedef {{ caller: unknown, source: SavedComparisonSource | null }} ComparisonSourceCheckpoint
+ * A History checkpoint of a commit that carries the saved comparison: the caller's checkpoint and the drawn units of
+ * what Inherit copied at that point (`withComparisonSourceCheckpoint`, which keeps the source itself apart).
+ * @typedef {{ caller: unknown, records: SavedUnitInput[] | null }} ComparisonSourceCheckpoint
  */
 /** @typedef {{ valid?: boolean, hasComparisonIntent?: boolean, error?: string }} ComparisonDraftResolution The current controls' comparison, validated. */
 
@@ -668,6 +668,9 @@ export const followCommittedComparison = (intent, committed) => {
  * The History checkpoint hooks of a commit that `followCommittedComparison` follows: the caller's (the File cards'
  * windows and orientations), with what Inherit copies beside them, so Undo and Redo of the commit give it back with
  * those windows. A drawing whose comparison is no longer preserved (a later Generate replaced it) keeps none.
+ * History stringifies a checkpoint to compare and count it against its shared limit, so the checkpoint names only the
+ * drawn units of the source (`records`, what such a commit changes); the source itself, with the stored tables'
+ * bytes its resources hold, is kept beside the checkpoint by identity (`heldSources`), never in its JSON.
  * @param {ImportedComparisonIntent} intent The drawing's Imported comparison state.
  * @param {{
  *   captureIntentCheckpoint: (context: { phase: 'before' | 'after' }) => unknown,
@@ -676,14 +679,26 @@ export const followCommittedComparison = (intent, committed) => {
  * @returns {{ captureIntentCheckpoint: (context: { phase: 'before' | 'after' }) => Promise<ComparisonSourceCheckpoint>,
  *   restoreIntentCheckpoint: (checkpoint: unknown) => unknown }}
  */
-export const withComparisonSourceCheckpoint = (intent, { captureIntentCheckpoint: capture, restoreIntentCheckpoint: restore }) => ({
-  captureIntentCheckpoint: async (context) => ({ caller: await capture(context), source: intent.source }),
-  restoreIntentCheckpoint: (checkpoint) => {
-    const { caller, source } = /** @type {ComparisonSourceCheckpoint} */ (checkpoint);
-    if (intent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY) intent.source = source;
-    return restore(caller);
-  }
-});
+export const withComparisonSourceCheckpoint = (intent, { captureIntentCheckpoint: capture, restoreIntentCheckpoint: restore }) => {
+  /** @type {WeakMap<ComparisonSourceCheckpoint, SavedComparisonSource | null>} */
+  const heldSources = new WeakMap();
+  return {
+    captureIntentCheckpoint: async (context) => {
+      const source = intent.source;
+      /** @type {ComparisonSourceCheckpoint} */
+      const checkpoint = { caller: await capture(context), records: source === null ? null : toRaw(source).records };
+      heldSources.set(checkpoint, source);
+      return checkpoint;
+    },
+    restoreIntentCheckpoint: (checkpoint) => {
+      const held = /** @type {ComparisonSourceCheckpoint} */ (checkpoint);
+      if (intent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY && heldSources.has(held)) {
+        intent.source = heldSources.get(held) ?? null;
+      }
+      return restore(held.caller);
+    }
+  };
+};
 
 /**
  * A comparison Inherit cannot carry into this request asks for the choice in the Comparison panel, with the reason the

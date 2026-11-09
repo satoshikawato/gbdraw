@@ -440,6 +440,28 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
   hooks.restoreIntentCheckpoint(before);
   assert.equal(undone.source, null);
   assert.deepEqual(restored, ['cards before', 'cards after', 'cards before']);
+
+  // History stringifies both checkpoints and counts their size against its shared limit, so a checkpoint names the
+  // source's drawn units and holds the source itself apart: never the stored tables' bytes. With a 16 MiB protein
+  // table, the checkpoint is a few hundred bytes, and Undo and Redo still give the source back.
+  const large = { ...classify(cliRequest), source: savedComparisonSource({
+    renderRequest: cliRequest, resources: { ...resources, protein: { ...resources.protein, data: 'QUFB'.repeat(1 << 22) } }
+  }) };
+  const largeHooks = withComparisonSourceCheckpoint(large, {
+    captureIntentCheckpoint: ({ phase }) => phase, restoreIntentCheckpoint: () => undefined
+  });
+  const largeBefore = await largeHooks.captureIntentCheckpoint({ phase: 'before' });
+  const heldSource = large.source;
+  followCommittedComparison(large, { renderRequest: { ...cliRequest, records: flippedRecords }, resources });
+  const largeAfter = await largeHooks.captureIntentCheckpoint({ phase: 'after' });
+  const measured = JSON.stringify([largeBefore, largeAfter]);
+  assert.ok(!measured.includes('QUFBQUFB') && !measured.includes('"data"'), 'a checkpoint holds no resource data');
+  assert.ok(measured.length < 2048, `checkpoint JSON is ${measured.length} characters`);
+  assert.deepEqual(JSON.parse(measured)[0].records, heldSource.records.map(({ recordKey, windows }) => ({ recordKey, windows })));
+  largeHooks.restoreIntentCheckpoint(largeBefore);
+  assert.equal(large.source, heldSource);
+  largeHooks.restoreIntentCheckpoint(largeAfter);
+  assert.deepEqual(large.source.records, flippedRecords.map(({ recordKey, windows }) => ({ recordKey, windows })));
 }
 
 console.log('imported comparison intent tests passed');
