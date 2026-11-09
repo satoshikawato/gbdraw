@@ -1,12 +1,15 @@
-// Guard: the rings' identity invariant through every ring transition the Web offers (#1777 round 8). A
+// Guard: the rings' identity invariant through every ring transition the Web offers (#1777 round 8, review 7). A
 // deterministic walk (fixed seeds, bounded steps) over Add Seq, Remove series, a ring row's Add file and file
-// remove, Move series, a ring's label and colour edit, a ring's LOSAT genetic code edit, a stack row's width edit, Generate's adoption of a LOSAT result
-// (the real request and adoption path), the replacement of a replayed table, the source radio's round trip, a Session 51 Save -> Load (also one that lost
-// a ring's genome file), and the track stack off and on, over rings of NCBI `sequence.fasta` files of one name, size
-// and date mixed with rings of distinct files. After every step it checks the invariant (`ringIdentityDefects`: each
-// series entry names one source by key, file name and place; each managed stack row carries the key the one matcher
-// gives its entry) and that each ring keeps its label, its colour, its genetic code (also as the next Generate reads
-// the rings, round 9) and its stack row's id and width.
+// remove, Move series, a ring's label (some with commas) and colour edit, a ring's LOSAT genetic code edit, a stack
+// row's width edit, a Generate as production builds it (the rings its ring keys read, `losatRequestRings`, the request
+// builder, the adoption with the rings it searched), a rerender of the committed request after any of these steps,
+// committed or not (R1 (c): the draft stays as it is), the replacement of a replayed table, the source radio's round
+// trip, a Session 51 Save -> Load (also one that lost a ring's genome file, in a LOSAT-cache replay too), and the track
+// stack off and on, over rings of NCBI `sequence.fasta` files of one name, size and date mixed with rings of distinct
+// files. After every step it checks the invariant (`ringIdentityDefects`: each series entry names one source by key,
+// file name and place; a replay's tables sit beside their genome lists; each drawn ring's one stack row is its own row
+// of the walk's model) and that each ring keeps its label, its colour, its genetic code (also as the next Generate
+// reads the rings) and its stack row's id and width. Every expected value comes from the walk's own model.
 // Undo and Redo are not walked: a History restore installs the series, the stack rows and the file bindings it
 // captured together (R11), after a step this walk checks, and calls no reconcile or re-key.
 import assert from 'node:assert/strict';
@@ -47,6 +50,7 @@ const {
 const {
   circularRingSources, isManagedConservationSlot, orderedConservationSources, ringGenomeFilesInRingOrder
 } = await import('../../gbdraw/web/js/services/conservation-series.js');
+const { NO_CONSERVATION_PAIRS, losatRequestRings, searchedRingSources } = await import('../../gbdraw/web/js/services/circular-conservation-keys.js');
 const { readFileText } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const { ringIdentityDefects } = await import('./helpers/ring-identity.mjs');
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
@@ -63,8 +67,7 @@ const sources = createCircularConservationSources({
   state, writeLosatCacheInfo: () => {}, askingStackPorts,
   syncCircularConservationSlots: (drawing) => editor.syncCircularConservationSlots(drawing),
   rekeyCircularConservationRows: (drawing, keyChanges) => editor.rekeyCircularConservationRows(drawing, keyChanges),
-  circularConservationRowsLeaving: (drawing, entries, keyChanges) => editor.circularConservationRowsLeaving(drawing, entries, keyChanges),
-  keepCircularConservationRowsThrough: (drawing, replaceSources) => editor.keepCircularConservationRowsThrough(drawing, replaceSources)
+  circularConservationRowsLeaving: (drawing, entries, keyChanges) => editor.circularConservationRowsLeaving(drawing, entries, keyChanges)
 });
 const panel = createCircularConservationSeriesPanel({
   state, shownAction, shownDrawingOfMode: (mode) => modeDrawing(state, mode), writeLosatCacheInfo: () => {},
@@ -110,13 +113,25 @@ const seeded = (seed) => () => {
 };
 
 /**
- * The walk's model: each ring by its own id, with its files' bases, its label, colour and LOSAT genetic code, and its
- * stack row's id and width once the stack has made it.
+ * The walk's model: each ring by its own id, with its files' bases, its label, colour and LOSAT genetic code, its
+ * stack row's id and width once the stack has made it, and whether a Load lost its genome while its replayed table
+ * stays (`lost`: drawn from its table, not searched by the next Generate).
  * @typedef {{ id: number, bases: Set<string>, label: string, color: string, code: number,
- *   row: { id: string, width: unknown } | null }} ModelRing
+ *   row: { id: string, width: unknown } | null, lost: boolean }} ModelRing
  */
 
 const ringRows = (drawing) => drawing.adv.circular_track_slots.filter((slot) => isManagedConservationSlot(slot));
+
+/** Everything of the draft's rings a rerender of the committed request leaves as it is (R1 (c)). */
+const draftRings = (drawing) => JSON.parse(JSON.stringify({
+  series: drawing.circularConservation.series,
+  labels: drawing.circularConservation.labels,
+  enabled: drawing.circularConservation.enabled,
+  fastas: ringGenomeFileLists(drawing.files.c_conservation_fastas).map((list) => list.map((file) => file.fileId)),
+  blasts: drawing.files.c_conservation_blasts.map((file) => file.fileId),
+  blastsSource: drawing.files.c_conservation_blasts_source,
+  rows: ringRows(drawing).map((slot) => [slot.id, slot.width, slot.params.series_key])
+}));
 
 /** The drawing's rings as drawn, in order: each with its genome's bases, label, colour, genetic code and stack row. */
 const drawnRings = async (drawing) => {
@@ -144,10 +159,9 @@ const runWalk = async (seed, steps) => {
   /** @type {Map<string, number>} */
   const kinds = new Map();
   /**
-   * The last Generate's request and its rings, while the draft's rings differ from them only by a move, a label or
-   * colour edit or a row width; a rerender of the committed Session adopts them again.
-   * @type {{ canonical: Parameters<typeof sessionConfig.adoptCanonicalRenderArtifacts>[0],
-   *   rings: { id: number, label: string, color: string }[] } | null}
+   * The committed request (the last Generate's, or the one a Load installed); a rerender of it (a Rotate) replaces only
+   * the committed Session, whatever the draft's rings did since.
+   * @type {Parameters<typeof sessionConfig.adoptCanonicalRenderArtifacts>[0] | null}
    */
   let committed = null;
   drawing.circularSources.splice(0, drawing.circularSources.length,
@@ -160,13 +174,16 @@ const runWalk = async (seed, steps) => {
   /** The drawn rings in the model's order, each found by the bases of its genome files. */
   const check = async (step) => {
     const where = `seed ${seed}, step ${step}: ${trail.join(' > ')}`;
-    assert.deepEqual(ringIdentityDefects(drawing), [], `the rings' identity invariant (${where})`);
+    assert.deepEqual(ringIdentityDefects(drawing, { rows: model.map((ring) => (ring.row ? ring.row.id : null)) }), [],
+      `the rings' identity invariant (${where})`);
     const drawn = await drawnRings(drawing);
     assert.equal(drawn.length, model.length, `one drawn ring per ring (${where})`);
     drawn.forEach((ring, index) => {
       const expected = model[index];
-      assert.ok(ring.bases.length > 0 && ring.bases.every((bases) => expected.bases.has(bases)) && ring.bases.length === expected.bases.size,
-        `ring ${index} draws ring ${expected.id}'s files (${where})`);
+      assert.ok(expected.lost
+        ? ring.bases.length === 0
+        : ring.bases.length > 0 && ring.bases.every((bases) => expected.bases.has(bases)) && ring.bases.length === expected.bases.size,
+      `ring ${index} draws ring ${expected.id}'s files (${where})`);
       assert.deepEqual([ring.label, ring.color, ring.code], [expected.label, expected.color, expected.code],
         `ring ${expected.id}'s label, colour and genetic code (${where})`);
       if (drawing.adv.circular_track_slots_enabled !== true) return;
@@ -179,14 +196,14 @@ const runWalk = async (seed, steps) => {
     });
     // The rings the next Generate searches, in order, and the genetic code it searches each with, as its ring keys
     // read them (`circularConservationKeys`).
-    const searched = orderedConservationSources(ringGenomeFileLists(drawing.files.c_conservation_fastas), drawing.circularConservation);
-    const searchedRings = await Promise.all(searched.map(async (source) => ({
+    const searchedRings = await Promise.all(searchedRingSources(drawing).map(async (source) => ({
       bases: await Promise.all(source.files.map(async (file) => basesOfText(await readFileText(state.inputFiles.fileOf(file))))),
       code: source.losat_gencode
     })));
-    assert.equal(searchedRings.length, model.length, `the next Generate searches every ring (${where})`);
+    const searchable = model.filter((ring) => !ring.lost);
+    assert.equal(searchedRings.length, searchable.length, `the next Generate searches every ring with a genome (${where})`);
     searchedRings.forEach((ring, index) => {
-      const expected = model[index];
+      const expected = searchable[index];
       assert.ok(ring.bases.length === expected.bases.size && ring.bases.every((bases) => expected.bases.has(bases)),
         `the next Generate searches ring ${expected.id}'s files at ${index} (${where})`);
       assert.equal(ring.code, expected.code, `the next Generate searches ring ${expected.id} with its genetic code (${where})`);
@@ -196,28 +213,29 @@ const runWalk = async (seed, steps) => {
   const newRingOf = (index, bases) => {
     const entry = drawing.circularConservation.series[index];
     ringCount += 1;
-    return { id: ringCount, bases: new Set([bases]), label: entry.label, color: entry.color, code: entry.losat_gencode, row: null };
+    return { id: ringCount, bases: new Set([bases]), label: entry.label, color: entry.color, code: entry.losat_gencode, row: null, lost: false };
   };
+  /** A change of the genome files leaves a LOSAT-cache replay: a ring whose genome a Load lost goes with its table. */
+  const leaveReplay = () => { model = model.filter((ring) => !ring.lost); };
 
   /** @type {Record<string, { weight: number, can: () => boolean, run: () => Promise<void> | void }>} */
   const STEPS = {
     'add seq': {
       weight: 4, can: () => model.length < 6,
       run: async () => {
-        committed = null;
         const file = genomeFile(random() < 0.6);
         const bases = basesOfText(atob(file.data));
         await files.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [file], value: 'x' } }));
         const index = drawing.circularConservation.series.length - 1;
         assert.equal(drawing.circularConservation.series[index].label, file.name.replace(/\.[^.]+$/, ''),
           `a new ring takes its file's name (seed ${seed}: ${trail.join(' > ')})`);
+        leaveReplay();
         model.push(newRingOf(index, bases));
       }
     },
     'remove series': {
       weight: 2, can: () => model.length > 0,
       run: () => {
-        committed = null;
         const index = pick(model.length);
         files.removeCircularConservationSource(index);
         model = model.filter((_, ring) => ring !== index);
@@ -226,24 +244,27 @@ const runWalk = async (seed, steps) => {
     'row add file': {
       weight: 2, can: () => model.length > 0,
       run: () => {
-        committed = null;
         const index = pick(model.length);
         const file = random() < 0.6 ? textFile('plasmid.fasta', `>p\n${nextBases()}\n`) : genomeFile(false);
         files.addRingRowFiles(index, /** @type {any} */ ({ target: { files: [file], value: 'x' } }));
-        model[index].bases.add(basesOfText(atob(file.data)));
+        const ring = model[index];
+        // A ring whose genome a Load lost takes the added file as its genome.
+        if (ring.lost) Object.assign(ring, { bases: new Set(), lost: false });
+        ring.bases.add(basesOfText(atob(file.data)));
+        leaveReplay();
       }
     },
     'row remove file': {
-      weight: 2, can: () => model.some((ring) => ring.bases.size > 1),
+      weight: 2, can: () => model.some((ring) => !ring.lost && ring.bases.size > 1),
       run: async () => {
-        committed = null;
-        const candidates = model.map((ring, index) => (ring.bases.size > 1 ? index : -1)).filter((index) => index >= 0);
+        const candidates = model.map((ring, index) => (!ring.lost && ring.bases.size > 1 ? index : -1)).filter((index) => index >= 0);
         const index = candidates[pick(candidates.length)];
         const genome = ringGenomeFilesInRingOrder(drawing)[index];
         const fileIndex = pick(genome.length);
         const bases = basesOfText(await readFileText(state.inputFiles.fileOf(genome[fileIndex])));
         files.removeRingRowFile(index, fileIndex);
         model[index].bases.delete(bases);
+        leaveReplay();
       }
     },
     'move series': {
@@ -259,7 +280,8 @@ const runWalk = async (seed, steps) => {
       run: () => {
         const index = pick(model.length);
         const entry = drawing.circularConservation.series[index];
-        entry.label = `ring ${model[index].id}`;
+        // Half of the labels hold a comma, which no stored list may split into another ring's name (OV-3193).
+        entry.label = random() < 0.5 ? `ring ${model[index].id}, strain K-${model[index].id}` : `ring ${model[index].id}`;
         entry.color = `#00${String(model[index].id).padStart(2, '0')}aa`;
         panel.refreshShownCircularConservationSlots();
         Object.assign(model[index], { label: entry.label, color: entry.color });
@@ -287,49 +309,44 @@ const runWalk = async (seed, steps) => {
       }
     },
     'generate': {
-      weight: 3, can: () => model.length > 0,
+      weight: 3, can: () => model.some((ring) => !ring.lost),
       run: async () => {
+        // As production runs it: the rings its ring keys read, their tables, the request's rings, the request builder,
+        // and the adoption with the rings it searched.
+        const searched = searchedRingSources(drawing);
         const filesData = await sessionConfig.serializeActiveRenderFiles(state, drawing);
-        const genomes = ringGenomeFileLists(filesData.c_conservation_fastas).filter((list) => list.length > 0);
-        const rings = orderedConservationSources(circularRingSources(drawing), drawing.circularConservation);
+        const tables = searched.map((ring, index) => ({
+          name: `${ring.fileName.replace(/\.[^.]+$/, '')}.circular_conservation.losatn.tsv`,
+          text: `q\ts\t100\t8\t0\t0\t1\t8\t1\t8\t1e-9\t2${index}\n`
+        }));
         const canonical = buildCanonicalRenderRequest({
           state, drawing, filesData,
-          resolvedCircularConservation: rings.map((ring, index) => ({
-            name: `${ring.fileName.replace(/\.[^.]+$/, '')}.circular_conservation.losatn.tsv`,
-            text: `q\ts\t100\t8\t0\t0\t1\t8\t1\t8\t1e-9\t2${index}\n`,
-            sourceIndex: ring.sourceIndex, label: ring.label, color: ring.color, fastas: genomes[ring.sourceIndex] || []
-          }))
+          resolvedCircularConservation: losatRequestRings(searched, tables, ringGenomeFileLists(filesData.c_conservation_fastas))
         });
         sources.adoptCircularRingResult(drawing, () => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
-          adoptOwnedRequest: true, drawing, conservationPairs: 'committed'
-        }), true);
+          adoptOwnedRequest: true, drawing, conservationPairs: NO_CONSERVATION_PAIRS
+        }), { searched, builtFromDraft: true });
         assert.ok(replayed(), 'the Generate adopted its LOSAT-cache result');
-        committed = { canonical, rings: model.map(({ id, label, color }) => ({ id, label, color })) };
+        // The rings it did not search (a genome a Load lost) go: the Result draws the rings it searched.
+        model = model.filter((ring) => !ring.lost);
+        committed = canonical;
       }
     },
-    'rerender the committed rings': {
-      // A rerender of the committed Session (a Rotate): the adoption of the last Generate's request when the draft no
-      // longer is that request; each ring comes back in its committed order, label and colour, in its own row, with the
-      // genetic code it has in the draft, which the request does not carry (OV-3178). Most
-      // of these steps move two rings first, as the review's case did (a move, then a Rotate).
+    'rerender the committed request': {
+      // A rerender of the committed request (a Rotate, an Align, a placement) after any step, committed or not: it
+      // replaces only the committed Session and leaves the draft's rings as they are (R1 (c), OV-3194).
       weight: 3, can: () => committed !== null,
       run: () => {
-        const { canonical, rings } = /** @type {NonNullable<typeof committed>} */ (committed);
-        if (model.length > 1 && random() < 0.7) {
-          const index = pick(model.length - 1);
-          panel.moveCircularConservationSeries(index, 1);
-          trail[trail.length - 1] += ` (after moving ring ${index} down)`;
-        }
-        sources.adoptCircularRingResult(drawing, () => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
-          adoptOwnedRequest: true, drawing, conservationPairs: 'committed'
-        }), false);
-        model = rings.map(({ id, label, color }) => Object.assign(/** @type {ModelRing} */ (model.find((ring) => ring.id === id)), { label, color }));
+        const before = draftRings(drawing);
+        sources.adoptCircularRingResult(drawing, () => sessionConfig.adoptCanonicalRenderArtifacts(
+          /** @type {NonNullable<typeof committed>} */ (committed), { adoptOwnedRequest: true, drawing, conservationPairs: 'committed' }
+        ), null);
+        assert.deepEqual(draftRings(drawing), before, `the draft's rings after a rerender (seed ${seed}: ${trail.join(' > ')})`);
       }
     },
     'replace a replayed table': {
       weight: 1, can: () => replayed(),
       run: () => {
-        committed = null;
         // The replacement of an input file that the drawing uses (`createInputReplacement`): the table at one place.
         const tables = [...drawing.files.c_conservation_blasts];
         const place = pick(tables.length);
@@ -340,7 +357,6 @@ const runWalk = async (seed, steps) => {
     'source radio round trip': {
       weight: 1, can: () => replayed(),
       run: () => {
-        committed = null;
         panel.changeCircularConservationSource('upload');
         panel.changeCircularConservationSource('losat');
       }
@@ -348,17 +364,23 @@ const runWalk = async (seed, steps) => {
     'save and load': {
       weight: 2, can: () => true,
       run: async () => {
-        committed = null;
         // Save Session, then Load of what it wrote, then the Load's reconcile (`afterImport`). One of three Loads of
-        // LOSAT rings could not read one ring's genome files: that ring goes.
+        // LOSAT rings could not read one ring's genome files: outside a replay that ring goes; in a LOSAT-cache replay
+        // its table stays, so it is drawn, and the next Generate does not search it.
         const result = await exportSession('ring walk', { askChoice: async () => 'download' });
         const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
-        const lost = !replayed() && model.length > 0 && random() < 0.34 ? pick(model.length) : -1;
+        const withGenome = model.map((ring, index) => (ring.lost ? -1 : index)).filter((index) => index >= 0);
+        const lost = withGenome.length > 0 && random() < 0.34 ? withGenome[pick(withGenome.length)] : -1;
         if (lost >= 0) {
           const place = drawing.circularConservation.series[lost].sourceIndex;
           const savedDrawing = saved.drawings.find((candidate) => candidate.mode === 'circular');
           savedDrawing.webFiles.bindings.c_conservation_fastas[place].forEach((file, index) => { file.resourceId = `missing-${place}-${index}`; });
-          model = model.filter((_, ring) => ring !== lost);
+          if (replayed()) {
+            model[lost].lost = true;
+            kinds.set('a replay Load that lost a genome', (kinds.get('a replay Load that lost a genome') || 0) + 1);
+          } else {
+            model = model.filter((_, ring) => ring !== lost);
+          }
           trail[trail.length - 1] += ` (lost ring ${lost})`;
           kinds.set('a Load that lost a genome', (kinds.get('a Load that lost a genome') || 0) + 1);
         }
@@ -369,6 +391,7 @@ const runWalk = async (seed, steps) => {
         drawing = circular();
         assert.notEqual(drawing, before, 'the Load installed new drawings');
         sources.reconcileLoadedCircularConservation(drawing, true);
+        committed = sessionConfig.getCommittedCanonicalSession();
       }
     },
     'stack off and on': {
@@ -409,8 +432,8 @@ test('each ring keeps one identity, its label, colour, genetic code and stack ro
   }
   console.log(`ring walk steps: ${JSON.stringify(Object.fromEntries(drawnKinds))}`);
   for (const kind of ['add seq', 'remove series', 'row add file', 'row remove file', 'move series', 'edit label and colour',
-    'set a genetic code', 'widen a stack row', 'generate', 'rerender the committed rings', 'replace a replayed table', 'source radio round trip', 'save and load',
-    'a Load that lost a genome', 'stack off and on']) {
+    'set a genetic code', 'widen a stack row', 'generate', 'rerender the committed request', 'replace a replayed table', 'source radio round trip',
+    'save and load', 'a Load that lost a genome', 'a replay Load that lost a genome', 'stack off and on']) {
     assert.ok((drawnKinds.get(kind) || 0) >= 3, `the walk draws ${kind} (${drawnKinds.get(kind) || 0} times)`);
   }
 });
