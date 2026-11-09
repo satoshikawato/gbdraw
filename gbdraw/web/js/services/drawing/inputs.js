@@ -57,24 +57,28 @@ const normalizeLinearSeqNumber = (value) => {
  * @property {unknown} region_end a draft, as `region_start`
  * @property {boolean} region_reverse
  * @property {LinearSeqWindow[]} windows the windows the card's crop fields cannot hold (`cardCropWindow`): those of a
- *   record drawn in several (D-01), in the order the request gave them, or one window across the origin of a
- *   circular record (D-34); empty for a record drawn whole or in one window that `region_*` hold. The card shows
- *   them and cannot edit them (D-10).
+ *   record drawn in several (D-01), in the order the request gave them or the card's Windows list set, or one
+ *   window across the origin of a circular record (D-34); empty for a record drawn whole or in one window that
+ *   `region_*` hold. The card edits them through `services/linear-card-windows.js` (PD-OI-124).
  */
 
 /**
- * One window of a record drawn in several: its span in source coordinates (1-based, both ends included), its
- * orientation, and its column in the record's row (D-08). The request validates it (R7).
+ * One window of a record drawn in several: its span in source coordinates (1-based, both ends included; both
+ * empty draws the whole record, PD-OI-124), its orientation, its column in the record's row (D-08), and
+ * `acrossOrigin`, the card's "Across the origin" box: ticked, a Start after the End runs across the origin of a
+ * circular record (D-45). The request validates it (R7).
  * @typedef {object} LinearSeqWindow
  * @property {number | null} start
  * @property {number | null} end
  * @property {boolean} reverseComplement
  * @property {number | null} column
+ * @property {boolean} acrossOrigin
  */
 
 /**
  * The windows a slot, the Circular form or a Session stores, read as `LinearSeqWindow`s; a value that is no list reads
- * as none.
+ * as none. A window without `acrossOrigin` (a request's, or a slot saved before the box) crosses the origin when its
+ * start is after its end: only a producer writes such a window (D-45).
  * @param {unknown} value
  * @returns {LinearSeqWindow[]}
  */
@@ -82,26 +86,31 @@ export const readLinearSeqWindows = (value) => (Array.isArray(value) ? value : [
   const window = /** @type {Partial<Record<keyof LinearSeqWindow, unknown>>} */ (
     item && typeof item === 'object' && !Array.isArray(item) ? item : {}
   );
+  const start = normalizeLinearSeqNumber(window.start);
+  const end = normalizeLinearSeqNumber(window.end);
   return {
-    start: normalizeLinearSeqNumber(window.start),
-    end: normalizeLinearSeqNumber(window.end),
+    start,
+    end,
     reverseComplement: Boolean(window.reverseComplement),
-    column: normalizeLinearSeqNumber(window.column)
+    column: normalizeLinearSeqNumber(window.column),
+    acrossOrigin: Object.hasOwn(window, 'acrossOrigin')
+      ? Boolean(window.acrossOrigin) : start !== null && end !== null && start > end
   };
 });
 
 /**
  * The window a card's own crop fields (`region_*`) hold: the only window of `windows`, unless it crosses the origin
- * of a circular record (its start after its end, D-34), which those fields would read as a reversed span (an End
- * before the Start reverses the crop). Null when `windows` stays the card's list. It reads the card's windows and a
- * request record's, whose endpoints are unvalidated there.
- * @template {{ start: unknown, end: unknown }} W
+ * of a circular record (its "Across the origin" box, or, for a request's window, its start after its end, D-34),
+ * which those fields would read as a reversed span (an End before the Start reverses the crop). Null when `windows`
+ * stays the card's list. It reads the card's windows and a request record's, whose endpoints are unvalidated there.
+ * @template {{ start: unknown, end: unknown, acrossOrigin?: boolean }} W
  * @param {readonly W[]} windows
  * @returns {W | null}
  */
 export const cardCropWindow = (windows) => {
   const [only] = windows.length === 1 ? windows : [null];
-  const crosses = only && typeof only.start === 'number' && typeof only.end === 'number' && only.start > only.end;
+  const crosses = only && (typeof only.acrossOrigin === 'boolean' ? only.acrossOrigin
+    : typeof only.start === 'number' && typeof only.end === 'number' && only.start > only.end);
   return only && !crosses ? only : null;
 };
 

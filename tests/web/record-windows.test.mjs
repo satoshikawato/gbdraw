@@ -21,7 +21,8 @@ const WINDOWS = [
 
 test('a slot keeps the windows of a record drawn in several and reads one window as its own crop', () => {
   const several = createLinearSeq({ uid: 'a', windows: WINDOWS, region_start: 5, region_end: 9, region_reverse: true });
-  assert.deepEqual(several.windows, WINDOWS);
+  // The slot marks each window's "Across the origin" box; a stored window reads it from its span (D-45).
+  assert.deepEqual(several.windows, WINDOWS.map((window) => ({ ...window, acrossOrigin: false })));
   assert.deepEqual([several.region_start, several.region_end, several.region_reverse], [null, null, false]);
   const one = createLinearSeq({ uid: 'b', windows: [{ start: 7, end: 70, reverseComplement: true, column: null }] });
   assert.deepEqual([one.region_start, one.region_end, one.region_reverse, one.windows], [7, 70, true, []]);

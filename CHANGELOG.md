@@ -223,6 +223,19 @@ write-up of a release.
   the ribbon ends above the text and the rows move apart by its height
   (OV-2712). Such figures also draw the scale bar now, under the same
   conditions as a figure with one record per row (OV-2714).
+- Added: the Web app's Linear record card edits the windows of a record. A
+  card with two or more windows lists them under "Windows", each with its
+  number in the drawing, Start, End, Reverse complement, and Remove; "+ Add
+  window" adds a window that draws the whole record until its Start and End
+  are set, and the card says how many bp lie between two windows next to each
+  other that run in the same direction. The card of a circular record has
+  "Across the origin": with it ticked, a Start after the End is a window across
+  the origin and the card gives its length; Generate stops when the box is
+  ticked and the Start is not after the End. Record Layout has one cell per
+  window, and Up and Down move one window within its row. An End typed before
+  the Start without the box now shows in order with Reverse complement ticked;
+  the figure is unchanged. The Comparison card lists each window pair of a
+  pair of records, with its own Save Raw LOSAT TSV.
 - Added: a window of a circular record may run across its origin. In the
   Python API, a `RecordWindow` whose `start` is after its `end` draws the arc
   from `start` across the origin to `end` as one continuous unit: a feature

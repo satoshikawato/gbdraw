@@ -121,6 +121,81 @@ export const catalogUnitRecords = (recordKeys, windowOf) => {
 };
 
 /**
+ * Where a drawn unit lies (`LinearUnitPlace`): the key of the record it draws (its card's), and, when it is one of
+ * several windows of that record, the window's number among them (from 1), else null.
+ * @typedef {{ recordKey: string, window: number | null }} LinearUnitPlace
+ */
+/**
+ * The place of each unit a drawn Result's catalog names, by unit key (`LinearUnitPlace`): its record
+ * (`catalogUnitRecords`) and its window number, counted in drawing order, which is the order of the record's window
+ * list (Python's `record_drawn_windows`). Empty without a catalog item. Every item names the same units
+ * (`catalogDrawnUnits`), so the first is read.
+ * @param {{ readonly items: readonly { recordKeys: readonly string[], windowOf?: unknown }[] } | null} catalog
+ * @returns {Map<string, LinearUnitPlace>}
+ */
+export const catalogUnitPlaces = (catalog) => {
+  const [item] = catalog === null ? [] : catalog.items;
+  if (!item) return new Map();
+  const units = catalogUnitRecords(item.recordKeys, item.windowOf);
+  /** @type {Map<string, number>} */
+  const counted = new Map();
+  return new Map(item.recordKeys.map((unitKey, unit) => {
+    const of = units.windowOf[unit];
+    const window = of === null ? null : (counted.get(of) ?? 0) + 1;
+    if (of !== null && window !== null) counted.set(of, window);
+    return [unitKey, { recordKey: units.recordKeys[unit], window }];
+  }));
+};
+
+/**
+ * Whether a LOSAT cache-info row is a window pair of the drawn Result (OV-2742, OV-2918): one of its two units is a
+ * window of a record drawn in several (`places`, the Result's units), and each unit is such a window or a record drawn
+ * whole, of a record `drawn` names. Its indexes count that Result's units, so a reorder or a Load keeps it as saved.
+ * @param {{ queryUid?: unknown, subjectUid?: unknown }} entry
+ * @param {ReadonlyMap<string, LinearUnitPlace>} places
+ * @param {(recordKey: string) => boolean} drawn
+ */
+export const isDrawnWindowPairRow = (entry, places, drawn) => {
+  /** @param {unknown} uid */
+  const drawnWindow = (uid) => {
+    const place = places.get(String(uid ?? ''));
+    return place !== undefined && place.window !== null && drawn(place.recordKey);
+  };
+  /** @param {unknown} uid */
+  const drawnUnit = (uid) => drawnWindow(uid) || drawn(String(uid ?? ''));
+  return (drawnWindow(entry.queryUid) || drawnWindow(entry.subjectUid))
+    && drawnUnit(entry.queryUid) && drawnUnit(entry.subjectUid);
+};
+
+/**
+ * One window pair of a card pair (`LinearWindowPair`): the edge key of its LOSAT cache-info row (the pair of drawn
+ * units Generate searched), the row's file name, and each side's window number (null for a card drawn whole).
+ * @typedef {{ edgeKey: string, filename: string, queryWindow: number | null, subjectWindow: number | null }} LinearWindowPair
+ */
+/**
+ * The window pairs of each card pair, by the card pair's edge key (its two records' keys): the cache-info rows whose
+ * two units `places` knows and at least one of which is one of several windows, in row order. A row whose two units
+ * are cards drawn whole is the card pair's own row, which the card reads by its edge key.
+ * @param {readonly { edgeKey?: string, queryUid?: string, subjectUid?: string, filename: string }[]} entries
+ * @param {ReadonlyMap<string, LinearUnitPlace>} places
+ * @returns {Map<string, LinearWindowPair[]>}
+ */
+export const linearWindowPairsByCardEdge = (entries, places) => {
+  /** @type {Map<string, LinearWindowPair[]>} */
+  const byCard = new Map();
+  entries.forEach((entry) => {
+    const query = places.get(String(entry.queryUid ?? ''));
+    const subject = places.get(String(entry.subjectUid ?? ''));
+    if (!entry.edgeKey || !query || !subject || (query.window === null && subject.window === null)) return;
+    const cardEdge = linearComparisonEdgeKey(query.recordKey, subject.recordKey);
+    byCard.set(cardEdge, [...(byCard.get(cardEdge) ?? []), {
+      edgeKey: entry.edgeKey, filename: entry.filename, queryWindow: query.window, subjectWindow: subject.window
+    }]);
+  });
+  return byCard;
+};
+
+/**
  * The request record a drawn unit draws: its index among the request's records, and whether the unit is one of
  * several windows of it.
  * @typedef {{ recordIndex: number, oneOfSeveral: boolean }} LinearUnitRecord

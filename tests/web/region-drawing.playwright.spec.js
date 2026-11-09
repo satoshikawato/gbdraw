@@ -127,11 +127,16 @@ test('Coordinates across the origin of a circular record make one window across 
     await expect(dialog).toHaveCount(0);
     const [added] = (await drawingIds(page)).filter((id) => id !== source);
     expect(await shownDrawing(page)).toEqual({ id: added, kind: 'linear' });
-    // The card holds the window in its read-only list: its Start/End fields would read 16,000-100 as reversed.
-    await expect(page.locator('[data-record-window]')).toHaveText([/^1\. 16,000\u2013100/]);
+    // The card's Region block holds the window with "Across the origin" ticked (PD-OI-124): Start 16,000, End 100.
+    const region = page.locator('[data-record-region-fields]');
+    // The File card may be folded: read the fields by their labels, shown or not.
+    await expect(region.locator('input[type="checkbox"][aria-label="Across the origin for sequence 1"]')).toBeChecked();
+    await expect(region.getByLabel('Region start for sequence 1')).toHaveValue('16000');
+    await expect(region.getByLabel('Region end for sequence 1')).toHaveValue('100');
     await generate(page);
-    // Once the record is read, the row gives the bases it draws across the origin of the 16,569 bp record.
-    await expect(page.locator('[data-record-window]')).toHaveText([/^1\. 16,000\u2013100\s*670 bp$/]);
+    // Once the record is read, the block gives the bases it draws across the origin of the 16,569 bp record.
+    await expect(region.locator('[data-record-window-origin]'))
+      .toHaveText('16,000 \u2192 16,569 \u2192 1 \u2192 100: 670 bp across the origin.');
     const drawn = await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => String(result.content || '')));
     expect(drawn).toHaveLength(1);
     // The record group carries the drawn span: it ends before it starts, across the origin.
@@ -171,10 +176,12 @@ test('A Circular Session whose record has one window across the origin loads it,
   expect(drawn[0]).not.toContain('16,569 bp');
   // The drawing holds the window in its read-only list, not in the Start/End fields, which would refuse 16,000-100.
   const originWindow = { start: 16000, end: 100, reverseComplement: false, column: null };
+  // The form's window has its "Across the origin" box ticked (PD-OI-124); the request writes the four fields above.
+  const formWindow = { ...originWindow, acrossOrigin: true };
   expect(await page.evaluate(() => {
     const { circular_region_start, circular_region_end, circular_windows } = window.__GBDRAW_APP__.form;
     return { circular_region_start, circular_region_end, circular_windows };
-  })).toEqual({ circular_region_start: null, circular_region_end: null, circular_windows: [originWindow] });
+  })).toEqual({ circular_region_start: null, circular_region_end: null, circular_windows: [formWindow] });
   await page.locator('[data-circular-record-presentation] summary').click();
   await expect(page.getByLabel('Circular region start')).toHaveCount(0);
   await expect(page.locator('[data-circular-record-presentation] [data-record-window]')).toHaveText([/^16,000\u2013100\s*670 bp$/]);
@@ -195,7 +202,7 @@ test('A Circular Session whose record has one window across the origin loads it,
   expect(await page.evaluate(() => {
     const { circular_reverse, circular_windows } = window.__GBDRAW_APP__.form;
     return { circular_reverse, circular_windows };
-  })).toEqual({ circular_reverse: false, circular_windows: [{ ...originWindow, reverseComplement: true }] });
+  })).toEqual({ circular_reverse: false, circular_windows: [{ ...formWindow, reverseComplement: true }] });
   await generate(page);
   const committed = await page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest());
   expect([committed.records[0].windows, committed.records[0].presentation.reverseComplement])

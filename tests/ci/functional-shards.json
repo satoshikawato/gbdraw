@@ -61,6 +61,7 @@
     "tests/web/label-fit.playwright.spec.js": 2.12,
     "tests/web/layout-edit-press.playwright.spec.js": 0.44,
     "tests/web/legend-zero-shift.playwright.spec.js": 1.24,
+    "tests/web/linear-card-windows.playwright.spec.js": 1.5,
     "tests/web/linear-file-card-fold.playwright.spec.js": 0.7,
     "tests/web/linear-multi-record.playwright.spec.js": 5.93,
     "tests/web/linear-typography.playwright.spec.js": 0.53,
@@ -191,7 +192,8 @@
       "tests/web/ui-component-styles.playwright.spec.js",
       "tests/web/unmanaged-config-overrides.playwright.spec.js",
       "tests/web/region-select.playwright.spec.js",
-      "tests/web/find-in-other-files.playwright.spec.js"
+      "tests/web/find-in-other-files.playwright.spec.js",
+      "tests/web/linear-card-windows.playwright.spec.js"
     ],
     [
       "tests/web/circular-cards-session-resources.playwright.spec.js",

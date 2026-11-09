@@ -16,6 +16,7 @@ import {
 } from '../services/linear-comparisons.js';
 import { linearRecordPositionTokens } from '../services/linear-record-layout.js';
 import { linearRecordNames } from '../services/linear-sources.js';
+import { catalogUnitPlaces, isDrawnWindowPairRow, linearWindowPairsByCardEdge } from '../services/linear-units.js';
 import { inputSourceFiles } from '../services/input-types.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
@@ -25,6 +26,7 @@ import { projectLinearComparisonUi } from './comparison-ui.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, WebState } from '../state.js' */
 /** @import { LinearComparisonPair, LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 /** @import { LinearRecordRow } from '../services/linear-record-layout.js' */
+/** @import { LinearWindowPair } from '../services/linear-units.js' */
 /** @import { LosatCacheInfoEntry } from '../services/config.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 
@@ -86,9 +88,13 @@ export const createLinearComparisonView = ({ state, mode, losatCacheInfo, writeL
     const resolvedByEdgeKey = new Map(
       drawing.linearComparisonResolution.value.edges.map((/** @type {LinearComparisonResolvedEdge} */ edge) => [edge.edgeKey, edge])
     );
+    // A window pair's row names the drawn units of the last Generate, whose indexes only that request counts: it
+    // stays while the records of its units are drawn (the drawn Result's units, OV-2742).
+    const places = catalogUnitPlaces(state.featureCatalog.value);
     writeLosatCacheInfo(losatCacheInfo.value.flatMap((/** @type {LosatCacheInfoEntry} */ entry) => {
       const edgeKey = String(entry?.edgeKey || '');
       if (!edgeKey) return [entry];
+      if (isDrawnWindowPairRow(entry, places, (uid) => indexByUid.has(uid))) return [entry];
       const resolved = resolvedByEdgeKey.get(edgeKey);
       const queryUid = String(resolved?.queryUid || entry?.queryUid || '');
       const subjectUid = String(resolved?.subjectUid || entry?.subjectUid || '');
@@ -304,7 +310,8 @@ export const createLinearComparisonFocus = ({ state, mode, errorLog, linearCompa
  */
 
 /**
- * The File card's row input of the shown Linear drawing, its record row tokens, and the LOSAT cache rows by pair.
+ * The File card's row input of the shown Linear drawing, its record row tokens, the LOSAT cache rows by pair, and the
+ * window pairs of each card pair.
  * @param {LinearLayoutReadersPorts} ports
  */
 export const createLinearLayoutReaders = ({ state, shownDrawingOfMode, losatCacheInfo }) => {
@@ -325,10 +332,29 @@ export const createLinearLayoutReaders = ({ state, shownDrawingOfMode, losatCach
         : []
     );
   });
+  /** @returns {LosatCacheInfoEntry[]} */
+  const cacheInfoRows = () => (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : []);
   const linearLosatCacheInfoByEdgeKey = computed(() => Object.fromEntries(
-    (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : [])
-      .filter((/** @type {LosatCacheInfoEntry} */ entry) => String(entry?.edgeKey || ''))
-      .map((/** @type {LosatCacheInfoEntry} */ entry) => [String(entry.edgeKey), entry])
+    cacheInfoRows()
+      .filter((entry) => String(entry?.edgeKey || ''))
+      .map((entry) => [String(entry.edgeKey), entry])
   ));
-  return { shownLinearRecordRowFor, linearLayoutTokens, linearLosatCacheInfoByEdgeKey };
+  // The window pairs of each card pair, by its edge key: one row each, with its own Save Raw LOSAT TSV and file name
+  // (OV-2742). The units come from the drawn Result's catalog, which the Generate that wrote the rows committed.
+  /** @type {{ readonly value: Record<string, LinearWindowPair[]> }} */
+  const linearLosatWindowPairs = computed(() => Object.fromEntries(
+    linearWindowPairsByCardEdge(cacheInfoRows(), catalogUnitPlaces(state.featureCatalog.value))
+  ));
+  /**
+   * A side of a window pair as its row names it after `#`: the card's number, and the window's when the card draws
+   * several ("1 window 2").
+   * @param {number} cardIndex @param {number | null} window
+   */
+  const linearWindowPairSide = (cardIndex, window) => (
+    window === null ? String(cardIndex + 1) : t('{n} window {window}', { n: cardIndex + 1, window })
+  );
+  return {
+    shownLinearRecordRowFor, linearLayoutTokens, linearLosatCacheInfoByEdgeKey, linearLosatWindowPairs,
+    linearWindowPairSide
+  };
 };

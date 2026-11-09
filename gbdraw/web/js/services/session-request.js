@@ -105,6 +105,9 @@ import {
   resolveLinearRecordEffectiveSubtitle
 } from './linear-sources.js';
 import {
+  layoutCellKey,
+  linearLayoutCells,
+  linearLayoutPlaces,
   linearRecordLayoutHasSharedRow,
   recordTranslationsFor,
   resolveEffectiveLinearRecordRows
@@ -1487,18 +1490,33 @@ const windowEndpoints = (rawStart, rawEnd) => {
  * Start reverses it), or the windows its list holds (`cardCropWindow`): those
  * of a record drawn in several, each placed by its own column when the Record
  * Layout arranges the rows (D-08, D-17), or one window across the origin,
- * placed by the record's column (D-14).
+ * placed by the record's column (D-14). A listed window with "Across the
+ * origin" ticked runs from its Start across the origin to its End, and
+ * Generate refuses one whose Start is not after its End, naming the card
+ * (`ordinal`, PD-OI-124). A listed window with both ends empty draws the whole
+ * record: Generate's card copies fill it in from the record's length
+ * (`resolveWholeRecordWindows`), so here it is still a missing endpoint.
  * @param {Pick<RequestLinearSeq, 'region_start' | 'region_end' | 'region_reverse' | 'windows'>} seq
- * @param {{ arranged: boolean }} options
+ * @param {{ arranged: boolean, ordinal?: number }} options
  * @returns {CanonicalRecord['windows']}
  */
-export const linearWindowsPayload = (seq, { arranged }) => {
+export const linearWindowsPayload = (seq, { arranged, ordinal }) => {
+  const context = ordinal === undefined ? {} : { inputOrdinal: ordinal };
   if (seq.windows && seq.windows.length) {
     const placed = arranged && seq.windows.length > 1;
     return seq.windows.map((window) => {
       const span = windowEndpoints(window.start, window.end);
-      if (span === null) throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
-      return { ...span, reverseComplement: window.reverseComplement, column: placed ? window.column : null };
+      if (span === null) throw diagnosticError('REGION_INVALID', { ...context, field: 'region', reason: 'BOTH_ENDPOINTS' });
+      const crosses = typeof window.acrossOrigin === 'boolean' ? window.acrossOrigin : span.start > span.end;
+      if (crosses && span.start <= span.end) {
+        throw diagnosticError('REGION_INVALID', { ...context, field: 'region', reason: 'ORIGIN_ORDER' });
+      }
+      const ordered = crosses ? span : { start: Math.min(span.start, span.end), end: Math.max(span.start, span.end) };
+      return {
+        ...ordered,
+        reverseComplement: Boolean(window.reverseComplement) || (!crosses && span.start > span.end),
+        column: placed ? window.column : null
+      };
     });
   }
   const span = windowEndpoints(seq.region_start, seq.region_end);
@@ -1626,11 +1644,18 @@ const buildRecords = ({ drawing, filesData, resources }) => {
         (/** @type {{ uid?: unknown, canonicalCardinality?: string }} */ entry) => [entry.uid, entry.canonicalCardinality]
       )
     );
+    const arranged = Boolean(drawing.linearRecordLayoutEnabled?.value);
+    // The places of the Record Layout's cells, when the Web owns them (a card drawn in several windows, PD-OI-124).
+    const places = arranged ? linearLayoutPlaces(linearLayoutCells(
+      (filesData.linearSeqs || []).map((seq) => ({ uid: seq.uid, windows: seq.windows || [] })), drawing.linearRecordRows
+    )) : null;
     /** @type {RequestDraftRecord[]} */
     const records = (filesData.linearSeqs || []).map((seq, index) => {
       const source = linearRecordSource(resources, drawing.inputType.value, seq, index);
-      const arranged = Boolean(drawing.linearRecordLayoutEnabled?.value);
-      const windows = linearWindowsPayload(seq, { arranged });
+      const written = linearWindowsPayload(seq, { arranged, ordinal: index + 1 });
+      const windows = places && written.length > 1
+        ? written.map((window, at) => ({ ...window, column: places.get(layoutCellKey(seq.uid, at)) ?? null }))
+        : written;
       const selector = linearCardSelector(seq);
       return {
         recordKey: linearSeqRecordKey(seq, index),
@@ -1645,9 +1670,9 @@ const buildRecords = ({ drawing, filesData, resources }) => {
             subtitle: resolveLinearRecordEffectiveSubtitle(seq),
             gridRow: arranged ? (resolvedRows[index]?.row ?? null) : null,
             // A record drawn in several windows places each by its own column (D-14).
-            gridColumn: arranged && windows.length < 2
-              ? (resolvedRows[index]?.canonicalColumn ?? null)
-              : null
+            gridColumn: !arranged || windows.length > 1 ? null
+              : places ? (places.get(layoutCellKey(seq.uid, null)) ?? null)
+                : (resolvedRows[index]?.canonicalColumn ?? null)
           }),
           reverseComplement: linearPresentationReverse(seq, windows)
         }

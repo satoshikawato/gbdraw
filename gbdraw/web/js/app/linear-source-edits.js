@@ -12,7 +12,8 @@ import { createLinearSeq, normalizeLinearSeqList, replaceLinearSeqs } from '../s
 import { padDepthFileSlots } from '../services/depth-track-state.js';
 import { inputSourceFiles } from '../services/input-types.js';
 import { reconcileLinearComparisonPlan } from '../services/linear-comparisons.js';
-import { planLinearSourceRowMove, reconcileLinearRecordLayout } from '../services/linear-record-layout.js';
+import { placeNewLayoutWindow, planLinearSourceRowMove, reconcileLinearRecordLayout } from '../services/linear-record-layout.js';
+import { addCardWindow, cardWindowEditKind, editCardWindow, removeCardWindow } from '../services/linear-card-windows.js';
 import {
   groupLinearSourceRecords,
   inferredDefinitionForRecord,
@@ -466,16 +467,17 @@ export const createLinearSourceMoves = ({
  *   A card's records, read in the drawing that holds it.
  * @property {(drawing: DrawingState, sequence: LinearSeq | undefined) => RecordSelectorStatus} linearRecordStatusFor
  * @property {() => void} rebindAnnotationRecords
+ * @property {ApplyLinearSeqMutation} applyLinearSeqMutation
  */
 
 /**
- * A Linear record card's record selector, crop, and the resets of its
- * definition and subtitle.
+ * A Linear record card's record selector, its windows (the Region block's crop, or the Windows list; PD-OI-124),
+ * and the resets of its definition and subtitle.
  * @param {LinearRecordEditsPorts} ports
  */
 export const createLinearRecordEdits = ({
   sessionOperationAvailability, shownDrawingOfMode, runUndoable, clearAlignmentForMutation, linearRecordsFor,
-  linearRecordStatusFor, rebindAnnotationRecords
+  linearRecordStatusFor, rebindAnnotationRecords, applyLinearSeqMutation
 }) => {
   /** @param {LinearSeq} sequence @param {unknown} value */
   const setLinearRecordSelector = (sequence, value) => {
@@ -496,19 +498,61 @@ export const createLinearRecordEdits = ({
     return true;
   };
 
-  /** @param {LinearSeq} sequence @param {'region_start' | 'region_end'} field @param {unknown} value */
-  const setLinearRecordCrop = (sequence, field, value) => {
+  /**
+   * A field of the card's window `index` (the Region block is window 0): Start or End (blank is empty), Reverse
+   * complement, or Across the origin. One History step: the control's own. A change of the span clears the alignment;
+   * Reverse complement alone is a direction the alignment keeps (`cardWindowEditKind`).
+   * @param {LinearSeq} sequence @param {number} index
+   * @param {'start' | 'end' | 'reverseComplement' | 'acrossOrigin'} field @param {unknown} value
+   */
+  const setLinearCardWindow = (sequence, index, field, value) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    if (!sequence || !['region_start', 'region_end'].includes(field)) return false;
-    const next = value === '' || value === null || value === undefined
-      ? null
-      : Number(value);
-    if (Object.is(sequence[field], next)) return false;
-    clearAlignmentForMutation(msg('record crop changed.'));
-    sequence[field] = next;
+    if (!sequence) return false;
+    const next = field === 'reverseComplement' || field === 'acrossOrigin' ? Boolean(value)
+      : value === '' || value === null || value === undefined ? null : Number(value);
+    const edit = { [field]: next };
+    const kind = cardWindowEditKind(sequence, index, edit);
+    if (!kind) return false;
+    if (kind === 'crop') clearAlignmentForMutation(msg('record crop changed.'));
+    editCardWindow(sequence, index, edit);
     return true;
   };
+
+  /**
+   * Replaces a card's windows (Add window, Remove): one History step through the record rows' transition, which also
+   * drops the stored comparisons whose unit indexes the change shifts (the next Generate plans them again).
+   * @param {string} label @param {LinearSeq} sequence @param {(card: LinearSeq, drawing: DrawingState) => boolean} change
+   */
+  const changeLinearCardWindows = (label, sequence, change) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing || !sequence) return false;
+    return runUndoable(label, () => {
+      const card = { ...sequence, windows: sequence.windows.map((window) => ({ ...window })) };
+      if (!change(card, drawing)) return;
+      applyLinearSeqMutation(drawing, drawing.linearSeqs.map((seq) => (seq.uid === card.uid ? card : seq)), {
+        preserveLosatCacheInfo: true, alignmentMutation: msg('record crop changed.')
+      });
+    });
+  };
+  /** "+ Add window": a window after the card's last one, in its row's next place. @param {LinearSeq} sequence */
+  const addLinearCardWindow = (sequence) => changeLinearCardWindows(msg('Add window'), sequence, (card, drawing) => {
+    const placed = drawing.linearRecordLayoutEnabled.value
+      ? placeNewLayoutWindow(drawing.linearSeqs, drawing.linearRecordRows, card.uid) : null;
+    const single = card.windows.length === 0;
+    // The placement wrote the places of the card's own windows on the drawing's card.
+    if (placed && !single) card.windows = sequence.windows.map((window) => ({ ...window }));
+    addCardWindow(card, placed ? placed.column : null);
+    if (placed && single) card.windows[0].column = placed.lastColumn;
+    if (placed) drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...placed.entries);
+    return true;
+  });
+  /** Remove of window `index`; the last window stays. @param {LinearSeq} sequence @param {number} index */
+  const removeLinearCardWindow = (sequence, index) => changeLinearCardWindows(
+    msg('Remove window'), sequence, (card) => removeCardWindow(card, index)
+  );
 
   /** @param {LinearSeq} seq */
   const resetLinearRecordDefinition = (seq) => {
@@ -529,5 +573,8 @@ export const createLinearRecordEdits = ({
       seq.record_subtitle = '';
     });
   };
-  return { setLinearRecordSelector, setLinearRecordCrop, resetLinearRecordDefinition, resetLinearRecordSubtitle };
+  return {
+    setLinearRecordSelector, setLinearCardWindow, addLinearCardWindow, removeLinearCardWindow, resetLinearRecordDefinition,
+    resetLinearRecordSubtitle
+  };
 };

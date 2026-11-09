@@ -305,8 +305,9 @@ import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
 import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
-import { drawsSeveralUnits, planLinearUnitSearch } from './linear-units.js';
-/** @import { LinearUnitPlanPayload, LinearUnitWindowsOf } from './linear-units.js' */
+import { catalogUnitPlaces, drawsSeveralUnits, isDrawnWindowPairRow, planLinearUnitSearch } from './linear-units.js';
+import { catalogRecordLength, resolveWholeRecordWindows } from './linear-card-windows.js';
+/** @import { LinearUnitPlace, LinearUnitPlanPayload, LinearUnitWindowsOf } from './linear-units.js' */
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
@@ -3775,10 +3776,22 @@ const losatCacheInfoIdentity = (entry) => {
  * @param {NonNullable<UnvalidatedFields<keyof LosatCacheInfoEntry | 'queryRecordInstanceKey'
  *   | 'subjectRecordInstanceKey'>>} entry A saved cache entry that passed `isCurrentRawLosatCacheEntry`; the
  *   fields read here are unvalidated.
+ * @param {ReadonlyMap<string, LinearUnitPlace>} places The units of the Result the drawing shows, read at Load from
+ *   the editor artifacts it installs after the cache: a window pair's row names two of them and keeps its saved
+ *   identity (OV-2918).
  */
-const restoredLosatCacheInfoIdentity = (drawing, entry) => {
+const restoredLosatCacheInfoIdentity = (drawing, entry, places) => {
   const identity = losatCacheInfoIdentity(entry);
   if (state.mode.value !== 'linear') return identity;
+
+  // Indexes of the committed request: positions in the drawn list.
+  const indexByUid = new Map(
+    drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff)
+      .map((sequence, index) => [String(sequence?.uid || ''), index])
+  );
+  // A window pair's row names two drawn units of the Result it was saved with, whose indexes that request counts:
+  // it keeps its saved identity (OV-2918).
+  if (identity.edgeKey && isDrawnWindowPairRow(identity, places, (uid) => indexByUid.has(uid))) return identity;
 
   // The search's records: the entry's record instances, or the row's own uids.
   const queryInstanceUid = String(entry?.queryRecordInstanceKey || '').trim();
@@ -3788,11 +3801,6 @@ const restoredLosatCacheInfoIdentity = (drawing, entry) => {
   const subjectUid = subjectInstanceUid || identity.subjectUid || '';
   if (!queryUid || !subjectUid || queryUid === subjectUid) return {};
 
-  // Indexes of the committed request: positions in the drawn list.
-  const indexByUid = new Map(
-    drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff)
-      .map((sequence, index) => [String(sequence?.uid || ''), index])
-  );
   const queryIndex = indexByUid.get(queryUid);
   const subjectIndex = indexByUid.get(subjectUid);
   if (queryIndex === undefined || subjectIndex === undefined) return {};
@@ -3928,7 +3936,8 @@ const savedLosatCacheEntryKind = (entry) => {
  * The project's raw LOSAT cache, from each drawing's saved entries (DESIGN
  * §4.1: a Session 51 drawing's entries merge into the one cache, keyed by
  * their content; a Session 27-50's one list is its Linear drawing's).
- * @param {readonly { drawing: DrawingState, entries: unknown }[]} sources
+ * @param {readonly { drawing: DrawingState, entries: unknown, places?: ReadonlyMap<string, LinearUnitPlace> }[]} sources
+ *   Each drawing's saved entries, with the units of the Result it shows (`catalogUnitPlaces`; none when not shown).
  * @param {unknown} [legacyEnvelope]
  * @param {{ adoptCurrent?: boolean, validatedManifest?: unknown }} [options]
  */
@@ -3943,7 +3952,7 @@ const applyLosatCache = (
   /** @type {Record<string, unknown>[]} */
   const legacyEntries = [];
 
-  sources.forEach(({ drawing, entries }) => {
+  sources.forEach(({ drawing, entries, places = new Map() }) => {
     if (!Array.isArray(entries)) return;
     // An entry an earlier drawing holds (the same key, the same content) is read once.
     const earlier = new Set(map.keys());
@@ -3975,7 +3984,7 @@ const applyLosatCache = (
         // A saved name that is no text is read as none (OV-981).
         filename: typeof entry.filename === 'string' && entry.filename ? entry.filename : `losat_pair_${idx + 1}.tsv`,
         display: true,
-        ...restoredLosatCacheInfoIdentity(drawing, entry)
+        ...restoredLosatCacheInfoIdentity(drawing, entry, places)
       });
     });
   });
@@ -4210,10 +4219,10 @@ export const assertDrawingInputs = (drawing) => {
 // `sequences`: the drawn record files, in request order. `cards`: every
 // Linear card, OFF cards included; an error names its card number among them.
 /**
- * @template {{ uid?: unknown, region_start?: unknown, region_end?: unknown, windows?: unknown }} S
+ * @template {{ uid?: unknown, region_start?: unknown, region_end?: unknown, windows?: readonly LinearSeqWindow[] }} S
  * @param {S[]} sequences
  * @param {{ mode?: unknown, status?: unknown, issues?: { code: string, context?: DiagnosticContext }[],
- *   records?: { sourceIndex?: unknown }[] } | null | undefined} catalog
+ *   records?: { sourceIndex?: unknown, recordLength?: unknown }[] } | null | undefined} catalog
  * @param {{ cards?: { uid: string }[] }} [options]
  * @returns {S[]}
  */
@@ -4248,7 +4257,8 @@ export const materializeLinearRecordFiles = (
       throw diagnosticError('REGION_INVALID', { inputOrdinal, reason: 'SELECT_RECORD_FOR_REGION' });
     }
   });
-  return sourceSequences;
+  // A listed window with Start and End empty draws its card's whole record (PD-OI-124).
+  return sourceSequences.map((source, sourceIndex) => resolveWholeRecordWindows(source, catalogRecordLength(catalog, sourceIndex)));
 };
 
 /**
@@ -6422,7 +6432,9 @@ const artifactUiState = (view) => ({
  * The raw LOSAT entries Save writes into one Session 51 drawing: those its
  * request's inputs name (DESIGN §1, K-3), so an entry two drawings use is
  * written in both and a drawing without a request names none. A Linear entry
- * names its pair's rows, which a Linear request names as its records' keys;
+ * names its pair's rows, which a Linear request names as its records' keys
+ * (a window pair's row names two drawn units, each a record key or a window
+ * of one, as the drawing's catalog `catalog` names it; OV-2918);
  * a Circular conservation entry names its subject and query hashes, which
  * must be a pair the drawing's committed request recorded (D-15-124; Save
  * reads no ring file); any other entry goes to every drawing with a request.
@@ -6430,16 +6442,20 @@ const artifactUiState = (view) => ({
  * @param {SessionResourceDrawing['renderRequest']} request The drawing's written request.
  * @param {ConservationPairs} conservationPairs The hash pairs its committed request names (none for a draft request).
  * @param {readonly Record<string, unknown>[]} entries `serializeLosatCache`'s.
+ * @param {Parameters<typeof catalogUnitPlaces>[0]} catalog The drawing's feature catalog (none before a Generate).
  * @returns {Record<string, unknown>[]}
  */
-const losatEntriesOfDrawing = (request, conservationPairs, entries) => {
+const losatEntriesOfDrawing = (request, conservationPairs, entries, catalog) => {
   if (!request) return [];
   const records = new Set(request.mode === 'linear' ? request.records.map(({ recordKey }) => recordKey) : []);
+  const places = catalogUnitPlaces(catalog);
+  /** @param {string} uid */
+  const named = (uid) => records.has(uid) || records.has(places.get(uid)?.recordKey ?? '');
   // A request without sequence rings names no pair, whatever its drawing's file held.
   const readsRings = request.mode === 'circular'
     && (request.diagramOptions.conservationFastaFiles ?? []).some((file) => file !== null);
   return entries.filter(({ queryUid, subjectUid, flow, queryCanonicalHash, subjectCanonicalHash }) => (
-    typeof queryUid === 'string' && typeof subjectUid === 'string' ? records.has(queryUid) && records.has(subjectUid)
+    typeof queryUid === 'string' && typeof subjectUid === 'string' ? named(queryUid) && named(subjectUid)
       : flow === CIRCULAR_CONSERVATION_FLOW
         ? readsRings && conservationPairs.has(conservationPairKey(subjectCanonicalHash, queryCanonicalHash))
         : true
@@ -6601,7 +6617,7 @@ const exportSessionDocument = async (
         } : {}),
         modes: { [saved.mode]: slice },
         ...(preservedCliOptions.has(saved.id) ? { cliOptions: cloneJsonData(preservedCliOptions.get(saved.id)) } : {}),
-        losatCache: { entries: losatEntriesOfDrawing(built.written[index].renderRequest, conservationPairs, losatEntries) },
+        losatCache: { entries: losatEntriesOfDrawing(built.written[index].renderRequest, conservationPairs, losatEntries, editorState?.featureCatalog ?? null) },
         losatDerivedCache: { entries: [] },
         proteinIdentityManifest,
         ...(cliInvocation ? { cliInvocation } : {})
@@ -8335,7 +8351,7 @@ const importSessionDocument = async (e, options = {}) => {
      * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field
      */
     const losatSourcesOf = (projectedEntries, field) => fileLosatEntriesOf(projectedEntries, field, losatPartDrawingId)
-      .map(({ id, entries }) => ({ drawing: shownDrawing.id === id ? shownDrawing : state.drawingOf(id), entries }));
+      .map(({ id, entries }) => (shownDrawing.id === id ? { drawing: shownDrawing, entries, places: catalogUnitPlaces(admittedFeatureCatalog(artifactEditorState.featureCatalog)) } : { drawing: state.drawingOf(id), entries }));
     if (canonicalSession) {
       applyLosatCache(
         losatSourcesOf(projectionResult.artifactState.losatCache?.entries, 'losatCache'),
