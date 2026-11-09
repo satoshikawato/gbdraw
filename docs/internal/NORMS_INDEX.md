@@ -229,7 +229,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-063](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-063-legend-order-continuity-across-generate) | Legend order continuity across Generate | ACCEPTED | web.legend.order-continuity | 1 | — | 4 |
 | [PD-OI-064](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-064-canvas-padding-continuity-across-generate) | Canvas padding continuity across Generate | ACCEPTED | web.canvas.padding-continuity | 1 | — | 2 |
 | [PD-OI-065](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-065-label-edits-after-source-replacement) | Label edits after source replacement | ACCEPTED | web.labels.source-replacement-reconciliation | 1 | — | 0 |
-| [PD-OI-066](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-066-live-edit-and-regeneration-parity) | Live-edit and regeneration parity | ACCEPTED | web.live-edit.regeneration-parity | 3 | scenario revision 2 | 17 |
+| [PD-OI-066](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-066-live-edit-and-regeneration-parity) | Live-edit and regeneration parity | ACCEPTED | web.live-edit.regeneration-parity | 3 | scenario revision 2 | 18 |
 | [PD-OI-067](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-067-per-record-inferred-linear-definitions) | Per-record inferred Linear definitions | ACCEPTED | web.linear.file-default-definition | 4 | scenario revision 1 | 2 |
 | [PD-OI-068](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-068-record-universe-of-fasta-and-gff3fasta-inputs) | Record universe of FASTA and GFF3+FASTA inputs | ACCEPTED | diagram-generation.gff-fasta-record-universe | 2 | scenario revision 1 | 8 |
 | [PD-OI-069](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-069-stable-hash-single-feature-colors-with-duplicate-record-ids) | Stable-hash single-feature colors with duplicate record IDs | ACCEPTED | web.feature-color.duplicate-record-instance | 2 | scenario revision 1 | 12 |
@@ -448,6 +448,7 @@ are listed under "Cited ids without a record".
   - `tests/web/helpers/live-generate-parity.cjs`
   - `tests/web/helpers/live-random-walk.mjs`
   - `tests/web/helpers/live-work-allowlist.mjs`
+  - `tests/web/linear-typography.playwright.spec.js`
   - `tests/web/live-generate-parity-legend.playwright.spec.js`
   - `tests/web/live-generate-parity-track-data.playwright.spec.js`
   - `tests/web/live-generate-parity.playwright.spec.js`
