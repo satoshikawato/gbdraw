@@ -7,11 +7,12 @@
 import { ANNOTATION_ID_ATTRIBUTE } from './drawn-attributes.generated.js';
 
 /**
- * The groups that draw one kind of track. A Result marks each with its slot
- * renderer (`data-gbdraw-slot-renderer`), whatever its id (a custom track slot
- * is `track_slot_<hash>_<slot>`). A Result stored without the marks is read
- * by id: `<id>`, or `<id>_…` for a record of a grid, a Linear record, or a
- * child group.
+ * The groups that draw one kind of track. Python names every slot group
+ * `track_slot_<hash>_<slot>` and marks it with its slot renderer
+ * (`data-gbdraw-slot-renderer`), which is what a Result is read by. The id
+ * lists serve only Results stored without slot tags, by an older gbdraw: such
+ * a Result is read by id, `<id>`, or `<id>_…` for a record of a grid, a Linear
+ * record, or a child group.
  * @typedef {{ readonly renderers: readonly string[], readonly ids: readonly string[] }} TrackGroups
  */
 
@@ -20,7 +21,7 @@ const trackGroups = (renderers, ids) => Object.freeze({ renderers, ids });
 
 export const TICK_GROUPS = trackGroups(['ticks'], ['tick']);
 export const DINUCLEOTIDE_CONTENT_GROUPS = trackGroups(['dinucleotide_content'], ['gc_content']);
-// Circular draws GC skew as `skew`, Linear as `gc_skew`.
+// A Result stored without slot tags named Circular GC skew `skew`, Linear `gc_skew`.
 export const DINUCLEOTIDE_SKEW_GROUPS = trackGroups(['dinucleotide_skew'], ['skew', 'gc_skew']);
 export const DEPTH_GROUPS = trackGroups(['depth'], ['depth']);
 

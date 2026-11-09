@@ -2928,7 +2928,8 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
       '[data-gbdraw-feature-id][data-gbdraw-record-id="NC_012920.1"]'
     );
     const svg = feature?.ownerSVGElement;
-    return Boolean(svg?.getElementById('gc_content') && svg?.getElementById('gc_skew'));
+    return Boolean(svg?.querySelector('[data-gbdraw-slot-renderer="dinucleotide_content"]')
+      && svg?.querySelector('[data-gbdraw-slot-renderer="dinucleotide_skew"]'));
   });
 
   const geometry = await page.evaluate(() => {
@@ -2937,11 +2938,14 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
     const svg = feature?.ownerSVGElement;
     if (!svg) throw new Error('Live HmmtDNA SVG was not found.');
     const features = Array.from(svg.querySelectorAll(featureSelector));
-    const gc = svg.getElementById('gc_content');
-    const skew = svg.getElementById('gc_skew');
-    if (features.length === 0 || !gc || !skew) {
-      throw new Error('Expected live feature, GC content, and GC skew geometry.');
+    // The one GC content and the one GC skew slot group of the record, found by their slot tags.
+    const gcGroups = Array.from(svg.querySelectorAll('[data-gbdraw-slot-renderer="dinucleotide_content"]'));
+    const skewGroups = Array.from(svg.querySelectorAll('[data-gbdraw-slot-renderer="dinucleotide_skew"]'));
+    if (features.length === 0 || gcGroups.length !== 1 || skewGroups.length !== 1) {
+      throw new Error('Expected live feature geometry and one GC content and one GC skew group.');
     }
+    const [gc] = gcGroups;
+    const [skew] = skewGroups;
 
     const clientBand = (elements) => {
       const rects = elements.map((element) => element.getBoundingClientRect());

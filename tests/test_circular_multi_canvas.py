@@ -729,11 +729,17 @@ def test_assemble_circular_diagram_from_records_shared_legend_and_unique_ids() -
 
     all_group_ids = [group.attrib.get("id", "") for group in root.findall(".//svg:g[@id]", ns)]
 
-    for base_id in ("Axis", "tick", "gc_content"):
-        ids = [gid for gid in all_group_ids if gid == base_id or gid.startswith(f"{base_id}_")]
-        assert len(ids) == len(records)
-        assert len(ids) == len(set(ids))
-        assert all(gid != base_id for gid in ids)
+    axis_ids = [gid for gid in all_group_ids if gid.startswith("Axis_")]
+    assert len(axis_ids) == len(records) == len(set(axis_ids))
+    assert "Axis" not in all_group_ids
+    # Each record's tick and GC content slot groups, found by their slot tags, have their own ids.
+    for renderer in ("ticks", "dinucleotide_content"):
+        ids = [
+            group.attrib["id"]
+            for group in root.findall(".//svg:g[@id]", ns)
+            if group.attrib.get("data-gbdraw-slot-renderer") == renderer
+        ]
+        assert len(ids) == len(records) == len(set(ids))
 
     for record_index in range(len(records)):
         record_group = root.find(f".//svg:g[@id='record_{record_index}']", ns)
@@ -754,16 +760,14 @@ def test_assemble_circular_diagram_from_records_shared_legend_and_unique_ids() -
             for group_id in record_label_ids
         )
 
+    # Each record's skew slot group, found by its slot tag (OV-3084).
     skew_ids = [
-        gid
-        for gid in all_group_ids
-        if gid in {"skew", "gc_skew"}
-        or gid.startswith("skew_")
-        or gid.startswith("gc_skew_")
+        group.attrib["id"]
+        for group in root.findall(".//svg:g[@id]", ns)
+        if group.attrib.get("data-gbdraw-slot-renderer") == "dinucleotide_skew"
     ]
     assert len(skew_ids) == len(records)
     assert len(skew_ids) == len(set(skew_ids))
-    assert all(gid not in {"skew", "gc_skew"} for gid in skew_ids)
 
     skew_clip_ids: list[str] = []
     for skew_id in skew_ids:
@@ -4926,8 +4930,10 @@ def test_a_record_part_is_keyed_by_its_record_index_and_its_renames() -> None:
 # record's renamed map, as canonical JSON (sha256), and the renames per record. The lambda plan names the GC
 # skew clip id, a hash of the skew path: it moved when the skew windows were centred (OV-2870; bc424518... before).
 _GOLDEN_RECORD_ID_PLANS = {
-    "whole + region": ("4468945bcd3d089e62a18f8d1bba4010001688935b3327b56341afecb63c10ae", [0, 22]),
-    "lambda twice, radial labels": ("c4f5399c955d911458add1dca40d7ca8655057dc0dcc09db5562bfb302d6f277", [0, 85]),
+    # Every slot group takes its slot's id without a stack too (OV-3084): the second record's slot groups, and the
+    # label path ids derived from them, now share the first record's ids, so the plan renames those as well.
+    "whole + region": ("2136eab09857e9d6b2b5821a36a8d4dfe1f26e49eb9dc47207d967007c612adb", [0, 26]),
+    "lambda twice, radial labels": ("66f463d4ec993a6a74c07d6e822b3d34562ffe898337fd9f16603798f402d7ba", [0, 97]),
 }
 
 

@@ -180,7 +180,7 @@ class GcContentDrawer:
         radius: float,
         track_width: float,
         norm_factor: float,
-        axis_group_id: str = "gc_content_axis",
+        axis_group_id: str,
     ) -> Group:
         if not self.show_axis:
             return group
@@ -269,7 +269,7 @@ class GcContentDrawer:
         track_width: float,
         norm_factor: float,
         dinucleotide: str,
-        group_id: str = "gc_content",
+        group_id: str,
         *,
         record_transform: RecordDisplayTransform,
     ) -> Group:

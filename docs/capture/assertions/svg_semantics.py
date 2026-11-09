@@ -94,10 +94,15 @@ root => {
     }
     return found && !value.slice(end).trim() ? [offsetX, offsetY] : null;
   };
+  // A Linear record's group is its features slot group, or a record group when no slot draws features.
+  const linearRecordGroup = (element) => (
+    /^record_group_[\w-]+$/.test(String(element.getAttribute('id') || '')) ||
+    element.getAttribute('data-gbdraw-slot-renderer') === 'features'
+  );
   const recordPlacementCandidates = elements
     .filter((element) => (
       String(element.tagName || '').toLowerCase() === 'g' &&
-      /^(?:record_\d+|record_group_[\w-]+)$/.test(String(element.getAttribute('id') || '')) &&
+      (/^record_\d+$/.test(String(element.getAttribute('id') || '')) || linearRecordGroup(element)) &&
       Boolean(element.getAttribute('data-gbdraw-record-id'))
     ));
   const indexedRecordPlacements = recordPlacementCandidates.filter((element) => (
@@ -106,9 +111,7 @@ root => {
   const recordPlacements = (
     indexedRecordPlacements.length > 0
       ? indexedRecordPlacements
-      : recordPlacementCandidates.filter((element) => (
-          /^record_group_[\w-]+$/.test(String(element.getAttribute('id') || ''))
-        ))
+      : recordPlacementCandidates.filter(linearRecordGroup)
   )
     .map((element) => {
       const bounds = element.getBoundingClientRect();
@@ -253,6 +256,15 @@ def _local_name(name: str) -> str:
     return name.rsplit("}", 1)[-1].lower()
 
 
+def _is_linear_record_group(element: ET.Element) -> bool:
+    """A Linear record's group: its features slot group, or a record group when no slot draws features."""
+
+    return bool(
+        re.fullmatch(r"record_group_[\w-]+", element.attrib.get("id", ""))
+        or element.attrib.get("data-gbdraw-slot-renderer") == "features"
+    )
+
+
 def _normalized_text(element: ET.Element) -> str:
     return " ".join("".join(element.itertext()).split())
 
@@ -374,9 +386,9 @@ def inspect_svg_file(path: Path) -> dict[str, Any]:
         element
         for element in elements
         if _local_name(element.tag) == "g"
-        and re.fullmatch(
-            r"(?:record_\d+|record_group_[\w-]+)",
-            element.attrib.get("id", ""),
+        and (
+            re.fullmatch(r"record_\d+", element.attrib.get("id", ""))
+            or _is_linear_record_group(element)
         )
         and element.attrib.get("data-gbdraw-record-id")
     ]
@@ -386,9 +398,7 @@ def inspect_svg_file(path: Path) -> dict[str, Any]:
         if re.fullmatch(r"record_\d+", element.attrib.get("id", ""))
     ]
     record_containers = indexed_record_containers or [
-        element
-        for element in record_container_candidates
-        if re.fullmatch(r"record_group_[\w-]+", element.attrib.get("id", ""))
+        element for element in record_container_candidates if _is_linear_record_group(element)
     ]
     event_attributes: list[str] = []
     unsafe_hrefs: list[str] = []

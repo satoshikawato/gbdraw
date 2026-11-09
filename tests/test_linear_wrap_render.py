@@ -123,7 +123,7 @@ def _translate_y(element: ElementTree.Element) -> float:
 
 
 def _record_groups(root: ElementTree.Element) -> list[ElementTree.Element]:
-    return [element for element in root.iter(f"{SVG}g") if element.attrib.get("id", "").startswith("record_group_")]
+    return [element for element in root.iter(f"{SVG}g") if element.attrib.get("data-gbdraw-slot-renderer") == "features"]
 
 
 def _path_points(data: str) -> list[tuple[float, float]]:
@@ -710,7 +710,7 @@ def test_depth_track_wraps(tmp_path: Path) -> None:
     depth = tmp_path / "depth.tsv"
     depth.write_text("".join(f"NC_001416.1\t{position}\t{position % 50}\n" for position in range(1, LAMBDA_LENGTH, 100)))
     root = _root(_build(depth_file=str(depth)))
-    groups = [element for element in root.iter(f"{SVG}g") if str(element.attrib.get("id", "")).startswith("depth")]
+    groups = [element for element in root.iter(f"{SVG}g") if element.attrib.get("data-gbdraw-slot-renderer") == "depth"]
     assert groups
     rows = [element for element in groups[0] if "data-gbdraw-wrap-row" in element.attrib]
     assert len(rows) == 5

@@ -87,6 +87,6 @@ def test_rendering_does_not_run_svgwrite_validation(
 
     assert (tmp_path / "circular.svg").exists()
     assert (tmp_path / "linear.svg").exists()
-    assert 'id="depth"' in (tmp_path / "circular.svg").read_text(encoding="utf-8")
-    assert 'id="depth_record_1"' in (tmp_path / "linear.svg").read_text(encoding="utf-8")
+    assert 'data-gbdraw-slot-renderer="depth"' in (tmp_path / "circular.svg").read_text(encoding="utf-8")
+    assert 'data-gbdraw-slot-renderer="depth"' in (tmp_path / "linear.svg").read_text(encoding="utf-8")
     assert calls == Counter()

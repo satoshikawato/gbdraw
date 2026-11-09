@@ -26,12 +26,12 @@ class GcContentGroup:
         gc_config: GcContentConfigurator,
         *,
         norm_factor_override: float,
-        group_id: str | None = None,
+        group_id: str,
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
         # The transform the record is drawn by: whether its lines wrap round the origin or hold to 12 o'clock.
         self.record_transform = record_transform if record_transform is not None else unset_record_transform(gb_record)
-        self.group_id = group_id or "gc_content"
+        self.group_id = group_id
         self.gc_group: Group = Group(id=self.group_id)
         self.radius: float = radius
         self.gc_config: GcContentConfigurator = gc_config

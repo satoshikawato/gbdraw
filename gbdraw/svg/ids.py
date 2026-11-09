@@ -67,19 +67,18 @@ def instance_svg_id(base_id: object, instance_id: object) -> str:
     )
 
 
-def track_slot_svg_id(
-    slot_id: object,
-    *,
-    renderer: object,
-    slot_index: int,
-) -> str:
-    """Return a deterministic DOM ID for one resolved user track slot."""
+def track_slot_svg_id(slot_id: object, *, renderer: object) -> str:
+    """Return the deterministic DOM ID of one resolved track slot in both modes.
+
+    A stack refuses duplicate slot ids, so the slot id and renderer name the slot. The ID leaves out the slot's
+    place in the stack, so adding, removing or moving another row keeps it, and the stages drawn into it stay
+    reusable (OV-3083).
+    """
 
     return stable_svg_id(
         "track_slot",
         str(renderer).strip().lower(),
         str(slot_id),
-        int(slot_index),
         namespace=slot_id,
     )
 

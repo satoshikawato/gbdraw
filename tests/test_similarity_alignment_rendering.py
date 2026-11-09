@@ -622,18 +622,18 @@ def test_final_translation_is_shared_by_every_record_geometry_consumer() -> None
         record = find(
             root,
             lambda element: element.attrib.get("data-gbdraw-record-id") == "second"
-            and element.attrib.get("id", "").startswith("record_group_"),
+            and element.attrib.get("data-gbdraw-slot-renderer") == "features",
         )
         definition = find(
             root,
             lambda element: element.attrib.get("data-gbdraw-record-id") == "second"
             and element.attrib.get("data-gbdraw-role") == "record-definition",
         )
+        # The second record's group of the region set's slot: the one whose marks name record index 1.
         annotation = find(
             root,
-            lambda element: element.attrib.get("id", "").startswith(
-                "gbdraw-annotation-track-annotations_1-2"
-            ),
+            lambda element: element.attrib.get("data-gbdraw-slot-id") == "annotations_1"
+            and any(child.attrib.get("data-gbdraw-record-index") == "1" for child in element.iter()),
         )
         comparison_group = find(
             root,

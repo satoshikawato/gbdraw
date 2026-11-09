@@ -351,14 +351,9 @@ class _CircularGridLayout:
     translations: tuple[tuple[float, float], ...]
 
 
-_MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS = {
-    "Axis",
-    "tick",
-    "labels",
-    "gc_content",
-    "skew",
-    "gc_skew",
-}
+# Track slot groups carry their slot and record identity (``track_slot_svg_id``); the
+# record axis is the one placed group named alike in every record.
+_MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS = {"Axis"}
 _DEFINITION_POSITIONS = {"center", "top", "bottom"}
 _LINEAR_PLOT_TITLE_POSITIONS = {"center", "top", "bottom"}
 _CIRCULAR_PLOT_TITLE_POSITIONS = {"none", "top", "bottom"}
@@ -1174,14 +1169,10 @@ def _require_circular_assembly_result(drawing: Drawing) -> CircularAssemblyResul
     return result
 
 
-def _record_suffixed_id(group_id: object, record_index: int, *, top_level: bool) -> object:
-    """The id a record's merge gives a placed group (``top_level``) or one of its direct children."""
-    if top_level and group_id in _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS:
+def _record_suffixed_id(group_id: object, record_index: int) -> object:
+    """The id a record's merge gives a placed group."""
+    if group_id in _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS:
         return f"{group_id}_{record_index}"
-    if isinstance(group_id, str) and group_id.startswith("depth_"):
-        if group_id.endswith("_axis"):
-            return f"{group_id[:-5]}_record_{record_index + 1}_axis"
-        return f"{group_id}_record_{record_index + 1}"
     return group_id
 
 
@@ -1191,11 +1182,7 @@ def _suffix_fixed_top_level_group_id(element: object, record_index: int) -> None
     if not isinstance(attribs, dict):
         return
     if "id" in attribs:
-        attribs["id"] = _record_suffixed_id(attribs["id"], record_index, top_level=True)
-    for child in getattr(element, "elements", []) or []:
-        child_attribs = getattr(child, "attribs", None)
-        if isinstance(child_attribs, dict) and "id" in child_attribs:
-            child_attribs["id"] = _record_suffixed_id(child_attribs["id"], record_index, top_level=False)
+        attribs["id"] = _record_suffixed_id(attribs["id"], record_index)
 
 
 _SVG_URL_REFERENCE_RE = re.compile(r"url\(#([^)]+)\)")
@@ -1235,21 +1222,15 @@ def _placed_record_ids(
     """The ids of one placed content as its ``record_part`` copy holds them before renaming.
 
     The copy's walk order after ``_suffix_fixed_top_level_group_id``: the
-    placed group's suffixed id, then each child's suffixed id followed by its
+    placed group's suffixed id, then each child's id followed by its
     descendants' ids. ``merge_circular_record_part`` checks the copy against it.
     """
     ids: list[str] = []
-    group_id = _record_suffixed_id(dict(attributes).get("id"), record_index, top_level=True)
+    group_id = _record_suffixed_id(dict(attributes).get("id"), record_index)
     if isinstance(group_id, str) and group_id:
         ids.append(group_id)
     for child in content.children:
-        child_attribs = getattr(child, "attribs", None)
-        if isinstance(child_attribs, dict):
-            child_id = _record_suffixed_id(child_attribs.get("id"), record_index, top_level=False)
-            if isinstance(child_id, str) and child_id:
-                ids.append(child_id)
-        for grandchild in getattr(child, "elements", []) or []:
-            ids.extend(_record_element_ids(grandchild))
+        ids.extend(_record_element_ids(child))
     return tuple(ids)
 
 

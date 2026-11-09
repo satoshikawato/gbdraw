@@ -35,7 +35,7 @@ class SkewDrawer:
         start_x: float,
         start_y: float,
         dinucleotide: str,
-        group_id: str = "gc_skew",
+        group_id: str,
         record_transform: RecordDisplayTransform | None = None,
         row: ScalarRow | None = None,
     ) -> Group:

@@ -26,7 +26,7 @@ class GcSkewGroup:
         skew_config: GcSkewConfigurator,
         *,
         norm_factor_override: float,
-        group_id: str | None = None,
+        group_id: str,
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
         # The transform the record is drawn by: whether its lines wrap round the origin or hold to 12 o'clock.
@@ -37,7 +37,7 @@ class GcSkewGroup:
         self.track_width: float = track_width
         self.skew_config: GcSkewConfigurator = skew_config
         self.record_len: int = len(self.gb_record.seq)
-        self.skew_group: Group = Group(id=group_id or "skew")
+        self.skew_group: Group = Group(id=group_id)
         self.norm_factor = float(norm_factor_override)
         self.dinucleotide: str = self.skew_config.dinucleotide
         self.add_elements_to_group()
@@ -52,7 +52,7 @@ class GcSkewGroup:
             self.norm_factor,
             self.dinucleotide,
             record_identifier=self.gb_record.id,
-            group_identifier=str(self.skew_group.attribs.get("id", "skew")),
+            group_identifier=str(self.skew_group.attribs["id"]),
             record_transform=self.record_transform,
         )
 

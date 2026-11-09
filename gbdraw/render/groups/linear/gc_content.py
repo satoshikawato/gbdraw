@@ -39,7 +39,7 @@ class GcContentGroup:
         start_x: float = 0,
         start_y: float = 0,
         gc_df: DataFrame | None = None,
-        group_id: str = "gc_content",
+        group_id: str,
         record_transform: RecordDisplayTransform | None = None,
         row_shifts: Sequence[float] = (),
     ) -> None:

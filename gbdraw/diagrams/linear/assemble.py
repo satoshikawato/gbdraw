@@ -267,7 +267,6 @@ from .precalc import (
     _precalculate_label_dimensions,
     _resolve_linear_diagram_label_font_size,
 )
-from ...features.ids import make_linear_dom_id
 from ...svg.ids import (
     definition_group_svg_id,
     instance_svg_id,
@@ -306,29 +305,6 @@ def _linear_feature_placement_slot(side: str, separate_strands: bool) -> Feature
         "linear",
         cast(Literal["overlay", "above", "below"], side),
         separate_strands,
-    )
-
-
-def _linear_track_slot_dom_id(
-    *,
-    slot_id: str,
-    renderer: str,
-    slot_index: int,
-    record_index: int,
-    record_count: int,
-) -> str:
-    """Return the deterministic DOM ID for one rendered Linear user slot."""
-
-    group_id = track_slot_svg_id(
-        slot_id,
-        renderer=renderer,
-        slot_index=slot_index,
-    )
-    if int(record_count) <= 1:
-        return group_id
-    return instance_svg_id(
-        group_id,
-        ("linear-record", int(record_index), int(record_count)),
     )
 
 
@@ -2083,21 +2059,6 @@ def _precalculate_gc_dataframes(
 
 
 
-def _linear_depth_group_id(
-    base_id: str,
-    *,
-    record_index: int,
-    record_count: int,
-) -> str:
-    """Return a stable linear depth group id."""
-
-    return make_linear_dom_id(
-        base_id or "depth",
-        record_index=record_index,
-        record_count=record_count,
-    )
-
-
 def _final_record_translations(
     *,
     record_keys: Sequence[str],
@@ -2524,12 +2485,10 @@ class _LinearTrackPlan:
 
     The annotations, annotation track layouts and normalized slots here
     supersede the slot plan's: the underlays add slots and annotation sets.
-    ``user_slot_mode`` is true when the request listed slots;
     ``label_font_size`` is the diagram's one feature label font size, which
     region labels without their own font take too.
     """
 
-    user_slot_mode: bool
     label_font_size: float
     feature_placement_slot: FeaturePlacementSlot | None
     record_feature_layers: list[FeatureBuildResult]
@@ -2651,7 +2610,6 @@ def _linear_track_plan(
         for index, feature_dict in enumerate(record_feature_dicts)
     ]
     return _LinearTrackPlan(
-        user_slot_mode=track_inputs.linear_track_slots is not None,
         label_font_size=label_font_size,
         feature_placement_slot=feature_placement_slot,
         record_feature_layers=record_feature_layers,
@@ -3888,26 +3846,24 @@ def _linear_record_drawing(
 
 class _LinearSlotDrawing(NamedTuple):
     """One slot of one record as the drawing reads it: the slot, where the record's plan puts it, how far it
-    lies on each wrap row below the first, and its DOM id when the request listed slots."""
+    lies on each wrap row below the first, and its DOM id."""
 
     slot: LinearResolvedTrack
     resolved: LinearResolvedSlot
     row_shifts: tuple[float, ...]
-    group_id: str | None
+    group_id: str
 
 
-def _linear_slot_group_id(drawing: _LinearRecordDrawing, slot: LinearResolvedTrack) -> str | None:
-    """The DOM id of one record's slot group when the request listed slots, else ``None``."""
+def _linear_slot_group_id(drawing: _LinearRecordDrawing, slot: LinearResolvedTrack) -> str:
+    """The DOM id of one record's slot group, the same whether the request listed the slots or took the
+    default ones, so a figure drawn without a stack and the same stack written out carry the same ids
+    (OV-3012). It is the Circular slot id (``track_slot_svg_id``), namespaced by record when the figure has
+    more than one."""
 
-    if not drawing.plan.tracks.user_slot_mode:
-        return None
-    return _linear_track_slot_dom_id(
-        slot_id=str(slot.id),
-        renderer=str(slot.renderer),
-        slot_index=int(slot.slot_index),
-        record_index=drawing.record_index,
-        record_count=drawing.record_count,
-    )
+    group_id = track_slot_svg_id(str(slot.id), renderer=str(slot.renderer))
+    if int(drawing.record_count) <= 1:
+        return group_id
+    return instance_svg_id(group_id, ("linear-record", int(drawing.record_index), int(drawing.record_count)))
 
 
 def _draw_linear_feature_slot(canvas: Drawing, drawing: _LinearRecordDrawing, slot: _LinearSlotDrawing) -> Drawing:
@@ -3931,12 +3887,8 @@ def _draw_linear_feature_slot(canvas: Drawing, drawing: _LinearRecordDrawing, sl
         orthogroup_label_top_member_ids=drawing.orthogroup_label_top_member_ids,
         record_index=drawing.record_index,
         record_count=drawing.record_count,
-        group_id=drawing.record_group_id,
-        dom_group_id=slot.group_id,
-        slot_id=str(slot.slot.id) if slot.group_id is not None else None,
-        slot_renderer=(
-            str(slot.slot.renderer) if slot.group_id is not None else None
-        ),
+        group_id=slot.group_id,
+        feature_slot=slot.slot,
         placement=drawing.placement,
         multi_record_layout=plan.frame.multi_record_enabled,
         record_local_ruler=plan.frame.multi_record_enabled,
@@ -3971,10 +3923,8 @@ def _draw_linear_annotation_slot(canvas: Drawing, drawing: _LinearRecordDrawing,
         font_family=str(drawing.canvas_config.profile.config.objects.text.font_family),
         params=annotation_track_params_from_mapping(slot.slot.params),
         labels=drawing.annotation_labels.get(slot_id, ()),
-        dom_group_id=slot.group_id,
-        semantic_slot_id=(
-            str(slot_id) if slot.group_id is not None else None
-        ),
+        group_id=slot.group_id,
+        slot_id=str(slot_id),
     )
     annotation_group = place_content(
         canvas,
@@ -3995,11 +3945,6 @@ def _draw_linear_depth_slot(canvas: Drawing, drawing: _LinearRecordDrawing, slot
     depth_track = drawing.depth_by_index.get(_depth_slot_track_index(slot.slot))
     if depth_track is None:
         return canvas
-    group_id = _linear_depth_group_id(
-        slot.slot.id or depth_track.id,
-        record_index=drawing.record_index,
-        record_count=drawing.record_count,
-    )
     return add_depth_group(
         canvas,
         drawing.record,
@@ -4008,18 +3953,9 @@ def _draw_linear_depth_slot(canvas: Drawing, drawing: _LinearRecordDrawing, slot
         drawing.canvas_config,
         depth_track.config,
         depth_df=depth_track.df,
-        group_id=group_id,
-        axis_group_id=f"{group_id}_axis",
-        dom_group_id=slot.group_id,
-        dom_axis_group_id=(
-            f"{slot.group_id}_axis"
-            if slot.group_id is not None
-            else None
-        ),
-        slot_id=str(slot.slot.id) if slot.group_id is not None else None,
-        slot_renderer=(
-            str(slot.slot.renderer) if slot.group_id is not None else None
-        ),
+        group_id=slot.group_id,
+        slot_id=str(slot.slot.id),
+        slot_renderer=str(slot.slot.renderer),
         track_height=slot.slot.height,
         track_offset_y=slot.resolved.origin_y,
         sequence_width=drawing.placement.sequence_width,
@@ -4038,12 +3974,9 @@ def _draw_linear_feature_density_slot(
     if layer is None:
         return canvas
     profile = drawing.canvas_config.profile
-    group_id = make_linear_dom_id(
-        slot.slot.id, record_index=drawing.record_index, record_count=drawing.record_count
-    )
     group_key = GroupKey(drawing.record_key, GroupKind.DEPTH, str(slot.slot.id))
-    slot_id = str(slot.slot.id) if slot.group_id is not None else None
-    slot_renderer = str(slot.slot.renderer) if slot.group_id is not None else None
+    slot_id = str(slot.slot.id)
+    slot_renderer = str(slot.slot.renderer)
     if layer.track.style == "histogram":
         frame, histogram_config = feature_density_histogram_source(layer, profile)
         return add_depth_group(
@@ -4054,9 +3987,7 @@ def _draw_linear_feature_density_slot(
             drawing.canvas_config,
             histogram_config,
             depth_df=frame,
-            group_id=group_id,
-            axis_group_id=f"{group_id}_axis",
-            dom_group_id=slot.group_id,
+            group_id=slot.group_id,
             slot_id=slot_id,
             slot_renderer=slot_renderer,
             track_height=slot.slot.height,
@@ -4072,7 +4003,7 @@ def _draw_linear_feature_density_slot(
         float(slot.slot.height),
         feature_density_color(layer, profile),
         sequence_width=drawing.placement.sequence_width,
-        group_id=slot.group_id or group_id,
+        group_id=slot.group_id,
         record_transform=drawing.record_transform,
         row_shifts=slot.row_shifts,
     )
@@ -4109,12 +4040,7 @@ def _draw_linear_gc_content_slot(canvas: Drawing, drawing: _LinearRecordDrawing,
         gc_df=_slot_gc_df(drawing, nt),
         track_height=slot.slot.height,
         track_offset_y=slot.resolved.origin_y,
-        group_id=make_linear_dom_id(
-            slot.slot.id,
-            record_index=drawing.record_index,
-            record_count=drawing.record_count,
-        ),
-        dom_group_id=slot.group_id,
+        group_id=slot.group_id,
         slot_id=str(slot.slot.id),
         slot_renderer=str(slot.slot.renderer),
         sequence_width=drawing.placement.sequence_width,
@@ -4139,12 +4065,7 @@ def _draw_linear_gc_skew_slot(canvas: Drawing, drawing: _LinearRecordDrawing, sl
         gc_df=_slot_gc_df(drawing, nt),
         track_height=slot.slot.height,
         track_offset_y=slot.resolved.origin_y,
-        group_id=make_linear_dom_id(
-            slot.slot.id,
-            record_index=drawing.record_index,
-            record_count=drawing.record_count,
-        ),
-        dom_group_id=slot.group_id,
+        group_id=slot.group_id,
         slot_id=str(slot.slot.id),
         slot_renderer=str(slot.slot.renderer),
         sequence_width=drawing.placement.sequence_width,
@@ -4178,7 +4099,7 @@ def _draw_linear_region_label_fronts(canvas: Drawing, drawing: _LinearRecordDraw
                 record_index=drawing.record_index,
                 font_family=str(drawing.canvas_config.profile.config.objects.text.font_family),
                 labels=drawing.annotation_labels.get(slot.id, ()),
-                dom_group_id=_linear_slot_group_id(drawing, slot),
+                group_id=_linear_slot_group_id(drawing, slot),
             )
             if slot.renderer == "annotations" and annotation_layout is not None
             else None
@@ -4211,13 +4132,13 @@ def _draw_linear_axis_only(canvas: Drawing, drawing: _LinearRecordDrawing) -> No
         render_context=plan.tracks.render_context,
         feature_dom_index=plan.tracks.feature_dom_index,
         precalculated_labels=None,
-        draw_features=False,
         label_font_size=plan.tracks.label_font_size,
         orthogroup_label_member_ids=drawing.orthogroup_label_member_ids,
         orthogroup_label_top_member_ids=drawing.orthogroup_label_top_member_ids,
         record_index=drawing.record_index,
         record_count=drawing.record_count,
         group_id=drawing.record_group_id,
+        feature_slot=None,
         placement=drawing.placement,
         multi_record_layout=plan.frame.multi_record_enabled,
         record_local_ruler=plan.frame.multi_record_enabled,

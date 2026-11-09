@@ -133,8 +133,13 @@ const semanticSnapshot = (page) => page.evaluate(() => {
     .filter((element) => drawn(element) && !element.closest('[data-label-feature-id], g[data-legend-key]'))
     .map(textOf).filter(Boolean).sort();
 
-  const overlays = sortedUnique([...root.querySelectorAll('[data-gbdraw-slot-renderer="annotations"]')]
-    .filter(drawn).map((element) => element.getAttribute('data-gbdraw-slot-id')));
+  // An annotation track group carries its slot tags. A Result stored by a gbdraw that tagged only the slots of a
+  // written stack (before OV-3012) names an untagged track group `gbdraw-annotation-track-<slot id>-<record number>`,
+  // so a loaded Result is read by that id and compares with the next Generate, which tags every slot group.
+  const overlays = sortedUnique([...root.querySelectorAll('[data-gbdraw-slot-renderer="annotations"], g[id^="gbdraw-annotation-track-"]')]
+    .filter(drawn).map((element) => (element.hasAttribute('data-gbdraw-slot-renderer')
+      ? element.getAttribute('data-gbdraw-slot-id')
+      : element.id.match(/^gbdraw-annotation-track-(.+)-\d+$/)?.[1])).filter(Boolean));
 
   return {
     context: {

@@ -280,8 +280,9 @@ def test_default_repeat_underlay_has_feature_identity_and_paints_first(mode: str
     assert shapes[0].attrib["stroke"] == "none"
     assert shapes[0].attrib["stroke-width"] == "0"
     assert "data-gbdraw-annotation-id" not in svg
-    assert svg.index(f'id="gbdraw-annotation-track-{PRIVATE_SLOT_ID}-1"') < svg.index(
-        f'id="{record.id}"'
+    # Both modes find both groups by their slot tags (OV-3012, OV-3084).
+    assert svg.index(f'data-gbdraw-slot-id="{PRIVATE_SLOT_ID}"') < svg.index(
+        'data-gbdraw-slot-id="features"'
     )
     if mode == "linear":
         assert shapes[0].attrib["data-gbdraw-stable-feature-id"] == feature_id

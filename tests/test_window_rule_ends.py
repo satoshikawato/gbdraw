@@ -268,7 +268,7 @@ def test_depth_is_drawn_at_the_window_centre() -> None:
     from xml.etree import ElementTree as ET
 
     root = ET.fromstring(svg)
-    group = next(node for node in root.iter() if node.get("id") == "depth")
+    group = next(node for node in root.iter() if node.get("data-gbdraw-slot-renderer") == "depth")
     desc = max((node.get("d", "") for node in group.iter() if node.tag.endswith("path")), key=len)
     seen = _seen_positions("linear", desc, 10_000)
     assert seen

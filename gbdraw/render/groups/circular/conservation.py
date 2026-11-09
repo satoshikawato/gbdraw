@@ -9,12 +9,8 @@ from ....comparisons.identity_scale import identity_color_domain
 from ....config.models import GbdrawConfig
 from ....layout.circular import RadialBand
 from ....layout.circular_ink import CircularInk, CircularInkRing, paint_shows
-from ....render.drawers.circular.conservation import (
-    ConservationDrawer,
-    _safe_id_fragment,
-)
+from ....render.drawers.circular.conservation import ConservationDrawer
 from ....svg.circular_conservation import generate_full_annulus_path_desc
-from ....svg.ids import stable_svg_id
 from ....layout.record_coordinates import RecordDisplayTransform
 
 
@@ -73,8 +69,8 @@ class ConservationGroup:
         outer_radius_px: float,
         min_identity: float,
         cfg: GbdrawConfig,
-        group_id: str | None = None,
-        slot_id: str | None = None,
+        group_id: str,
+        slot_id: str,
         record_transform: RecordDisplayTransform | None = None,
         record_index: int = 0,
     ) -> None:
@@ -82,19 +78,9 @@ class ConservationGroup:
         track_color = track.track_color
         source_index = track.source_index
         track_index = track.track_index
-        safe_label = _safe_id_fragment(track_label)
-        resolved_group_id = group_id or stable_svg_id(
-            "conservation_ring",
-            "circular-conservation-ring",
-            int(source_index),
-            int(track_index),
-            str(track_label),
-            namespace=safe_label or f"source_{int(source_index) + 1}",
-        )
-        self.group = Group(id=resolved_group_id)
-        if slot_id:
-            self.group.attribs["data-gbdraw-slot-id"] = str(slot_id)
-            self.group.attribs["data-gbdraw-slot-renderer"] = "sequence_conservation"
+        self.group = Group(id=group_id)
+        self.group.attribs["data-gbdraw-slot-id"] = slot_id
+        self.group.attribs["data-gbdraw-slot-renderer"] = "sequence_conservation"
         self.group.attribs["data-source-index"] = str(source_index)
         self.group.attribs["data-track-index"] = str(track_index)
         self.group.attribs["data-track-label"] = str(track_label)

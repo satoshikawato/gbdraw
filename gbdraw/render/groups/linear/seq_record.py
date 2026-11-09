@@ -22,7 +22,7 @@ from ....config.models.render_profiles import LinearRenderProfile
 from ....layout.linear import LinearFeatureLaneGeometry, LinearFeatureTrackLayout
 from ....features.factory import FeatureBuildResult
 from ....configurators import FeatureDrawingConfigurator
-from ....svg.ids import record_group_svg_id, stable_svg_id
+from ....svg.ids import stable_svg_id
 from ....layout.linear_wrap import drawn_axis_length
 from ....layout.record_labels import coordinate_map_ticks, source_ruler_ticks
 from ...label_binding import bind_label_part
@@ -69,7 +69,6 @@ class SeqRecordGroup:
         orthogroup_label_top_member_ids: set[str | int] | None = None,
         record_index: int = 0,
         record_count: int = 1,
-        group_id: str | None = None,
         record_local_ruler: bool = False,
         feature_offset_y: float = 0.0,
         feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
@@ -77,6 +76,7 @@ class SeqRecordGroup:
         axis_row_offsets: Sequence[float] = (),
         feature_row_shifts: Sequence[float] = (),
         *,
+        group_id: str,
         sequence_width: float,
     ) -> None:
         self.record_transform = record_transform
@@ -95,16 +95,7 @@ class SeqRecordGroup:
         self.orthogroup_label_top_member_ids = orthogroup_label_top_member_ids
         self.record_index = int(record_index)
         self.record_count = int(record_count)
-        self.record_group_id = (
-            str(group_id)
-            if group_id
-            else record_group_svg_id(
-                gb_record.id,
-                mode="linear",
-                record_index=self.record_index,
-                record_count=self.record_count,
-            )
-        )
+        self.record_group_id = group_id
         # The record's drawn axis width, from its placement (``solve_linear_horizontal_layout``).
         self.sequence_width = float(sequence_width)
         self.record_local_ruler = bool(record_local_ruler)

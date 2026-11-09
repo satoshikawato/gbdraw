@@ -40,13 +40,13 @@ def _role_groups(svg_text: str, role: str) -> list[ET.Element]:
 
 
 def _track_paths(svg_text: str) -> dict[str, str]:
-    """The drawn feature, GC content and GC skew paths by group id: their radii and widths."""
+    """The drawn tick, GC content and GC skew paths by slot id: their radii and widths."""
 
     paths: dict[str, str] = {}
     for group in ET.fromstring(svg_text).iter("{http://www.w3.org/2000/svg}g"):
-        group_id = str(group.get("id") or "")
-        if group_id.startswith(("gc_content", "skew", "gc_skew", "tick")):
-            paths[group_id] = "|".join(str(path.get("d")) for path in group.iter("{http://www.w3.org/2000/svg}path"))
+        if group.get("data-gbdraw-slot-renderer") in {"ticks", "dinucleotide_content", "dinucleotide_skew"}:
+            slot_id = str(group.get("data-gbdraw-slot-id"))
+            paths[slot_id] = "|".join(str(path.get("d")) for path in group.iter("{http://www.w3.org/2000/svg}path"))
     assert paths
     return paths
 
