@@ -291,6 +291,12 @@ write-up of a release.
   the Start without the box now shows in order with Reverse complement ticked;
   the figure is unchanged. The Comparison card lists each window pair of a
   pair of records, with its own Save Raw LOSAT TSV.
+- Fixed: a Linear record card's window numbers and the bp it reports between
+  windows now come from the planner that draws the figure, so they match it
+  (the card counted bp between two windows that a third window covers). An
+  empty window draws the whole record in every reader, Record Layout moves a
+  record's windows to the end of a new row, and a card without windows no
+  longer counts as having settings.
 - Added: a window of a circular record may run across its origin. In the
   Python API, a `RecordWindow` whose `start` is after its `end` draws the arc
   from `start` across the origin to `end` as one continuous unit: a feature
