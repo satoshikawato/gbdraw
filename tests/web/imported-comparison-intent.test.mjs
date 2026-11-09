@@ -340,4 +340,45 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
   }).disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
 }
 
+// OV-2995: a request's comparison indexes count drawn units, one per window (D-01), as Python reads them; a record
+// drawn in two windows draws two units. The classifier reads them through `unitRecordsOf`.
+{
+  const window = (start, end) => ({ start, end, reverseComplement: false, column: null });
+  const windowedRecords = [
+    { recordKey: 'record-a', presentation: { gridRow: 1, gridColumn: null }, windows: [window(1, 15000), window(25000, 40000)] },
+    { recordKey: 'record-b', presentation: { gridRow: 2, gridColumn: null }, windows: [] }
+  ];
+  const windowedRequest = (comparisons) => request(comparisons, { schema: 10, records: windowedRecords });
+  const unitPipeline = (pairs) => windowedRequest([{
+    kind: 'generatedProteinComparison', mode: 'pairwise', settings: currentPipelineSettings,
+    pairs: pairs.map(([queryRecordIndex, subjectRecordIndex]) => ({ queryRecordIndex, subjectRecordIndex }))
+  }]);
+  const classify = (renderRequest) => classifyImportedComparisonIntent({ renderRequest, resources });
+  // Window 1 and window 2 of record-a against record-b: unit 2 is record-b, not a third record. The controls hold
+  // record pairs, so the comparison runs as saved through Inherit.
+  const intent = classify(unitPipeline([[0, 2], [1, 2]]));
+  assert.equal(intent.disposition, IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY, JSON.stringify(intent));
+  assert.equal(intent.hasCommittedComparison, true);
+  // An index that is no unit index, or a unit against itself, identifies no two records.
+  assert.equal(classify(unitPipeline([[0, -1]])).disposition, IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED);
+  assert.equal(classify(unitPipeline([[2, 2]])).disposition, IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED);
+  // The CLI's LOSAT comparison of the same drawing: one protein table per unit pair (gbdraw linear --region twice).
+  const cliRequest = windowedRequest([
+    { kind: 'precomputedProteinComparison', resourceId: 'protein', encoding: 'canonicalTsv', queryRecordIndex: 0, subjectRecordIndex: 2 },
+    { kind: 'precomputedProteinComparison', resourceId: 'protein', encoding: 'canonicalTsv', queryRecordIndex: 1, subjectRecordIndex: 2 },
+    { kind: 'generatedProteinComparison', mode: 'none', settings: currentPipelineSettings, pairs: [] }
+  ]);
+  assert.equal(classify(cliRequest).disposition, IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY);
+  // Inherit carries unit indexes into a request that draws the same units (the same records and windows), as saved.
+  const committedWindowed = { renderRequest: cliRequest, resources };
+  const sameUnits = { renderRequest: request([], { schema: 10, records: structuredClone(windowedRecords) }), resources: {} };
+  inheritCommittedComparisonIntent({ candidate: sameUnits, committed: committedWindowed });
+  assert.deepEqual(sameUnits.renderRequest.comparisons.map((comparison) => [comparison.queryRecordIndex, comparison.subjectRecordIndex]),
+    [[0, 2], [1, 2], [undefined, undefined]]);
+  // A draft whose windows changed draws other units: the saved indexes name none of them.
+  const otherUnits = { renderRequest: request([], { schema: 10, records: [{ ...windowedRecords[0], windows: [window(1, 15000)] }, windowedRecords[1]] }), resources: {} };
+  assert.throws(() => inheritCommittedComparisonIntent({ candidate: otherUnits, committed: committedWindowed }),
+    /The drawn windows changed since the comparison was saved/);
+}
+
 console.log('imported comparison intent tests passed');

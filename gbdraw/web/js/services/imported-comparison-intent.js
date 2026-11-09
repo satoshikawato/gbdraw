@@ -1,5 +1,7 @@
 // @ts-check
+/** @import { LinearUnitRecord } from './linear-units.js' */
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
+import { drawsSeveralUnits, unitRecordsOf } from './linear-units.js';
 import { msg } from '../utils/i18n.js';
 
 /**
@@ -28,7 +30,16 @@ import { msg } from '../utils/i18n.js';
  *   pairs: SavedEndpoint[]
  * }} SavedPipeline
  */
-/** @typedef {{ recordKey?: unknown, presentation?: { gridRow?: unknown } | null }} SavedRecord */
+/**
+ * One saved record: its key, its row, and its windows (a request of schema 9 or older wrote none: the record draws
+ * one unit, as Python reads it).
+ * @typedef {{ recordKey?: unknown, presentation?: { gridRow?: unknown } | null, windows?: unknown }} SavedRecord
+ */
+/**
+ * The request records of one saved endpoint (`queryRecordIndex`, `subjectRecordIndex`, which count drawn units),
+ * by index into the request's records.
+ * @typedef {{ query: number, subject: number }} RecordPair
+ */
 /**
  * The part of the canonical request the checks read.
  * @typedef {{
@@ -171,32 +182,32 @@ const comparisonResourceIssue = (comparison, resources) => {
 };
 
 /**
+ * The records a saved endpoint compares: its indexes count drawn units (one per window, D-01), each read as the
+ * request record it draws (`unitRecordsOf`). Without the request's units (`unitRecords` null: a record is drawn in
+ * several windows and Python's units are not known) an index is only checked to be a unit index, and the records are
+ * unknown (`pair` null).
  * @param {SavedEndpoint | null | undefined} comparison
- * @param {number} recordCount
+ * @param {(LinearUnitRecord | null)[] | null} unitRecords
+ * @returns {{ issue: string } | { pair: RecordPair | null }}
  */
-const endpointIssue = (comparison, recordCount) => {
+const endpointRecords = (comparison, unitRecords) => {
   const query = Number(comparison?.queryRecordIndex);
   const subject = Number(comparison?.subjectRecordIndex);
-  if (
-    !Number.isInteger(query)
-    || !Number.isInteger(subject)
-    || query < 0
-    || subject < 0
-    || query >= recordCount
-    || subject >= recordCount
-    || query === subject
-  ) {
-    return msg('The saved comparison does not identify two available records.');
-  }
-  return '';
+  const issue = { issue: msg('The saved comparison does not identify two available records.') };
+  if (!Number.isInteger(query) || !Number.isInteger(subject) || query < 0 || subject < 0 || query === subject) return issue;
+  if (unitRecords === null) return { pair: null };
+  const queryRecord = unitRecords[query];
+  const subjectRecord = unitRecords[subject];
+  if (!queryRecord || !subjectRecord || queryRecord.recordIndex === subjectRecord.recordIndex) return issue;
+  return { pair: { query: queryRecord.recordIndex, subject: subjectRecord.recordIndex } };
 };
 
 /**
  * @param {SavedComparison} comparison
- * @param {number} recordCount
+ * @param {(LinearUnitRecord | null)[] | null} unitRecords The request record each drawn unit draws (`unitRecordsOf`).
  * @param {number} requestSchema
  */
-const pipelineIssue = (comparison, recordCount, requestSchema) => {
+const pipelineIssue = (comparison, unitRecords, requestSchema) => {
   if (
     !(/** @type {(string | undefined)[]} */ (['none', 'pairwise', 'orthogroup', 'collinear'])).includes(comparison?.mode)
     || !isObject(comparison?.settings)
@@ -227,44 +238,47 @@ const pipelineIssue = (comparison, recordCount, requestSchema) => {
     }
   }
   for (const pair of comparison.pairs) {
-    const issue = endpointIssue(pair, recordCount);
-    if (issue) return issue;
+    const read = endpointRecords(pair, unitRecords);
+    if ('issue' in read) return read.issue;
   }
   return '';
 };
 
 /**
  * @param {SavedRecord[]} records
- * @param {SavedEndpoint[]} comparisons
+ * @param {readonly RecordPair[]} pairs
  */
-const rowsAreEditable = (records, comparisons) => {
+const rowsAreEditable = (records, pairs) => {
   const rows = records.map((record, index) => (
     positiveRow(record?.presentation?.gridRow, index + 1)
   ));
   const orderedRows = [...new Set(rows)].sort((left, right) => left - right);
   const rowPosition = new Map(orderedRows.map((row, index) => [row, index]));
-  return comparisons.every((comparison) => {
-    const query = Number(comparison.queryRecordIndex);
-    const subject = Number(comparison.subjectRecordIndex);
-    return Math.abs((rowPosition.get(rows[query]) ?? NaN) - (rowPosition.get(rows[subject]) ?? NaN)) === 1;
-  });
+  return pairs.every(({ query, subject }) => (
+    Math.abs((rowPosition.get(rows[query]) ?? NaN) - (rowPosition.get(rows[subject]) ?? NaN)) === 1
+  ));
 };
 
 /**
  * @param {SavedRecord[]} records
- * @param {SavedEndpoint[]} comparisons
+ * @param {readonly RecordPair[]} pairs
  */
-const endpointKeys = (records, comparisons) => comparisons.map((comparison) => (
-  endpointKey(
-    recordKey(records[Number(comparison.queryRecordIndex)], Number(comparison.queryRecordIndex)),
-    recordKey(records[Number(comparison.subjectRecordIndex)], Number(comparison.subjectRecordIndex))
-  )
+const endpointKeys = (records, pairs) => pairs.map(({ query, subject }) => (
+  endpointKey(recordKey(records[query], query), recordKey(records[subject], subject))
 ));
 
-/** @param {{ records: SavedRecord[], comparisons: SavedComparison[], pipeline: SavedPipeline }} saved */
-const generatedPipelineIsProjectable = ({ records, comparisons, pipeline }) => {
+/**
+ * The request's records as Python plans their drawn units (`planLinearUnits`): each record's key and windows.
+ * @param {readonly SavedRecord[]} records
+ * @returns {{ recordKey: string, windows: unknown[] }[]}
+ */
+const unitInputsOf = (records) => records.map((record, index) => ({
+  recordKey: recordKey(record, index), windows: Array.isArray(record?.windows) ? record.windows : []
+}));
+
+/** @param {{ comparisons: SavedComparison[], pipeline: SavedPipeline }} saved Its rows are editable. */
+const generatedPipelineIsProjectable = ({ comparisons, pipeline }) => {
   const endpoints = comparisons.filter((comparison) => ENDPOINT_KINDS.has(comparison.kind));
-  if (!rowsAreEditable(records, [...endpoints, ...pipeline.pairs])) return false;
   if (pipeline.mode === 'pairwise' && pipeline.pairs.length === 0 && endpoints.length === 0) {
     return false;
   }
@@ -293,7 +307,8 @@ const generatedPipelineIsProjectable = ({ records, comparisons, pipeline }) => {
 /**
  * A stored request is classified as its reader reads it: a schema 1 or 2
  * request through the lift (PR-D, OV-796), so its comparisons classify as the
- * schema-2 re-save of the same Session does.
+ * schema-2 re-save of the same Session does. Its comparison indexes count
+ * drawn units (OV-2995), read as records through `unitRecordsOf`.
  * @param {{ renderRequest?: SavedRenderRequest, resources?: SavedResources }} [input]
  * @returns {ImportedComparisonIntent}
  */
@@ -357,6 +372,15 @@ export const classifyImportedComparisonIntent = ({
     return decision(msg('The saved comparison has no available records.'));
   }
 
+  const unitInputs = unitInputsOf(records);
+  // Python's units of the request are not known here: they are the records unless a record draws several windows.
+  const unitRecords = unitRecordsOf(unitInputs, null);
+  /** @param {SavedEndpoint} endpoint An endpoint the loop below accepted. */
+  const recordPairOf = (endpoint) => {
+    const read = endpointRecords(endpoint, unitRecords);
+    return 'pair' in read ? read.pair : null;
+  };
+
   /** @type {SavedPipeline | null} */
   let pipeline = null;
   /** @type {Set<string>} */
@@ -367,7 +391,7 @@ export const classifyImportedComparisonIntent = ({
       const resourceIssue = comparisonResourceIssue(comparison, resources);
       if (resourceIssue) return decision(resourceIssue);
     } else if (kind === 'generatedProteinComparison') {
-      const issue = pipelineIssue(comparison, records.length, Number(renderRequest?.schema));
+      const issue = pipelineIssue(comparison, unitRecords, Number(renderRequest?.schema));
       if (issue) return decision(issue);
       if (pipeline) return decision(msg('The saved comparison contains more than one protein pipeline.'));
       // `pipelineIssue` returned no issue, so the settings and pairs are present.
@@ -376,8 +400,8 @@ export const classifyImportedComparisonIntent = ({
       return decision(`The saved comparison kind '${kind || 'unknown'}' is unsupported.`);
     }
     if (ENDPOINT_KINDS.has(kind)) {
-      const issue = endpointIssue(comparison, records.length);
-      if (issue) return decision(issue);
+      const read = endpointRecords(comparison, unitRecords);
+      if ('issue' in read) return decision(read.issue);
     }
     if (['orthogroupResult', 'collinearityResult'].includes(kind)) {
       if (singletonKinds.has(kind)) {
@@ -391,12 +415,21 @@ export const classifyImportedComparisonIntent = ({
   const executableEndpoints = pipeline
     ? [...endpoints, ...pipeline.pairs]
     : endpoints;
-  if (!rowsAreEditable(records, executableEndpoints)) {
+  const executablePairs = executableEndpoints.map(recordPairOf);
+  if (!rowsAreEditable(records, executablePairs.filter((pair) => pair !== null))) {
     return decision(
       msg('The saved comparison connects records that are not on adjacent rows; the comparison controls support adjacent rows only.')
     );
   }
-  const duplicateEndpoints = endpointKeys(records, endpoints);
+  // The controls and their projection hold record pairs; the comparisons of a drawing with a record drawn in several
+  // windows join drawn units, and run as saved through Inherit.
+  if (drawsSeveralUnits(unitInputs) && executableEndpoints.length > 0) {
+    return preserved(
+      msg('The saved comparison can run, but the current controls cannot edit the comparisons of records drawn in several windows.')
+    );
+  }
+  const duplicateEndpoints = endpointKeys(records,
+    /** @type {RecordPair[]} Each unit is a record here: a drawing with several units returned above. */ (endpoints.map(recordPairOf)));
   if (new Set(duplicateEndpoints).size !== duplicateEndpoints.length) {
     return preserved(
       msg('The saved comparison contains repeated record pairs that current controls cannot represent losslessly.')
@@ -411,7 +444,7 @@ export const classifyImportedComparisonIntent = ({
       msg('The saved comparison can run, but the current controls cannot edit its stored protein-input format.')
     );
   }
-  if (pipeline && !generatedPipelineIsProjectable({ records, comparisons, pipeline })) {
+  if (pipeline && !generatedPipelineIsProjectable({ comparisons, pipeline })) {
     return preserved(
       msg('The saved protein comparison is executable, but current controls cannot represent it losslessly.')
     );
@@ -573,9 +606,23 @@ export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
     }
     candidateIndexByKey.set(key, index);
   });
+  // The saved indexes count drawn units (OV-2995). Python plans the units from the records' keys and windows
+  // (`planLinearUnits`), so a draft that draws the same records in the same windows draws the same units, and the
+  // indexes carry over as saved; a draft whose windows differ draws other units.
+  const committedUnits = unitInputsOf(committedRecords);
+  const candidateUnits = unitInputsOf(candidateRecords);
+  const windowed = drawsSeveralUnits(committedUnits) || drawsSeveralUnits(candidateUnits);
+  /** @param {unknown} window */
+  const span = (window) => (isObject(window) ? [window.start, window.end, window.reverseComplement] : window);
+  /** @param {{ recordKey: string, windows: unknown[] }[]} unitInputs */
+  const drawnUnits = (unitInputs) => JSON.stringify(unitInputs.map(({ recordKey: key, windows }) => [key, windows.map(span)]));
+  if (windowed && drawnUnits(committedUnits) !== drawnUnits(candidateUnits)) {
+    throw new Error('The drawn windows changed since the comparison was saved. Choose Replace or Clear.');
+  }
   /** @param {unknown} value */
   const remapIndex = (value) => {
     const sourceIndex = Number(value);
+    if (windowed && Number.isInteger(sourceIndex) && sourceIndex >= 0) return sourceIndex;
     if (!Number.isInteger(sourceIndex) || !committedRecords[sourceIndex]) {
       throw new Error('The preserved comparison references an unavailable record.');
     }
