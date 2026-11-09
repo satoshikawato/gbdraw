@@ -480,7 +480,10 @@ write-up of a release.
   of another mark of the slot (OV-2991-B), and in any inside slot when its
   letters cross its own mark (OV-3035). Its mark is drawn, the warning counts
   it, and no error is raised for it. A label that only comes nearer its own
-  mark than `label_offset` is still drawn.
+  mark than `label_offset` is still drawn. An inside slot with
+  `overflow=clip` whose set width reaches past the centre now counts the
+  labels it leaves out "in clipped slots", as every clipped slot does, not
+  "for want of room before the centre".
 - Changed: a requested figure size that the figure cannot fit is refused
   sooner when the figure stops shrinking. Once the two smallest sizes tried are
   the same, the fit ends instead of trying smaller sizes down to the smallest
