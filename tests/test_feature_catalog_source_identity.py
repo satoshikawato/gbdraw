@@ -20,6 +20,7 @@ from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.session import build_session_document
 from tests.utils.session_drawing_view import session_view
 from gbdraw.web_support.feature_catalog import build_feature_catalog_item
+from tests.utils.web_render_result import web_result_svg
 from gbdraw.web_support.request_render import (
     render_embedded_canonical_web_request,
 )
@@ -199,7 +200,7 @@ def test_renderer_emits_unique_catalog_refs_for_exact_feature_collisions(
     for feature in rendered:
         assert (
             f'id="{feature["svgId"]}"'
-            in response["results"][0]["content"]
+            in web_result_svg(response["results"][0])
         )
 
 

@@ -31,6 +31,7 @@ from gbdraw.session import build_session_document
 from tests.utils.session_drawing_view import drawing_view
 from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 from gbdraw.web_support.rule_matching import evaluate_rules_json, exact_value_pattern
+from tests.utils.web_render_result import web_result_svg
 
 REPO = Path(__file__).resolve().parents[1]
 LAMBDA = REPO / "tests" / "test_inputs" / "NC_001416.gb"
@@ -162,7 +163,7 @@ def _web_render(tmp_path: Path, request: LinearDiagramRequest) -> tuple[list[dic
         workspace=tmp_path / str(len(list(tmp_path.iterdir()))),
     )
     assert reply["featureCatalog"] is not None
-    return reply["featureCatalog"]["items"][0]["biologicalFeatures"], reply["results"][0]["content"]
+    return reply["featureCatalog"]["items"][0]["biologicalFeatures"], web_result_svg(reply["results"][0])
 
 
 def test_a_shown_source_feature_with_an_undrawn_identical_twin_colors_alike_live_and_after_generate(tmp_path: Path):

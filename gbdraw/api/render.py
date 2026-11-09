@@ -13,7 +13,7 @@ from svgwrite import Drawing
 
 from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
 from gbdraw.render import export as _export
-from gbdraw.render.document import write_svg_document, write_text
+from gbdraw.render.document import SvgDocument, write_svg_document, write_text
 from gbdraw.render.export_limits import check_drawing_export_limits, checked_png_dpi
 from gbdraw.render.formats import (
     INTERACTIVE_SVG_FORMAT,
@@ -34,12 +34,13 @@ from gbdraw.render.output_paths import (
 logger = logging.getLogger(__name__)
 
 
-def _font_embedding(svg_source: str, embed_fonts: bool) -> FontEmbedding:
-    """The fonts the SVG outputs of one drawing embed (D-05), computed once."""
+def _font_embedding(document: SvgDocument, embed_fonts: bool) -> FontEmbedding:
+    """The fonts the SVG outputs of one drawing embed (D-05), computed once; without ``embed_fonts`` the text is not
+    read (nor joined)."""
     if not embed_fonts:
         return FontEmbedding(css="", refused_families=())
     try:
-        embedding = svg_font_embedding(svg_source)
+        embedding = svg_font_embedding(document.body)
     except Exception as exc:
         raise ExportError(
             f"Could not embed the fonts in the SVG: {exc}. Turn font embedding off to write it without them "
@@ -136,10 +137,14 @@ def save_figure_to(
         try:
             canvas.filename = svg_filename
             document = write_svg_document(canvas)
-            embedding = _font_embedding(document.body, embed_fonts)
+            embedding = _font_embedding(document, embed_fonts)
             with open(staged[Path(svg_filename)], "w", encoding="utf-8") as svg_file:
-                svg_file.write(document.prolog)
-                write_text(svg_file, embed_font_css(document.body, embedding))
+                if embedding.css:
+                    svg_file.write(document.prolog)
+                    write_text(svg_file, embed_font_css(document.body, embedding))
+                else:
+                    # Nothing to insert: the pieces are written in turn, without joining the body (OV-3027).
+                    document.write(svg_file)
         except GbdrawError:
             raise
         except Exception as exc:
@@ -213,8 +218,9 @@ def render_to_bytes(
     fmt_norm = parse_output_formats((fmt,))[0]
     check_drawing_export_limits(canvas, (fmt_norm,), dpi=dpi)
     if fmt_norm in {SVG_FORMAT, INTERACTIVE_SVG_FORMAT}:
-        svg_source = write_svg_document(canvas).body
-        embedding = _font_embedding(svg_source, embed_fonts)
+        document = write_svg_document(canvas)
+        svg_source = document.body
+        embedding = _font_embedding(document, embed_fonts)
         if fmt_norm == INTERACTIVE_SVG_FORMAT:
             svg_source = enrich_svg(svg_source, context=interactive_context)
         return embed_font_css(svg_source, embedding).encode("utf-8")

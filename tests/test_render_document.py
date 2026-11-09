@@ -666,3 +666,40 @@ def test_a_written_svg_is_handed_to_the_file_a_chunk_at_a_time(
     write_svg_document(drawing).write(stream)
     assert stream.getvalue() == expected.getvalue()
     assert max(stream_writes) <= 4096
+
+
+def test_an_svg_file_without_embedded_fonts_is_written_from_the_pieces(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """OV-3027: with nothing to insert, the SVG file is written piece by piece, never as one joined text; its bytes
+    are svgwrite's."""
+
+    drawing = _linear_with_clip_and_hatch()
+    expected = io.StringIO()
+    drawing.write(expected)
+
+    def joined(_parts: DocumentParts) -> str:
+        raise AssertionError("the SVG body was joined")
+
+    monkeypatch.setattr(DocumentParts, "body", joined)
+    (path,) = api_render.save_figure_to(drawing, ("svg",), output_prefix=str(tmp_path / "pieces"), embed_fonts=False)
+    assert Path(path).read_text(encoding="utf-8") == expected.getvalue()
+
+
+def test_a_stored_content_keeps_one_copy_of_its_text_and_hashes_it_in_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OV-3027: the feature catalog read a content's whole text (``text``), which the content then kept beside its
+    children text for as long as the render cache kept it; its revision encoded the whole children text at once."""
+
+    import gbdraw.render.group_content as group_content_module
+    from gbdraw.web_support.feature_catalog import catalog_content_snapshot
+
+    monkeypatch.setattr(group_content_module, "_DIGEST_CHUNK", 7)
+    group = Group(id="holder", class_="feature")
+    for index in range(5):
+        group.add(Text(f"µ-{index} ✓", insert=(0, index)))
+    content = GroupContent.of(group)
+    data = content.children_text.encode("utf-8")
+    assert len(content.children_text) > 7 and len(data) > len(content.children_text)
+    assert (content.revision, content.children_byte_length) == (hashlib.sha256(data).hexdigest(), len(data))
+    assert content.text == "".join(content.texts()) == group_content_module.start_tag(group) + content.children_text + "</g>"
+
+    catalog_content_snapshot(content)
+    assert "text" not in vars(content)

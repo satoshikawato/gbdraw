@@ -46,6 +46,7 @@ from gbdraw.api.options import losatp_analysis_mode
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_io import CURRENT_SESSION_VERSION, load_session
 from tests.utils.session_drawing_view import build_mode_scoped_session_document, drawing_view, upgrade_to_mode_scoped
+from tests.utils.web_render_result import web_result_svg
 
 
 def _record(record_id: str = "record") -> RecordInput:
@@ -927,11 +928,13 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
     interactive = json.loads(metadata.text)
     assert interactive["items"][0]["orthogroups"] == catalog_item["orthogroups"]
     assert len(comparison_paths(interactive_source)) == 1
-    assert [path.get("d") for path in comparison_paths(web["results"][0]["content"])] == [paths[0].get("d")]
+    assert [path.get("d") for path in comparison_paths(web_result_svg(web["results"][0]))] == [paths[0].get("d")]
 
     session_path = tmp_path / "mixed.gbdraw-session.json"
     saved = save_session_document(session_path, drawings=[SessionDrawingSpec(request, state={
-        "results": web["results"], "editorState": {"featureCatalog": web["featureCatalog"]},
+        # The page saves each Result's text, assembled from the reply's pieces.
+        "results": [{"name": result["name"], "content": web_result_svg(result)} for result in web["results"]],
+        "editorState": {"featureCatalog": web["featureCatalog"]},
     })])
     reloaded = load_session_document(session_path)
     assert reloaded.version == saved.version == CURRENT_SESSION_VERSION
@@ -944,7 +947,7 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
             output_directory=tmp_path / "reload-web",
         )
     assert rerendered["featureCatalog"] == web["featureCatalog"]
-    assert [path.get("d") for path in comparison_paths(rerendered["results"][0]["content"])] == [paths[0].get("d")]
+    assert [path.get("d") for path in comparison_paths(web_result_svg(rerendered["results"][0]))] == [paths[0].get("d")]
     return session_path
 
 

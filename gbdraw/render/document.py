@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Iterator, TextIO, TypeAlias
 
 from svgwrite import Drawing
@@ -101,22 +102,32 @@ def _root_with(drawing: Drawing, attribs: dict[str, str] | None) -> Drawing:
 
 @dataclass(frozen=True)
 class SvgDocument:
-    """The text of one serialized drawing.
+    """The text of one serialized drawing, held as its pieces (``DocumentParts``).
 
     ``prolog`` is what svgwrite writes before the root element of a file: the
     XML declaration and any stylesheet instructions. ``body`` is the root
     element alone; in-memory SVG, interactive SVG and the CairoSVG input use it
-    without the prolog, as ``Drawing.tostring()`` gave them.
+    without the prolog, as ``Drawing.tostring()`` gave them. It is joined the
+    first time a reader asks for it: ``write`` writes the pieces in order, so a
+    file that nothing else reads never holds the whole text (OV-3027).
     """
 
-    prolog: str
-    body: str
+    parts: DocumentParts
+
+    @property
+    def prolog(self) -> str:
+        return self.parts.prolog
+
+    @cached_property
+    def body(self) -> str:
+        return self.parts.body()
 
     def write(self, handle: TextIO) -> None:
-        """Write the file form, prolog then body, to an open text file."""
+        """Write the file form, prolog then body, to an open text file; the same text as ``prolog + body``."""
 
         handle.write(self.prolog)
-        write_text(handle, self.body)
+        for text in self.parts.texts():
+            write_text(handle, text)
 
 
 # The characters handed to a text file at a time: its encoder then holds a
@@ -183,10 +194,17 @@ class DocumentParts:
     pieces: tuple[Piece, ...]
     tail: str
 
-    def body(self) -> str:
-        """The root element: head, pieces and tail joined in order."""
+    def texts(self) -> Iterator[str]:
+        """The root element's texts in order: head, each piece's texts, tail (the one order of the body)."""
 
-        return "".join((self.head, *_piece_texts(self.pieces), self.tail))
+        yield self.head
+        yield from _piece_texts(self.pieces)
+        yield self.tail
+
+    def body(self) -> str:
+        """The root element: ``texts`` joined. A reader that can take the texts in turn does not join them."""
+
+        return "".join(self.texts())
 
 
 def _piece_texts(pieces: tuple[Piece, ...]) -> Iterator[str]:
@@ -245,8 +263,7 @@ def write_svg_document(drawing: Drawing) -> SvgDocument:
     A drawing fitted to a requested size (``bind_export_size``) states it in the requested unit.
     """
 
-    parts = document_parts(drawing, root_attribs=_export_root_size(drawing))
-    return SvgDocument(prolog=parts.prolog, body=parts.body())
+    return SvgDocument(document_parts(drawing, root_attribs=_export_root_size(drawing)))
 
 
 def raster_svg_body(drawing: Drawing, written: SvgDocument | None = None) -> str:

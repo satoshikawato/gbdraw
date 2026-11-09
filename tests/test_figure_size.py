@@ -27,6 +27,7 @@ from gbdraw.layout.composition import CompositionItem, CompositionRequest, Legen
 from gbdraw.layout.spatial import Aabb
 from gbdraw.render.composition import applied_composition_plan
 from tests.utils.png_chunks import png_chunks, png_phys
+from tests.utils.web_render_result import web_result_svg
 
 INPUTS = Path(__file__).resolve().parent / "test_inputs"
 MM_180_PX = 180 * 96 / 25.4
@@ -1085,13 +1086,15 @@ def test_a_sized_web_render_keeps_the_page_root_in_px(tmp_path) -> None:
 
     reply = _web_render(_sars_request({"canvas.figure_width": "300mm", "labels.circular.scope": "none"}), tmp_path)
     result = reply["results"][0]
-    width, _height, view_box = _svg_size(result["content"])
+    width, _height, view_box = _svg_size(web_result_svg(result))
     assert width.endswith("px")
     assert float(width.removesuffix("px")) == pytest.approx(300 * 96 / 25.4, abs=0.01) == view_box[2]
-    assert result["document"]["head"] in result["content"]
+    assert web_result_svg(result).startswith(result["document"]["head"])
     # At Auto the page's text is the written file's, byte for byte.
     auto = _web_render(_sars_request({"labels.circular.scope": "none"}), tmp_path / "auto")["results"][0]
-    assert auto["content"] == (tmp_path / "auto" / "out" / auto["name"]).read_text(encoding="utf-8")
+    assert '<?xml version="1.0" encoding="utf-8" ?>\n' + web_result_svg(auto) == (
+        tmp_path / "auto" / "out" / auto["name"]
+    ).read_text(encoding="utf-8")
 
 
 def test_the_web_export_check_states_a_sized_svg_root_as_python_writes_it() -> None:
