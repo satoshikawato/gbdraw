@@ -294,9 +294,41 @@ export const ringKeyChangesOf = (before, after, removed = -1) => new Map(before.
 }));
 
 /**
+ * The series with each entry naming the source at its index of `sources`, all three fields of its identity from that
+ * one source: its key, its first file's name and its place (`sourceIndex`); an entry given no source stays as it is.
+ *
+ * The rings' identity invariant, which every ring transition keeps and `tests/web/ring-identity-walk.test.mjs`
+ * checks after each step: (a) each series entry's `sourceKey`, `fileName` and `sourceIndex` name one and the same
+ * source of the drawing's current ring sources (`circularRingSources`), and no two entries name one source; (b) each
+ * managed stack row's `series_key` is the key the one matcher (`conservationSourcesOfSeries`) gives its entry over
+ * those sources. With (a) the matcher gives each entry the source it names, so an entry's stored key is the key its row
+ * carries, which the reconcile's key changes read (`reconcileConservationSeries`).
+ * @param {readonly RawConservationSeriesEntry[]} series
+ * @param {readonly (ConservationSourceDescriptor | null | undefined)[]} sources
+ * @returns {RawConservationSeriesEntry[]}
+ */
+export const seriesNamingSources = (series, sources) => series.map((entry, index) => {
+  const source = sources[index];
+  return source ? { ...entry, sourceKey: source.sourceKey, fileName: source.fileName, sourceIndex: source.placeIndex } : entry;
+});
+
+/**
+ * The label the stored label list (`circularConservation.labels`) gives a source that no series entry claims. The list
+ * names the rings by their series index, as the writers write it from the series (Generate's adoption, the reconcile)
+ * and as an older Session kept it for places past its series (OV-898). Its label at an index the series covers is
+ * that entry's ring, never a new source, so such a source takes its file's name (OV-3166).
+ * @param {readonly string[]} labels @param {number} sourceIndex @param {number} seriesLength
+ * @returns {string | null}
+ */
+const listLabelOfUnclaimedSource = (labels, sourceIndex, seriesLength) => (
+  sourceIndex >= seriesLength ? labels[sourceIndex] ?? null : null
+);
+
+/**
  * The series a change of the ring files leaves, and how the change moves the rings' keys: each previous entry's key
- * (the key its row carries, which the last reconcile wrote from the same match the rows read) to the key of the source
- * the matcher gives it, `''` when it has none.
+ * (the key its row carries: the rings' identity invariant, `seriesNamingSources`, held before the change, and a
+ * transition that re-keyed the rows first wrote its entries the same keys) to the key of the source the matcher gives
+ * it, `''` when it has none.
  * @param {{
  *   sourceFiles: ConservationSourcePlace<ConservationFile> | readonly ConservationSourcePlace<ConservationFile>[],
  *   previousSeries: RawConservationSeriesEntry[] | null | undefined,
@@ -320,7 +352,8 @@ export const reconcileConservationSeries = ({
     nextSeries.push(mergeSeriesEntry(descriptor, previous[seriesIndex], nextSeries.length, fallbackLabels[descriptor.sourceIndex]));
   });
   unclaimed.forEach((descriptor) => {
-    nextSeries.push(mergeSeriesEntry(descriptor, null, nextSeries.length, fallbackLabels[descriptor.sourceIndex]));
+    nextSeries.push(mergeSeriesEntry(descriptor, null, nextSeries.length,
+      listLabelOfUnclaimedSource(fallbackLabels, descriptor.sourceIndex, previous.length)));
   });
   return { series: nextSeries, keyChanges: ringKeyChangesOf(previous, matched) };
 };
@@ -481,7 +514,7 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
     });
   });
   unclaimed.forEach((descriptor) => {
-    const fallbackLabel = legacyLabels[descriptor.sourceIndex] || descriptor.defaultLabel;
+    const fallbackLabel = listLabelOfUnclaimedSource(legacyLabels, descriptor.sourceIndex, series.length) || descriptor.defaultLabel;
     entries.push({
       ...descriptor,
       label: String(fallbackLabel || descriptor.defaultLabel).trim() || descriptor.defaultLabel,

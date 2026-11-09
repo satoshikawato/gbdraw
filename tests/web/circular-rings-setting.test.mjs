@@ -30,7 +30,11 @@ const { sessionSourceFactsOf } = await import('../../gbdraw/web/js/services/sess
 const { circularRingSources, orderedConservationSources } = await import('../../gbdraw/web/js/services/conservation-series.js');
 
 const circular = () => modeDrawing(state, 'circular');
-const textFile = (name, text = '>ring\nACGT\n') => ({ name, type: 'text/plain', size: text.length, lastModified: 0, data: btoa(text) });
+// `arrayBuffer` lets Generate's serializer read it (`serializeActiveRenderFiles`).
+const textFile = (name, text = '>ring\nACGT\n') => ({
+  name, type: 'text/plain', size: text.length, lastModified: 0, data: btoa(text),
+  arrayBuffer: async () => new TextEncoder().encode(text).buffer
+});
 const shownAction = (mode, action) => action(modeDrawing(state, mode));
 const askingStackPorts = () => ({
   askChoice: async () => null, runUndoable: (_label, fn) => fn(), busy: () => false, rows: () => [], mode: 'circular'
@@ -42,6 +46,7 @@ const sources = createCircularConservationSources({
   syncCircularConservationSlots: () => {},
   rekeyCircularConservationRows: () => {},
   circularConservationRowsLeaving: () => new Set(),
+  keepCircularConservationRowsThrough: (_drawing, replaceSources) => replaceSources(),
   askingStackPorts
 });
 const panel = createCircularConservationSeriesPanel({
@@ -55,7 +60,7 @@ const comparisonFiles = createCircularConservationComparisonFiles({
   state, shownAction, writeLosatCacheInfo: () => {},
   // The step's commit waits for the record label read, which no Worker answers here.
   runUndoable: async () => undefined,
-  clearDerivedCircularConservationBlasts: sources.clearDerivedCircularConservationBlasts,
+  setRingGenomeLists: sources.setRingGenomeLists,
   setCircularConservationSourceFiles: sources.setCircularConservationSourceFiles,
   reconcileCircularConservation: sources.reconcileCircularConservation,
   refreshCircularConservationSlots: sources.refreshCircularConservationSlots,
@@ -368,13 +373,21 @@ const stackSources = createCircularConservationSources({
     leavingAsked.push([...leaving]);
     return leaving;
   },
+  keepCircularConservationRowsThrough: (drawing, replaceSources) => stackEditor.keepCircularConservationRowsThrough(drawing, replaceSources),
   askingStackPorts
 });
 const stackFiles = createCircularConservationComparisonFiles({
   state, shownAction, writeLosatCacheInfo: () => {},
   runUndoable: async () => undefined,
-  clearDerivedCircularConservationBlasts: stackSources.clearDerivedCircularConservationBlasts,
+  setRingGenomeLists: stackSources.setRingGenomeLists,
   setCircularConservationSourceFiles: stackSources.setCircularConservationSourceFiles,
+  reconcileCircularConservation: stackSources.reconcileCircularConservation,
+  refreshCircularConservationSlots: stackSources.refreshCircularConservationSlots,
+  askRingSourceRemoval: stackSources.askRingSourceRemoval
+});
+const stackPanel = createCircularConservationSeriesPanel({
+  state, shownAction, shownDrawingOfMode: (mode) => modeDrawing(state, mode), writeLosatCacheInfo: () => {},
+  circularConservationFastaInput: { value: null },
   reconcileCircularConservation: stackSources.reconcileCircularConservation,
   refreshCircularConservationSlots: stackSources.refreshCircularConservationSlots,
   askRingSourceRemoval: stackSources.askRingSourceRemoval
@@ -489,4 +502,201 @@ test('the stack keeps each ring row with its ring through Remove series of repla
       assert.deepEqual(drawn, [['Genome b', 'b'], ['Genome c', 'c'], ['Genome d', 'd']].filter((_, index) => index !== removed));
     });
   }
+});
+
+// #1777 review 6: after a LOSAT Generate's adoption (its tables at the rings' places, the rows moved to their keys),
+// every later ring transition still keeps each ring's label, colour and stack row (id, width), and each ring keeps one
+// identity (`ringIdentityDefects`): Add Seq, a ring row's file edit, Remove series, and the source radio. The
+// adoption runs the real path: Generate's canonical request (`buildCanonicalRenderRequest`) adopted by
+// `adoptCanonicalRenderArtifacts`, through the rings' adoption transition of the composition root.
+const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
+const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
+const { ringGenomeFileLists } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const { ringGenomeFilesInRingOrder } = await import('../../gbdraw/web/js/services/conservation-series.js');
+const { readFileText } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+const { ringIdentityDefects } = await import('./helpers/ring-identity.mjs');
+const REFERENCE_GENBANK = 'LOCUS       REFERENCE                   8 bp    DNA     linear   UNK 01-JAN-1980\nFEATURES             Location/Qualifiers\nORIGIN\n        1 aaccggtt\n//\n';
+/** The reference record a Generate's request draws (as `session-losat-cache-validation.test.mjs` sets it). */
+const placeReference = (drawing) => {
+  drawing.circularSources.splice(0, drawing.circularSources.length,
+    { uid: 'record-1', gb: state.inputFiles.registerFile(textFile('reference.gb', REFERENCE_GENBANK)), gff: null, fasta: null });
+  drawing.circularRecordList.value = [{ uid: 'record-1', k: 1, identity: 'record-1', selector: '#1', record_id: 'REFERENCE',
+    record_length: 8, detectedTopology: 'linear' }];
+};
+/**
+ * A LOSAT Generate of the draft's rings, adopted: each ring's table is named after its first genome file, as Generate
+ * names it, so three rings of `sequence.fasta` files give three tables of one name.
+ * @param {import('../../gbdraw/web/js/state.js').DrawingState} drawing
+ */
+const generateRings = async (drawing) => {
+  const filesData = await sessionConfig.serializeActiveRenderFiles(state, drawing);
+  const genomes = ringGenomeFileLists(filesData.c_conservation_fastas).filter((files) => files.length > 0);
+  const rings = orderedConservationSources(circularRingSources(drawing), drawing.circularConservation);
+  const canonical = buildCanonicalRenderRequest({
+    state, drawing, filesData,
+    resolvedCircularConservation: rings.map((ring, index) => ({
+      name: `${ring.fileName.replace(/\.[^.]+$/, '')}.circular_conservation.losatn.tsv`,
+      text: `q\ts\t100\t8\t0\t0\t1\t8\t1\t8\t1e-9\t2${index}\n`,
+      sourceIndex: ring.sourceIndex, label: ring.label, color: ring.color, fastas: genomes[ring.sourceIndex] || []
+    }))
+  });
+  adoptRings(drawing, canonical, true);
+  return canonical;
+};
+/**
+ * Generate's adoption of a request's rings; `builtFromDraft` false is a rerender of the committed Session (a Rotate),
+ * which may adopt rings the draft has since moved.
+ * @param {import('../../gbdraw/web/js/state.js').DrawingState} drawing
+ * @param {Parameters<typeof sessionConfig.adoptCanonicalRenderArtifacts>[0]} canonical
+ * @param {boolean} builtFromDraft
+ */
+const adoptRings = (drawing, canonical, builtFromDraft) => {
+  stackSources.adoptCircularRingResult(drawing, () => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
+    adoptOwnedRequest: true, drawing, conservationPairs: 'committed'
+  }), builtFromDraft);
+  assert.equal(drawing.files.c_conservation_blasts_source, 'losat-cache', 'the Generate adopted a LOSAT-cache result');
+};
+const ringLooks = () => circular().circularConservation.series.map((entry) => [entry.label, entry.color]);
+/** Each drawn ring's label and bases; a Generate binds its own views (Files) of the ring files. */
+const drawnRings = async () => {
+  const drawing = circular();
+  const bases = async (file) => (await readFileText(state.inputFiles.fileOf(file))).split('\n')[1];
+  const genomes = ringGenomeFilesInRingOrder(drawing);
+  return Promise.all(orderedConservationSources(circularRingSources(drawing), drawing.circularConservation)
+    .map(async (source, index) => [source.label, genomes[index].length > 0 ? await bases(genomes[index][0]) : null]));
+};
+/**
+ * Three rings of NCBI `sequence.fasta` files of one size and date (or, with `distinct`, of files of their own names),
+ * named GA, GB, GC, their rows 10, 11 and 12 px wide.
+ */
+const threeSequenceRings = async (drawing, { distinct = false } = {}) => {
+  placeReference(drawing);
+  for (const bases of ['ACGT', 'TTTT', 'GGGG']) {
+    const file = distinct ? textFile(`genome_${bases}.fasta`, `>r\n${bases}\n`) : sequenceFastaOf(bases);
+    await stackFiles.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [file], value: 'x' } }));
+  }
+  // Colours of the user's own, so a ring that loses its entry shows (a default label may come back from the stored
+  // label list, a colour does not).
+  drawing.circularConservation.series.forEach((entry, index) => Object.assign(entry, { label: `G${'ABC'[index]}`, color: `#12345${index}` }));
+  stackSources.refreshCircularConservationSlots(drawing);
+  widenRingRows();
+  return { rows: stackRingRows(), looks: ringLooks() };
+};
+
+test('after a LOSAT Generate, Add Seq keeps each ring\'s label, colour and stack row (#1777 review 6)', async () => {
+  await withStack(async (drawing) => {
+    const { rows, looks } = await threeSequenceRings(drawing);
+    await generateRings(drawing);
+    assert.deepEqual(stackRingRows(), rows, 'the Generate keeps the rows');
+    assert.deepEqual(ringIdentityDefects(drawing), [], 'one identity per ring after the Generate');
+    await stackFiles.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [sequenceFastaOf('CCCC')], value: 'x' } }));
+    assert.deepEqual(ringLooks().slice(0, 3), looks, 'labels and colours after Add Seq');
+    assert.deepEqual(stackRingRows().slice(0, 3), rows, 'rows after Add Seq');
+    assert.deepEqual(await drawnRings(), [['GA', 'ACGT'], ['GB', 'TTTT'], ['GC', 'GGGG'], ['sequence', 'CCCC']]);
+    assert.deepEqual(ringIdentityDefects(drawing), []);
+  });
+});
+
+test('after a LOSAT Generate, a ring row\'s file edit keeps each ring\'s stack row (#1777 review 6)', async () => {
+  await withStack(async (drawing) => {
+    const { rows, looks } = await threeSequenceRings(drawing);
+    await generateRings(drawing);
+    stackFiles.addRingRowFiles(0, /** @type {any} */ ({ target: { files: [textFile('plasmid.fasta')], value: 'x' } }));
+    assert.deepEqual(stackRingRows(), rows, 'Add file on the first ring row');
+    assert.deepEqual(ringLooks(), looks);
+    assert.deepEqual(ringIdentityDefects(drawing), []);
+    stackFiles.removeRingRowFile(0, 1);
+    assert.deepEqual(stackRingRows(), rows, 'its remove button');
+    assert.deepEqual(await drawnRings(), [['GA', 'ACGT'], ['GB', 'TTTT'], ['GC', 'GGGG']]);
+    assert.deepEqual(ringIdentityDefects(drawing), []);
+  });
+});
+
+test('after a LOSAT Generate, Remove series keeps the other rings\' labels and stack rows (#1777 review 6)', async () => {
+  await withStack(async (drawing) => {
+    const { rows, looks } = await threeSequenceRings(drawing);
+    await generateRings(drawing);
+    leavingAsked.splice(0);
+    stackFiles.removeCircularConservationSource(1);
+    assert.deepEqual(leavingAsked, [[rows[1][0]]], 'the reach dialog takes out the removed ring\'s row');
+    assert.deepEqual(stackRingRows(), [rows[0], rows[2]]);
+    assert.deepEqual(ringLooks(), [looks[0], looks[2]]);
+    assert.deepEqual(ringIdentityDefects(drawing), []);
+    await stackFiles.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [sequenceFastaOf('CCCC')], value: 'x' } }));
+    assert.deepEqual(stackRingRows().slice(0, 2), [rows[0], rows[2]], 'then Add Seq');
+    assert.deepEqual(await drawnRings(), [['GA', 'ACGT'], ['GC', 'GGGG'], ['sequence', 'CCCC']]);
+    assert.deepEqual(ringIdentityDefects(drawing), []);
+  });
+});
+
+test('after a LOSAT Generate, the source radio upload, LOSAT, upload keeps each ring\'s label and stack row (#1777 review 6)', async () => {
+  await withStack(async (drawing) => {
+    const { rows, looks } = await threeSequenceRings(drawing);
+    await generateRings(drawing);
+    for (const source of /** @type {const} */ (['upload', 'losat', 'upload'])) {
+      stackPanel.changeCircularConservationSource(source);
+      assert.deepEqual(stackRingRows(), rows, `rows after the radio's ${source}`);
+      assert.deepEqual(ringLooks(), looks, `labels and colours after the radio's ${source}`);
+      assert.deepEqual(ringIdentityDefects(drawing), [], `one identity per ring after the radio's ${source}`);
+    }
+    stackPanel.changeCircularConservationSource('losat');
+  });
+});
+
+test('a rerender of the committed rings after a move gives each ring its own label, colour and stack row (#1777 round 8)', async () => {
+  for (const distinct of [false, true]) {
+    await withStack(async (drawing) => {
+      const { rows, looks } = await threeSequenceRings(drawing, { distinct });
+      const canonical = await generateRings(drawing);
+      stackPanel.moveCircularConservationSeries(0, 1);
+      adoptRings(drawing, canonical, false);
+      const files = distinct ? 'files of their own names' : 'sequence.fasta files';
+      assert.deepEqual(ringLooks(), looks, `${files}: the committed rings, each with its own label and colour`);
+      assert.deepEqual(stackRingRows(), rows, `${files}: each ring in its own row`);
+      assert.deepEqual(await drawnRings(), [['GA', 'ACGT'], ['GB', 'TTTT'], ['GC', 'GGGG']], files);
+      assert.deepEqual(ringIdentityDefects(drawing), [], files);
+    });
+  }
+});
+
+test('replacing an uploaded BLAST table for every drawing keeps its ring\'s label and colour (#1777 round 8)', async () => {
+  const drawing = circular();
+  const table = (name) => textFile(name, 'q\ts\t100\t8\t0\t0\t1\t8\t1\t8\t1e-9\t20\n');
+  panel.changeCircularConservationSource('upload');
+  panel.setCircularConservationUploadFiles([table('zebrafish.blast.tsv'), table('fly.blast.tsv')]);
+  Object.assign(drawing.circularConservation.series[0], { label: 'Danio', color: '#123456' });
+  // The replacement of an input file that the drawing uses (`createInputReplacement`) writes the table at its place.
+  sources.replaceCircularConservationBlasts(drawing, [table('zebrafish.v2.blast.tsv'), drawing.files.c_conservation_blasts[1]]);
+  assert.deepEqual(drawing.circularConservation.series.map((entry) => [entry.fileName, entry.label, entry.color]),
+    [['zebrafish.v2.blast.tsv', 'Danio', '#123456'], ['fly.blast.tsv', 'fly.blast', drawing.circularConservation.series[1].color]]);
+  assert.deepEqual(ringIdentityDefects(drawing), []);
+  panel.setCircularConservationUploadFiles([]);
+  panel.changeCircularConservationSource('losat');
+});
+
+test('a new ring is named after its file, not after a ring that went (#1777 round 8, OV-3166)', async () => {
+  await withStack(async (drawing) => {
+    await threeSequenceRings(drawing);
+    await generateRings(drawing);
+    await stackFiles.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [sequenceFastaOf('CCCC')], value: 'x' } }));
+    while (drawing.circularConservation.series.length > 0) stackFiles.removeCircularConservationSource(0);
+    await stackFiles.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [textFile('genome_x.fasta')], value: 'x' } }));
+    assert.deepEqual(ringLooks().map(([label]) => label), ['genome_x']);
+    assert.deepEqual(ringIdentityDefects(drawing), []);
+  });
+});
+
+test('re-picked tables of other names are named after their files while the stored label list names the rings left (#1777 round 8, OV-3166)', () => {
+  const drawing = circular();
+  const table = (name) => textFile(name, 'q\ts\t100\t8\t0\t0\t1\t8\t1\t8\t1e-9\t20\n');
+  panel.changeCircularConservationSource('upload');
+  panel.setCircularConservationUploadFiles([table('a.tsv'), table('b.tsv')]);
+  drawing.circularConservation.series.forEach((entry, index) => { entry.label = `U${index}`; });
+  comparisonFiles.removeCircularConservationSource(1);
+  assert.equal(drawing.circularConservation.labels, 'U0', 'the reconcile writes the label list from the rings left');
+  // D-144: a re-picked set of other names gets rings of its own; the list's U0 is the ring that went, not c.tsv.
+  panel.setCircularConservationUploadFiles([table('c.tsv'), table('d.tsv')]);
+  assert.deepEqual(drawing.circularConservation.series.map((entry) => [entry.fileName, entry.label]), [['c.tsv', 'c'], ['d.tsv', 'd']]);
+  panel.setCircularConservationUploadFiles([]);
+  panel.changeCircularConservationSource('losat');
 });

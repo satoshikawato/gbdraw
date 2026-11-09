@@ -1635,14 +1635,15 @@ export const createAppSetup = () => {
     }) ?? removeLinearDepthTrack(drawing, index);
   });
   const {
-    clearDerivedCircularConservationBlasts, setCircularConservationSourceFiles, replaceCircularConservationBlasts,
+    setRingGenomeLists, setCircularConservationSourceFiles, replaceCircularConservationBlasts, adoptCircularRingResult,
     askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
     refreshCircularConservationSlots
   } = createCircularConservationSources({
     state, writeLosatCacheInfo, askingStackPorts,
     syncCircularConservationSlots: circularTrackSlotEditor.syncCircularConservationSlots,
     rekeyCircularConservationRows: circularTrackSlotEditor.rekeyCircularConservationRows,
-    circularConservationRowsLeaving: circularTrackSlotEditor.circularConservationRowsLeaving
+    circularConservationRowsLeaving: circularTrackSlotEditor.circularConservationRowsLeaving,
+    keepCircularConservationRowsThrough: circularTrackSlotEditor.keepCircularConservationRowsThrough
   });
   const {
     setCircularConservationUploadFiles, circularConservationSeriesRows, canMoveCircularConservationSeries,
@@ -1656,7 +1657,7 @@ export const createAppSetup = () => {
     settleComparisonRecordLabels, addCircularConservationComparisonFile, addRingRowFiles,
     removeRingRowFile, removeCircularConservationSource
   } = createCircularConservationComparisonFiles({
-    state, shownAction, writeLosatCacheInfo, runUndoable: history.runUndoable, clearDerivedCircularConservationBlasts,
+    state, shownAction, writeLosatCacheInfo, runUndoable: history.runUndoable, setRingGenomeLists,
     setCircularConservationSourceFiles, reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
   });
   // The auxiliary file imports still applying: the watchers add them, Save and
@@ -1791,17 +1792,11 @@ export const createAppSetup = () => {
     askChoice,
     showNotice,
     // A Generate that adopts a Circular LOSAT result reconciles its drawing's
-    // rings; a Linear Generate and a Circular one without such a result leave
-    // them. The ring rows move to its keys only if the draft's rings are those
-    // the request was built from (`keepCircularConservationRowsThrough` states why).
-    adoptCanonicalRenderArtifacts: (canonical, { builtFromDraft = false, ...options }) => {
-      const { drawing } = options;
-      const adopt = () => adoptCanonicalRenderArtifacts(canonical, options);
-      const adopted = builtFromDraft
-        ? circularTrackSlotEditor.keepCircularConservationRowsThrough(drawing, adopt)
-        : adopt();
-      if (adopted) reconcileCircularConservation(drawing);
-    },
+    // rings (`adoptCircularRingResult`); a Linear Generate and a Circular one
+    // without such a result leave them.
+    adoptCanonicalRenderArtifacts: (canonical, { builtFromDraft = false, ...options }) => adoptCircularRingResult(
+      options.drawing, () => adoptCanonicalRenderArtifacts(canonical, options), builtFromDraft
+    ),
     getCommittedCanonicalSession,
     readCommittedCanonicalRevision,
     commitLiveSettingValues,
