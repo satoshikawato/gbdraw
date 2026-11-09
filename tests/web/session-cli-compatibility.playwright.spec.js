@@ -465,6 +465,78 @@ test('Session CLI feature density tracks survive Web Generate', async ({ browser
   }
 });
 
+// OV-3079, OV-3155: a CLI stack that names no Axis index draws each slot on its own side (a set's row without a side
+// outside or above, a Linear features slot without a side below). The Session it saves, loaded and generated in the
+// Web, draws the CLI's figure: the region set stays outside (above) the Axis, and Overlay set rows of one z keep the
+// order Python paints them in.
+for (const [name, mode, slots, axis, stack, coveredOfItsZ = []] of [
+  ['circular', 'circular', ['features:features', 'regions:annotations@set_id=regions,side=outside'],
+    1, [['regions', 'outside'], ['features', 'inside']]],
+  ['linear', 'linear', ['features:features', 'regions:annotations@set_id=regions,side=above'],
+    1, [['regions', 'above'], ['features', 'below']]],
+  ['circular blank-side', 'circular', ['hl:annotations@set_id=hl,side=overlay,anchor_slot=features,layer=underlay,z=-1',
+    'features:features', 'regions:annotations@set_id=regions'], 2, [['regions', 'outside'], ['hl', 'overlay'], ['features', 'inside']]],
+  ['circular overlay tie', 'circular', ['features:features', 'a:annotations@set_id=a,side=overlay,anchor_slot=features,z=1',
+    'gc:content', 'regions:annotations@set_id=regions,side=outside', 'b:annotations@set_id=b,side=overlay,anchor_slot=features,z=1'],
+  1, [['regions', 'outside'], ['features', 'inside'], ['a', 'overlay'], ['gc', 'inside'], ['b', 'overlay']]],
+  // `a` spans features to `sk`, so it covers `gc` of its z and paints over it; `regions` of its z lies outside the span.
+  ['circular overlay span', 'circular', ['features:features', 'gc:content@z=1',
+    'a:annotations@set_id=a,side=overlay,anchor_slot=features,to_slot=sk,z=1', 'regions:annotations@set_id=regions,side=outside,z=1',
+    'sk:skew'], 1, [['regions', 'outside'], ['features', 'inside'], ['gc', 'inside'], ['a', 'overlay'], ['sk', 'inside']], ['gc']]
+]) test(`Session CLI ${name} stack without an Axis index draws its region set where the CLI drew it`, async ({ browser }, testInfo) => {
+  test.setTimeout(900_000);
+  await fs.writeFile(testInfo.outputPath('regions.tsv'), [
+    'set_id\tid\tmark\tstart\tend\tlabel', 'regions\thead\tline\t1\t9500\tHead genes', 'regions\ttail\tline\t9600\t19000\tTail genes',
+    ...Object.entries({ hl: 'hl\th1\thighlight\t20000\t26000\t', a: 'a\ta1\thighlight\t1000\t9000\t', b: 'b\tb1\thighlight\t5000\t12000\t' })
+      .filter(([set]) => slots.some((slot) => slot.includes(`set_id=${set},`))).map(([, row]) => row)
+  ].join('\n') + '\n');
+  const file = await cli(mode, ['--gbk', lambda, '--annotation_table', 'regions.tsv',
+    ...slots.flatMap((slot) => [`--${mode}_track_slot`, slot]), '-f', 'svg'], testInfo, 'no-axis');
+  const stored = shownSavedDrawing(await readSession(file));
+  const [slotsKey, axisKey] = [`${mode}TrackSlots`, `${mode}TrackAxisIndex`];
+  expect(stored.renderRequest.diagramOptions.tracks[axisKey]).toBe(null);
+  const run = await load(browser, file, { width: 1600, height: 1000 });
+  try {
+    // The figure's size and each slot group's place and paths, by slot id (4 decimals, as `svgSemantics`).
+    const slotGroups = (svg) => run.page.evaluate((text) => {
+      const round = (value) => value && value.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, (number) => String(Math.round(Number(number) * 1e4) / 1e4));
+      const root = new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
+      return {
+        size: [round(root.getAttribute('width')), round(root.getAttribute('height'))],
+        slots: [...root.querySelectorAll('[data-gbdraw-slot-id]')].map((group) => [
+          group.getAttribute('data-gbdraw-slot-id'), round(group.getAttribute('transform')),
+          [...group.querySelectorAll('path')].map((item) => round(item.getAttribute('d'))).sort()
+        ]).sort((a, b) => a[0].localeCompare(b[0]))
+      };
+    }, svg);
+    // The Web stack lists the rows outside (above) the Axis first, so its slot groups and their texts come in that order.
+    const semantics = async (svg) => {
+      const read = await run.page.evaluate(svgSemantics, svg);
+      return { ...read, text: [...read.text].sort() };
+    };
+    // Overlay set rows overlap each other and the rows of their z they cover: the order of those groups in the
+    // document is the order Python paints them in.
+    const paintedIds = [...stack.filter(([, drawnSide]) => drawnSide === 'overlay').map(([id]) => id), ...coveredOfItsZ];
+    const painted = (svg) => run.page.evaluate(([text, ids]) => [...new DOMParser().parseFromString(text, 'image/svg+xml')
+      .querySelectorAll('[data-gbdraw-slot-id]')].map((group) => group.getAttribute('data-gbdraw-slot-id')).filter((id) => ids.includes(id)),
+    [svg, paintedIds]);
+    const drawn = await slotGroups(stored.results[0].content);
+    const before = await snapshot(run.page);
+    expect(await slotGroups(before.selected)).toEqual(drawn);
+    await generateAndWaitForResult(run.page);
+    const after = await snapshot(run.page);
+    expect(await slotGroups(after.selected)).toEqual(drawn);
+    expect(await painted(after.selected)).toEqual(await painted(stored.results[0].content));
+    expect(await semantics(after.selected)).toEqual(await semantics(before.selected));
+    const tracks = after.request.diagramOptions.tracks;
+    expect({ axis: tracks[axisKey], slots: tracks[slotsKey].map(({ id, side: drawnSide }) => [id, drawnSide]) })
+      .toEqual({ axis, slots: stack });
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
+
 test('Session schema-1 Web binding control still loads', async ({ browser }, testInfo) => {
   const run = await load(browser, path.join(root, 'tests/fixtures/sessions/single.v41-bindings1.json'), { width: 1600, height: 1000 }, false);
   try {

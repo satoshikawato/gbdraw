@@ -9,6 +9,7 @@ import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
 import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptionalPixel } from './track-slot-validation.js';
+import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
 import { noteReplacedLeaf } from '../utils/field-reading.js';
 
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
@@ -317,7 +318,7 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
       usedIds.add(id);
       const side = renderer === 'features'
         ? normalizeSide(slot.side, sideForLinearTrackLayout(trackLayout))
-        : normalizeSide(slot.side, renderer === 'annotations' ? 'above' : 'below');
+        : normalizeSide(slot.side, renderer === 'annotations' ? AUTOMATIC_ANNOTATION_LANE_SIDES.linear : 'below');
       const readSide = renderer !== 'features' && renderer !== 'annotations' && side === 'overlay' ? 'below' : side;
       noteReplacedLeaf(losses, `[${index}].side`, slot.side, readSide);
       return {
@@ -707,10 +708,13 @@ const canonicalLinearTrackSlotSource = (spec) => validateCanonicalLinearTrackSlo
 );
 
 // `nt`: the dinucleotide of a content or skew slot that names none: the
-// request's, as Python reads it (`slot_dinucleotide`; OV-490).
+// request's, as Python reads it (`slot_dinucleotide`; OV-490). A request's
+// features slot that names no side draws below, as Python reads it
+// (gbdraw/tracks/linear.py, `normalize_linear_track_slots`), whatever the
+// track layout: the track layout gives only the Web's own rows their side (OV-3155).
 /** @param {unknown} spec @param {string} [nt] */
 export const parseLinearTrackSlotSpec = (spec, nt = 'GC') => {
-  const normalized = normalizeLinearTrackSlots([canonicalLinearTrackSlotSource(spec)], nt);
+  const normalized = normalizeLinearTrackSlots([canonicalLinearTrackSlotSource(spec)], nt, 'below');
   return normalized[0] || null;
 };
 

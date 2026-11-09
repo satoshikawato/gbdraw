@@ -56,6 +56,7 @@ const {
   CustomTrackPlanValidationError,
   validateTrackSlotBindingInvariants,
   assertValidCustomTrackPlan,
+  stackTrackSlotsBySide,
   validateCustomTrackPlan
 } = await import(
   pathToFileURL(join(tempRoot, 'services', 'track-slot-validation.js'))
@@ -68,6 +69,7 @@ const {
 );
 const {
   buildLinearTrackSlotPayload,
+  effectiveLinearSlotPlacement,
   normalizeLinearTrackSlots,
   parseLinearTrackSlotSpec
 } = await import(
@@ -76,7 +78,9 @@ const {
 const { buildCircularTrackSlotSpec } = await import(
   pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js'))
 );
-const { buildCircularTrackSlotPayload, normalizeCircularTrackSlot, parseCircularTrackSlotSpec, placeCircularTrackStack } = await import(
+const {
+  buildCircularTrackSlotPayload, effectiveSlotPlacement, normalizeCircularTrackSlot, parseCircularTrackSlotSpec, placeCircularTrackStack
+} = await import(
   pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js'))
 );
 
@@ -982,6 +986,64 @@ test('invalid depth height remains editable without overwriting its last valid c
   editor.setLinearTrackSlotHeight(slot, '1e1PX');
   assert.equal(state.adv.depth_tracks[0].height, 10);
   assert.deepEqual(buildLinearTrackSlotPayload(slot).height, { value: 10, unit: 'px' });
+});
+
+// OV-3079, OV-3155: a request without an Axis index draws each row on its own side (a set's row without a side
+// outside or above, as Python reads it), in the stack's order on each side; the Web stack places the rows of the outer
+// side before the Axis.
+test('a stack without an Axis index places each row on its own side in both modes (OV-3079, OV-3155)', () => {
+  const row = (id, renderer, side = null, params = {}) => ({ id, renderer, enabled: true, side, z: 0, params });
+  const ids = ({ slots, axisIndex }) => ({ axisIndex, ids: slots.map((slot) => slot.id) });
+  const circular = (slots, preset) => ids(stackTrackSlotsBySide(slots, (slot) => effectiveSlotPlacement(slot, preset), 'outside'));
+  // `features:features regions:annotations@set_id=regions ticks:ticks out:content@side=outside`
+  assert.deepEqual(circular([
+    row('features', 'features'), row('regions', 'annotations', null, { set_id: 'regions' }), row('ticks', 'ticks'),
+    row('out', 'dinucleotide_content', 'outside')
+  ], 'tuckin'), { axisIndex: 2, ids: ['regions', 'out', 'features', 'ticks'] });
+  // A stack whose sides already follow its order keeps it, with the index Load inferred before.
+  assert.deepEqual(circular([row('features', 'features'), row('gc', 'dinucleotide_content'), row('skew', 'dinucleotide_skew')], 'tuckin'),
+    { axisIndex: 0, ids: ['features', 'gc', 'skew'] });
+  assert.deepEqual(circular([row('features', 'features'), row('gc', 'dinucleotide_content')], 'spreadout'),
+    { axisIndex: 1, ids: ['features', 'gc'] });
+  // The row on the Axis follows the rows outside; an Overlay set row keeps its place before the row after it.
+  assert.deepEqual(circular([
+    row('gc', 'dinucleotide_content'), row('hl', 'annotations', 'overlay', { set_id: 'r', anchor_slot: 'features' }),
+    row('features', 'features'), row('regions', 'annotations', 'outside', { set_id: 'r' })
+  ], 'middle'), { axisIndex: 2, ids: ['regions', 'hl', 'features', 'gc'] });
+  // A stack whose sides follow its order, Overlay set rows included, comes back unchanged.
+  const highlight = row('hl', 'annotations', 'overlay', { set_id: 'r', anchor_slot: 'features' });
+  assert.deepEqual(circular([highlight, row('features', 'features'), row('gc', 'dinucleotide_content')], 'middle'),
+    { axisIndex: 1, ids: ['hl', 'features', 'gc'] });
+  assert.deepEqual(circular([row('features', 'features'), row('gc', 'dinucleotide_content'), highlight], 'tuckin'),
+    { axisIndex: 0, ids: ['features', 'gc', 'hl'] });
+  assert.deepEqual(circular([row('regions', 'annotations', null, { set_id: 'r' }), highlight, row('features', 'features')], 'tuckin'),
+    { axisIndex: 2, ids: ['regions', 'hl', 'features'] });
+  // Python paints rows by z, then by place: an Overlay set row keeps the request's order against the rows of its z it
+  // covers (its anchor, its `to_slot` and the rows between) and against overlays of its z that share a row, wherever
+  // a list can. Other rows of its z lie elsewhere on the figure and move freely.
+  const overlay = (id, z = 1, toSlot = null) => ({
+    ...row(id, 'annotations', 'overlay', { set_id: id, anchor_slot: 'features', ...(toSlot ? { to_slot: toSlot } : {}) }), z
+  });
+  const gc = (z) => ({ ...row('gc', 'dinucleotide_content'), z });
+  const outer = (z) => ({ ...row('r', 'annotations', 'outside', { set_id: 'r' }), z });
+  assert.deepEqual(circular([row('features', 'features'), overlay('a'), gc(0), outer(0), overlay('b')], 'tuckin'),
+    { axisIndex: 1, ids: ['r', 'features', 'a', 'gc', 'b'] });
+  // `a` spans features to `sk`, so it covers `gc` of its z and stays after it; `r` of its z lies outside the span.
+  assert.deepEqual(circular([row('features', 'features'), gc(1), overlay('a', 1, 'sk'), outer(1), row('sk', 'dinucleotide_skew')], 'tuckin'),
+    { axisIndex: 1, ids: ['r', 'features', 'gc', 'a', 'sk'] });
+  // A span over the Axis that covers rows of its z on both sides in the other order (`y` inside before it, `x`
+  // outside after it) can keep only one of them: no list keeps both. The overlay goes before the row after it.
+  const content = (id, side, z) => ({ ...row(id, 'dinucleotide_content', side), z });
+  assert.deepEqual(circular([row('features', 'features'), content('y', null, 1),
+    { ...row('a', 'annotations', 'overlay', { set_id: 'a', anchor_slot: 'oc', to_slot: 't' }), z: 1 },
+    content('oc', 'outside', 0), content('x', 'outside', 1), content('t', null, 0)], 'tuckin'),
+  { axisIndex: 3, ids: ['a', 'oc', 'x', 'features', 'y', 't'] });
+  // Linear, read as a request is (`parseLinearTrackSlotSpec`): a features row without a side draws below.
+  const linear = (specs) => ids(stackTrackSlotsBySide(specs.map((spec) => parseLinearTrackSlotSpec(spec)), effectiveLinearSlotPlacement, 'above'));
+  assert.deepEqual(linear(['features:features', 'regions:annotations@set_id=regions', 'gc:content', 'up:skew@side=above']),
+    { axisIndex: 2, ids: ['regions', 'up', 'features', 'gc'] });
+  assert.deepEqual(linear(['gc:content', 'features:features@side=overlay', 'regions:annotations@set_id=r,side=above']),
+    { axisIndex: 1, ids: ['regions', 'features', 'gc'] });
 });
 
 // OV-1263: Generate stores the Axis index the rows' sides were set from, so an Overlay

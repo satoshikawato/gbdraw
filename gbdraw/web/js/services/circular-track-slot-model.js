@@ -10,6 +10,7 @@ import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptional
 import { isUnsetValue, noteReplacedLeaf } from '../utils/field-reading.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
+import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
 import { ownEntry } from '../utils/own-entry.js';
 
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
@@ -468,6 +469,8 @@ export const syncSlotPlacementFromSide = (slot, side) => {
 };
 
 /**
+ * The side a row draws on. A set's row without a side sits where the set's automatic row sits, as Python reads it
+ * (gbdraw/tracks/circular.py, `_normalize_circular_track_slots`).
  * @param {SlotPlacementSource | null | undefined} slot
  * @param {unknown} [preset]
  * @returns {string}
@@ -477,7 +480,7 @@ export const effectiveSlotPlacement = (slot, preset = 'tuckin') => {
   if (slot.renderer === 'features') {
     return sideForLaneDirection(featureLaneForSlot(slot, preset));
   }
-  return normalizePlacement(slot.side, 'inside');
+  return normalizePlacement(slot.side, slot.renderer === 'annotations' ? AUTOMATIC_ANNOTATION_LANE_SIDES.circular : 'inside');
 };
 
 /**
@@ -521,6 +524,26 @@ export const clampCircularTrackAxisIndex = (value, slotCount, losses = null) => 
   noteReplacedLeaf(losses, '', value, read);
   return read;
 };
+
+/**
+ * The slots of a request with an Axis index as Python reads them: a features slot that names neither a side nor a
+ * lane takes the lane of its place, outward before the index and inward past it, under every track type
+ * (`_slot_with_axis_derived_side` in gbdraw/tracks/circular.py; OV-3186). The Web writes both, so only the requests of
+ * the CLI and the Python API change. Other slots (a slot written as CLI text among them), and every slot without an
+ * index, come back as they are.
+ * @template T
+ * @param {readonly T[]} slots
+ * @param {unknown} axisIndex
+ * @returns {T[]}
+ */
+export const circularRequestSlotsWithPlacedLanes = (slots, axisIndex) => slots.map((slot, index) => {
+  if (!Number.isInteger(axisIndex) || typeof slot !== 'object' || slot === null) return slot;
+  const row = /** @type {{ readonly renderer?: unknown, readonly enabled?: unknown, readonly side?: unknown, readonly params?: unknown }} */ (slot);
+  const params = cloneParams(row.params);
+  if (row.renderer !== 'features' || row.enabled === false || row.side != null
+    || normalizeOptionalText(params.lane_direction ?? params.lanes) !== null) return slot;
+  return /** @type {T} */ ({ ...row, params: { ...params, lane_direction: index < Number(axisIndex) ? 'outside' : 'inside' } });
+});
 
 /**
  * @param {(CircularTrackSlot | null | undefined)[]} slots Edited in place.

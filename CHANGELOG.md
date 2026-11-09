@@ -207,6 +207,31 @@ write-up of a release.
   **Use custom stack** had already given a row, so the set got a second row:
   the figure drew it twice, or Generate stopped on the first row's lane
   overflow. They now edit the row the stack starts with (OV-3151, OV-3081).
+- Fixed (Web app): a Session saved by `gbdraw circular` or `gbdraw linear`
+  with track slot rows and no Axis index (`--circular_track_axis_index`,
+  `--linear_track_axis_index`) drew some rows on the wrong side of the Axis
+  when loaded and generated in the Web app: for example
+  `regions:annotations@set_id=regions,side=outside` (Circular) or `side=above`
+  (Linear) after the features row was drawn inside or below it. Load now
+  places each row on the side the CLI drew it. An Annotations row with no
+  `side=` is read as outside (above), and a Linear features row with no
+  `side=` as below, as the CLI draws them. The Web lists the rows by side, so
+  where the CLI's order of writing differs, a Circular Legend can list its
+  track rows in another order, and rows of one `z` that overlap can paint in
+  another order (OV-3079, OV-3155).
+- Fixed (Web app): a Circular Session saved by the CLI with
+  `--circular_track_axis_index` and a `features:features` slot with no
+  `side=` or `lane_direction=` loaded with the lanes of the track type (split
+  under Middle) instead of the lanes of the slot's place, as the CLI draws
+  them. Load now reads the lanes of the place, and the Run Info Source recipe
+  writes them; before, its command drew another figure (Middle) or failed
+  (Tuckin) (OV-3186).
+- Fixed (Web app): the Source recipe in Run Info for a Linear drawing whose
+  track slots name an Axis index wrote `side=below` (`side=overlay` for the
+  features slot) for each slot without a side, also for slots placed above the
+  Axis, so the command failed with
+  "conflicts with --linear_track_axis_index". The recipe now writes the side
+  each slot is drawn on (OV-3157).
 - Changed: every track group in an SVG is now named from its track slot
   (`track_slot_<hash>_<slot id>`) and carries `data-gbdraw-slot-id` and
   `data-gbdraw-slot-renderer`, in both modes and with or without a custom

@@ -471,6 +471,119 @@ await test('a request whose Circular slot objects name a renderer by alias loads
     [['c', 'content'], ['g', 'content'], ['s', 'skew']]);
 });
 
+// OV-3079: a request without an Axis index (the CLI's and the Python API's) draws each slot on its own side, in the
+// stack's order on each side. The Web stack holds a side as a place before or after the Axis, so Load moves the
+// rows outside the Axis before it, each side in its order, and the next Generate draws the loaded figure.
+await test('a request without an Axis index loads each slot on the side Python draws it (OV-3079)', async () => {
+  const session = JSON.parse(gunzipSync(await readFile(path.join(
+    root, 'tests/fixtures/sessions/HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'
+  ))));
+  const slot = (id, renderer, side = null, params = {}) => ({ kind: 'circularTrackSlot', id, renderer, enabled: true,
+    side, radius: null, width: null, z: 0, params, innerGapPx: null, outerGapPx: null });
+  // `--circular_track_slot features:features --circular_track_slot c:content@side=outside --circular_track_slot s:skew`
+  session.renderRequest.diagramOptions.tracks.circularTrackSlots = [
+    slot('features', 'features'), slot('c', 'dinucleotide_content', 'outside', { nt: 'GC' }),
+    slot('s', 'dinucleotide_skew', null, { nt: 'GC' })
+  ];
+  session.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = null;
+  delete session.config;
+  const result = await load(Buffer.from(JSON.stringify(session)));
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  const drawing = modeDrawing(state, 'circular');
+  const placement = ({ id, side, params }) => [id, side, params.lane_direction ?? null];
+  assert.deepEqual({
+    axis: drawing.adv.circular_track_slots_axis_index, slots: drawing.adv.circular_track_slots.map(placement)
+  }, {
+    // The fixture's preset is Middle: its feature row draws on the Axis.
+    axis: 1, slots: [['c', 'outside', null], ['features', 'overlay', 'split'], ['s', 'inside', null]]
+  });
+  const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
+  const { tracks } = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData }).renderRequest.diagramOptions;
+  assert.deepEqual({ axis: tracks.circularTrackAxisIndex, slots: tracks.circularTrackSlots.map(({ id, side }) => [id, side]) },
+    { axis: 1, slots: [['c', 'outside'], ['features', 'overlay'], ['s', 'inside']] });
+});
+
+// OV-3079: a set's row without a side loads outside, as the CLI draws it, and an Overlay set row keeps its place
+// before the row after it.
+await test('a Circular CLI stack with blank sides and an Overlay set row loads on the sides the CLI drew (OV-3079)', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-axis-'));
+  try {
+    const output = path.join(directory, 'stack');
+    await writeFile(path.join(directory, 'regions.tsv'), ['set_id\tid\tmark\tstart\tend\tlabel',
+      'regions\thead\tline\t1\t9500\tHead genes', 'hl\th1\thighlight\t20000\t26000\t'].join('\n') + '\n');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', lambda, '--annotation_table', 'regions.tsv',
+      '--circular_track_slot', 'hl:annotations@set_id=hl,side=overlay,anchor_slot=features,layer=underlay,z=-1',
+      '--circular_track_slot', 'features:features', '--circular_track_slot', 'regions:annotations@set_id=regions',
+      '-f', 'svg', '-o', output, '--session_output', `${output}.gbdraw-session.json.gz`], {
+      cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+    });
+    const result = await load(gunzipSync(await readFile(`${output}.gbdraw-session.json.gz`)));
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    const drawing = modeDrawing(state, 'circular');
+    assert.deepEqual({
+      axis: drawing.adv.circular_track_slots_axis_index, slots: drawing.adv.circular_track_slots.map(({ id, side }) => [id, side])
+    }, { axis: 2, slots: [['regions', 'outside'], ['hl', 'overlay'], ['features', 'inside']] });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// OV-3186: with an Axis index, Python gives a features slot that names no side and no lane the lane of its place
+// (outward before the index, inward past it), under every track type. Load reads it so.
+await test('a Circular CLI features slot without a side takes the lane of its place beside the Axis index (OV-3186)', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-axis-'));
+  try {
+    for (const [trackType, axis, lane] of [['middle', 2, 'outside'], ['tuckin', 2, 'outside'], ['spreadout', 1, 'inside']]) {
+      const output = path.join(directory, trackType);
+      execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', lambda, '--track_type', trackType,
+        '--circular_track_slot', 'gc:content', '--circular_track_slot', 'features:features', '--circular_track_slot', 'sk:skew',
+        '--circular_track_axis_index', String(axis), '-f', 'svg', '-o', output, '--session_output', `${output}.gbdraw-session.json.gz`], {
+        cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+      });
+      const result = await load(gunzipSync(await readFile(`${output}.gbdraw-session.json.gz`)));
+      assert.equal(result.status, 'ok', JSON.stringify(result.error));
+      const features = modeDrawing(state, 'circular').adv.circular_track_slots.find(({ id }) => id === 'features');
+      assert.deepEqual([features.side, features.params.lane_direction], [lane, lane], trackType);
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// OV-3155: the Linear stack of a CLI Session without an Axis index loads the same way: each row on the side the CLI
+// drew it (a features row without a side below, as Python reads it), the rows above the Axis first.
+await test('a Linear CLI stack without an Axis index loads each slot on the side the CLI drew it (OV-3155)', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-axis-'));
+  try {
+    const output = path.join(directory, 'stack');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', lambda, '--linear_track_slot', 'features:features',
+      '--linear_track_slot', 'c:content@side=above', '--linear_track_slot', 's:skew', '-f', 'svg', '-o', output,
+      '--session_output', `${output}.gbdraw-session.json.gz`], {
+      cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+    });
+    const bytes = gunzipSync(await readFile(`${output}.gbdraw-session.json.gz`));
+    const view = savedDrawingView(JSON.parse(bytes), JSON.parse(bytes).ui.activeDrawingId);
+    assert.equal(view.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, null);
+    const result = await load(bytes);
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    const drawing = modeDrawing(state, 'linear');
+    assert.deepEqual({
+      axis: drawing.adv.linear_track_slots_axis_index, slots: drawing.adv.linear_track_slots.map(({ id, side }) => [id, side])
+    }, { axis: 1, slots: [['c', 'above'], ['features', 'below'], ['s', 'below']] });
+    const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
+    const comparisonPlanSnapshot = resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
+      losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
+    });
+    const { tracks } = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot })
+      .renderRequest.diagramOptions;
+    assert.deepEqual({ axis: tracks.linearTrackAxisIndex, slots: tracks.linearTrackSlots.map(({ id, side }) => [id, side]) },
+      { axis: 1, slots: [['c', 'above'], ['features', 'below'], ['s', 'below']] });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 // Before the Font setting, a Web Session kept the diagram font as a preserved
 // override (PD-OI-009) in its draft and its request. Load moves it into the
 // setting, so no preserved override names a path the GUI manages. The

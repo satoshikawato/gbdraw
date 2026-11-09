@@ -19,6 +19,7 @@ import {
   shownAfterSourceChange
 } from '../services/depth-track-state.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
+import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 import {
   findTrackSlotGeometry,
@@ -307,7 +308,7 @@ export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [],
   const slot = makeSlot({
     id,
     renderer: normalizedRenderer,
-    side: normalizedRenderer === 'annotations' && side === null ? 'outside' : side,
+    side: normalizedRenderer === 'annotations' && side === null ? AUTOMATIC_ANNOTATION_LANE_SIDES.circular : side,
     params
   });
   if (side !== null) applyPlacementDefaults(slot, side);

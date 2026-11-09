@@ -21,6 +21,7 @@ from .parsing import (
 from .scalars import ScalarSpec, parse_optional_pixel
 from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
+from gbdraw.annotations.planning import AUTOMATIC_ANNOTATION_LANE_SIDES
 
 
 LinearTrackRendererName = Literal[
@@ -384,8 +385,9 @@ def _normalize_linear_track_slots(
         if not slot.enabled:
             continue
 
+        # A set's row without a side sits where the set's automatic row sits; the Web reads the same constant.
         side = _normalize_side_value(slot.side) if slot.side is not None else (
-            "above" if renderer == "annotations" else "below"
+            AUTOMATIC_ANNOTATION_LANE_SIDES["linear"] if renderer == "annotations" else "below"
         )
         if side == "overlay" and renderer not in {"features", "annotations"}:
             raise ValueError("side=overlay is only supported for features and annotations slots")
