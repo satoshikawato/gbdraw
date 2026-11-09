@@ -1815,7 +1815,7 @@ const collectCustomTrackIssues = ({
         { code: 'feature_density_track_required', message: `${modeLabel} feature density track ${slotLabel} requires a track.`,
           parts: sentence(msg('This row needs a feature density track.')) },
         (track) => ({ code: 'feature_density_track_unknown', message: `${modeLabel} feature density track ${slotLabel} names track '${track}', which is not defined.`,
-          parts: sentence(msg("Feature density track '{track}' does not exist."), { track }) }))
+          parts: sentence(msg("Feature density track '{id}' does not exist."), { id: track }) }))
         : null);
     if (reference) addRowIssue(rowIssues, index, reference);
 
