@@ -115,7 +115,7 @@ const inputSummaries = ref(/** @type {readonly DrawnInputSummary[]} */ ([]));
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
 // Analysis-scoped materialized nucleotide sources used by match span popups.
 const matchSequenceRegistry = createSequenceSourceRegistry();
-const svgContent = computed(() => {
+const svgContent = typedComputed(() => {
   if (results.value.length === 0) return null;
   return getCommittedSvgContent(results.value[selectedResultIndex.value]);
 });

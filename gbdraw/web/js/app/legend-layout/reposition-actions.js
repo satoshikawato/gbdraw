@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
+/** @import { DrawingState, WebState } from '../../state.js' */
 import {
   applyCompositionEdit,
   bindCompositionMetadata,
@@ -28,7 +28,9 @@ const setLegendVariant = (legendGroup, side) => {
 
 /**
  * @typedef {object} LegendRepositionActionsOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Pick<WebState, 'activeDrawing' | 'sessionOperationAvailability' | 'svgContent' | 'svgContainer'
+ *   | 'generatedLegendPosition' | 'diagramElements' | 'diagramElementOriginalTransforms' | 'diagramOffset'
+ *   | 'legendInitialTransform' | 'legendCurrentOffset' | 'plotTitleAutoTransform' | 'plotTitleUserOffset'>} state
  * @property {(svg: SVGSVGElement, options?: { side?: string }) => import('../../services/legend-layout.js').LayoutBox | null} layOutLegend
  *   The Legend manager's layout of the Legend for a side as Python lays it out;
  *   returns its local bounds, or null when it laid nothing out.
@@ -54,7 +56,9 @@ export const createLegendRepositionActions = ({
     plotTitleAutoTransform,
     plotTitleUserOffset
   } = state;
-  /** @param {Element} svg @param {CompositionBinding} [binding] */
+  // The one writer of the composition offsets and transforms from a Result's composition: at its mount
+  // (the root's `captureBaseConfig`), after a Legend move, a Reset of the positions, and a History restore.
+  /** @param {Element} svg @param {CompositionBinding} [binding] @returns {CompositionBinding} */
   const syncStateFromComposition = (svg, binding = bindCompositionMetadata(svg)) => {
     const { metadata } = binding;
     const deltas = compositionUserDeltas(svg);
@@ -97,6 +101,7 @@ export const createLegendRepositionActions = ({
       plotTitleUserOffset.x = 0;
       plotTitleUserOffset.y = 0;
     }
+    return binding;
   };
 
   /**
@@ -135,6 +140,12 @@ export const createLegendRepositionActions = ({
     return true;
   };
 
+  // The mount's capture of the composition state of the displayed Result.
+  const captureBaseConfig = () => {
+    const svg = svgContainer.value?.querySelector('svg') || null;
+    return svg ? syncStateFromComposition(svg) : null;
+  };
+
   /** @param {{ commit?: boolean }} [options] */
   const refreshLegendGeometry = ({ commit = true } = {}) => {
     const drawing = state.activeDrawing();
@@ -150,6 +161,7 @@ export const createLegendRepositionActions = ({
   };
 
   return {
+    captureBaseConfig,
     refreshLegendGeometry,
     syncStateFromComposition
   };
