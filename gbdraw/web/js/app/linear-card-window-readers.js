@@ -103,9 +103,7 @@ export const createLinearCardWindowReaders = ({
    */
   const linearCardWindowView = (seq) => {
     const drawing = state.activeDrawing();
-    const record = linearSeqRecord(drawing, seq);
-    const recordLength = typeof record?.recordLength === 'number' ? record.recordLength : null;
-    const circular = record?.detectedTopology === 'circular';
+    const { length: recordLength, circular } = cardRecordOf(drawing, seq);
     const plan = shownPlan();
     const windows = cardWindowList(seq);
     /** @param {number} value */

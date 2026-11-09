@@ -58,7 +58,7 @@ from gbdraw.config.models.render_profiles import CircularRenderProfile
 from gbdraw.configurators.depth import DepthConfigurator
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import RecordSelector
-from gbdraw.io.regions import RecordWindow
+from gbdraw.io.regions import RecordWindow, window_drawn_reverse
 from gbdraw.session import MaterializedSession, SessionDrawingSpec, session_to_request
 from gbdraw.session_drawings import DrawingMode
 from gbdraw.session_request_codec import canonical_depth_tracks
@@ -612,7 +612,7 @@ def _record_input(
         index = item.source_record_index
         selector = RecordSelector(raw=f"#{index + 1}", record_id=None, record_index=index)
     reverse = (
-        item.presentation.reverse_complement or bool(item.region and item.region.reverse_complement)
+        window_drawn_reverse(bool(item.region and item.region.reverse_complement), item.presentation.reverse_complement)
         if reverse_complement is None
         else reverse_complement
     )
