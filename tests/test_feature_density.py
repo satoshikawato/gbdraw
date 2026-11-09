@@ -14,6 +14,7 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.analysis.feature_density import (
     FeatureDensityTrack,
     feature_density_layers,
+    feature_density_track_words,
     feature_density_values,
     parse_feature_density_words,
     read_feature_density_table,
@@ -241,6 +242,49 @@ def test_track_words_and_table_define_the_same_track(tmp_path: Path) -> None:
         "ltr\trepeat_region\trpt_type\tlong_terminal_repeat\tcoverage\thistogram\t20000\t5000\t#d08a3a\tLTR\n"
     )
     assert read_feature_density_table(str(table)) == (words,)
+
+
+@pytest.mark.parametrize(
+    "track",
+    [
+        FeatureDensityTrack("genes", FeatureQuery("gene")),
+        FeatureDensityTrack(
+            "ltr",
+            FeatureQuery("repeat_region", "rpt_type", "long_terminal=repeat", 100, 7000),
+            "coverage",
+            "histogram",
+            50000,
+            10000,
+            "#d9944a",
+            "LTR, % of 50 kb",
+        ),
+        FeatureDensityTrack("any", FeatureQuery("*", "note"), caption="every feature with a note"),
+    ],
+)
+def test_track_words_read_back_as_the_track(track: FeatureDensityTrack) -> None:
+    """The words Python writes for a track (the Web's Source recipe writes the same, OV-3118) read back as it."""
+
+    assert parse_feature_density_words(feature_density_track_words(track), where="test") == track
+
+
+def test_the_web_word_table_reads_a_request_track_as_python_writes_its_words() -> None:
+    """``describe_feature_density_track_words`` (generated into the Web as FEATURE_DENSITY_TRACK_WORDS): each word's
+    path into a request's ``featureDensityTracks`` entry gives the value ``feature_density_track_words`` writes."""
+
+    from gbdraw.session_request_codec import _encode_feature_density_tracks, describe_feature_density_track_words
+
+    track = FeatureDensityTrack(
+        "ltr", FeatureQuery("repeat_region", "rpt_type", "LTR", 5000, None), "coverage", "histogram", 50000, None, "orange"
+    )
+    [encoded] = _encode_feature_density_tracks([track])
+    words = []
+    for row in describe_feature_density_track_words():
+        value: object = encoded
+        for key in row["path"]:
+            value = value[key]  # type: ignore[index]
+        if value is not None:
+            words.append(f"{row['word']}={value}")
+    assert tuple(words) == feature_density_track_words(track)
 
 
 @pytest.mark.parametrize(

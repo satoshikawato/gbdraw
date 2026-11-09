@@ -57,6 +57,23 @@ FEATURE_DENSITY_TRACK_FIELDS: tuple[str, ...] = (
     "caption",
 )
 _FIELD_ALIASES = {"feature_type": "type"}
+# Where each field's value lives on a track: the attribute path from FeatureDensityTrack (the query's fields under
+# ``query``). The words a track is written back as (:func:`feature_density_track_words`) and the Web's Source recipe
+# (``describe_feature_density_track_words`` in gbdraw/session_request_codec.py) read the fields through it.
+FEATURE_DENSITY_TRACK_FIELD_ATTRIBUTES: dict[str, tuple[str, ...]] = {
+    "id": ("id",),
+    "type": ("query", "feature_type"),
+    "qualifier": ("query", "qualifier"),
+    "value": ("query", "value"),
+    "min_length": ("query", "min_length"),
+    "max_length": ("query", "max_length"),
+    "metric": ("metric",),
+    "style": ("style",),
+    "window": ("window",),
+    "step": ("step",),
+    "color": ("color",),
+    "caption": ("caption",),
+}
 # The color steps of a heatmap band: fewer when a count track's largest value is smaller.
 HEATMAP_LEVELS = 8
 # The pale end of a heatmap band's colors and Legend gradient.
@@ -178,6 +195,21 @@ def parse_feature_density_words(words: Sequence[str], *, where: str) -> FeatureD
             raise ValidationError(f"{where}: '{key}' is given twice.", diagnostic=_INVALID_TRACK)
         fields[key.strip().lower()] = value
     return feature_density_track_from_fields(fields, where=where)
+
+
+def feature_density_track_words(track: FeatureDensityTrack) -> tuple[str, ...]:
+    """The ``key=value`` words of ``--feature_density_track`` that read back as ``track``
+    (:func:`parse_feature_density_words`): one word per field the track sets, in
+    :data:`FEATURE_DENSITY_TRACK_FIELDS` order."""
+
+    words = []
+    for field in FEATURE_DENSITY_TRACK_FIELDS:
+        value: object = track
+        for attribute in FEATURE_DENSITY_TRACK_FIELD_ATTRIBUTES[field]:
+            value = getattr(value, attribute)
+        if value is not None:
+            words.append(f"{field}={value}")
+    return tuple(words)
 
 
 def read_feature_density_table(path: str) -> tuple[FeatureDensityTrack, ...]:
@@ -509,6 +541,7 @@ __all__ = [
     "FEATURE_DENSITY_METRICS",
     "FEATURE_DENSITY_STYLES",
     "FEATURE_DENSITY_TRACK_FIELDS",
+    "FEATURE_DENSITY_TRACK_FIELD_ATTRIBUTES",
     "FeatureDensityLayer",
     "FeatureDensityMetric",
     "FeatureDensityStyle",
@@ -520,6 +553,7 @@ __all__ = [
     "feature_density_layers",
     "feature_density_scale_max",
     "feature_density_track_from_fields",
+    "feature_density_track_words",
     "feature_density_values",
     "heatmap_level_colors",
     "parse_feature_density_words",

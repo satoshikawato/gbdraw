@@ -47,6 +47,7 @@ import {
 } from '../services/circular-track-slot-model.js';
 import { listText, msg, t, tm, tn } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
+import { featureDensityTrackIds, insertFeatureDensitySlots, nextFeatureDensitySlotTrack } from '../services/feature-density-tracks.js';
 import {
   OVERLAY_ANNOTATION_PARAMS,
   annotationSetForNewRow,
@@ -68,6 +69,7 @@ import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
   cloneParams,
+  circularFeatureDensitySlot,
   createDefaultCircularTrackSlots,
   DEFAULT_SLOT_IDS,
   DEFAULT_TICK_LABEL_LAYOUT,
@@ -117,6 +119,7 @@ const RENDERER_LABELS = {
   dinucleotide_content: msg('Dinucleotide content'),
   dinucleotide_skew: msg('Dinucleotide skew'),
   depth: msg('Depth'),
+  feature_density: msg('Feature density'),
   sequence_conservation: msg('Pairwise comparison'),
   annotations: msg('Annotations'),
   spacer: msg('Spacer')
@@ -530,7 +533,8 @@ const presetTemplateSlots = (drawing, preset) => {
       showGc: !drawing.form.suppress_gc,
       showSkew: !drawing.form.suppress_skew,
       showTicks: drawing.form.show_scale !== false,
-      preset
+      preset,
+      featureDensityTrackIds: featureDensityTrackIds(drawing.adv)
     }), circularGeometryShortcutsForState(drawing))
   ];
 };
@@ -642,6 +646,7 @@ export const createCircularTrackSlotEditor = ({
     depthTrackCount: circularAvailableDepthTrackCount(drawing),
     depthSourcedTrackIndexes: circularSourcedDepthTrackIndexes(drawing),
     annotationSetIds: annotationSetIds(drawing),
+    featureDensityTracks: drawing.adv.feature_density_tracks,
     conservationSeries: conservationEntries(drawing)
   });
 
@@ -743,7 +748,8 @@ export const createCircularTrackSlotEditor = ({
     return trackAddBlockReason(normalizedRenderer, {
       supported: UI_RENDERERS.includes(normalizedRenderer),
       annotationSetCount: annotationSetIds(drawing).length,
-      depthSeriesCount: circularAvailableDepthTrackCount(drawing)
+      depthSeriesCount: circularAvailableDepthTrackCount(drawing),
+      featureDensityTrackCount: drawing.adv.feature_density_tracks.length
     });
   };
 
@@ -766,6 +772,7 @@ export const createCircularTrackSlotEditor = ({
     if (slot.enabled === false) return true;
     if (slot.renderer === 'annotations') return annotationSetIds(drawing).length > 0;
     if (slot.renderer === 'depth') return circularAvailableDepthTrackCount(drawing) > 0;
+    if (slot.renderer === 'feature_density') return drawing.adv.feature_density_tracks.length > 0;
     return true;
   };
 
@@ -1147,9 +1154,12 @@ export const createCircularTrackSlotEditor = ({
     if (!Array.isArray(drawing.adv.circular_track_slots) || drawing.adv.circular_track_slots.length === 0) {
       resetSlotsToPreset(drawing, drawing.form.track_type);
     } else {
-      // The stack it turns on holds the managed comparison ring rows and the rows of the Region Annotation sets it does not name (D-35).
+      // The stack it turns on holds the managed comparison ring rows, the rows of the feature density tracks when
+      // it draws none (OV-3174), and the rows of the Region Annotation sets it does not name (D-35).
       syncConservationSlots(drawing);
       const rows = drawing.adv.circular_track_slots;
+      drawing.adv.circular_track_slots_axis_index = insertFeatureDensitySlots(rows, axisIndexForCurrentSlots(drawing, rows),
+        featureDensityTrackIds(drawing.adv), circularFeatureDensitySlot);
       drawing.adv.circular_track_slots_axis_index = prependMissingAnnotationTrackSlots(rows, axisIndexForCurrentSlots(drawing, rows),
         drawing.annotationSets, 'circular', (added) => normalizeCircularTrackSlots(added, drawing.adv.nt, drawing.form.track_type), CIRCULAR_SLOT_SIZE_FIELDS);
     }
@@ -1180,6 +1190,8 @@ export const createCircularTrackSlotEditor = ({
       let trackIndex = 0;
       while (trackIndex < available && claimed.has(trackIndex)) trackIndex += 1;
       slot.params.track_index = trackIndex < available ? trackIndex : 0;
+    } else if (slot.renderer === 'feature_density') {
+      slot.params.track = nextFeatureDensitySlotTrack(drawing.adv.feature_density_tracks, drawing.adv.circular_track_slots);
     }
     drawing.adv.circular_track_slots.push(slot);
     normalizeSlots(drawing);

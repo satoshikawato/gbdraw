@@ -58,7 +58,13 @@ from gbdraw.analysis.collinearity import (
 )
 from gbdraw.analysis.collinearity_units import _COLLINEARITY_UNIT_MODES, COLLINEARITY_UNIT_MODE_SPELLINGS
 from gbdraw.analysis.conservation import _default_label as _default_conservation_label
-from gbdraw.analysis.feature_density import FeatureDensityMetric, FeatureDensityStyle, FeatureDensityTrack
+from gbdraw.analysis.feature_density import (
+    FEATURE_DENSITY_TRACK_FIELD_ATTRIBUTES,
+    FEATURE_DENSITY_TRACK_FIELDS,
+    FeatureDensityMetric,
+    FeatureDensityStyle,
+    FeatureDensityTrack,
+)
 from gbdraw.analysis.ortholog_paths import OrthologPathCollection
 from gbdraw.analysis.windows import WINDOW_SOURCE_ANNOTATION, WindowSource
 from gbdraw.analysis.protein_colinearity import (
@@ -6068,6 +6074,24 @@ def describe_record_source_files() -> dict[str, list[RecordSourceFile]]:
         _camel(kind): [{"resource": resource, "field": field} for resource, field in files]
         for kind, files in _SOURCE_FILE_RESOURCES.items()
     }
+
+
+class FeatureDensityTrackWord(TypedDict):
+    """One word of ``--feature_density_track``: its key and where a request track holds its value."""
+
+    word: str
+    path: list[str]
+
+
+def describe_feature_density_track_words() -> list[FeatureDensityTrackWord]:
+    """The words of ``--feature_density_track`` in the order Python writes them
+    (``feature_density_track_words``), each with the path of its value in a request's
+    ``featureDensityTracks`` entry (wire names). The Web's Source recipe writes a track's words from it."""
+
+    return [
+        {"word": field, "path": [_camel(attribute) for attribute in FEATURE_DENSITY_TRACK_FIELD_ATTRIBUTES[field]]}
+        for field in FEATURE_DENSITY_TRACK_FIELDS
+    ]
 
 
 def describe_legacy_request_tables() -> dict[str, Any]:

@@ -4,6 +4,7 @@ import { noteReplacedLeaf } from '../utils/field-reading.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg, t } from '../utils/i18n.js';
 import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
+import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
 /** @import { ErrorTextPart } from '../utils/error-normalization.js' */
@@ -73,6 +74,9 @@ import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.j
  * @property {number | null} [depthTrackCount] null or undefined skips the Depth range check.
  * @property {unknown} [depthSourcedTrackIndexes] The Depth series that have a source; a non-array skips that check.
  * @property {unknown} [annotationSetIds] The annotation sets (ids or { id } entries); null or undefined skips the check.
+ * @property {unknown} [featureDensityTracks] The drawing's feature density tracks (ids or { id } entries) a
+ *   `feature_density` row may name (Python: gbdraw/tracks/parsing.py `check_feature_density_slots`); null or
+ *   undefined skips the check.
  * @property {unknown} [conservationSeries] The Comparison Series entries.
  */
 
@@ -585,6 +589,7 @@ export const setOverlayAnnotationParam = (slot, slots, key, value) => {
  * @property {boolean} supported The mode draws this renderer.
  * @property {number} annotationSetCount Region annotation sets loaded in the drawing.
  * @property {number} depthSeriesCount Depth series with a loaded TSV.
+ * @property {number} featureDensityTrackCount The drawing's feature density tracks.
  * @property {boolean} [featuresRowEnabled] The stack already has an enabled Features row (Linear draws one).
  */
 /**
@@ -594,10 +599,13 @@ export const setOverlayAnnotationParam = (slot, slots, key, value) => {
  * @param {TrackAddFacts} facts
  * @returns {string}
  */
-export const trackAddBlockReason = (renderer, { supported, annotationSetCount, depthSeriesCount, featuresRowEnabled = false }) => {
+export const trackAddBlockReason = (renderer, {
+  supported, annotationSetCount, depthSeriesCount, featureDensityTrackCount, featuresRowEnabled = false
+}) => {
   if (!supported) return t('Choose a track type this diagram can draw');
   if (renderer === 'annotations' && annotationSetCount <= 0) return t('Import or add a Region annotation set in Region Annotations first');
   if (renderer === 'depth' && depthSeriesCount <= 0) return t('Load a Depth TSV first');
+  if (renderer === 'feature_density' && featureDensityTrackCount <= 0) return t('The drawing has no feature density track');
   if (renderer === 'features' && featuresRowEnabled) return t('The stack already has an enabled Features row; disable or delete it first');
   return '';
 };
@@ -980,24 +988,8 @@ export const validateTrackSlotBindingInvariants = (
 
 /** @type {Readonly<Record<string, ReadonlySet<string>>>} */
 const CUSTOM_TRACK_RENDERERS = Object.freeze({
-  circular: new Set([
-    'features',
-    'ticks',
-    'dinucleotide_content',
-    'dinucleotide_skew',
-    'depth',
-    'sequence_conservation',
-    'annotations',
-    'spacer'
-  ]),
-  linear: new Set([
-    'features',
-    'dinucleotide_content',
-    'dinucleotide_skew',
-    'depth',
-    'annotations',
-    'spacer'
-  ])
+  circular: new Set(MODE_PROFILE_DATA.modes.circular.trackRenderers),
+  linear: new Set(MODE_PROFILE_DATA.modes.linear.trackRenderers)
 });
 
 /** @type {Readonly<Record<string, ReadonlySet<string>>>} */
@@ -1373,6 +1365,30 @@ export const nextCopyId = (sourceId, items) => {
 };
 
 /**
+ * The ids a row may name, of entries that are ids or `{ id }`; null or undefined (the caller has none to check):
+ * null.
+ * @param {unknown} values
+ * @returns {Set<string> | null}
+ */
+const optionalInventoryIds = (values) => (values === null || values === undefined ? null : normalizedInventoryIds(values));
+
+/**
+ * The issue of a row that names another part of the drawing by id: it names none (`missing`), or one the drawing
+ * does not have (`unknown`; an `inventory` of null skips that check).
+ * @param {unknown} value The id the row names.
+ * @param {Set<string> | null} inventory
+ * @param {Omit<RowIssueInput, 'code' | 'message' | 'parts'>} where The field and the row's slot id.
+ * @param {Omit<RowIssueInput, 'field' | 'slotId'>} missing
+ * @param {(name: string) => Omit<RowIssueInput, 'field' | 'slotId'>} unknown
+ * @returns {RowIssueInput | null}
+ */
+const namedReferenceIssue = (value, inventory, where, missing, unknown) => {
+  const name = String(value ?? '').trim();
+  if (!name) return { ...missing, ...where };
+  return inventory && !inventory.has(name) ? { ...unknown(name), ...where } : null;
+};
+
+/**
  * @param {unknown} values
  * @returns {Set<string>}
  */
@@ -1426,6 +1442,7 @@ const collectCustomTrackIssues = ({
   depthTrackCount,
   depthSourcedTrackIndexes,
   annotationSetIds,
+  featureDensityTracks,
   conservationSeries
 }) => {
   /** @type {Map<number, TrackSlotRowIssue[]>} */
@@ -1471,9 +1488,8 @@ const collectCustomTrackIssues = ({
     };
   }
 
-  const annotationInventory = annotationSetIds === null || annotationSetIds === undefined
-    ? null
-    : normalizedInventoryIds(annotationSetIds);
+  const annotationInventory = optionalInventoryIds(annotationSetIds);
+  const densityInventory = optionalInventoryIds(featureDensityTracks);
   const conservation = conservationInventory(conservationSeries);
   const depthCountProvided = depthTrackCount !== null && depthTrackCount !== undefined;
   const validDepthCount = (
@@ -1786,25 +1802,24 @@ const collectCustomTrackIssues = ({
       }
     }
 
+    // An annotation row names its set, and an enabled feature density row its track, by id; Python refuses a name
+    // the drawing does not have (gbdraw/tracks/parsing.py `check_feature_density_slots`).
+    const reference = renderer === 'annotations' && params ? namedReferenceIssue(params.set_id, annotationInventory,
+      { field: 'params.set_id', slotId: id || null },
+      { code: 'annotation_set_required', message: `${modeLabel} Annotation track ${slotLabel} requires an annotation set.`,
+        parts: sentence(msg('This row needs an annotation set.')) },
+      (set) => ({ code: 'annotation_set_unknown', message: `${modeLabel} Annotation track ${slotLabel} references unknown set '${set}'.`,
+        parts: sentence(msg("Annotation set '{set}' does not exist."), { set }) }))
+      : (renderer === 'feature_density' && slot.enabled !== false ? namedReferenceIssue(params?.track, densityInventory,
+        { field: 'params.track', slotId: id || null },
+        { code: 'feature_density_track_required', message: `${modeLabel} feature density track ${slotLabel} requires a track.`,
+          parts: sentence(msg('This row needs a feature density track.')) },
+        (track) => ({ code: 'feature_density_track_unknown', message: `${modeLabel} feature density track ${slotLabel} names track '${track}', which is not defined.`,
+          parts: sentence(msg("Feature density track '{track}' does not exist."), { track }) }))
+        : null);
+    if (reference) addRowIssue(rowIssues, index, reference);
+
     if (renderer === 'annotations' && params) {
-      const setId = String(params.set_id || '').trim();
-      if (!setId) {
-        addRowIssue(rowIssues, index, {
-          code: 'annotation_set_required',
-          field: 'params.set_id',
-          slotId: id || null,
-          message: `${modeLabel} Annotation track ${slotLabel} requires an annotation set.`,
-          parts: sentence(msg('This row needs an annotation set.'))
-        });
-      } else if (annotationInventory && !annotationInventory.has(setId)) {
-        addRowIssue(rowIssues, index, {
-          code: 'annotation_set_unknown',
-          field: 'params.set_id',
-          slotId: id || null,
-          message: `${modeLabel} Annotation track ${slotLabel} references unknown set '${setId}'.`,
-          parts: sentence(msg("Annotation set '{set}' does not exist."), { set: setId })
-        });
-      }
 
       if (
         Object.prototype.hasOwnProperty.call(params, 'marks') &&
@@ -2046,6 +2061,7 @@ export const validateCustomTrackPlan = (options = {}) => collectCustomTrackIssue
   depthTrackCount: options.depthTrackCount,
   depthSourcedTrackIndexes: options.depthSourcedTrackIndexes,
   annotationSetIds: options.annotationSetIds,
+  featureDensityTracks: options.featureDensityTracks,
   conservationSeries: options.conservationSeries
 });
 

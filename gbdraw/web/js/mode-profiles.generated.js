@@ -359,6 +359,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
     }
   },
   "defaultFontFamily": "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif",
+  "featureDensitySlotIdPrefix": "density_",
   "featureTypes": [
     "CDS",
     "rRNA",
@@ -415,6 +416,17 @@ export const MODE_PROFILE_DATA = deepFreeze({
       },
       "linearAxisColor": null,
       "linearRulerAxisColor": null,
+      "trackRenderers": [
+        "features",
+        "ticks",
+        "dinucleotide_content",
+        "dinucleotide_skew",
+        "depth",
+        "feature_density",
+        "sequence_conservation",
+        "annotations",
+        "spacer"
+      ],
       "tracks": {
         "gc": true,
         "skew": true
@@ -435,6 +447,15 @@ export const MODE_PROFILE_DATA = deepFreeze({
       },
       "linearAxisColor": "lightgray",
       "linearRulerAxisColor": "dimgray",
+      "trackRenderers": [
+        "features",
+        "dinucleotide_content",
+        "dinucleotide_skew",
+        "depth",
+        "feature_density",
+        "annotations",
+        "spacer"
+      ],
       "tracks": {
         "gc": false,
         "skew": false

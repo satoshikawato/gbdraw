@@ -137,6 +137,8 @@ _DERIVED: tuple[tuple[str, str, str], ...] = (
     ("ABSENT_LINEAR_OUTPUT", "gbdraw.session_request_codec", "describe_absent_linear_output"),
     # The files of each record source kind (resource kind, source field), in the order the source names them.
     ("RECORD_SOURCE_FILES", "gbdraw.session_request_codec", "describe_record_source_files"),
+    # The words of --feature_density_track and where a request track holds each value: the Source recipe's spelling.
+    ("FEATURE_DENSITY_TRACK_WORDS", "gbdraw.session_request_codec", "describe_feature_density_track_words"),
     # The Auto organism name rule's data; the Web fast path runs its steps (R4).
     ("ORGANISM_NAME_RULE", "gbdraw.core.record_metadata", "organism_name_rule_data"),
     # The raw-cache args keep one spelling; the LOSAT Wasm reads the runtime spelling.

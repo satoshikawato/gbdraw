@@ -115,6 +115,17 @@ def check_feature_density_slots(slots: Sequence[SlotView] | None, track_ids: Col
             )
 
 
+# The id of the slot that draws a feature density track in a stack the reader did not write: the prefix and the
+# track's id. The Web's stacks name their slots the same way (mode-profiles.generated.js).
+FEATURE_DENSITY_SLOT_ID_PREFIX = "density_"
+
+
+def feature_density_slot_id(track_id: str) -> str:
+    """The id of the slot that draws track ``track_id`` in a stack the reader did not write."""
+
+    return f"{FEATURE_DENSITY_SLOT_ID_PREFIX}{track_id}"
+
+
 def with_feature_density_slots(
     slots: Sequence[_Slot], track_ids: Sequence[str], make_slot: Callable[[str], _Slot]
 ) -> list[_Slot]:
@@ -378,6 +389,8 @@ def strip_inline_comment(raw: str) -> str:
 
 
 __all__ = [
+    "FEATURE_DENSITY_SLOT_ID_PREFIX",
+    "feature_density_slot_id",
     "CARRIED_SLOT_PARAM_KEYS",
     "CircularTrackSlotParseError",
     "LEGEND_LABEL_PARAM_KEYS",

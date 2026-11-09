@@ -139,8 +139,8 @@ const FUNCTION_LINES = {
   'services/session-request.js::projectCanonicalSessionRequest': 1106,
   'services/session-request.js::trackPlanProjection': 201,
   'services/session-resources.js::buildSessionDrawingResources': 376,
-  'services/track-slot-validation.js::collectCustomTrackIssues': 589,
-  'services/track-slot-validation.js::collectCustomTrackIssues.forEach()': 351,
+  'services/track-slot-validation.js::collectCustomTrackIssues': 588,
+  'services/track-slot-validation.js::collectCustomTrackIssues.forEach()': 350,
   'services/track-slot-validation.js::validateTrackSlotBindingInvariants': 175,
   'workers/diagram-generation-worker.js::runGeneration': 231,
   'workers/losat-threaded-worker.js::runThreadedLosat': 191

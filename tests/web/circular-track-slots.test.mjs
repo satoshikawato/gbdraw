@@ -35,7 +35,8 @@ await cp(
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'contracts'), join(tempRoot, 'contracts'), { recursive: true });
 // The track-slot leaves the slot editors import.
 for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js', 'circular-track-slot-model.js',
-  'linear-track-slot-model.js', 'current-option-values.js', 'linear-label-visibility.js', 'losat-normalization.js', 'track-legend-rows.js']) {
+  'linear-track-slot-model.js', 'current-option-values.js', 'linear-label-visibility.js', 'losat-normalization.js', 'track-legend-rows.js',
+  'feature-density-tracks.js', 'json-clone.js']) {
   await cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf),
     join(tempRoot, 'services', leaf)
@@ -133,6 +134,7 @@ const createState = ({
     features: ['CDS'],
     feature_shapes: { CDS: 'arrow' },
     depth_tracks: [],
+    feature_density_tracks: [],
     feature_width_circular: null,
     depth_width_circular: null,
     gc_content_width_circular: null,
@@ -657,10 +659,31 @@ test('Add track names the missing source of the chosen renderer (OV-1254)', () =
   assert.equal(editor.circularTrackAddBlockReason('annotations'), 'Import or add a Region annotation set in Region Annotations first');
   assert.equal(editor.circularTrackAddBlockReason('depth'), 'Load a Depth TSV first');
   assert.equal(editor.circularTrackAddBlockReason('spacer'), '');
+  assert.equal(editor.circularTrackAddBlockReason('feature_density'), 'The drawing has no feature density track');
   assert.equal(editor.canAddCircularTrackRenderer('annotations'), false);
   state.annotationSets = [{ id: 'plastome_regions' }];
   assert.equal(editor.circularTrackAddBlockReason('annotations'), '');
   assert.equal(editor.canAddCircularTrackRenderer('annotations'), true);
+  // A feature density row draws one of the drawing's tracks: the first one no row draws yet.
+  state.adv.feature_density_tracks = [{ id: 'genes' }, { id: 'ltr' }];
+  assert.equal(editor.circularTrackAddBlockReason('feature_density'), '');
+  editor.addCircularTrackSlot('feature_density');
+  editor.addCircularTrackSlot('feature_density');
+  assert.deepEqual(state.adv.circular_track_slots.filter(({ renderer }) => renderer === 'feature_density')
+    .map(({ params }) => params.track), ['genes', 'ltr']);
+});
+
+// OV-3174: Use custom stack on a stack that draws no feature density track adds a row per track after the Features
+// row, so the custom stack draws the tracks the simple stack drew.
+test('Use custom stack adds the feature density rows the simple stack drew (OV-3174)', () => {
+  const state = createState();
+  state.adv.circular_track_slots_enabled = false;
+  state.adv.feature_density_tracks = [{ id: 'genes' }];
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  editor.setCircularTrackSlotsEnabled(true);
+  const ids = state.adv.circular_track_slots.map(({ id }) => id);
+  assert.equal(ids[ids.indexOf('features') + 1], 'density_genes', JSON.stringify(ids));
+  assert.deepEqual(state.adv.circular_track_slots[ids.indexOf('density_genes')].params, { track: 'genes' });
 });
 
 // D-51: the slot editor shows each row issue as one sentence in the UI language.
