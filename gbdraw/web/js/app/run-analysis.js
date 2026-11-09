@@ -226,7 +226,8 @@ import {
   inheritSavedComparison,
   followCommittedComparison,
   inheritedPipelineSearch,
-  storedProteinResultMode
+  storedProteinResultMode,
+  withComparisonSourceCheckpoint
 } from '../services/imported-comparison-intent.js';
 /** @import { InheritedPipelineSearch } from '../services/imported-comparison-intent.js' */
 /** @import { LabelDiagramOptions, LabelFeature } from './feature-editor/label-actions.js' */
@@ -5986,6 +5987,10 @@ export const createRunAnalysis = ({
     // A target-record transform and a label reflow draw the committed Results
     // again, with the settings and edits of the drawing they belong to.
     const drawing = displayedArtifactDrawing();
+    // Undo and Redo give back what Inherit copies with the caller's checkpoint (`followCommittedComparison`).
+    const checkpointHooks = captureIntentCheckpoint && restoreIntentCheckpoint
+      ? withComparisonSourceCheckpoint(drawing.importedComparisonIntent, { captureIntentCheckpoint, restoreIntentCheckpoint })
+      : { captureIntentCheckpoint, restoreIntentCheckpoint };
     // A run started while a Generate runs would replace the Result that Generate adopts (OV-2446).
     const sessionBusy = state.sessionOperationAvailability?.('not-during-run');
     if (sessionBusy) return sessionBusy;
@@ -6026,8 +6031,7 @@ export const createRunAnalysis = ({
       outcome = typeof runGeneratedArtifactReplacement === 'function'
         ? await runGeneratedArtifactReplacement(label, execute, {
             shouldCommit: (result) => result?.status === 'ok',
-            captureIntentCheckpoint,
-            restoreIntentCheckpoint,
+            ...checkpointHooks,
             onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
             restoreAppliedArtifact: async (beforeHandle) => {
               historyRecovery = 'restore-failed';

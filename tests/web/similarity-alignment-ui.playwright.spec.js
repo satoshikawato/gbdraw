@@ -2193,6 +2193,12 @@ test('Undo after Align gives back each window orientation of a record drawn in m
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoBefore + 1);
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await expect.poll(card2).toEqual(loaded);
+  // The Undo gives back what Inherit copies with the windows: the next Generate's Inherit draws the saved comparison
+  // in the loaded windows, not the flipped ones the Align committed.
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.inheritImportedComparison());
+  const generated = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(generated.status).toBe('ok');
+  expect(await card2()).toEqual(loaded);
 });
 
 test('changed final facts require a separate Apply and validation errors preserve Custom for retry', async ({ page }, testInfo) => {

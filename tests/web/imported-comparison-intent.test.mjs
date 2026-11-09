@@ -11,7 +11,8 @@ import {
   savedComparisonSource,
   resolveImportedComparisonAction,
   restoreImportedComparisonIntent,
-  serializeImportedComparisonResolution
+  serializeImportedComparisonResolution,
+  withComparisonSourceCheckpoint
 } from '../../gbdraw/web/js/services/imported-comparison-intent.js';
 import { normalizeCaughtError, normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 
@@ -419,6 +420,26 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
   const editable = createImportedComparisonIntentState();
   followCommittedComparison(editable, { renderRequest: cliRequest, resources });
   assert.equal(editable.source, null);
+  // Undo and Redo of the commit give back what Inherit copies with the caller's checkpoint (the cards' windows).
+  const undone = { ...classify(cliRequest), source: committedWindowed };
+  /** @type {unknown[]} */
+  const restored = [];
+  const hooks = withComparisonSourceCheckpoint(undone, {
+    captureIntentCheckpoint: ({ phase }) => `cards ${phase}`, restoreIntentCheckpoint: (checkpoint) => restored.push(checkpoint)
+  });
+  const before = await hooks.captureIntentCheckpoint({ phase: 'before' });
+  followCommittedComparison(undone, { renderRequest: { ...cliRequest, records: flippedRecords }, resources });
+  const after = await hooks.captureIntentCheckpoint({ phase: 'after' });
+  hooks.restoreIntentCheckpoint(before);
+  assert.equal(undone.source, committedWindowed);
+  assert.deepEqual(restored, ['cards before']);
+  hooks.restoreIntentCheckpoint(after);
+  assert.deepEqual(undone.source.records, flippedRecords.map(({ recordKey, windows }) => ({ recordKey, windows })));
+  // A later Generate that replaced the comparison leaves the drawing editable: an Undo of the commit gives it no source.
+  Object.assign(undone, createImportedComparisonIntentState());
+  hooks.restoreIntentCheckpoint(before);
+  assert.equal(undone.source, null);
+  assert.deepEqual(restored, ['cards before', 'cards after', 'cards before']);
 }
 
 console.log('imported comparison intent tests passed');

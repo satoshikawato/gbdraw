@@ -86,6 +86,11 @@ import { toRaw } from '../utils/vue-raw.js';
  * of its unit pairs, and the score thresholds the saved request sets (`SavedComparisonSource.thresholds`).
  * @typedef {{ pipeline: SavedPipeline, unitSearch: LinearUnitSearch, thresholds: SavedComparisonSource['thresholds'] }} InheritedPipelineSearch
  */
+/**
+ * A History checkpoint of a commit that carries the saved comparison: the caller's checkpoint and what Inherit copied
+ * at that point (`withComparisonSourceCheckpoint`).
+ * @typedef {{ caller: unknown, source: SavedComparisonSource | null }} ComparisonSourceCheckpoint
+ */
 /** @typedef {{ valid?: boolean, hasComparisonIntent?: boolean, error?: string }} ComparisonDraftResolution The current controls' comparison, validated. */
 
 export const IMPORTED_COMPARISON_DISPOSITIONS = Object.freeze({
@@ -658,6 +663,27 @@ export const savedComparisonSource = ({ renderRequest, resources }) => {
 export const followCommittedComparison = (intent, committed) => {
   if (intent.source !== null) intent.source = savedComparisonSource(committed);
 };
+
+/**
+ * The History checkpoint hooks of a commit that `followCommittedComparison` follows: the caller's (the File cards'
+ * windows and orientations), with what Inherit copies beside them, so Undo and Redo of the commit give it back with
+ * those windows. A drawing whose comparison is no longer preserved (a later Generate replaced it) keeps none.
+ * @param {ImportedComparisonIntent} intent The drawing's Imported comparison state.
+ * @param {{
+ *   captureIntentCheckpoint: (context: { phase: 'before' | 'after' }) => unknown,
+ *   restoreIntentCheckpoint: (checkpoint: unknown) => unknown
+ * }} hooks The caller's hooks, as History takes them (`HistoryStepBase` in services/history.js).
+ * @returns {{ captureIntentCheckpoint: (context: { phase: 'before' | 'after' }) => Promise<ComparisonSourceCheckpoint>,
+ *   restoreIntentCheckpoint: (checkpoint: unknown) => unknown }}
+ */
+export const withComparisonSourceCheckpoint = (intent, { captureIntentCheckpoint: capture, restoreIntentCheckpoint: restore }) => ({
+  captureIntentCheckpoint: async (context) => ({ caller: await capture(context), source: intent.source }),
+  restoreIntentCheckpoint: (checkpoint) => {
+    const { caller, source } = /** @type {ComparisonSourceCheckpoint} */ (checkpoint);
+    if (intent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY) intent.source = source;
+    return restore(caller);
+  }
+});
 
 /**
  * A comparison Inherit cannot carry into this request asks for the choice in the Comparison panel, with the reason the
