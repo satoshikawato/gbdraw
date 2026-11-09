@@ -19,7 +19,6 @@ import { proposalCountText, proposalView, windowChoices, windowDrafts, windowRef
 
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { ProjectedDraftRequest, RegionDerivation } from '../services/config.js' */
-/** @import { DerivedRegionDrawing } from '../services/diagram-worker-protocol.js' */
 /** @import { LosatJob } from '../services/losat.js' */
 /** @import { LocateHelperPayload, LocateStep } from '../services/find-in-other-files.js' */
 /** @import { DrawingListOutcome } from './drawing-list.js' */
@@ -305,7 +304,7 @@ const proposalActions = ({ dialog, session, begin, current, step, fail }, newDra
       Object.assign(dialog, {
         status: 'proposal', message: '', proposal: proposalView(search, reply.plan, drafts, names), count: proposalCountText(drafts),
         createReason: drafts.some((draft) => draft.ticked) ? '' : t('Tick at least one window to create the drawing.'),
-        ...derivedDrawingNotes(/** @type {DerivedRegionDrawing} */ (/** @type {unknown} */ (reply.drawing)))
+        ...derivedDrawingNotes(reply.drawing)
       });
     } catch (error) {
       if (current(mine)) fail(error);
@@ -362,9 +361,7 @@ const proposalActions = ({ dialog, session, begin, current, step, fail }, newDra
     const { sourceId, sent, derived } = found;
     dialog.status = 'creating';
     try {
-      const outcome = await newDrawingFromSearch(sourceId, {
-        derived: /** @type {DerivedRegionDrawing} */ (/** @type {unknown} */ (derived.drawing)), sent
-      }, 'search');
+      const outcome = await newDrawingFromSearch(sourceId, { derived: derived.drawing, sent }, 'search');
       close();
       return outcome;
     } catch (error) {

@@ -285,7 +285,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-120](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-120-input-file-changed-after-choosing) | Input file changed after choosing | ACCEPTED | input.file-changed-after-choosing | 1 | — | 2 |
 | [PD-OI-121](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-121-input-file-kept-in-a-browser-copy-after-choosing) | Input file kept in a browser copy after choosing | ACCEPTED | input.file-changed-after-choosing | 2 | PD-OI-120 scenario revision 1 | 9 |
 | [PD-OI-122](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-122-windows-in-a-linear-row) | Windows in a Linear row | ACCEPTED | diagram-generation.linear-row-windows | 2 | scenario revision 1 | 12 |
-| [PD-OI-123](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-123-find-in-other-files) | Find in other files | ACCEPTED | diagram-generation.locate-homologs | 1 | — | 2 |
+| [PD-OI-123](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-123-find-in-other-files) | Find in other files | ACCEPTED | diagram-generation.locate-homologs | 1 | — | 5 |
 | [PD-OI-124](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-124-windows-in-the-record-card-and-record-layout) | Windows in the record card and Record Layout | ACCEPTED | web.linear.record-windows | 1 | — | 0 |
 
 ### Test files that cite each record
@@ -789,6 +789,9 @@ are listed under "Cited ids without a record".
 - [PD-OI-123](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-123-find-in-other-files)
   - `tests/test_locate_command.py`
   - `tests/test_locate_plan.py`
+  - `tests/test_locate_web.py`
+  - `tests/web/find-in-other-files.playwright.spec.js`
+  - `tests/web/find-in-other-files.test.mjs`
 
 ### Cited ids without a record
 

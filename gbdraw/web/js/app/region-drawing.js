@@ -9,7 +9,8 @@ import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { ProjectedDraftRequest, RegionDerivation } from '../services/config.js' */
-/** @import { DerivedRegionDrawing, RefusedRegionDrawing, RegionNotCarriedItem, RegionDrawingHelperPayload, RegionDrawingRegion, RegionDrawingReply } from '../services/diagram-worker-protocol.js' */
+/** @import { DerivedRegionDrawing, NotCarriedItem } from '../contracts/locate.generated.js' */
+/** @import { RefusedRegionDrawing, RegionDrawingHelperPayload, RegionDrawingRegion, RegionDrawingReply } from '../services/diagram-worker-protocol.js' */
 /** @import { DrawingListOutcome } from './drawing-list.js' */
 /** @import { IdentityRequestRecord, RecordIdentitySources } from '../services/record-draw-selection.js' */
 
@@ -155,7 +156,7 @@ export const adaptableSettingLabel = (mode, setting) => {
  * `NotCarriedKind`; wording owner); a kind worded per mode is keyed,
  * as `ADAPTABLE_SETTING_TEXT` is, by the new drawing's mode. The other mode's
  * settings are those of the mode the new drawing is not.
- * @type {Readonly<Record<RegionNotCarriedItem['kind'], string | Readonly<Record<DerivedRegionDrawing['mode'], string>>>>}
+ * @type {Readonly<Record<NotCarriedItem['kind'], string | Readonly<Record<DerivedRegionDrawing['mode'], string>>>>}
  */
 const NOT_CARRIED_TEXT = Object.freeze({
   OTHER_MODE_SETTINGS: Object.freeze({
@@ -178,7 +179,7 @@ const NOT_CARRIED_TEXT = Object.freeze({
 /**
  * A not-carried line in the UI language, as a drawing of `mode` words it.
  * @param {DerivedRegionDrawing['mode']} mode
- * @param {RegionNotCarriedItem['kind']} kind
+ * @param {NotCarriedItem['kind']} kind
  * @returns {string}
  */
 export const notCarriedLine = (mode, kind) => {
