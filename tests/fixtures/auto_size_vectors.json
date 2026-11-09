@@ -80,8 +80,8 @@
         "objects.definition.linear.font_size": 24,
         "objects.gc_content.tick_font_size": 8,
         "objects.depth.tick_font_size": 7,
-        "window": 1000,
-        "step": 100,
+        "window": 301,
+        "step": 30,
         "objects.scale.interval": 1000
       }
     },
@@ -221,7 +221,7 @@
       }
     },
     {
-      "name": "B: mtDNA Circular to a 3,012 bp Linear region; only the mode changes",
+      "name": "B: mtDNA Circular to a 3,012 bp Linear region; the mode and the Auto window change",
       "source": {"mode": "circular", "recordLengths": [16569]},
       "target": {"mode": "linear", "recordLengths": [3012]},
       "explicit": {
@@ -238,13 +238,13 @@
         "kept": {
           "objects.features.block_stroke_width": 1,
           "objects.legends.font_size": 18,
-          "window": 500,
-          "step": 50,
           "objects.scale.interval": 2000
         },
         "reset": [
           {"setting": "labels.font_size", "explicit": 16, "sourceAuto": 14, "targetAuto": null},
           {"setting": "objects.axis.circular.stroke_width", "explicit": 2, "sourceAuto": 3, "targetAuto": null},
+          {"setting": "window", "explicit": 500, "sourceAuto": 1000, "targetAuto": 301},
+          {"setting": "step", "explicit": 50, "sourceAuto": 100, "targetAuto": 30},
           {"setting": "objects.depth.tick_font_size", "explicit": 6, "sourceAuto": 8, "targetAuto": 7}
         ]
       }
