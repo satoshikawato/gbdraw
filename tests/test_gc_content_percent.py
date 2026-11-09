@@ -35,6 +35,7 @@ from gbdraw.svg.circular_tracks import (
     generate_circular_scalar_area_path_desc,
 )
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 
 def _make_record(record_id: str = "rec1", length: int = 160) -> SeqRecord:
@@ -374,9 +375,9 @@ def test_circular_scalar_area_closure_is_opt_in_for_depth_paths() -> None:
         depth_plot_df,
         20,
         1.0,
-        value_column="depth_normalized",
+        value_column="depth_normalized", record_transform=_circular_transform(100)
     )
-    depth_path = generate_circular_depth_path_desc(100, 100, depth_plot_df, 20, 1.0)
+    depth_path = generate_circular_depth_path_desc(100, 100, depth_plot_df, 20, 1.0, record_transform=_circular_transform(100))
     closed_path = generate_circular_scalar_area_path_desc(
         100,
         100,
@@ -384,7 +385,7 @@ def test_circular_scalar_area_closure_is_opt_in_for_depth_paths() -> None:
         20,
         1.0,
         value_column="depth_normalized",
-        close_at_record_len=True,
+        close_at_record_len=True, record_transform=_circular_transform(100)
     )
 
     assert depth_path == default_path
@@ -588,3 +589,9 @@ def test_gc_percent_cli_rejects_invalid_ranges() -> None:
                 "30",
             ]
         )
+
+
+def _circular_transform(length: int) -> RecordDisplayTransform:
+    """The transform of a whole record drawn as circular: its lines close round the origin."""
+
+    return RecordDisplayTransform(int(length), 1, 1, None, True)

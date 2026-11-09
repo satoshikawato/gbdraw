@@ -11,7 +11,7 @@ from gbdraw.svg.elements import Circle
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from ..layout.scalar_axis import project_scalar_line
+from ..layout.scalar_axis import held_to_end, project_scalar_line
 from .circular_arcs import circle_arc, circle_arc_to, circle_point, position_angle
 from .path_data import path_point
 from .track_paths import TRACK_PATH_TOLERANCE_PX, track_line_to, track_polyline
@@ -96,7 +96,7 @@ def circular_gc_content_line(
     track_width: float,
     norm_factor: float,
     dinucleotide: str,
-    record_transform: RecordDisplayTransform | None = None,
+    record_transform: RecordDisplayTransform,
 ) -> CircularTrackLine | None:
     """The GC content line the path draws: display positions and their radii; the area lies between it and the
     circle at ``radius * norm_factor``."""
@@ -118,8 +118,10 @@ def circular_gc_content_line(
         radius_of_coordinate = (norm_radius + (0.5 * track_width * (diff / max_diff))).to_numpy(dtype=float)
 
     positions = gc_df.index.to_numpy(dtype=float)
-    if record_transform is not None and record_transform.start_coordinate is not None:
+    if record_transform.start_coordinate is not None:
         return CircularTrackLine(*project_scalar_line(positions, radius_of_coordinate, record_transform))
+    if not record_transform.is_circular:
+        return CircularTrackLine(*held_to_end(positions, radius_of_coordinate, float(record_len)))
     if len(positions) > 0 and np.isclose(positions[0], 0.0):
         positions = np.append(positions, float(record_len))
         radius_of_coordinate = np.append(radius_of_coordinate, radius_of_coordinate[0])
@@ -133,7 +135,7 @@ def generate_circular_gc_content_path_desc(
     track_width: float,
     norm_factor: float,
     dinucleotide: str,
-    record_transform: RecordDisplayTransform | None = None,
+    record_transform: RecordDisplayTransform,
 ) -> str:
     """
     Generates the SVG path description for circular GC content representation using vectorization.
@@ -149,7 +151,8 @@ def generate_circular_gc_content_path_desc(
 def _closed_line_desc(line: CircularTrackLine, total_len: float) -> str:
     """The closed line of a GC content (deviation) or skew path: it starts at 12 o'clock on the radius of the
     first sample, runs through every sample, and closes back to 12 o'clock along the circle; the baseline
-    circle follows as its own subpath."""
+    circle follows as its own subpath. The line of a record not drawn as circular already holds its last value
+    to 12 o'clock (``held_to_end``), so its close is a radial step there, not a ramp across bases (OV-2920)."""
 
     positions, radii, segment_starts = line
     drawn = circular_drawn_line(
@@ -174,7 +177,7 @@ def circular_gc_skew_line(
     track_width: float,
     norm_factor: float,
     dinucleotide: str,
-    record_transform: RecordDisplayTransform | None = None,
+    record_transform: RecordDisplayTransform,
 ) -> CircularTrackLine | None:
     """The skew line the path draws: display positions and their radii; the areas lie between it and the circle
     at ``radius * norm_factor``."""
@@ -194,8 +197,11 @@ def circular_gc_skew_line(
         radius_of_coordinate = norm_radius + (0.5 * track_width * (diff / max_diff))
 
     positions = df.index
-    if record_transform is not None and record_transform.start_coordinate is not None:
+    if record_transform.start_coordinate is not None:
         return CircularTrackLine(*project_scalar_line(positions, radius_of_coordinate, record_transform))
+    if not record_transform.is_circular:
+        return CircularTrackLine(*held_to_end(positions, radius_of_coordinate, float(total_len)))
+    # A record drawn as circular closes from its last sample to its first along the circle (``_closed_line_desc``).
     return CircularTrackLine(positions.to_numpy(dtype=float), np.asarray(radius_of_coordinate, dtype=float))
 
 
@@ -206,7 +212,7 @@ def generate_circular_gc_skew_path_desc(
     track_width: float,
     norm_factor: float,
     dinucleotide: str,
-    record_transform: RecordDisplayTransform | None = None,
+    record_transform: RecordDisplayTransform,
 ) -> str:
     line = circular_gc_skew_line(radius, df, total_len, track_width, norm_factor, dinucleotide, record_transform)
     if line is None:
@@ -224,7 +230,7 @@ def circular_scalar_area_line(
     value_column: str = "value_normalized",
     position_column: str = "position",
     close_at_record_len: bool = False,
-    record_transform: RecordDisplayTransform | None = None,
+    record_transform: RecordDisplayTransform,
 ) -> CircularAreaLine | None:
     """The outer line of a scalar area as the path draws it: display positions, their radii, and the baseline
     radius the area is filled down to."""
@@ -237,8 +243,10 @@ def circular_scalar_area_line(
     values = np.clip(values, 0.0, 1.0)
     positions = scalar_df[position_column].to_numpy(dtype=float)
     segment_starts: tuple[int, ...] = ()
-    if record_transform is not None and record_transform.start_coordinate is not None:
+    if record_transform.start_coordinate is not None:
         positions, values, segment_starts = project_scalar_line(positions, values, record_transform)
+    elif not record_transform.is_circular:
+        positions, values = held_to_end(positions, values, float(record_len))
     elif close_at_record_len and len(positions) > 0 and np.isclose(positions[0], 0.0):
         positions = np.append(positions, float(record_len))
         values = np.append(values, values[0])
@@ -255,7 +263,7 @@ def generate_circular_scalar_area_path_desc(
     value_column: str = "value_normalized",
     position_column: str = "position",
     close_at_record_len: bool = False,
-    record_transform: RecordDisplayTransform | None = None,
+    record_transform: RecordDisplayTransform,
 ) -> str:
     """Return an annular filled area path for normalized scalar values."""
 
@@ -294,7 +302,7 @@ def generate_circular_depth_path_desc(
     depth_df: DataFrame,
     track_width: float,
     norm_factor: float,
-    record_transform: RecordDisplayTransform | None = None,
+    record_transform: RecordDisplayTransform,
 ) -> str:
     """Return an annular filled area path for binned circular depth coverage."""
 

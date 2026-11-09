@@ -89,7 +89,7 @@ from ...labels.fit import (
 )
 from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
-from ...layout.record_transform import bind_record_transforms
+from ...layout.record_transform import bind_record_transforms, unset_record_transform
 from ...render.track_slot_metadata import (
     CircularTrackSlotEntry,
     CircularTrackSlotRecord,
@@ -1211,7 +1211,9 @@ def _record_track_ink(
     canvas_radius = float(sources.geometry.radius)
     record_length = len(gb_record.seq)
     cfg = sources.profile.config
-    record_transform = sources.record_transform
+    record_transform = (
+        sources.record_transform if sources.record_transform is not None else unset_record_transform(gb_record)
+    )
     inks: list[CircularInk] = [CircularInkRing(axis.paint_band_px)]
     for slot in slots:
         renderer = str(slot.renderer)

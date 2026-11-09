@@ -36,6 +36,7 @@ from gbdraw.render.interactive_svg import enrich_svg
 from gbdraw.svg.ids import definition_group_svg_id, instance_svg_id
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 _URL_REFERENCE_RE = re.compile(r"url\(#([^)]+)\)")
 
@@ -363,6 +364,7 @@ def test_repeated_circular_skew_slots_get_distinct_deterministic_clip_ids() -> N
                 "GC",
                 record_identifier="record-a",
                 group_identifier=group_id,
+                record_transform=RecordDisplayTransform(120, 1, 1, None, True),
             )
         )
 

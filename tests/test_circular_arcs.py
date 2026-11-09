@@ -28,6 +28,7 @@ from gbdraw.svg.circular_tracks import (
     generate_circular_scalar_area_path_desc,
 )
 from gbdraw.svg.path_data import PATH_DECIMALS
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 # The largest radial distance of a drawn arc from its true (unrounded) circle, in SVG px. The drawn arc has the
 # rounded radius and endpoints, so it is off by up to 0.0005 px of rounding plus the bow its centre takes from them.
@@ -166,7 +167,7 @@ def test_feature_writers_draw_arcs_on_their_circles(strand: str, length_bp: int)
 def test_conservation_annotation_label_and_track_arcs_stay_on_their_circles() -> None:
     inner, outer, label, track = 390.50120364, 394.32104679078, 410.3712345, 387.25683452012
     depth = pd.DataFrame({"position": [0, 6_000, 12_000, 16_568], "value_normalized": [0.2, 0.9, 0.4, 0.6]})
-    area_line = circular_scalar_area_line(track, _LENGTH, depth, 30.0, 1.0)
+    area_line = circular_scalar_area_line(track, _LENGTH, depth, 30.0, 1.0, record_transform=_circular_transform(_LENGTH))
     assert area_line is not None
     paths = [
         (
@@ -182,7 +183,7 @@ def test_conservation_annotation_label_and_track_arcs_stay_on_their_circles() ->
         (CircularLabelArc(radius=label, angle=171.0, half_span=89.95, flipped=True).path, (label,)),
         (generate_circle_path_desc(track, 1.0), (track,)),
         # The area closes on its baseline circle.
-        (generate_circular_scalar_area_path_desc(track, _LENGTH, depth, 30.0, 1.0), (area_line[2],)),
+        (generate_circular_scalar_area_path_desc(track, _LENGTH, depth, 30.0, 1.0, record_transform=_circular_transform(_LENGTH)), (area_line[2],)),
     ]
     for d, radii in paths:
         assert "A" in d
@@ -193,3 +194,9 @@ def test_arc_numbers_use_the_path_number_form() -> None:
     d = circle_arc(387.257, 269.97, -359.97)
     numbers = re.findall(r"-?\d+(?:\.\d+)?", d)
     assert all(len(number.partition(".")[2]) <= PATH_DECIMALS for number in numbers)
+
+
+def _circular_transform(length: int) -> RecordDisplayTransform:
+    """The transform of a whole record drawn as circular: its lines close round the origin."""
+
+    return RecordDisplayTransform(int(length), 1, 1, None, True)

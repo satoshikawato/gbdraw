@@ -10,6 +10,7 @@ from ....configurators import GcSkewConfigurator
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_transform import unset_record_transform
 
 class GcSkewGroup:
     """
@@ -28,7 +29,8 @@ class GcSkewGroup:
         group_id: str | None = None,
         record_transform: RecordDisplayTransform | None = None,
     ) -> None:
-        self.record_transform = record_transform
+        # The transform the record is drawn by: whether its lines wrap round the origin or hold to 12 o'clock.
+        self.record_transform = record_transform if record_transform is not None else unset_record_transform(gb_record)
         self.gb_record: SeqRecord = gb_record
         self.gc_df: DataFrame = gc_df
         self.radius: float = radius

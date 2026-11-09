@@ -35,6 +35,7 @@ from gbdraw.labels.fit import (
     label_fit_notice,
 )
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 TEST_INPUTS = Path(__file__).parent / "test_inputs"
 MERS_COV = TEST_INPUTS / "MERS-CoV.gbk"
@@ -707,7 +708,7 @@ def test_a_percent_background_and_border_count_only_when_they_show(
         settings["percent_background_color"] = "none"
     drawer = GcContentDrawer(types.SimpleNamespace(**settings))
     gc_df = pd.DataFrame({"GC content": [0.0] * 4}, index=[0, 250, 500, 750])
-    inks = drawer.ink(100.0, gc_df, 1000, 20.0, 1.0, "GC")
+    inks = drawer.ink(100.0, gc_df, 1000, 20.0, 1.0, "GC", RecordDisplayTransform(1000, 1, 1, None, True))
     assert _lines_at(inks, radius, 0.5) == lines
 
 

@@ -139,7 +139,7 @@ class DepthDrawer:
         track_width: float,
         norm_factor: float,
         *,
-        record_transform: RecordDisplayTransform | None = None,
+        record_transform: RecordDisplayTransform,
     ) -> tuple[CircularInk, ...]:
         """What ``draw`` paints with the same arguments: the area down to the baseline with half its stroke, and
         the axis, its labels measured in the figure's font as ``draw`` writes them."""
@@ -179,7 +179,8 @@ class DepthDrawer:
         track_width: float,
         norm_factor: float,
         axis_group_id: str = "depth_axis",
-        record_transform: RecordDisplayTransform | None = None,
+        *,
+        record_transform: RecordDisplayTransform,
     ) -> Group:
         plot_df = _prepare_depth_plot_dataframe(
             depth_df,

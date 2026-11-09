@@ -161,13 +161,14 @@ def _run_record(run: tuple[int, int], topology: str, length: int = 10_000) -> Se
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 def test_a_linear_records_end_windows_do_not_read_its_other_end(mode: str) -> None:
     """A run at the start of a linear record is seen within half a window of the start only (circular: and
-    within half a window before the end)."""
+    within half a window before the end). Past its last sample a Circular line of a linear record holds that
+    sample's value to 12 o'clock, as a Linear track holds it to the end; it does not ramp to the first sample's
+    value, which would draw bases that are not there (OV-2920)."""
 
     for topology in ("linear", "circular"):
         paths = _track_paths(mode, _run_record((0, 100), topology), None)
         for track, desc in paths.items():
-            # The samples' own points: past the last sample a Circular line closes to 12 o'clock (OV-2920).
-            seen = [p for p in _seen_positions(mode, desc, 10_000) if p <= 10_000 - STEP + 1]
+            seen = _seen_positions(mode, desc, 10_000)
             near_end = [p for p in seen if p > 10_000 - WINDOW]
             assert bool(near_end) == (topology == "circular"), (mode, topology, track, near_end)
             assert all(p < WINDOW // 2 + 100 + STEP or p > 10_000 - WINDOW for p in seen), (mode, topology, track)
@@ -216,3 +217,30 @@ def test_depth_is_drawn_at_the_window_centre() -> None:
     centre = sum(seen) / len(seen)
     # Start-anchored windows put the deep base half a window (1,000 bp) before its place.
     assert math.isclose(centre, 3_000, abs_tol=STEP), seen
+
+
+@pytest.mark.parametrize("close_at_record_len", [False, True], ids=["depth", "percent"])
+def test_a_circular_area_of_a_linear_record_holds_its_last_value_to_the_end(close_at_record_len: bool) -> None:
+    """Depth and Percent GC areas: a record drawn as circular closes on its first sample (Percent GC) or ends at
+    its last sample (Depth) as before; a linear record's area holds its last value on to 12 o'clock (OV-2920)."""
+
+    from gbdraw.layout.record_transform import unset_record_transform
+    from gbdraw.svg.circular_tracks import circular_scalar_area_line
+
+    data = pd.DataFrame({"position": [0, 400, 800], "value_normalized": [0.2, 0.5, 0.9]})
+    lines = {}
+    for topology in ("linear", "circular"):
+        transform = unset_record_transform(_run_record((0, 0), topology, length=1_000))
+        line = circular_scalar_area_line(
+            100.0, 1_000, data, 10.0, 1.0, close_at_record_len=close_at_record_len, record_transform=transform
+        )
+        assert line is not None
+        lines[topology] = line
+    linear = lines["linear"]
+    assert list(linear.positions) == [0, 400, 800, 1_000]
+    assert linear.radii[-1] == linear.radii[-2]
+    circular = lines["circular"]
+    if close_at_record_len:
+        assert list(circular.positions) == [0, 400, 800, 1_000] and circular.radii[-1] == circular.radii[0]
+    else:
+        assert list(circular.positions) == [0, 400, 800]

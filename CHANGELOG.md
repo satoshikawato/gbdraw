@@ -57,7 +57,10 @@ write-up of a release.
   2.5 kb at `--depth_window 5000`, earlier). A record whose file states no
   topology (GFF3 + FASTA, FASTA) counts as linear unless it is marked circular
   (`--record_topology circular`, or Circular record in the Web app), also in a
-  Circular figure (OV-2890, OV-2919).
+  Circular figure. There, the GC content, GC skew and Depth lines of a record
+  that is not circular hold their last value up to 12 o'clock and step back to
+  the first value there, instead of a ramp across the origin that described no
+  bases (OV-2890, OV-2919, OV-2920).
 - Changed: the Auto GC content and GC skew window is now at most a tenth of the
   drawn length, and the Auto step at most a tenth of the window, so figures
   shorter than 10 kb keep about a hundred samples: a 671 bp region uses a 67 bp
