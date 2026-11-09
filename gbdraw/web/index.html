@@ -10281,11 +10281,11 @@
                 <i class="ph ph-check-circle" aria-hidden="true"></i>
                 <span class="min-w-0 truncate" :title="selectedLabel">{{ selectedLabel }}</span>
             </div>
-            <!-- After the selection chain above, so it does not break the v-if/v-else-if/v-else of the zone's text. -->
-            <span v-if="drop" :id="dropHintId" class="text-[10px] text-slate-500">{{ t('Choose several or drop them here.') }}</span>
         </div>
         <help-tip v-if="help" :id="helpId" :text="help" :label="t('Help: {name}', { name: $attrs['data-input-aria-label'] || label })"></help-tip>
         </div>
+        <!-- Outside the role=button zone, so the button's text equals its name; the zone's aria-describedby points here. -->
+        <span v-if="drop" :id="dropHintId" class="block mt-1 text-center text-[10px] text-slate-500">{{ t('Choose several or drop them here.') }}</span>
         <select
             v-if="sessionFiles.length"
             class="form-input form-input-compact mt-1 w-full"
