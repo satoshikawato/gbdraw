@@ -224,10 +224,11 @@ export const WORK_ALLOWLIST = [
   },
   {
     // Python writes the rules that carry the row's features under the new
-    // name (synthesizeColorRules), so their matches are a request. The rules
+    // name (synthesizeColorRules, after it names the qualifiers the rules
+    // read, synthesisQualifiers), so their matches are a request. The rules
     // also match Result 2's tRNAs, so Python draws that Result again.
     kind: 'Legend rename, palette row with features', stages: ['fills', 'rules', 'legendFills', 'legend', 'strokes'], compiles: 1,
-    requests: ['evaluateRules', 'evaluateRules', 'render', 'synthesizeColorRules'],
+    requests: ['evaluateRules', 'evaluateRules', 'render', 'synthesisQualifiers', 'synthesizeColorRules'],
     run: (page) => renameLegendRow(page, 'tRNA', 'transfer RNA')
   },
   // A delete, its Undo and a Restore also show the strokes: a deleted row's
@@ -286,11 +287,12 @@ export const WORK_ALLOWLIST = [
     // the Restore (which shows the row) and then the merge's rule commit, in
     // one History checkpoint. Each shows once: two compiles. The merge's
     // rule commit prepares its candidate rules (one request) and, as a join,
-    // asks Python where the joined rows go (synthesizeColorRules); the rows
+    // asks Python where the joined rows go (synthesisQualifiers names the
+    // qualifiers it reads, synthesizeColorRules writes the rows); the rows
     // stay on the displayed Result, so no rerender. It runs after the Load, so
     // it leaves the rule preparation of the rows above as they were (OV-286).
     kind: 'Legend rename onto a deleted row (Restore and merge)', stages: ['fills', 'legend', 'legendFills', 'rules', 'strokes'],
-    compiles: 2, requests: ['evaluateRules', 'synthesizeColorRules'],
+    compiles: 2, requests: ['evaluateRules', 'synthesisQualifiers', 'synthesizeColorRules'],
     before: (page) => deleteLegendRow(page, 'Two'),
     run: async (page) => {
       await renameRow(page, 'Fifth', 'Two');

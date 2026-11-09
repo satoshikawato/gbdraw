@@ -102,6 +102,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   RESOLVE_LEGACY_PROTEIN_REFERENCES: 'resolveLegacyProteinReferences',
   RESOLVE_SIMILARITY_ALIGNMENT: 'resolveSimilarityAlignment',
   SEARCH_HIT_ANNOTATION_SET: 'searchHitAnnotationSet',
+  SYNTHESIS_QUALIFIERS: 'synthesisQualifiers',
   SYNTHESIZE_COLOR_RULES: 'synthesizeColorRules',
   UPGRADE_LEGACY_SESSION: 'upgradeLegacySession',
   VALIDATE_CONFIG_OVERRIDES: 'validateConfigOverrides'

@@ -13,7 +13,7 @@ import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
 import { createResultsManager } from '../../gbdraw/web/js/app/results.js';
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
-import { groupColorRulesOver, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
+import { groupColorRulesOver, synthesisPythonQualifiers, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 
 const ref = (value) => ({ value });
 
@@ -84,6 +84,7 @@ const setup = ({
   const preparation = createRulePreparation({
     state,
     synthesize: synthesizePythonColorRules,
+    synthesisQualifiers: synthesisPythonQualifiers,
     evaluate: (payload) => {
       stages.push(`worker:evaluateRules:${payload.kind}:${payload.rules.map((rule) => rule.qual).join('+')}`);
       return evaluateRules(payload);

@@ -446,6 +446,8 @@ const readShownRecordSpans = (spans) => requestRecordSpanSequences(
   (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
     resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
 );
+/** A rule synthesis helper of the diagram Worker: the `result` it answers for one `request`. @param {string} operation */
+const ruleSynthesisHelper = (operation) => async (/** @type {object} */ request) => (await runDiagramHelperOperation(operation, { request })).result;
 // The sequences the catalog does not store, read by Python from the committed request the shown Result was made from
 // (D5): the Sequence tab, member Copy and Download, the sequence fields of Feature search, the match popup's Copy and
 // FASTA, and Interactive SVG export. The one door keeps each reply while the same Result is shown.
@@ -1029,7 +1031,7 @@ export const createAppSetup = () => {
     pending: ruleMatchingPending,
     blocking: ruleMatchingBlocking,
     evaluate: evaluateRules,
-    synthesize: async (request) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.SYNTHESIZE_COLOR_RULES, { request })).result,
+    synthesize: ruleSynthesisHelper(DIAGRAM_HELPER_OPERATIONS.SYNTHESIZE_COLOR_RULES), synthesisQualifiers: ruleSynthesisHelper(DIAGRAM_HELPER_OPERATIONS.SYNTHESIS_QUALIFIERS),
     visibilityRules: () => requestFeatureVisibilityRules(state.activeDrawing().featureVisibilityManualRules)
   });
   specificRuleRestorePorts.retainRulesForRestore = rulePreparation.retain;

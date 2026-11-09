@@ -10,7 +10,7 @@ import { displayedFeatureAddressing } from '../../gbdraw/web/js/services/feature
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
-import { groupColorRulesOver, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
+import { groupColorRulesOver, synthesisPythonQualifiers, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 import { ruleOwnerPorts } from './helpers/rule-preparation-ports.mjs';
 
 // The Legend owner's writer of a row's own color (app/feature-editor.js wires it); these tests record its calls.
@@ -98,7 +98,7 @@ test('"All features with legend item" over K features with K hash rules does O(K
   for (const count of [50, 200]) {
     const count_ = counting();
     const { features, rules, state } = setup(count, count_);
-    const preparation = createRulePreparation({ state, evaluate: evaluateHashRules, synthesize: synthesizePythonColorRules });
+    const preparation = createRulePreparation({ state, evaluate: evaluateHashRules, synthesize: synthesizePythonColorRules, synthesisQualifiers: synthesisPythonQualifiers });
     assert.equal(await preparation.prepare(rules), true);
     let committed = null;
     // Not a palette row (D-15): Python writes one exact product rule per

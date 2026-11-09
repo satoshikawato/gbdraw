@@ -19,7 +19,7 @@ from gbdraw.api.request_render import load_render_source_records
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.prepared import PreparedBiologicalInputCache
 from gbdraw.web_support.error_adapter import private_web_execution, serialize_web_error, web_error_stage
-from gbdraw.web_support.rule_matching import evaluate_rules_json, synthesize_color_rules_json
+from gbdraw.web_support.rule_matching import evaluate_rules_json, synthesis_qualifiers_json, synthesize_color_rules_json
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
 from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
@@ -1786,6 +1786,7 @@ _WEB_JSON_HELPERS = {
     "clear_web_cancel": (clear_web_cancel, "generate"),
     # Its errors are rule errors: the error vocabulary has no operation of its own for it.
     "synthesize_color_rules_json": (synthesize_color_rules_json, "evaluateRules"),
+    "synthesis_qualifiers_json": (synthesis_qualifiers_json, "evaluateRules"),
     "svg_font_embedding_json": (svg_font_embedding_json, "embedFonts"),
     "pdf_fonts_json": (pdf_fonts_json, "pdfFonts"),
     # A PNG or PDF over its format's limit refuses before the browser draws it (EXPORT_LIMIT).

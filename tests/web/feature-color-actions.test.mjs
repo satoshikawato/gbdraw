@@ -1,4 +1,4 @@
-import { evaluatePythonRules, groupColorRulesOver, reviseColorRulesOver, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
+import { evaluatePythonRules, groupColorRulesOver, reviseColorRulesOver, synthesisPythonQualifiers, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -137,7 +137,7 @@ const preparationState = { ...preparationMembers(), extractedFeatures, biologica
 let legendSiblings = [featureB, hashOnlyFeature];
 let matchingRegexRule = specificRule;
 const preparedRuleSets = [];
-const actionsPreparation = createRulePreparation({ state: withDrawings(preparationState), evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules });
+const actionsPreparation = createRulePreparation({ state: withDrawings(preparationState), evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules, synthesisQualifiers: synthesisPythonQualifiers });
 const runWithRuleMatchesForActions = runWithRuleMatchesOf(actionsPreparation, preparationState);
 const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor,
   state: withDrawings({
@@ -857,7 +857,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const resetPreparation = createRulePreparation({
     state: withDrawings({ ...preparationMembers(), extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules }),
     evaluate: evaluatePythonRules,
-    synthesize: synthesizePythonColorRules
+    synthesize: synthesizePythonColorRules,
+    synthesisQualifiers: synthesisPythonQualifiers
   });
   const resetActions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor,
     state: withDrawings({
@@ -963,7 +964,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     // Catalog features: each has its catalog identity, here its rendered id in one record.
     const featureList = ref(features.map((feature) => ({ record_key: 'record-1', biological_feature_id: feature.svg_id, ...feature })));
     const renameState = { ...preparationMembers(), extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules };
-    const renamePreparation = createRulePreparation({ state: withDrawings(renameState), evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules });
+    const renamePreparation = createRulePreparation({ state: withDrawings(renameState), evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules, synthesisQualifiers: synthesisPythonQualifiers });
     // Python's rows of the displayed Result: the listed rows as Python drew them.
     /** @param {string} caption */
     const rowRules = (caption) => legendRowRules(caption, {

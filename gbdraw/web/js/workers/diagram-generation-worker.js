@@ -921,6 +921,12 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       jsonArgument(payload.features, []), jsonArgument(payload.rules, []), String(payload.kind || 'color')
     ])
   },
+  // The qualifiers the candidate conditions of a color edit read (D5): the page sends the synthesis those only.
+  [DIAGRAM_HELPER_OPERATIONS.SYNTHESIS_QUALIFIERS]: {
+    keys: ['request'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'synthesis_qualifiers_json', [jsonArgument(payload.request, null)])
+  },
   // The rules of a group color edit (OV-244): Python writes them over the whole catalog.
   [DIAGRAM_HELPER_OPERATIONS.SYNTHESIZE_COLOR_RULES]: {
     keys: ['request'],

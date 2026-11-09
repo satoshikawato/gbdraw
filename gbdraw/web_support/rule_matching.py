@@ -187,6 +187,22 @@ class SynthesizeColorRulesRequest(TypedDict):
     drawn: list[int] | None
 
 
+class SynthesisQualifiersRequest(TypedDict):
+    """The selected features of one color edit, as whole payloads, the label texts each shows (as `labels` of
+    :class:`SynthesizeColorRulesRequest`), and the edit's `scope`."""
+
+    scope: Literal["group", "row", "features", "reset"]
+    features: list[RuleFeaturePayload]
+    labels: list[list[str]]
+
+
+class SynthesisQualifiers(TypedDict):
+    """The qualifier keys, lowercased and sorted, that the edit's candidate conditions read: with the keys its rules
+    read, all the synthesis reads of any feature's qualifiers, so the Web sends no other value (D5)."""
+
+    qualifiers: list[str]
+
+
 class RetargetedColorRule(TypedDict):
     """A copy of the request's row `row` with the pattern `val`."""
 
@@ -226,7 +242,7 @@ def describe_rule_helpers() -> dict[str, dict[str, Shape]]:
             return ref(hint.__name__)
         return None
 
-    for root in (SynthesizeColorRulesRequest, SynthesizedColorRules,
+    for root in (SynthesizeColorRulesRequest, SynthesizedColorRules, SynthesisQualifiersRequest, SynthesisQualifiers,
                  ColorRuleCondition, VisibilityRuleRow, LabelRuleRow, RuleEvaluationResult):
         special(root)
     return {"types": types_}
@@ -660,6 +676,26 @@ def _colored_table(request: SynthesizeColorRulesRequest, features: list[_MatchFe
         # features): the rows go where they go without a join.
         table, winners = place(None)
     return [*table], winners
+
+
+def synthesis_qualifiers(request: SynthesisQualifiersRequest) -> SynthesisQualifiers:
+    """The keys the candidate conditions of a color edit of `request["features"]` read (:func:`_candidate_conditions`;
+    none for a scope that writes no condition)."""
+    if request["scope"] not in ("group", "row"):
+        return {"qualifiers": []}
+    conditions = _candidate_conditions(SynthesizeColorRulesRequest(
+        scope=request["scope"], features=request["features"], selected=list(range(len(request["features"]))),
+        labels=request["labels"], rules=[], color="", caption="", joins=None, drawn=None))
+    return {"qualifiers": sorted({qualifier for _type, qualifier, _pattern in conditions})}
+
+
+def synthesis_qualifiers_json(request_json: str) -> str:
+    """:func:`synthesis_qualifiers` for the Web's diagram helper `synthesisQualifiers`."""
+    request = json.loads(request_json)
+    problems = violations(request, ref("SynthesisQualifiersRequest"), _REQUEST_DESCRIPTION["types"], "request")
+    if problems or len(request["labels"]) != len(request["features"]):
+        raise ValueError("Unreadable rule synthesis request: " + "; ".join(problems[:3] or ["labels do not match the features"]))
+    return json.dumps(synthesis_qualifiers(request))
 
 
 def synthesize_color_rules_json(request_json: str) -> str:

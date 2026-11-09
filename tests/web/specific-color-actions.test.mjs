@@ -15,7 +15,7 @@ import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/service
 import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { isLegendOrderEdited } from '../../gbdraw/web/js/services/legend-svg.js';
-import { evaluatePythonRules, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
+import { evaluatePythonRules, synthesisPythonQualifiers, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
 import { ruleOwnerPorts } from './helpers/rule-preparation-ports.mjs';
@@ -62,7 +62,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
   const transactions = [], transactionScopes = [];
   // `linear`: a second drawing; `state.mode.value` picks the shown one.
   const view = linear ? withModeDrawings(Object.assign(state, { mode: { value: 'circular' } }), { circular: state, linear }) : withDrawings(state);
-  const preparation = createRulePreparation({state: view, evaluate, synthesize});
+  const preparation = createRulePreparation({state: view, evaluate, synthesize, synthesisQualifiers: synthesisPythonQualifiers});
   let prepareLegend = async () => {};
   let previousIntents = [];
   let lastRekeyed = null;
@@ -963,7 +963,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   const orders = [];
   const actions = createFeatureRuleActions({
     ref: value => ({ value }), computed: get => ({ get value() { return get(); } }), state: drawingState,
-    ...ruleOwnerPorts(createRulePreparation({ state: drawingState, evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules })),
+    ...ruleOwnerPorts(createRulePreparation({ state: drawingState, evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules, synthesisQualifiers: synthesisPythonQualifiers })),
     runUndoableCheckpoint: async (_label, commit) => commit(), runUndoable: async (_label, commit) => commit(),
     prepareFileLegendEntries: async (intents, options = {}) => {
       orders.push(options.legendOrder ?? null);
