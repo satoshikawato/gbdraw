@@ -1105,10 +1105,9 @@ comparison uses the displayed Circular record as the search subject and each
 ring's genome under **Comparison sequence files** as a query. **Add comparison
 sequence** adds a ring for the chosen file. A genome split over several files
 (a chromosome and its plasmids, for example) is one ring: **Add file** on the
-ring row adds files to that ring's genome, and the arrows and the remove button
-beside each file reorder or remove it; the ring keeps its name and color. The
-files are read in their order as one genome, as `--conservation_genome a b`
-reads them, and two files of one genome that share a record ID are refused. A
+ring row adds files to that ring's genome, and the remove button beside each
+file removes it; the ring keeps its name and color. The files are read in the
+order they were added as one genome, as `--conservation_genome a b` reads them, and two files of one genome that share a record ID are refused. A
 LOSAT ring keeps at least one file; **Remove series** removes the ring. A
 comparison file is FASTA, GenBank, or DDBJ. The diagram worker reads a ring's
 files with the reader of `--conservation_genome`, so a ring has the CLI raw

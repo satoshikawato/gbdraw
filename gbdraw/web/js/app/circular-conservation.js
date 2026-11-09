@@ -399,8 +399,9 @@ export const createCircularConservationSeriesPanel = ({
  */
 
 /**
- * The file controls of a ring row (D-02): Add file, the arrows, and the remove
- * button change the genome files of that ring, one History step each.
+ * The file controls of a ring row (D-02): Add file and the remove button change
+ * the genome files of that ring, one History step each. The files keep the
+ * order they were added in (D-106): their order changes no hit drawn.
  * @param {Pick<CircularConservationComparisonFilesPorts, 'state' | 'shownAction' | 'writeLosatCacheInfo'
  *   | 'clearDerivedCircularConservationBlasts' | 'reconcileCircularConservation'>} ports
  */
@@ -408,7 +409,7 @@ const createRingRowFileEdits = ({
   state, shownAction, writeLosatCacheInfo, clearDerivedCircularConservationBlasts, reconcileCircularConservation
 }) => {
   /**
-   * The genome files of one ring row (`ringRowFiles`), in their new order. An
+   * The genome files of one ring row (`ringRowFiles`) after an edit. An
    * uploaded table's row writes its comparison sequence files at its source's
    * place. A LOSAT ring writes the rings in series order, each series entry
    * then keyed by its ring's files (so a row keeps its name and color while
@@ -457,18 +458,6 @@ const createRingRowFileEdits = ({
     setRingRowFiles(drawing, Number(rowIndex), [...(ringRowFiles(drawing)[Number(rowIndex)] || []), ...added], RING_FILE_REPLACED);
   });
   /**
-   * Move a file of a ring row up (-1) or down (1) in the row's genome.
-   * @param {number} rowIndex @param {number} fileIndex @param {number} direction
-   */
-  const moveRingRowFile = (rowIndex, fileIndex, direction) => shownAction('circular', (drawing) => {
-    const files = ringRowFiles(drawing)[Number(rowIndex)] || [];
-    const target = Number(fileIndex) + Math.sign(Number(direction));
-    if (!Number.isInteger(Number(fileIndex)) || target < 0 || target >= files.length || Number(fileIndex) < 0) return;
-    const next = [...files];
-    [next[Number(fileIndex)], next[target]] = [next[target], next[Number(fileIndex)]];
-    setRingRowFiles(drawing, Number(rowIndex), next, RING_SOURCE_CHANGED);
-  });
-  /**
    * Remove a file of a ring row. A LOSAT ring keeps at least one file (Remove
    * series removes the ring); an uploaded table's comparison sequence is
    * optional.
@@ -479,7 +468,7 @@ const createRingRowFileEdits = ({
     if (!canRemoveRingRowFile(drawing, files.length) || !(Number(fileIndex) in files)) return;
     setRingRowFiles(drawing, Number(rowIndex), files.filter((_, index) => index !== Number(fileIndex)), RING_SOURCE_CHANGED);
   });
-  return { addRingRowFiles, moveRingRowFile, removeRingRowFile };
+  return { addRingRowFiles, removeRingRowFile };
 };
 
 /**

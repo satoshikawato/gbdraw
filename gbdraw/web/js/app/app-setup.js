@@ -1653,7 +1653,7 @@ export const createAppSetup = () => {
     reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
   });
   const {
-    settleComparisonRecordLabels, addCircularConservationComparisonFile, addRingRowFiles, moveRingRowFile,
+    settleComparisonRecordLabels, addCircularConservationComparisonFile, addRingRowFiles,
     removeRingRowFile, removeCircularConservationSource
   } = createCircularConservationComparisonFiles({
     state, shownAction, writeLosatCacheInfo, runUndoable: history.runUndoable, clearDerivedCircularConservationBlasts,
@@ -3545,7 +3545,7 @@ export const createAppSetup = () => {
     circularConservationFastaInput,
     circularConservationSeriesRows,
     setCircularConservationUploadFiles,
-    addRingRowFiles, moveRingRowFile, removeRingRowFile,
+    addRingRowFiles, removeRingRowFile,
     canMoveCircularConservationSeries,
     moveCircularConservationSeries,
     openCircularConservationComparisonFilePicker,

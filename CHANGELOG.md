@@ -968,7 +968,7 @@ into the `[Unreleased]` list below.
   lists the files separated by `;`, and a list of paths in
   `CircularDiagramOptions.conservation_sequence_files`, a list of paths in
   `ComparisonRingTrackOptions.comparison_sequence_source`, and **Add file** on
-  a Web app ring row (which also reorders and removes the ring's files) give
+  a Web app ring row (which also removes the ring's files) give
   one ring every record of those files, file after file: the ring of one file
   that holds them all. The ring is labelled after its first file. `--losat_output_dir` writes
   the `;` list, so its `conservation.tsv` still reads back unchanged. Two files

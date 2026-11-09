@@ -6,6 +6,7 @@
 // reads a Session 51's stored setting and turns an older Session's rings on by
 // its ring files.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 
@@ -150,10 +151,11 @@ test('Load keeps a Session 51 rings setting and reads an older Session by its ri
 });
 
 // PR-B (D-02, Owner 2026-11-08 「すべて推奨通り」): a ring compares one genome,
-// which may be several files. Its row adds files to that genome, moves and
-// removes them, and keeps its name and place; a LOSAT ring keeps its last file
-// (Remove series removes the ring).
-test('a ring row adds, moves and removes the files of its genome and keeps its name', async () => {
+// which may be several files. Its row adds files to that genome and removes
+// them, and keeps its name and place; a LOSAT ring keeps its last file (Remove
+// series removes the ring). The files keep the order they were added in: their
+// order changes no hit drawn, and a new order would only search again (D-106).
+test('a ring row adds and removes the files of its genome, in the order added, and keeps its name', async () => {
   const drawing = circular();
   await addSeq('chr1.fasta');
   await addSeq('fly.fasta');
@@ -167,14 +169,16 @@ test('a ring row adds, moves and removes the files of its genome and keeps its n
   assert.equal(drawing.circularConservation.series[0].label, 'Two chromosomes');
   assert.match(String(drawing.circularConservation.series[0].sourceKey), /chr1\.fasta.* \+ .*chr2\.fasta.* \+ .*chr3\.fasta/);
 
-  comparisonFiles.moveRingRowFile(0, 2, -1);
-  assert.deepEqual(rows()[0].files, ['chr1.fasta', 'chr3.fasta', 'chr2.fasta']);
+  assert.equal('moveRingRowFile' in comparisonFiles, false, 'a ring row has no file order edit');
+  const ringRowFileControls = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8')
+    .split('data-ring-row-files')[1].split('data-ring-row-file-add')[0];
+  assert.doesNotMatch(ringRowFileControls, /ph-arrow-(up|down)|Move File/, 'a ring row file has no move buttons');
   comparisonFiles.removeRingRowFile(0, 0);
-  assert.deepEqual(rows()[0].files, ['chr3.fasta', 'chr2.fasta']);
+  assert.deepEqual(rows()[0].files, ['chr2.fasta', 'chr3.fasta']);
   assert.equal(drawing.circularConservation.series[0].label, 'Two chromosomes');
   assert.deepEqual(rows().map((row) => row.canRemoveFile), [true, false]);
   comparisonFiles.removeRingRowFile(1, 0);
-  assert.deepEqual(boundNames(), [['chr3.fasta', 'chr2.fasta'], ['fly.fasta']], 'a LOSAT ring keeps its last file');
+  assert.deepEqual(boundNames(), [['chr2.fasta', 'chr3.fasta'], ['fly.fasta']], 'a LOSAT ring keeps its last file');
 
   comparisonFiles.removeCircularConservationSource(1);
   comparisonFiles.removeCircularConservationSource(0);
