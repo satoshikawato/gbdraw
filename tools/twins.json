@@ -1327,8 +1327,7 @@
       "vector": "tests/fixtures/record-region-windows-vectors.json",
       "reason": "Python decodes the stored request directly; the Web promotes the JSON before its one stored-request reader so Load needs no Worker",
       "retireWhen": "the Web reads stored requests through the Python decoder, or stops reading request schema 9 and older",
-      "source": "review of feat/ring-genome-files (OV-2957); the twin is on dev with no shared vector",
-      "pending": true
+      "source": "review of feat/ring-genome-files (OV-2957); the twin is on dev with no shared vector"
     }
   ]
 }
