@@ -89,6 +89,8 @@ from gbdraw.session_request_codec import (
     CanonicalRequestDecodingError,
     CanonicalRequestEncodingError,
     EncodedCanonicalRequest,
+    _decode_region,
+    _decode_selector,
     _read_typed_json_resource,
     decode_canonical_request,
     encode_canonical_request,
@@ -3781,3 +3783,53 @@ def test_a_schema9_region_whose_start_is_greater_than_its_end_is_the_reversed_sp
     assert stored_record_windows(windowed["records"][0]) == [
         {"start": 300, "end": 50, "reverseComplement": False, "column": None}
     ]
+
+
+_REGION_WINDOW_VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "record-region-windows-vectors.json").read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize("case", _REGION_WINDOW_VECTORS, ids=lambda case: case["name"])
+def test_a_stored_region_reads_as_the_windows_the_web_promotion_writes(case: dict[str, Any]) -> None:
+    """The stored-region twin (tools/twins.json): tests/web/session-request.test.mjs reads the same vectors (OV-2957)."""
+    region = case["record"].get("region")
+    if case.get("refused"):
+        # The Web refuses this stored form at Load as Python refuses it (OV-3000, OV-3057).
+        with pytest.raises((ValidationError, CanonicalRequestDecodingError), match=case["pythonRefusal"]):
+            RecordInput(
+                source=GenBankInputSource(Path("record.gbk")),
+                selector=_decode_selector(case["record"]["selector"], path="selector"),
+                region=_decode_region(region, path="region"),
+            )
+        return
+    assert stored_record_windows(case["record"]) == case["windows"]
+    if (
+        isinstance(region, dict)
+        and type(region.get("start")) is int
+        and type(region.get("end")) is int
+        and isinstance(region.get("reverseComplement"), bool)
+    ):
+        decoded = _decode_region(region, path="region")
+        assert decoded is not None
+        # The record's selector once decoded: its own, or the region's, which RecordInput lifts onto the record.
+        # RecordInput refuses a start or end below 1; those vectors carry no selector.
+        if decoded.start >= 1 and decoded.end >= 1:
+            selector = RecordInput(
+                source=GenBankInputSource(Path("record.gbk")),
+                selector=_decode_selector(case["record"].get("selector"), path="selector"),
+                region=decoded,
+            ).selector
+            assert (
+                None
+                if selector is None
+                else {"kind": "recordId", "value": selector.record_id}
+                if selector.record_id is not None
+                else {"kind": "recordIndex", "index": selector.record_index}
+            ) == case["promotedSelector"]
+        else:
+            assert case["promotedSelector"] is None
+        window = case["windows"][0]
+        assert (decoded.start, decoded.end, decoded.reverse_complement) == (
+            window["start"], window["end"], window["reverseComplement"]
+        )

@@ -198,6 +198,9 @@ if TYPE_CHECKING:
 CANONICAL_REQUEST_SCHEMA = 10
 DISPLAY_PLACEMENT_SCHEMA = 7
 FEATURE_OVERRIDE_SCHEMA = 9
+# The keys of a record's `region` in a stored request of schema 9 and older; the Web refuses any other
+# (OV-3057).
+STORED_REGION_FIELDS: frozenset[str] = frozenset({"selector", "start", "end", "reverseComplement"})
 # Schema 10 writes a record's spans as ``windows`` (D-01); earlier schemas wrote one ``region``, read as one window.
 RECORD_WINDOWS_SCHEMA = 10
 SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset(
@@ -1659,7 +1662,7 @@ def _decode_region(value: object, *, path: str) -> RegionSpec | None:
     region = _object(
         value,
         path=path,
-        required={"selector", "start", "end", "reverseComplement"},
+        required=STORED_REGION_FIELDS,
     )
     selector = _decode_selector(region["selector"], path=f"{path}.selector")
     start = _integer(region["start"], f"{path}.start")

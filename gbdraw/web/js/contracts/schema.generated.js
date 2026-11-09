@@ -51,6 +51,10 @@ export const DISPLAY_PLACEMENT_SCHEMA = 7;
 // gbdraw/session_request_codec.py: FEATURE_OVERRIDE_SCHEMA
 export const FEATURE_OVERRIDE_SCHEMA = 9;
 
+// gbdraw/session_request_codec.py: STORED_REGION_FIELDS
+/** @type {readonly string[]} */
+export const STORED_REGION_FIELDS = Object.freeze(['end', 'reverseComplement', 'selector', 'start']);
+
 // gbdraw/session_request_codec.py: SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 /** @type {readonly number[]} */
 export const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = Object.freeze([1, 2, 5, 6, 7, 8, 9, 10]);
