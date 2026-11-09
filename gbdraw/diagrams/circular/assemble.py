@@ -1028,6 +1028,14 @@ def _external_label_obstacles_on_canvas(
 _SlotLabels: TypeAlias = dict[str, tuple[CircularAnnotationLabel, ...]]
 
 
+class _RegionLabelsNotClear(NamedTuple):
+    """What a record's annotation slots could not draw clear (``CircularAnnotationLabels``): the labels left out
+    because no letter fits their circle, and how many things the drawn labels still overlap (OV-3015)."""
+
+    without_letters: tuple[CircularAnnotationLabel, ...] = ()
+    overlaps: int = 0
+
+
 def _circular_annotation_labels_by_slot(
     radial_layout: CircularRadialLayout,
     annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack] | None,
@@ -1036,10 +1044,10 @@ def _circular_annotation_labels_by_slot(
     record_length: int,
     font_family: str,
     obstacles: CircularLabelObstacles,
-) -> tuple[_SlotLabels, tuple[CircularAnnotationLabel, ...]]:
+) -> tuple[_SlotLabels, _RegionLabelsNotClear]:
     """The drawn labels of each annotation slot of a record, measured once for the drawer and the canvas bounds,
-    and the labels the slots leave out because no letter fits their circle (``CircularAnnotationLabels``), for the
-    label fit warning.
+    and, for the label fit warning, the labels the slots leave out because no letter fits their circle and what the
+    drawn labels still overlap (``CircularAnnotationLabels``).
 
     The letters clear the axis circle's paint too where they would meet it, and
     move along their regions off ``obstacles`` and the labels of earlier slots.
@@ -1048,6 +1056,7 @@ def _circular_annotation_labels_by_slot(
     axis_paint = radial_layout.axis.paint_band_px
     labels: dict[str, tuple[CircularAnnotationLabel, ...]] = {}
     without_letters: list[CircularAnnotationLabel] = []
+    overlaps = 0
     for slot in radial_layout.slots:
         layout = (annotation_track_layouts or {}).get(slot.id)
         if str(slot.renderer) != "annotations" or layout is None:
@@ -1079,8 +1088,9 @@ def _circular_annotation_labels_by_slot(
         )
         labels[slot.id] = measured.drawn
         without_letters.extend(measured.without_letters)
+        overlaps += measured.overlaps
         obstacles = obstacles.with_labels(measured.drawn)
-    return labels, tuple(without_letters)
+    return labels, _RegionLabelsNotClear(tuple(without_letters), overlaps)
 
 
 def _region_label_warnings(
@@ -1088,21 +1098,22 @@ def _region_label_warnings(
     tracks: Mapping[str, ResolvedAnnotationTrack],
     record_index: int,
     labels: Mapping[str, Sequence[CircularAnnotationLabel]],
-    without_letters: Sequence[CircularAnnotationLabel],
+    not_clear: _RegionLabelsNotClear,
 ) -> RegionLabelWarnings:
     """The record's region label counts that only warn, with the font sizes of the labels left out: the labels its
-    tracks leave out for want of room (``region_rooms_left_out``), the drawn ``labels`` that lie on another track
-    (LP-D86), and the labels left out because no letter fits their circle (``without_letters``,
-    RGN-CUT-EMPTY-OMIT)."""
+    tracks leave out for want of room (``region_rooms_left_out``), what the drawn ``labels`` still overlap (OV-3015,
+    REGION-WARN as in Linear), the drawn labels that lie on another track (LP-D86), and the labels left out because
+    no letter fits their circle (RGN-CUT-EMPTY-OMIT)."""
 
     return region_rooms_left_out(tracks.values(), record_index).adding(
         LabelFit(
             0,
             0,
+            region_overlaps=not_clear.overlaps,
             region_track_overlaps=_region_labels_on_other_tracks(radial_layout, labels),
-            region_cuts_left_out=len(without_letters),
+            region_cuts_left_out=len(not_clear.without_letters),
         ),
-        tuple(label.font_size for label in without_letters),
+        tuple(label.font_size for label in not_clear.without_letters),
     )
 
 
@@ -3570,8 +3581,8 @@ def add_record_on_circular_canvas(
 
     # Annotation labels lie outside the radial bands too: the canvas holds them and a legend or title avoids them.
     # They move along their regions off the feature labels and leaders, so they follow the feature labels.
-    def place_annotation_labels() -> tuple[_SlotLabels, tuple[Aabb, ...], tuple[CircularAnnotationLabel, ...]]:
-        labels_by_slot, without_letters = _circular_annotation_labels_by_slot(
+    def place_annotation_labels() -> tuple[_SlotLabels, tuple[Aabb, ...], _RegionLabelsNotClear]:
+        labels_by_slot, not_clear = _circular_annotation_labels_by_slot(
             radial_layout,
             annotation_track_layouts,
             record_index=planned.annotation_record_index,
@@ -3583,7 +3594,7 @@ def add_record_on_circular_canvas(
             label.ink_bounds.translated(float(canvas_config.offset_x), float(canvas_config.offset_y))
             for labels in labels_by_slot.values()
             for label in labels
-        ), without_letters
+        ), not_clear
 
     # A corner legend must also clear the record and its tracks, even when
     # every label has moved outside and the interior has no label obstacles.
@@ -3603,7 +3614,7 @@ def add_record_on_circular_canvas(
             definition_target=definition,
         )
 
-    annotation_labels, annotation_label_obstacles, labels_without_letters = place_annotation_labels()
+    annotation_labels, annotation_label_obstacles, region_labels_not_clear = place_annotation_labels()
     overlay_obstacles = (
         *_external_label_obstacles_on_canvas(precalculated_labels or (), len(record.gb_record.seq), canvas_config),
         *annotation_label_obstacles,
@@ -3651,7 +3662,7 @@ def add_record_on_circular_canvas(
                     ],
                     len(record.gb_record.seq),
                 )
-            annotation_labels, annotation_label_obstacles, labels_without_letters = place_annotation_labels()
+            annotation_labels, annotation_label_obstacles, region_labels_not_clear = place_annotation_labels()
             overlay_obstacles = (
                 *_external_label_obstacles_on_canvas(precalculated_labels, len(record.gb_record.seq), canvas_config),
                 *annotation_label_obstacles,
@@ -3784,7 +3795,7 @@ def add_record_on_circular_canvas(
         capacity=label_capacity,
         region_labels=tuple(label for labels in annotation_labels.values() for label in labels),
         region_warnings=_region_label_warnings(
-            radial_layout, annotation_track_layouts, planned.annotation_record_index, annotation_labels, labels_without_letters
+            radial_layout, annotation_track_layouts, planned.annotation_record_index, annotation_labels, region_labels_not_clear
         ),
         definition_track_overlaps=(
             definition_lines_on_tracks(radial_layout, definition_ink, annotation_labels) if definition_ink else 0

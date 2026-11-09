@@ -173,10 +173,13 @@ class CircularAnnotationLabels:
     labels whose cut keeps no letter, and those the track leaves out because their cut would keep none where their
     text would put their mark (``ResolvedAnnotationTrack.without_letters``, OV-2805), each at its midpoint. A label
     left out is not drawn and takes no place, room, obstacle or canvas bounds; the label fit warning counts it,
-    with its font size."""
+    with its font size. ``overlaps`` counts what the drawn labels still overlap where they are drawn: each label or
+    leader line of the obstacles, and each label of the track placed before it, that a label's letters meet counts
+    once (REGION-WARN, OV-3015); 0 when the labels were placed without obstacles."""
 
     drawn: tuple[CircularAnnotationLabel, ...]
     without_letters: tuple[CircularAnnotationLabel, ...]
+    overlaps: int = 0
 
 
 def _record_lanes(
@@ -362,7 +365,8 @@ def _box(points: Sequence[Point]) -> Aabb:
 class _ObstacleIndex:
     """Counts what a label's letters meet: the polygons within ``clearance``, the segments within theirs; an obstacle
     met by several parts of a curved label counts once. ``add`` takes a label placed since, so a track's labels are
-    boxed once each, not once per later label (OV-2664)."""
+    boxed once each, not once per later label (OV-2664). ``conflicts(label, clearance=0.0)`` counts what the letters
+    overlap, with no clearance kept (OV-3015)."""
 
     def __init__(self, obstacles: CircularLabelObstacles) -> None:
         self._obstacles = obstacles
@@ -370,7 +374,7 @@ class _ObstacleIndex:
         for shape in obstacles.shapes:
             self._add_shape(shape)
         self._segments = [
-            (_box((segment.start, segment.end)), (segment.start, segment.end), obstacles.clearance + segment.half_width)
+            (_box((segment.start, segment.end)), (segment.start, segment.end), segment.half_width)
             for segment in obstacles.segments
         ]
 
@@ -382,10 +386,11 @@ class _ObstacleIndex:
 
         self._add_shape(label.parts)
 
-    def conflicts(self, label: CircularAnnotationLabel) -> int:
+    def conflicts(self, label: CircularAnnotationLabel, clearance: float | None = None) -> int:
         # An obstacle whose box misses the box around all the grown letters misses each part's box: it is skipped
         # before the parts are paired with it.
-        near = [(_box(part), part) for part in (grown_convex_polygon(part, self._obstacles.clearance) for part in label.parts)]
+        kept = self._obstacles.clearance if clearance is None else clearance
+        near = [(_box(part), part) for part in (grown_convex_polygon(part, kept) for part in label.parts)]
         reach = union_aabbs(box for box, _ in near)
         if reach is None:
             return 0
@@ -402,17 +407,17 @@ class _ObstacleIndex:
         # The letters grown by each distinct segment clearance (one per leader width), made once per call.
         line_near = {
             distance: [(_box(part), part) for part in (grown_convex_polygon(part, distance) for part in label.parts)]
-            for distance in {item[2] for item in self._segments}
+            for distance in {kept + item[2] for item in self._segments}
         }
         line_reach = {distance: union_aabbs(box for box, _ in parts) for distance, parts in line_near.items()}
         return count + sum(
             1
-            for box, segment, distance in self._segments
-            if (reach_at := line_reach[distance]) is not None
+            for box, segment, half_width in self._segments
+            if (reach_at := line_reach[kept + half_width]) is not None
             and reach_at.intersects(box)
             and any(
                 part_box.intersects(box) and segment_intersects_polygon(segment, part, touching=False)
-                for part_box, part in line_near[distance]
+                for part_box, part in line_near[kept + half_width]
             )
         )
 
@@ -556,6 +561,7 @@ def circular_annotation_labels(
     room = max((_reach(label, inner_radius_px, outer_radius_px, outward) for _entry, label in kept), default=0.0)
     placed: list[CircularAnnotationLabel] = []
     index = _ObstacleIndex(obstacles)
+    overlaps = 0
     for (annotation, label_at), default in kept:
         label = _along_region(
             annotation,
@@ -567,9 +573,11 @@ def circular_annotation_labels(
             conflicts=index.conflicts,
             join_origin=track.join_origin,
         )
+        # What the placed letters still overlap, without the clearance the places keep (OV-3015).
+        overlaps += index.conflicts(label, clearance=0.0)
         placed.append(label)
         index.add(label)
-    return CircularAnnotationLabels(tuple(placed), without_letters)
+    return CircularAnnotationLabels(tuple(placed), without_letters, overlaps)
 
 
 def circular_annotation_lanes_meeting(

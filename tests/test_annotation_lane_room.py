@@ -1050,6 +1050,61 @@ def test_an_inside_slot_adds_no_room_past_the_centre_and_warns(count: int, witho
     assert not [row for row in report.rows if row.kind not in {"smaller_definition_font", "narrow_tracks"}]
 
 
+def _explicit_lane_inside(
+    second: tuple[int, int] = (2505, 2525),
+) -> tuple[str, list[warnings.WarningMessage], object]:
+    """Two short bands at 3 o'clock, the second over ``second`` (next to the first by default), both in explicit
+    lane 0 of an inside slot with ``overflow=compress``, with long level labels."""
+
+    regions = tuple(
+        replace(_region(identity, start, end, label), lane=0)
+        for identity, (start, end), label in zip(("a", "b"), ((2470, 2490), second), ("A long region label", "Another long region label"))
+    )
+    options = gbdraw.CircularOptions(
+        annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+        tracks=gbdraw.CircularTrackOptions(
+            slots=("features:features", "regions:annotations@side=inside,set_id=regions,overflow=compress")
+        ),
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        drawing = gbdraw.draw_circular(_record(), options=options)._drawing
+    return drawing.tostring(), caught, drawing
+
+
+def test_inside_region_labels_over_each_other_are_drawn_and_warned() -> None:
+    # OV-3008, OV-3015 (REGION-WARN, as in Linear): explicit lanes under overflow=compress keep two labels in one
+    # lane although their letters meet, and the placer finds no clear place along their short regions. The figure
+    # is drawn as before, and the warning counts the overlap; the Web shows the Linear sentence over the figure,
+    # with no row to choose for the region labels.
+    from gbdraw.api.diagram import label_fit_report
+    from gbdraw.labels.fit import label_fit_notice
+    from gbdraw.web_support.label_fit import label_fit_report_payload
+
+    svg, caught, drawing = _explicit_lane_inside()
+
+    assert all(_labelled(item) for item in _groups(svg).values())
+    assert any("1 region label overlap" in str(item.message) for item in caught), [str(item.message) for item in caught]
+    report = label_fit_report(drawing)
+    assert report is not None and report.drawn and report.region_overlaps == 1
+    sentence = "Region labels overlap other labels or lines (1)."
+    assert sentence in label_fit_notice(report)
+    payload = label_fit_report_payload(report, "circular")
+    assert sentence in payload["notice"]
+    assert not [row for row in report.rows if row.kind not in {"smaller_definition_font", "narrow_tracks"}]
+
+
+def test_inside_region_labels_clear_of_each_other_add_no_warning() -> None:
+    # OV-3015: the same labels with their regions apart keep clear of each other and add no region label overlap.
+    from gbdraw.api.diagram import label_fit_report
+
+    _svg_text, caught, drawing = _explicit_lane_inside((3000, 3020))
+
+    assert not any("region label overlap" in str(item.message) for item in caught)
+    report = label_fit_report(drawing)
+    assert report is None or report.region_overlaps == 0
+
+
 def test_an_inside_label_that_keeps_no_letter_is_left_out_and_counted() -> None:
     # RGN-CUT-EMPTY-OMIT (OV-2804, PD-OI-097 scenario revision 22): ten nested bands with labels along the circle.
     # The innermost band's label would be cut so far that no letter is left, only the ellipsis: it is not drawn,
