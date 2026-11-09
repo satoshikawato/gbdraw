@@ -663,8 +663,8 @@ def test_a_slot_that_raises_names_the_smallest_size_that_draws_its_lanes(
 @pytest.mark.parametrize(
     ("overflow", "refusal"),
     (
-        ("error", r"requires [0-9.]+px but only ([0-9.]+)px is available before the centre of the circle"),
-        ("compress", r"cannot fit 7 lanes in ([0-9.]+)px before the centre of the circle"),
+        ("error", r"requires [0-9.]+px but only ([0-9.]+)px lies before the centre of the circle"),
+        ("compress", r"cannot fit 7 lanes in the ([0-9.]+)px before the centre of the circle"),
     ),
 )
 def test_an_inside_slot_whose_set_width_passes_the_centre_is_checked_against_the_room_before_it(
@@ -679,6 +679,18 @@ def test_an_inside_slot_whose_set_width_passes_the_centre_is_checked_against_the
     match = re.search(refusal, str(raised.value))
     assert match is not None, str(raised.value)
     assert float(match.group(1)) < 640.0
+
+
+@pytest.mark.parametrize("width", (60, 300, 640))
+def test_an_inside_slot_whose_lanes_need_more_than_the_room_before_the_centre_names_that_room(width: int) -> None:
+    # OV-2990: seven nested bands labelled at 12 pt need more than the room before the centre, so no set width draws
+    # them. The refusal names that room as the bound, whatever the set width, not a size that would not draw either.
+    slot = f"regions:annotations@side=inside,set_id=regions,w={width}px,overflow=error"
+    with pytest.raises(ValidationError) as raised:
+        _svg("circular", _nested_regions(7, 100, 12, "horizontal"), slot)
+    match = re.search(r"requires ([0-9.]+)px but only ([0-9.]+)px lies before the centre of the circle\.", str(raised.value))
+    assert match is not None, str(raised.value)
+    assert float(match.group(2)) < float(match.group(1)), str(raised.value)
 
 
 def test_a_fixed_slot_with_overflow_compress_narrows_the_lane_gap() -> None:
@@ -1541,6 +1553,18 @@ def test_an_inside_label_whose_letters_pass_the_centre_onto_other_marks_is_left_
     assert all(_marked(drawn.items[identity]) for identity, *_rest in regions)
     assert any(counts in message for message in drawn.messages), drawn.messages
     assert not _marks_met(drawn, regions), _marks_met(drawn, regions)
+
+
+@pytest.mark.parametrize("slot", (",w=345px,overflow=error", ",w=340px,overflow=error", ",w=345px,overflow=compress"))
+def test_an_inside_label_whose_letters_pass_the_centre_in_a_set_width_that_errors_or_compresses_is_drawn(slot: str) -> None:
+    # OV-2991-B: a slot whose width is set with overflow error or compress has no room stop: the Contract leaves out a
+    # label across the centre only without a set width (LBL-ROOM-STOP-AT-CENTRE-OMIT) or in a clipped slot
+    # (LBL-ROOM-CLIP-FIT-OMIT). Seven nested bands, only r6 labelled at 24 pt, in a set width that fits before the
+    # centre: r6 is drawn across the centre, as before, until the Owner decides that case.
+    drawn = _bands_and_left_out(_SEVEN_NESTED, slot, "horizontal", empty=frozenset(f"r{index}" for index in range(6)), size=24)
+
+    assert [label.annotation_id for label in drawn.drawn] == ["r6"], drawn.drawn
+    assert not any("left out for want of room" in message for message in drawn.messages), drawn.messages
 
 
 def test_an_inside_label_whose_letters_pass_the_centre_onto_no_other_mark_is_drawn() -> None:

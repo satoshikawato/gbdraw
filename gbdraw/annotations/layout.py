@@ -813,15 +813,16 @@ def _across_centre(
     the centre of the circle onto a mark (``LabelSizing.across_centre``; OV-2991): no room keeps such letters clear of
     the marks they meet there, so they are left out as a label whose room would carry its lanes past the centre is
     (LBL-ROOM-STOP-AT-CENTRE-OMIT; in a clipped slot of set size, LBL-ROOM-CLIP-FIT-OMIT), and counted where the
-    track's rooms stop (``rooms_stop``; at the centre where a set size with overflow error or compress stops none).
-    Unchanged where the slot draws no labels of its own (not ``labelled``) or its letters cannot pass the centre."""
+    track's rooms stop (``rooms_stop``). Unchanged where the slot draws no labels of its own (not ``labelled``), its
+    letters cannot pass the centre, or its rooms have no stop (``band.limit_px``: a set size with overflow error or
+    compress, which the Contract does not name for such a label; OV-2991-B)."""
 
-    if not labelled or labels.across_centre is None:
+    if not labelled or labels.across_centre is None or band.limit_px is None:
         return track
     met = labels.across_centre(track, params, band.drawn_extent_px(lane_count_of(track.placements), track.lane_room_px))
     if not met:
         return track
-    return replace(track, without_room=tuple(sorted({*track.without_room, *met})), rooms_stop=track.rooms_stop or "centre")
+    return replace(track, without_room=tuple(sorted({*track.without_room, *met})), rooms_stop=band.stop)
 
 
 class _LanePlace(NamedTuple):
@@ -1283,15 +1284,17 @@ def layout_annotation_track(
     lane_count = lane_count_of(placements)
     fit = _set_size_fit(track_params, band, lane_count, room)
     if not fit.draws and checks_set_size and band.set_px is not None:
-        # An inside Circular slot whose set size passes the centre has only the extent before it.
-        where = " before the centre of the circle" if available_extent_px is not None and band.set_px < available_extent_px else ""
+        # Lanes that need more than the room before the centre of an inside Circular slot fit no set size: that room
+        # bounds them, whatever the size. Otherwise the size named (rounded up, so it holds the lanes) draws.
+        centre = room_bounds.limit_px
+        past_centre = centre is not None and fit.required_px > centre
+        bound = f"{centre:.2f}px lies before the centre of the circle" if past_centre else f"{band.set_px:.2f}px is available"
         if track_params.overflow == "error":
             raise ValidationError(
-                # Rounded up, so the size printed holds the lanes.
-                f"Annotation slot {slot_id!r} requires {math.ceil(fit.required_px * 100.0) / 100.0:.2f}px but only "
-                f"{band.set_px:.2f}px is available{where}."
+                f"Annotation slot {slot_id!r} requires {math.ceil(fit.required_px * 100.0) / 100.0:.2f}px but only {bound}."
             )
-        raise ValidationError(f"Annotation slot {slot_id!r} cannot fit {lane_count} lanes in {band.set_px:.2f}px{where}.")
+        where = f"the {centre:.2f}px before the centre of the circle" if past_centre else f"{band.set_px:.2f}px"
+        raise ValidationError(f"Annotation slot {slot_id!r} cannot fit {lane_count} lanes in {where}.")
     # Its rooms fit within the set size (``_lane_rooms``), so only lanes that pass it alone are clipped.
     clipped = (
         track_params.overflow == "clip"
