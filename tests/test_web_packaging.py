@@ -637,6 +637,35 @@ def test_pyodide_runtime_wheels_are_the_lock_files_of_their_packages() -> None:
     } == PYODIDE_RUNTIME_PACKAGE_WHEELS
 
 
+def test_vendored_pyodide_carries_its_recorded_patch() -> None:
+    from gbdraw._web_assets import PYODIDE_PATCH, PYODIDE_RUNTIME_DIR
+
+    # vendor-assets writes the patched file only when its SHA-256 is the recorded one.
+    patched = (PYODIDE_RUNTIME_DIR / PYODIDE_PATCH.target).read_bytes()
+    assert hashlib.sha256(patched).hexdigest() == PYODIDE_PATCH.sha256
+    pairs = [
+        line[2:].encode("utf-8")
+        for line in (REPO_ROOT / PYODIDE_PATCH.path).read_text(encoding="utf-8").splitlines()
+        if line.startswith(("- ", "+ "))
+    ]
+    assert len(pairs) == 8
+    for old, new in zip(pairs[::2], pairs[1::2]):
+        assert patched.count(new) == 1 and old not in patched
+
+
+def test_vendored_patch_replaces_each_text_that_occurs_once() -> None:
+    apply_vendored_patch = _load_verify_module().apply_vendored_patch
+    patch = "# header\n\n- a>>1\n+ a>>>1\n\n- b>>2\n+ b>>>2\n"
+
+    assert apply_vendored_patch(patch, b"x a>>1 y b>>2") == b"x a>>>1 y b>>>2"
+    with pytest.raises(ValueError, match="occurs 0 times"):
+        apply_vendored_patch(patch, b"a>>1")
+    with pytest.raises(ValueError, match="occurs 2 times"):
+        apply_vendored_patch(patch, b"a>>1 a>>1 b>>2")
+    with pytest.raises(ValueError, match="pairs"):
+        apply_vendored_patch("- a\n", b"a")
+
+
 def test_index_uses_title_logo_separately_from_icon_assets() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "./assets/gbdraw-logo-title-outlined.svg" in index_html
@@ -1649,6 +1678,8 @@ def test_setup_commands_refresh_open_source_notices() -> None:
 
 @pytest.mark.slow
 def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
+    from gbdraw._web_assets import PYODIDE_RUNTIME_DIR
+
     verify_module, _ = ensure_prepared_browser_wheel()
     build_root = tmp_path / "build_lib"
     subprocess.run(
@@ -1668,22 +1699,8 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         build_root / "gbdraw" / "web" / "assets" / "gbdraw-logo-title-outlined.svg",
         build_root / "gbdraw" / "web" / verify_module._parse_wheel_name(),
         build_root / "gbdraw" / "web" / "vendor" / "vue" / "vue.global.prod.js",
-        build_root
-        / "gbdraw"
-        / "web"
-        / "vendor"
-        / "pyodide"
-        / "v0.29.0"
-        / "full"
-        / "pyodide.js",
-        build_root
-        / "gbdraw"
-        / "web"
-        / "vendor"
-        / "pyodide"
-        / "v0.29.0"
-        / "full"
-        / "pyodide.asm.wasm",
+        build_root / PYODIDE_RUNTIME_DIR.relative_to(REPO_ROOT) / "pyodide.js",
+        build_root / PYODIDE_RUNTIME_DIR.relative_to(REPO_ROOT) / "pyodide.asm.wasm",
         build_root
         / "gbdraw"
         / "web"

@@ -18,7 +18,7 @@ export const PYODIDE_SNAPSHOT_URL = null;
 // gbdraw/_web_assets.py (PYODIDE_RUNTIME_DIR, PYODIDE_LOADER_FILES,
 // PYODIDE_LOCAL_WHEELS, PYODIDE_RUNTIME_WHEELS); tests/test_web_packaging.py
 // fails when they differ.
-export const PYODIDE_INDEX_URL = "./vendor/pyodide/v0.29.0/full/";
+export const PYODIDE_INDEX_URL = "./vendor/pyodide/v0.29.0-gbdraw.1/full/";
 // The files in PYODIDE_INDEX_URL that Pyodide's loader downloads at start.
 export const PYODIDE_RUNTIME_FILES = [
   "pyodide.asm.js",
@@ -41,8 +41,8 @@ export const PYODIDE_LOCAL_WHEELS = [
 // micropip installs PYODIDE_LOCAL_WHEELS: micropip and what those wheels
 // require from the distribution (pandas' tzdata).
 export const PYODIDE_RUNTIME_WHEELS = [
-  "./vendor/pyodide/v0.29.0/full/micropip-0.11.0-py3-none-any.whl",
-  "./vendor/pyodide/v0.29.0/full/tzdata-2025.2-py2.py3-none-any.whl"
+  "./vendor/pyodide/v0.29.0-gbdraw.1/full/micropip-0.11.0-py3-none-any.whl",
+  "./vendor/pyodide/v0.29.0-gbdraw.1/full/tzdata-2025.2-py2.py3-none-any.whl"
 ];
 export const LOSAT_THREADED_WASM_URL = "./wasm/losat/losat-threaded.wasm";
 export const WASI_SHIM_URL = "./vendor/browser_wasi_shim/dist/index.js";

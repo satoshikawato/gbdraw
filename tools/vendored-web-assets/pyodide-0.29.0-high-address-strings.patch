@@ -1,0 +1,29 @@
+# Pyodide 0.29.0, pyodide.asm.js: read and write a string stored above 2 GiB of
+# the heap at its real address.
+#
+# Upstream fix: https://github.com/pyodide/pyodide/pull/6217 ("Fix Python->JS
+# string corruption when strings are allocated at >2GB memory locations"),
+# which makes the shifts in src/core/jsmemops.h unsigned. It is first released
+# in Pyodide 314.0.0; 0.29.x does not carry it. The pairs below are that
+# change at the four places of the 0.29.0 build that convert strings:
+# _python2js_ucs2 and _python2js_ucs4 (Python to JavaScript) and
+# js2python_string (JavaScript to Python). A signed shift turns an address at
+# or above 2^31 into a negative index, so the text came back as NUL characters
+# or failed to convert.
+#
+# Format: each "-" line is text that occurs exactly once in the file; the "+"
+# line after it replaces it. tools/verify_gui_offline.py vendor-assets applies
+# the pairs and checks the result against PYODIDE_PATCH.sha256 in
+# gbdraw/_web_assets.py.
+
+- String.fromCharCode(HEAPU16[(ptr>>1)+i>>>0])
++ String.fromCharCode(HEAPU16[(ptr>>>1)+i>>>0])
+
+- String.fromCodePoint(HEAPU32[(ptr>>2)+i>>>0])
++ String.fromCodePoint(HEAPU32[(ptr>>>2)+i>>>0])
+
+- HEAPU32[(i>>2)+s>>>0]=r[s]
++ HEAPU32[(i>>>2)+s>>>0]=r[s]
+
+- HEAPU16[(i>>1)+s>>>0]=r[s]
++ HEAPU16[(i>>>1)+s>>>0]=r[s]

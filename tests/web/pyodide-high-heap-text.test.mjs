@@ -1,11 +1,13 @@
 // Text crosses between Python and JavaScript intact whatever its address in
-// the Pyodide heap (OV-2985). After one large Generate the Worker's heap stays
-// above 2 GiB, and Pyodide 0.29 read and wrote a string above 2^31 with a
-// character beyond U+00FF at a wrong address: Python-to-JavaScript text came
-// back as NUL characters or failed to convert, and JavaScript-to-Python text
-// arrived as NUL characters. Each case runs a crossing the Worker uses, with
-// every string above 2 GiB: a helper call (its JSON arguments and its JSON
-// reply, built with ensure_ascii=False) and the Generate result's conversion.
+// the Pyodide heap (OV-2985, OV-2986). After one large Generate the Worker's
+// heap stays above 2 GiB. Pyodide 0.29.0 as released reads and writes a string
+// above 2^31 with a character beyond U+00FF at a wrong address: Python-to-
+// JavaScript text came back as NUL characters or failed to convert, and
+// JavaScript-to-Python text arrived as NUL characters. The vendored runtime
+// carries the upstream fix (tools/vendored-web-assets/). Each case runs a
+// crossing the Worker uses, with every string above 2 GiB: a helper call (its
+// JSON arguments and its JSON reply, built with ensure_ascii=False) and the
+// Generate result's conversion.
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { HIGH_ADDRESS, allocateAboveTwoGiB, loadVendoredPyodide } from './helpers/pyodide-high-heap.mjs';

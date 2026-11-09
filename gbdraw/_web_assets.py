@@ -11,11 +11,27 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
 VENDOR_ROOT = WEB_ROOT / "vendor"
-PYODIDE_RUNTIME_DIR = VENDOR_ROOT / "pyodide" / "v0.29.0" / "full"
+# The Pyodide release that gbdraw vendors, with PYODIDE_PATCH applied to it;
+# the folder name carries both, so that a new patch gets a new URL.
+PYODIDE_VERSION = "0.29.0"
+PYODIDE_RUNTIME_DIR = VENDOR_ROOT / "pyodide" / f"v{PYODIDE_VERSION}-gbdraw.1" / "full"
 
 # The Vue build that index.html loads: the global production build, which
 # still contains the template compiler that the in-DOM templates need.
 VUE_RUNTIME_FILE = Path("vendor") / "vue" / "vue.global.prod.js"
+
+
+@dataclass(frozen=True)
+class VendoredPatch:
+    """A recorded patch that `tools/verify_gui_offline.py vendor-assets` applies to one downloaded file.
+
+    `path` is the patch file, relative to the repository; `target` is the file it
+    changes; `sha256` is that of the patched file.
+    """
+
+    path: Path
+    target: str
+    sha256: str
 
 
 @dataclass(frozen=True)
@@ -34,15 +50,15 @@ ASSET_DOWNLOADS = {
         "78133fb37d7da6ab9fb0ede6c8ed446f38773595d1faf52a3c1b77d539b06b61",
     ),
     "pyodide_core": VendoredDownload(
-        "https://github.com/pyodide/pyodide/releases/download/0.29.0/pyodide-core-0.29.0.tar.bz2",
+        f"https://github.com/pyodide/pyodide/releases/download/{PYODIDE_VERSION}/pyodide-core-{PYODIDE_VERSION}.tar.bz2",
         "fe85edd0d5c9828598da14c98d2f79cea45aac5a9e6448ca65dcc2d58d4ed033",
     ),
     "micropip": VendoredDownload(
-        "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/micropip-0.11.0-py3-none-any.whl",
+        f"https://cdn.jsdelivr.net/pyodide/v{PYODIDE_VERSION}/full/micropip-0.11.0-py3-none-any.whl",
         "d98e6100df5e4145c1b11d559a8620e92b98d994cc1b52381a8815cebf3e7128",
     ),
     "tzdata": VendoredDownload(
-        "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/tzdata-2025.2-py2.py3-none-any.whl",
+        f"https://cdn.jsdelivr.net/pyodide/v{PYODIDE_VERSION}/full/tzdata-2025.2-py2.py3-none-any.whl",
         "efe840e3b9cc04707b6fbca5c145910e50916f801a61a8db6730ba4c92abba86",
     ),
     "browser_wasi_shim": VendoredDownload(
@@ -74,6 +90,15 @@ ASSET_DOWNLOADS = {
         "e4d4ba8825aebe6293e19400a07d45b8f111ff31532c8dfbdd77b986c0123652",
     ),
 }
+
+# Pyodide 0.29 reads and writes a string at an address above 2 GiB of its heap
+# wrongly. The patch is the upstream fix (pyodide/pyodide#6217, first released
+# in 314.0.0) at the four places of pyodide.asm.js that convert strings.
+PYODIDE_PATCH = VendoredPatch(
+    Path("tools") / "vendored-web-assets" / f"pyodide-{PYODIDE_VERSION}-high-address-strings.patch",
+    "pyodide.asm.js",
+    "c5d3053355543fc79000d4099cfe4ef057967460a3cb91cb6458040019f1efb9",
+)
 
 # The files vendor-assets takes from a package folder; the package holds others.
 BROWSER_WASI_SHIM_FILES = (
@@ -163,8 +188,7 @@ PYODIDE_LOCAL_WHEELS = (
 )
 
 PYODIDE_RUNTIME_WHEELS = tuple(
-    Path("vendor") / "pyodide" / "v0.29.0" / "full" / filename
-    for filename in PYODIDE_RUNTIME_PACKAGE_WHEELS.values()
+    PYODIDE_RUNTIME_DIR.relative_to(WEB_ROOT) / filename for filename in PYODIDE_RUNTIME_PACKAGE_WHEELS.values()
 )
 
 PYODIDE_BUNDLED_WHEELS = PYODIDE_LOCAL_WHEELS + PYODIDE_RUNTIME_WHEELS
@@ -242,11 +266,16 @@ WEB_ASSET_NOTICES = (
     ),
     WebAssetNotice(
         display_name="Pyodide core runtime",
-        version="0.29.0",
+        version=PYODIDE_VERSION,
         license_expression="MPL-2.0",
         source_url=ASSET_DOWNLOADS["pyodide_core"].url,
-        bundled_path="vendor/pyodide/v0.29.0/full/",
-        notice="The local Pyodide package.json declares MPL-2.0.",
+        bundled_path=f"{PYODIDE_RUNTIME_DIR.relative_to(WEB_ROOT).as_posix()}/",
+        notice=(
+            "The local Pyodide package.json declares MPL-2.0. gbdraw modifies pyodide.asm.js with the "
+            "upstream fix of pyodide/pyodide#6217 (https://github.com/pyodide/pyodide/pull/6217), which "
+            "converts text stored above 2 GiB of memory correctly; the change is recorded in "
+            f"{PYODIDE_PATCH.path.as_posix()} in the gbdraw source repository."
+        ),
         license_text_anchors=("license-mpl-2.0",),
     ),
     WebAssetNotice(

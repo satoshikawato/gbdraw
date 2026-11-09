@@ -315,6 +315,14 @@ write-up of a release.
   memory passed 2 GiB, the drawn diagram could not be passed from Python to the
   page. It is now passed whatever the memory size, and human chromosome 1 draws
   with the default settings (OV-2800).
+- Fixed: after a large figure, such as human chromosome 1, had been drawn in a
+  Web app page, text with characters such as Japanese, an en dash or a micro
+  sign could be lost without a message: a title or label came back as empty
+  characters, a helper reply was refused as "could not be accepted", and the
+  same text typed into the page could reach the diagram engine empty. The
+  browser's Python runtime read and wrote such text at a wrong place once its
+  memory passed 2 GiB. The bundled runtime now carries the upstream fix for
+  this, so the text is kept whatever the memory size (OV-2985, OV-2986).
 - Added: **Sequence search** in the Web app searches the records of the shown
   drawing for one or more query sequences, with LOSAT blastn for a nucleotide
   query and tblastn for a protein query (one search may hold both), and draws
