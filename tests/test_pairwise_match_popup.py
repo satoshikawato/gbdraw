@@ -73,7 +73,22 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "services" / "conservation-series.js")
         .read_text(encoding="utf-8")
         .replace("../utils/color-utils.js", "./color-utils.mjs")
-        .replace("../utils/conservation-colors.generated.js", "./conservation-colors.generated.mjs"),
+        .replace("../utils/conservation-colors.generated.js", "./conservation-colors.generated.mjs")
+        .replace("./drawing/inputs.js", "./drawing-inputs.mjs"),
+        encoding="utf-8",
+    )
+    # conservation-series.js and match-sequences.js read a ring's files through drawing/inputs.js.
+    (tmp_path / "drawing-inputs.mjs").write_text(
+        (WEB_ROOT / "js" / "services" / "drawing" / "inputs.js")
+        .read_text(encoding="utf-8")
+        .replace("../history-files.js", "./history-files.mjs")
+        .replace("../../utils/error-normalization.js", "./error-normalization.mjs")
+        .replace("../../utils/reactivity.js", "./reactivity.mjs")
+        .replace("./slice-handle.js", "./drawing-slice-handle.mjs"),
+        encoding="utf-8",
+    )
+    (tmp_path / "history-files.mjs").write_text(
+        (WEB_ROOT / "js" / "services" / "history-files.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     # conservation-series.js reads the generated ring colours.
@@ -98,6 +113,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("./record-options.js", "./record-options.mjs")
         .replace("./linear-units.js", "./linear-units.mjs")
         .replace("./record-draw-selection.js", "./record-draw-selection.mjs")
+        .replace("./drawing/inputs.js", "./drawing-inputs.mjs")
         .replace("../utils/error-normalization.js", "./error-normalization.mjs")
         .replace("../utils/i18n.js", "./i18n.mjs"),
         encoding="utf-8",

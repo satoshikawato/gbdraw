@@ -973,7 +973,7 @@ into the `[Unreleased]` list below.
   that holds them all. The ring is labelled after its first file. `--losat_output_dir` writes
   the `;` list, so its `conservation.tsv` still reads back unchanged. Two files
   of one genome that hold the same record ID are refused
-  (`DUPLICATE_RECORD_ID`). `--conservation_sequence` keeps one file per ring.
+  (`UNIQUE_IDS`). `--conservation_sequence` keeps one file per ring.
   A request now writes each ring's `conservationFastaFiles` entry, and a
   Session its ring file bindings, as a list of files; a request or Session
   saved by gbdraw 0.14.5 or earlier reads each ring's one file as before.

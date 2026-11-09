@@ -205,7 +205,7 @@ def comparison_genome(files: Sequence[ComparisonSequenceFile]) -> ComparisonGeno
 
     A search reports a hit by the query record ID, so an ID that names records
     of two files would make the ring's hits and its span export ambiguous
-    (``INPUT_INVALID`` / ``DUPLICATE_RECORD_ID``). One file is read as before.
+    (``INPUT_INVALID`` / ``UNIQUE_IDS``). One file is read as before.
     """
 
     if not files:
@@ -221,7 +221,7 @@ def comparison_genome(files: Sequence[ComparisonSequenceFile]) -> ComparisonGeno
                     f"{file.path}; the files of one genome must not share a record ID.",
                     diagnostic={
                         "code": "INPUT_INVALID",
-                        "reason": "DUPLICATE_RECORD_ID",
+                        "reason": "UNIQUE_IDS",
                         "field": _FIELD,
                         "recordId": record_id,
                     },

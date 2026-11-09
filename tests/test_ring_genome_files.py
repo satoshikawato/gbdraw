@@ -125,7 +125,7 @@ def test_two_files_of_one_genome_with_one_record_id_are_refused(tmp_path: Path) 
         comparison_genome((read_comparison_sequence_file(DANIO_FASTA), read_comparison_sequence_file(copy)))
     assert excinfo.value.diagnostic == {
         "code": "INPUT_INVALID",
-        "reason": "DUPLICATE_RECORD_ID",
+        "reason": "UNIQUE_IDS",
         "field": "comparison_sequence",
         "recordId": "NC_002333.2",
     }
@@ -295,7 +295,7 @@ def test_the_web_helper_reads_every_file_of_a_genome_as_the_cli_ring_does(tmp_pa
     copy.write_bytes(DANIO.read_bytes())
     with pytest.raises(ValidationError) as excinfo:
         read_comparison_sequence_json(str(DANIO), str(copy))
-    assert excinfo.value.diagnostic["reason"] == "DUPLICATE_RECORD_ID"
+    assert excinfo.value.diagnostic["reason"] == "UNIQUE_IDS"
 
 
 def test_the_beginner_api_takes_the_files_of_a_ring_genome() -> None:

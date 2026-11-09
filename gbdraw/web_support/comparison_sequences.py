@@ -31,7 +31,7 @@ def read_comparison_sequence_json(path: str, *more_paths: str) -> str:
     ``comparison_file_stem`` itself. ``recordIds`` lists every record of every
     file in query order. Raises ``INPUT_UNREADABLE`` (``SEQUENCE_MISSING`` for
     a file or record without sequence) like the CLI ring search, and
-    ``INPUT_INVALID`` / ``DUPLICATE_RECORD_ID`` when two files share a record ID.
+    ``INPUT_INVALID`` / ``UNIQUE_IDS`` when two files share a record ID.
     """
 
     comparison = comparison_genome(

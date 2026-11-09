@@ -462,7 +462,7 @@ def read_conservation_table(path: str, *, losat: bool = False) -> ConservationTa
                 ),
                 diagnostic={
                     "code": "TABLE_INVALID",
-                    "reason": "EMPTY_PATH",
+                    "reason": "REQUIRED",
                     "field": "comparison_sequence",
                     "row": row.row_number,
                 },
@@ -1175,7 +1175,7 @@ def conservation_table_text(entries: Sequence[ConservationTableEntry]) -> str:
                 raise ValidationError(
                     f"The conservation table cannot name {path}: a comparison_sequence cell separates "
                     f"files with {COMPARISON_SEQUENCE_SEPARATOR!r}. Rename the file.",
-                    diagnostic={"code": "INPUT_INVALID", "reason": "TABLE_PATH", "field": "comparison_sequence"},
+                    diagnostic={"code": "INPUT_INVALID", "field": "comparison_sequence"},
                 )
     return _table_text(
         ("blast", "comparison_sequence", "label", "color"),
