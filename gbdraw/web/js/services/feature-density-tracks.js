@@ -4,12 +4,14 @@
 // (`projectCanonicalSessionRequest`), and Generate and Save write them back into the request
 // (`projectCanonicalRenderInput`), so a Session the CLI or the Python API wrote keeps its tracks. Python owns a
 // track (gbdraw/analysis/feature_density.py) and its request shape (`CanonicalFeatureDensityTrack`, carried by
-// tools/generate_web_contracts.py); the Web checks a stored track against that shape and never derives one.
+// tools/generate_web_contracts.py); the Web checks a stored track against that shape and never derives one. The
+// copies are JSON copies: a drawing's draft is a Vue proxy, which `structuredClone` refuses.
 /** @import { CanonicalFeatureDensityTrack } from '../contracts/request.generated.js' */
 /** @import { FieldReading } from '../utils/field-reading.js' */
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { shapeViolations } from '../utils/contract-shape.js';
 import { isUnsetValue } from '../utils/field-reading.js';
+import { cloneJsonData } from './json-clone.js';
 
 const TRACK_SHAPE = Object.freeze({ kind: /** @type {const} */ ('ref'), name: 'CanonicalFeatureDensityTrack' });
 
@@ -30,7 +32,7 @@ export const readFeatureDensityTracks = (value) => {
   if (!Array.isArray(value)) return { value: [], lost: !isUnsetValue(value) };
   const tracks = value.filter(isFeatureDensityTrack);
   const dropped = value.length - tracks.length;
-  return { value: structuredClone(tracks), lost: dropped > 0, ...(dropped > 0 ? { dropped } : {}) };
+  return { value: cloneJsonData(tracks), lost: dropped > 0, ...(dropped > 0 ? { dropped } : {}) };
 };
 
 /**
@@ -39,7 +41,7 @@ export const readFeatureDensityTracks = (value) => {
  * @param {readonly CanonicalFeatureDensityTrack[] | null | undefined} requested
  * @returns {CanonicalFeatureDensityTrack[]}
  */
-export const projectFeatureDensityTracks = (requested) => structuredClone([...(requested ?? [])]);
+export const projectFeatureDensityTracks = (requested) => cloneJsonData([...(requested ?? [])]);
 
 /**
  * The request's `featureDensityTracks` of a draft: the key only when the drawing has tracks, so the request of a
@@ -49,5 +51,5 @@ export const projectFeatureDensityTracks = (requested) => structuredClone([...(r
  * @returns {{ featureDensityTracks?: CanonicalFeatureDensityTrack[] }}
  */
 export const requestFeatureDensityTracks = ({ feature_density_tracks: tracks = [] }) => (
-  tracks.length > 0 ? { featureDensityTracks: structuredClone([...tracks]) } : {}
+  tracks.length > 0 ? { featureDensityTracks: cloneJsonData([...tracks]) } : {}
 );
