@@ -5,7 +5,7 @@
 // - OV-3195: a Generate after a replay Load that lost ring 0's genome gives each ring the genetic code, label and row
 //   it searched it with, and the next Generate and Add Seq read the same rings.
 // - OV-3199: a Generate that searched no ring, after a replay Load that lost every ring's genome, leaves the rings.
-// - OV-3193: a ring label with a comma names no later ring.
+// - OV-3193: a ring label with a comma names no later ring; OV-3200: nor does an older Session's label list in a replay.
 // - OV-3196: a ring edit clears only its drawing's LOSAT cache-info rows.
 // Generate runs as production builds it: the rings its ring keys read (`searchedRingSources`), the request's rings
 // (`losatRequestRings`) and the request builder (`buildCanonicalRenderRequest`), then the composition root's adoption.
@@ -283,6 +283,28 @@ test('a ring label with a comma names no later ring (#1777 review 7, OV-3193)', 
   files.removeCircularConservationSource(1);
   await addSeq(genome(false, 'ACACA'));
   assert.deepEqual(drawing.circularConservation.series.map((entry) => entry.label), ['E. coli, K-12', 'g_GGGGG', 'g_TTTTT', 'g_ACACA']);
+  clearRings(drawing);
+});
+
+test('a replay Load folds an older Session\'s ring label list into the series, so it names no later ring (#1777 review 8, OV-3200)', async () => {
+  let drawing = await threeRings(false);
+  drawing.circularConservation.series[0].label = 'E. coli, K-12';
+  await generate(drawing);
+  const result = await exportSession('older list', { askChoice: async () => 'download' });
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const savedRings = saved.drawings.find((candidate) => candidate.mode === 'circular').config.circularConservation;
+  // dev and main write the series labels' comma join at a LOSAT Generate's adoption.
+  savedRings.labels = savedRings.series.map((entry) => entry.label).join(',');
+  const loaded = await importSession({ target: { files: [new File([JSON.stringify(saved)], 'older.gbdraw.json', { type: 'application/json' })], value: 'x' } },
+    { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.equal(loaded.status, 'ok');
+  drawing = circular();
+  sources.reconcileLoadedCircularConservation(drawing, true);
+  assert.equal(drawing.files.c_conservation_blasts_source, 'losat-cache', 'the Load replays the LOSAT tables');
+  assert.equal(drawing.circularConservation.labels, '', 'the Load read the list into the series');
+  await addSeq(textFile('g_TTTTT.fasta', '>r\nTTTTT\n'));
+  assert.deepEqual(drawing.circularConservation.series.map((entry) => entry.label), ['E. coli, K-12', 'GB', 'GC', 'g_TTTTT']);
+  assert.deepEqual(ringIdentityDefects(drawing), []);
   clearRings(drawing);
 });
 

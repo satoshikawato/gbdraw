@@ -23,6 +23,7 @@ import {
   normalizeFileList,
   orderedConservationSources,
   parseConservationLabelText,
+  seriesEntriesOfUnclaimedSources,
   reconcileConservationSeries,
   seriesNamingSources,
   thenRingKeyChanges,
@@ -213,6 +214,20 @@ const seriesOfRingFiles = (drawing, sourceFiles, series = drawing.circularConser
   });
   return { series: reconciled.series, keyChanges: thenRingKeyChanges(earlier, reconciled.keyChanges) };
 };
+/**
+ * The series a LOSAT-cache replay's reconcile leaves, whose tables stay at their places: each entry names the table the
+ * matcher gives it (`seriesNamingSources`), and each table no entry claims gains an entry, labelled by the stored label
+ * list where an older Session named it there (`seriesEntriesOfUnclaimedSources`). The rings' keys move only as
+ * `keyChanges` says.
+ * @param {DrawingState} drawing @param {RingKeyChanges} keyChanges
+ * @returns {RingSeriesChange}
+ */
+const seriesOfReplayTables = (drawing, keyChanges) => {
+  const { series, labels } = drawing.circularConservation;
+  const { matched, unclaimed } = conservationSourcesOfSeries(circularRingSources(drawing), drawing.circularConservation);
+  const gained = seriesEntriesOfUnclaimedSources(unclaimed, parseConservationLabelText(labels), series.length);
+  return { series: [...seriesNamingSources(series, matched), ...gained], keyChanges };
+};
 
 /**
  * @typedef {object} CircularConservationSourcesPorts
@@ -319,18 +334,13 @@ export const createCircularConservationSources = ({
   // names its table as its row does, and the rows move only by `keyChanges`.
   /** @type {ReconcileRings} */
   const reconcileCircularConservation = (drawing, keyChanges = NO_RING_KEY_CHANGES) => {
-    if (isDerivedCircularConservationReplay(drawing)) {
-      const { matched } = conservationSourcesOfSeries(circularRingSources(drawing), drawing.circularConservation);
-      drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length,
-        ...seriesNamingSources(drawing.circularConservation.series, matched));
-      rekeyCircularConservationRows(drawing, keyChanges);
-      refreshCircularConservationSlots(drawing);
-      return;
-    }
-    const reconciled = seriesOfRingFiles(drawing, circularRingSources(drawing), drawing.circularConservation.series, keyChanges);
+    const reconciled = isDerivedCircularConservationReplay(drawing)
+      ? seriesOfReplayTables(drawing, keyChanges)
+      : seriesOfRingFiles(drawing, circularRingSources(drawing), drawing.circularConservation.series, keyChanges);
     drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...reconciled.series);
-    // The series owns the ring labels. The stored label list of an older Session named its rings past its series: this
-    // reconcile gave each of them an entry, so the list is read, and a list left would name the next new ring (OV-3166).
+    // The series owns the ring labels. The stored label list of an older Session named its rings past its series: both
+    // reconciles gave each of them an entry, so the list is read, and a list left would name the next new ring (OV-3166,
+    // OV-3200 in a replay).
     drawing.circularConservation.labels = '';
     rekeyCircularConservationRows(drawing, reconciled.keyChanges);
     refreshCircularConservationSlots(drawing);

@@ -322,6 +322,21 @@ export const seriesNamingSources = (series, sources) => series.map((entry, index
 const listLabelOfUnclaimedSource = (labels, sourceIndex, seriesLength) => (
   sourceIndex >= seriesLength ? labels[sourceIndex] ?? null : null
 );
+/**
+ * The entries the series gains for the sources no entry of it claims, after its `seriesLength` entries, each labelled
+ * by the stored label list where an older Session named it there (`listLabelOfUnclaimedSource`), else by its file. Both
+ * reconciles, of a change of the files and of a LOSAT-cache replay, fold the list into the series this way, so the list
+ * names no ring after them.
+ * @param {readonly ConservationSourceDescriptor[]} unclaimed
+ * @param {readonly string[]} labels The stored label list, parsed (`parseConservationLabelText`).
+ * @param {number} seriesLength The entries of the series the list was stored with.
+ * @param {number} [orderStart] The colour order of the first gained entry: after the entries kept before it.
+ * @returns {ConservationSeriesEntry[]}
+ */
+export const seriesEntriesOfUnclaimedSources = (unclaimed, labels, seriesLength, orderStart = seriesLength) => unclaimed.map(
+  (descriptor, index) => mergeSeriesEntry(descriptor, null, orderStart + index,
+    listLabelOfUnclaimedSource(labels, descriptor.sourceIndex, seriesLength))
+);
 
 /**
  * The series a change of the ring files leaves, and how the change moves the rings' keys: each previous entry's key
@@ -350,10 +365,7 @@ export const reconcileConservationSeries = ({
     if (!descriptor) return;
     nextSeries.push(mergeSeriesEntry(descriptor, previous[seriesIndex], nextSeries.length, fallbackLabels[descriptor.sourceIndex]));
   });
-  unclaimed.forEach((descriptor) => {
-    nextSeries.push(mergeSeriesEntry(descriptor, null, nextSeries.length,
-      listLabelOfUnclaimedSource(fallbackLabels, descriptor.sourceIndex, previous.length)));
-  });
+  nextSeries.push(...seriesEntriesOfUnclaimedSources(unclaimed, fallbackLabels, previous.length, nextSeries.length));
   return { series: nextSeries, keyChanges: ringKeyChangesOf(previous, matched) };
 };
 
