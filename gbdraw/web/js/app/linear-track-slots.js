@@ -23,7 +23,7 @@ import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
-import { OVERLAY_ANNOTATION_PARAMS, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { OVERLAY_ANNOTATION_PARAMS, automaticAnnotationTrackSlots, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
 import {
@@ -89,6 +89,27 @@ const ANNOTATION_MARK_OPTIONS = Object.freeze([
 const linearAvailableDepthTrackCountForDrawing = (drawing) => (
   depthTrackMatrixWidth(drawing.linearSeqs.map((seq) => seq.depth))
 );
+
+/**
+ * The rows Reset builds: the Region Annotation sets' rows first, as Python
+ * places a set without a stack (D-35), then the default rows.
+ * @param {DrawingState} drawing
+ */
+const defaultLinearStackSlots = (drawing) => {
+  // One Depth row per loaded Depth series; Show Depth is not an input (TK-10).
+  const depthTrackCount = linearAvailableDepthTrackCountForDrawing(drawing);
+  return [
+    ...automaticAnnotationTrackSlots(drawing.annotationSets, 'linear'),
+    ...createDefaultLinearTrackSlots({
+      showDepth: depthTrackCount > 0,
+      depthTrackCount,
+      showGc: Boolean(drawing.form.show_gc),
+      showSkew: Boolean(drawing.form.show_skew),
+      nt: drawing.adv.nt,
+      trackLayout: drawing.form.linear_track_layout
+    })
+  ];
+};
 
 /** @param {{ linearSeqs: readonly { depth?: DepthFileSlots }[] }} drawing */
 const linearSourcedDepthTrackIndexesForDrawing = (drawing) => (
@@ -475,17 +496,7 @@ export const createLinearTrackSlotEditor = ({
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    // One Depth row per loaded Depth series; Show Depth is not an input (TK-10).
-    const depthTrackCount = linearAvailableDepthTrackCountForDrawing(drawing);
-    const slots = createDefaultLinearTrackSlots({
-      showDepth: depthTrackCount > 0,
-      depthTrackCount,
-      showGc: Boolean(drawing.form.show_gc),
-      showSkew: Boolean(drawing.form.show_skew),
-      nt: drawing.adv.nt,
-      trackLayout: drawing.form.linear_track_layout
-    });
-    const normalized = normalizeLinearTrackSlots(slots, drawing.adv.nt, drawing.form.linear_track_layout);
+    const normalized = normalizeLinearTrackSlots(defaultLinearStackSlots(drawing), drawing.adv.nt, drawing.form.linear_track_layout);
     drawing.adv.linear_track_slots_axis_index = inferLinearTrackAxisIndexFromSlots(normalized);
     syncLinearSlotsFromAxisIndex(normalized, drawing.adv.linear_track_slots_axis_index);
     drawing.adv.linear_track_slots_axis_index = enforceSingleLinearOnAxisSlot(
@@ -501,6 +512,11 @@ export const createLinearTrackSlotEditor = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     drawing.adv.linear_track_slots_enabled = Boolean(enabled);
+    if (!drawing.adv.linear_track_slots_enabled) return;
+    // The stack it turns on holds the rows of the Region Annotation sets it does not name (D-35).
+    const rows = drawing.adv.linear_track_slots;
+    drawing.adv.linear_track_slots_axis_index = prependMissingAnnotationTrackSlots(rows, axisIndexForCurrentLinearSlots(drawing, rows),
+      drawing.annotationSets, 'linear', (added) => normalizeLinearTrackSlots(added, drawing.adv.nt, drawing.form.linear_track_layout));
   };
 
   /** @param {DrawingState} drawing @param {string} renderer */

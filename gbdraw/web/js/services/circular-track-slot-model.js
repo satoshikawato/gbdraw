@@ -89,6 +89,8 @@ const TICK_LABEL_LAYOUTS = [
   'label_only'
 ];
 export const DEFAULT_TICK_LABEL_LAYOUT = 'label_out_tick_in';
+/** The empty size fields of a Circular slot. */
+export const CIRCULAR_SLOT_SIZE_FIELDS = Object.freeze({ width: null, radius: null, inner_gap_px: null, outer_gap_px: null });
 const DEFAULT_INNER_TICK_LABEL_LAYOUT = 'label_in_tick_out';
 const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = new Set([
   'spacing',

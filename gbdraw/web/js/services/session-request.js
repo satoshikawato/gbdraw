@@ -52,6 +52,7 @@ import {
   CIRCULAR_TRACK_RENDERERS,
   GLOBAL_SUPPRESS_PARAM,
   circularTrackSlotHiddenBySuppressForm,
+  CIRCULAR_SLOT_SIZE_FIELDS,
   createDefaultCircularTrackSlots,
   normalizeNt,
   placeCircularStackForGenerate,
@@ -116,6 +117,7 @@ import { resolveLinearLabelVisibility } from './linear-label-visibility.js';
 import {
   CustomTrackPlanValidationError,
   assertValidCustomTrackPlan,
+  automaticAnnotationTrackSlots,
   emittedCustomTrackAxisIndex,
   overlayReferenceIssues,
   trackSlotRowEnabled,
@@ -266,7 +268,6 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  *   WebFileBindings } from './session-resource-backing.js'
  */
 /** @import { CircularRecordDrawing, CircularRegionForm } from './record-options.js' */
-/** @import { CircularTrackSlot } from './circular-track-slot-model.js' */
 /** @import { RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from './record-display-model.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { DepthFileSlots, DepthFileSlotsOrRows, DepthSlotFile, DepthSlotRow } from './depth-track-state.js' */
@@ -3405,61 +3406,6 @@ const annotationSetIdsForState = (drawing) => (
     .filter(Boolean)
 );
 
-/** @param {RequestDrawing} drawing */
-const automaticCircularAnnotationSlots = (drawing) => {
-  /** @type {CircularTrackSlot[]} */
-  const slots = [];
-  (Array.isArray(drawing.annotationSets) ? drawing.annotationSets : [])
-    .forEach((set, index) => {
-      const setId = String(set?.id || '').trim();
-      if (!setId) return;
-      const marks = Array.from(new Set(
-        (Array.isArray(set.annotations) ? set.annotations : [])
-          .map((/** @type {{ mark?: unknown } | null} */ annotation) => String(annotation?.mark || '').trim().toLowerCase())
-          .filter(Boolean)
-      ));
-      const laneMarks = marks.filter((mark) => mark !== 'highlight');
-      if (laneMarks.length > 0) {
-        slots.push({
-          id: `annotations_${index + 1}`,
-          renderer: 'annotations',
-          enabled: true,
-          width: null,
-          radius: null,
-          inner_gap_px: null,
-          outer_gap_px: null,
-          side: 'outside',
-          z: 0,
-          params: { set_id: setId, marks: laneMarks }
-        });
-      }
-      // A set that keeps its highlight overlay (a sequence search's) gets it from Python's rule for an explicit
-      // stack (`prepare_annotation_track_slots`), as in a custom stack, so a search's live draw and Generate
-      // send the same slots.
-      if (marks.includes('highlight') && set.keepHighlightOverlay !== true) {
-        slots.push({
-          id: `annotations_${index + 1}${laneMarks.length > 0 ? '_highlight' : ''}`,
-          renderer: 'annotations',
-          enabled: true,
-          width: null,
-          radius: null,
-          inner_gap_px: null,
-          outer_gap_px: null,
-          side: 'overlay',
-          z: -1,
-          params: {
-            set_id: setId,
-            marks: ['highlight'],
-            anchor_slot: 'features',
-            layer: 'underlay',
-            cover_anchor: true,
-            padding_px: 0
-          }
-        });
-      }
-    });
-  return slots;
-};
 
 /**
  * @param {{ reference?: unknown, ring_width?: unknown, ring_gap?: unknown }} conservation
@@ -3636,7 +3582,7 @@ const buildTrackPlan = ({
         shortcuts
       );
       const slots = [
-        ...automaticCircularAnnotationSlots(drawing),
+        ...automaticAnnotationTrackSlots(drawing.annotationSets, 'circular', CIRCULAR_SLOT_SIZE_FIELDS),
         ...implicitSlots
       ];
       const axisIndex = inferLegacyAxisIndexFromFeature(

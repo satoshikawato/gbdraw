@@ -90,6 +90,8 @@ const MODES = {
       setRenderer: (slot, renderer) => editor.updateCircularTrackSlotRenderer(slot, renderer),
       issue: (index) => editor.circularTrackSlotIssue(state.adv.circular_track_slots[index], index),
       reset: () => editor.resetCircularTrackSlotsFromSimpleControls(),
+      turnOn: (enabled) => editor.setCircularTrackSlotsEnabled(enabled),
+      axisRowId: () => state.adv.circular_track_slots[state.adv.circular_track_slots_axis_index]?.id,
       canDuplicate: (slot) => editor.canDuplicateCircularTrackSlot(slot),
       duplicate: (index) => editor.duplicateCircularTrackSlot(index),
       setPlacement: (slot, placement) => editor.updateCircularTrackSlotPlacement(slot, placement),
@@ -112,6 +114,8 @@ const MODES = {
       setRenderer: (slot, renderer) => editor.updateLinearTrackSlotRenderer(slot, renderer),
       issue: (index) => editor.linearTrackSlotIssue(state.adv.linear_track_slots[index], index),
       reset: () => editor.resetLinearTrackSlotsFromSimpleControls(),
+      turnOn: (enabled) => editor.setLinearTrackSlotsEnabled(enabled),
+      axisRowId: () => state.adv.linear_track_slots[state.adv.linear_track_slots_axis_index]?.id,
       canDuplicate: (slot) => editor.canDuplicateLinearTrackSlot(slot),
       duplicate: (index) => editor.duplicateLinearTrackSlot(index),
       setPlacement: (slot, placement) => editor.updateLinearTrackSlotPlacement(slot, placement),
@@ -331,6 +335,55 @@ for (const [mode, create] of Object.entries(MODES)) {
     const withoutDepth = create(ROWS[mode](), { showDepth: false, depthFiles: [] });
     withoutDepth.reset();
     assert.equal(withoutDepth.slots().some((slot) => slot.renderer === 'depth'), false);
+  });
+
+  // OV-3007 option A (Owner D-35, 2026-11-09): the stack that Use custom stack
+  // turns on, and Reset, hold the rows Python's automatic placement draws for
+  // the Region Annotation sets (`prepare_annotation_track_slots` without a
+  // stack), so turning the stack on does not change the figure. A sequence
+  // search's set gets no row (PD-OI-117), nor does a set without annotations.
+  test(`${mode}: turning the stack on and Reset give each Region Annotation set its automatic rows`, () => {
+    const regionSets = () => [
+      { id: 'islands', annotations: [{ mark: 'band' }, { mark: 'highlight' }, { mark: 'band' }] },
+      { id: 'tint', annotations: [{ mark: 'highlight' }] },
+      { id: 'Search 1', keepHighlightOverlay: true, annotations: [{ mark: 'highlight' }] },
+      { id: 'empty', annotations: [] }
+    ];
+    const laneSide = mode === 'circular' ? 'outside' : 'above';
+    // The editor writes the defaults of Python's slot parser (overflow, show_labels, layer) into the row.
+    const defaults = { overflow: 'error', show_labels: true };
+    const overlay = (id, setId) => ({ id, side: 'overlay', z: -1, params: {
+      set_id: setId, marks: ['highlight'], anchor_slot: 'features', layer: 'underlay', cover_anchor: true, padding_px: 0, ...defaults
+    } });
+    const expected = [
+      { id: 'annotations_1', side: laneSide, z: 0, params: { set_id: 'islands', marks: ['band'], layer: 'foreground', ...defaults } },
+      overlay('annotations_1_highlight', 'islands'),
+      overlay('annotations_2', 'tint')
+    ];
+    const annotationRows = (editor) => editor.slots().filter((slot) => slot.renderer === 'annotations')
+      .map(({ id, side, z, params }) => ({ id, side, z, params }));
+
+    const editor = create(ROWS[mode]());
+    editor.state.annotationSets = regionSets();
+    const axisRow = editor.axisRowId();
+    editor.turnOn(false);
+    editor.turnOn(true);
+    assert.deepEqual(annotationRows(editor), expected, 'turned on');
+    assert.deepEqual(editor.slots().slice(0, 3).map((slot) => slot.id), expected.map((row) => row.id));
+    assert.equal(editor.axisRowId(), axisRow, 'the Axis stays on its row');
+
+    // A set the stack names, also in a row turned off, gets no other row.
+    editor.slots()[0].enabled = false;
+    editor.turnOn(false);
+    editor.turnOn(true);
+    assert.deepEqual(annotationRows(editor), expected, 'turned on again');
+    assert.equal(editor.slots()[0].enabled, false);
+
+    const reset = create(ROWS[mode]());
+    reset.state.annotationSets = regionSets();
+    reset.reset();
+    assert.deepEqual(annotationRows(reset), expected, 'Reset');
+    assert.deepEqual(reset.slots().slice(0, 3).map((slot) => slot.id), expected.map((row) => row.id));
   });
 }
 

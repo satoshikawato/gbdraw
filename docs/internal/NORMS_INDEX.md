@@ -279,7 +279,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size) | Web control for the figure size | ACCEPTED | web.layout.figure-size | 3 | scenario revision 2 | 12 |
 | [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing) | Select region on the drawing | ACCEPTED | web.result.region-select | 1 | — | 7 |
 | [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap) | gzip input expansion cap | ACCEPTED | input.gzip-expansion-cap | 1 | — | 3 |
-| [PD-OI-117](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-117-sequence-search) | Sequence search | ACCEPTED | web.sequence-search | 1 | — | 8 |
+| [PD-OI-117](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-117-sequence-search) | Sequence search | ACCEPTED | web.sequence-search | 1 | — | 9 |
 | [PD-OI-118](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-118-diagram-reply-too-large-for-the-page) | Diagram reply too large for the page | ACCEPTED | diagram-generation.reply-too-large-for-page | 1 | — | 3 |
 | [PD-OI-119](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-119-region-label-place) | Region label place | ACCEPTED | product.region-label-place | 6 | scenario revision 2 | 4 |
 | [PD-OI-120](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-120-input-file-changed-after-choosing) | Input file changed after choosing | ACCEPTED | input.file-changed-after-choosing | 1 | — | 2 |
@@ -751,6 +751,7 @@ are listed under "Cited ids without a record".
   - `tests/web/sequence-search-programs.test.mjs`
   - `tests/web/sequence-search.playwright.spec.js`
   - `tests/web/sequence-search.test.mjs`
+  - `tests/web/track-slot-row-edits.test.mjs`
 - [PD-OI-118](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-118-diagram-reply-too-large-for-the-page)
   - `tests/web/diagram-reply-too-large.test.mjs`
   - `tests/web/error-boundary.playwright.spec.js`
