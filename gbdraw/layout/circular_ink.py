@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import cached_property
 from typing import TypeAlias
 
 import numpy as np
@@ -145,8 +146,11 @@ class CircularInkPolygon:
         missed = exit_ < entry
         return np.where(missed, np.inf, entry), np.where(missed, -np.inf, exit_)
 
-    @property
+    @cached_property
     def nearest_px(self) -> float:
+        """How near the centre the polygon comes (0 where it holds the centre): measured once, as a track's paint
+        is counted against each line of the centre definition (``box_meets_ink``)."""
+
         edges = list(zip(self.points, (*self.points[1:], self.points[0])))
         sides = {math.copysign(1.0, x1 * y2 - x2 * y1) for (x1, y1), (x2, y2) in edges}
         return 0.0 if len(sides) == 1 else min(_segment_distance(p0, p1) for p0, p1 in edges)

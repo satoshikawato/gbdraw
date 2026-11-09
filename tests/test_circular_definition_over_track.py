@@ -917,3 +917,22 @@ def test_the_tracks_keep_the_definition_band_the_labels_stage_reads_only_as_a_re
     assert placed.state.inner_reserve_px == assemble_module.radial_label_inner_reserve_px(
         layout if placed.radial_layout is not None else fits[0].layout
     )
+
+
+def test_a_track_polygon_is_measured_once_however_many_lines_it_is_counted_against(monkeypatch) -> None:
+    # OV-2981: a track's paint is counted against each line of the centre definition (``box_meets_ink``), and each
+    # polygon of it measures how near the centre it comes once.
+    import gbdraw.layout.circular_ink as circular_ink
+
+    measured: list[int] = []
+    original = circular_ink._segment_distance
+
+    def distance(start, end):
+        measured.append(1)
+        return original(start, end)
+
+    monkeypatch.setattr(circular_ink, "_segment_distance", distance)
+    polygon = circular_ink.CircularInkPolygon(((10.0, 10.0), (20.0, 10.0), (20.0, 20.0), (10.0, 20.0)))
+
+    assert polygon.nearest_px == polygon.nearest_px == pytest.approx(10.0 * 2**0.5)
+    assert len(measured) == 4
