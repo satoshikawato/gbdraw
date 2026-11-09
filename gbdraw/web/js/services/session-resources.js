@@ -16,7 +16,7 @@ import {
 } from './session-resource-backing.js';
 import { isAdoptedCanonicalSession } from './session-authority.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
-import { ringGenomeFileLists } from './drawing/inputs.js';
+import { ringGenomeIdLists } from './drawing/inputs.js';
 import {
   collectCanonicalResourceIds,
   isCanonicalResourceReferenceField
@@ -175,10 +175,11 @@ const rewriteOriginalNameHints = (webFiles, aliases) => {
     'conservationSequenceSources'
   ].forEach((field) => {
     if (!Array.isArray(webFiles?.[field])) return;
-    // One list of resource IDs per ring (`ringGenomeFileLists`).
-    rewritten[field] = ringGenomeFileLists(webFiles[field]).map((ids) => ids.flatMap((resourceId) => (
-      typeof resourceId === 'string' && aliases.has(resourceId) ? [/** @type {string} */ (aliases.get(resourceId))] : []
-    )));
+    // One list of resource IDs per ring (`ringGenomeIdLists`).
+    rewritten[field] = ringGenomeIdLists(webFiles[field]).map((ids) => ids.flatMap((resourceId) => {
+      const alias = aliases.get(resourceId);
+      return alias ? [alias] : [];
+    }));
   });
   if (Array.isArray(rewritten.linearRecordMetadata)) {
     rewritten.linearRecordMetadata = rewritten.linearRecordMetadata.map((/** @type {unknown} */ entry) => {
@@ -431,8 +432,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
     const named = collectCanonicalResourceIds(committedRequest?.renderRequest);
     collectCanonicalResourceIds(webFiles, named);
     ['conservationLosatFastaSources', 'conservationSequenceSources'].forEach((field) => {
-      ringGenomeFileLists(webFiles[field]).flat()
-        .forEach((/** @type {unknown} */ id) => { if (typeof id === 'string' && id) named.add(id); });
+      ringGenomeIdLists(webFiles[field]).flat().forEach((id) => named.add(id));
     });
     const hints = webFiles.resourceOriginalNames || {};
     /** @type {Map<string, CommittedPayload[]>} */

@@ -30,8 +30,9 @@ import { ringGenomeFileLists } from './drawing/inputs.js';
  * default label). A BLAST table is a source of one file; a ring's comparison genome is a source of its files, in the
  * listed order (a chromosome and its plasmids).
  * @template {ConservationFile} [F=ConservationFile]
- * @typedef {{ file: F, files: readonly F[], sourceKey: string, sourceIndex: number, fileName: string,
- *   defaultLabel: string }} ConservationSourceDescriptor
+ * `sourceIndex` counts the sources; `placeIndex` is the source's place in the given list, empty places counted.
+ * @typedef {{ file: F, files: readonly F[], sourceKey: string, sourceIndex: number, placeIndex: number,
+ *   fileName: string, defaultLabel: string }} ConservationSourceDescriptor
  */
 /**
  * The places of a source list as the helpers read them: a file (a BLAST table), a ring's genome files, or nothing.
@@ -58,14 +59,24 @@ export const normalizeFileList = (files) => (Array.isArray(files) ? files.filter
 
 /**
  * What `circularRingSources` reads of a Circular drawing.
+ * @template {ConservationFile} [F=InputFileRef]
  * @typedef {{
  *   files: {
- *     readonly c_conservation_blasts: readonly InputFileRef[], readonly c_conservation_blasts_source: string | null,
- *     readonly c_conservation_fastas: readonly (readonly InputFileRef[])[]
+ *     readonly c_conservation_blasts: readonly F[], readonly c_conservation_blasts_source: string | null,
+ *     readonly c_conservation_fastas: readonly (readonly F[])[]
  *   },
  *   circularConservation: { readonly source?: unknown }
  * }} RingSourceDrawing
  */
+/** @param {RingSourceDrawing<ConservationFile>} drawing */
+const isUploadedRingDrawing = (drawing) => String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload';
+/**
+ * Whether a drawing's rings follow BLAST tables: uploaded ones, or those of a LOSAT-cache replay.
+ * @param {RingSourceDrawing<ConservationFile>} drawing
+ */
+const ringsFollowTables = (drawing) => isUploadedRingDrawing(drawing) || (
+  drawing.files.c_conservation_blasts_source === 'losat-cache' && normalizeFileList([...drawing.files.c_conservation_blasts]).length > 0
+);
 /**
  * The sources of a Circular drawing's rings, the one reading of which files
  * its ring series follow: the BLAST tables of uploaded rings and of a
@@ -74,9 +85,7 @@ export const normalizeFileList = (files) => (Array.isArray(files) ? files.filter
  * @returns {readonly (InputFileRef | readonly InputFileRef[])[]}
  */
 export const circularRingSources = (drawing) => {
-  const blasts = normalizeFileList([...drawing.files.c_conservation_blasts]);
-  const upload = String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload';
-  if (upload || (drawing.files.c_conservation_blasts_source === 'losat-cache' && blasts.length > 0)) return blasts;
+  if (ringsFollowTables(drawing)) return normalizeFileList([...drawing.files.c_conservation_blasts]);
   return ringGenomeFileLists(drawing.files.c_conservation_fastas).filter((files) => files.length > 0);
 };
 
@@ -226,7 +235,7 @@ const fileSignature = (file, index) => {
 
 /**
  * The sources of a source list, in order; a place without a file is left out,
- * so `sourceIndex` counts the sources. A source's key is its files'
+ * so `sourceIndex` counts the sources and `placeIndex` names the place. A source's key is its files'
  * signatures (one file's is that file's, as before a ring took several), with
  * the count of earlier sources of the same files.
  * @template {ConservationFile} F
@@ -238,7 +247,10 @@ export const conservationSourceDescriptors = (sourceFiles) => {
   const seen = new Map();
   /** @type {readonly ConservationSourcePlace<F>[]} */
   const places = Array.isArray(sourceFiles) ? sourceFiles : [sourceFiles];
-  return places.map((place) => filesOfPlace(place)).filter((files) => files.length > 0).map((files, index) => {
+  return places.flatMap((place, placeIndex) => {
+    const files = filesOfPlace(place);
+    return files.length > 0 ? [{ files, placeIndex }] : [];
+  }).map(({ files, placeIndex }, index) => {
     const [file] = files;
     const signature = files.map((member) => fileSignature(member, index)).join(' + ');
     const duplicateIndex = seen.get(signature) || 0;
@@ -250,6 +262,7 @@ export const conservationSourceDescriptors = (sourceFiles) => {
       files,
       sourceKey,
       sourceIndex: index,
+      placeIndex,
       fileName,
       defaultLabel: defaultConservationSeriesLabel(file, index)
     };
@@ -363,15 +376,19 @@ export const applyComparisonSequenceRecordLabel = ({ series, sourceFiles, file, 
 };
 
 /**
+ * The source of each series entry, in series order: the one matching of a ring
+ * or a BLAST row to its files, which Generate, the track slots, the ring rows
+ * and Save read. An entry takes the source of its source key, else the first
+ * unused source of its file name, else the source at the place its source
+ * index names; `null` when none is left.
  * @template {ConservationFile} F
  * @param {ConservationSourcePlace<F> | readonly ConservationSourcePlace<F>[]} sourceFiles
  * @param {CircularConservationLike | null | undefined} circularConservation
- * @returns {OrderedConservationSource<F>[]}
+ * @returns {{ descriptors: ConservationSourceDescriptor<F>[], matched: (ConservationSourceDescriptor<F> | null)[] }}
  */
-export const orderedConservationSources = (sourceFiles, circularConservation) => {
+export const conservationSourcesOfSeries = (sourceFiles, circularConservation) => {
   // The places' union hides F from the call's inference; the descriptors hold the given files.
   const descriptors = /** @type {ConservationSourceDescriptor<F>[]} */ (conservationSourceDescriptors(sourceFiles));
-  const legacyLabels = parseConservationLabelText(circularConservation?.labels);
   const descriptorByKey = new Map(descriptors.map((descriptor) => [descriptor.sourceKey, descriptor]));
   /** @type {Map<string, ConservationSourceDescriptor<F>[]>} */
   const descriptorsByFileName = new Map();
@@ -380,14 +397,11 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
     // Set just above when absent.
     /** @type {ConservationSourceDescriptor<F>[]} */ (descriptorsByFileName.get(descriptor.fileName)).push(descriptor);
   });
-
   /** @type {Set<string>} */
   const usedKeys = new Set();
-  /** @type {OrderedConservationSource<F>[]} */
-  const entries = [];
   const series = Array.isArray(circularConservation?.series) ? circularConservation.series : [];
-  series.forEach((entry, seriesIndex) => {
-    if (!entry || typeof entry !== 'object') return;
+  const matched = series.map((entry, seriesIndex) => {
+    if (!entry || typeof entry !== 'object') return null;
     const sourceKey = String(entry.sourceKey || '').trim();
     let descriptor = sourceKey ? descriptorByKey.get(sourceKey) : null;
     if (!descriptor) {
@@ -398,10 +412,36 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
     if (!descriptor) {
       const sourceIndex = Number(entry.sourceIndex);
       const fallbackIndex = Number.isInteger(sourceIndex) ? sourceIndex : seriesIndex;
-      const indexed = descriptors[fallbackIndex];
+      // A Session writes one place per ring, so a place left empty on Load keeps the later rings at theirs.
+      const indexed = descriptors.find((candidate) => candidate.placeIndex === fallbackIndex);
       descriptor = indexed && !usedKeys.has(indexed.sourceKey) ? indexed : null;
     }
-    if (!descriptor || usedKeys.has(descriptor.sourceKey)) return;
+    if (!descriptor || usedKeys.has(descriptor.sourceKey)) return null;
+    usedKeys.add(descriptor.sourceKey);
+    return descriptor;
+  });
+  return { descriptors, matched };
+};
+
+/**
+ * @template {ConservationFile} F
+ * @param {ConservationSourcePlace<F> | readonly ConservationSourcePlace<F>[]} sourceFiles
+ * @param {CircularConservationLike | null | undefined} circularConservation
+ * @returns {OrderedConservationSource<F>[]}
+ */
+export const orderedConservationSources = (sourceFiles, circularConservation) => {
+  // The places' union hides F from the call's inference, as in `conservationSourcesOfSeries`.
+  const { descriptors, matched } = /** @type {{ descriptors: ConservationSourceDescriptor<F>[],
+    matched: (ConservationSourceDescriptor<F> | null)[] }} */ (conservationSourcesOfSeries(sourceFiles, circularConservation));
+  const legacyLabels = parseConservationLabelText(circularConservation?.labels);
+  const series = Array.isArray(circularConservation?.series) ? circularConservation.series : [];
+  /** @type {Set<string>} */
+  const usedKeys = new Set();
+  /** @type {OrderedConservationSource<F>[]} */
+  const entries = [];
+  matched.forEach((descriptor, seriesIndex) => {
+    if (!descriptor) return;
+    const entry = series[seriesIndex];
     usedKeys.add(descriptor.sourceKey);
     entries.push({
       ...descriptor,
@@ -426,6 +466,63 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
   });
 
   return entries;
+};
+
+/**
+ * What `ringGenomePlaces` reads of a Circular drawing.
+ * @template {ConservationFile} [F=InputFileRef]
+ * @typedef {RingSourceDrawing<F> & {
+ *   files: RingSourceDrawing<F>['files'] & { readonly c_conservation_sequence_sources: readonly (readonly F[])[] },
+ *   circularConservation: CircularConservationLike & { readonly source?: unknown }
+ * }} RingGenomeDrawing
+ */
+/** @typedef {'c_conservation_fastas' | 'c_conservation_sequence_sources'} RingGenomeKey */
+/**
+ * Where each ring's comparison genome files are, in series order: the list
+ * that holds them (a LOSAT ring's own files, or the comparison sequence files
+ * beside an uploaded or replayed BLAST table) and each series entry's place in
+ * it, or `null` for an entry without a source. Entries are matched to sources
+ * as Generate matches them (`conservationSourcesOfSeries`): by source key, then
+ * file name, then the place a Session wrote, so a place left empty on Load
+ * keeps the later rings at theirs. `unplaced` are the places of LOSAT rings
+ * that no entry names, which Generate draws after the others.
+ * @template {ConservationFile} F
+ * @param {RingGenomeDrawing<F>} drawing
+ * @returns {{ key: RingGenomeKey, lists: F[][], places: (number | null)[], unplaced: number[] }}
+ */
+export const ringGenomePlaces = (drawing) => {
+  const tables = ringsFollowTables(drawing);
+  /** @type {RingGenomeKey} */
+  const key = isUploadedRingDrawing(drawing) ? 'c_conservation_sequence_sources' : 'c_conservation_fastas';
+  /** @type {F[][]} */
+  const lists = ringGenomeFileLists(drawing.files[key]);
+  // A table's place is its genome files' place, beside it.
+  const { descriptors, matched } = conservationSourcesOfSeries(
+    tables ? normalizeFileList([...drawing.files.c_conservation_blasts]) : lists, drawing.circularConservation
+  );
+  const places = matched.map((source) => (source ? source.placeIndex : null));
+  const unplaced = tables ? [] : descriptors.map((source) => source.placeIndex).filter((place) => !places.includes(place));
+  return { key, lists, places, unplaced };
+};
+
+/**
+ * Each ring's comparison genome files in the order Generate draws the rings,
+ * which Save and the span export catalog read: a LOSAT ring's own files, one
+ * list per series entry (empty for an entry whose files are missing, as a
+ * Session loaded without them shows its stored rings), then the rings no entry
+ * names; or the comparison sequence files at each uploaded or replayed table's
+ * place, in the tables' ring order (`orderedConservationSources`).
+ * @template {ConservationFile} F
+ * @param {RingGenomeDrawing<F>} drawing
+ * @returns {F[][]}
+ */
+export const ringGenomeFilesInRingOrder = (drawing) => {
+  const { lists, places, unplaced } = ringGenomePlaces(drawing);
+  if (ringsFollowTables(drawing)) {
+    const tables = orderedConservationSources(normalizeFileList([...drawing.files.c_conservation_blasts]), drawing.circularConservation);
+    return tables.map((table) => [...(lists[table.placeIndex] || [])]);
+  }
+  return [...places, ...unplaced].map((place) => (place === null ? [] : [...(lists[place] || [])]));
 };
 
 /**

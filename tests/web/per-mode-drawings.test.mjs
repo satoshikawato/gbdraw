@@ -234,7 +234,7 @@ const NOT_WRITERS = new Set(SLICE_READERS.filter((name) => !name.includes('.')))
 // of members the slice does not hold yet (`files` joins with the five cards,
 // B2b-1b-5c; until then the handle has no `files` to write).
 const INPUTS_NO_HANDLE_CALLS = new Set([
-  'createLinearSeq', 'cardCropWindow', 'ringGenomeFileLists', 'readLinearSeqWindows', 'idleCircularRecordDiscovery', 'normalizeLinearSeqList', 'collapseEmptyLinearSeqList', 'bindInputFile',
+  'createLinearSeq', 'cardCropWindow', 'ringGenomeFileLists', 'ringGenomeIdLists', 'readLinearSeqWindows', 'idleCircularRecordDiscovery', 'normalizeLinearSeqList', 'collapseEmptyLinearSeqList', 'bindInputFile',
   'registerInputFiles', 'boundInputFileIds', 'retainHistoryAndBoundFiles', 'registerInputFileTree',
   'bindCanonicalComparisons', 'bindLoadedInputs',
   'createCircularSource', 'bindDrawingInputFileList', 'bindDrawingInputFileTree', 'setConservationBlastsSource',

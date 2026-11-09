@@ -27,6 +27,7 @@ const {
 const { createDrawingReset } = await import('../../gbdraw/web/js/app/reset-settings.js');
 const { bindDrawingInputFileList, bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { sessionSourceFactsOf } = await import('../../gbdraw/web/js/services/session-drawings-upgrade.js');
+const { circularRingSources, orderedConservationSources } = await import('../../gbdraw/web/js/services/conservation-series.js');
 
 const circular = () => modeDrawing(state, 'circular');
 const textFile = (name, text = '>ring\nACGT\n') => ({ name, type: 'text/plain', size: text.length, lastModified: 0, data: btoa(text) });
@@ -179,6 +180,37 @@ test('a ring row adds and removes the files of its genome, in the order added, a
   assert.deepEqual(rows().map((row) => row.canRemoveFile), [true, false]);
   comparisonFiles.removeRingRowFile(1, 0);
   assert.deepEqual(boundNames(), [['chr2.fasta', 'chr3.fasta'], ['fly.fasta']], 'a LOSAT ring keeps its last file');
+
+  comparisonFiles.removeCircularConservationSource(1);
+  comparisonFiles.removeCircularConservationSource(0);
+  assert.deepEqual(ringNames(), []);
+});
+
+// Review 1 of #1777, item 1: a ring row reads and writes its files by the ring
+// identity Generate pairs a name and color with (the series entry's source
+// key), so two first files of one name and a moved series keep each genome
+// with its own name.
+test('a ring row reads and writes its files by the identity Generate uses, also for first files of one name', async () => {
+  const drawing = circular();
+  const add = (file) => comparisonFiles.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [file], value: 'x' } }));
+  await add(textFile('sequence.fasta', '>A\nACGT\n'));
+  await add(textFile('sequence.fasta', '>B\nACGTACGTACGT\n'));
+  const [first, second] = drawing.circularConservation.series;
+  first.label = 'Genome A';
+  second.label = 'Genome B';
+  panel.moveCircularConservationSeries(1, -1);
+  const generated = () => orderedConservationSources(circularRingSources(drawing), drawing.circularConservation)
+    .map((source) => [source.label, source.files.map((file) => file.size)]);
+  const shown = () => panel.circularConservationSeriesRows.value
+    .map((row) => [drawing.circularConservation.series[row.index].label, row.files]);
+  assert.deepEqual(generated(), [['Genome B', [16]], ['Genome A', [8]]]);
+  assert.deepEqual(shown(), [['Genome B', ['sequence.fasta']], ['Genome A', ['sequence.fasta']]]);
+
+  comparisonFiles.addRingRowFiles(0, /** @type {any} */ ({ target: { files: [textFile('plasmid.fasta', '>P\nAC\n')], value: 'x' } }));
+  assert.deepEqual(generated(), [['Genome B', [16, 6]], ['Genome A', [8]]], 'the plasmid joins the genome of its row');
+  assert.deepEqual(shown(), [['Genome B', ['sequence.fasta', 'plasmid.fasta']], ['Genome A', ['sequence.fasta']]]);
+  comparisonFiles.removeRingRowFile(0, 0);
+  assert.deepEqual(generated(), [['Genome B', [6]], ['Genome A', [8]]], 'the file removed is the one of its row');
 
   comparisonFiles.removeCircularConservationSource(1);
   comparisonFiles.removeCircularConservationSource(0);

@@ -133,3 +133,25 @@ test('a ring place is its genome\'s files; the one-file form of an older Session
     'an empty place is no ring; a ring is named by its first file');
   assert.notEqual(series[0].sourceKey, rowsFor([[c, b]])[0].sourceKey, 'the order of a genome\'s files is part of its key');
 });
+
+// PR-B review 1, items 1 and 5: Save, the span export catalog and the ring rows
+// read each ring's genome files by the identity Generate matches (source key),
+// and a place a Session left empty on Load (a missing file) keeps the later
+// rings at theirs instead of lending its ring the next genome's files.
+test('a ring keeps its own genome files when an earlier ring\'s files are missing', async () => {
+  const { ringGenomeFilesInRingOrder, ringGenomePlaces } = await import('../../gbdraw/web/js/services/conservation-series.js');
+  const [a, b, plasmid] = [file('a.fasta', 8), file('b.fasta', 14), file('b-plasmid.fasta', 4)];
+  const [entryA, entryB] = rowsFor([[a], [b, plasmid]]);
+  const drawing = (fastas) => ({
+    files: { c_conservation_blasts: [], c_conservation_blasts_source: null, c_conservation_fastas: fastas, c_conservation_sequence_sources: [] },
+    circularConservation: { source: 'losat', series: [entryA, entryB] }
+  });
+  assert.deepEqual(ringGenomeFilesInRingOrder(drawing([[a], [b, plasmid]])), [[a], [b, plasmid]]);
+  assert.deepEqual(ringGenomeFilesInRingOrder(drawing([[], [b, plasmid]])), [[], [b, plasmid]],
+    'the ring whose file is missing lists none; the next ring keeps its files');
+  assert.deepEqual(ringGenomePlaces(drawing([[], [b, plasmid]])).places, [null, 1]);
+  // Series moved: the rows follow their keys, not their places.
+  const moved = { ...drawing([[a], [b, plasmid]]), circularConservation: { source: 'losat', series: [entryB, entryA] } };
+  assert.deepEqual(ringGenomeFilesInRingOrder(moved), [[b, plasmid], [a]]);
+  assert.deepEqual(ringGenomePlaces(moved).places, [1, 0]);
+});

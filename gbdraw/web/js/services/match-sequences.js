@@ -2,10 +2,7 @@
 import { inputSequenceSource } from './input-types.js';
 import { formatFastaEntry } from './feature-sequence-fasta.js';
 import { recordSourceInterval } from './record-source-coordinates.js';
-import {
-  orderedConservationSources,
-  orderedOptionalConservationFiles
-} from './conservation-series.js';
+import { normalizeFileList, ringGenomeFilesInRingOrder } from './conservation-series.js';
 import { ringGenomeFileLists } from './drawing/inputs.js';
 import {
   gffFastaReaderSelector,
@@ -555,20 +552,18 @@ export const resolveCircularComparisonSequenceAvailability = ({
   const sourceMode = text(circularConservation?.source).toLowerCase();
   if (!['upload', 'losat'].includes(sourceMode)) return [];
 
-  // Each ring's comparison genome files (`ringGenomeFileLists`).
-  /** @type {FileLike[][]} */
-  const comparisonFiles = ringGenomeFileLists(sourceMode === 'upload'
-    ? files?.c_conservation_sequence_sources
-    : files?.c_conservation_fastas);
-  const orderedComparisonFiles = sourceMode === 'upload'
-    ? orderedConservationSources(
-        files?.c_conservation_blasts || [],
-        circularConservation
-      ).map((entry) => comparisonFiles[entry.sourceIndex] || [])
-    : orderedOptionalConservationFiles(
-        comparisonFiles,
-        circularConservation
-      );
+  // Each ring's comparison genome files, in the order Generate draws the rings (`ringGenomeFilesInRingOrder`).
+  /** @type {import('./conservation-series.js').RingGenomeDrawing<FileLike>} */
+  const drawing = {
+    files: {
+      c_conservation_blasts: normalizeFileList(files?.c_conservation_blasts),
+      c_conservation_blasts_source: files?.c_conservation_blasts_source ?? null,
+      c_conservation_fastas: ringGenomeFileLists(files?.c_conservation_fastas),
+      c_conservation_sequence_sources: ringGenomeFileLists(files?.c_conservation_sequence_sources)
+    },
+    circularConservation: circularConservation || {}
+  };
+  const orderedComparisonFiles = ringGenomeFilesInRingOrder(drawing);
   return orderedComparisonFiles.map((ringFiles, sourceIndex) => ({
     sourceIndex,
     files: ringFiles || [],

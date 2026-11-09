@@ -5,7 +5,7 @@ import {
   recordSourceOf, recordSourceSlotIds
 } from './input-types.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
-import { cardCropWindow, ringGenomeFileLists } from './drawing/inputs.js';
+import { cardCropWindow, ringGenomeFileLists, ringGenomeIdLists } from './drawing/inputs.js';
 /** @import { InputSlot } from './input-types.js' */
 import {
   canonicalFeatureOverrides,
@@ -104,7 +104,7 @@ import {
 import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
 import {
   orderedConservationSources,
-  orderedOptionalConservationFiles
+  ringGenomeFilesInRingOrder
 } from './conservation-series.js';
 import {
   resolveLinearRecordEffectiveDefinition,
@@ -4884,10 +4884,8 @@ const projectCanonicalRenderInput = ({
       }
     }
     if (conservationSource === 'losat') {
-      const comparisonFastas = orderedOptionalConservationFiles(
-        ringGenomeFileLists(filesData.c_conservation_fastas),
-        drawing.circularConservation
-      );
+      // In the order Generate draws the rings, matched by source key (`ringGenomeFilesInRingOrder`).
+      const comparisonFastas = ringGenomeFilesInRingOrder({ files: filesData, circularConservation: drawing.circularConservation });
       if (comparisonFastas.length > 0) {
         // Each ring's LOSAT query files, one list of resource IDs per ring.
         webFiles.conservationLosatFastaSources = comparisonFastas.map((files, index) => (files || []).map(
@@ -6904,7 +6902,7 @@ export const projectCanonicalSessionRequest = ({
     : null);
   // Each ring's genome files, in their order: the request's references
   // (request schema 10), else the Web metadata's resource IDs, one list per
-  // ring (one ID or null per ring in a Session 50 or older, `ringGenomeFileLists`).
+  // ring (one ID or null per ring in a Session 50 or older, `ringGenomeIdLists`).
   if (renderRequest.mode === 'circular' && Array.isArray(options.conservationFastaFiles)) {
     files.c_conservation_sequence_sources = options.conservationFastaFiles.map((/** @type {unknown} */ ringFiles) => (
       (Array.isArray(ringFiles) ? ringFiles : []).flatMap((/** @type {UnvalidatedFields<'resourceId'>} */ ref) => {
@@ -6916,14 +6914,14 @@ export const projectCanonicalSessionRequest = ({
     renderRequest.mode === 'circular'
     && Array.isArray(webMetadata.conservationSequenceSources)
   ) {
-    files.c_conservation_sequence_sources = ringGenomeFileLists(webMetadata.conservationSequenceSources)
+    files.c_conservation_sequence_sources = ringGenomeIdLists(webMetadata.conservationSequenceSources)
       .map((ids) => ids.flatMap((resourceId) => { const file = resourceFile(resourceId); return file ? [file] : []; }));
   }
   if (
     renderRequest.mode === 'circular'
     && Array.isArray(webMetadata.conservationLosatFastaSources)
   ) {
-    files.c_conservation_fastas = ringGenomeFileLists(webMetadata.conservationLosatFastaSources)
+    files.c_conservation_fastas = ringGenomeIdLists(webMetadata.conservationLosatFastaSources)
       .map((ids) => ids.flatMap((resourceId) => { const file = resourceFile(resourceId); return file ? [file] : []; }));
   }
   // The tables the request reads. A Web or CLI binding names the file a table

@@ -88,10 +88,7 @@ import {
 /** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import { placeCircularStackForGenerate } from '../services/circular-track-slot-model.js';
-import {
-  normalizeFileList,
-  orderedConservationSources
-} from '../services/conservation-series.js';
+import { normalizeFileList } from '../services/conservation-series.js';
 import {
   placeLinearStackForGenerate
 } from '../services/linear-track-slot-model.js';
@@ -263,7 +260,7 @@ import {
  */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
-/** @import { CircularConservationLike, RawConservationSeriesEntry } from '../services/conservation-series.js' */
+/** @import { RawConservationSeriesEntry } from '../services/conservation-series.js' */
 /** @import { FeatureFill, LegendRow } from '../services/drawing/paint.js' */
 /** @import { LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 /** @import { RequestCanonicalComparison } from '../services/session-request.js' */
@@ -1360,16 +1357,6 @@ const losatSeqEntryFromRecord = (record, regionSpec) => {
 export const extractLosatFastaFast = async ({ text, fmt, regionSpec, recordSelector }) => (
   losatSeqEntryFromRecord(selectParsedRecord(parseSequenceRecordsFast(text, fmt), recordSelector), regionSpec)
 );
-/**
- * @param {readonly (InputFileRef | readonly InputFileRef[])[]} sourceFiles BLAST tables, or each ring's genome files.
- * @param {CircularConservationLike | null | undefined} circularConservation
- */
-const buildConservationSeries = (sourceFiles, circularConservation) => {
-  return orderedConservationSources(sourceFiles, circularConservation).map((entry) => ({
-    label: entry.label,
-    color: entry.color
-  }));
-};
 /**
  * The rings of a series as one string: equal only for the same keys in the same order. It reads the keys the series
  * holds, so both sides of a comparison read one channel whichever files the keys came from.
@@ -3543,21 +3530,18 @@ export const createRunAnalysis = ({
             requestRingKeys = ringKeysOfSeries(drawing.circularConservation.series);
             const conservationKeys = await circularConservationKeys(drawing, inputFiles.fileOf, throwIfGenerationCanceled);
             conservationPairs = conservationHashPairs(conservationKeys);
+            // Each ring's source with its label and color, as the ring keys matched it (`orderedConservationSources`).
             const conservationEntries = conservationKeys.rings.map(({ source }) => source);
-            const conservationSeries = buildConservationSeries(comparisonFiles, drawing.circularConservation);
             const conservationResults = await runCircularLosatConservation(conservationKeys);
             drawing.circularConservation.reference = 'subject';
             resolvedCircularConservation = conservationResults.map((result, index) => {
-              /** @type {Record<string, any>} */
-              const source = conservationEntries[index] || {};
-              /** @type {Record<string, any>} */
-              const style = conservationSeries[index] || {};
+              const source = conservationEntries[index];
               return {
                 name: result.name || getPayloadName(result.path),
                 text: result.text,
-                sourceIndex: Number(source.sourceIndex ?? index),
-                label: String(style.label || `Comparison ${index + 1}`),
-                color: String(style.color || '#D9EAF7')
+                sourceIndex: source ? source.sourceIndex : index,
+                label: source?.label || `Comparison ${index + 1}`,
+                color: source?.color || '#D9EAF7'
               };
             });
           }

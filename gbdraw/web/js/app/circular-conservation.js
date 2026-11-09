@@ -14,11 +14,12 @@ import {
   applyComparisonSequenceRecordLabel,
   circularRingSources,
   conservationSourceDescriptors,
+  conservationSourcesOfSeries,
   defaultConservationSeriesLabel,
+  ringGenomePlaces,
   moveConservationSeriesEntry,
   normalizeFileList,
   orderedConservationSources,
-  orderedOptionalConservationFiles,
   parseConservationLabelText,
   reconcileConservationSeries,
   withoutConservationSeries
@@ -71,29 +72,15 @@ const isDerivedCircularConservationReplay = (drawing) => (
   normalizeFileList(drawing.files.c_conservation_blasts).length > 0
 );
 /**
- * The comparison genome files of each ring row, in series order: the row's
- * LOSAT query files, or for an uploaded BLAST table its optional comparison
- * sequence files (the span export reads them). A row lists them and its file
- * controls change them (`setRingRowFiles`).
+ * The comparison genome files of each ring row, in series order, at the
+ * places Generate matches the rows to (`ringGenomePlaces`). A row lists them
+ * and its file controls change them (`setRingRowFiles`).
  * @param {DrawingState} drawing
  * @returns {InputFileRef[][]}
  */
 const ringRowFiles = (drawing) => {
-  const { series } = drawing.circularConservation;
-  if (isCircularConservationUploadSource(drawing)) {
-    /** @type {InputFileRef[][]} */
-    const companions = ringGenomeFileLists(drawing.files.c_conservation_sequence_sources);
-    return series.map((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => (
-      [...(companions[seriesSourceIndex(entry, index)] || [])]
-    ));
-  }
-  /** @type {InputFileRef[][]} */
-  const rings = ringGenomeFileLists(drawing.files.c_conservation_fastas);
-  // A LOSAT-cache replay keeps each ring's place beside its table, a ring
-  // without its files included; otherwise every ring has files.
-  const places = isDerivedCircularConservationReplay(drawing) ? rings : rings.filter((files) => files.length > 0);
-  return orderedOptionalConservationFiles(places, drawing.circularConservation)
-    .slice(0, series.length).map((files) => [...(files || [])]);
+  const { lists, places } = ringGenomePlaces(drawing);
+  return places.map((place) => (place === null ? [] : [...(lists[place] || [])]));
 };
 /**
  * The source index a series entry names (its place among the sources), else its place in the series.
@@ -409,39 +396,34 @@ const createRingRowFileEdits = ({
   state, shownAction, writeLosatCacheInfo, clearDerivedCircularConservationBlasts, reconcileCircularConservation
 }) => {
   /**
-   * The genome files of one ring row (`ringRowFiles`) after an edit. An
-   * uploaded table's row writes its comparison sequence files at its source's
-   * place. A LOSAT ring writes the rings in series order, each series entry
-   * then keyed by its ring's files (so a row keeps its name and color while
-   * its files change), and a LOSAT-cache replay's tables go: its rings search
-   * again at the next Generate.
+   * The genome files of one ring row (`ringGenomePlaces`) after an edit, written
+   * at the row's place. An uploaded table's row writes its comparison sequence
+   * files. A LOSAT ring's series entries are then keyed by the files at their
+   * places (so a row keeps its name and color while its files change), and a
+   * LOSAT-cache replay's tables go: its rings search again at the next Generate.
    * @param {DrawingState} drawing @param {number} rowIndex @param {InputFileRef[]} nextFiles
    * @param {DepthSourceChange} change
    */
   const setRingRowFiles = (drawing, rowIndex, nextFiles, change) => {
-    const rows = ringRowFiles(drawing);
-    if (!Number.isInteger(rowIndex) || rowIndex < 0 || rowIndex >= rows.length) return;
-    if (isCircularConservationUploadSource(drawing)) {
-      /** @type {InputFileRef[][]} */
-      const companions = ringGenomeFileLists(drawing.files.c_conservation_sequence_sources);
-      const place = seriesSourceIndex(drawing.circularConservation.series[rowIndex], rowIndex);
-      while (companions.length <= place) companions.push([]);
-      companions[place] = nextFiles;
-      bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', companions);
+    const { key, lists, places } = ringGenomePlaces(drawing);
+    const place = places[rowIndex];
+    if (place === undefined || place === null) return;
+    while (lists.length <= place) lists.push([]);
+    lists[place] = nextFiles;
+    if (key === 'c_conservation_sequence_sources') {
+      bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, key, lists);
       return;
     }
-    rows[rowIndex] = nextFiles;
     changeRingSourceFiles(state, drawing, change, () => {
       clearDerivedCircularConservationBlasts(drawing);
-      bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', rows);
+      bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, key, lists);
     });
-    const descriptors = conservationSourceDescriptors(rows);
-    let sourceIndex = 0;
+    // Each row keeps its place; its entry takes the identity of the files there now.
+    const descriptors = conservationSourceDescriptors(lists);
     drawing.circularConservation.series.forEach((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => {
-      if (!rows[index]?.length) return;
-      const { sourceKey, fileName } = descriptors[sourceIndex];
-      Object.assign(entry, { sourceKey, fileName, sourceIndex });
-      sourceIndex += 1;
+      const source = descriptors.find((descriptor) => descriptor.placeIndex === places[index]);
+      if (!source) return;
+      Object.assign(entry, { sourceKey: source.sourceKey, fileName: source.fileName, sourceIndex: source.sourceIndex });
     });
     writeLosatCacheInfo([]);
     reconcileCircularConservation(drawing);
@@ -534,14 +516,15 @@ export const createCircularConservationComparisonFiles = ({
         drawing.files.c_conservation_blasts,
         drawing.circularConservation
       ).map((entry) => entry.file);
-      const orderedFastas = orderedOptionalConservationFiles(
-        drawing.files.c_conservation_fastas,
-        drawing.circularConservation
-      );
-      const orderedSequenceSources = orderedOptionalConservationFiles(
-        drawing.files.c_conservation_sequence_sources,
-        drawing.circularConservation
-      );
+      // Each table's genome files sit at its place (`ringGenomePlaces`).
+      const { places } = ringGenomePlaces(drawing);
+      /** @param {readonly (readonly InputFileRef[])[]} list */
+      const inSeriesOrder = (list) => {
+        const lists = ringGenomeFileLists(list);
+        return places.map((place) => (place === null ? null : lists[place] || null));
+      };
+      const orderedFastas = inSeriesOrder(drawing.files.c_conservation_fastas);
+      const orderedSequenceSources = inSeriesOrder(drawing.files.c_conservation_sequence_sources);
       const kept = withoutConservationSeries({
         blasts: orderedBlasts,
         fastas: orderedFastas,
@@ -566,16 +549,11 @@ export const createCircularConservationComparisonFiles = ({
       };
       return askRingSourceRemoval(drawing, normalizeFileList(kept.blasts), kept.series, msg('Remove series'), applyKept) ?? applyKept();
     }
-    const entry = drawing.circularConservation.series[idx];
     const sourceFiles = circularRingSources(drawing);
-    const descriptors = conservationSourceDescriptors(sourceFiles);
-    let sourceIndex = descriptors.findIndex((descriptor) => descriptor.sourceKey === String(entry?.sourceKey || ''));
-    if (sourceIndex < 0) {
-      const fileName = String(entry?.fileName || '').trim();
-      sourceIndex = descriptors.findIndex((descriptor) => descriptor.fileName === fileName);
-    }
-    if (sourceIndex < 0 && idx < sourceFiles.length) sourceIndex = idx;
-    if (sourceIndex < 0 || sourceIndex >= sourceFiles.length) return;
+    // The row's source as Generate matches it (`conservationSourcesOfSeries`).
+    const source = conservationSourcesOfSeries(sourceFiles, drawing.circularConservation).matched[idx];
+    if (!source) return;
+    const { sourceIndex } = source;
     const keptFiles = sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex);
     /** @param {() => void} [turnOffReaching] */
     const apply = (turnOffReaching) => {
