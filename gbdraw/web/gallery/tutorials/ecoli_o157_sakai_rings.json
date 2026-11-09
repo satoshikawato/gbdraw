@@ -1,0 +1,789 @@
+{
+ "id": "ecoli_o157_sakai_rings",
+ "version": 1,
+ "title": "Find strain-specific islands with comparison rings",
+ "summary": "Start from the Web defaults for the <i>Escherichia coli</i> O157:H7 Sakai chromosome, add three genomes as nucleotide identity rings with one LOSATN search, name six islands from a region table, and stretch their tints across the rings, generating after each change.",
+ "appMode": "Circular",
+ "primaryWorkflow": "Circular comparison rings with region annotations",
+ "downloads": [
+  {
+   "label": "NC_002695.2",
+   "source": "NCBI Nucleotide",
+   "accession": "NC_002695.2",
+   "targetName": "NC_002695.2.gbk",
+   "note": "Download the complete chromosome of <i>Escherichia coli</i> O157:H7 Sakai as a GenBank flat file and save it as NC_002695.2.gbk, the filename stored in the Gallery session."
+  },
+  {
+   "label": "NZ_CP008957.1",
+   "source": "NCBI Nucleotide",
+   "accession": "NZ_CP008957.1",
+   "targetName": "NZ_CP008957.1.fna",
+   "note": "Download the chromosome of <i>E. coli</i> O157:H7 EDL933 as FASTA and save it as NZ_CP008957.1.fna."
+  },
+  {
+   "label": "NC_000913.3",
+   "source": "NCBI Nucleotide",
+   "accession": "NC_000913.3",
+   "targetName": "NC_000913.3.fna",
+   "note": "Download the chromosome of <i>E. coli</i> K-12 MG1655 as FASTA and save it as NC_000913.3.fna."
+  },
+  {
+   "label": "NC_004431.1",
+   "source": "NCBI Nucleotide",
+   "accession": "NC_004431.1",
+   "targetName": "NC_004431.1.fna",
+   "note": "Download the chromosome of the uropathogenic <i>E. coli</i> CFT073 as FASTA and save it as NC_004431.1.fna."
+  },
+  {
+   "label": "Island table",
+   "source": "Gallery file",
+   "targetName": "ecoli_o157_sakai_islands.tsv",
+   "href": "./files/ecoli_o157_sakai_islands.tsv",
+   "note": "Six Sakai regions that K-12 and CFT073 largely lack, in two region sets: islands_tint holds one highlight per region, and islands holds one labelled line per region."
+  }
+ ],
+ "manualSteps": [
+  {
+   "title": "Switch to Circular mode",
+   "body": "Open gbdraw.app and check that the Circular drawing is shown before adding the GenBank file.",
+   "operations": [
+    {
+     "media": {
+      "src": "./media/ecoli_o157_sakai_rings/manual-01-01-circular-mode.webp",
+      "alt": "Drawing bar with the Circular drawing tab selected and the + Linear tab beside it.",
+      "caption": "The Circular drawing is shown when the app opens."
+     },
+     "capture": {
+      "source": "webapp",
+      "selector": ".drawing-bar-tabs",
+      "cropPadding": 4,
+      "actions": [
+       {
+        "type": "click",
+        "selector": ".drawing-bar [role=\"tab\"][data-drawing-id=\"circular\"]"
+       },
+       {
+        "type": "waitForFunction",
+        "script": "() => window.__GBDRAW_APP__?.mode === 'circular'"
+       }
+      ]
+     }
+    }
+   ],
+   "replay": [
+    {
+     "type": "click",
+     "selector": ".drawing-bar [role=\"tab\"][data-drawing-id=\"circular\"]"
+    }
+   ]
+  },
+  {
+   "title": "Upload the GenBank file",
+   "body": "Upload NC_002695.2.gbk as the Circular GenBank input and set Output Prefix. Leave Species empty: the app reads the organism and strain from the file and draws them in the center.",
+   "table": {
+    "columns": [
+     "Setting",
+     "Value"
+    ],
+    "rows": [
+     [
+      "GenBank/DDBJ File",
+      "NC_002695.2.gbk"
+     ],
+     [
+      "Output Prefix",
+      "ecoli_o157_sakai_rings"
+     ]
+    ]
+   },
+   "replay": [
+    {
+     "type": "fill",
+     "selector": "#output-prefix",
+     "value": "ecoli_o157_sakai_rings"
+    }
+   ],
+   "operations": [
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/ecoli_o157_sakai_rings/manual-02-01-genbank-upload.webp",
+      "alt": "Circular Input Genomes card with NC_002695.2.gbk selected as the GenBank file.",
+      "caption": "Upload NC_002695.2.gbk in the Circular GenBank uploader."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "replayThrough": 2,
+      "cardTitle": "Input Genomes",
+      "cropPadding": 14,
+      "actions": [
+       {
+        "type": "waitForFunction",
+        "script": "() => (document.querySelector(\"[data-setting='inputs']\")?.textContent || '').includes('NC_002695.2.gbk')"
+       }
+      ],
+      "clipSelectors": [
+       "[data-setting='inputs'] .card-header",
+       "[data-circular-record-presentation]"
+      ],
+      "assertAppState": {
+       "mode": "circular"
+      },
+      "visibleText": [
+       "NC_002695.2.gbk"
+      ]
+     }
+    },
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/ecoli_o157_sakai_rings/manual-02-02-output-prefix.webp",
+      "alt": "Basic card with ecoli_o157_sakai_rings as the output prefix and an empty Species field.",
+      "caption": "Set Output Prefix to ecoli_o157_sakai_rings."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "replayThrough": 2,
+      "cardTitle": "Basic",
+      "cropPadding": 14,
+      "assertAppState": {
+       "mode": "circular"
+      },
+      "visibleControls": [
+       {
+        "selector": "#output-prefix",
+        "value": "ecoli_o157_sakai_rings"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "title": "Generate with the defaults",
+   "body": "Click Generate Diagram. The defaults draw the features on two strands with a GC content ring and a GC skew ring, and the legend at the left. The center gives the organism, strain, accession, length, and GC content from the file.",
+   "replay": [
+    {
+     "type": "generate"
+    }
+   ],
+   "operations": [
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/ecoli_o157_sakai_rings/manual-03-01-default-preview.webp",
+      "alt": "<i>E. coli</i> O157:H7 Sakai preview with the Web defaults: features on two strands, GC content and GC skew rings, the legend at the left, and no comparison rings.",
+      "caption": "Web defaults: features, GC content, and GC skew; nothing shows what other strains share."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "replayThrough": 3,
+      "viewport": {
+       "width": 1400,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-rings-preview', 'true');"
+       },
+       {
+        "type": "wait",
+        "ms": 100
+       }
+      ],
+      "selector": "svg[data-capture-rings-preview='true']",
+      "cropPadding": 12,
+      "assertAppState": {
+       "mode": "circular",
+       "form.legend": "left",
+       "circularConservation.enabled": false
+      },
+      "visibleText": [
+       "NC_002695.2",
+       "5,498,578 bp",
+       "GC content"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "title": "Compare the chromosome with three genomes",
+   "body": "Open Pairwise Comparisons. Run LOSAT is the default source, and the default LOSAT mode, BLASTN, compares nucleotide sequences. Click Add comparison sequence, choose NZ_CP008957.1.fna, and type O157:H7 EDL933 in the name box beside the ring's color. Add NC_000913.3.fna and NC_004431.1.fna the same way, one at a time, with the names in the table. Show Comparison Rings in Layout turns on with the first file. Click Generate Diagram: LOSATN compares each genome with the chromosome once, and three identity rings appear inside the features, outer to inner in the order you added them. The EDL933 ring is closed except one gap near 5.05 Mbp. The K-12 and CFT073 rings break at the same places, around 0.9, 1.3, 1.4, 2.9, 4.6, and 5.05 Mbp: stretches of the Sakai chromosome that these two strains lack.",
+   "table": {
+    "columns": [
+     "Comparison sequence",
+     "Name"
+    ],
+    "rows": [
+     [
+      "NZ_CP008957.1.fna",
+      "O157:H7 EDL933"
+     ],
+     [
+      "NC_000913.3.fna",
+      "K-12 MG1655"
+     ],
+     [
+      "NC_004431.1.fna",
+      "CFT073 (UPEC)"
+     ]
+    ]
+   },
+   "replay": [
+    {
+     "type": "evaluate",
+     "script": "const labels = [\"Pairwise Comparisons\", \"Layout\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+    },
+    {
+     "type": "check",
+     "selector": "role=checkbox[name='Show Comparison Rings'] >> visible=true"
+    },
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Comparison ring label 1']",
+     "value": "O157:H7 EDL933"
+    },
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Comparison ring label 2']",
+     "value": "K-12 MG1655"
+    },
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Comparison ring label 3']",
+     "value": "CFT073 (UPEC)"
+    },
+    {
+     "type": "generate"
+    }
+   ],
+   "operations": [
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/ecoli_o157_sakai_rings/manual-04-01-comparison-files.webp",
+      "alt": "Comparison sequence files in Pairwise Comparisons: NZ_CP008957.1.fna named O157:H7 EDL933, NC_000913.3.fna named K-12 MG1655, and NC_004431.1.fna named CFT073 (UPEC), each with its own color, and the Add comparison sequence button.",
+      "caption": "Add the three genomes one at a time and name each ring."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "replayThrough": 4,
+      "viewport": {
+       "width": 1280,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "const labels = [\"Pairwise Comparisons\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+       },
+       {
+        "type": "evaluate",
+        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const node = document.querySelector(\"input[aria-label='Comparison ring label 1']\"); if (!node) throw new Error(\"Capture target not found: input[aria-label='Comparison ring label 1']\"); node.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
+       },
+       {
+        "type": "wait",
+        "ms": 300
+       }
+      ],
+      "clipSelectors": [
+       "input[aria-label='Comparison ring label 1']",
+       "input[aria-label='Comparison ring label 3']",
+       "input[type='file'][accept^='.fa,.fas,'] + button"
+      ],
+      "cropPadding": 8,
+      "assertAppState": {
+       "mode": "circular",
+       "circularConservation.enabled": true,
+       "circularConservation.source": "losat"
+      },
+      "visibleControls": [
+       {
+        "selector": "input[aria-label='Comparison ring label 1']",
+        "value": "O157:H7 EDL933"
+       },
+       {
+        "selector": "input[aria-label='Comparison ring label 2']",
+        "value": "K-12 MG1655"
+       },
+       {
+        "selector": "input[aria-label='Comparison ring label 3']",
+        "value": "CFT073 (UPEC)"
+       }
+      ]
+     }
+    },
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/ecoli_o157_sakai_rings/manual-04-02-rings-preview.webp",
+      "alt": "Preview with three identity rings inside the features: O157:H7 EDL933 in blue is closed except one gap, while K-12 MG1655 in orange and CFT073 (UPEC) in green break at the same places; the legend gives each ring's name with its own identity ramp.",
+      "caption": "Three rings from one LOSATN search: the K-12 and CFT073 rings break at the same places."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "replayThrough": 4,
+      "viewport": {
+       "width": 1400,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-rings-preview', 'true');"
+       },
+       {
+        "type": "wait",
+        "ms": 100
+       }
+      ],
+      "selector": "svg[data-capture-rings-preview='true']",
+      "cropPadding": 12,
+      "assertAppState": {
+       "mode": "circular",
+       "circularConservation.enabled": true
+      },
+      "visibleText": [
+       "NC_002695.2",
+       "5,498,578 bp",
+       "GC content",
+       "O157:H7 EDL933",
+       "K-12 MG1655",
+       "CFT073 (UPEC)"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "title": "Name the islands from a region table",
+   "body": "The gaps have no names yet. Open Region Annotations, click Import TSV, and choose ecoli_o157_sakai_islands.tsv. It adds two region sets: islands_tint, with one highlight per island, and islands, with one labelled line per island. Click Generate Diagram; it reuses the cached LOSAT results. Six labelled lines appear outside the map, and six tints mark the islands on the feature track.",
+   "table": {
+    "columns": [
+     "Region set",
+     "Marks"
+    ],
+    "rows": [
+     [
+      "islands_tint",
+      "6 highlights"
+     ],
+     [
+      "islands",
+      "6 labelled lines"
+     ]
+    ]
+   },
+   "replay": [
+    {
+     "type": "evaluate",
+     "script": "const labels = [\"Region Annotations\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+    },
+    {
+     "type": "upload",
+     "selector": "button:has-text('Import TSV')",
+     "path": "gallery/files/ecoli_o157_sakai_islands.tsv"
+    },
+    {
+     "type": "generate"
+    }
+   ],
+   "operations": [
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/ecoli_o157_sakai_rings/manual-05-01-region-sets.webp",
+      "alt": "Region Annotations card after Import TSV of ecoli_o157_sakai_islands.tsv: the region set islands_tint with its six islands, and the start of the region set islands.",
+      "caption": "Import ecoli_o157_sakai_islands.tsv."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "replayThrough": 5,
+      "viewport": {
+       "width": 1280,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "const labels = [\"Region Annotations\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+       },
+       {
+        "type": "evaluate",
+        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const node = document.querySelector(\"details:has(> summary[aria-label='Region Annotations']) > div > div.flex.flex-wrap\"); if (!node) throw new Error(\"Capture target not found: details:has(> summary[aria-label='Region Annotations']) > div > div.flex.flex-wrap\"); node.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
+       },
+       {
+        "type": "wait",
+        "ms": 300
+       }
+      ],
+      "clipSelectors": [
+       "details:has(> summary[aria-label='Region Annotations']) > div > div.flex.flex-wrap",
+       "input[aria-label='Annotation set id']"
+      ],
+      "cropPadding": 8,
+      "assertAppState": {
+       "mode": "circular",
+       "circularConservation.enabled": true
+      },
+      "visibleControls": [
+       {
+        "selector": "input[aria-label='Annotation set id']",
+        "value": "islands_tint"
+       },
+       {
+        "selector": "input[aria-label='Annotation set id']",
+        "nth": 1,
+        "value": "islands"
+       }
+      ]
+     }
+    },
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/ecoli_o157_sakai_rings/manual-05-02-regions-preview.webp",
+      "alt": "Preview with six plum lines and their names outside the map (Sakai-only prophage, Effector-gene phage, Stx2 phage, Tellurite island, Stx1 phage, LEE island) and six plum tints on the feature track only.",
+      "caption": "The islands are named, but their tints stop at the feature track."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "replayThrough": 5,
+      "viewport": {
+       "width": 1400,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-rings-preview', 'true');"
+       },
+       {
+        "type": "wait",
+        "ms": 100
+       }
+      ],
+      "selector": "svg[data-capture-rings-preview='true']",
+      "cropPadding": 12,
+      "assertAppState": {
+       "mode": "circular",
+       "circularConservation.enabled": true
+      },
+      "visibleText": [
+       "NC_002695.2",
+       "5,498,578 bp",
+       "GC content",
+       "Stx2 phage",
+       "Stx1 phage",
+       "LEE island",
+       "Tellurite island",
+       "Effector-gene phage",
+       "Sakai-only prophage"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "title": "Stretch the tints across the rings",
+   "body": "The tints stop at the feature track, while the gaps they explain are in the rings. In Layout, open Custom Track Slots and turn on Use custom stack. Add both region sets to the stack before you generate: a custom stack draws only the region sets it has a row for. Choose Annotations as the new track and click Add track. In the new row, annotations, set Annotation set to islands_tint, the placement to Overlay anchor, the anchor to features, and Extend to conservation_CFT073_UPEC, the innermost ring. Add another Annotations row, annotations_2, set its Annotation set to islands, and choose Row actions, Move outside Axis, so that the labels stay outside the map. Click Generate Diagram; it reuses the cached LOSAT results. Each tint now runs from the feature track through all three rings, and the gaps of K-12 and CFT073, and the one gap of EDL933 at the Sakai-only prophage, sit inside the named islands.",
+   "table": {
+    "columns": [
+     "Row",
+     "Setting",
+     "Value"
+    ],
+    "rows": [
+     [
+      "Custom Track Slots",
+      "Use custom stack",
+      "On"
+     ],
+     [
+      "annotations",
+      "Annotation set",
+      "islands_tint"
+     ],
+     [
+      "annotations",
+      "Placement",
+      "Overlay anchor"
+     ],
+     [
+      "annotations",
+      "Anchor",
+      "features"
+     ],
+     [
+      "annotations",
+      "Extend to",
+      "conservation_CFT073_UPEC"
+     ],
+     [
+      "annotations_2",
+      "Annotation set",
+      "islands"
+     ],
+     [
+      "annotations_2",
+      "Row actions",
+      "Move outside Axis"
+     ]
+    ]
+   },
+   "replay": [
+    {
+     "type": "evaluate",
+     "script": "const toggle = document.querySelector('[aria-controls=\"circular-custom-track-slots-panel\"]'); if (!toggle) throw new Error('Custom Track Slots toggle not found.'); let node = toggle; while (node) { if (node.tagName === 'DETAILS' && !node.open) node.open = true; node = node.parentElement; } if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click();"
+    },
+    {
+     "type": "check",
+     "selector": "[data-setting='track-slots']:has(#circular-custom-track-slots-panel) >> role=checkbox[name='Use custom stack']"
+    },
+    {
+     "type": "select",
+     "selector": "[aria-label='New circular track renderer']",
+     "value": "annotations"
+    },
+    {
+     "type": "click",
+     "selector": "#circular-custom-track-slots-panel button:has-text('Add track')"
+    },
+    {
+     "type": "select",
+     "selector": "[aria-label='Circular track slot annotations Annotation set']",
+     "value": "islands_tint"
+    },
+    {
+     "type": "select",
+     "selector": "[aria-label='Circular track slot annotations Annotation placement']",
+     "value": "overlay"
+    },
+    {
+     "type": "select",
+     "selector": "[aria-label='Circular track slot annotations Enabled drawable anchor']",
+     "value": "features"
+    },
+    {
+     "type": "select",
+     "selector": "[aria-label='Circular track slot annotations Extend to']",
+     "value": "conservation_CFT073_UPEC"
+    },
+    {
+     "type": "select",
+     "selector": "[aria-label='New circular track renderer']",
+     "value": "annotations"
+    },
+    {
+     "type": "click",
+     "selector": "#circular-custom-track-slots-panel button:has-text('Add track')"
+    },
+    {
+     "type": "select",
+     "selector": "[aria-label='Circular track slot annotations_2 Annotation set']",
+     "value": "islands"
+    },
+    {
+     "type": "click",
+     "selector": "[data-capture='circular-track-slot-annotations_2'] .track-slot-row-menu > summary"
+    },
+    {
+     "type": "click",
+     "selector": "[data-capture='circular-track-slot-annotations_2'] .track-slot-row-menu >> role=button[name='Move outside Axis']"
+    },
+    {
+     "type": "generate"
+    }
+   ],
+   "operations": [
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/ecoli_o157_sakai_rings/manual-06-01-label-row.webp",
+      "alt": "Top of the custom stack with Use custom stack on: the annotations_2 row with Annotation set islands above the Axis, then the features row below it.",
+      "caption": "Turn on Use custom stack; the annotations_2 row draws islands outside the Axis."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "replayThrough": 6,
+      "viewport": {
+       "width": 1280,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "const toggle = document.querySelector('[aria-controls=\"circular-custom-track-slots-panel\"]'); if (!toggle) throw new Error('Custom Track Slots toggle not found.'); let node = toggle; while (node) { if (node.tagName === 'DETAILS' && !node.open) node.open = true; node = node.parentElement; } if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click();"
+       },
+       {
+        "type": "evaluate",
+        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const node = document.querySelector(\"[data-capture='circular-track-slot-annotations_2']\"); if (!node) throw new Error(\"Capture target not found: [data-capture='circular-track-slot-annotations_2']\"); node.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
+       },
+       {
+        "type": "wait",
+        "ms": 300
+       }
+      ],
+      "clipSelectors": [
+       "[data-capture='circular-track-slot-annotations_2']",
+       "[data-capture='circular-track-axis-row']"
+      ],
+      "cropPadding": 8,
+      "assertAppState": {
+       "mode": "circular",
+       "adv.circular_track_slots_enabled": true
+      },
+      "visibleControls": [
+       {
+        "selector": "[aria-label='Circular track slot annotations_2 Annotation set']",
+        "value": "islands"
+       }
+      ]
+     }
+    },
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/ecoli_o157_sakai_rings/manual-06-02-tint-row.webp",
+      "alt": "The annotations row of the custom stack: Annotation set islands_tint, placement Overlay anchor, anchor features, layer Foreground, and Extend to conservation_CFT073_UPEC.",
+      "caption": "The annotations row lays islands_tint over the features and extends it to the innermost ring."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "replayThrough": 6,
+      "viewport": {
+       "width": 1280,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "const toggle = document.querySelector('[aria-controls=\"circular-custom-track-slots-panel\"]'); if (!toggle) throw new Error('Custom Track Slots toggle not found.'); let node = toggle; while (node) { if (node.tagName === 'DETAILS' && !node.open) node.open = true; node = node.parentElement; } if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click();"
+       },
+       {
+        "type": "evaluate",
+        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const node = document.querySelector(\"[data-capture='circular-track-slot-annotations']\"); if (!node) throw new Error(\"Capture target not found: [data-capture='circular-track-slot-annotations']\"); node.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
+       },
+       {
+        "type": "wait",
+        "ms": 300
+       }
+      ],
+      "clipSelectors": [
+       "[data-capture='circular-track-slot-annotations']"
+      ],
+      "cropPadding": 8,
+      "assertAppState": {
+       "mode": "circular",
+       "adv.circular_track_slots_enabled": true
+      },
+      "visibleControls": [
+       {
+        "selector": "[aria-label='Circular track slot annotations Annotation set']",
+        "value": "islands_tint"
+       },
+       {
+        "selector": "[aria-label='Circular track slot annotations Annotation placement']",
+        "value": "overlay"
+       },
+       {
+        "selector": "[aria-label='Circular track slot annotations Extend to']",
+        "value": "conservation_CFT073_UPEC"
+       }
+      ]
+     }
+    },
+    {
+     "dataDependent": true,
+     "media": {
+      "src": "./media/ecoli_o157_sakai_rings/manual-06-03-final-preview.webp",
+      "alt": "Final preview: six named plum tints run from the feature track through the O157:H7 EDL933, K-12 MG1655, and CFT073 (UPEC) rings; the K-12 and CFT073 gaps, and the one EDL933 gap at the Sakai-only prophage, lie inside the tints.",
+      "caption": "Each island's tint now runs through all three rings."
+     },
+     "capture": {
+      "source": "webapp",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "replayThrough": 6,
+      "viewport": {
+       "width": 1400,
+       "height": 1400
+      },
+      "actions": [
+       {
+        "type": "evaluate",
+        "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const svg = app?.svgContainer?.querySelector('svg'); if (!svg) throw new Error('No generated preview.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-rings-preview', 'true');"
+       },
+       {
+        "type": "wait",
+        "ms": 100
+       }
+      ],
+      "selector": "svg[data-capture-rings-preview='true']",
+      "cropPadding": 12,
+      "assertAppState": {
+       "mode": "circular",
+       "adv.circular_track_slots_enabled": true
+      },
+      "visibleText": [
+       "NC_002695.2",
+       "5,498,578 bp",
+       "GC content",
+       "O157:H7 EDL933",
+       "K-12 MG1655",
+       "CFT073 (UPEC)",
+       "Stx2 phage",
+       "Stx1 phage",
+       "LEE island",
+       "Tellurite island",
+       "Effector-gene phage",
+       "Sakai-only prophage"
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "troubleshooting": [
+  {
+   "title": "No comparison rings are drawn",
+   "body": "Check that the three comparison files are listed in Pairwise Comparisons with Run LOSAT chosen, and that Show Comparison Rings in Layout is on."
+  },
+  {
+   "title": "The region tints or labels disappear after Use custom stack is turned on",
+   "body": "A custom stack draws only the region sets it has a row for. Add an Annotations row for islands_tint and one for islands, as in the last step."
+  },
+  {
+   "title": "The island names are drawn in the center of the map",
+   "body": "The annotations_2 row is below the Axis. Choose Row actions, Move outside Axis on that row."
+  },
+  {
+   "title": "The generated diagram differs from the Gallery image",
+   "body": "Check the ring order (O157:H7 EDL933, K-12 MG1655, CFT073 (UPEC), outer to inner), the region table ecoli_o157_sakai_islands.tsv, the two Annotations rows, and Extend to conservation_CFT073_UPEC."
+  }
+ ],
+ "related": [
+  {
+   "label": "Open this Gallery entry",
+   "href": "./#ecoli_o157_sakai_rings"
+  },
+  {
+   "label": "Open the gbdraw web app",
+   "href": "../"
+  },
+  {
+   "label": "Read the track customization reference",
+   "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations"
+  }
+ ]
+}

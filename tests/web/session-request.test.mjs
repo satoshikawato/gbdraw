@@ -2443,6 +2443,18 @@ assert.deepEqual(
   cardsOfKeys([{ recordKey: 'circular-BGC0000709-#2', resourceId: firstResource }]),
   [{ uid: 'record-1', name: firstName }]
 );
+// A Session 51 saved in the Web keyed its records by its cards' uids; a Load without its bindings (a Gallery
+// Session) keeps them, so the record rows that name them still apply (OV-3022). A 0.14.2 key of a record whose ID
+// begins `source-` is not such a uid.
+const webCardUid = 'circular-source-60ac5956-743c-42df-b464-ade6d3a183df';
+assert.deepEqual(
+  cardsOfKeys([{ recordKey: `${webCardUid}:1`, resourceId: firstResource }, { recordKey: 'circular-source-1700000000000-2', resourceId: 'record-2-genbank' }]),
+  [{ uid: webCardUid, name: firstName }, { uid: 'circular-source-1700000000000-2', name: multiCards[1].gb.name }]
+);
+assert.deepEqual(
+  cardsOfKeys([{ recordKey: 'circular-source-1-#2', resourceId: firstResource }]),
+  [{ uid: 'record-1', name: firstName }]
+);
 // OV-2960: a Record Order token `#k` names the committed request's k-th record through the one `#N` reader
 // (`flatRecordSelectorNumber`); `#0` and `#01` are not that selector and stay as they are.
 const projectedPositions = projectCanonicalSessionRequest({

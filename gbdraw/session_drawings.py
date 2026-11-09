@@ -998,7 +998,9 @@ def _card_uids(files: Sequence[object], records: Sequence[object]) -> list[str]:
     form (``record-<n>``) and the bases differ; else ``record-1`` for one card and
     ``source-<n>`` for several, which no key of a Session 50 has (a composite
     drawn as one concatenated source keyed its records ``record-<k>`` over all
-    of them).
+    of them). The Web's ``cardUids`` also keeps a key base that is a Web
+    card's uid, for the cards a Load makes of a Session 51 published without
+    bindings (OV-3022); no Session 46-50 has such a key.
     """
 
     bases: list[str] = []

@@ -928,7 +928,7 @@ test('Gallery uses workflow tags and runnable commands', async ({ page }) => {
   await page.goto(`${baseUrl}/gallery/`, { waitUntil: 'domcontentloaded' });
 
   const cards = page.locator('.sample-card');
-  await expect(cards).toHaveCount(11);
+  await expect(cards).toHaveCount(12);
   await expect(cards.nth(0)).not.toContainText('Beginner');
   await expect(cards.nth(0)).not.toContainText('Under 5 min');
   await expect(cards.nth(0).locator('.tag')).toHaveText(['Circular', 'Interactive SVG']);
@@ -938,18 +938,18 @@ test('Gallery uses workflow tags and runnable commands', async ({ page }) => {
   const tagFilters = page.getByRole('group', { name: 'Filter by tag' });
   await tagFilters.getByRole('button', { name: 'Linear', exact: true }).click();
   await expect(cards).toHaveCount(6);
-  await expect(page.locator('#sample-count')).toHaveText('6 of 11 examples');
+  await expect(page.locator('#sample-count')).toHaveText('6 of 12 examples');
   await tagFilters.getByRole('button', { name: 'LOSAT', exact: true }).click();
   await expect(cards).toHaveCount(5);
-  await expect(page.locator('#sample-count')).toHaveText('5 of 11 examples');
+  await expect(page.locator('#sample-count')).toHaveText('5 of 12 examples');
   await expect(cards.locator('.tag-row')).toContainText(['LOSAT', 'LOSAT', 'LOSAT', 'LOSAT', 'LOSAT']);
   await tagFilters.getByRole('button', { name: 'Circular', exact: true }).click();
   await expect(cards).toHaveCount(0);
   await expect(page.locator('#no-tag-matches')).toBeVisible();
-  await expect(page.locator('#sample-count')).toHaveText('0 of 11 examples');
+  await expect(page.locator('#sample-count')).toHaveText('0 of 12 examples');
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
-  await expect(cards).toHaveCount(11);
-  await expect(page.locator('#sample-count')).toHaveText('11 examples');
+  await expect(cards).toHaveCount(12);
+  await expect(page.locator('#sample-count')).toHaveText('12 examples');
 
   const harveyiCard = page.locator('[data-sample-id="vibrio-harveyi-group-collinear"]');
   await expect(harveyiCard.locator('.tag')).toHaveText([

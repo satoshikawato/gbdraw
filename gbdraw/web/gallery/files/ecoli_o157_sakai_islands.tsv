@@ -1,0 +1,13 @@
+set_id	id	mark	record	start	end	coordinate_space	wraps_origin	label	lane	fill	fill_opacity	stroke	stroke_width	label_color	label_font_size	label_offset	label_orientation
+islands_tint	stx2_phage_tint	highlight	NC_002695.2	1254737	1308857	source	false			#b07aa1	0.25	#8a5a80	1.5				
+islands_tint	ter_island_tint	highlight	NC_002695.2	1405426	1417933	source	false			#b07aa1	0.25	#8a5a80	1.5				
+islands_tint	stx1_phage_tint	highlight	NC_002695.2	2906409	2935986	source	false			#b07aa1	0.25	#8a5a80	1.5				
+islands_tint	lee_tint	highlight	NC_002695.2	4582350	4624421	source	false			#b07aa1	0.25	#8a5a80	1.5				
+islands_tint	effector_phage_tint	highlight	NC_002695.2	891128	929694	source	false			#b07aa1	0.25	#8a5a80	1.5				
+islands_tint	sakai_phage_tint	highlight	NC_002695.2	5040982	5079726	source	false			#b07aa1	0.25	#8a5a80	1.5				
+islands	stx2_phage	line	NC_002695.2	1254737	1308857	source	false	Stx2 phage	0			#8a5a80	4	#6b4463	22	6	horizontal
+islands	ter_island	line	NC_002695.2	1405426	1417933	source	false	Tellurite island	0			#8a5a80	4	#6b4463	22	6	horizontal
+islands	stx1_phage	line	NC_002695.2	2906409	2935986	source	false	Stx1 phage	0			#8a5a80	4	#6b4463	22	6	horizontal
+islands	lee	line	NC_002695.2	4582350	4624421	source	false	LEE island	0			#8a5a80	4	#6b4463	22	6	horizontal
+islands	effector_phage	line	NC_002695.2	891128	929694	source	false	Effector-gene phage	0			#8a5a80	4	#6b4463	22	6	horizontal
+islands	sakai_phage	line	NC_002695.2	5040982	5079726	source	false	Sakai-only prophage	0			#8a5a80	4	#6b4463	22	6	horizontal

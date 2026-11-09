@@ -46,6 +46,14 @@ The 606,194-bp genome of <i>Ca.</i> Hepatoplasma scabrum Ps-JP with a ring of me
 
 [Open in the interactive Gallery](https://gbdraw.app/gallery/#hepatoplasma_scabrum_depth)
 
+### Strain-specific islands in whole-genome comparison rings (<i>Escherichia coli</i> O157:H7 Sakai)
+
+<a href="https://gbdraw.app/gallery/#ecoli_o157_sakai_rings"><img src="../gbdraw/web/gallery/thumbnails/ecoli_o157_sakai_rings.webp" alt="Circular map of the Escherichia coli O157:H7 Sakai chromosome with three comparison rings and six named plum tints that run from the gene ring through the rings" width="640"></a>
+
+The 5,498,578-bp chromosome of <i>Escherichia coli</i> O157:H7 Sakai with three nucleotide identity rings from one LOSATN search in the browser: O157:H7 EDL933, K-12 MG1655, and the uropathogenic strain CFT073. EDL933 covers almost the whole chromosome, while K-12 and CFT073 leave many gaps, several at the same places. Six of them are tinted across the rings and named: the Stx1 and Stx2 phages, which carry the Shiga toxin genes, the tellurite resistance island, the LEE island, a phage with effector genes, and a prophage that EDL933 also lacks.
+
+[Open in the interactive Gallery](https://gbdraw.app/gallery/#ecoli_o157_sakai_rings)
+
 ### Every replicon of a multi-replicon bacterial genome on one canvas (<i>Vibrio nigripulchritudo</i>)
 
 <a href="https://gbdraw.app/gallery/#Vnig_TUMSAT-TG-2018"><img src="../gbdraw/web/gallery/thumbnails/Vnig_TUMSAT-TG-2018.webp" alt="Two chromosomes and four plasmids of Vibrio nigripulchritudo drawn as six circles on one canvas" width="640"></a>

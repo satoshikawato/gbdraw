@@ -488,6 +488,18 @@ write-up of a release.
   depth track it was saved with. A command-line Session whose depth track
   left its color, label, height, or ticks at their defaults could not be
   published at all; it now publishes.
+- Added: a Gallery example with a step-by-step tutorial that compares the
+  *Escherichia coli* O157:H7 Sakai chromosome with three other *E. coli*
+  genomes as comparison rings and marks six strain-specific islands across
+  the rings with region annotations.
+- Fixed (CLI): `--session_output` could not save a Circular Session with
+  comparison rings again when the Session held no Web file list, as a Gallery
+  Session does; the command drew the figure and then stopped with "Web
+  binding schema 2 requires circularSources". It now saves the Session.
+- Fixed (Gallery tooling): a Circular Session saved in the Web app could not
+  be published: the published Session keeps no Web file list, and its Load
+  gave the GenBank file's card a new ID, so Record Order no longer named the
+  record. Load now keeps the card ID that the drawing's records use.
 - Fixed (Web app): Reset Settings returns an empty Width or Height of Figure
   size to px. Before, a unit picked for an empty side without typing an amount
   (for example mm) stayed after Reset Settings, so the next amount typed was
