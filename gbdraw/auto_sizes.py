@@ -157,18 +157,19 @@ def sliding_window(length: int, cfg: GbdrawConfig) -> tuple[int, int]:
     a tenth of the length and the step at most a tenth of the window, each at least 1 bp."""
     tier_window, tier_step = next(
         ((window, step) for below, window, step in sliding_window_tiers(cfg) if length < below),
-        (int(cfg.objects.sliding_window.up10m[0]), int(cfg.objects.sliding_window.up10m[1])),
+        (int(cfg.objects.sliding_window.up100m[0]), int(cfg.objects.sliding_window.up100m[1])),
     )
     window = max(1, min(tier_window, int(length) // _SLIDING_WINDOW_DIVISOR))
     return window, max(1, min(tier_step, window // _SLIDING_WINDOW_DIVISOR))
 
 
 def sliding_window_tiers(cfg: GbdrawConfig) -> tuple[tuple[int, int, int], ...]:
-    """Return the Auto GC (below bp, window, step) tiers; longer records use ``up10m``."""
+    """Return the Auto GC (below bp, window, step) tiers; records of 100 Mbp or longer use ``up100m``."""
     tiers = cfg.objects.sliding_window
     return (
         (1_000_000, int(tiers.default[0]), int(tiers.default[1])),
         (10_000_000, int(tiers.up1m[0]), int(tiers.up1m[1])),
+        (100_000_000, int(tiers.up10m[0]), int(tiers.up10m[1])),
     )
 
 
@@ -178,11 +179,11 @@ def tick_and_window_tiers(cfg: GbdrawConfig) -> dict[str, object]:
     Each ``tiers`` row is checked in order against the record length (circular
     ticks: at most; the others: below); a longer record takes ``above``.
     """
-    up10m = cfg.objects.sliding_window.up10m
+    up100m = cfg.objects.sliding_window.up100m
     return {
         "slidingWindow": {
             "tiers": [list(row) for row in sliding_window_tiers(cfg)],
-            "above": [int(up10m[0]), int(up10m[1])],
+            "above": [int(up100m[0]), int(up100m[1])],
             "divisor": _SLIDING_WINDOW_DIVISOR,
         },
         "depthWindow": {"divisor": _DEPTH_WINDOW_DIVISOR, "minWindow": _DEPTH_MIN_WINDOW},

@@ -92,6 +92,9 @@ def test_packaged_size_class_boundary(cfg: GbdrawConfig, mode: DiagramMode, boun
         (1_000_000, (10_000, 1_000)),
         (9_999_999, (10_000, 1_000)),
         (10_000_000, (100_000, 10_000)),
+        (99_999_999, (100_000, 10_000)),
+        (100_000_000, (1_000_000, 100_000)),
+        (248_956_422, (1_000_000, 100_000)),
     ],
 )
 def test_sliding_window_tiers(cfg: GbdrawConfig, length: int, expected: tuple[int, int]) -> None:

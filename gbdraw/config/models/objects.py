@@ -532,6 +532,7 @@ class ObjectsSlidingWindowConfig:
     default: tuple[int, int]
     up1m: tuple[int, int]
     up10m: tuple[int, int]
+    up100m: tuple[int, int] = (1_000_000, 100_000)
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsSlidingWindowConfig":
@@ -539,7 +540,12 @@ class ObjectsSlidingWindowConfig:
             a = list(v)
             return ascii_int(a[0]), ascii_int(a[1])
 
-        return cls(default=_pair(d["default"]), up1m=_pair(d["up1m"]), up10m=_pair(d["up10m"]))
+        return cls(
+            default=_pair(d["default"]),
+            up1m=_pair(d["up1m"]),
+            up10m=_pair(d["up10m"]),
+            up100m=_pair(d["up100m"]) if "up100m" in d else cls.up100m,
+        )
 
 
 @dataclass(frozen=True)

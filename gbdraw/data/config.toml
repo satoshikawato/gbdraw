@@ -103,6 +103,7 @@ color_scheme = "same"
 identity_scale = "auto"
 
 [objects.sliding_window]
+up100m = [1000000, 100000]
 up10m = [100000, 10000]
 up1m = [10000, 1000]
 default = [1000, 100]
