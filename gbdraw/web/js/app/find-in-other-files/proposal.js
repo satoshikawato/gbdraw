@@ -1,13 +1,14 @@
 // @ts-check
 // The proposal of Find in other files (PD-OI-123) as the dialog shows it. Python made every value (the windows, which
-// are ticked at first and why the others are not, the genes found, the window numbers of the drawing); these
-// functions only word them. A window is found by its identity in the plan: its File and its column.
+// are ticked at first and why the others are not, the genes found, the window numbers of the drawing, the alignments
+// removed); these functions only word them. A window is found by its identity in the plan: its File and its column.
 import { msg, t, tm, tn } from '../../utils/i18n.js';
-import { circledNumber, windowGeneSpan, windowSpanText } from '../../services/find-in-other-files.js';
+import { diagnosticError } from '../../utils/error-normalization.js';
+import { LOCATE_OPERATION, circledNumber, windowGeneSpan, windowSpanText } from '../../services/find-in-other-files.js';
 
 /**
- * @import { FilePlanJson, LocatePlanJson, LocatePlanReply, LocateWindowChoiceInput, LocateWindowRefused,
- *   PlannedWindowJson } from '../../contracts/locate.generated.js'
+ * @import { FilePlanJson, LocateDrawingReady, LocateFileCountsReply, LocatePlanJson, LocatePlanReply,
+ *   LocateWindowChoiceInput, LocateWindowRefused, PlannedWindowJson } from '../../contracts/locate.generated.js'
  */
 
 /**
@@ -128,44 +129,61 @@ const geneList = (ids, names) => ids.map((id) => names[id] ?? id).join(', ');
 
 /**
  * Why a File has no window: its search failed (with the reason), or no window was found (with how many alignments
- * the thresholds removed).
+ * the thresholds removed, Python's count).
  * @param {FilePlanJson} file
+ * @param {LocateFileCountsReply} counts
  */
-const emptyText = (file) => {
+const emptyText = (file, counts) => {
   const failed = file.warnings.find((warning) => warning.code === 'FILE_SEARCH_FAILED');
   if (failed) return t('The search of this file failed: {reason}', { reason: String(failed.args.error ?? '') });
   if (file.windows.length || file.candidates.length) return '';
-  const removed = file.tally.rows_read - file.tally.rows_kept;
-  return tn(removed, 'No window found. The thresholds removed {count} alignment.', 'No window found. The thresholds removed {count} alignments.');
+  return tn(counts.alignmentsRemoved, 'No window found. The thresholds removed {count} alignment.',
+    'No window found. The thresholds removed {count} alignments.');
 };
 
 /**
- * The proposal: each File in the drawing's order, with the windows of the search and their state now.
+ * One File of a plan by its File key; a plan without it is not the plan of this search.
+ * @template {{ file_key: string } | { fileKey: string }} T
+ * @param {readonly T[]} items @param {string} fileKey
+ * @returns {T}
+ */
+const byFileKey = (items, fileKey) => {
+  const found = items.find((item) => ('file_key' in item ? item.file_key : item.fileKey) === fileKey);
+  if (!found) throw diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: LOCATE_OPERATION });
+  return found;
+};
+
+/**
+ * The proposal: each File in the drawing's order, with the windows of the search and their state now. Python gives
+ * every number: the window numbers of the drawing, the genes found and the alignments removed (`counts`).
  * @param {LocatePlanReply} search The search's plan, its gene names.
- * @param {LocatePlanJson} chosen The plan of the kept windows (Python's `choose_locate_windows`).
+ * @param {Pick<LocateDrawingReady, 'plan' | 'counts'>} chosen The plan of the kept windows (Python's
+ *   `choose_locate_windows`) and the counts of its Files (`locate_file_counts`).
  * @param {readonly WindowDraft[]} drafts
  * @param {Readonly<Record<string, string>>} fileNames By File key.
  * @returns {ProposalFileView[]}
  */
 export const proposalView = (search, chosen, drafts, fileNames) => {
   const names = search.geneNames;
-  const total = search.plan.reference.genes.length;
   const draftOf = new Map(drafts.map((draft) => [draft.key, draft]));
-  return search.plan.files.map((file, index) => {
-    const kept = chosen.files[index];
-    const keptByKey = new Map(kept.windows.map((item, position) => [windowKey(file.file_key, item.window.column), { item, number: position + 1 }]));
+  return search.plan.files.map((file) => {
+    const kept = byFileKey(chosen.plan.files, file.file_key);
+    const counts = byFileKey(chosen.counts, file.file_key);
+    const numbers = new Map(counts.windowNumbers.map(({ column, number }) => [column, number]));
+    const keptByKey = new Map(kept.windows.map((item) => [windowKey(file.file_key, item.window.column), item]));
     /** @param {PlannedWindowJson} item */
     const row = (item) => {
       const key = windowKey(file.file_key, item.window.column);
-      const found = keptByKey.get(key);
-      return windowView(item, found?.item, /** @type {WindowDraft} */ (draftOf.get(key)), found?.number ?? 0, names, search.plan.options.max_windows);
+      const keptItem = keptByKey.get(key);
+      return windowView(item, keptItem, /** @type {WindowDraft} */ (draftOf.get(key)),
+        keptItem ? numbers.get(item.window.column ?? 0) ?? 0 : 0, names, search.plan.options.max_windows);
     };
     const { complete, partial, absent } = kept.coverage;
     return {
       fileKey: file.file_key,
       name: fileNames[file.file_key] ?? file.file_key,
       summary: t('{windows} · {found} of {total} genes', {
-        windows: tn(kept.windows.length, '{count} window', '{count} windows'), found: complete.length + partial.length, total
+        windows: tn(kept.windows.length, '{count} window', '{count} windows'), found: counts.genesFound, total: counts.genesTotal
       }),
       windows: file.windows.map(row),
       notSelected: file.candidates.map(row),
@@ -174,7 +192,7 @@ export const proposalView = (search, chosen, drafts, fileNames) => {
       }),
       partial: geneList(partial, names),
       absent: geneList(absent, names),
-      empty: emptyText(file)
+      empty: emptyText(file, counts)
     };
   });
 };

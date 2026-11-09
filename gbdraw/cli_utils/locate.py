@@ -36,6 +36,7 @@ from gbdraw.comparisons.locate import (
     finish_locate,
     locate_default_thresholds,
     locate_drawing,
+    locate_file_counts,
     locate_results,
     prepare_locate_search,
 )
@@ -263,15 +264,17 @@ def _report(plan: LocatePlan) -> None:
             "%d reference CDS cut by a window edge are not searched: %s.",
             len(reference.cut_genes), ", ".join(cds.name for cds in reference.cut_genes),
         )
-    for file_plan in plan.files:
+    for file_plan, counts in zip(plan.files, locate_file_counts(plan)):
         coverage = file_plan.coverage
-        found = len(coverage.complete) + len(coverage.partial)
         logger.info(
             "%s: %d window(s); %d of %d genes found, %d in full.",
-            file_plan.file_key, len(file_plan.windows), found, len(reference.genes), len(coverage.complete),
+            file_plan.file_key, len(file_plan.windows), counts.genes_found, counts.genes_total, len(coverage.complete),
         )
-        # Numbered as the drawing numbers the File's windows.
-        for number, window in enumerate(file_plan.windows, start=1):
+        # Each window by the number the drawing gives it (``locate_file_counts``), in that order.
+        numbers = dict(counts.window_numbers)
+        for number, window in sorted(
+            ((numbers[window.window.column or 0], window) for window in file_plan.windows), key=lambda item: item[0]
+        ):
             genes = sorted(window.genes, key=lambda gene: gene.order)
             first, last = names[genes[0].protein_id], names[genes[-1].protein_id]
             ends = [label for flag, label in ((window.touches_start, "contig start"), (window.touches_end, "contig end")) if flag]

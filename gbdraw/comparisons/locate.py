@@ -1534,6 +1534,45 @@ def locate_drawing(plan: LocatePlan) -> LocateDrawing:
     return LocateDrawing(tuple(rows), pairs)
 
 
+@dataclass(frozen=True)
+class LocateFileCounts:
+    """What the report and the proposal say of one File (PD-OI-123), from the plan of its selected windows.
+
+    ``window_numbers`` gives each selected window's number in the drawing as (column, number): a row draws its
+    windows by column, ties by input order (PD-OI-122), and numbers them in that order. ``genes_found`` are the
+    reference genes found in full or in part, of ``genes_total``; ``alignments_removed`` are the rows the thresholds
+    removed.
+    """
+
+    file_key: str
+    window_numbers: tuple[tuple[int, int], ...]
+    genes_found: int
+    genes_total: int
+    alignments_removed: int
+
+
+def _row_numbers(row: LocateDrawnRow) -> tuple[tuple[int, int], ...]:
+    columns = [window.column or 0 for record in row.records for window in record.windows]
+    order = sorted(range(len(columns)), key=lambda index: (columns[index], index))
+    return tuple((columns[index], number) for number, index in enumerate(order, start=1))
+
+
+def locate_file_counts(plan: LocatePlan) -> tuple[LocateFileCounts, ...]:
+    """The counts of each File of ``plan``, in plan order."""
+
+    numbers = {row.file_key: _row_numbers(row) for row in locate_drawing(plan).rows[1:]}
+    return tuple(
+        LocateFileCounts(
+            file_key=file_plan.file_key,
+            window_numbers=numbers.get(file_plan.file_key, ()),
+            genes_found=len(file_plan.coverage.complete) + len(file_plan.coverage.partial),
+            genes_total=len(plan.reference.genes),
+            alignments_removed=file_plan.tally.rows_read - file_plan.tally.rows_kept,
+        )
+        for file_plan in plan.files
+    )
+
+
 # Inputs from records and the search plan.
 
 
@@ -1860,6 +1899,7 @@ __all__ = [
     "read_locate_file",
     "LocateDrawnRecord",
     "LocateDrawnRow",
+    "LocateFileCounts",
     "LocateOptions",
     "LocatePlan",
     "LocatePlanJson",
@@ -1880,6 +1920,7 @@ __all__ = [
     "WindowGene",
     "locate_default_thresholds",
     "locate_drawing",
+    "locate_file_counts",
     "locate_query",
     "locate_reference",
     "locate_search_args",

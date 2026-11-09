@@ -9688,8 +9688,12 @@
             </div>
         </choice-dialog>
         <!-- Find in other files (PD-OI-123): the view of app/find-in-other-files.js, which owns open, close and every input.
-             The dialog steps aside while the LOSAT overlay shows the search; nothing here is saved or makes a History step. -->
+             The dialog steps aside while the full-window overlay shows the search ('searching': Python reads the files,
+             LOSAT by file, Python plans); it is busy while Python answers a tick, an edit or Create. Nothing here is saved
+             or makes a History step. -->
         <choice-dialog v-if="findInOtherFiles.dialog.show" v-show="findInOtherFiles.dialog.status !== 'searching'"
+             :busy="findInOtherFiles.dialog.status === 'deriving' || findInOtherFiles.dialog.status === 'creating'"
+             :busy-status="t('Updating the proposal…')"
              wide labelledby="find-files-title" describedby="find-files-description" data-find-files-dialog
              :data-find-files-screen="findInOtherFiles.dialog.screen" :data-find-files-status="findInOtherFiles.dialog.status"
              @cancel="findInOtherFiles.close()" @keydown.tab="trapDialogFocus"

@@ -54,6 +54,7 @@ from gbdraw.comparisons.locate import (
     choose_locate_windows,
     finish_locate,
     locate_drawing,
+    locate_file_counts,
     locate_results,
     locate_target,
     prepare_locate_search,
@@ -108,14 +109,12 @@ class LocateReferenceInput(TypedDict):
 
 class LocateReferenceReady(TypedDict):
     """The reference windows can be searched: the File and record they are of, and their genes (``genes``, the
-    CDS that lie wholly inside a window) and the CDS a window edge cuts (``cutGenes``, by name), which are not
-    searched."""
+    CDS that lie wholly inside a window). The proposal names the CDS a window edge cuts (the plan's ``cut_genes``)."""
 
     status: Literal["ready"]
     fileKey: str
     recordId: str
     genes: int
-    cutGenes: list[str]
 
 
 class LocateWindowRefused(TypedDict):
@@ -229,11 +228,32 @@ class LocateDrawingInput(TypedDict):
     adaptSizes: bool
 
 
+class LocateWindowNumber(TypedDict):
+    """A kept window by its column (its identity in the plan) and the number it has in the drawing."""
+
+    column: int
+    number: int
+
+
+class LocateFileCountsReply(TypedDict):
+    """What the proposal says of one File (``locate_file_counts``, which the report of ``gbdraw locate`` reads):
+    the number each kept window has in the drawing, the reference genes found in full or in part of all of them,
+    and the alignments the thresholds removed."""
+
+    fileKey: str
+    windowNumbers: list[LocateWindowNumber]
+    genesFound: int
+    genesTotal: int
+    alignmentsRemoved: int
+
+
 class LocateDrawingReady(TypedDict):
-    """The plan with the windows kept, its window pairs, and the new drawing."""
+    """The plan with the windows kept, the counts of each of its Files in plan order, its window pairs, and the new
+    drawing."""
 
     status: Literal["derived"]
     plan: LocatePlanJson
+    counts: list[LocateFileCountsReply]
     pairs: list[LocateWindowPairReply]
     drawing: DerivedRegionDrawing
 
@@ -368,7 +388,6 @@ def locate_web_reference(
         "fileKey": located.file_key,
         "recordId": located.record_id,
         "genes": len(located.genes),
-        "cutGenes": [cds.name for cds in located.cut_genes],
     }
 
 
@@ -467,6 +486,16 @@ def locate_web_drawing(
     return {
         "status": "derived",
         "plan": plan.to_json(),
+        "counts": [
+            {
+                "fileKey": counts.file_key,
+                "windowNumbers": [{"column": column, "number": number} for column, number in counts.window_numbers],
+                "genesFound": counts.genes_found,
+                "genesTotal": counts.genes_total,
+                "alignmentsRemoved": counts.alignments_removed,
+            }
+            for counts in locate_file_counts(plan)
+        ],
         "pairs": _pairs(plan),
         "drawing": derived_drawing_reply(
             derived.request, "linear", derived.adaptation, derived.not_carried, resource_paths
@@ -568,6 +597,7 @@ __all__ = [
     "LocateDrawingReply",
     "LocateDrawingStep",
     "LocateEditRefused",
+    "LocateFileCountsReply",
     "LocateFileRecord",
     "LocateFileReply",
     "LocateFilesReply",
@@ -590,6 +620,7 @@ __all__ = [
     "LocateWindowChoiceInput",
     "LocateWindowInput",
     "LocateWindowName",
+    "LocateWindowNumber",
     "LocateWindowPairReply",
     "LocateWindowRefused",
     "describe_locate",

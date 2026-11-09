@@ -33,7 +33,7 @@ import {
 import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
 import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
-import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
+import { prepareLosatRuntime, runLosatJobsByFile, runLosatPairsParallel } from '../services/losat.js';
 import {
   requestedLosatExecutionMode, requestedLosatParallelWorkers, requestedLosatThreadsPerJob, requestedLosatTotalThreadBudget
 } from '../services/losat-thread-plan.js';
@@ -197,8 +197,7 @@ import {
   PROTEIN_LOSAT_CACHE_SCHEMA
 } from '../contracts/schema.generated.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
-import { diagnosticError, liveEditFailure, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
-import { errorText } from '../utils/error-text.js';
+import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { cloneFileBytesForTransfer, holdReadBytes } from '../services/file-content-cache.js';
 import {
   admitFeatureCatalog
@@ -225,8 +224,7 @@ import {
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { FeatureCatalog } from '../services/feature-catalog.js' */
-/** @import { LosatJob, LosatJobResult, LosatRunOptions } from '../services/losat.js' */
-/** A job's rows, or why it failed (`runLosatJobsInOverlay` by File). @typedef {LosatJobResult & { error?: string }} LosatJobOutcome */
+/** @import { LosatJob, LosatJobResult, LosatOverlayRun, LosatRunOptions } from '../services/losat.js' */
 /** @import { AdoptedConservationPairs, CircularConservationKeys, ConservationPairs, ConservationSubject } from '../services/circular-conservation-keys.js' */
 /** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
 /** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
@@ -6464,59 +6462,55 @@ export const createRunAnalysis = ({
     losatCacheInfo.value = [];
   };
 
-  // LOSAT jobs of a run that is not a Generate (a Sequence search, PD-OI-117; Find in other files, PD-OI-123), with
-  // the LOSAT settings Generate uses, under the full-window overlay with their progress and Cancel. They draw
-  // nothing. Busy (with the reason) while a Generate or a Session load or save runs, whose overlay they would
-  // replace. `byFile`: one job per File, run one after another so the overlay says "File k of N"; a File whose job
-  // fails keeps its reason (`error`) and the others still run.
+  // A run that is not a Generate (a Sequence search, PD-OI-117; Find in other files, PD-OI-123) under the
+  // full-window overlay from its first step to its last, with its status and Cancel; Cancel discards the reply of a
+  // Python step (`until`) and stops LOSAT. Its LOSAT jobs run with the LOSAT settings Generate uses; it draws
+  // nothing. Busy (with the reason) while a Generate or a Session load or save runs, whose overlay it would replace.
   /**
-   * @param {{ jobs: LosatJob[], sequences: Map<string, string>, byFile?: boolean }} plan
-   * @returns {Promise<{ status: 'ok', results: LosatJobOutcome[] } | { status: 'canceled' } | { status: 'busy', reason: string }>}
+   * @template T
+   * @param {(run: LosatOverlayRun) => Promise<T>} task
+   * @returns {Promise<{ status: 'ok', value: T } | { status: 'canceled' } | { status: 'busy', reason: string }>}
    */
-  const runLosatJobsInOverlay = async ({ jobs, sequences, byFile = false }) => {
+  const runInLosatOverlay = async (task) => {
     const busy = state.sessionOperationAvailability?.('not-during-run');
     if (busy) return busy;
     const controller = new AbortController();
+    const { signal } = controller;
     activeLosatAbortController = controller;
     generationCancelRequested.value = false;
     processing.value = true;
     labelCapacityNotices.value = [];
-    /** @param {number} completed */
-    const progress = (completed) => {
-      if (controller.signal.aborted) return;
-      processingStatus.value = byFile
-        ? t('Running LOSAT: File {k} of {total}', { k: Math.min(completed + 1, jobs.length), total: jobs.length })
-        : tn(jobs.length, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed, total: jobs.length });
-    };
-    progress(0);
-    /** @param {LosatJob[]} batch @param {(completed: number) => void} onProgress */
-    const execute = (batch, onProgress) => executeLosatJobs(batch, {
+    /** @type {Promise<never>} */
+    const canceled = new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+    canceled.catch(() => {});
+    /** @param {string} text */
+    const status = (text) => { if (!signal.aborted) processingStatus.value = text; };
+    /** @param {LosatJob[]} batch @param {Map<string, string>} sequences @param {(completed: number) => void} onProgress */
+    const execute = (batch, sequences, onProgress) => executeLosatJobs(batch, {
       concurrency: requestedLosatParallelWorkers(state.losatExecution),
       executionMode: requestedLosatExecutionMode(state.losatExecution),
       totalThreadBudget: requestedLosatTotalThreadBudget(state.losatExecution),
       threadsPerJob: requestedLosatThreadsPerJob(state.losatExecution, batch[0]?.program),
       sequences,
-      signal: controller.signal,
-      onRuntimeStatus: (status) => { losatThreadingStatus.value = status; },
+      signal,
+      onRuntimeStatus: (runtime) => { losatThreadingStatus.value = runtime; },
       onProgress: ({ completed }) => onProgress(completed)
     });
-    try {
-      if (!byFile) return { status: 'ok', results: await execute(jobs, progress) };
-      /** @type {LosatJobOutcome[]} */
-      const results = [];
-      for (const job of jobs) {
-        try {
-          results.push(...await execute([job], () => {}));
-        } catch (error) {
-          if (controller.signal.aborted) throw error;
-          const failure = normalizeCaughtError(error, { stage: 'losat' });
-          results.push({ ...job, text: '', error: errorText(failure.summaryParts) });
-        }
-        progress(results.length);
+    /** @type {LosatOverlayRun} */
+    const run = {
+      signal, status, until: (step) => Promise.race([step, canceled]),
+      losat: async ({ jobs, sequences, byFile = false }) => {
+        if (byFile) return runLosatJobsByFile(jobs, (job) => execute([job], sequences, () => {}), run);
+        /** @param {number} completed */
+        const progress = (completed) => status(tn(jobs.length, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed, total: jobs.length }));
+        progress(0);
+        return execute(jobs, sequences, progress);
       }
-      return { status: 'ok', results };
+    };
+    try {
+      return { status: 'ok', value: await task(run) };
     } catch (error) {
-      if (controller.signal.aborted) return { status: 'canceled' };
+      if (signal.aborted) return { status: 'canceled' };
       throw error;
     } finally {
       if (activeLosatAbortController === controller) activeLosatAbortController = null;
@@ -6526,8 +6520,14 @@ export const createRunAnalysis = ({
       replayDeferredLabelReflow();
     }
   };
+  /** The LOSAT jobs of a Sequence search under the overlay (`runInLosatOverlay`). @param {{ jobs: LosatJob[], sequences: Map<string, string> }} plan */
+  const runLosatJobsInOverlay = async (plan) => {
+    const run = await runInLosatOverlay((overlay) => overlay.losat(plan));
+    return run.status === 'ok' ? { status: /** @type {const} */ ('ok'), results: run.value } : run;
+  };
 
   return {
+    runInLosatOverlay,
     runLosatJobsInOverlay,
     runAnalysis,
     runCommittedCanonicalCandidate,

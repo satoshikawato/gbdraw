@@ -1,7 +1,8 @@
 // Find in other files (PD-OI-123): the dialog's owner over a fake Worker that answers as Python's steps answer
 // (`gbdraw/web_support/locate.py`; each reply is checked against the generated description, so a reply here of another
-// shape fails). The search runs under the LOSAT overlay by File; Cancel, Back and closing add nothing; Create adds the
-// derived drawing through the drawing list as one step, after the source drawing.
+// shape fails). The search runs under the full-window overlay from its first Python step to its last, LOSAT by File;
+// Cancel, Back and closing add nothing; Create adds the derived drawing through the drawing list as one step, after
+// the source drawing.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -62,8 +63,16 @@ const searchPlan = () => ({
   ]
 });
 const NAMES = { p1: 'g1', p2: 'g2', p3: 'g3', p7: 'g7' };
-const drawingReply = (plan) => ({
-  status: 'derived', plan, pairs: [],
+/** Python's `locate_file_counts` for the plans here: the kept windows numbered by column, the genes found, the rows removed. */
+const countsOf = (plan) => plan.files.map((file) => ({
+  fileKey: file.file_key,
+  windowNumbers: file.windows.map((item) => item.window.column).sort((a, b) => a - b).map((column, index) => ({ column, number: index + 1 })),
+  genesFound: file.coverage.complete.length + file.coverage.partial.length,
+  genesTotal: plan.reference.genes.length,
+  alignmentsRemoved: file.tally.rows_read - file.tally.rows_kept
+}));
+const drawingReply = (plan, counts = countsOf(plan)) => ({
+  status: 'derived', plan, counts, pairs: [],
   drawing: { status: 'derived', mode: 'linear', renderRequest: { mode: 'linear' }, resourceSources: {}, returnedToAuto: [],
     notCarried: [{ kind: 'LINEAR_COMPARISONS', count: 1, items: [] }] }
 });
@@ -81,35 +90,74 @@ const chosenPlan = (plan, choices) => ({
   })
 });
 
-const harness = ({ losat = 'ok', files = FILES } = {}) => {
-  const calls = { steps: [], losat: [], created: [] };
+/** A promise and its resolve, for a step a test answers later. */
+const deferred = () => {
+  let resolve;
+  const promise = new Promise((done) => { resolve = done; });
+  return { promise, resolve };
+};
+
+/**
+ * The owner over fakes. The overlay fake is `runInLosatOverlay`'s contract: it is up while the task runs, `cancel()`
+ * aborts it, `until` drops a reply that comes after Cancel, and a run it refuses (`busy`) never starts the task.
+ * `held` names a Python step whose reply waits for `calls.release()`; `counts` replaces Python's counts.
+ */
+const harness = ({ losat = 'ok', files = FILES, busy = '', held = '', counts = null, drawingAdv = null } = {}) => {
+  const calls = { steps: [], losat: [], created: [], status: [], overlay: false, cancel: () => {}, release: () => {} };
   const owner = createFindInOtherFiles({
     shownDrawingId: () => 'linear',
     projectShownRequest: async () => sent,
     runLocateStep: async ({ locate }) => {
-      calls.steps.push(locate);
+      calls.steps.push({ ...locate, overlay: calls.overlay, dialogStatus: owner.dialog.status, dialogShown: owner.dialog.show });
+      if (locate.step === held) {
+        const wait = deferred();
+        calls.release = wait.resolve;
+        await wait.promise;
+      }
       const reply = {
         files: () => ({ files }),
         reference: () => (locate.reference.windows.some((window) => window.end > 12000)
           ? { status: 'refused', reason: 'WINDOW_PAST_END', start: locate.reference.windows[0].start, end: locate.reference.windows[0].end }
-          : { status: 'ready', fileKey: 'ref', recordId: 'REF', genes: 3, cutGenes: ['g7'] }),
+          : { status: 'ready', fileKey: 'ref', recordId: 'REF', genes: 3 }),
         search: () => ({ program: 'tlosatn', search: 'tblastn', cacheArgs: ['-evalue', '10'], jobs: locate.search.targets.map((fileKey) => ({
           fileKey, queryFasta: '>q\nMK\n', subjectFasta: `>${fileKey}\nACGT\n`, rawKey: `raw-${fileKey}` })) }),
         plan: () => ({ plan: searchPlan(), pairs: [], geneNames: NAMES }),
         drawing: () => {
           const edited = locate.drawing.choices.find((choice) => choice.start > choice.end);
           return edited ? { status: 'refused', reason: 'WINDOW_ACROSS_LINEAR_ORIGIN', start: edited.start, end: edited.end, fileKey: edited.fileKey, column: edited.column }
-            : drawingReply(chosenPlan(locate.drawing.plan, locate.drawing.choices));
+            : drawingReply(...((chosen) => [chosen, counts ?? countsOf(chosen)])(chosenPlan(locate.drawing.plan, locate.drawing.choices)));
         }
       }[locate.step]();
       return { result: JSON.parse(JSON.stringify(reply)) };
     },
-    runLosatJobs: async (plan) => {
-      calls.losat.push(plan);
-      if (losat === 'canceled') return { status: 'canceled' };
-      return { status: 'ok', results: plan.jobs.map((job) => ({ ...job, text: 'rows' })) };
+    runInOverlay: async (task) => {
+      if (busy) return { status: 'busy', reason: busy };
+      const controller = new AbortController();
+      const canceled = new Promise((_resolve, reject) => controller.signal.addEventListener('abort', () => reject(controller.signal.reason)));
+      canceled.catch(() => {});
+      calls.cancel = () => controller.abort(new Error('canceled'));
+      calls.overlay = true;
+      try {
+        return { status: 'ok', value: await task({
+          signal: controller.signal,
+          status: (text) => calls.status.push(text),
+          until: (step) => Promise.race([step, canceled]),
+          losat: async (plan) => {
+            calls.losat.push(plan);
+            if (losat === 'canceled') calls.cancel();
+            await Promise.resolve();
+            if (controller.signal.aborted) throw controller.signal.reason;
+            return plan.jobs.map((job) => ({ ...job, text: 'rows' }));
+          }
+        }) };
+      } catch (error) {
+        if (controller.signal.aborted) return { status: 'canceled' };
+        throw error;
+      } finally {
+        calls.overlay = false;
+      }
     },
-    shownDrawing: () => ({ adv: { min_bitscore: '75', evalue: '', identity: null, alignment_length: 30 },
+    shownDrawing: () => ({ adv: drawingAdv ?? { min_bitscore: '75', evalue: '', identity: null, alignment_length: 30 },
       linearSeqs: files.map(() => ({ gb: { name: 'x' }, gff: null, fasta: null })) }),
     newDrawingFromSearch: async (sourceId, derivation, kind) => {
       calls.created.push({ sourceId, derivation, kind });
@@ -282,10 +330,117 @@ test('a reply of another shape is refused, and a File whose search failed says w
     filePlan('a', [], [], coverage([], [], ['p1', 'p2', 'p3']), [{ code: 'FILE_SEARCH_FAILED', args: { error: 'LOSAT exited with status 1' } }], tally(0, 0)),
     filePlan('b', [], [], coverage([], [], ['p1', 'p2', 'p3']), [{ code: 'FILE_NO_WINDOWS', args: { rows_read: 12, rows_kept: 0 } }], tally(12, 0))
   ] };
-  const view = proposalView({ plan, pairs: [], geneNames: NAMES }, plan, [], { a: 'a.gb', b: 'b.gff' });
+  const view = proposalView({ plan, pairs: [], geneNames: NAMES }, { plan, counts: countsOf(plan) }, [], { a: 'a.gb', b: 'b.gff' });
   assert.deepEqual(view.map((file) => [file.name, file.empty, file.windows.length]), [
     ['a.gb', 'The search of this file failed: LOSAT exited with status 1', 0],
     ['b.gff', 'No window found. The thresholds removed 12 alignments.', 0]
   ]);
   assert.deepEqual(locateLosatJobs({ program: 'tlosatn', search: 'tblastn', cacheArgs: [], jobs: [] }), { jobs: [], sequences: new Map() });
+});
+
+test('the overlay is up from the first Python step of a search to its last, and the dialog steps aside only then', async () => {
+  const { owner, calls } = harness();
+  await owner.open({ recordKey: 'ref', start: 1501, end: 8100 });
+  assert.equal(calls.overlay, false);
+  await owner.search();
+  // Python reads the Files and plans under the overlay, with the dialog hidden ('searching') and still open.
+  const during = calls.steps.filter((step) => step.step === 'search' || step.step === 'plan');
+  assert.deepEqual(during.map(({ step, overlay, dialogStatus, dialogShown }) => [step, overlay, dialogStatus, dialogShown]), [
+    ['search', true, 'searching', true], ['plan', true, 'searching', true]
+  ]);
+  // The overlay says what runs at each step; LOSAT's "File k of N" is the by-File runner's (services/losat.js).
+  assert.deepEqual(calls.status, ['Reading the files of the drawing…', 'Finding the windows in each file…']);
+  // The proposal is worked out after the overlay is down, in the dialog.
+  const drawing = calls.steps.find((step) => step.step === 'drawing');
+  assert.deepEqual([drawing.overlay, owner.dialog.screen], [false, 'proposal']);
+});
+
+test('Cancel during a Python step of the search discards its reply and keeps the dialog on the search', async () => {
+  for (const held of ['search', 'plan']) {
+    const { owner, calls } = harness({ held });
+    await owner.open({ recordKey: 'ref', start: 1501, end: 8100 });
+    const searching = owner.search();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(calls.overlay, true, held);
+    calls.cancel();
+    await searching;
+    assert.equal(calls.overlay, false, held);
+    assert.deepEqual([owner.dialog.screen, owner.dialog.status, owner.dialog.message], ['search', 'ready', ''], held);
+    // The step's reply comes after Cancel and changes nothing; the search adds nothing.
+    calls.release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual([owner.dialog.screen, owner.dialog.status], ['search', 'ready'], held);
+    assert.deepEqual(calls.steps.map((step) => step.step), held === 'search' ? ['files', 'reference', 'search'] : ['files', 'reference', 'search', 'plan'], held);
+    assert.equal(calls.losat.length, held === 'search' ? 0 : 1, held);
+    assert.deepEqual(calls.created, [], held);
+  }
+});
+
+test('a search while a Generate or a Session operation runs does not start, and says why', async () => {
+  const { owner, calls } = harness({ busy: 'Generating diagram. Retry after generation finishes.' });
+  await owner.open({ recordKey: 'ref', start: 1501, end: 8100 });
+  await owner.search();
+  assert.deepEqual([owner.dialog.screen, owner.dialog.status, owner.dialog.message],
+    ['search', 'ready', 'Generating diagram. Retry after generation finishes.']);
+  assert.deepEqual(calls.steps.map((step) => step.step), ['files', 'reference']);
+});
+
+test('the window numbers, the genes found and the alignments removed are the ones Python gives', async () => {
+  // Python numbers the kept windows as the drawing numbers them; the dialog shows its numbers, not their positions.
+  const counts = [
+    { fileKey: 'b', windowNumbers: [{ column: 1, number: 2 }, { column: 2, number: 1 }], genesFound: 2, genesTotal: 5, alignmentsRemoved: 0 },
+    { fileKey: 'a', windowNumbers: [{ column: 1, number: 1 }], genesFound: 1, genesTotal: 5, alignmentsRemoved: 7 }
+  ];
+  const { owner } = harness({ counts });
+  await owner.open({ recordKey: 'ref', start: 1501, end: 8100 });
+  await owner.search();
+  const [a, b] = owner.dialog.proposal;
+  assert.deepEqual(b.windows.map((window) => [window.recordId, window.number]), [['B1', '②'], ['B2', '①']]);
+  // Each File is found by its key (the reply lists them in another order here).
+  assert.deepEqual([a.summary, b.summary], ['1 window · 1 of 5 genes', '2 windows · 2 of 5 genes']);
+
+  const plan = { ...searchPlan(), files: [filePlan('a', [], [], coverage([], [], ['p1', 'p2', 'p3']), [], tally(12, 0))] };
+  const view = proposalView({ plan, pairs: [], geneNames: NAMES },
+    { plan, counts: [{ fileKey: 'a', windowNumbers: [], genesFound: 0, genesTotal: 3, alignmentsRemoved: 9 }] }, [], { a: 'a.gb' });
+  assert.equal(view[0].empty, 'No window found. The thresholds removed 9 alignments.');
+});
+
+test('each search setting starts from its own Pairwise Comparisons value; an invalid one takes its default alone', async () => {
+  const { owner } = harness({ drawingAdv: { min_bitscore: '100', evalue: 'abc', identity: '', alignment_length: '-5' } });
+  await owner.open();
+  assert.deepEqual({ ...owner.dialog.settings }, { program: 'tlosatn', bitscore: '100', evalue: '1e-2', identity: '0', alignmentLength: '0' });
+});
+
+test('a tick or an edit while Python answers the last one is not taken', async () => {
+  const { owner, calls } = harness();
+  await owner.open({ recordKey: 'ref', start: 1501, end: 8100 });
+  await owner.search();
+  const before = calls.steps.filter((step) => step.step === 'drawing').length;
+  const [first, second] = owner.dialog.proposal[1].windows;
+  const pending = owner.toggleWindow(first.key, false);
+  assert.equal(owner.dialog.status, 'deriving');
+  assert.equal(await owner.toggleWindow(second.key, false), '');
+  await pending;
+  assert.equal(calls.steps.filter((step) => step.step === 'drawing').length, before + 1);
+  assert.deepEqual(owner.dialog.proposal[1].windows.map((window) => window.ticked), [false, true]);
+});
+
+test('typing in Start or End counts the genes once typing pauses', async () => {
+  const { owner, calls } = harness();
+  await owner.open();
+  const [row] = owner.dialog.rows;
+  await owner.editRow(row.id, { recordKey: 'ref' });
+  const counted = calls.steps.filter((step) => step.step === 'reference').length;
+  const typed = ['1', '15', '150', '1501'].map((start) => owner.editRow(row.id, { start }));
+  assert.equal(owner.searchReason(), 'Counting the genes of the windows…');
+  owner.editRow(row.id, { end: '8100' });
+  await Promise.all(typed);
+  assert.equal(calls.steps.filter((step) => step.step === 'reference').length, counted + 1);
+  assert.deepEqual(calls.steps.at(-1).reference.windows, [{ start: 1501, end: 8100, reverseComplement: false }]);
+  assert.equal(owner.dialog.genes, 3);
+  // Closing drops a count that still waits.
+  owner.editRow(row.id, { start: '1502' });
+  owner.close();
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.equal(calls.steps.filter((step) => step.step === 'reference').length, counted + 1);
 });

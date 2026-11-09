@@ -1,5 +1,7 @@
 // @ts-check
-import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { errorText } from '../utils/error-text.js';
+import { t } from '../utils/i18n.js';
 import { LOSAT_THREADED_WASM_URL, WASI_SHIM_URL } from '../config.js';
 import { resolveLosatThreadPlan } from './losat-thread-plan.js';
 import { losatSearchTask } from './losat-cache.js';
@@ -1067,4 +1069,43 @@ export const prepareLosatRuntime = async ({
   if (!includeThreaded) return { wasiShim: prepared[0], wasmModule: prepared[1], threaded: null };
   const threaded = await getLosatThreadingSupport({ threadedWasmPath });
   return { wasiShim: prepared[0], wasmModule: prepared[1], threaded };
+};
+
+/** A job's rows, or why it failed (`runLosatJobsByFile`). @typedef {LosatJobResult & { error?: string }} LosatJobOutcome */
+
+/**
+ * A run that is not a Generate under the full-window overlay (Sequence search, PD-OI-117; Find in other files,
+ * PD-OI-123), as the overlay's owner (`app/run-analysis.js`) hands it to the run: its Cancel, its status line, a
+ * Python step that Cancel discards, and its LOSAT jobs with the LOSAT settings Generate uses.
+ * @typedef {object} LosatOverlayRun
+ * @property {AbortSignal} signal Aborted by the overlay's Cancel.
+ * @property {(text: string) => void} status The overlay's status line.
+ * @property {<T>(step: Promise<T>) => Promise<T>} until A step's reply, or Cancel's rejection when Cancel comes first:
+ *   a reply that arrives after Cancel is discarded.
+ * @property {(plan: { jobs: LosatJob[], sequences: Map<string, string>, byFile?: boolean }) => Promise<LosatJobOutcome[]>} losat
+ *   The jobs, with their progress on the status line; `byFile` as `runLosatJobsByFile` runs them.
+ */
+
+/**
+ * The jobs of a search by File (Find in other files, PD-OI-123): one job per File, one after another, so the status
+ * says "File k of N". A File whose job fails keeps its reason (`error`) and the next File still runs; Cancel stops
+ * the run (the abort is thrown).
+ * @param {readonly LosatJob[]} jobs
+ * @param {(job: LosatJob) => Promise<LosatJobResult[]>} execute
+ * @param {Pick<LosatOverlayRun, 'signal' | 'status'>} run
+ * @returns {Promise<LosatJobOutcome[]>}
+ */
+export const runLosatJobsByFile = async (jobs, execute, { signal, status }) => {
+  /** @type {LosatJobOutcome[]} */
+  const results = [];
+  for (const job of jobs) {
+    status(t('Running LOSAT: File {k} of {total}', { k: results.length + 1, total: jobs.length }));
+    try {
+      results.push(...await execute(job));
+    } catch (error) {
+      if (signal.aborted) throw error;
+      results.push({ ...job, text: '', error: errorText(normalizeCaughtError(error, { stage: 'losat' }).summaryParts) });
+    }
+  }
+  return results;
 };

@@ -241,7 +241,6 @@
  * @property {string} fileKey
  * @property {string} recordId
  * @property {number} genes
- * @property {string[]} cutGenes
  */
 /**
  * @typedef {object} LocateWindowRefused
@@ -286,8 +285,22 @@
  * @typedef {object} LocateDrawingReady
  * @property {'derived'} status
  * @property {LocatePlanJson} plan
+ * @property {LocateFileCountsReply[]} counts
  * @property {LocateWindowPairReply[]} pairs
  * @property {DerivedRegionDrawing} drawing
+ */
+/**
+ * @typedef {object} LocateFileCountsReply
+ * @property {string} fileKey
+ * @property {LocateWindowNumber[]} windowNumbers
+ * @property {number} genesFound
+ * @property {number} genesTotal
+ * @property {number} alignmentsRemoved
+ */
+/**
+ * @typedef {object} LocateWindowNumber
+ * @property {number} column
+ * @property {number} number
  */
 /**
  * @typedef {object} DerivedRegionDrawing
@@ -752,8 +765,7 @@ export const LOCATE_DESCRIPTION = Object.freeze({
         status: Object.freeze({kind: "literal", values: Object.freeze(["ready"])}),
         fileKey: Object.freeze({kind: "string"}),
         recordId: Object.freeze({kind: "string"}),
-        genes: Object.freeze({kind: "integer"}),
-        cutGenes: Object.freeze({kind: "array", items: Object.freeze({kind: "string"})})
+        genes: Object.freeze({kind: "integer"})
       }),
       optional: Object.freeze([]),
       open: false
@@ -829,9 +841,28 @@ export const LOCATE_DESCRIPTION = Object.freeze({
       fields: Object.freeze({
         status: Object.freeze({kind: "literal", values: Object.freeze(["derived"])}),
         plan: Object.freeze({kind: "ref", name: "LocatePlanJson"}),
+        counts: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "LocateFileCountsReply"})}),
         pairs: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "LocateWindowPairReply"})}),
         drawing: Object.freeze({kind: "ref", name: "DerivedRegionDrawing"})
       }),
+      optional: Object.freeze([]),
+      open: false
+    }),
+    LocateFileCountsReply: Object.freeze({
+      kind: "object",
+      fields: Object.freeze({
+        fileKey: Object.freeze({kind: "string"}),
+        windowNumbers: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "LocateWindowNumber"})}),
+        genesFound: Object.freeze({kind: "integer"}),
+        genesTotal: Object.freeze({kind: "integer"}),
+        alignmentsRemoved: Object.freeze({kind: "integer"})
+      }),
+      optional: Object.freeze([]),
+      open: false
+    }),
+    LocateWindowNumber: Object.freeze({
+      kind: "object",
+      fields: Object.freeze({column: Object.freeze({kind: "integer"}), number: Object.freeze({kind: "integer"})}),
       optional: Object.freeze([]),
       open: false
     }),

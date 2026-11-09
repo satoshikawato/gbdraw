@@ -9,6 +9,7 @@ tblastn when one resolves (``GBDRAW_TEST_LOSAT_BIN``).
 from __future__ import annotations
 
 import json
+import re
 import os
 from dataclasses import replace
 import random
@@ -610,3 +611,51 @@ def test_a_window_whose_record_id_would_not_read_back_is_named_by_its_number(
     [protein] = [item for item in session["renderRequest"]["comparisons"] if item["kind"] == "generatedProteinComparison"]
     expected = [(0, 1), (0, 2)] + ([(1, 3), (2, 3)] if case == "id-of-another-window" else [])
     assert [(pair["queryRecordIndex"], pair["subjectRecordIndex"]) for pair in protein["pairs"]] == expected
+
+
+def _interleaved(tmp_path: Path) -> dict[str, Path]:
+    """D holds g1-g2 at the start of contig D1, g3-g4 on contig D2 and g5-g6 far down D1: a File whose windows run
+    D1, D2, D1 in the order of the reference, two of one record around one of another."""
+
+    paths = _genomes(tmp_path)
+    reference = SeqIO.read(paths["ref"], "genbank")
+    rng = random.Random(11)
+    d1 = reference[1900:3400] + _record("D1", _filler(rng, 14_000)) + reference[5900:7400] + _record("D1", _filler(rng, 2000))
+    d2 = _record("D2", _filler(rng, 2000)) + reference[3900:5400] + _record("D2", _filler(rng, 2000))
+    for record, record_id in ((d1, "D1"), (d2, "D2")):
+        record.id = record.name = record_id
+        record.annotations = {"molecule_type": "DNA", "topology": "linear"}
+    paths["d"] = tmp_path / "d.gb"
+    SeqIO.write([d1, d2], paths["d"], "genbank")
+    return paths
+
+
+def test_interleaved_windows_of_a_file_are_numbered_and_drawn_in_the_order_of_the_reference(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    # PD-OI-122: a row orders its windows by column, ties by input order, and numbers them in that order; PD-OI-123:
+    # the report and the proposal give each window the number it has in the drawing. A record whose windows stand
+    # around another record's keeps that order through the records table and `gbdraw linear`.
+    paths = _interleaved(tmp_path)
+    caplog.set_level("INFO")
+    assert _run(_locate_args(paths, _fake_losat(tmp_path), tmp_path / "P", "d"), monkeypatch) == 0
+    plan = LocatePlan.from_json(json.loads((tmp_path / "P.plan.json").read_text(encoding="utf-8")))
+    windows = plan.files[0].windows
+    assert [(item.record_id, item.window.column) for item in windows] == [("D1", 1), ("D2", 2), ("D1", 3)]
+    spans = [f"{item.window.start:,}-{item.window.end:,}" for item in windows]
+
+    # The report: each window under the number the drawing gives it.
+    listed = [message for message in (record.getMessage() for record in caplog.records) if message.startswith("  ")]
+    assert [line.split(":")[0] for line in listed[:3]] == [f"  1 D1 {spans[0]}", f"  2 D2 {spans[1]}", f"  3 D1 {spans[2]}"]
+
+    # The records table: the D1 rows share a record_group, and each row keeps its window's column.
+    table = read_records_table(str(tmp_path / "P.records.tsv"))
+    rows = sorted(table.rows[1:], key=lambda row: row.column or 0)
+    assert [(row.column, row.record_id, row.row) for row in rows] == [(1, "D1", 2), (2, "D2", 2), (3, "D1", 2)]
+    assert rows[0].record_group == rows[2].record_group != rows[1].record_group
+
+    # `gbdraw linear` draws the row's windows in that order, numbered 1 to 3 in its window list.
+    monkeypatch.chdir(tmp_path)
+    assert _run("--records_table P.records.tsv -o FIG".split(), monkeypatch, "linear") == 0
+    drawn = re.findall(r">(D[12]:[^<]*)<", (tmp_path / "FIG.svg").read_text(encoding="utf-8"))
+    assert drawn == [f"D1:{spans[0]}", f"D2:{spans[1]}", f"D1:{spans[2]}"]
