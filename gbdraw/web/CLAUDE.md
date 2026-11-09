@@ -66,8 +66,10 @@ decoded resources and parsed sources it built (they depend only on the
 resource bytes and their key) when it ends, also when its render fails, unless
 the request changed them; it publishes resolved records and render-stage
 results only after the full render succeeds. The blastp protein extraction
-helper and the Circular ring search-frame helper
-(`convertRingTablesToSearchFrame`) also publish, when they end, the decoded
+helper, the Circular ring search-frame helper
+(`convertRingTablesToSearchFrame`) and the sequence reads
+(`readFeatureSequences`, `readMatchSequences`, `readEmbedSequences`) also
+publish, when they end, the decoded
 resources and parsed sources they built for the files they staged, unless they
 changed them; any other helper lookup publishes nothing. A build that failed is never kept. Release every cache fill with the Worker; never reuse a final
 reply.
