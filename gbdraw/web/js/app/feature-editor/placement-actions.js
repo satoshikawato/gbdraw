@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DiagramMode, DrawingState } from '../../state.js' */
+/** @import { DiagramMode, DrawingState, WebState } from '../../state.js' */
 /** @import { FeaturePlacementDraftRow, FeaturePlacementTarget } from '../../services/feature-placement.js' */
 /** @import { ChangeTrackLayout, LayoutControl } from '../track-slot-edits.js' */
 /** @import { RecordKeyedFeature } from '../../services/feature-identity.js' */
@@ -121,7 +121,7 @@ export const restoreTrackLayout = ({ form, adv }, saved) => {
 
 /**
  * @typedef {object} FeaturePlacementActionsOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Pick<WebState, 'activeDrawing' | 'featureCatalog' | 'mode' | 'sessionOperationAvailability'>} state
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
  * @property {() => ({ mode?: string } | null)} getCommittedRequest The committed canonical request.
  * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
@@ -152,7 +152,7 @@ export const createFeaturePlacementActions = ({
     const inCatalog = inCommittedCatalog(features);
     const targets = inCatalog ? draftPlacementTargets(draft(drawing)) : [];
     const current = features.length > 0 && features.every((feature) => Boolean(featureIdentityKeyOf(feature)) && isCurrentFeature(feature));
-    return ['auto', 'main', ...SIDES[/** @type {DiagramMode} */ (state.mode.value)]].map((value) => {
+    return ['auto', 'main', ...SIDES[state.mode.value]].map((value) => {
       const enabled = current && (value === 'auto'
         || targets.some((target) => value === 'main' ? target.kind === 'main' : target.side === value));
       return { value, enabled, label: value === 'auto' ? t('Auto') : value === 'main' ? t('Main') : LANE_ONE_LABEL[value](),
@@ -168,7 +168,7 @@ export const createFeaturePlacementActions = ({
    */
   const setPlacement = (features, value) => {
     const drawing = state.activeDrawing();
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     const choice = choices(features).find((entry) => entry.value === value);
     if (!choice?.enabled) throw new Error(choice?.reason || 'Unknown feature placement.');
@@ -224,7 +224,7 @@ export const createFeaturePlacementActions = ({
    */
   const changeTrackLayout = (apply, control = null) => {
     const drawing = state.activeDrawing();
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     if (!Object.values(drawing.featurePlacementOverrides).some((row) => row?.placement?.kind === 'lane')) return apply();
     const before = laneSides(drawing);
