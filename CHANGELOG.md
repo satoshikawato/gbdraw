@@ -493,9 +493,9 @@ write-up of a release.
   "for want of room before the centre".
 - Performance: curved Circular region labels (`arc` and `auto`) are placed
   with less work: each label's text is measured once where it stands. A
-  Circular map with 150 labelled regions in an `inside` slot took 9.8 s of CPU
-  time instead of 17.5 s, and one with 400 regions about 30 % less; the figure
-  is the same (OV-2981).
+  Circular map with 150 labelled regions in an `inside` slot is drawn in about
+  45 % less time, and one with 400 regions in about 30 % less; the figure is
+  the same (OV-2981).
 - Fixed: after a font file was registered for a font family that had already
   been used, curved Circular region labels were still checked against the
   earlier font's letters (for overlaps and for their reach), while their size
