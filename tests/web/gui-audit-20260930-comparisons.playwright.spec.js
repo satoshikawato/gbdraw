@@ -190,6 +190,23 @@ test('a record drawn in two windows searches each window against the other recor
   const firstWindowCds = await featureSpan(page, 'R2_1');
   expect(ribbons[0].queryX[0], JSON.stringify({ ribbon: ribbons[0].queryX, firstWindowCds })).toBeGreaterThan(firstWindowCds[1]);
   expect(contains(ribbons[0].subjectX, await featureSpan(page, 'R3_1'))).toBe(true);
+  // OV-2742: the pair's Comparison card lists each window pair with its own raw result and file name.
+  const selectedPairs = page.locator('details[data-linear-comparison-disclosure="selected-pairs"]');
+  if (!await selectedPairs.evaluate((element) => element.open)) await selectedPairs.locator(':scope > summary').click();
+  const windowPairs = page.locator('[data-linear-window-pairs] > li');
+  await expect(windowPairs).toHaveCount(2);
+  await expect(windowPairs.nth(0)).toContainText('#1 window 1 → #2');
+  await expect(windowPairs.nth(1)).toContainText('#1 window 2 → #2');
+  await windowPairs.nth(1).getByText('File name', { exact: true }).click();
+  const name = windowPairs.nth(1).getByRole('textbox', { name: 'Raw LOSAT filename for #1 window 2 to #2', exact: true });
+  await name.fill('second-window');
+  await name.press('Enter');
+  const pending = page.waitForEvent('download', { timeout: 60_000 });
+  await windowPairs.nth(1).getByRole('button', { name: 'Save Raw LOSAT TSV for #1 window 2 to #2', exact: true }).click();
+  const download = await pending;
+  expect(download.suggestedFilename()).toBe('second-window.tsv');
+  expect(readFileSync(await download.path(), 'utf8').trim()).not.toBe('');
+  await page.locator('fieldset[data-linear-comparison-pair-row]').screenshot({ path: test.info().outputPath('window-pairs.png') });
 });
 
 // OV-2739: a window across the origin of a circular record is searched as Python crops it (PD-OI-122, ":origin"):

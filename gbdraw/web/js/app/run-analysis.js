@@ -41,7 +41,7 @@ import { ABSENT_COLLINEAR_INFER_ORTHOGROUPS, DEFAULT_COLLINEAR_ANCHOR_MODE, DEFA
 import {
   losatRecordGencode, losatSearchSequences, prepareLosatSourceBatches, splitLosatSourceResult
 } from '../services/linear-sources.js';
-import { drawnRecordIdentities, offRecordRequestRecords, recordKeyMoves } from '../services/record-draw-selection.js';
+import { drawnRecordIdentities, linearSeqRecordKey, offRecordRequestRecords, recordKeyMoves } from '../services/record-draw-selection.js';
 /** @import { DrawnRecordIdentity, RecordIdentitySources } from '../services/record-draw-selection.js' */
 import { moveInstanceRuleRecords } from '../services/feature-selector.js';
 import {
@@ -112,7 +112,7 @@ import {
   numberLosatDisplayPairs,
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
-import { generateUnitSearch } from '../services/linear-units.js';
+import { catalogUnitPlaces, generateUnitSearch } from '../services/linear-units.js';
 import {
   movedIdentityValues,
   movedRecordEdits,
@@ -2278,26 +2278,39 @@ export const createRunAnalysis = ({
   };
 
   /**
+   * The default raw LOSAT TSV name of the pair of `cards` at two indexes: each card's definition, else its record ID,
+   * else its number (`seq_<n>`).
+   * @param {DrawingState} drawing
+   * @param {readonly LinearSeq[]} cards
+   * @param {number} queryIndex @param {number} subjectIndex NaN or -1 for a card not found.
+   * @param {string} [queryId] @param {string} [subjectId]
+   */
+  const losatCardPairName = (drawing, cards, queryIndex, subjectIndex, queryId = '', subjectId = '') => {
+    /** @param {number} index @param {string} recordId @param {number} fallback */
+    const label = (index, recordId, fallback) => getSeqLabel(
+      cards[index], recordId || `seq_${Number.isInteger(index) && index >= 0 ? index + 1 : fallback}`
+    );
+    return buildLosatFilename(drawing, label(queryIndex, queryId, 1), label(subjectIndex, subjectId, 2));
+  };
+  /**
+   * The default raw LOSAT TSV name of a pair the Comparison card shows: a card pair by its resolved edge or its
+   * cache-info row, whose indexes count the drawn cards; a window pair by its row, whose units name their records
+   * (the drawn Result's units, OV-2742), so its cards are found by record key, never by the row's unit indexes.
    * @param {DrawingState} drawing
    * @param {string} edgeKey
-   * @param {{ recordId?: string } | null} [queryEntry]
-   * @param {{ recordId?: string } | null} [subjectEntry]
    */
-  const losatPairDefaultName = (drawing, edgeKey, queryEntry = null, subjectEntry = null) => {
-    const cacheEntry = getLosatCacheInfoEntry(edgeKey);
-    const edge = getResolvedLinearEdge(drawing, edgeKey) || cacheEntry;
-    const queryIndex = Number(edge?.queryIndex);
-    const subjectIndex = Number(edge?.subjectIndex);
+  const losatPairDefaultName = (drawing, edgeKey) => {
+    const edge = getResolvedLinearEdge(drawing, edgeKey) || getLosatCacheInfoEntry(edgeKey);
     const drawnSeqs = drawing.drawnLinearSeqs.value;
-    const leftLabel = getSeqLabel(
-      drawnSeqs[queryIndex],
-      queryEntry?.recordId || `seq_${Number.isInteger(queryIndex) ? queryIndex + 1 : 1}`
+    const places = catalogUnitPlaces(featureCatalog.value);
+    const windowPair = [edge?.queryUid, edge?.subjectUid].some((uid) => places.get(String(uid ?? ''))?.window);
+    /** @param {string | undefined} uid @param {number | undefined} index */
+    const cardIndex = (uid, index) => (windowPair
+      ? drawnSeqs.findIndex((seq, at) => linearSeqRecordKey(seq, at) === (places.get(String(uid ?? ''))?.recordKey ?? uid))
+      : Number(index));
+    return losatCardPairName(
+      drawing, drawnSeqs, cardIndex(edge?.queryUid, edge?.queryIndex), cardIndex(edge?.subjectUid, edge?.subjectIndex)
     );
-    const rightLabel = getSeqLabel(
-      drawnSeqs[subjectIndex],
-      subjectEntry?.recordId || `seq_${Number.isInteger(subjectIndex) ? subjectIndex + 1 : 2}`
-    );
-    return buildLosatFilename(drawing, leftLabel, rightLabel);
   };
   // LOSAT pairs are the Linear comparisons: the three pair handlers act for
   // the drawing their caller (the panel binding) gives, and do nothing for a
@@ -2305,12 +2318,10 @@ export const createRunAnalysis = ({
   /**
    * @param {DrawingState} drawing
    * @param {string} edgeKey
-   * @param {{ recordId?: string } | null} [queryEntry]
-   * @param {{ recordId?: string } | null} [subjectEntry]
    */
-  const getLosatPairDefaultName = (drawing, edgeKey, queryEntry = null, subjectEntry = null) => {
+  const getLosatPairDefaultName = (drawing, edgeKey) => {
     if (drawing.mode !== 'linear') return '';
-    return losatPairDefaultName(drawing, edgeKey, queryEntry, subjectEntry);
+    return losatPairDefaultName(drawing, edgeKey);
   };
 
   /**
@@ -2379,6 +2390,8 @@ export const createRunAnalysis = ({
   };
 
   /**
+   * The raw TSV file name of a pair's cache-info row (a window pair's own name, OV-2742); an empty name returns to
+   * the default name.
    * @param {DrawingState} drawing
    * @param {string} edgeKey
    * @param {unknown} customName
@@ -2395,7 +2408,7 @@ export const createRunAnalysis = ({
       : 0;
     const filename = normalizeLosatFilename(
       customName,
-      entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
+      defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
     losatCacheInfo.value = losatCacheInfo.value.map((/** @type {LosatCacheInfoEntry} */ candidate) => (
       candidate === entry ? { ...candidate, filename } : candidate
@@ -4189,12 +4202,9 @@ export const createRunAnalysis = ({
           const edge = unitResolution.edges.find(
             (/** @type {LinearComparisonResolvedEdge} */ candidate) => candidate.edgeKey === spec.edgeKey
           );
-          const fallback = losatPairDefaultName(
-            drawing,
-            spec.edgeKey,
-            queryEntry,
-            subjectEntry
-          );
+          // Named by its edge's units' cards: a window pair by the cards whose windows it compares (OV-2742).
+          const fallback = losatCardPairName(drawing, losatCards, Number(edge?.queryIndex), Number(edge?.subjectIndex),
+            queryEntry.recordId, subjectEntry.recordId);
           return normalizeLosatFilename(
             edge?.losatFilenameActive ? edge.losatFilename : '',
             fallback

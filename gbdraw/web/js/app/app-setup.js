@@ -655,7 +655,7 @@ export const createAppSetup = () => {
     openLinearComparisonDisclosure, focusLinearComparisonPair, focusLinearComparisonIssue, chooseLinearComparisonPairFile,
     showLinearComparisonCause
   } = createLinearComparisonFocus({ state, mode, errorLog, linearComparisonUi, revealSetting: settingsPaneActions.revealSetting });
-  const { shownLinearRecordRowFor, linearLayoutTokens, linearLosatCacheInfoByEdgeKey } = createLinearLayoutReaders({
+  const { shownLinearRecordRowFor, linearLayoutTokens, linearLosatCacheInfoByEdgeKey, linearLosatWindowPairs, linearWindowPairSide } = createLinearLayoutReaders({
     state, shownDrawingOfMode, losatCacheInfo
   });
 
@@ -3593,7 +3593,7 @@ export const createAppSetup = () => {
     linearComparisonTimeline,
     linearComparisonRecordLabel,
     linearComparisonRecordName,
-    linearLosatCacheInfoByEdgeKey,
+    linearLosatCacheInfoByEdgeKey, linearLosatWindowPairs, linearWindowPairSide,
     linearLayoutTokens,
     syncLinearRecordLayout,
     setLinearRecordLayoutEnabled,

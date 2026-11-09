@@ -3901,6 +3901,37 @@
                                                     :disabled="!semanticMutationAvailable"
                                                 >{{ t('Use automatic filename') }}</button>
                                             </details>
+                                            <!-- A card drawn in several windows is searched one window pair at a time: each pair has its own raw result and file name. -->
+                                            <ul v-if="linearLosatWindowPairs[pair.edgeKey]" class="w-full min-w-0 space-y-1" data-linear-window-pairs>
+                                                <li
+                                                    v-for="windowPair in linearLosatWindowPairs[pair.edgeKey]"
+                                                    :key="windowPair.edgeKey"
+                                                    :data-linear-window-pair="windowPair.edgeKey"
+                                                    class="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1"
+                                                >
+                                                    <span class="w-full text-[10px] text-slate-700">#{{ linearWindowPairSide(pair.queryIndex, windowPair.queryWindow) }} → #{{ linearWindowPairSide(pair.subjectIndex, windowPair.subjectWindow) }}</span>
+                                                    <button
+                                                        type="button"
+                                                        :aria-label="t('Save Raw LOSAT TSV for #{from} to #{to}', { from: linearWindowPairSide(pair.queryIndex, windowPair.queryWindow), to: linearWindowPairSide(pair.subjectIndex, windowPair.subjectWindow) })"
+                                                        @click="downloadLosatPair(windowPair.edgeKey, '')"
+                                                        class="btn btn-secondary px-1.5 py-0.5 text-[10px]"
+                                                    ><i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}</button>
+                                                    <details class="linear-pair-file-name min-w-0 flex-1">
+                                                        <summary class="text-[10px] font-normal text-slate-500" :aria-label="t('Raw LOSAT file name for #{from} to #{to}', { from: linearWindowPairSide(pair.queryIndex, windowPair.queryWindow), to: linearWindowPairSide(pair.subjectIndex, windowPair.subjectWindow) })">{{ t('File name') }}</summary>
+                                                        <label class="linear-primary-label block" :for="`linear-raw-name-${windowPair.edgeKey}`">{{ t('Raw LOSAT filename') }}</label>
+                                                        <input
+                                                            :id="`linear-raw-name-${windowPair.edgeKey}`"
+                                                            type="text"
+                                                            :value="windowPair.filename"
+                                                            :placeholder="getLosatPairDefaultName(windowPair.edgeKey)"
+                                                            :title="getLosatPairDefaultName(windowPair.edgeKey)"
+                                                            @change="setLosatPairFilename(windowPair.edgeKey, $event.target.value)"
+                                                            :aria-label="t('Raw LOSAT filename for #{from} to #{to}', { from: linearWindowPairSide(pair.queryIndex, windowPair.queryWindow), to: linearWindowPairSide(pair.subjectIndex, windowPair.subjectWindow) })"
+                                                            class="form-input form-input-compact min-w-0"
+                                                            :disabled="!semanticMutationAvailable">
+                                                    </details>
+                                                </li>
+                                            </ul>
                                         </div>
                                         <div v-else-if="pair.draft?.losatFilename" :data-linear-raw-result="pair.edgeKey" class="flex min-w-0 flex-wrap items-center justify-between gap-1 rounded bg-amber-50 px-1.5 py-1 text-[9px] text-amber-800">
                                             <span class="min-w-0 flex-1 truncate" :title="pair.draft.losatFilename">{{ t('Not used · {name}', { name: pair.draft.losatFilename }) }}</span>
