@@ -393,7 +393,8 @@ def test_a_tier_above_10_mbp_ends_where_its_tick_labels_come_closer_than_a_quart
     """The rows above 10 Mbp are measured, not chosen: each ends at the longest record whose labels keep a quarter
     em apart, so only figures whose labels would come closer take a coarser interval."""
 
-    assert _label_gap_shortfall_px(_tick_group_of_length(long_record_tick_group, at_most + 1, large)) < 0.0
+    assert _tick_group_of_length(long_record_tick_group, at_most, large).label_stride == 1
+    assert _tick_group_of_length(long_record_tick_group, at_most + 1, large).label_stride > 1
 
 
 def test_the_ticks_above_the_last_tier_fit_records_of_10_gbp(long_record_tick_group) -> None:
@@ -401,3 +402,82 @@ def test_the_ticks_above_the_last_tier_fit_records_of_10_gbp(long_record_tick_gr
 
     assert group.tick_large == _TIERS["above"][0]
     assert _label_gap_shortfall_px(group) >= 0.0
+
+
+# OV-3020: the 5,498,578 bp E. coli O157:H7 Sakai chromosome with ten comparison rings drew its tick circle at radius
+# 117 px, and its 0.5 Mbp labels printed into each other ("4.5 Mbp5.0 Mbp"). A small figure puts the ticks there too.
+_SAKAI_BP = 5_498_578
+
+
+def _drawn_tick_group(radius: float, slot: str = "ticks:ticks", interval: int | None = None) -> TickGroup:
+    """The tick group that ``draw_circular`` draws for a featureless record of ``_SAKAI_BP`` at ``radius``."""
+
+    made: list[TickGroup] = []
+    original_init = TickGroup.__init__
+
+    def recording_init(self: TickGroup, *args: object, **kwargs: object) -> None:
+        original_init(self, *args, **kwargs)
+        made.append(self)
+
+    record = SeqRecord(Seq("ACGT" * (_SAKAI_BP // 4) + "AC"), id="sakai", annotations={"molecule_type": "DNA"})
+    overrides: dict[str, object] = {"canvas.circular.radius": radius}
+    if interval is not None:
+        overrides["objects.scale.interval"] = interval
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(TickGroup, "__init__", recording_init)
+        gbdraw.draw_circular(
+            [record],
+            options=gbdraw.CircularOptions(
+                config_overrides=overrides, tracks=gbdraw.CircularTrackOptions(slots=["features:features", slot])
+            ),
+        )
+    return made[-1]
+
+
+def _drawn_label_texts(group: TickGroup) -> list[str]:
+    return [
+        text_path.text
+        for text in group.get_group().elements
+        if text.elementname == "text"
+        for text_path in text.elements
+    ]
+
+
+@pytest.mark.parametrize(
+    ("radius", "slot"),
+    [
+        (120.0, "ticks:ticks"),
+        (90.0, "ticks:ticks"),
+        (90.0, "ticks:ticks@tick_label_layout=label_in_tick_out"),
+        (90.0, "ticks:ticks@tick_label_layout=label_out_tick_in"),
+        (90.0, "ticks:ticks@tick_label_layout=label_only"),
+    ],
+)
+def test_tick_labels_on_a_small_circle_leave_labels_out_instead_of_printing_into_each_other(radius, slot) -> None:
+    """OV-3020: where the labels of every tick would come closer than a quarter em, every second (then fifth, tenth,
+    ...) tick keeps its label; every tick keeps its mark at the interval."""
+
+    group = _drawn_tick_group(radius, slot)
+
+    assert group.tick_large == 500_000
+    assert group.label_stride > 1
+    assert _label_gap_shortfall_px(group) >= 0.0
+    marks = [element for element in group.get_group().elements if element.elementname == "path" and element["stroke"] == "gray"]
+    assert len(marks) == (0 if slot.endswith("label_only") else 11)
+    texts = _drawn_label_texts(group)
+    assert texts and all(float(text.split()[0]) * 1_000_000 % (500_000 * group.label_stride) == 0 for text in texts)
+
+
+def test_a_typed_interval_keeps_its_ticks_and_leaves_out_labels_that_would_print_into_each_other() -> None:
+    group = _drawn_tick_group(120.0, interval=250_000)
+
+    assert group.tick_large == 250_000
+    assert group.label_stride > 1
+    assert _label_gap_shortfall_px(group) >= 0.0
+
+
+def test_tick_labels_that_keep_apart_are_all_drawn() -> None:
+    group = _drawn_tick_group(390.0)
+
+    assert group.label_stride == 1
+    assert _drawn_label_texts(group) == [f"{tick / 1_000_000} Mbp" for tick in range(500_000, _SAKAI_BP, 500_000)]
