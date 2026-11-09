@@ -22,6 +22,24 @@ test('a record with no feature to draw: the status area says so and Run Info lis
   await expect(notice.locator('[data-input-warning="no_drawable_features"]')).toHaveText(
     'Record EMPTY001.1 (zero_features_record.gb) has no feature to draw: it has no features.'
   );
+  // #1777 review 2, LOW 3: a warning of an input drawn in full (a comparison file that repeats a record ID) sits
+  // apart from the heading, which stays over the warnings that leave input out, also when both kinds are shown.
+  await page.evaluate(async () => {
+    const { drawnInputSummaries } = await import(new URL('js/services/input-summary.js', document.baseURI).href);
+    const { state } = await import(new URL('js/state.js', document.baseURI).href);
+    const repeated = { code: 'comparison_record_id_repeated', message: 'Comparison sequence file a.fna: record ID X names more than one record.' };
+    state.inputSummaries.value = state.inputSummaries.value.map((entry) => drawnInputSummaries([{
+      resultIndex: entry.resultIndex, resultName: entry.resultName, lines: entry.lines,
+      warnings: [...entry.warnings, repeated], records: entry.records, linearWrap: entry.linearWrap
+    }], entry.drawnVisibility)[0]);
+  });
+  await expect(notice.locator('[data-input-warnings="left-out"] p')).toHaveText([
+    'Part of the input was not drawn.',
+    'Record EMPTY001.1 (zero_features_record.gb) has no feature to draw: it has no features.'
+  ]);
+  await expect(notice.locator('[data-input-warnings="drawn-in"] p')).toHaveText([
+    'Comparison sequence file a.fna: record ID X names more than one record.'
+  ]);
 
   await page.evaluate(() => { window.__GBDRAW_APP__.resultPanelTab = 'run-info'; });
   await expect(page.locator('[data-run-info-input-summary] li')).toHaveText([

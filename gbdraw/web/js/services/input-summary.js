@@ -47,8 +47,11 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {LinearWrapSummary | null} linearWrap `null` when the Result cut no record.
  */
 /**
- * @typedef {InputSummary & { readonly drawnVisibility: string, readonly leavesOutInput: boolean }} DrawnInputSummary
- *   A Result's summary with the Feature visibility of the render that sent it (Web-owned), and whether its warnings say part of the input was not drawn.
+ * @typedef {InputSummary & {
+ *   readonly drawnVisibility: string, readonly leftOutWarnings: readonly InputWarning[], readonly drawnInWarnings: readonly InputWarning[]
+ * }} DrawnInputSummary
+ *   A Result's summary with the Feature visibility of the render that sent it (Web-owned), and its warnings in two
+ *   groups: those that say part of the input was not drawn, and those of an input drawn in full.
  */
 
 const SUMMARY_FIELDS = ['resultIndex', 'resultName', 'lines', 'warnings', 'records', 'linearWrap'];
@@ -125,7 +128,8 @@ export const drawnInputSummaries = (summaries, drawnVisibility) => Object.freeze
     ...entry,
     drawnVisibility,
     // A warning of an input drawn in full (Python's `INPUT_WARNINGS_OF_DRAWN_INPUT`) leaves nothing out.
-    leavesOutInput: entry.warnings.some((warning) => !INPUT_WARNINGS_OF_DRAWN_INPUT.includes(warning.code))
+    leftOutWarnings: Object.freeze(entry.warnings.filter((warning) => !INPUT_WARNINGS_OF_DRAWN_INPUT.includes(warning.code))),
+    drawnInWarnings: Object.freeze(entry.warnings.filter((warning) => INPUT_WARNINGS_OF_DRAWN_INPUT.includes(warning.code)))
   }))
 );
 
