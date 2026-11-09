@@ -466,6 +466,17 @@ write-up of a release.
   and the record's line says "drew no features (no enabled features track
   slot)". Figures with a features track do not change. This applies on the
   command line, in the Python API and in the Web app.
+- Changed: a custom Circular or Linear track stack without an enabled
+  features track slot now draws for any input. Before, a record with a feature
+  drawn as an underlay (`repeat_region` by default) refused such a stack ("The
+  track settings are invalid" in the Web app). Underlays are not drawn, like
+  every other feature of such a stack, and the record's line says "drew no
+  features (no enabled features track slot)". A Circular stack with two or more
+  enabled features slots is still refused when a record has an underlay, and
+  the message now names the underlay types and what to change: keep one
+  features slot, or draw those types as Arrow or Rectangle. Figures with one
+  features track do not change. This applies on the command line, in the
+  Python API and in the Web app.
 - Performance: a per-base depth file takes much less memory on the command
   line, in the Python API and in the Web app. Each reference's depths are held
   as one array (whole numbers in 1, 2 or 4 bytes, decimals in 8) instead of a

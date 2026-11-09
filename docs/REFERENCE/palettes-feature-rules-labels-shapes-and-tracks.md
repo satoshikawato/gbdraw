@@ -285,9 +285,12 @@ by its source identity and decides its Feature visibility, Label visibility,
 and label text before the visibility and label tables.
 
 Supported feature renderings include directional `arrow`, nondirectional
-`rectangle`, and full-band `underlay`. Underlays require an enabled feature
-anchor and render behind foreground glyphs. Block strokes, connector strokes,
-fill, width, visibility, and overlap resolution are separate controls.
+`rectangle`, and full-band `underlay`. Underlays render behind foreground
+glyphs on the band of the one enabled `features` slot. A track stack without
+an enabled `features` slot draws no underlay, as it draws no other feature; a
+stack with two or more is refused when a record has a feature drawn as an
+underlay. Block strokes, connector strokes, fill, width, visibility, and
+overlap resolution are separate controls.
 A partial end is drawn open: no arrowhead and no block stroke on that edge, so
 the feature reads as continuing past it. This covers ends written as partial in
 the source location (`<1..1635`, `48045..>48169`, `complement(<1..242)`), ends

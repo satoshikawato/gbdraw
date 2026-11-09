@@ -678,9 +678,9 @@ def _add_circular_feature_underlays(
         mode="circular",
         record_indices=[record_index],
     )
-    if set_id is None:
+    anchor_id = feature_underlay_anchor_slot_id(slots, underlay_features) if set_id is not None else None
+    if anchor_id is None:
         return slots, bundle, layouts
-    anchor_id = feature_underlay_anchor_slot_id(slots)
     anchor = next(slot for slot in slots if str(slot.id) == anchor_id)
     slot_id = feature_underlay_slot_id(slots)
     underlay_slot = CircularTrackSlot(

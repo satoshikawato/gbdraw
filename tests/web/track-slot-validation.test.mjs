@@ -186,10 +186,10 @@ test('limits Linear to one enabled Features row and ignores a disabled duplicate
   assert.equal(valid.rowIssues.size, 0);
 });
 
-// TK-13 (Owner 2026-10-05: match the CLI): whether a stack needs a Features
-// row for underlays depends on the record's features, so the Web plan does
-// not reject a stack for the configured underlay types; Python reports
-// TRACK_INVALID FEATURES_COUNT when the record has underlay features.
+// TK-13 (Owner 2026-10-05: match the CLI): the Web plan does not reject a
+// stack for the configured underlay types. A stack without a Features row
+// draws no underlay; with two Circular Features rows Python reports
+// TRACK_INVALID UNDERLAY_FEATURE_SLOTS when the record has underlay features.
 test('accepts a stack without one Features row whatever underlay types are configured (TK-13)', () => {
   const ticksOnly = validate({
     mode: 'circular',

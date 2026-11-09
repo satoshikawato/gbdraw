@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VARIANTS = ROOT / "tests" / "fixtures" / "input_variants"
 ZERO_FEATURES = VARIANTS / "zero_features_record.gb"
 QUERY = VARIANTS / "prokka_locus_tag_only.gb"
+WITH_REPEATS = ROOT / "tests" / "test_inputs" / "NC_001879.gbk"
 SUBJECT = VARIANTS / "rast_seed_dbxref.gb"
 ROWS_BELOW_IDENTITY = VARIANTS / "blast_rows_below_identity.tsv"
 BOM = b"\xef\xbb\xbf"
@@ -138,6 +139,25 @@ def test_cli_keeps_quiet_when_every_region_set_is_drawn(tmp_path: Path, mode: st
 
     assert run.returncode == 0, run.stderr
     assert not any(line.startswith("WARNING:") for line in _lines(run)), run.stderr
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_cli_draws_a_stack_without_a_features_slot_for_a_record_with_underlays(tmp_path: Path, mode: str) -> None:
+    """repeat_region is drawn as an underlay by default; a stack without a features slot draws it no more than the
+    other features, and the run succeeds (OV-2801)."""
+    slot = f"--{mode}_track_slot"
+    run = _gbdraw(mode, "--gbk", str(WITH_REPEATS), slot, "gc:gc_content", "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    lines = _lines(run)
+    assert (
+        "INFO: Record NC_001879.2 (NC_001879.gbk), record 1 of 1, 155,943 bp: "
+        "drew no features (no enabled features track slot)."
+    ) in lines
+    assert not any(line.startswith("WARNING:") for line in lines), lines
+    svg = (tmp_path / "out.svg").read_text()
+    assert 'data-gbdraw-auto-feature-underlay="true"' not in svg
+    assert 'data-legend-key="repeat_region"' not in svg
 
 
 def test_cli_warns_when_the_thresholds_leave_out_every_comparison_row(tmp_path: Path) -> None:
