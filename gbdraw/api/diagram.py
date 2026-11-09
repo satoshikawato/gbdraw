@@ -1298,12 +1298,12 @@ def _apply_record_ids(
     element: object,
     renames: _IdRenames,
     *,
-    record_index: int,
+    request_index: int,
     renamed: tuple[tuple[str, str], ...],
     bind_record_identity: bool,
 ) -> None:
     """Name the ids of one copied tree by its plan, rewrite the references to
-    renamed ids, and bind feature identities to the record."""
+    renamed ids, and bind feature identities to the record (its request index)."""
 
     new_ids = dict(renames)
     ordinal = 0
@@ -1311,12 +1311,12 @@ def _apply_record_ids(
         if bind_record_identity and attribs.get("data-gbdraw-feature-id"):
             stable_id = attribs["data-gbdraw-feature-id"]
             rendered_id = attribs.get("data-gbdraw-rendered-feature-id") or stable_id
-            attribs["data-gbdraw-rendered-feature-id"] = instance_svg_id(rendered_id, f"record_{record_index + 1}")
+            attribs["data-gbdraw-rendered-feature-id"] = instance_svg_id(rendered_id, f"record_{request_index + 1}")
             attribs["data-gbdraw-stable-feature-id"] = stable_id
-            attribs["data-gbdraw-record-index"] = str(record_index)
+            attribs["data-gbdraw-record-index"] = str(request_index)
         if bind_record_identity and attribs.get("data-label-feature-id"):
             attribs["data-label-feature-id"] = instance_svg_id(
-                attribs["data-label-feature-id"], f"record_{record_index + 1}"
+                attribs["data-label-feature-id"], f"record_{request_index + 1}"
             )
         if _element_id(attribs) is None:
             continue
@@ -1384,6 +1384,7 @@ def merge_circular_record_part(
     attributes: tuple[tuple[str, object], ...],
     *,
     record_index: int,
+    request_index: int,
     bind_record_identity: bool,
     planned_ids: tuple[str, ...],
     renames: _IdRenames,
@@ -1408,7 +1409,7 @@ def merge_circular_record_part(
     _suffix_fixed_top_level_group_id(copied, record_index)
     _require_planned_ids(copied, planned_ids)
     _apply_record_ids(
-        copied, renames, record_index=record_index, renamed=renamed, bind_record_identity=bind_record_identity
+        copied, renames, request_index=request_index, renamed=renamed, bind_record_identity=bind_record_identity
     )
     return GroupContent.of(copied)
 
@@ -1418,6 +1419,7 @@ def merge_circular_record(
     definition_sources: tuple[tuple[GroupContent, int], ...],
     *,
     record_index: int,
+    request_index: int,
     record_id: str,
     bind_record_identity: bool,
     definition_ids: tuple[tuple[str, ...], ...],
@@ -1441,14 +1443,14 @@ def merge_circular_record(
         _apply_record_ids(
             definition,
             renames,
-            record_index=record_index,
+            request_index=request_index,
             renamed=plan.renamed,
             bind_record_identity=bind_record_identity,
         )
         copied_definitions.append(definition)
     record_group = Group(id=f"record_{record_index}")
     record_group.attribs["data-gbdraw-record-id"] = record_id
-    record_group.attribs["data-gbdraw-record-index"] = str(record_index)
+    record_group.attribs["data-gbdraw-record-index"] = str(request_index)
     for part, key in parts:
         record_group.add(ContentGroup(part, key))
     return GroupContent.of(record_group, tuple(copied_definitions))
@@ -3099,21 +3101,9 @@ def assemble_circular_diagram_from_records(
     record_features = tuple(_in_drawn_order(inputs._resolved_record_features or None, ordered_indices) or ())
     _record_transforms = _in_drawn_order(_record_transforms, ordered_indices)
     _record_presentations = _in_drawn_order(_record_presentations, ordered_indices)
-    if ordered_indices != list(range(len(ordered_indices))):
-        display_index_by_input = {
-            input_index: display_index
-            for display_index, input_index in enumerate(ordered_indices)
-        }
-        resolved_annotations = replace(
-            resolved_annotations,
-            annotations=tuple(
-                replace(
-                    annotation,
-                    record_index=display_index_by_input[annotation.record_index],
-                )
-                for annotation in resolved_annotations.annotations
-            ),
-        )
+    # ``records`` is in the drawn order from here; each record keeps its request index
+    # (``ordered_indices[i]``) as its identity in the figure: its features, annotations and
+    # groups name it as the interactive metadata and the Session do (OV-2899).
 
     parsed_circular_track_slots = _parse_circular_track_slot_inputs(inputs.circular_track_slots)
     implicit_track_stack = parsed_circular_track_slots is None
@@ -3321,7 +3311,7 @@ def assemble_circular_diagram_from_records(
             ),
             _record_context=CircularRecordContext(
                 requested_canvas=False,
-                annotation_record_index=record_index,
+                annotation_record_index=ordered_indices[record_index],
                 definition_group_id=definition_group_id,
                 definition_profile=record_definition_profile,
                 layout_definition_profile=layout_definition_profile,
@@ -3518,6 +3508,7 @@ def assemble_circular_diagram_from_records(
                     content,
                     attributes,
                     record_index=record_index,
+                    request_index=ordered_indices[record_index],
                     bind_record_identity=bind_record_identity,
                     planned_ids=planned_ids,
                     renames=renames,
@@ -3535,6 +3526,7 @@ def assemble_circular_diagram_from_records(
             parts,
             tuple((placed[content_index][0], definition_index) for content_index, definition_index in definition_positions),
             record_index=record_index,
+            request_index=ordered_indices[record_index],
             record_id=str(records[record_index].id),
             bind_record_identity=bind_record_identity,
             definition_ids=definition_ids,
@@ -3543,7 +3535,7 @@ def assemble_circular_diagram_from_records(
         record_group = place_content(
             merged_canvas,
             merged_content,
-            GroupKey(record_key_at(records[record_index], record_index), GroupKind.RECORD),
+            GroupKey(record_key_at(records[record_index], ordered_indices[record_index]), GroupKind.RECORD),
         )
         record_dx, record_dy = grid_layout.translations[record_index]
         record_group.translate(record_dx, record_dy)

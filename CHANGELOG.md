@@ -66,6 +66,14 @@ write-up of a release.
   in another record, and the Web app then stopped Generate with "Label
   visibility is On for a feature, but this diagram does not draw its label."
   Each record now keeps its own (OV-2907).
+- Fixed: on the same reordered Circular canvas, the figure named a moved
+  record by its drawn position, while the Session names records by the order
+  they were given. `--save_session` then failed with "identity fields do not
+  resolve" when a moved record drew repeat regions (OV-2899), a moved record's
+  region annotations were saved under another record (OV-2930), and in the Web
+  app a click on a moved record's name opened another record's settings
+  (OV-2931). Each record now keeps the index it was given; the figure looks
+  the same.
 - Fixed (Web app): in a Circular figure with a Depth axis and its ticks beside
   a Percent GC content axis, the GC content **Tick Font Size** field showed an
   Auto size that the figure did not use: the GC axis numbers are drawn in the
