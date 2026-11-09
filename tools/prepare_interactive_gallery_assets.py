@@ -148,7 +148,7 @@ ECOLI_O157_SAKAI_RINGS_COMMAND = (
     "gbdraw circular --gbk NC_002695.2.gbk -o ecoli_o157_sakai_rings -f interactive_svg -l left --separate_strands "
     "--losat losatn --conservation_sequence NZ_CP008957.1.fna NC_000913.3.fna NC_004431.1.fna "
     "--conservation_labels 'O157:H7 EDL933' 'K-12 MG1655' 'CFT073 (UPEC)' "
-    "--conservation_colors '#6e91b7' '#f4a251' '#77b26f' "
+    "--conservation_colors '#81a5cc' '#e5a972' '#7cb075' "
     "--annotation_table ecoli_o157_sakai_islands.tsv "
     "--circular_track_axis_index 1 "
     "--circular_track_slot 'islands:annotations@set_id=islands,side=outside' "

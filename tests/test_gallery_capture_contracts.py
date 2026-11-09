@@ -525,7 +525,7 @@ PROGRESSIVE_TUTORIALS = {
             "role=checkbox[name='Show Comparison Rings'] >> visible=true",
             "input[aria-label='Comparison ring label 1']",
             "button:has-text('Import TSV')",
-            "[aria-label='Circular track slot annotations Extend to']",
+            "[aria-label='Circular track slot annotations_1 Extend to']",
         },
     },
     "tobacco-chloroplast": {

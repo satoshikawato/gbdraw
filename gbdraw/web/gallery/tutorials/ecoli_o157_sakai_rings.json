@@ -495,7 +495,7 @@
   },
   {
    "title": "Stretch the tints across the rings",
-   "body": "The tints stop at the feature track, while the gaps they explain are in the rings. In Layout, open Custom Track Slots and turn on Use custom stack. Add both region sets to the stack before you generate: a custom stack draws only the region sets it has a row for. Choose Annotations as the new track and click Add track. In the new row, annotations, set Annotation set to islands_tint, the placement to Overlay anchor, the anchor to features, and Extend to conservation_CFT073_UPEC, the innermost ring. Add another Annotations row, annotations_2, set its Annotation set to islands, and choose Row actions, Move outside Axis, so that the labels stay outside the map. Click Generate Diagram; it reuses the cached LOSAT results. Each tint now runs from the feature track through all three rings, and the gaps of K-12 and CFT073, and the one gap of EDL933 at the Sakai-only prophage, sit inside the named islands.",
+   "body": "The tints stop at the feature track, while the gaps they explain are in the rings. In Layout, open Custom Track Slots and turn on Use custom stack. The stack starts with a row for each region set, placed as the figure draws it now: annotations_1 lays islands_tint behind the features, and annotations_2 draws islands outside the Axis. In the annotations_1 row, set Extend to conservation_CFT073_UPEC, the innermost ring, set the layer to Foreground, so that the tints lie over the rings, and set padding to 2. Click Generate Diagram; it reuses the cached LOSAT results. Each tint now runs from the feature track through all three rings, and the gaps of K-12 and CFT073, and the one gap of EDL933 at the Sakai-only prophage, sit inside the named islands.",
    "table": {
     "columns": [
      "Row",
@@ -509,34 +509,19 @@
       "On"
      ],
      [
-      "annotations",
-      "Annotation set",
-      "islands_tint"
-     ],
-     [
-      "annotations",
-      "Placement",
-      "Overlay anchor"
-     ],
-     [
-      "annotations",
-      "Anchor",
-      "features"
-     ],
-     [
-      "annotations",
+      "annotations_1",
       "Extend to",
       "conservation_CFT073_UPEC"
      ],
      [
-      "annotations_2",
-      "Annotation set",
-      "islands"
+      "annotations_1",
+      "Layer",
+      "Foreground"
      ],
      [
-      "annotations_2",
-      "Row actions",
-      "Move outside Axis"
+      "annotations_1",
+      "Padding",
+      "2"
      ]
     ]
    },
@@ -551,54 +536,18 @@
     },
     {
      "type": "select",
-     "selector": "[aria-label='New circular track renderer']",
-     "value": "annotations"
-    },
-    {
-     "type": "click",
-     "selector": "#circular-custom-track-slots-panel button:has-text('Add track')"
-    },
-    {
-     "type": "select",
-     "selector": "[aria-label='Circular track slot annotations Annotation set']",
-     "value": "islands_tint"
-    },
-    {
-     "type": "select",
-     "selector": "[aria-label='Circular track slot annotations Annotation placement']",
-     "value": "overlay"
-    },
-    {
-     "type": "select",
-     "selector": "[aria-label='Circular track slot annotations Enabled drawable anchor']",
-     "value": "features"
-    },
-    {
-     "type": "select",
-     "selector": "[aria-label='Circular track slot annotations Extend to']",
+     "selector": "[aria-label='Circular track slot annotations_1 Extend to']",
      "value": "conservation_CFT073_UPEC"
     },
     {
      "type": "select",
-     "selector": "[aria-label='New circular track renderer']",
-     "value": "annotations"
+     "selector": "[aria-label='Circular track slot annotations_1 Annotation layer']",
+     "value": "foreground"
     },
     {
-     "type": "click",
-     "selector": "#circular-custom-track-slots-panel button:has-text('Add track')"
-    },
-    {
-     "type": "select",
-     "selector": "[aria-label='Circular track slot annotations_2 Annotation set']",
-     "value": "islands"
-    },
-    {
-     "type": "click",
-     "selector": "[data-capture='circular-track-slot-annotations_2'] .track-slot-row-menu > summary"
-    },
-    {
-     "type": "click",
-     "selector": "[data-capture='circular-track-slot-annotations_2'] .track-slot-row-menu >> role=button[name='Move outside Axis']"
+     "type": "fill",
+     "selector": "[aria-label='Circular track slot annotations_1 Padding']",
+     "value": "2"
     },
     {
      "type": "generate"
@@ -610,7 +559,7 @@
      "media": {
       "src": "./media/ecoli_o157_sakai_rings/manual-06-01-label-row.webp",
       "alt": "Top of the custom stack with Use custom stack on: the annotations_2 row with Annotation set islands above the Axis, then the features row below it.",
-      "caption": "Turn on Use custom stack; the annotations_2 row draws islands outside the Axis."
+      "caption": "Turn on Use custom stack; its annotations_2 row already draws islands outside the Axis."
      },
      "capture": {
       "source": "webapp",
@@ -655,8 +604,8 @@
      "dataDependent": true,
      "media": {
       "src": "./media/ecoli_o157_sakai_rings/manual-06-02-tint-row.webp",
-      "alt": "The annotations row of the custom stack: Annotation set islands_tint, placement Overlay anchor, anchor features, layer Foreground, and Extend to conservation_CFT073_UPEC.",
-      "caption": "The annotations row lays islands_tint over the features and extends it to the innermost ring."
+      "alt": "The annotations_1 row of the custom stack: Annotation set islands_tint, placement Overlay anchor, anchor features, layer Foreground, Extend to conservation_CFT073_UPEC, and padding 2.",
+      "caption": "The annotations_1 row lays islands_tint over the features and extends it to the innermost ring."
      },
      "capture": {
       "source": "webapp",
@@ -673,7 +622,7 @@
        },
        {
         "type": "evaluate",
-        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const node = document.querySelector(\"[data-capture='circular-track-slot-annotations']\"); if (!node) throw new Error(\"Capture target not found: [data-capture='circular-track-slot-annotations']\"); node.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
+        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const node = document.querySelector(\"[data-capture='circular-track-slot-annotations_1']\"); if (!node) throw new Error(\"Capture target not found: [data-capture='circular-track-slot-annotations_1']\"); node.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
        },
        {
         "type": "wait",
@@ -681,7 +630,7 @@
        }
       ],
       "clipSelectors": [
-       "[data-capture='circular-track-slot-annotations']"
+       "[data-capture='circular-track-slot-annotations_1']"
       ],
       "cropPadding": 8,
       "assertAppState": {
@@ -690,16 +639,20 @@
       },
       "visibleControls": [
        {
-        "selector": "[aria-label='Circular track slot annotations Annotation set']",
+        "selector": "[aria-label='Circular track slot annotations_1 Annotation set']",
         "value": "islands_tint"
        },
        {
-        "selector": "[aria-label='Circular track slot annotations Annotation placement']",
+        "selector": "[aria-label='Circular track slot annotations_1 Annotation placement']",
         "value": "overlay"
        },
        {
-        "selector": "[aria-label='Circular track slot annotations Extend to']",
+        "selector": "[aria-label='Circular track slot annotations_1 Extend to']",
         "value": "conservation_CFT073_UPEC"
+       },
+       {
+        "selector": "[aria-label='Circular track slot annotations_1 Annotation layer']",
+        "value": "foreground"
        }
       ]
      }
