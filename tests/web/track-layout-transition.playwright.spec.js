@@ -1834,9 +1834,10 @@ test('Rotate Apply now reached by keyboard while a Generate runs is disabled and
 });
 
 // A change through the hook, not a control: the compare at adoption replaces the rows instead of moving them to the
-// other ring's key. This checks the state right after that Generate only; the series it adopts still takes the draft's
-// entry at the same place (`adoptCanonicalRenderArtifacts`). The controls named above are disabled while a Generate
-// runs, and Reset Settings and the Rotate, Align, and Align at feature runs are refused; these tests check no other.
+// other ring's key. This checks the state right after that Generate only; the series it adopts is the request's rings,
+// each with the genetic code of the draft's ring at its place (`adoptCircularRingResult`). The controls named above are
+// disabled while a Generate runs, and Reset Settings and the Rotate, Align, and Align at feature runs are refused;
+// these tests check no other.
 test('a ring reorder after the request is built puts no row on another ring', async ({ browser }) => {
   test.setTimeout(420000);
   const page = await loadAddedRings(browser);

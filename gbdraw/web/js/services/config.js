@@ -4643,17 +4643,12 @@ export const adoptCanonicalRenderArtifacts = (
     );
   } else if (projection.files.c_conservation_blasts_source === 'losat-cache') {
     const projectedConservation = projection.config.circularConservation;
-    // Each adopted ring is the request's ring at its table's place. Of the draft's ring at its index it keeps only
-    // the LOSAT genetic code, which the request does not carry: once the draft moved its rings (a rerender of the
-    // committed Session, such as a Rotate), that is another ring, and its source key would bind this ring to the
-    // other's table (#1777 round 8). The rings' reconcile then names each entry's table (`seriesNamingSources`).
-    const draftSeries = drawing.circularConservation.series;
+    // Each adopted ring is the request's ring at its table's place, nothing of the draft's ring at its index: once the
+    // draft moved its rings (a rerender of the committed Session, such as a Rotate), that is another ring (#1777 round
+    // 8, OV-3178). The rings' adoption transition gives each ring the LOSAT genetic code of the draft's ring it is,
+    // which the request does not carry (`adoptCircularRingResult`), and its reconcile names each entry's table.
     const nextSeries = Array.isArray(projectedConservation?.series)
-      ? projectedConservation.series.map((entry, index) => ({
-          ...entry,
-          losat_gencode: draftSeries[index]?.losat_gencode ?? entry.losat_gencode,
-          sourceIndex: index
-        }))
+      ? projectedConservation.series.map((entry, index) => ({ ...entry, sourceIndex: index }))
       : [];
     nextCircularState = {
       blasts: (projection.files.c_conservation_blasts || [])

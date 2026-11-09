@@ -659,6 +659,33 @@ test('a rerender of the committed rings after a move gives each ring its own lab
   }
 });
 
+// OV-3178: the request carries no ring's LOSAT genetic code, so the adoption takes it from the draft's ring the request
+// ring is, through the one matcher, never from the draft's entry at the same index: after a move that is another ring.
+test('a rerender of the committed rings after a move keeps each ring\'s own genetic code for the next Generate (#1777 round 9, OV-3178)', async () => {
+  for (const distinct of [false, true]) {
+    await withStack(async (drawing) => {
+      await threeSequenceRings(drawing, { distinct });
+      drawing.circularConservation.series.forEach((entry, index) => { entry.losat_gencode = [11, 4, 2][index]; });
+      const files = distinct ? 'files of their own names' : 'sequence.fasta files';
+      const codes = () => drawing.circularConservation.series.map((entry) => [entry.label, entry.losat_gencode]);
+      // The rings and codes the next Generate searches, as it reads them (`circularConservationKeys`).
+      const searched = () => Promise.all(orderedConservationSources(ringGenomeFileLists(drawing.files.c_conservation_fastas), drawing.circularConservation)
+        .map(async (source) => [(await readFileText(state.inputFiles.fileOf(source.file))).split('\n')[1], source.losat_gencode]));
+      const canonical = await generateRings(drawing);
+      assert.deepEqual(codes(), [['GA', 11], ['GB', 4], ['GC', 2]], `${files}: the Generate keeps each ring's code`);
+      stackPanel.moveCircularConservationSeries(0, 1);
+      assert.deepEqual(await searched(), [['TTTT', 4], ['ACGT', 11], ['GGGG', 2]], `${files}: the moved rings`);
+      adoptRings(drawing, canonical, false);
+      assert.deepEqual(codes(), [['GA', 11], ['GB', 4], ['GC', 2]], `${files}: a rerender of the committed rings after a move`);
+      assert.deepEqual(await searched(), [['ACGT', 11], ['TTTT', 4], ['GGGG', 2]], `${files}: the next Generate searches each ring with its code`);
+      stackPanel.moveCircularConservationSeries(1, 1);
+      await generateRings(drawing);
+      assert.deepEqual(codes(), [['GA', 11], ['GC', 2], ['GB', 4]], `${files}: a Generate after a move`);
+      assert.deepEqual(ringIdentityDefects(drawing), [], files);
+    });
+  }
+});
+
 test('replacing an uploaded BLAST table for every drawing keeps its ring\'s label and colour (#1777 round 8)', async () => {
   const drawing = circular();
   const table = (name) => textFile(name, 'q\ts\t100\t8\t0\t0\t1\t8\t1\t8\t1e-9\t20\n');

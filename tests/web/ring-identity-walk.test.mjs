@@ -1,11 +1,12 @@
 // Guard: the rings' identity invariant through every ring transition the Web offers (#1777 round 8). A
 // deterministic walk (fixed seeds, bounded steps) over Add Seq, Remove series, a ring row's Add file and file
-// remove, Move series, a ring's label and colour edit, a stack row's width edit, Generate's adoption of a LOSAT result
+// remove, Move series, a ring's label and colour edit, a ring's LOSAT genetic code edit, a stack row's width edit, Generate's adoption of a LOSAT result
 // (the real request and adoption path), the replacement of a replayed table, the source radio's round trip, a Session 51 Save -> Load (also one that lost
 // a ring's genome file), and the track stack off and on, over rings of NCBI `sequence.fasta` files of one name, size
 // and date mixed with rings of distinct files. After every step it checks the invariant (`ringIdentityDefects`: each
 // series entry names one source by key, file name and place; each managed stack row carries the key the one matcher
-// gives its entry) and that each ring keeps its label, its colour and its stack row's id and width.
+// gives its entry) and that each ring keeps its label, its colour, its genetic code (also as the next Generate reads
+// the rings, round 9) and its stack row's id and width.
 // Undo and Redo are not walked: a History restore installs the series, the stack rows and the file bindings it
 // captured together (R11), after a step this walk checks, and calls no reconcile or re-key.
 import assert from 'node:assert/strict';
@@ -109,14 +110,15 @@ const seeded = (seed) => () => {
 };
 
 /**
- * The walk's model: each ring by its own id, with its files' bases, its label and colour, and its stack row's id and
- * width once the stack has made it.
- * @typedef {{ id: number, bases: Set<string>, label: string, color: string, row: { id: string, width: unknown } | null }} ModelRing
+ * The walk's model: each ring by its own id, with its files' bases, its label, colour and LOSAT genetic code, and its
+ * stack row's id and width once the stack has made it.
+ * @typedef {{ id: number, bases: Set<string>, label: string, color: string, code: number,
+ *   row: { id: string, width: unknown } | null }} ModelRing
  */
 
 const ringRows = (drawing) => drawing.adv.circular_track_slots.filter((slot) => isManagedConservationSlot(slot));
 
-/** The drawing's rings as drawn, in order: each with its genome's bases, label, colour and stack row. */
+/** The drawing's rings as drawn, in order: each with its genome's bases, label, colour, genetic code and stack row. */
 const drawnRings = async (drawing) => {
   const genomes = ringGenomeFilesInRingOrder(drawing);
   const drawn = orderedConservationSources(circularRingSources(drawing), drawing.circularConservation);
@@ -124,6 +126,7 @@ const drawnRings = async (drawing) => {
     bases: await Promise.all((genomes[index] || []).map(async (file) => basesOfText(await readFileText(state.inputFiles.fileOf(file))))),
     label: source.label,
     color: source.color,
+    code: source.losat_gencode,
     row: ringRows(drawing).find((slot) => String(slot.params.series_key) === source.sourceKey) || null
   })));
 };
@@ -164,7 +167,8 @@ const runWalk = async (seed, steps) => {
       const expected = model[index];
       assert.ok(ring.bases.length > 0 && ring.bases.every((bases) => expected.bases.has(bases)) && ring.bases.length === expected.bases.size,
         `ring ${index} draws ring ${expected.id}'s files (${where})`);
-      assert.deepEqual([ring.label, ring.color], [expected.label, expected.color], `ring ${expected.id}'s label and colour (${where})`);
+      assert.deepEqual([ring.label, ring.color, ring.code], [expected.label, expected.color, expected.code],
+        `ring ${expected.id}'s label, colour and genetic code (${where})`);
       if (drawing.adv.circular_track_slots_enabled !== true) return;
       assert.ok(ring.row, `ring ${expected.id} has its stack row (${where})`);
       if (expected.row) {
@@ -173,12 +177,26 @@ const runWalk = async (seed, steps) => {
         expected.row = { id: String(ring.row.id), width: ring.row.width };
       }
     });
+    // The rings the next Generate searches, in order, and the genetic code it searches each with, as its ring keys
+    // read them (`circularConservationKeys`).
+    const searched = orderedConservationSources(ringGenomeFileLists(drawing.files.c_conservation_fastas), drawing.circularConservation);
+    const searchedRings = await Promise.all(searched.map(async (source) => ({
+      bases: await Promise.all(source.files.map(async (file) => basesOfText(await readFileText(state.inputFiles.fileOf(file))))),
+      code: source.losat_gencode
+    })));
+    assert.equal(searchedRings.length, model.length, `the next Generate searches every ring (${where})`);
+    searchedRings.forEach((ring, index) => {
+      const expected = model[index];
+      assert.ok(ring.bases.length === expected.bases.size && ring.bases.every((bases) => expected.bases.has(bases)),
+        `the next Generate searches ring ${expected.id}'s files at ${index} (${where})`);
+      assert.equal(ring.code, expected.code, `the next Generate searches ring ${expected.id} with its genetic code (${where})`);
+    });
   };
   const replayed = () => drawing.files.c_conservation_blasts_source === 'losat-cache' && drawing.files.c_conservation_blasts.length > 0;
   const newRingOf = (index, bases) => {
     const entry = drawing.circularConservation.series[index];
     ringCount += 1;
-    return { id: ringCount, bases: new Set([bases]), label: entry.label, color: entry.color, row: null };
+    return { id: ringCount, bases: new Set([bases]), label: entry.label, color: entry.color, code: entry.losat_gencode, row: null };
   };
 
   /** @type {Record<string, { weight: number, can: () => boolean, run: () => Promise<void> | void }>} */
@@ -247,6 +265,17 @@ const runWalk = async (seed, steps) => {
         Object.assign(model[index], { label: entry.label, color: entry.color });
       }
     },
+    'set a genetic code': {
+      // The ring's LOSAT genetic code field (`circularConservation.series[i].losat_gencode`). A rerender of the
+      // committed rings keeps it with its ring (OV-3178); the request does not carry it.
+      weight: 2, can: () => model.length > 0,
+      run: () => {
+        const index = pick(model.length);
+        const code = 2 + pick(24);
+        drawing.circularConservation.series[index].losat_gencode = code;
+        model[index].code = code;
+      }
+    },
     'widen a stack row': {
       weight: 2, can: () => model.some((ring) => ring.row) && drawing.adv.circular_track_slots_enabled === true,
       run: () => {
@@ -280,7 +309,8 @@ const runWalk = async (seed, steps) => {
     },
     'rerender the committed rings': {
       // A rerender of the committed Session (a Rotate): the adoption of the last Generate's request when the draft no
-      // longer is that request; each ring comes back in its committed order, label and colour, in its own row. Most
+      // longer is that request; each ring comes back in its committed order, label and colour, in its own row, with the
+      // genetic code it has in the draft, which the request does not carry (OV-3178). Most
       // of these steps move two rings first, as the review's case did (a move, then a Rotate).
       weight: 3, can: () => committed !== null,
       run: () => {
@@ -371,7 +401,7 @@ const runWalk = async (seed, steps) => {
   return kinds;
 };
 
-test('each ring keeps one identity, its label, colour and stack row through a walk of ring transitions', async () => {
+test('each ring keeps one identity, its label, colour, genetic code and stack row through a walk of ring transitions', async () => {
   /** @type {Map<string, number>} */
   const drawnKinds = new Map();
   for (const seed of [1777, 3165, 3166, 3167, 8, 20261110]) {
@@ -379,7 +409,7 @@ test('each ring keeps one identity, its label, colour and stack row through a wa
   }
   console.log(`ring walk steps: ${JSON.stringify(Object.fromEntries(drawnKinds))}`);
   for (const kind of ['add seq', 'remove series', 'row add file', 'row remove file', 'move series', 'edit label and colour',
-    'widen a stack row', 'generate', 'rerender the committed rings', 'replace a replayed table', 'source radio round trip', 'save and load',
+    'set a genetic code', 'widen a stack row', 'generate', 'rerender the committed rings', 'replace a replayed table', 'source radio round trip', 'save and load',
     'a Load that lost a genome', 'stack off and on']) {
     assert.ok((drawnKinds.get(kind) || 0) >= 3, `the walk draws ${kind} (${drawnKinds.get(kind) || 0} times)`);
   }

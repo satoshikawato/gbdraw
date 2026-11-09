@@ -146,6 +146,26 @@ const changeRingSourceFiles = (state, drawing, change, write) => {
 };
 
 /**
+ * A Generate's adoption of its LOSAT result (`adopt`, which says whether it installed the rings' tables) in which each
+ * adopted ring keeps the LOSAT genetic code of the draft's ring it is, which the request does not carry (OV-3178): of
+ * the draft's rings as the one matcher orders them before the adoption (`orderedConservationSources`), the ring at its
+ * index in that order for a request built from them (`builtFromDraft`), else the ring at its place, where the adoption
+ * of that request put it and where a move keeps it. A request ring the draft has no ring for keeps the request's code.
+ * @param {DrawingState} drawing @param {() => boolean} adopt @param {boolean} builtFromDraft
+ * @returns {boolean}
+ */
+const adoptKeepingRingCodes = (drawing, adopt, builtFromDraft) => {
+  const draftRings = orderedConservationSources(circularRingSources(drawing), drawing.circularConservation);
+  /** @param {number} index */
+  const draftRingOf = (index) => (builtFromDraft ? draftRings[index] : draftRings.find((ring) => ring.placeIndex === index));
+  if (!adopt()) return false;
+  drawing.circularConservation.series.forEach((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => {
+    entry.losat_gencode = draftRingOf(index)?.losat_gencode ?? entry.losat_gencode;
+  });
+  return true;
+};
+
+/**
  * A change of the ring sources (`write`) that keeps each ring at its place: each series entry takes the identity of
  * the source at the place the one matcher gave it before the change, and the change's key changes are each row's
  * key before (the matcher's, which the row carries) to that source's key. A LOSAT-cache replay's table sits at its
@@ -313,11 +333,13 @@ export const createCircularConservationSources = ({
   /**
    * A Generate's adoption of its LOSAT result (`adopt`, which says whether it installed the rings' tables), then the
    * rings' reconcile. The ring rows move to the tables' keys only when the draft's rings are those the request was
-   * built from (`builtFromDraft`; `keepCircularConservationRowsThrough` states why); else they are replaced.
+   * built from (`builtFromDraft`; `keepCircularConservationRowsThrough` states why); else they are replaced. Each
+   * adopted ring keeps its genetic code (`adoptKeepingRingCodes`).
    * @param {DrawingState} drawing @param {() => boolean} adopt @param {boolean} builtFromDraft
    */
   const adoptCircularRingResult = (drawing, adopt, builtFromDraft) => {
-    const adopted = builtFromDraft ? keepCircularConservationRowsThrough(drawing, adopt) : adopt();
+    const adoptWithCodes = () => adoptKeepingRingCodes(drawing, adopt, builtFromDraft);
+    const adopted = builtFromDraft ? keepCircularConservationRowsThrough(drawing, adoptWithCodes) : adoptWithCodes();
     if (adopted) reconcileCircularConservation(drawing);
   };
   // Session Load (`afterImport`): a Session whose Show Comparison Rings is not

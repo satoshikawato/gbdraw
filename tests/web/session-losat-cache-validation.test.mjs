@@ -1052,11 +1052,13 @@ ORIGIN
       sourceIndex: 0,
       label: 'Missing FASTA',
       color: '#e15759',
-      losatGencode: 11
+      // The request carries no ring's genetic code, and the adoption takes nothing of the draft's ring at the same
+      // index: the rings' adoption transition gives each ring the code of the draft's ring it is (OV-3178,
+      // `adoptCircularRingResult`, pinned in circular-rings-setting.test.mjs).
+      losatGencode: 1
     }
   );
   assert.equal(state.activeDrawing().circularConservation.series[1].sourceIndex, 1);
-  assert.equal(state.activeDrawing().circularConservation.series[1].losat_gencode, 4);
 
   installShownDrawing('circular');
   state.activeDrawing().circularConservation.enabled = true;
