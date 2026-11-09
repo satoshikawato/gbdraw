@@ -121,6 +121,12 @@ def _expanded_gzip(path: str | PathLike[str], capped: bool) -> io.BufferedReader
     return io.BufferedReader(_CappedExpansion(path, MAX_EXPANDED_INPUT_BYTES), buffer_size=_READ_CHUNK)
 
 
+def expanded_gzip_input(path: str | PathLike[str]) -> io.BufferedReader | gzip.GzipFile:
+    """The expanded bytes of a gzip input file, refused past ``MAX_EXPANDED_INPUT_BYTES`` (``open_input_text``)."""
+
+    return _expanded_gzip(path, capped=True)
+
+
 def is_gzip_file(path: str | PathLike[str]) -> bool:
     """Whether the file starts with the gzip signature; its name does not count."""
 
@@ -342,6 +348,7 @@ __all__ = [
     "MAX_EXPANDED_INPUT_BYTES",
     "canonical_feature_type",
     "canonicalize_feature_types",
+    "expanded_gzip_input",
     "flat_file_format",
     "flat_file_stream",
     "gff3_stream",

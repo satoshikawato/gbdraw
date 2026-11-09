@@ -4,13 +4,13 @@
 import os
 import logging
 from contextlib import contextmanager
-from itertools import chain
 from collections import Counter
 from collections.abc import Iterator, Set as AbstractSet
 import string
 from typing import Callable, List, Dict, Literal
 
 from Bio import SeqIO
+from Bio.Seq import Seq
 from Bio.SeqFeature import CompoundLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from BCBio import GFF
@@ -25,8 +25,8 @@ from .input_text import (
     flat_file_stream,
     gff3_stream,
     read_input_bytes,
-    read_sequence_text,
 )
+from .record_sequences import read_fasta_records, read_flat_records, read_gff3_text
 from .record_select import parse_record_selector, reverse_records, select_record
 from ..exceptions import GbdrawError, InputFileError, ParseError, ValidationError
 
@@ -51,6 +51,8 @@ _IUPAC_NUCLEOTIDE_CODES = frozenset("ACGTURYSWKMBDHVNacgturyswkmbdhvn")
 # amino acid code (B J O U X Z included) and "*" as a stop.
 _PROTEIN_CODES = frozenset(string.ascii_letters + "*")
 SequenceMolecule = Literal["nucleotide", "protein"]
+# Sequences are checked this many letters at a time, never copied whole.
+_VALIDATION_PIECE = 1 << 20
 _FLAT_FILE_KINDS = "GenBank, DDBJ or EMBL flat file"
 # What a file without a record is, by the reason of its NO_RECORDS diagnostic.
 _ABSENCE_MESSAGES = {
@@ -100,18 +102,13 @@ def read_flat_file_records(path: str) -> list[SeqRecord]:
 
     fmt: FlatFileFormat = "genbank"
 
-    def parse(lines: Iterator[str]) -> list[SeqRecord]:
+    def parse(lines: Iterator[str], file_format: FlatFileFormat) -> list[SeqRecord]:
         nonlocal fmt
-        head: list[str] = []
-        for line in lines:
-            head.append(line)
-            if line.strip():
-                break
-        fmt = flat_file_format(head[-1] if head else "")
-        return list(SeqIO.parse(flat_file_stream(chain(head, lines), fmt), fmt))
+        fmt = file_format
+        return list(SeqIO.parse(flat_file_stream(lines, fmt), fmt))
 
     try:  # A file that is not text stops at its first line: UnicodeDecodeError is a ValueError.
-        records = read_sequence_text(path, parse)
+        records = read_flat_records(path, parse, flat_file_format)
     except (ValueError, *GZIP_ERRORS) as e:
         name = FLAT_FILE_FORMAT_NAMES[fmt]
         raise ParseError(
@@ -257,10 +254,9 @@ def require_nucleotide_records(records: list[SeqRecord], path: str) -> list[SeqR
 
     name = os.path.basename(path)
     for position, record in enumerate(records, start=1):
-        sequence = _required_sequence(record, position, name)
-        # The first letter that is not a nucleotide code is looked for only when one exists.
-        if set(sequence) - _IUPAC_NUCLEOTIDE_CODES:
-            letter = next(char for char in sequence if char not in _IUPAC_NUCLEOTIDE_CODES)
+        _require_sequence(record, position, name)
+        letter = _first_letter_outside(record.seq, _IUPAC_NUCLEOTIDE_CODES)
+        if letter is not None:
             raise ValidationError(
                 f"FASTA record {record.id or f'#{position}'} in {name} holds {letter!r}, which is not a nucleotide code: "
                 "gbdraw draws nucleotide records (IUPAC codes A C G T U R Y S W K M B D H V N).",
@@ -269,36 +265,34 @@ def require_nucleotide_records(records: list[SeqRecord], path: str) -> list[SeqR
     return records
 
 
-def _required_sequence(record: SeqRecord, position: int, name: str) -> str:
-    """The sequence of the ``position``-th FASTA record of file ``name``, refused when it has none."""
+def _require_sequence(record: SeqRecord, position: int, name: str) -> None:
+    """Refuse the ``position``-th FASTA record of file ``name`` when it has no sequence."""
 
-    sequence = str(record.seq)
-    if not sequence:
+    if not len(record.seq):
         raise ValidationError(
             f"FASTA record {record.id or f'#{position}'} in {name} has no sequence. Give each FASTA record its sequence.",
             diagnostic=_fasta_record_diagnostic("EMPTY_SEQUENCE", record, position),
         )
-    return sequence
 
 
-def sequence_molecule(sequence: str) -> SequenceMolecule | None:
-    """What a sequence is: nucleotide when it holds IUPAC nucleotide codes only (the rule of
-    :func:`require_nucleotide_records`), else protein when it holds amino acid codes and ``*`` only, else ``None``."""
+def _first_letter_outside(sequence: Seq, codes: frozenset[str]) -> str | None:
+    """The first letter of ``sequence`` that is not in ``codes``, read a piece at a time, or ``None``."""
 
-    letters = set(sequence)
-    if not letters - _IUPAC_NUCLEOTIDE_CODES:
-        return "nucleotide"
-    if not letters - _PROTEIN_CODES:
-        return "protein"
+    for start in range(0, len(sequence), _VALIDATION_PIECE):
+        piece = str(sequence[start:start + _VALIDATION_PIECE])
+        if set(piece) - codes:
+            return next(char for char in piece if char not in codes)
     return None
 
 
 def load_query_fasta(path: str) -> list[tuple[SeqRecord, SequenceMolecule]]:
-    """The entries of a FASTA file of search queries, each with what it is (:func:`sequence_molecule`).
+    """The entries of a FASTA file of search queries, each with what it is.
 
-    Refused as :func:`load_fasta` refuses a file: one without an entry, an entry
-    without sequence; and an entry holding a character that is neither a
-    nucleotide nor an amino acid code (``NOT_SEQUENCE``, with that character).
+    An entry is nucleotide when it holds IUPAC nucleotide codes only (the rule of
+    :func:`require_nucleotide_records`), else protein when it holds amino acid
+    codes and ``*`` only. Refused as :func:`load_fasta` refuses a file: one without
+    an entry, an entry without sequence; and an entry holding a character that is
+    neither a nucleotide nor an amino acid code (``NOT_SEQUENCE``, with that character).
     """
 
     if not os.path.isfile(path):
@@ -306,15 +300,17 @@ def load_query_fasta(path: str) -> list[tuple[SeqRecord, SequenceMolecule]]:
     name = os.path.basename(path)
     queries: list[tuple[SeqRecord, SequenceMolecule]] = []
     for position, record in enumerate(_read_fasta_file(path), start=1):
-        sequence = _required_sequence(record, position, name)
-        molecule = sequence_molecule(sequence)
-        if molecule is None:
-            letter = next(char for char in sequence if char not in _PROTEIN_CODES)
-            raise ValidationError(
-                f"FASTA record {record.id or f'#{position}'} in {name} holds {letter!r}, which is neither a nucleotide "
-                "nor an amino acid code. Give DNA, RNA or protein sequences (letters, and * for a stop).",
-                diagnostic=_fasta_record_diagnostic("NOT_SEQUENCE", record, position, letter),
-            )
+        _require_sequence(record, position, name)
+        molecule: SequenceMolecule = "nucleotide"
+        if _first_letter_outside(record.seq, _IUPAC_NUCLEOTIDE_CODES) is not None:
+            molecule = "protein"
+            letter = _first_letter_outside(record.seq, _PROTEIN_CODES)
+            if letter is not None:
+                raise ValidationError(
+                    f"FASTA record {record.id or f'#{position}'} in {name} holds {letter!r}, which is neither a nucleotide "
+                    "nor an amino acid code. Give DNA, RNA or protein sequences (letters, and * for a stop).",
+                    diagnostic=_fasta_record_diagnostic("NOT_SEQUENCE", record, position, letter),
+                )
         queries.append((record, molecule))
     return queries
 
@@ -602,19 +598,16 @@ def _read_fasta_records(fasta_file: str) -> list[SeqRecord]:
     Biopython 1.88 refuses it. A file without a ">" line has no entry (OV-1257).
     """
 
-    records = read_sequence_text(fasta_file, _fasta_entries)
+    records = read_fasta_records(fasta_file, _fasta_entries)
     if records is None:
         raise ValidationError(f"FASTA file {fasta_file} has no sequence entry.", diagnostic=_FASTA_WITHOUT_ENTRIES)
     return records
 
 
-def _fasta_entries(lines: Iterator[str]) -> list[SeqRecord] | None:
-    """The entries of a FASTA file's lines, or ``None`` when no line starts one."""
+def _fasta_entries(lines: Iterator[str]) -> list[SeqRecord]:
+    """The entries of a FASTA file's header lines (the first line starts one); each sequence comes from its file."""
 
-    for line in lines:
-        if line.startswith(">"):
-            return list(SeqIO.parse(LineStream(chain([line], lines)), "fasta"))
-    return None
+    return list(SeqIO.parse(LineStream(lines), "fasta"))
 
 
 def read_sequence_file_records(path: str, fmt: str) -> list[SeqRecord]:
@@ -657,7 +650,7 @@ def parse_gff_fasta(
             raise InputFileError(f"File does not exist or is not accessible: {path}")
     with _gff_fasta_errors(gff_file, fasta_file):
         logger.info("Loading GFF3 file {}".format(gff_file))
-        gff_records = read_sequence_text(gff_file, lambda lines: list(GFF.parse(gff3_stream(lines))))
+        gff_records = read_gff3_text(gff_file, lambda lines: list(GFF.parse(gff3_stream(lines))))
         for record in gff_records:
             canonicalize_feature_types(record.features)
             _normalize_gff3_multipart_features(record)
@@ -755,7 +748,6 @@ __all__ = [
     "load_fasta",
     "load_query_fasta",
     "require_nucleotide_records",
-    "sequence_molecule",
     "SequenceMolecule",
     "read_flat_file_records",
     "require_record_sequence",
