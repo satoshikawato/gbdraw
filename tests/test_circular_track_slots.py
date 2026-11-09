@@ -125,9 +125,10 @@ def test_default_slots_draw_the_same_svg_as_the_same_explicit_stack(with_depth: 
     Generate sends the stack."""
 
     record = _load_record()
-    extra: dict[str, Any] = {"depth_table": _depth_table(str(record.id)), "window": 100, "step": 100} if with_depth else {}
+    depth_table = _depth_table(str(record.id)) if with_depth else None
+    window = 100 if with_depth else None
 
-    def draw(slots: list[Any] | None) -> str:
+    def draw(slots: list[CircularTrackSlot] | None) -> str:
         return assemble_circular_diagram_from_record(
             record,
             CircularAssemblyInputs(
@@ -136,7 +137,9 @@ def test_default_slots_draw_the_same_svg_as_the_same_explicit_stack(with_depth: 
                 selected_features_set=SELECTED_FEATURES,
                 legend="none",
                 circular_track_slots=slots,
-                **extra,
+                depth_table=depth_table,
+                window=window,
+                step=window,
             ),
         ).tostring()
 
@@ -148,7 +151,7 @@ def test_default_slots_draw_the_same_svg_as_the_same_explicit_stack(with_depth: 
     assert set(tagged) == {"features", "ticks", "dinucleotide_content", "dinucleotide_skew"} | (
         {"depth"} if with_depth else set()
     )
-    assert default_svg == draw(list(default_circular_track_slots(show_depth=with_depth)))
+    assert default_svg == draw(default_circular_track_slots(show_depth=with_depth))
 
 
 def test_circular_spacer_reserves_resolved_geometry_without_rendering_a_group() -> None:

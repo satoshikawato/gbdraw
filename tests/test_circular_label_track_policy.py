@@ -49,6 +49,8 @@ def test_horizontal_inner_labels_suppress_implicit_gc_and_skew_tracks(
     )
 
     svg = drawing.tostring()
+    # The slot groups carry their tags, so the two absences below are about the GC tracks alone.
+    assert 'data-gbdraw-slot-renderer="features"' in svg
     assert 'data-gbdraw-slot-renderer="dinucleotide_content"' not in svg
     assert 'data-gbdraw-slot-renderer="dinucleotide_skew"' not in svg
 

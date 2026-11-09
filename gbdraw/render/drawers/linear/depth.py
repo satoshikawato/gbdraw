@@ -57,7 +57,7 @@ class DepthDrawer:
         track_height: float,
         start_x: float,
         start_y: float,
-        axis_group_id: str = "depth_axis",
+        axis_group_id: str,
     ) -> Group:
         if not self.show_axis:
             return group
@@ -169,7 +169,7 @@ class DepthDrawer:
         track_height: float,
         start_x: float,
         start_y: float,
-        axis_group_id: str = "depth_axis",
+        axis_group_id: str,
         record_transform: RecordDisplayTransform | None = None,
         row: ScalarRow | None = None,
     ) -> Group:

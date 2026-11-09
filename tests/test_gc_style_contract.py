@@ -68,10 +68,13 @@ def test_gc_content_outline_contract_matches_in_both_modes(
     frame = _gc_frame()
     circular_group = CircularGcContentDrawer(
         _gc_content_config(stroke_color=stroke_color, stroke_width=stroke_width)
-    ).draw(100.0, Group(), frame, 120, 20.0, 0.8, "GC", record_transform=RecordDisplayTransform(120, 1, 1, None, True))
+    ).draw(
+        100.0, Group(), frame, 120, 20.0, 0.8, "GC", "gc_content_track",
+        record_transform=RecordDisplayTransform(120, 1, 1, None, True),
+    )
     linear_group = LinearGcContentDrawer(
         _gc_content_config(stroke_color=stroke_color, stroke_width=stroke_width)
-    ).draw(Group(), frame, 120, 600.0, 24.0, 0.0, 0.0, "GC")
+    ).draw(Group(), frame, 120, 600.0, 24.0, 0.0, 0.0, "GC", "gc_content_track")
 
     for group in (circular_group, linear_group):
         paths = _main_paths(group, stroke_color=stroke_color)
@@ -99,6 +102,7 @@ def test_gc_skew_outline_contract_matches_in_both_modes(
         0.0,
         0.0,
         "GC",
+        "gc_skew_track",
     )
 
     for group in (circular_group, linear_group):
@@ -110,8 +114,8 @@ def test_gc_skew_outline_contract_matches_in_both_modes(
 @pytest.mark.parametrize(
     ("drawer", "args"),
     [
-        (CircularGcContentDrawer, (100.0, Group(), _gc_frame(), 120, 20.0, 0.8, "GC")),
-        (LinearGcContentDrawer, (Group(), _gc_frame(), 120, 600.0, 24.0, 0.0, 0.0, "GC")),
+        (CircularGcContentDrawer, (100.0, Group(), _gc_frame(), 120, 20.0, 0.8, "GC", "gc_content_track")),
+        (LinearGcContentDrawer, (Group(), _gc_frame(), 120, 600.0, 24.0, 0.0, 0.0, "GC", "gc_content_track")),
     ],
 )
 def test_none_stroke_remains_invisible_with_positive_width(drawer, args) -> None:

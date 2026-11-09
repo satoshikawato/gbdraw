@@ -27,8 +27,8 @@ class DepthGroup:
         start_x: float = 0,
         start_y: float = 0,
         depth_df: DataFrame | None = None,
-        group_id: str = "depth",
-        axis_group_id: str = "depth_axis",
+        group_id: str,
+        axis_group_id: str,
         record_transform: RecordDisplayTransform | None = None,
         row_shifts: Sequence[float] = (),
     ) -> None:

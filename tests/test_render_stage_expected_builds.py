@@ -599,6 +599,8 @@ def test_a_row_added_to_an_explicit_stack_keeps_the_other_slots_stages(
     assert warm.error is None
     kept = {"gc_content_content", "gc_skew_content"} | ({"record_content"} if case.mode == "linear" else set())
     assert not kept & set(warm.stages.builds), sorted(warm.stages.builds)
+    # Kept, not skipped: each of the stages was drawn from the cache.
+    assert all(warm.stages.hits.get(name, 0) > 0 for name in kept), dict(warm.stages.hits)
 
 
 @pytest.mark.parametrize("case_id", ["L2", "L3"])

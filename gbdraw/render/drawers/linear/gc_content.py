@@ -117,7 +117,7 @@ class GcContentDrawer:
         track_height: float,
         start_x: float,
         start_y: float,
-        axis_group_id: str = "gc_content_axis",
+        axis_group_id: str,
     ) -> Group:
         if not self.show_axis:
             return group
@@ -226,7 +226,7 @@ class GcContentDrawer:
         start_x: float,
         start_y: float,
         dinucleotide: str,
-        group_id: str = "gc_content",
+        group_id: str,
         record_transform: RecordDisplayTransform | None = None,
         row: ScalarRow | None = None,
     ) -> Group:
