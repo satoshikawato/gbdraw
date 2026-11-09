@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import hashlib
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from collections.abc import Mapping, Sequence, Set
 from typing import Any, TypedDict, cast
@@ -131,6 +131,23 @@ class AlignmentHelperRecord(TypedDict):
     recordKey: str
     windows: list[StoredRecordWindow]
     presentation: AlignmentHelperPresentation
+
+
+class _AlignmentHelperCommittedRequest(TypedDict):
+    canonicalRequest: dict[str, Any]
+    orientations: dict[str, bool] | None
+
+
+class AlignmentHelperProjection(_AlignmentHelperCommittedRequest, total=False):
+    """The committed request a helper call places every candidate on (D5-13), as the Web sends it.
+
+    ``orientations`` are the directions the projection geometry is drawn
+    after, ``None`` for every record flipped. ``geometry`` is ``False`` for a
+    call that needs only the decisions (the check before a Generate): the
+    reply's ``projection`` is then ``None`` and no layout is planned or built.
+    """
+
+    geometry: bool
 
 
 def _record_key(value: object, path: str) -> str:
@@ -286,8 +303,32 @@ def _serialize_plan(plan: SimilarityAlignmentPlan) -> dict[str, object]:
 
 
 
-def _projection_context(value: object, resource_paths: Mapping[str, str], output_directory: str):
-    raw = _object(value, {"canonicalRequest", "orientations"}, "projection")
+@dataclass(frozen=True)
+class _CommittedPlacement:
+    """The committed request a call names (without its plan) and the records it draws, on which every candidate is
+    placed, by the renderer's projection, whether or not the call asks for the projection geometry."""
+
+    raw: AlignmentHelperProjection
+    request: LinearDiagramRequest
+    collection: ResolvedRecordCollection
+
+
+@dataclass(frozen=True)
+class _ProjectionGeometry:
+    """The layouts a review draws its previews from: the committed placements and those after ``orientations``."""
+
+    before: LinearRequestPlan
+    before_collection: ResolvedRecordCollection
+    after: LinearRequestPlan
+    flipped_collection: ResolvedRecordCollection
+
+
+def _committed_placement(value: object, resource_paths: Mapping[str, str], output_directory: str) -> _CommittedPlacement:
+    raw = cast(AlignmentHelperProjection, _object(
+        value, {"canonicalRequest", "orientations"}, "projection", optional={"geometry"},
+    ))
+    if "geometry" in raw:
+        _boolean(raw["geometry"], "projection.geometry")
     request = decode_canonical_request(
         raw["canonicalRequest"], resource_paths=resource_paths, output_directory=output_directory,
     )
@@ -299,19 +340,30 @@ def _projection_context(value: object, resource_paths: Mapping[str, str], output
     # The caller materializes current placements through the composition bridge.
     # The plan is deliberately removed for raw, untranslated placement facts.
     request = replace(request, similarity_alignment=None)
+    # A canonical request carries no planner-only transform (auto_orient, origin_feature: the codec encodes their
+    # results), so its resolved records are the records the plan draws.
+    collection = resolve_request_records(request)
+    if alignment_record_keys(collection) != tuple(keys):
+        raise ValidationError("Alignment projection record binding changed.", diagnostic={"code": "INPUT_INVALID"})
+    return _CommittedPlacement(raw, request, collection)
+
+
+def _projection_geometry(committed: _CommittedPlacement) -> _ProjectionGeometry:
+    request = committed.request
+    keys = [cast(str, record.record_key) for record in request.records]
     before = plan_linear_request(request)
     before_collection = ResolvedRecordCollection(before.records, before.provenance)
     if alignment_record_keys(before_collection) != tuple(keys):
         raise ValidationError("Alignment projection record binding changed.", diagnostic={"code": "INPUT_INVALID"})
     # Counterfactual source transforms are always available for local direction edits.
     flipped_orientations = {key: not _drawn_reverse(before, key) for key in keys}
-    orientations = raw["orientations"]
-    if orientations is None:
+    raw_orientations = committed.raw["orientations"]
+    if raw_orientations is None:
         orientations = flipped_orientations
     else:
-        orientations = _object(orientations, set(keys), "projection.orientations")
+        checked = _object(raw_orientations, set(keys), "projection.orientations")
         orientations = {key: _boolean(value, f"projection.orientations.{key}")
-                        for key, value in orientations.items()}
+                        for key, value in checked.items()}
     after = plan_linear_request(_oriented_request(request, orientations))
     # The flipped records serve only anchor facts, so they are resolved, not
     # planned; without orientations (the stale-target repair) they are the
@@ -321,7 +373,7 @@ def _projection_context(value: object, resource_paths: Mapping[str, str], output
         if orientations == flipped_orientations
         else resolve_request_records(_oriented_request(request, flipped_orientations))
     )
-    return raw, before, before_collection, after, flipped_collection, request.options.orthogroups, request
+    return _ProjectionGeometry(before, before_collection, after, flipped_collection)
 
 
 def _oriented_request(request: LinearDiagramRequest, reverse_by_key: Mapping[str, bool]) -> LinearDiagramRequest:
@@ -346,8 +398,15 @@ def _drawn_reverse(plan: LinearRequestPlan, record_key: str) -> bool:
     return all(plan.transforms[index].source_step == -1 for index in _record_units(plan, record_key))
 
 
-def _serialize_projection(context, candidates, raw_request):
-    raw, before, collection, after, flipped_collection, _orthogroups, request = context
+def _serialize_projection(
+    committed: _CommittedPlacement,
+    geometry: _ProjectionGeometry,
+    candidates: Sequence[SimilarityAlignmentCandidate],
+    raw_request: Mapping[str, Any],
+) -> dict[str, object]:
+    raw, request = committed.raw, committed.request
+    before, collection, after = geometry.before, geometry.before_collection, geometry.after
+    flipped_collection = geometry.flipped_collection
     before_placements = getattr(before.build().drawing, "_gbdraw_alignment_placements")
     after_placements = getattr(after.build().drawing, "_gbdraw_alignment_placements")
     # The content of each source this call staged, hashed once per file. Not
@@ -366,7 +425,8 @@ def _serialize_projection(context, candidates, raw_request):
     base = {item.record_key: item for item in (before.layout.record_translations if before.layout else ())}
     # One entry per request record; the windows of a record share its row and move with it, and each anchor is drawn
     # by the window that holds it (D-50).
-    for index, key in enumerate(item.record_key for item in request.records):
+    # Every record of a committed placement has a key (``_committed_placement``).
+    for index, key in enumerate(cast(str, item.record_key) for item in request.records):
         first = _record_units(before, key)[0]
         provenance = collection.provenance[first]
         before_reverse = _drawn_reverse(before, key)
@@ -428,10 +488,12 @@ def _serialize_projection(context, candidates, raw_request):
                                      for item in request.records},
             "records": records}
 
-def _resource_evidence_edges(context, group_id, candidates) -> list[AlignmentEvidenceEdge]:
+def _resource_evidence_edges(
+    committed: _CommittedPlacement, group_id: str, candidates: Sequence[SimilarityAlignmentCandidate],
+) -> list[AlignmentEvidenceEdge]:
     """Bind resource edges to the current members; unbound endpoints are omitted."""
 
-    collection, orthogroups = context[2], context[5]
+    collection, orthogroups = committed.collection, committed.request.options.orthogroups
     by_key = {candidate.anchor.canonical_key: candidate.anchor for candidate in candidates}
 
     def current(anchor: AlignmentAnchorIdentity) -> AlignmentAnchorIdentity | None:
@@ -461,7 +523,7 @@ def resolve_similarity_alignment_payload(
     """Validate Web facts, call the shared resolver, and serialize its result.
 
     ``projection`` names the committed request (``canonicalRequest``) on which every candidate is placed; a payload
-    without one is malformed (D5-13).
+    without one is malformed (D5-13). With ``geometry`` false the reply carries the decisions only.
     """
 
     raw = _object(
@@ -480,8 +542,8 @@ def resolve_similarity_alignment_payload(
     if type(raw["schema"]) is not int or raw["schema"] != SIMILARITY_ALIGNMENT_PLAN_SCHEMA:
         raise ValidationError(f"request.schema must be {SIMILARITY_ALIGNMENT_PLAN_SCHEMA}.")
     group_id = _text(raw["groupId"], "request.groupId")
-    context = _projection_context(projection, resource_paths or {}, output_directory)
-    collection = context[2]
+    committed = _committed_placement(projection, resource_paths or {}, output_directory)
+    collection = committed.collection
     record_keys = [
         _record_key(value, f"request.records[{index}]")
         for index, value in enumerate(_list(raw["records"], "request.records"))
@@ -509,7 +571,7 @@ def resolve_similarity_alignment_payload(
             "request.directEdges must be empty; direct evidence comes from "
             "the committed orthogroup resource."
         )
-    edges = _resource_evidence_edges(context, group_id, candidates)
+    edges = _resource_evidence_edges(committed, group_id, candidates)
     choices = []
     for index, value in enumerate(_list(raw["choices"], "request.choices")):
         path = f"request.choices[{index}]"
@@ -550,7 +612,10 @@ def resolve_similarity_alignment_payload(
             )
         ],
         "plan": _serialize_plan(plan) if plan is not None else None,
-        "projection": _serialize_projection(context, candidates, raw),
+        "projection": (
+            _serialize_projection(committed, _projection_geometry(committed), candidates, raw)
+            if committed.raw.get("geometry", True) else None
+        ),
     }
 
 

@@ -227,6 +227,37 @@ def test_an_alignment_plans_before_and_after_and_only_resolves_the_flipped_recor
     assert len(plans) == 2
 
 
+def test_the_check_before_a_generate_places_candidates_without_planning_or_building_a_layout(
+    helpers: dict[str, object], alignment: dict[str, object], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The check before a Generate with a plan asks for the decisions only (``geometry`` false): Python places every
+    candidate on the committed request, as the review does, and plans and builds no layout (S2b)."""
+
+    import gbdraw.web_support.similarity_alignment as alignment_module
+
+    cache = helpers["_WEB_PREPARED_INPUT_CACHE"]
+    assert isinstance(cache, PreparedBiologicalInputCache)
+    stage = alignment["stage"]
+    assert isinstance(stage, _Stage)
+    stage.render(cache, alignment["payload"])
+    review = _align(helpers, alignment)
+    plans: list[object] = []
+    original = alignment_module.plan_linear_request
+
+    def counting(request):  # type: ignore[no-untyped-def]
+        plans.append(request)
+        return original(request)
+
+    monkeypatch.setattr(alignment_module, "plan_linear_request", counting)
+    parses = _count_parses(monkeypatch)
+    check = _align(helpers, {**alignment, "context": {**alignment["context"], "geometry": False}})  # type: ignore[dict-item]
+    assert plans == [] and parses == []
+    assert check["projection"] is None
+    assert {key: value for key, value in check.items() if key != "projection"} == {
+        key: value for key, value in review.items() if key != "projection"
+    }
+
+
 def test_alignment_identities_must_match_the_staged_manifest(
     helpers: dict[str, object], alignment: dict[str, object],
 ) -> None:

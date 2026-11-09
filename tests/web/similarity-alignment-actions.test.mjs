@@ -217,7 +217,7 @@ const create = ({
     runHelperOperation: async (operation, payload) => {
       helperCalls.push({ operation, payload: structuredClone(payload) });
       const output=await helper(operation, payload, helperCalls.length);
-      if(output?.result && payload.projection && output.result.projection===null){
+      if(output?.result && payload.projection && payload.projection.geometry!==false && output.result.projection===null){
         const r=output.result;const request=payload.request;
         const current=payload.projection.canonicalRequest;
         const refMember=request.members.find(m=>JSON.stringify(m.anchor)===JSON.stringify(request.reference));
@@ -709,10 +709,12 @@ test('active schema-2 plan validates on regeneration and supports Reset and stab
   const calls = fixture.helperCalls.length;
   assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
   assert.equal(fixture.helperCalls.length, calls + 1);
-  // The check resolves on the committed request, as every helper call does (D5-13: the projection is required).
+  // The check resolves on the committed request, as every helper call does (D5-13: the projection is required), and
+  // asks for the decisions only: Python plans and builds no layout for it.
   const { payload: check } = fixture.helperCalls.at(-1);
   assert.equal(check.projection.canonicalRequest.records.length, 3);
   assert.equal(check.projection.orientations, null);
+  assert.equal(check.projection.geometry, false);
   assert.ok(check.resources.source);
   fixture.actions.retainForStableReorder(['c', 'a', 'b']);
   assert.deepEqual(fixture.state.similarityAlignmentPlan.value.records.map(({ recordKey }) => recordKey),

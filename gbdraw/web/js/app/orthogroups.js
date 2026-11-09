@@ -12,11 +12,13 @@ import {
   isInternalProteinDisplayId,
   locationPartBound,
   locationRangeText,
+  normalizeMemberStrand,
   resolveDisplayProteinId
 } from '../services/feature-utils.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { featureSequenceReads, readRowsFasta } from '../services/catalog-sequences.js';
+import { memberFastaFeature } from '../services/feature-sequence-fasta.js';
 import { copyPendingTextToClipboard } from '../utils/clipboard.js';
 import { normalizeCaughtError } from '../utils/error-normalization.js';
 import { ownEntry } from '../utils/own-entry.js';
@@ -142,39 +144,6 @@ const memberLocationText = (member) => {
   return `${start + 1}-${end}${strand}`;
 };
 
-/** @param {unknown} strand */
-const normalizeMemberStrand = (strand) => {
-  if (strand === -1 || String(strand).trim() === '-1') return '-';
-  if (strand === 1 || String(strand).trim() === '1') return '+';
-  return normalizeText(strand);
-};
-
-/** @param {OrthogroupMember | null | undefined} member */
-const buildMemberFeaturePayload = (member) => {
-  // A non-null object here; its fields are read as `unknown`.
-  const sourceFeature = /** @type {Record<string, unknown>} */ (member?.sequenceFeature && typeof member.sequenceFeature === 'object'
-    ? member.sequenceFeature
-    : {});
-  const displayProteinId = resolveDisplayProteinId(
-    sourceFeature,
-    member,
-    memberLocationText(member)
-  );
-  return {
-    ...sourceFeature,
-    record_id: sourceFeature.record_id || sourceFeature.recordId || member?.recordId || member?.record_id,
-    start: sourceFeature.start ?? member?.start,
-    end: sourceFeature.end ?? member?.end,
-    strand: sourceFeature.strand || normalizeMemberStrand(member?.strand),
-    source_protein_id: displayProteinId,
-    protein_id: displayProteinId,
-    product: sourceFeature.product || member?.product,
-    note: sourceFeature.note || member?.note,
-    gene: sourceFeature.gene || member?.gene,
-    organism: sourceFeature.organism || member?.organism
-  };
-};
-
 /**
  * The read of an enriched member's sequences: the identity and bases of the catalog row it resolved to, or null
  * when it resolved to none or the row has no identity. Such a member is the one a sequence action can read, so it
@@ -196,7 +165,7 @@ const memberSequenceRead = (member) => {
  * @returns {Promise<string | null>}
  */
 const readMembersFasta = (members, sequenceKind, readFeatureSequences) => readRowsFasta(
-  members.map((member) => ({ read: memberSequenceRead(member), feature: buildMemberFeaturePayload(member) })),
+  members.map((member) => ({ read: memberSequenceRead(member), feature: memberFastaFeature(member, /** @type {FeatureLike | null} */ (member.sequenceFeature ?? null), memberLocationText(member)) })),
   sequenceKindLabel(sequenceKind) === 'aa' ? 'aa' : 'nt', readFeatureSequences
 );
 

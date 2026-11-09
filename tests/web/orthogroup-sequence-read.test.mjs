@@ -157,3 +157,26 @@ test('Download reads through the port, names the file, and gives the same feedba
   assert.ok(failing.state.errorLog.value);
   assert.equal(state.errorLog.value, null);
 });
+
+test('the orthogroup panel and the match popup take a member FASTA header from one owner', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { buildFeatureSequenceFastas, memberFastaFeature } = await import('../../gbdraw/web/js/services/feature-sequence-fasta.js');
+  // The catalog row is read first, the member fills what it lacks, and the header's protein ID is the one the
+  // popups show (an internal ID never).
+  const header = memberFastaFeature(
+    { recordId: 'REC', start: 0, end: 12, strand: -1, sourceProteinId: 'WP_1.1', product: 'kinase' },
+    { recordKey: 'rec-1', biologicalFeatureId: 'alpha', sourceProteinId: 'h_abcdefghijklmnopqrstuvwxyz', gene: 'abc' },
+    '1-12(-)'
+  );
+  assert.equal(header.record_id, 'REC');
+  assert.equal(header.strand, '-');
+  assert.equal(header.protein_id, 'WP_1.1');
+  assert.match(buildFeatureSequenceFastas(header, { nucleotideSequence: 'ATG', aminoAcidSequence: 'M' }).aminoAcidFasta,
+    /^>WP_1\.1 /);
+  assert.equal(header.product, 'kinase');
+  assert.equal(header.gene, 'abc');
+  for (const file of ['gbdraw/web/js/app/orthogroups.js', 'gbdraw/web/js/services/pairwise-match-popup.js']) {
+    const source = readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /const (buildMemberFeaturePayload|normalizeMemberStrand) =/, file);
+  }
+});

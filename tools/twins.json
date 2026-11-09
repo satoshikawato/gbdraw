@@ -1394,7 +1394,7 @@
       "id": "concern:unit-coordinate-map-base",
       "concern": "Where a window's coordinate map starts (its start, or its end when the unit is reversed)",
       "pythonOwner": [
-        "gbdraw/web_support/similarity_alignment.py:_RecordFact._unit_offset"
+        "gbdraw/api/record_planning.py:_anchor_center_on_unit"
       ],
       "jsOwner": [
         "gbdraw/web/js/services/record-display-model.js"

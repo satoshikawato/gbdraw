@@ -29,6 +29,7 @@ import { ownEntry } from '../utils/own-entry.js';
 import { catalogNameIndex } from '../services/feature-catalog.js';
 
 /**
+ * @import { FeatureCatalog } from '../services/feature-catalog.js'
  * @import { AliasSource, CommittedRecord } from '../services/feature-identity.js'
  * @import { OrthogroupGroup, OrthogroupMember } from '../services/orthogroup-feature-metadata.js'
  * @import { CommittedCanonicalSession } from '../services/session-request.js'
@@ -123,6 +124,11 @@ const { computed, ref, watch } = window.Vue;
  *   schema: 2, groupId: string, records: AlignmentRequestRecord[], reference: AnchorIdentity,
  *   members: AlignmentMemberFacts[], directEdges: never[], choices: AlignmentChoice[]
  * }} AlignmentHelperRequest What the Worker helper resolves.
+ * @typedef {{
+ *   canonicalRequest: Record<string, unknown>, orientations: Record<string, boolean> | null, geometry?: boolean
+ * }} AlignmentHelperProjection The committed request a helper call places every candidate on (Python's
+ *   `AlignmentHelperProjection`): `orientations` are the directions the projection geometry is drawn after (null:
+ *   every record flipped); `geometry: false` asks for the decisions only, and the reply's projection is null.
  */
 
 /** @type {Set<string | null>} */
@@ -891,15 +897,29 @@ export const projectSimilarityAlignmentDirections = ({ resolution, intent, expec
 };
 
 /**
- * @param {unknown} value
- * @param {AlignmentHelperRequest} request
- * @returns {AlignmentResolution}
+ * The projection of the check before a Generate with a plan: the committed request its decisions are placed on, and
+ * no geometry (the reply's projection is null).
+ * @param {Record<string, unknown>} canonicalRequest
+ * @returns {AlignmentHelperProjection}
  */
-export const validateSimilarityAlignmentResolution = (value, request) => {
-  const raw = exactObject(value, [
-    'schema', 'status', 'groupId', 'reference', 'referenceDisplayedStrand',
-    'referenceDisplayCenter', 'records', 'plan', 'projection'
-  ], 'alignment helper response');
+const decisionsOnlyProjection = (canonicalRequest) => ({ canonicalRequest, orientations: null, geometry: false });
+
+/**
+ * The fields of a helper reply.
+ * @param {unknown} value
+ */
+const helperReplyFields = (value) => exactObject(value, [
+  'schema', 'status', 'groupId', 'reference', 'referenceDisplayedStrand',
+  'referenceDisplayCenter', 'records', 'plan', 'projection'
+], 'alignment helper response');
+
+/**
+ * The decisions of a helper reply, checked against its request: every validator of a reply reads them.
+ * @param {ReturnType<typeof helperReplyFields>} raw
+ * @param {AlignmentHelperRequest} request
+ * @returns {Omit<AlignmentResolution, 'projection'>}
+ */
+const validateDecisions = (raw, request) => {
   if (raw.schema !== SIMILARITY_ALIGNMENT_PLAN_SCHEMA || !oneOf(['resolved', 'ambiguous'], raw.status)
     || raw.groupId !== request.groupId || !Array.isArray(raw.records)
     || !oneOf([null, -1, 1], raw.referenceDisplayedStrand)
@@ -940,14 +960,34 @@ export const validateSimilarityAlignmentResolution = (value, request) => {
   if ((raw.status === 'ambiguous') !== ambiguous) {
     throw new Error('Alignment helper response status does not match its records.');
   }
-  /** @type {AlignmentResolution} */
+  /** @type {Omit<AlignmentResolution, 'projection'>} */
   const response = {
     schema: SIMILARITY_ALIGNMENT_PLAN_SCHEMA, status: raw.status, groupId: raw.groupId, reference,
     referenceDisplayedStrand: raw.referenceDisplayedStrand,
     referenceDisplayCenter: raw.referenceDisplayCenter,
-    records, plan: /** @type {AlignmentPlan | null} */ (null),
-    projection: validateProjection(raw.projection, request)
+    records, plan: /** @type {AlignmentPlan | null} */ (null)
   };
+  if (raw.status === 'resolved') {
+    if (raw.plan === null) throw new Error('Resolved alignment helper response has no plan.');
+    response.plan = validatePlan(raw.plan, response, 'alignment helper response.plan');
+  } else if (raw.plan !== null) {
+    throw new Error('Ambiguous alignment helper response must not contain a plan.');
+  }
+  return response;
+};
+
+/**
+ * A review's reply: the decisions, and the projection whose current placements agree with them.
+ * @param {unknown} value
+ * @param {AlignmentHelperRequest} request
+ * @returns {AlignmentResolution}
+ */
+export const validateSimilarityAlignmentResolution = (value, request) => {
+  const raw = helperReplyFields(value);
+  const decided = validateDecisions(raw, request);
+  const { records, reference } = decided;
+  /** @type {AlignmentResolution} */
+  const response = { ...decided, projection: validateProjection(raw.projection, request) };
   response.projection.records.forEach((fact, index) => {
     const current = fact.variants[Number(fact.beforeReverseComplement)];
     const candidates = records[index].candidates;
@@ -966,13 +1006,19 @@ export const validateSimilarityAlignmentResolution = (value, request) => {
       }
     }
   });
-  if (raw.status === 'resolved') {
-    if (raw.plan === null) throw new Error('Resolved alignment helper response has no plan.');
-    response.plan = validatePlan(raw.plan, response, 'alignment helper response.plan');
-  } else if (raw.plan !== null) {
-    throw new Error('Ambiguous alignment helper response must not contain a plan.');
-  }
   return deepFreeze(response);
+};
+
+/**
+ * The reply of the check before a Generate with a plan, which asks for no projection geometry (`geometry: false`):
+ * the decisions only.
+ * @param {unknown} value
+ * @param {AlignmentHelperRequest} request
+ */
+export const validateSimilarityAlignmentCheck = (value, request) => {
+  const raw = helperReplyFields(value);
+  if (raw.projection !== null) throw new Error('The alignment check reply must not contain a projection.');
+  validateDecisions(raw, request);
 };
 
 /**
@@ -1942,13 +1988,12 @@ export const createSimilarityAlignmentActions = ({
       return prepareStaleTargetRepair(plan, request, goneRecordKeys, expectedActionId);
     }
     try {
-      // Python places the plan's anchors on the committed request, as every helper call does (D5-13).
+      // Python places the plan's anchors on the committed request (D5-13); the check plans and builds no layout.
       const committed = baseline({ materializePlan: true });
       const helper = await runHelperOperation(resolveOperation, { request,
-        projection: { canonicalRequest: committed.request, orientations: null },
-        resources: committed.canonical.resources });
+        projection: decisionsOnlyProjection(committed.request), resources: committed.canonical.resources });
       if (expectedActionId !== actionId) return { status: 'stale' };
-      validateSimilarityAlignmentResolution(helper?.result, request);
+      validateSimilarityAlignmentCheck(helper?.result, request);
     } catch (_cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       const alignedKeys = new Set(

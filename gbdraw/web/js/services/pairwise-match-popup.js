@@ -5,9 +5,10 @@ import {
   getQualifierFirstValue,
   isInternalProteinDisplayId,
   locationRangeText,
+  normalizeMemberStrand,
   resolveDisplayProteinId
 } from './feature-utils.js';
-import { formatFastaEntry } from './feature-sequence-fasta.js';
+import { formatFastaEntry, memberFastaFeature } from './feature-sequence-fasta.js';
 import { featureSequenceReads } from './catalog-sequences.js';
 import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
 import {
@@ -1212,40 +1213,6 @@ const memberLocationText = (member) => {
   return range && strand ? `${range} (${strand})` : range;
 };
 
-/** @param {unknown} strand */
-const normalizeMemberStrand = (strand) => {
-  if (strand === -1 || String(strand).trim() === '-1') return '-';
-  if (strand === 1 || String(strand).trim() === '1') return '+';
-  return normalizeText(strand);
-};
-
-/**
- * The header fields of a member's FASTA entries; the bases are read from Python when a FASTA action is pressed.
- * @param {PopupMember | null | undefined} member
- * @param {PopupFeature | null | undefined} feature
- */
-const buildMemberFeaturePayload = (member, feature) => {
-  const sourceFeature = feature && typeof feature === 'object' ? feature : {};
-  const displayProteinId = resolveDisplayProteinId(
-    sourceFeature,
-    member,
-    memberLocationText(member)
-  );
-  return {
-    ...sourceFeature,
-    record_id: sourceFeature.record_id || sourceFeature.recordId || member?.recordId || member?.record_id,
-    start: sourceFeature.start ?? member?.start,
-    end: sourceFeature.end ?? member?.end,
-    strand: sourceFeature.strand || normalizeMemberStrand(member?.strand),
-    source_protein_id: sourceFeature.source_protein_id || sourceFeature.sourceProteinId || member?.sourceProteinId || member?.source_protein_id,
-    protein_id: displayProteinId,
-    product: sourceFeature.product || member?.product,
-    note: sourceFeature.note || member?.note,
-    gene: sourceFeature.gene || member?.gene,
-    organism: sourceFeature.organism || member?.organism
-  };
-};
-
 /**
  * @param {unknown} orthogroupId
  * @param {unknown} displayName
@@ -1352,7 +1319,7 @@ const buildOrthogroupMemberRows = (group, context, orthogroupId) => (
         assignmentReason: firstText(member?.assignmentReason, member?.assignment_reason),
         productOrNote: firstText(member?.product, member?.note),
         read,
-        fastaFeature: buildMemberFeaturePayload(member, feature),
+        fastaFeature: memberFastaFeature(member, feature, memberLocationText(member)),
         ntFilename: orthogroupMemberSequenceFilename(member, orthogroupId, 'nt'),
         aaFilename: orthogroupMemberSequenceFilename(member, orthogroupId, 'aa')
       };

@@ -69,8 +69,8 @@ const replaceOnce = (source, from, to) => {
 };
 const instrumentedPopupSource = [
   [
-    "import { formatFastaEntry } from './feature-sequence-fasta.js';",
-    "import { formatFastaEntry as formatFastaEntryBase } from './feature-sequence-fasta.js';"
+    "import { formatFastaEntry, memberFastaFeature } from './feature-sequence-fasta.js';",
+    "import { formatFastaEntry as formatFastaEntryBase, memberFastaFeature } from './feature-sequence-fasta.js';"
   ], [
     "import { featureSequenceReads } from './catalog-sequences.js';",
     "import { featureSequenceReads as featureSequenceReadsBase } from './catalog-sequences.js';"
