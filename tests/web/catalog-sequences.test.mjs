@@ -68,7 +68,7 @@ const doorWith = (initialCommitted) => {
       calls.spans.push(payload.spans);
       return { result: { spans: payload.spans.map((span) => ({
         status: 'ok', reason: null, recordId: 'REC', orientation: span.start <= span.end ? '+' : '-',
-        length: Math.abs(span.end - span.start) + 1, sequence: 'ACGT'
+        length: Math.abs(span.end - span.start) + 1, sequence: 'ACGT', sourceLength: 8
       })) } };
     },
     readEmbedSequences: async (payload) => ({ result: embedPartReply(payload) })
@@ -151,7 +151,7 @@ test('the Worker receives plain spans and features even when the popup state hol
       readFeatureSequences: async (payload) => { sent.push(structuredClone(payload)); return { result: { features: payload.features.map(featureReply) } }; },
       readMatchSequences: async (payload) => {
         sent.push(structuredClone(payload));
-        return { result: { spans: payload.spans.map(() => ({ status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT' })) } };
+        return { result: { spans: payload.spans.map(() => ({ status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT', sourceLength: 8 })) } };
       },
       readEmbedSequences: async (payload) => ({ result: embedPartReply(payload) })
     }
@@ -342,12 +342,38 @@ test('a second export of the shown Result reads its embed from what the first ex
   assert.deepEqual(await retried.readEmbedJson(exportItem), first);
 });
 
+// An export's embed has its own place per shown Result, outside the reply bound: an embed larger than the bound is
+// kept, so a second export of the Result never reads again, and keeping it drops no feature or span reply.
+test('an embed larger than the reply bound is kept for the shown Result and drops no other reply', async () => {
+  const committed = committedOf();
+  let parts = 0;
+  let featureReads = 0;
+  const door = createCatalogSequences({
+    getCommittedSession: () => committed, featureReadBases: 25, keptCharacters: 40,
+    helpers: {
+      readFeatureSequences: async (payload) => { featureReads += 1; return { result: { features: payload.features.map(featureReply) } }; },
+      readEmbedSequences: async (payload) => { parts += 1; return { result: embedPartReply(payload) }; }
+    }
+  });
+  await door.readFeatures([kinase]);
+  const first = await door.readEmbedJson(exportItem);
+  assert.ok(first.biologicalFeatures.length + (first.sequenceSources?.length ?? 0) > 40, 'the embed is above the bound');
+  const read = parts;
+  assert.deepEqual(await door.readEmbedJson(exportItem), first);
+  assert.equal(parts, read, 'the second export reads nothing');
+  await door.readFeatures([kinase]);
+  assert.equal(featureReads, 1, 'the feature reply kept before the export is still kept');
+});
+
 // D5 review r1 (MEDIUM-5): the reasons a span reply may carry are Python's list (generated), so a reason Python adds
 // is read, and a reason Python does not name is refused.
 test('a span reply carries any of Python\'s span reasons and no other', () => {
   const spans = MATCH_SPAN_REASONS.map((_, index) => ({ kind: 'record', recordKey: `rec-${index}`, start: 1, end: 2 }));
-  const unavailable = (reason) => ({ status: 'unavailable', reason, recordId: '', orientation: '+', length: 0, sequence: '' });
-  assert.deepEqual(MATCH_SPAN_REASONS, ['NEVER_SUPPLIED', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'OUT_OF_RANGE']);
+  const unavailable = (reason) => ({ status: 'unavailable', reason, recordId: '', orientation: '+', length: 0, sequence: '', sourceLength: 0 });
+  assert.deepEqual(MATCH_SPAN_REASONS, ['NEVER_SUPPLIED', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'RECORD_ALIAS_AMBIGUOUS',
+    'COORDINATE_BELOW_ONE', 'SOURCE_EMPTY', 'OUT_OF_RANGE']);
+  assert.throws(() => readMatchSequencesReply({ spans: [{ ...unavailable('OUT_OF_RANGE'), sourceLength: undefined }] }, spans.slice(0, 1)),
+    (error) => error.code === 'RESULT_INVALID', 'a reply without the source length is refused');
   assert.equal(readMatchSequencesReply({ spans: MATCH_SPAN_REASONS.map(unavailable) }, spans).length, spans.length);
   assert.throws(() => readMatchSequencesReply({ spans: [unavailable('ELSEWHERE')] }, spans.slice(0, 1)),
     (error) => error.code === 'RESULT_INVALID');

@@ -56,7 +56,8 @@ const isSpanSequence = (item) => isRecord(item)
   && (item.status === 'ok' ? item.reason === null : item.status === 'unavailable' && item.reason !== null)
   && SPAN_REASONS.has(/** @type {null} */ (item.reason)) && (item.orientation === '+' || item.orientation === '-')
   && typeof item.recordId === 'string' && typeof item.sequence === 'string' && Number.isSafeInteger(item.length)
-  && item.length === /** @type {string} */ (item.sequence).length;
+  && item.length === /** @type {string} */ (item.sequence).length
+  && Number.isSafeInteger(item.sourceLength) && /** @type {number} */ (item.sourceLength) >= 0;
 
 /**
  * The `readMatchSequences` reply, checked against the spans asked: one per span, in order.
@@ -316,8 +317,10 @@ const OUTLIVED = Symbol('outlived');
 
 /**
  * The replies kept for one committed request; a read in flight is kept as its promise, so a second asker waits
- * for the same reply, and a failed read is forgotten, so Retry reads again. An export's embed is kept by its
- * catalog item (the shown Result's stored item, the same object each export), so a second export reads nothing.
+ * for the same reply, and a failed read is forgotten, so Retry reads again. Feature and span replies share the
+ * bound; an export's embed has its own place outside it, kept by its catalog item (the shown Result's stored item,
+ * the same object each export), so a second export of the Result reads nothing, whatever its size, and drops no
+ * other reply. Base held every sequence in the catalog while the Result was shown; the embed holds no more.
  * @typedef {{ committed: CommittedCanonicalSession | null, features: Map<string, Promise<FeatureSequencesOf>>,
  *   spans: Map<string, Promise<MatchSpanSequence>>, embeds: Map<string, Promise<EmbeddedSequencesJson>>,
  *   sizes: Map<string, number>, characters: number }} Kept
@@ -336,8 +339,19 @@ const itemKey = (item) => {
   return key;
 };
 /** @param {Kept} owner @param {string} kind */
-const keptOf = (owner, kind) => /** @type {Map<string, Promise<unknown>>} */ (
-  kind === 'f' ? owner.features : kind === 's' ? owner.spans : owner.embeds);
+const keptOf = (owner, kind) => /** @type {Map<string, Promise<unknown>>} */ (kind === 'f' ? owner.features : owner.spans);
+/**
+ * Keeps `read` in `map` under `key` while it runs and after it settles; a failed read is forgotten.
+ * @template T
+ * @param {Map<string, Promise<unknown>>} map @param {string} key @param {Promise<T>} read
+ * @param {(value: T) => void} [settled]
+ */
+const keepIn = (map, key, read, settled = () => {}) => {
+  map.set(key, read);
+  read.then(settled, () => {
+    if (map.get(key) === read) map.delete(key);
+  });
+};
 
 /**
  * Python's encoding of one catalog item with its sequences, read part by part.
@@ -392,7 +406,7 @@ export const createCatalogSequences = ({
   };
   /**
    * Keeps one settled reply's size and drops the oldest replies past the bound.
-   * @param {Kept} owner @param {'f' | 's' | 'e'} kind features, spans or embeds @param {string} key @param {number} size
+   * @param {Kept} owner @param {'f' | 's'} kind features or spans @param {string} key @param {number} size
    */
   const account = (owner, kind, key, size) => {
     if (owner.committed !== kept.committed || keptOf(owner, kind).get(key) === undefined) return;
@@ -406,18 +420,13 @@ export const createCatalogSequences = ({
     }
   };
   /**
-   * Keeps `read` under `key` while it runs and after it settles; a failed read is forgotten.
+   * Keeps a feature or span reply, counted against the bound once it settles.
    * @template T
-   * @param {Kept} owner @param {'f' | 's' | 'e'} kind @param {string} key @param {Promise<T>} read
+   * @param {Kept} owner @param {'f' | 's'} kind @param {string} key @param {Promise<T>} read
    * @param {(value: T) => number} sizeOf
    */
-  const keep = (owner, kind, key, read, sizeOf) => {
-    const map = keptOf(owner, kind);
-    map.set(key, read);
-    read.then((value) => account(owner, kind, key, sizeOf(value)), () => {
-      if (map.get(key) === read) map.delete(key);
-    });
-  };
+  const keep = (owner, kind, key, read, sizeOf) => keepIn(keptOf(owner, kind), key, read,
+    (value) => account(owner, kind, key, sizeOf(value)));
   /**
    * The answer of a read for the Result shown when it began, or null when another Result is shown when it ends,
    * whether it read or failed: a popup never shows what a Result it no longer shows read, nor why that failed.
@@ -481,9 +490,8 @@ export const createCatalogSequences = ({
     const { owner, request } = committedOf('readEmbedSequences');
     const key = itemKey(item);
     if (!owner.embeds.has(key)) {
-      keep(owner, 'e', key, encodeEmbed(helpers.readEmbedSequences, request, item, featureReadBases,
-        () => getCommittedSession() === owner.committed),
-        (embed) => embed.biologicalFeatures.length + (embed.sequenceSources?.length ?? 0));
+      keepIn(owner.embeds, key, encodeEmbed(helpers.readEmbedSequences, request, item, featureReadBases,
+        () => getCommittedSession() === owner.committed));
     }
     return forShown(owner, () => /** @type {Promise<EmbeddedSequencesJson>} */ (owner.embeds.get(key)));
   };
