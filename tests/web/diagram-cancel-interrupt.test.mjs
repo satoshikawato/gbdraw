@@ -232,3 +232,52 @@ test('a second Cancel during the drain, then the timeout, boots no Worker for th
   assert.deepEqual(drainOutcomes(), ['terminated']);
   assert.equal(ControlledWorker.instances.length, constructed, 'no Worker boots for a request that no longer exists');
 });
+
+// PD-OI-125 (OV-3027): an engine that ran out of memory is replaced even when a Cancel settled the Generate first, whether its
+// reply was already on its way (the drain receives it) or the Worker dropped it (the drain answer carries the error).
+// The Generate that waits for the drain is not failed: the termination ends the drain and it boots a new Worker.
+for (const [name, outOfMemory] of [
+  ['a reply already on its way', (worker, requestId) => worker.emit({ type: 'run', requestId, ok: true,
+    results: { error: { code: 'OUT_OF_MEMORY', operation: 'generate', stage: 'render', context: {} } } })],
+  ['a reply the Worker dropped', (worker) => worker.emit({ type: 'cancel', id: worker.sent('cancel').at(-1).id, ok: true,
+    error: { code: 'OUT_OF_MEMORY', operation: 'generate', stage: 'render', context: {} } })]
+]) {
+  test(`a Cancel's drain replaces an engine that ran out of memory: ${name} (OV-3027)`, async () => {
+    const worker = await warmWorker();
+    const canceled = runDiagramGeneration(payload('AAAA'));
+    await runsSent(worker, 2);
+    const { requestId } = latestRun(worker);
+    const rejected = assert.rejects(canceled, /canceled/);
+    cancelDiagramGeneration();
+    await rejected;
+    const next = runDiagramGeneration(payload('AAAA'));
+    await flush();
+    outOfMemory(worker, requestId);
+    await flush();
+    assert.equal(worker.terminated, true);
+    assert.deepEqual(drainOutcomes(), ['terminated']);
+    assert.equal(listenerCount(worker), 0);
+    const replacement = ControlledWorker.instances.at(-1);
+    assert.notEqual(replacement, worker);
+    replacement.initialize();
+    await runsSent(replacement, 1);
+    assert.deepEqual(transferred(replacement), ['source']);
+    replacement.emit({ type: 'run', requestId: latestRun(replacement).requestId, ok: true, results: [] });
+    assert.deepEqual((await next).results, []);
+  });
+}
+
+test('a drain answer without an error keeps the engine after an earlier reply of another error', async () => {
+  const worker = await warmWorker();
+  const canceled = runDiagramGeneration(payload('AAAA'));
+  await runsSent(worker, 2);
+  const { requestId } = latestRun(worker);
+  const rejected = assert.rejects(canceled, /canceled/);
+  cancelDiagramGeneration();
+  await rejected;
+  worker.emit({ type: 'run', requestId, ok: true, results: { error: { code: 'RENDER_FAILED', operation: 'generate', stage: 'render', context: {} } } });
+  worker.drain();
+  await flush();
+  assert.equal(worker.terminated, undefined);
+  assert.deepEqual(drainOutcomes(), ['drained']);
+});

@@ -12,7 +12,9 @@ const {
   createReplyBuffer,
   resolveGeneratedFeatureCatalog,
   resolveGenerationCleanupOutcome,
-  serializeError
+  serializeError,
+  noteDroppedReply,
+  cancelDrainReply
 } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
 const { readHeldSegments } = await import('../../gbdraw/web/js/services/diagram-worker-protocol.js');
 
@@ -547,4 +549,17 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
     globalThis.fetch = originalFetch;
     delete globalThis.__FAKE_LOAD_PYODIDE__;
   }
+}
+
+// OV-3027: a canceled request's reply is dropped, but when it says the engine ran out of memory the drain answer
+// carries that error once, so the page still replaces the engine.
+{
+  const outOfMemory = { code: 'OUT_OF_MEMORY', operation: 'generate', stage: 'render', context: {} };
+  assert.deepEqual(cancelDrainReply('a'), { type: 'cancel', id: 'a', ok: true });
+  noteDroppedReply({ code: 'RENDER_FAILED', operation: 'generate', stage: 'render', context: {} });
+  noteDroppedReply(undefined);
+  assert.deepEqual(cancelDrainReply('b'), { type: 'cancel', id: 'b', ok: true });
+  noteDroppedReply(outOfMemory);
+  assert.deepEqual(cancelDrainReply('c'), { type: 'cancel', id: 'c', ok: true, error: outOfMemory });
+  assert.deepEqual(cancelDrainReply('d'), { type: 'cancel', id: 'd', ok: true });
 }

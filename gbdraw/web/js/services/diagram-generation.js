@@ -1,7 +1,7 @@
 // @ts-check
 import { createBoundedJsonReceiver } from './bounded-json-transport.js';
 import { buildPyodideAssetManifest } from './pyodide-assets.js';
-import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { normalizeUserFacingError, OUT_OF_MEMORY_CODE } from '../utils/error-normalization.js';
 import { validateWebRuntimeCapabilities, DiagramRuntimeCompatibilityError } from './runtime-capabilities.js';
 import {
   DIAGRAM_HELPER_OPERATION_NAMES,
@@ -30,7 +30,7 @@ import { toRaw } from '../utils/vue-raw.js';
 /** @import { WebFontEntry } from './font-store.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { FeatureCatalogRevision, WorkerHeldSegment } from './diagram-worker-protocol.js' */
-/** @import { DiagramWorkerCancelMessage, DiagramWorkerCancelReply, DiagramWorkerInitMessage } from './diagram-worker-protocol.js' */
+/** @import { DiagramWorkerCancelMessage, DiagramWorkerCancelReply, DiagramWorkerInitMessage, DiagramWorkerReplyError } from './diagram-worker-protocol.js' */
 /** @import { DecodedContentPiece, DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 
 /**
@@ -682,6 +682,26 @@ const terminateWorker = (error = null) => {
 };
 
 /**
+ * Replace the engine that ran out of memory (OV-3027, PD-OI-125): the Worker's Python heap never shrinks, so the
+ * Worker is terminated and the next request builds a new one, which receives every input again. A Generate in
+ * progress on that Worker would never be answered: it ends with the same failure. A Generate that waits for a drain
+ * has not reached the Worker; the termination ends the drain, and it starts the new one.
+ * @param {Worker} currentWorker The Worker that replied.
+ * @param {unknown} serialized The error of its reply, if any.
+ * @returns {boolean} Whether the engine was replaced.
+ */
+const replaceEngineOutOfMemory = (currentWorker, serialized) => {
+  const code = serialized && typeof serialized === 'object' ? /** @type {{ code?: unknown }} */ (serialized).code : null;
+  if (code !== OUT_OF_MEMORY_CODE || worker !== currentWorker) return false;
+  const pending = drainState ? null : activeRequest;
+  if (pending) {
+    settleActiveRequest(pending, () => pending.reject(deserializeWorkerError({ code: OUT_OF_MEMORY_CODE, operation: 'generate', stage: 'unknown' })));
+  }
+  terminateWorker();
+  return true;
+};
+
+/**
  * Stop the kept Worker's canceled requests (D7): write SIGINT into its
  * interrupt buffer, so Python stops at its next checkpoint, and ask it to
  * drain: it drops the replies of every request up to the last one sent and
@@ -697,7 +717,14 @@ const drainWorker = (currentWorker, buffer) => {
   /** @param {MessageEvent} event */
   const handleMessage = (event) => {
     const data = /** @type {Partial<DiagramWorkerCancelReply>} */ (event.data || {});
-    if (data.type === 'cancel' && data.id === id) finish('drained');
+    if (data.type === 'cancel' && data.id === id) {
+      // The Worker dropped a canceled reply that ran out of memory: the termination ends the drain.
+      if (!replaceEngineOutOfMemory(currentWorker, data.error)) finish('drained');
+      return;
+    }
+    // A reply already on its way when the Cancel settled its request.
+    const reply = /** @type {DiagramWorkerReplyError} */ (event.data || {});
+    replaceEngineOutOfMemory(currentWorker, reply.ok === false ? reply.error : reply.results?.error);
   };
   const terminate = () => {
     if (worker === currentWorker) terminateWorker();
@@ -1013,12 +1040,8 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
             failWorker(error);
             return;
           }
-          settleActiveRequest(request, () => {
-            resolveRequest(markCurrentWorkerGenerationResponse({
-              requestId,
-              ...normalized
-            }));
-          });
+          settleActiveRequest(request, () => resolveRequest(markCurrentWorkerGenerationResponse({ requestId, ...normalized })));
+          replaceEngineOutOfMemory(currentWorker, data.results?.error);
           return;
         }
         failWorker(deserializeWorkerError(data.error, { operation: 'generate' }));
@@ -1159,6 +1182,7 @@ const runAuxiliaryWorkerRequest = ({
           return;
         }
         rejectRequest(deserializeWorkerError(data.error, { operation }));
+        replaceEngineOutOfMemory(currentWorker, data.error);
       }
 
       function handleError() {

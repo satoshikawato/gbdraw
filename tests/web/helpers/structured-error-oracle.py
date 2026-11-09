@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from gbdraw.api import CircularDiagramOptions, CircularDiagramRequest, ColorOptions, InMemoryRecordSource, RecordInput
 from gbdraw import exceptions
 from gbdraw.session import build_session_document
+from gbdraw.api import render as api_render
 from gbdraw.web_support import request_render
 from tests.utils.session_drawing_view import drawing_view
 
@@ -82,11 +83,28 @@ def engine_phase_failure(namespace, name, stage):
         setattr(request_render, phase, original)
 
 
+def svg_write_memory_failure(namespace):
+    """The engine runs out of memory while it writes the SVG: the writer raises ExportError from the MemoryError
+    (gbdraw/api/render.py save_figure_to), as the second human chromosome 1 render did (OV-3027)."""
+
+    def fail(*_args, **_kwargs):
+        raise MemoryError()
+
+    original = api_render.write_svg_document
+    api_render.write_svg_document = fail
+    try:
+        return render_failure(namespace, 'VALID_PLACEHOLDER')
+    finally:
+        api_render.write_svg_document = original
+
+
 def main():
     payload = json.load(sys.stdin)
     namespace = python_helpers()
     if payload.get('raise'):
         result = [engine_phase_failure(namespace, name, stage) for name, stage in payload['raise']]
+    elif payload.get('svgWriteMemoryError'):
+        result = svg_write_memory_failure(namespace)
     elif any(payload.get(key) is not None for key in ('displayStart', 'genbankText', 'configOverrides')):
         result = render_failure(namespace, 'VALID_PLACEHOLDER', payload.get('displayStart'), payload.get('genbankText'),
                                 payload.get('configOverrides'))

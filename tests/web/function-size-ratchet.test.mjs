@@ -116,7 +116,7 @@ const FUNCTION_LINES = {
   'components.js::SettingsSectionIndex.setup': 163,
   'services/config.js::exportSessionDocument': 193,
   'services/config.js::importSessionDocument': 1414,
-  'services/diagram-generation.js::runDiagramGeneration': 169,
+  'services/diagram-generation.js::runDiagramGeneration': 165,
   'services/diagram-resource-staging.js::createDiagramResourceTransport': 155,
   'services/feature-catalog.js::validateAndProjectCatalogItem': 372,
   'services/feature-override-identity.js::migrateLegacyFeatureOverrides': 152,

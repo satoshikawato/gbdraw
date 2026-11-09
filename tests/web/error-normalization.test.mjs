@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/services/circular-track-slot-model.js';
-import { diagnosticError, liveEditFailure, normalizeCaughtError, normalizeUserFacingError, operationErrorTitle } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { diagnosticError, liveEditFailure, normalizeCaughtError, normalizeUserFacingError, operationErrorTitle, OUT_OF_MEMORY_CODE } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
 import { MODE_PROFILE_DATA } from '../../gbdraw/web/js/mode-profiles.generated.js';
 globalThis.self = {};
@@ -245,13 +245,16 @@ from gbdraw.web_support import error_adapter as a
 exact = list(a._EXACT.values())
 print(json.dumps(dict(
     operations=sorted(a.OPERATIONS), stages=sorted(a.STAGES), fields=sorted(a.FIELDS),
-    codes=sorted(a.DIAGNOSTIC_CODES | {code for code, _ in exact} | {row[1] for row in a._TEMPLATES}),
+    codes=sorted(a.DIAGNOSTIC_CODES | {code for code, _ in exact} | {row[1] for row in a._TEMPLATES} | {a.MEMORY_REFUSAL_CODE}),
+    memoryRefusal=a.MEMORY_REFUSAL_CODE,
     reasons=sorted(a.DIAGNOSTIC_REASONS | {ctx["reason"] for _, ctx in exact if "reason" in ctx}
         | {row[2] for row in a._TEMPLATES} | set(a._CONSTRAINTS.values())),
     contextKeys=sorted(a._DIAGNOSTIC_INTEGER_KEYS | {"configPath"}),
     exceptionTypes=sorted(a.EXCEPTION_TYPE_NAMES))))
 `], { encoding: 'utf8' }));
 for (const code of pythonContract.codes) assert.equal(roundtrip({ code }).code, code, code);
+// The code on which services/diagram-generation.js replaces the engine is Python's memory refusal (OV-3027).
+assert.equal(OUT_OF_MEMORY_CODE, pythonContract.memoryRefusal);
 for (const reason of pythonContract.reasons) {
   const model = roundtrip({ code: 'INPUT_INVALID', context: { reason } });
   assert.equal(model.context.reason, reason, reason);
@@ -667,8 +670,26 @@ test('an unclassified engine failure is a render failure with its exception clas
     assert.deepEqual(model.actions, ['save-session']);
     assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
   }
-  // Memory depends on the runtime, not the inputs: that failure keeps Retry.
-  assert.deepEqual([memory.code, memory.actions], ['UNKNOWN', ['retry', 'save-session']]);
+  // Memory depends on what the page's engine holds, not on the inputs alone: it is the memory refusal, and the
+  // page replaces that engine, so Retry runs on a new one (OV-3027, PD-OI-125).
+  assert.deepEqual([memory.code, memory.actions], ['OUT_OF_MEMORY', ['retry', 'save-session']]);
+});
+
+// PD-OI-125 (OV-3027): the engine ran out of memory while it wrote the SVG of a large figure, and the writer raised
+// ExportError from the MemoryError. By the exception class in its cause, never its text, it is the memory refusal:
+// the words say that the engine ran out of memory and was replaced, and what to do if it happens again, not that
+// the same inputs fail the same way. The page replaces the engine (services/diagram-generation.js), so the panel
+// offers Retry Generate and Save Session.
+test('a MemoryError under the SVG writer is the memory refusal, not a render failure (OV-3027)', () => {
+  const model = roundtrip(invoke({ svgWriteMemoryError: true }).error);
+  assert.deepEqual([model.code, model.operation, model.stage, model.context], ['OUT_OF_MEMORY', 'generate', 'render', {}]);
+  assert.equal(model.summary, 'The diagram engine ran out of memory and was replaced with a new one. Generate again. '
+    + 'If it runs out of memory again, draw a smaller region, turn off tracks or labels you do not need, or draw it '
+    + 'with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).');
+  assert.doesNotMatch(model.summary, /fails the same way|Python exception|reload/);
+  assert.deepEqual(model.actions, ['retry', 'save-session']);
+  // A live edit that ran out of memory offers Retry: the next request runs on the new engine.
+  assert.deepEqual(liveEditFailure(model).actions, ['retry', 'generate']);
 });
 
 // B10: two user-fixable engine failures carry a producer diagnostic through the

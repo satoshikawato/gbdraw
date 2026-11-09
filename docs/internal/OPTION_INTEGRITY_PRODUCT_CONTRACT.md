@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `135`
+- Contract revision: `136`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -45,7 +45,7 @@ Status: active Product authority
   `PD-OI-112`, `PD-OI-113`, `PD-OI-114`, `PD-OI-115`,
   `PD-OI-116`, `PD-OI-117`,
   `PD-OI-118`, `PD-OI-119`, `PD-OI-120`, `PD-OI-121`, `PD-OI-122`,
-  `PD-OI-123`, and `PD-OI-124`
+  `PD-OI-123`, `PD-OI-124`, and `PD-OI-125`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -5120,6 +5120,44 @@ Status: active Product authority
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime that
     implements it is in the same pull request, and the Review is `REQUIRED`.
+- Revision 136 changes: `PD-OI-125` is added (concern
+  `diagram-generation.engine-out-of-memory`, scenario revision `1`; the outcome
+  `B OUT-OF-MEMORY-FRESH-ENGINE`). When the diagram engine (Python in the
+  Worker) raises `MemoryError`, raised or as the explicit cause of another
+  exception without a diagnostic of its own, the failure is `OUT_OF_MEMORY`
+  at the stage where it happened. The page then ends that Worker at once,
+  after a Cancel too; a Generate in progress on it ends with the same
+  failure, and the next operation that uses the engine starts a new one,
+  which receives the drawing's inputs again. The error shows the approved
+  text, and a Generate failure offers Retry Generate and Save Session, with
+  no Reload. The previous Result, request, draft, and History stay. Every
+  failure other than `MemoryError` keeps whether it ends the engine, its
+  code, its text, and its buttons.
+  - The Product Decision Owner `satoshikawato` answered 「Q1=B」 on
+    `2026-11-09` (`DECISIONS.md` `D-42`) to the question Q1 of the
+    campaign `euk-feasibility-20261108` with three options (A: the text and
+    Save Session and Reload, with no Retry; B: the page replaces the engine at
+    once, and the text and Retry and Save Session; C: keep the UNKNOWN text).
+  - On `2026-11-09` (`DECISIONS.md` `D-44`) the complete receipt below was
+    shown in a question, 「OV-3027（同じページでヒト 1 番染色体を 2 回描くとメモリが足りなくなる件）について、Owner が選んだ B（メモリ不足のとき描画エンジンを新しいものに取り替える、2026-11-09「Q1=B」）の Product Contract 受領書です。右の全文は、レビュアーが 2 回コードと照合し、指摘をすべて直したものです。この全文を、そのまま 1 字も変えずに Contract（Revision 135 / PD-OI-125、dev で空いている番号）に書き込みます。変えるのは Decision date の行だけで、承認した日を入れます。この全文で承認しますか？」, and the Owner answered 「この全文で承認（推奨）」.
+    The shown text's last line was the placeholder
+    「Decision date: （承認の日）」. The serialized receipt fills it with the
+    date of the approval, `2026-11-09`, and changes nothing else (shown text
+    SHA-256 `bd63dc334cc581fddefdb3c2bcf19df9ce40777f847e86d489b559fb64967fcb`).
+  - The question named Revision `135`, the free revision on `dev` when it
+    was asked; another pull request took it before this one merged, so the
+    record is serialized at the next free revision, `136`. The receipt
+    names no revision.
+  - The session drafted the receipt's fields; the Owner approved them as
+    written. The receipt and JSON reproduce the approved fields without
+    translation or additional terms.
+  - New receipt SHA-256: `PD-OI-125` scenario revision `1`
+    `b05de346a992da2928e22b14a6def330cb53c5485d44dace77d745194ee7b8ee`.
+  - No other record is amended or retired. `PD-OI-016`, `PD-OI-046`, and
+    `PD-OI-118` stay.
+  - This change is a static Product Contract co-change: the runtime and tests
+    that implement it are in the same pull request, and the Review is
+    `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -13186,6 +13224,61 @@ Decision date: 2026-11-08
   "acceptedResidualRisk": "Record Layout では 1 つの record の window が複数のセルになり、Row の値が同じ数字として並ぶ。window をまたぐ Select region の drag はできず、window ごとに選ぶ。Region の入力は Generate まで図に出ない。Add window で足した window は、Start と End を入れるまで record 全体を描く。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-08"
+}
+```
+
+### PD-OI-125: Diagram engine out of memory
+
+- Concern key: `diagram-generation.engine-out-of-memory`
+- Scenario revision: `1`
+- Supersedes: none. No earlier record fixed the failure of a diagram engine
+  that runs out of memory. `PD-OI-016` (the previous Result, request, draft,
+  and History stay after a failure), `PD-OI-046` (Details, Copy diagnostics,
+  and the diagnostics shown), and `PD-OI-118` (a drawn diagram whose reply the
+  page cannot receive) stay.
+- Status: `ACCEPTED`
+- Selected outcome: `B OUT-OF-MEMORY-FRESH-ENGINE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Product Decision Owner's choice and approval of
+  `2026-11-09` described in the Revision 136 entry above. The receipt and
+  JSON below reproduce all nine fields of the approved receipt without
+  translation or additional terms. The runtime that implements it merges with
+  it (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `b05de346a992da2928e22b14a6def330cb53c5485d44dace77d745194ee7b8ee`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.engine-out-of-memory（描画中に描画エンジンのメモリが足りなくなったとき）
+Scenario revision: 1
+Choice: B OUT-OF-MEMORY-FRESH-ENGINE
+  - 描画エンジン（Worker の中の Python）が MemoryError を出したとき（MemoryError そのもの、または MemoryError を明示の原因に持つ別の例外、たとえば SVG を書く処理の ExportError）は、ほかの診断を持たない失敗であれば、エラーの種別を OUT_OF_MEMORY とする。段階はそのときの段階のまま。判定は例外の種類で行い、メッセージの文面では判定しない。Generate、すぐ反映される設定による再描画、ラベルの再配置は同じ経路を通るので、どれも同じ扱いにする。ファイルの読み込みなど、描画エンジンのほかの処理も同じ種別になる。
+  - この種別の失敗が返ってきたら、ページはその描画エンジン（Worker）をすぐに終了する。Cancel の後に返ってきた場合も同じ。そのとき進行中の Generate は、同じ失敗として終わる。ただし Cancel の後に始めた Generate は失敗せず、新しいエンジンで描く。Cancel した Generate にはこの文は出ない。次に描画エンジンを使う操作が新しいエンジンを起動し、その図の入力をすべて送り直して描く。
+  - 表示する文は "The diagram engine ran out of memory and was replaced with a new one. Generate again. If it runs out of memory again, draw a smaller region, turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`)." とする。英語が原文で、ほかの言語は翻訳の一括作業で訳す。
+  - Generate の失敗に出すボタンは Retry Generate と Save Session。Reload は出さない。すぐ反映される設定による再描画とラベルの再配置の失敗は、ボタンのない注記に "Live edit failed: direct edits already applied are kept; geometry may still need updating." と上の文と "Retry the live edit or use Generate." を続けて出す。
+  - 直前の Result、request、draft、History はそのまま残る。設定を変えて Generate し直すこともできる。
+  - MemoryError 以外の失敗では、エンジンを取り替えるかどうか、種別、文、ボタンは今のまま（RENDER_FAILED は Save Session だけ）。
+Rationale: これまでは、描画中の MemoryError は、SVG を書く処理の中で起きると「描画エンジンの失敗（RENDER_FAILED）：同じ入力と設定では同じように失敗する」と表示され、そのまま受けると原因を言わない UNKNOWN と表示されて、どちらもメモリが原因だとわからなかった（ヒト 1 番染色体を同じページで 2 回描いたとき）。原因はこのページの描画エンジンが使えるメモリ（4 GiB）で、エンジンのメモリは Worker を終了するまで減らないため、同じエンジンで Retry しても同じように足りないことが多い。新しいエンジンはメモリが空から始まるので、新しいエンジンで足りる図なら、ページを読み込み直さず、保存していない編集を失わずに、Retry の 1 回で描き直せる。それでも足りない図は、範囲を小さくするか、トラックやラベルを減らすか、コマンドラインで描く。
+Must preserve: 失敗しても直前の Result、canonical request、draft、History を保ち、直して Generate し直せること（PD-OI-016）。Details と Copy diagnostics、表示する診断の範囲（PD-OI-046）。ページが受け取れない描画結果の扱い（PD-OI-118）。MemoryError 以外の失敗で、エンジンを取り替えるかどうかと、種別、文、ボタン。
+May retire: 描画中の MemoryError を RENDER_FAILED（Save Session だけ）または UNKNOWN（Retry と Save Session）と表示すること。MemoryError を出した描画エンジンを、ページを閉じるか読み込み直すまで使い続けること。
+Accepted residual risk: ブラウザがタブや Worker ごと落とした場合（Python が MemoryError を出す前にメモリが尽きた場合）や、Python の外（Worker の JavaScript）でメモリが足りなくなった場合は、この文にならない。MemoryError を処理している途中で別の例外が起きた場合（明示の原因でない場合）や、診断を持つ例外がメモリ不足を原因に持つ場合も、この種別にならず、エンジンも取り替えない。MemoryError を知らせる処理そのものでメモリが足りなくなった場合は、メモリが原因と言わない失敗（Generate では UNKNOWN、ファイルの読み込みなどでは RESULT_INVALID）になる。そのとき Generate ではエンジンを取り替えるが、ファイルの読み込みなどほかの処理では取り替えない。一時的なメモリ不足でも、エンジンを取り替える。新しいエンジンは起動し直し、キャッシュのない状態で入力の読み込みからやり直すので、次の Generate は同じエンジンでの Generate より時間がかかる（PR #1810 のメモリ修正を入れた版のヒト 1 番染色体で、この PC では、同じエンジンでの Generate が 79〜163 秒、新しいエンジンでは 503〜575 秒だった）。取り替えたエンジンで待っていたほかの処理（ファイルの読み込みなど）は、原因を言わない失敗（UNKNOWN）になる。ファイルの読み込みなど Generate 以外の処理で足りなくなったときも同じ文で、文は Generate をもう一度と言う。Session の上限を超える入力では Save Session が理由を示して断られるので、そのときは入力ファイルを直接コマンドラインに渡す。
+Owner: satoshikawato
+Decision date: 2026-11-09
+```
+
+```json
+{
+  "concern": "diagram-generation.engine-out-of-memory（描画中に描画エンジンのメモリが足りなくなったとき）",
+  "scenarioRevision": 1,
+  "choice": "B OUT-OF-MEMORY-FRESH-ENGINE\n  - 描画エンジン（Worker の中の Python）が MemoryError を出したとき（MemoryError そのもの、または MemoryError を明示の原因に持つ別の例外、たとえば SVG を書く処理の ExportError）は、ほかの診断を持たない失敗であれば、エラーの種別を OUT_OF_MEMORY とする。段階はそのときの段階のまま。判定は例外の種類で行い、メッセージの文面では判定しない。Generate、すぐ反映される設定による再描画、ラベルの再配置は同じ経路を通るので、どれも同じ扱いにする。ファイルの読み込みなど、描画エンジンのほかの処理も同じ種別になる。\n  - この種別の失敗が返ってきたら、ページはその描画エンジン（Worker）をすぐに終了する。Cancel の後に返ってきた場合も同じ。そのとき進行中の Generate は、同じ失敗として終わる。ただし Cancel の後に始めた Generate は失敗せず、新しいエンジンで描く。Cancel した Generate にはこの文は出ない。次に描画エンジンを使う操作が新しいエンジンを起動し、その図の入力をすべて送り直して描く。\n  - 表示する文は \"The diagram engine ran out of memory and was replaced with a new one. Generate again. If it runs out of memory again, draw a smaller region, turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).\" とする。英語が原文で、ほかの言語は翻訳の一括作業で訳す。\n  - Generate の失敗に出すボタンは Retry Generate と Save Session。Reload は出さない。すぐ反映される設定による再描画とラベルの再配置の失敗は、ボタンのない注記に \"Live edit failed: direct edits already applied are kept; geometry may still need updating.\" と上の文と \"Retry the live edit or use Generate.\" を続けて出す。\n  - 直前の Result、request、draft、History はそのまま残る。設定を変えて Generate し直すこともできる。\n  - MemoryError 以外の失敗では、エンジンを取り替えるかどうか、種別、文、ボタンは今のまま（RENDER_FAILED は Save Session だけ）。",
+  "rationale": "これまでは、描画中の MemoryError は、SVG を書く処理の中で起きると「描画エンジンの失敗（RENDER_FAILED）：同じ入力と設定では同じように失敗する」と表示され、そのまま受けると原因を言わない UNKNOWN と表示されて、どちらもメモリが原因だとわからなかった（ヒト 1 番染色体を同じページで 2 回描いたとき）。原因はこのページの描画エンジンが使えるメモリ（4 GiB）で、エンジンのメモリは Worker を終了するまで減らないため、同じエンジンで Retry しても同じように足りないことが多い。新しいエンジンはメモリが空から始まるので、新しいエンジンで足りる図なら、ページを読み込み直さず、保存していない編集を失わずに、Retry の 1 回で描き直せる。それでも足りない図は、範囲を小さくするか、トラックやラベルを減らすか、コマンドラインで描く。",
+  "mustPreserve": "失敗しても直前の Result、canonical request、draft、History を保ち、直して Generate し直せること（PD-OI-016）。Details と Copy diagnostics、表示する診断の範囲（PD-OI-046）。ページが受け取れない描画結果の扱い（PD-OI-118）。MemoryError 以外の失敗で、エンジンを取り替えるかどうかと、種別、文、ボタン。",
+  "mayRetire": "描画中の MemoryError を RENDER_FAILED（Save Session だけ）または UNKNOWN（Retry と Save Session）と表示すること。MemoryError を出した描画エンジンを、ページを閉じるか読み込み直すまで使い続けること。",
+  "acceptedResidualRisk": "ブラウザがタブや Worker ごと落とした場合（Python が MemoryError を出す前にメモリが尽きた場合）や、Python の外（Worker の JavaScript）でメモリが足りなくなった場合は、この文にならない。MemoryError を処理している途中で別の例外が起きた場合（明示の原因でない場合）や、診断を持つ例外がメモリ不足を原因に持つ場合も、この種別にならず、エンジンも取り替えない。MemoryError を知らせる処理そのものでメモリが足りなくなった場合は、メモリが原因と言わない失敗（Generate では UNKNOWN、ファイルの読み込みなどでは RESULT_INVALID）になる。そのとき Generate ではエンジンを取り替えるが、ファイルの読み込みなどほかの処理では取り替えない。一時的なメモリ不足でも、エンジンを取り替える。新しいエンジンは起動し直し、キャッシュのない状態で入力の読み込みからやり直すので、次の Generate は同じエンジンでの Generate より時間がかかる（PR #1810 のメモリ修正を入れた版のヒト 1 番染色体で、この PC では、同じエンジンでの Generate が 79〜163 秒、新しいエンジンでは 503〜575 秒だった）。取り替えたエンジンで待っていたほかの処理（ファイルの読み込みなど）は、原因を言わない失敗（UNKNOWN）になる。ファイルの読み込みなど Generate 以外の処理で足りなくなったときも同じ文で、文は Generate をもう一度と言う。Session の上限を超える入力では Save Session が理由を示して断られるので、そのときは入力ファイルを直接コマンドラインに渡す。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-09"
 }
 ```
 
