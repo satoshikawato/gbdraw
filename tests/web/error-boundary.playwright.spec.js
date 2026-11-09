@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise, fetchRoute } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 
@@ -247,7 +247,7 @@ test('an engine that runs out of memory is replaced, and Retry Generate draws on
   await forceColdPyodideBoot(page);
   let outOfMemory = false;
   await page.context().route('**/js/app/python-helpers.js', async (route) => {
-    const response = await route.fetch();
+    const response = await fetchRoute(route);
     const body = await response.text();
     expect(body.startsWith(`// @ts-check\n${PYTHON_HELPERS_START}`)).toBe(true);
     await route.fulfill({ response,
