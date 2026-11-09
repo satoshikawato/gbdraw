@@ -224,7 +224,9 @@ import {
   IMPORTED_COMPARISON_DISPOSITIONS,
   createImportedComparisonIntentState,
   inheritSavedComparison,
-  inheritedPipelineSearch
+  followCommittedComparison,
+  inheritedPipelineSearch,
+  storedProteinResultMode
 } from '../services/imported-comparison-intent.js';
 /** @import { InheritedPipelineSearch } from '../services/imported-comparison-intent.js' */
 /** @import { LabelDiagramOptions, LabelFeature } from './feature-editor/label-actions.js' */
@@ -729,21 +731,6 @@ export const resolveProteinBlastpCandidateLimit = (candidateLimit) => (
   requireCurrentProteinBlastpCandidateLimit(candidateLimit)
 );
 
-/** @param {unknown} comparisons */
-const inferredResolvedProteinMode = (comparisons) => {
-  const values = Array.isArray(comparisons) ? comparisons : [];
-  if (values.some((comparison) => comparison?.kind === 'collinearityResult')) {
-    return 'collinear';
-  }
-  if (values.some((comparison) => comparison?.kind === 'orthogroupResult')) {
-    return 'orthogroup';
-  }
-  if (values.some((comparison) => comparison?.kind === 'precomputedProteinComparison')) {
-    return 'pairwise';
-  }
-  return '';
-};
-
 /**
  * @param {unknown} left
  * @param {unknown} right
@@ -834,8 +821,8 @@ const canReuseResolvedProteinArtifacts = ({
           || reverse !== Boolean(only?.reverseComplement || record.presentation?.reverseComplement));
   })) return false;
 
-  const persistedMode = inferredResolvedProteinMode(persisted);
-  const committedMode = inferredResolvedProteinMode(committed);
+  const persistedMode = storedProteinResultMode(persisted);
+  const committedMode = storedProteinResultMode(committed);
   if (!persistedMode || persistedMode !== committedMode || committedMode !== active.mode) {
     return false;
   }
@@ -1025,8 +1012,8 @@ const buildLosatFilename = (drawing, leftLabel, rightLabel) => (
 /**
  * What a Linear Generate searches. Python plans the drawn units: a record drawn in several windows draws one unit per
  * window, and a pair of records compares every window pair of the draft plan (`generateUnitSearch`, OV-2738). Inherit
- * of a saved LOSATP pipeline that names unit pairs searches exactly those pairs (`inherited`, with the pipeline and its
- * thresholds), through the same planner and runner (OV-3003).
+ * of a saved LOSATP Pairwise pipeline searches its pairs (`inherited`, with the pipeline and its thresholds), through the
+ * same planner and runner (OV-3003); its plan is checked as the draft's is, before any search.
  * @param {DrawingState} drawing
  * @param {readonly LinearSeq[]} cards The cards this Generate draws (`drawnLinearSeqs`), in request order.
  * @param {LinearComparisonResolution} draftPlan
@@ -1038,6 +1025,7 @@ const buildLosatFilename = (drawing, leftLabel, rightLabel) => (
 const linearSearchOf = async (drawing, cards, draftPlan, inherit, windowsOf, runHelper) => {
   const inherited = inherit ? await inheritedPipelineSearch({
     source: drawing.importedComparisonIntent.source, cards, windowsOf, runHelper,
+    requirePlan: requireLinearComparisonPlanSnapshot,
     plan: { sequences: drawing.linearSeqs, recordsOff: drawing.recordsOff,
       layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [] }
   }) : null;
@@ -4289,7 +4277,8 @@ export const createRunAnalysis = ({
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
           const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
             ? unitSeqs.map((_, index) => index)
-            // The plan is valid here (`requireLinearComparisonPlanSnapshot`), so every edge names two drawn units.
+            // The plan is valid here (`requireLinearComparisonPlanSnapshot` checked the draft's, or Inherit's in
+            // `inheritedPipelineSearch`), so every edge names two drawn units.
             : Array.from(new Set(unitResolution.edges
                 .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'losat')
                 .flatMap((/** @type {LinearComparisonResolvedEdge} */ edge) => /** @type {number[]} */ (
@@ -5948,14 +5937,13 @@ export const createRunAnalysis = ({
         return { status: 'stale' };
       }
       if (typeof setGeneratedArtifactIdentity === 'function') {
-        setGeneratedArtifactIdentity(execution.generationResponse.artifactIdentity, {
-          results: candidateCommit.results
-        });
+        setGeneratedArtifactIdentity(execution.generationResponse.artifactIdentity, { results: candidateCommit.results });
       }
       if (typeof adoptCanonicalRenderArtifacts === 'function') {
         // A candidate of the committed request runs no conservation search: the request's pairs stay.
         adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing, conservationPairs: 'committed' });
       }
+      followCommittedComparison(drawing.importedComparisonIntent, canonical);
       if (typeof commitIntent === 'function') await commitIntent();
       if (isCurrentAlert()) errorLog.value = null;
       failedGeneratePreservedResult.value = false;

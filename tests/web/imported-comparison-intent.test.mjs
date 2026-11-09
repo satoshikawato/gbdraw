@@ -5,6 +5,7 @@ import {
   IMPORTED_COMPARISON_DISPOSITIONS,
   classifyImportedComparisonIntent,
   createImportedComparisonIntentState,
+  followCommittedComparison,
   importedComparisonExecution,
   inheritSavedComparison,
   savedComparisonSource,
@@ -400,6 +401,24 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
   const missing = shownFailure(() => inheritSavedComparison({ candidate: structuredClone(sameUnits), source: null }));
   assert.equal(missing.code, 'COMPARISON_CHOICE_REQUIRED');
   assert.match(missing.summary, /This drawing holds no saved comparison to inherit\./);
+  // Align flips record-a's windows and commits a candidate of the committed request, which keeps the comparison
+  // (`runCommittedCanonicalCandidate`); the File card's windows are flipped too. The next Inherit draws the comparison
+  // in those windows: what Inherit copies follows the commit, as a Save of it would write it.
+  const flippedRecords = [{ ...windowedRecords[0], windows: windowedRecords[0].windows.map((span) => ({ ...span, reverseComplement: true })) },
+    windowedRecords[1]];
+  const flippedDraft = () => ({ renderRequest: request([], { schema: 10, records: structuredClone(flippedRecords) }), resources: {} });
+  const aligned = { ...classify(cliRequest), source: committedWindowed };
+  assert.equal(shownFailure(() => inheritSavedComparison({ candidate: flippedDraft(), source: aligned.source })).code,
+    'COMPARISON_CHOICE_REQUIRED');
+  followCommittedComparison(aligned, { renderRequest: { ...cliRequest, records: flippedRecords }, resources });
+  assert.deepEqual(aligned.source.records, flippedRecords.map(({ recordKey, windows }) => ({ recordKey, windows })));
+  const inherited = inheritSavedComparison({ candidate: flippedDraft(), source: aligned.source });
+  assert.deepEqual(inherited.renderRequest.comparisons.map((comparison) => [comparison.queryRecordIndex, comparison.subjectRecordIndex]),
+    [[0, 2], [1, 2], [undefined, undefined]]);
+  // A drawing whose comparison is editable holds no source, and a commit gives it none.
+  const editable = createImportedComparisonIntentState();
+  followCommittedComparison(editable, { renderRequest: cliRequest, resources });
+  assert.equal(editable.source, null);
 }
 
 console.log('imported comparison intent tests passed');

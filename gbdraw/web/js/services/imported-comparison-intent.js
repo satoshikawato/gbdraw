@@ -1,8 +1,9 @@
 // @ts-check
 /** @import { LinearSeq } from './drawing/inputs.js' */
-/** @import { LinearComparisonEdge, LinearComparisonLayoutRow } from './linear-comparisons.js' */
+/** @import { LinearComparisonEdge, LinearComparisonLayoutRow, LinearComparisonResolution } from './linear-comparisons.js' */
 /** @import { LinearUnitPlanPayload, LinearUnitRecord, LinearUnitSearch, LinearUnitWindowsOf } from './linear-units.js' */
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
+import { COMPARISON_THRESHOLD_KEYS } from '../mode-profiles.js';
 import {
   LINEAR_COMPARISON_MODES, LINEAR_COMPARISON_SOURCES, createLinearComparisonEdge, resolveLinearComparisonPlan
 } from './linear-comparisons.js';
@@ -113,8 +114,6 @@ const ENDPOINT_KINDS = new Set([
   'nucleotideBlast',
   'precomputedProteinComparison'
 ]);
-// The score thresholds of a comparison, which the saved request's diagram options hold.
-const THRESHOLD_FIELDS = /** @type {const} */ (['evalue', 'bitscore', 'identity', 'alignmentLength']);
 const CURRENT_PIPELINE_SETTING_FIELDS = new Set([
   'collinearityParams',
   'collinearityUnitMode',
@@ -316,8 +315,9 @@ const unitInputsOf = (records) => records.map((record, index) => ({
 /**
  * The LOSATP mode whose results a request stores beside a pipeline marker of mode `none`, as the CLI and the Web
  * write them after a render: Collinear for a `collinearityResult`, Similarity groups for an `orthogroupResult`,
- * Pairwise for protein tables alone, and '' for none. The one reader of that mode: the classifier and Load's draft of
- * a CLI Session, which has no saved controls (`projectCanonicalSessionRequest` in services/session-request.js).
+ * Pairwise for protein tables alone, and '' for none. The one reader of that mode: the classifier, Load's draft of
+ * a CLI Session, which has no saved controls (`projectCanonicalSessionRequest` in services/session-request.js), and
+ * Generate's reuse of resolved protein results (`canReuseResolvedProteinArtifacts` in app/run-analysis.js).
  * @param {readonly { kind?: unknown }[]} comparisons The request's comparisons.
  * @returns {'collinear' | 'orthogroup' | 'pairwise' | ''}
  */
@@ -640,10 +640,23 @@ export const savedComparisonSource = ({ renderRequest, resources }) => {
   return {
     comparisons,
     records: unitInputsOf(Array.isArray(renderRequest?.records) ? renderRequest.records : []),
-    thresholds: Object.fromEntries(THRESHOLD_FIELDS.filter((field) => Object.hasOwn(options, field))
+    thresholds: Object.fromEntries(COMPARISON_THRESHOLD_KEYS.filter((field) => Object.hasOwn(options, field))
       .map((field) => [field, options[field]])),
     resources: read
   };
+};
+
+/**
+ * A commit of a candidate of the committed request (`runCommittedCanonicalCandidate` in app/run-analysis.js: Align, a
+ * record rotation, Align at a feature) carries the drawing's saved comparison into the request it commits, which
+ * draws its records in the windows and orientations that commit wrote to the File cards. What Inherit copies follows
+ * that request, as a Save of it would write it, so the next Generate's Inherit draws the comparison in those windows.
+ * A drawing whose comparison is not preserved holds no source and keeps none.
+ * @param {ImportedComparisonIntent} intent The drawing's Imported comparison state.
+ * @param {{ renderRequest?: SavedRenderRequest, resources?: Readonly<Record<string, unknown>> | null }} committed
+ */
+export const followCommittedComparison = (intent, committed) => {
+  if (intent.source !== null) intent.source = savedComparisonSource(committed);
 };
 
 /**
@@ -711,17 +724,20 @@ const searchedPipelineOf = (source) => /** @type {SavedPipeline | undefined} */ 
  *   cards: readonly LinearSeq[],
  *   windowsOf: LinearUnitWindowsOf,
  *   runHelper: (payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>,
+ *   requirePlan: (resolution: LinearComparisonResolution) => LinearComparisonResolution,
  *   plan: { sequences: readonly LinearSeq[], recordsOff: Iterable<unknown>, layout: readonly LinearComparisonLayoutRow[] }
- * }} input The drawn cards, in request order, and every card with the OFF records and the row layout.
+ * }} input The drawn cards, in request order, and every card with the OFF records and the row layout; `requirePlan`
+ *   checks the plan of the records as Generate checks the draft's (`requireLinearComparisonPlanSnapshot`), so a plan
+ *   the drawing no longer allows (its records moved into one row) stops before any search.
  * @returns {Promise<InheritedPipelineSearch | null>}
  */
-export const inheritedPipelineSearch = async ({ source: held, cards, windowsOf, runHelper, plan }) => {
+export const inheritedPipelineSearch = async ({ source: held, cards, windowsOf, runHelper, requirePlan, plan }) => {
   const source = toRaw(held);
   const pipeline = source === null ? null : searchedPipelineOf(source);
   if (source === null || pipeline === null) return null;
   const carry = savedIndexCarrier(source, unitRecordInputs(cards, windowsOf));
   /** @param {LinearComparisonEdge[]} edges The selected record pairs; none plans the records of adjacent rows. */
-  const losatPlan = (edges) => resolveLinearComparisonPlan({
+  const losatPlan = (edges) => requirePlan(resolveLinearComparisonPlan({
     ...plan,
     plan: {
       mode: edges.length > 0 ? LINEAR_COMPARISON_MODES.SELECTED : LINEAR_COMPARISON_MODES.ADJACENT,
@@ -729,7 +745,7 @@ export const inheritedPipelineSearch = async ({ source: held, cards, windowsOf, 
     },
     losatProgram: 'blastp',
     blastpMode: 'pairwise'
-  });
+  }));
   const pairs = pipeline.pairs.map((pair) => ({
     queryUnit: carry(pair.queryRecordIndex), subjectUnit: carry(pair.subjectRecordIndex)
   }));
@@ -780,7 +796,7 @@ export const inheritSavedComparison = ({ candidate, source: held, searched = fal
   });
   candidate.renderRequest.comparisons = [...inheritedComparisons, ...searchedComparisons];
   const candidateOptions = candidate.renderRequest.diagramOptions || {};
-  THRESHOLD_FIELDS.forEach((field) => {
+  COMPARISON_THRESHOLD_KEYS.forEach((field) => {
     if (Object.hasOwn(source.thresholds, field)) {
       candidateOptions[field] = source.thresholds[field];
     } else {

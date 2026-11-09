@@ -173,6 +173,9 @@ const COMPARISON_THRESHOLDS = Object.freeze([
   ['alignment_length', 'alignmentLength', 'alignment_length']
 ]);
 
+/** The generated domain keys of the comparison thresholds, as a request's diagram options name them. */
+export const COMPARISON_THRESHOLD_KEYS = Object.freeze(COMPARISON_THRESHOLDS.map(([, domainKey]) => domainKey));
+
 /**
  * The comparison thresholds a saved request sets (its diagram options, by generated domain key), resolved as
  * `resolveComparisonThresholds` resolves the draft's: a field the request leaves out takes the mode default.

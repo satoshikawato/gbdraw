@@ -8,7 +8,7 @@ import test from 'node:test';
 import { createLinearSeq } from '../../gbdraw/web/js/services/drawing/inputs.js';
 import { buildLosatJobSpecs, linearComparisonEdgeKey } from '../../gbdraw/web/js/services/linear-comparisons.js';
 import { losatSearchSequences } from '../../gbdraw/web/js/services/linear-sources.js';
-import { linearWindowsPayload } from '../../gbdraw/web/js/services/session-request.js';
+import { linearWindowsPayload, requireLinearComparisonPlanSnapshot } from '../../gbdraw/web/js/services/session-request.js';
 import {
   linearUnitPlanPayload,
   planLinearUnitSearch,
@@ -160,13 +160,14 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
   });
   /** @type {unknown[]} */
   const asked = [];
-  const search = (source) => inheritedPipelineSearch({
+  const search = (source, layout = []) => inheritedPipelineSearch({
     source, cards, windowsOf,
     runHelper: async (payload) => {
       asked.push(payload);
       return { result: pythonPlan(payload) };
     },
-    plan: { sequences: cards, recordsOff: [], layout: [] }
+    requirePlan: requireLinearComparisonPlanSnapshot,
+    plan: { sequences: cards, recordsOff: [], layout }
   });
   // Units 0 and 1 are a's windows, 2 and 3 b's: the pipeline keeps window 1 against window 1, window 2 against 2.
   const inherited = await search(saved([[0, 2], [1, 3]]));
@@ -211,6 +212,11 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
   // A saved comparison without a Pairwise pipeline is copied as saved; changed windows ask for the choice before a
   // search.
   assert.equal(await search(saved([], cards, 'none')), null);
+  // Saved pairs whose records now share one row (moved in Record Layout) stop as the draft's would, with the pair
+  // named, before any LOSAT job: Generate builds no job from a plan it refuses.
+  await assert.rejects(search(saved([[0, 2], [1, 3]]), [{ uid: 'a', row: 1 }, { uid: 'b', row: 1 }]),
+    (error) => error.code === 'COMPARISON_INPUT' && error.context?.reason === 'PAIR_TOPOLOGY'
+      && error.context?.queryRecordIndex === 0 && error.context?.subjectRecordIndex === 1);
   asked.length = 0;
   await assert.rejects(search(saved([[0, 2]], [cards[0], createLinearSeq({ uid: 'b', windows: [window(10, 90)] })])),
     (error) => error.code === 'COMPARISON_CHOICE_REQUIRED' && error.context?.reason === 'INHERIT_UNITS_CHANGED');
