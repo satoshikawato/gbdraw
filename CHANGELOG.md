@@ -540,11 +540,9 @@ write-up of a release.
   `overflow=clip` whose set width reaches past the centre now counts the
   labels it leaves out "in clipped slots", as every clipped slot does, not
   "for want of room before the centre".
-- Performance: curved Circular region labels (`arc` and `auto`) are placed
-  with less work: each label's text is measured once where it stands. A
-  Circular map with 150 labelled regions in an `inside` slot is drawn in about
-  45 % less time, and one with 400 regions in about 30 % less; the figure is
-  the same (OV-2981).
+- Performance: Circular maps with many labelled regions are drawn faster,
+  with the same figure: a map with 150 or 400 labelled regions in an `inside`
+  slot takes about half the time (OV-2981).
 - Fixed: after a font file was registered for a font family that had already
   been used, curved Circular region labels were still checked against the
   earlier font's letters (for overlaps and for their reach), while their size
