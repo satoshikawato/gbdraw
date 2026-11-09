@@ -127,6 +127,7 @@ from gbdraw.io.colors import read_color_table, read_default_color_overrides
 from gbdraw.io.comparison_sequences import (
     ComparisonGenome,
     ComparisonSequenceFile,
+    RepeatedRecordIds,
     comparison_genome,
     read_comparison_sequence_file,
 )
@@ -499,6 +500,19 @@ class _ComparisonSequenceSources:
                 for paths in self.genomes
             )
         return self._genomes
+
+    def repeated_record_ids(self) -> tuple[RepeatedRecordIds, ...]:
+        """The repeated record IDs of the genomes this render read (OV-2954), each file once.
+
+        Only a genome the render read (for the LOSAT query or the interactive
+        span export) is reported: a ring that reads no file names no record.
+        """
+
+        found: dict[RepeatedRecordIds, None] = {}
+        for genome in self._genomes or ():
+            if genome is not None:
+                found.update(dict.fromkeys(genome.repeated_record_ids))
+        return tuple(found)
 
 
 @dataclass(frozen=True)
@@ -3704,6 +3718,8 @@ def _render_request_diagram(
             prepared,
             include_feature_catalog=include_feature_catalog,
         )
+    sources = prepared.inputs.comparison_sequences if prepared.inputs is not None else None
+    repeated_ids = sources.repeated_record_ids() if sources is not None else ()
     if isinstance(prepared, PreparedCircularBatchRequest):
         return CircularBatchRenderResult(
             request=prepared.request,
@@ -3713,6 +3729,7 @@ def _render_request_diagram(
                     item,
                     comparison_sequence_records=comparison_sequence_records,
                     include_feature_catalog=include_feature_catalog,
+                    repeated_comparison_ids=repeated_ids,
                 )
                 for item in prepared.items
             ),
@@ -3723,6 +3740,7 @@ def _render_request_diagram(
         prepared,
         comparison_sequence_records=comparison_sequence_records,
         include_feature_catalog=include_feature_catalog,
+        repeated_comparison_ids=repeated_ids,
     )
 
 
@@ -3836,8 +3854,13 @@ def _render_prepared_request(
     *,
     comparison_sequence_records: Sequence[Sequence[SeqRecord]] = (),
     include_feature_catalog: bool = False,
+    repeated_comparison_ids: tuple[RepeatedRecordIds, ...] = (),
 ) -> RequestRenderResult:
-    """Write one already-planned diagram using its canonical output request."""
+    """Write one already-planned diagram using its canonical output request.
+
+    Its input summary adds the repeated record IDs of the comparison genomes the
+    render read (OV-2954), known only once they are read.
+    """
 
     output = prepared.request.output
     with _request_render_diagnostic_phase("interactivePreparation"):
@@ -3877,7 +3900,7 @@ def _render_prepared_request(
         output_paths=tuple(Path(path) for path in paths),
         annotation_warnings=prepared.annotation_warnings,
         feature_identity_notices=prepared.feature_identity_notices,
-        input_summary=prepared.input_summary,
+        input_summary=replace(prepared.input_summary, repeated_comparison_ids=repeated_comparison_ids),
         interactive_context=interactive_context,
         linear_metadata=prepared.linear_metadata,
         losat_cache_entries=prepared.losat_cache_entries,

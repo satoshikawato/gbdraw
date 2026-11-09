@@ -31,6 +31,7 @@ from gbdraw.features.overrides import feature_override_lookup
 from gbdraw.features.placement import ResolvedRecordFeatureInputs
 from gbdraw.features.selector_values import get_feature_type
 from gbdraw.features.visibility import should_render_feature
+from gbdraw.io.comparison_sequences import RepeatedRecordIds
 from gbdraw.io.comparisons import ComparisonThresholdName, ComparisonThresholdTally
 from gbdraw.layout.linear_wrap import LinearWrapSummary
 from gbdraw.linear_comparison import ComparisonTableTally
@@ -44,11 +45,15 @@ InputWarningCode = Literal[
     "comparison_rows_filtered_out",
     "comparison_table_empty",
     "annotation_set_not_drawn",
+    "comparison_record_id_repeated",
 ]
 NO_DRAWABLE_FEATURES: InputWarningCode = "no_drawable_features"
 COMPARISON_ROWS_FILTERED_OUT: InputWarningCode = "comparison_rows_filtered_out"
 COMPARISON_TABLE_EMPTY: InputWarningCode = "comparison_table_empty"
 ANNOTATION_SET_NOT_DRAWN: InputWarningCode = "annotation_set_not_drawn"
+COMPARISON_RECORD_ID_REPEATED: InputWarningCode = "comparison_record_id_repeated"
+# Warnings of inputs drawn in full: the Web does not head them "Part of the input was not drawn".
+INPUT_WARNINGS_OF_DRAWN_INPUT: frozenset[InputWarningCode] = frozenset({COMPARISON_RECORD_ID_REPEATED})
 
 _THRESHOLD_WORDING: dict[ComparisonThresholdName, tuple[str, str, str]] = {
     # name: (relation of a left-out row, threshold name, unit)
@@ -103,7 +108,7 @@ class RecordInputSummary:
 
 @dataclass(frozen=True)
 class InputWarning:
-    """A reason the drawing shows less than its inputs hold; the run still draws."""
+    """A reason the drawing shows less than its inputs hold, or names part of them ambiguously; the run still draws."""
 
     code: InputWarningCode
     message: str
@@ -118,6 +123,8 @@ class InputSummary:
     # The region annotation sets with annotations that the explicit track stack draws nothing of
     # (``gbdraw.annotations.planning.annotation_sets_left_out``), in the order the sets were given.
     annotation_sets_left_out: tuple[str, ...] = ()
+    # The comparison genome files the render read whose record IDs repeat (OV-2954).
+    repeated_comparison_ids: tuple[RepeatedRecordIds, ...] = ()
 
 
 class InputWarningPayload(TypedDict):
@@ -379,7 +386,8 @@ def _no_feature_reason(record: RecordInputSummary) -> str:
 
 
 def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
-    """The reasons the drawing shows nothing of a record, of a comparison table, or of a region annotation set."""
+    """The reasons the drawing shows nothing of a record, of a comparison table, or of a region annotation set, and
+    the comparison files whose hover and span export name some records ambiguously."""
 
     warnings = [
         InputWarning(
@@ -410,6 +418,9 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
             f"Add an annotations track slot for it (set_id={set_id}) to draw it.",
         )
         for set_id in summary.annotation_sets_left_out
+    )
+    warnings.extend(
+        InputWarning(COMPARISON_RECORD_ID_REPEATED, item.message) for item in summary.repeated_comparison_ids
     )
     return tuple(warnings)
 
@@ -446,6 +457,10 @@ def with_source_names(summary: InputSummary, names: Mapping[str, str]) -> InputS
             replace(table, source_name=names.get(table.source_name, table.source_name))
             if table.source_name is not None else table
             for table in summary.comparisons
+        ),
+        repeated_comparison_ids=tuple(
+            replace(item, source_name=names.get(item.source_name, item.source_name))
+            for item in summary.repeated_comparison_ids
         ),
     )
 
@@ -490,9 +505,11 @@ def input_summary_payload(
 
 __all__ = [
     "ANNOTATION_SET_NOT_DRAWN",
+    "COMPARISON_RECORD_ID_REPEATED",
     "COMPARISON_ROWS_FILTERED_OUT",
     "COMPARISON_TABLE_EMPTY",
     "FeatureTypeTally",
+    "INPUT_WARNINGS_OF_DRAWN_INPUT",
     "InputSummary",
     "InputSummaryPayload",
     "InputWarning",

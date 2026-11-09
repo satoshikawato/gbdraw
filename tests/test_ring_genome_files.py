@@ -141,6 +141,29 @@ def test_two_files_of_one_genome_with_one_record_id_are_refused(tmp_path: Path) 
         ])
 
 
+def test_a_comparison_file_that_repeats_a_record_id_draws_as_before_and_warns(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """OV-2954 (Owner 2026-11-09 「Q2=C」): hover and export name its later records by the first; gbdraw says so."""
+
+    repeated = tmp_path / "repeated.fna"
+    repeated.write_bytes(DANIO_FASTA.read_bytes() * 2)
+    common = ["--gbk", str(HUMAN), "--conservation_blast", str(DANIO_TSV), "--conservation_reference", "subject"]
+    prefix = tmp_path / "out" / "ring"
+    with caplog.at_level("WARNING"):
+        circular_main([*common, "--conservation_sequence", str(repeated), "-o", str(prefix), "-f", "interactive_svg"])
+    warned = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    assert warned.count(
+        "Comparison sequence file repeated.fna: record ID NC_002333.2 names more than one record. The ring draws "
+        "every record, but the hover popup and the span export show the first record with that ID."
+    ) == 1
+    # Without the span export the file is not read, so nothing is named.
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        circular_main([*common, "--conservation_sequence", str(repeated), "-o", str(tmp_path / "plain" / "ring")])
+    assert not [record for record in caplog.records if "repeated.fna" in record.getMessage()]
+
+
 def test_the_genome_label_is_the_rule_applied_to_its_first_file(tmp_path: Path) -> None:
     genome = comparison_genome((read_comparison_sequence_file(DROSOPHILA), read_comparison_sequence_file(DANIO)))
     assert genome.label == "Drosophila melanogaster mitochondrion, complete genome"

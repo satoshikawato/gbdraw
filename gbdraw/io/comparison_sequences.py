@@ -173,6 +173,31 @@ def read_comparison_sequence_file(path: str | os.PathLike[str]) -> ComparisonSeq
 
 
 @dataclass(frozen=True)
+class RepeatedRecordIds:
+    """Record IDs that each name more than one record of one comparison file (OV-2954).
+
+    The ring draws every record, but a search names a hit by its query record
+    ID, so the hover popup and the span export take the first record with that
+    ID for each of them. Two files of one genome that share an ID are refused
+    instead (:func:`comparison_genome`).
+    """
+
+    source_name: str
+    record_ids: tuple[str, ...]
+
+    @property
+    def message(self) -> str:
+        """The warning every surface shows (the CLI logs it, the Web shows it after Generate)."""
+
+        ids = ", ".join(self.record_ids)
+        named = f"record ID {ids} names" if len(self.record_ids) == 1 else f"record IDs {ids} each name"
+        return (
+            f"Comparison sequence file {self.source_name}: {named} more than one record. The ring draws "
+            "every record, but the hover popup and the span export show the first record with that ID."
+        )
+
+
+@dataclass(frozen=True)
 class ComparisonGenome:
     """The comparison genome of one ring: its files, in the listed order.
 
@@ -199,13 +224,29 @@ class ComparisonGenome:
     def record_label(self) -> str | None:
         return self.files[0].record_label
 
+    @property
+    def repeated_record_ids(self) -> tuple[RepeatedRecordIds, ...]:
+        """Each file with a record ID that names more than one of its records, in file order."""
+
+        repeated = []
+        for file in self.files:
+            counts: dict[str, int] = {}
+            for record in file.records:
+                counts[str(record.id)] = counts.get(str(record.id), 0) + 1
+            ids = tuple(record_id for record_id, count in counts.items() if count > 1)
+            if ids:
+                repeated.append(RepeatedRecordIds(os.path.basename(file.path), ids))
+        return tuple(repeated)
+
 
 def comparison_genome(files: Sequence[ComparisonSequenceFile]) -> ComparisonGenome:
     """One comparison genome of ``files``, refused when two of its files share a record ID.
 
     A search reports a hit by the query record ID, so an ID that names records
     of two files would make the ring's hits and its span export ambiguous
-    (``INPUT_INVALID`` / ``UNIQUE_IDS``). One file is read as before.
+    (``INPUT_INVALID`` / ``UNIQUE_IDS``). One file is read as before; an ID
+    that names two records of one file is drawn and warned about
+    (:attr:`ComparisonGenome.repeated_record_ids`, Owner 2026-11-09 「Q2=C」).
     """
 
     if not files:
@@ -232,6 +273,7 @@ def comparison_genome(files: Sequence[ComparisonSequenceFile]) -> ComparisonGeno
 __all__ = [
     "ComparisonGenome",
     "ComparisonSequenceFile",
+    "RepeatedRecordIds",
     "comparison_file_stem",
     "comparison_genome",
     "read_comparison_sequence_file",

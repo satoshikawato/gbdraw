@@ -6867,7 +6867,7 @@
                 <div v-if="shownInputSummary && shownInputSummary.warnings.length && !shownInputSummaryStale && !processing"
                      role="status" aria-live="polite" aria-atomic="true" data-testid="input-summary-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
-                    <p class="font-semibold">{{ t('Part of the input was not drawn.') }}</p>
+                    <p v-if="shownInputSummary.leavesOutInput" class="font-semibold">{{ t('Part of the input was not drawn.') }}</p>
                     <p v-for="(warning, index) in shownInputSummary.warnings" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
                 </div>
                 <!-- A live Feature visibility edit no render drew: the summary's counts are the last render's. -->

@@ -474,7 +474,9 @@ draw, a comparison table whose rows the thresholds all leave out, or a Region
 Annotation set that the custom stack (**Use custom stack**) has no Annotations
 row for shows **Part of the input was not drawn.** under the status line, with the same
 warning the command line prints (see [Input
-summary](command-line.md#input-summary)). **Run Info** lists the shown Result's
+summary](command-line.md#input-summary)). A similarity ring's comparison file
+whose record IDs repeat shows its warning there too, without that heading: the
+ring draws every record. **Run Info** lists the shown Result's
 **Input summary**: what it read and drew, per record and per comparison table.
 Neither is saved in a Session; the next Generate recomputes them.
 

@@ -974,6 +974,10 @@ into the `[Unreleased]` list below.
   the `;` list, so its `conservation.tsv` still reads back unchanged. Two files
   of one genome that hold the same record ID are refused
   (`UNIQUE_IDS`). `--conservation_sequence` keeps one file per ring.
+  A comparison file whose own records repeat a record ID still draws as
+  before, and gbdraw now warns (the command line on stderr, the Web app after
+  Generate), naming the file and the ID, that the hover popup and the span
+  export show the first record with that ID.
   A request now writes each ring's `conservationFastaFiles` entry, and a
   Session its ring file bindings, as a list of files; a request or Session
   saved by gbdraw 0.14.5 or earlier reads each ring's one file as before.

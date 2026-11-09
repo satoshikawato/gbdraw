@@ -93,10 +93,22 @@ test('each summary keeps the Feature visibility its render drew', () => {
   const drawing = { featureOverrides: {}, featureVisibilityManualRules: [] };
   const drawn = drawnInputSummaries(validateInputSummaries([summary()], results), visibilityPaintState(drawing));
   assert.ok(Object.isFrozen(drawn) && Object.isFrozen(drawn[0]));
-  assert.deepEqual(drawn[0], { ...summary(), drawnVisibility: visibilityPaintState(drawing) });
+  assert.deepEqual(drawn[0], { ...summary(), drawnVisibility: visibilityPaintState(drawing), leavesOutInput: true });
   assert.equal(inputSummaryOf(drawn, 1, 'b.svg'), drawn[0]);
   const hidden = { ...drawing, featureOverrides: { k: { recordKey: 'r', biologicalFeatureId: 'f1', featureVisibility: 'off' } } };
   assert.notEqual(drawn[0].drawnVisibility, visibilityPaintState(hidden), 'a hide changes the drawn visibility');
   const labelOnly = { ...drawing, featureOverrides: { k: { recordKey: 'r', biologicalFeatureId: 'f1', featureVisibility: null, labelVisibility: 'off' } } };
   assert.equal(visibilityPaintState(labelOnly), drawn[0].drawnVisibility, 'a label-only row sets no visibility');
+});
+
+// OV-2954 (Owner 2026-11-09 「Q2=C」): a comparison file whose record IDs repeat is drawn in full, so its warning
+// alone does not say part of the input was not drawn (Python's INPUT_WARNINGS_OF_DRAWN_INPUT).
+test('a warning of an input drawn in full does not say part of the input was not drawn', () => {
+  const repeated = { code: 'comparison_record_id_repeated', message: 'Comparison sequence file a.fna: record ID X names more than one record.' };
+  const [alone, both] = drawnInputSummaries(validateInputSummaries([
+    summary({ resultIndex: 0, resultName: 'a.svg', warnings: [repeated] }),
+    summary({ warnings: [repeated, ...summary().warnings] })
+  ], results), '');
+  assert.equal(alone.leavesOutInput, false);
+  assert.equal(both.leavesOutInput, true);
 });
