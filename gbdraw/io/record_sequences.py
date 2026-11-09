@@ -27,15 +27,16 @@ many decoded bases stay in memory, never what a read returns.
 from __future__ import annotations
 
 import bisect
+import itertools
+import os
 import re
-import shutil
 import tempfile
 import threading
 import warnings
 import weakref
 from array import array
 from collections import OrderedDict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from os import PathLike, fspath
 from typing import IO, Literal, TypeVar
@@ -44,13 +45,15 @@ from Bio import BiopythonParserWarning
 from Bio.Seq import Seq, SequenceDataAbstractBaseClass
 from Bio.SeqRecord import SeqRecord
 
-from .input_text import GZIP_SIGNATURE, FlatFileFormat, expanded_gzip_input, in_sequence_encoding
+from ..exceptions import InputFileError
+from .input_text import FlatFileFormat, expand_input_copy, in_sequence_encoding, is_gzip_file, open_input_bytes
 
 SequenceFormat = Literal["genbank", "embl", "fasta"]
 
 _BLOCK_BYTES = 8 << 20  # sequential reads of the parse pass
 _CHUNK_BYTES = 64 << 10  # most raw bytes of one indexed chunk (whole lines)
 _CACHE_BYTES = 256 << 20  # decoded bases the block cache keeps, all input files together
+_OPEN_FILES = 16  # input files kept open for reads at offsets, all records together
 _BYTE_ORDER_MARK = "﻿"
 _DIGITS = b"0123456789"
 _LETTERS = bytes(range(ord("A"), ord("Z") + 1)) + bytes(range(ord("a"), ord("z") + 1)) + b"*-."
@@ -113,35 +116,102 @@ class _BlockCache:
 _CACHE = _BlockCache()
 _FILE_KEYS = iter(range(1, 1 << 62))
 
+# What identifies the bytes a file holds: size, modification time (ns) and inode.
+_Stamp = tuple[int, int, int]
 
-def _release(handle: IO[bytes], file_key: int) -> None:
-    handle.close()
+
+def _stamp(handle: IO[bytes]) -> _Stamp:
+    status = os.fstat(handle.fileno())
+    return status.st_size, status.st_mtime_ns, status.st_ino
+
+
+class _OpenFiles:
+    """The input files open for reads at offsets: at most ``_OPEN_FILES``, least recently used closed first.
+
+    A file is opened by its path when a read needs it, so the number of inputs is
+    not bounded by the number of files a process may hold open. Every read checks
+    that the file still holds the bytes its records were indexed from.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._handles: OrderedDict[int, IO[bytes]] = OrderedDict()
+
+    def read(self, source: _SequenceFile, offset: int, size: int) -> bytes:
+        with self._lock:
+            handle = self._handles.pop(source.key, None)
+            try:
+                if handle is None:
+                    handle = open_input_bytes(source.path)
+            except OSError as error:
+                raise source.changed() from error
+            try:
+                if _stamp(handle) != source.stamp:
+                    raise source.changed()
+                handle.seek(offset)
+                data = handle.read(size)
+            except InputFileError:
+                handle.close()
+                raise
+            except OSError as error:
+                handle.close()
+                raise source.changed() from error
+            self._handles[source.key] = handle
+            while len(self._handles) > _OPEN_FILES:
+                self._handles.popitem(last=False)[1].close()
+        if len(data) != size:
+            raise source.changed()
+        return data
+
+    def close(self, file_key: int) -> None:
+        with self._lock:
+            handle = self._handles.pop(file_key, None)
+        if handle is not None:
+            handle.close()
+
+
+_OPEN = _OpenFiles()
+_EXPANSIONS: list[tempfile.TemporaryDirectory[str]] = []
+_EXPANSIONS_LOCK = threading.Lock()
+
+
+def _expansion_directory() -> str:
+    """The one directory of this process's expanded gzip inputs, removed when the process ends."""
+
+    with _EXPANSIONS_LOCK:
+        if not _EXPANSIONS:
+            _EXPANSIONS.append(tempfile.TemporaryDirectory(prefix="gbdraw-inputs-"))
+        return _EXPANSIONS[0].name
+
+
+def _release(file_key: int, copy: str | None) -> None:
+    _OPEN.close(file_key)
     _CACHE.drop_file(file_key)
+    if copy is not None:
+        try:
+            os.unlink(copy)
+        except OSError:
+            pass  # removed with its directory already
 
 
 class _SequenceFile:
-    """One input file's bytes, read at offsets.
+    """One input file's bytes: read in order by the parse pass, and at offsets by its record sequences.
 
-    ``read_at`` is the one read of the file below a record sequence. The file stays
-    open while a record sequence refers to it and is closed, and its cached blocks
-    dropped, when the last one goes.
+    A gzip input is expanded once into a file of its own (gzip cannot be read at
+    an offset), removed when the last record sequence of the input goes.
+    ``read_at`` is the one read below a record sequence. The parse pass records
+    the file's stamp, and a read of a file that changed since is refused with an
+    ``InputFileError``, never answered with other bases.
     """
 
     def __init__(self, path: str | PathLike[str]) -> None:
-        self.path = fspath(path)
+        self.name = fspath(path)
         self.encoding = "utf-8"
-        with open(self.path, "rb") as probe:
-            gzip_input = probe.read(len(GZIP_SIGNATURE)) == GZIP_SIGNATURE
-        self._file: IO[bytes]
-        if gzip_input:  # expanded once, into a file that is gone when it closes
-            self._file = tempfile.TemporaryFile(buffering=0)
-            with expanded_gzip_input(self.path) as expanded:
-                shutil.copyfileobj(expanded, self._file, _BLOCK_BYTES)
-        else:
-            self._file = open(self.path, "rb", buffering=0)
         self.key = next(_FILE_KEYS)
-        self._finalizer = weakref.finalize(self, _release, self._file, self.key)
-        self._lock = threading.Lock()
+        self.stamp: _Stamp = (-1, -1, -1)
+        copy = expand_input_copy(self.name, _expansion_directory()) if is_gzip_file(self.name) else None
+        self.path = copy or self.name
+        weakref.finalize(self, _release, self.key, copy)
         self._tables = 0
 
     def table_key(self) -> int:
@@ -151,22 +221,26 @@ class _SequenceFile:
         return self._tables
 
     def blocks(self) -> Iterator[bytes]:
-        """The file's bytes from its start, in order (the parse pass)."""
+        """The file's bytes from its start, in order, from a handle of the parse pass's own."""
 
-        offset = 0
-        while True:
-            block = self.read_at(offset, _BLOCK_BYTES)
-            if not block:
-                return
-            offset += len(block)
-            yield block
+        with open_input_bytes(self.path) as handle:
+            self.stamp = _stamp(handle)
+            while block := handle.read(_BLOCK_BYTES):
+                yield block
+            if _stamp(handle) != self.stamp:
+                raise self.changed()
 
     def read_at(self, offset: int, size: int) -> bytes:
-        """``size`` bytes from ``offset`` (fewer at the end of the file)."""
+        """``size`` bytes from ``offset``, all within the file as it was indexed."""
 
-        with self._lock:
-            self._file.seek(offset)
-            return self._file.read(size)
+        return _OPEN.read(self, offset, size)
+
+    def changed(self) -> InputFileError:
+        return InputFileError(
+            f"{self.name} changed after gbdraw read it, so its sequence can no longer be read from it. "
+            "Read the file again.",
+            diagnostic={"code": "INPUT_UNREADABLE"},
+        )
 
 
 @dataclass(eq=False)
@@ -621,11 +695,11 @@ class _Slot:
 class _Scan:
     """One pass over a sequence file: the lines for the parser, and each record's sequence table."""
 
-    def __init__(self, source: _SequenceFile, fmt: SequenceFormat) -> None:
+    def __init__(self, source: _SequenceFile, fmt: SequenceFormat, blocks: Iterator[bytes] | None = None) -> None:
         self.source = source
         self.fmt = fmt
         self.slots: list[_Slot] = []
-        self._lines = _Lines(source.blocks())
+        self._lines = _Lines(source.blocks() if blocks is None else blocks)
         self._first = True
 
     def _decode(self, line: bytes) -> str:
@@ -783,23 +857,38 @@ def read_flat_records(
 ) -> list[SeqRecord]:
     """The records ``parse`` builds from a flat file's lines, each with its sequence read from the file.
 
-    ``fmt_of`` names the format from the first non-blank line.
+    ``fmt_of`` names the format from the first non-blank line, read from the
+    blocks the parse pass reads (the file is read once).
     """
 
     source = _SequenceFile(path)
 
     def read() -> list[SeqRecord]:
-        head = _Scan(source, "genbank")
-        fmt = fmt_of(next((text for text in _decoded_lines(head) if text.strip()), ""))
-        scan = _Scan(source, fmt)
+        first, blocks = _first_text_line(source, source.blocks())
+        fmt = fmt_of(first)
+        scan = _Scan(source, fmt, blocks)
         return _attach(parse(scan.flat_lines(), fmt), scan.slots)
 
     return _with_encoding(source, read)
 
 
-def _decoded_lines(scan: _Scan) -> Iterator[str]:
-    while line := scan._lines.readline():
-        yield scan._decode(line)
+def _first_text_line(source: _SequenceFile, blocks: Iterator[bytes]) -> tuple[str, Iterator[bytes]]:
+    """The first line that is not blank, and the file's blocks from its start again.
+
+    The blocks read to find the line (usually one) are kept until the pass reads
+    them again, so the file is read once.
+    """
+
+    head: list[bytes] = []
+    scan = _Scan(source, "genbank", _recorded(blocks, head))
+    lines = (scan._decode(line) for line in iter(scan._lines.readline, b""))
+    return next((text for text in lines if text.strip()), ""), itertools.chain(head, blocks)
+
+
+def _recorded(blocks: Iterator[bytes], into: list[bytes]) -> Iterator[bytes]:
+    for block in blocks:
+        into.append(block)
+        yield block
 
 
 def read_fasta_records(
@@ -826,6 +915,18 @@ def _prepend(first: str, rest: Iterator[str]) -> Iterator[str]:
     yield from rest
 
 
+def detach_record_sequences(records: Iterable[SeqRecord]) -> None:
+    """Give each record its sequence in memory, so it no longer reads its input file.
+
+    Records handed to a caller (the public readers) are detached: the caller may
+    rewrite or delete the file, which a record sequence would then refuse to read.
+    """
+
+    for record in records:
+        if isinstance(getattr(record.seq, "_data", None), RecordSequence):
+            record.seq = Seq(bytes(record.seq))
+
+
 def read_gff3_text(path: str | PathLike[str], read: Callable[[Iterator[str]], _Read]) -> _Read:
     """What ``read`` makes of a GFF3 file's lines; its ``##FASTA`` part keeps only its header lines.
 
@@ -839,6 +940,7 @@ def read_gff3_text(path: str | PathLike[str], read: Callable[[Iterator[str]], _R
 __all__ = [
     "RecordSequence",
     "SequenceFormat",
+    "detach_record_sequences",
     "read_fasta_records",
     "read_flat_records",
     "read_gff3_text",

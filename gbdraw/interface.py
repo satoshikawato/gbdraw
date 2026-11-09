@@ -33,6 +33,7 @@ from gbdraw.api.io import load_gbks as _load_gbks, load_gff_fasta as _load_gff_f
 from gbdraw.api.input_summary import log_input_warnings as _log_input_warnings
 from gbdraw.io.comparison_sequences import read_comparison_sequence_records
 from gbdraw.io.genome import load_fasta as _load_fasta
+from gbdraw.io.record_sequences import detach_record_sequences
 from gbdraw.api.options import (
     CircularDiagramOptions as _CircularDiagramOptions,
     CircularMultiRecordOptions as _CircularLayout,
@@ -820,7 +821,9 @@ def read_fasta(
     sequences are not nucleotide is refused with the record's name.
     """
 
-    return _load_fasta(_paths(paths, field_name="paths"))
+    records = _load_fasta(_paths(paths, field_name="paths"))
+    detach_record_sequences(records)
+    return records
 
 
 def read_gff(
