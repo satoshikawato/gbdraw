@@ -13,7 +13,7 @@ globalThis.self = {};
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const indexURL = `${root}gbdraw/web/vendor/pyodide/v0.29.0/full/`;
-const { loadPyodide } = await import(`${indexURL}pyodide.mjs`);
+const { loadPyodide } = await import(new URL('../../gbdraw/web/vendor/pyodide/v0.29.0/full/pyodide.mjs', import.meta.url).href);
 const { finishReplyBuffers, replyBufferFactory } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
 
 const pyodide = await loadPyodide({ indexURL });
