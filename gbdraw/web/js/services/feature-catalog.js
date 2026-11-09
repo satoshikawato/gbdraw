@@ -17,7 +17,8 @@ import {
   ANCHOR_FEATURE_CATALOG_SCHEMA,
   FEATURE_CATALOG_SCHEMA,
   LEGACY_FEATURE_CATALOG_SCHEMA,
-  SEQUENCE_FEATURE_CATALOG_SCHEMA
+  SEQUENCE_FEATURE_CATALOG_SCHEMA,
+  STORED_SEQUENCE_KEYS
 } from '../contracts/schema.generated.js';
 /** @import { OrthogroupFeatureIndex } from './orthogroup-feature-metadata.js' */
 /** @import { RenderedFeatureId } from './legend-svg.js' */
@@ -212,13 +213,9 @@ const legacyAnchorProfile = (feature) => {
   };
 };
 
-// What a catalog of schema 5 or older stored of the sequences (Python's
-// `STORED_SEQUENCE_KEYS`): a schema 6 row holds none of it, and a schema 6 item
-// no `sequenceSources`.
-const STORED_SEQUENCE_KEYS = Object.freeze([
-  'nucleotide_sequence', 'nucleotideSequence', 'amino_acid_sequence', 'aminoAcidSequence',
-  'sequence_warnings', 'sequenceWarnings', 'sequenceSourceIndex', 'translationFromAminoAcidSequence'
-]);
+// What a catalog of schema 5 or older stored of the sequences is Python's
+// `STORED_SEQUENCE_KEYS` (generated): a schema 6 row holds none of it, and a
+// schema 6 item no `sequenceSources`.
 
 /**
  * The amino acid sequence a row stored, by the alias the writer used.

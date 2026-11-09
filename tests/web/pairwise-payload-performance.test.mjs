@@ -283,7 +283,6 @@ const commonAttributes = {
 // The records the synthetic Result draws (`matchSequenceRecordsOf`): two drawn units, one per record ID.
 const syntheticSequenceRecords = ({ comparisonSupplied = true } = {}) => ({
   unitKeys: ['query-unit', 'subject-unit'],
-  unitKeysOfRecordId: (recordId) => ({ 'query-record': ['query-unit'], 'subject-record': ['subject-unit'] })[recordId] ?? [],
   comparisonSupplied: () => comparisonSupplied
 });
 
@@ -629,6 +628,27 @@ test('one full payload request traverses each input once and builds no FASTA whe
       assert.ok(count <= 1, `identity mode ${mode} normalized one object ${count} times`);
     });
   });
+});
+
+// LOW-10 (D5 review r1): a Circular comparison band carries no record index; it names its reference by the record ID
+// of its hit, which may be an alias (name, accession) or a record without feature rows. The popup sends that ID, and
+// Python finds the drawn record by ID, then alias, as the match registry did before D5.
+test('a Circular comparison band reads its reference by the record ID its hit names', () => {
+  const attributes = {
+    ...commonAttributes,
+    'data-match-kind': 'homology',
+    'data-source-index': '0',
+    'data-reference-side': 'query',
+    'data-query-record-id': 'NC_000001'
+  };
+  delete attributes['data-query-record-index'];
+  delete attributes['data-subject-record-index'];
+  const records = { unitKeys: ['unit-a', 'unit-b'], comparisonSupplied: () => true };
+  const payload = popupModule.buildMatchPopupPayload(elementFrom(attributes), { matchSequenceRecords: records });
+  assert.deepStrictEqual(payload.sequenceBundle.entries.map((entry) => [entry.read, entry.unavailableReason]), [
+    [{ kind: 'reference', recordId: 'NC_000001', start: 10, end: 18 }, ''],
+    [{ kind: 'comparison', sourceIndex: 0, recordId: 'subject-record', start: 30, end: 38 }, '']
+  ]);
 });
 
 // OV-1010: a member's null or blank bound is missing, not 0.

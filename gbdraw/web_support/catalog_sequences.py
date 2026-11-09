@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from typing import Literal, TypedDict, cast, final
+from typing import Literal, TypedDict, cast, final, get_args
 
 from gbdraw.api.record_planning import ResolvedRecordCollection
 from gbdraw.api.request_render import load_comparison_sequence_records, resolve_request_records
@@ -77,6 +77,17 @@ class RecordMatchSpan(TypedDict):
 
 
 @final
+class ReferenceMatchSpan(TypedDict):
+    """A span of a drawn record named by its record ID or an alias (a Circular comparison band names its reference
+    by the ID its hit carries); coordinates as in ``RecordMatchSpan``."""
+
+    kind: Literal["reference"]
+    recordId: str
+    start: int
+    end: int
+
+
+@final
 class ComparisonMatchSpan(TypedDict):
     """A span of a comparison FASTA record, by the index of its comparison source and its record ID or alias."""
 
@@ -87,8 +98,10 @@ class ComparisonMatchSpan(TypedDict):
     end: int
 
 
-MatchSpanInput = RecordMatchSpan | ComparisonMatchSpan
+MatchSpanInput = RecordMatchSpan | ReferenceMatchSpan | ComparisonMatchSpan
 MatchSpanReason = Literal["NEVER_SUPPLIED", "RECORD_UNKNOWN", "RECORD_AMBIGUOUS", "OUT_OF_RANGE"]
+# Why a span cannot be read, in the reply's order: the Web reads its list from here (tools/generate_web_contracts.py).
+MATCH_SPAN_REASONS: tuple[MatchSpanReason, ...] = get_args(MatchSpanReason)
 
 
 class MatchSpanSequence(TypedDict):
@@ -140,6 +153,10 @@ def _span_inputs(value: object) -> list[MatchSpanInput]:
             item["recordKey"], str
         ):
             spans.append({"kind": "record", "recordKey": item["recordKey"], "start": item["start"], "end": item["end"]})
+        elif set(item) == {"kind", "recordId", "start", "end"} and item["kind"] == "reference" and isinstance(
+            item["recordId"], str
+        ):
+            spans.append({"kind": "reference", "recordId": item["recordId"], "start": item["start"], "end": item["end"]})
         elif (
             set(item) == {"kind", "sourceIndex", "recordId", "start", "end"}
             and item["kind"] == "comparison"
@@ -151,7 +168,9 @@ def _span_inputs(value: object) -> list[MatchSpanInput]:
                 "start": item["start"], "end": item["end"],
             })
         else:
-            raise _protocol_error("A match span names a drawn record by key or a comparison record by source and ID.")
+            raise _protocol_error(
+                "A match span names a drawn record by key or ID, or a comparison record by source and ID."
+            )
     return spans
 
 
@@ -202,18 +221,24 @@ def _match_source(
     sources: Sequence[Mapping[str, object]],
     span: MatchSpanInput,
 ) -> tuple[Mapping[str, object] | None, MatchSpanReason | None]:
-    """The source a span reads: a drawn unit by its record key, or a comparison record by its source and its record
-    ID, else an alias; ambiguity and absence are reasons, never a guess."""
+    """The source a span reads: a drawn unit by its record key; a drawn unit by its record ID, else an alias (the
+    record identity ``match_sequence_sources`` gives: ID, name, accessions); or a comparison record of a source by
+    its record ID, else an alias. Ambiguity and absence are reasons, never a guess."""
 
     if span["kind"] == "record":
         if span["recordKey"] not in records.unit_keys:
             return None, "RECORD_UNKNOWN"
         unit = records.unit_keys.index(span["recordKey"])
         return next(source for source in sources if source.get("recordIndex") == unit and "sourceIndex" not in source), None
-    index = span["sourceIndex"]
-    if not 0 <= index < len(records.comparison_records) or not records.comparison_records[index]:
-        return None, "NEVER_SUPPLIED"
-    candidates = [source for source in sources if source.get("sourceIndex") == index]
+    if span["kind"] == "reference":
+        candidates = [source for source in sources if "sourceIndex" not in source]
+    else:
+        index = span["sourceIndex"]
+        if not 0 <= index < len(records.comparison_records) or not records.comparison_records[index]:
+            return None, "NEVER_SUPPLIED"
+        candidates = [source for source in sources if source.get("sourceIndex") == index]
+    if not span["recordId"].strip():
+        return None, "RECORD_UNKNOWN"
     for found in (
         [source for source in candidates if source["recordId"] == span["recordId"]],
         [source for source in candidates if span["recordId"] in _aliases(source)],
@@ -424,7 +449,9 @@ __all__ = [
     "FeatureSequencesReply",
     "MatchSequencesReply",
     "MatchSpanSequence",
+    "MATCH_SPAN_REASONS",
     "RecordMatchSpan",
+    "ReferenceMatchSpan",
     "read_embed_catalog_item",
     "read_embed_catalog_part",
     "read_embed_sequences_json",

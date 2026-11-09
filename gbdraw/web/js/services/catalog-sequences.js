@@ -16,6 +16,7 @@
 import { diagnosticError } from '../utils/error-normalization.js';
 import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
 import { featureIdentityKey } from './feature-placement.js';
+import { MATCH_SPAN_REASONS } from '../contracts/schema.generated.js';
 
 /** @typedef {'readFeatureSequences' | 'readMatchSequences' | 'readEmbedSequences'} CatalogSequenceOperation */
 
@@ -46,7 +47,8 @@ export const readFeatureSequencesReply = (result, features) => {
   return /** @type {readonly FeatureSequencesOf[]} */ (read);
 };
 
-const SPAN_REASONS = new Set([null, 'NEVER_SUPPLIED', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'OUT_OF_RANGE']);
+/** @type {ReadonlySet<string | null>} Python's reasons (generated), and none for a span read. */
+const SPAN_REASONS = new Set([null, ...MATCH_SPAN_REASONS]);
 
 /** @param {unknown} item @returns {item is MatchSpanSequence} */
 const isSpanSequence = (item) => isRecord(item)
@@ -148,9 +150,11 @@ const featureKey = ({ recordKey, biologicalFeatureId }) => featureIdentityKey(re
  * reactive proxy the Worker message cannot clone).
  * @param {MatchSpanInput} span @returns {MatchSpanInput}
  */
-const spanInput = (span) => (span.kind === 'record'
-  ? { kind: 'record', recordKey: span.recordKey, start: span.start, end: span.end }
-  : { kind: 'comparison', sourceIndex: span.sourceIndex, recordId: span.recordId, start: span.start, end: span.end });
+const spanInput = (span) => {
+  if (span.kind === 'record') return { kind: 'record', recordKey: span.recordKey, start: span.start, end: span.end };
+  if (span.kind === 'reference') return { kind: 'reference', recordId: span.recordId, start: span.start, end: span.end };
+  return { kind: 'comparison', sourceIndex: span.sourceIndex, recordId: span.recordId, start: span.start, end: span.end };
+};
 /** @param {MatchSpanInput} span */
 const spanKey = (span) => JSON.stringify(Object.values(spanInput(span)));
 
@@ -266,33 +270,19 @@ export const readRowsFasta = async (rows, kind, readFeatures) => {
 
 /**
  * The records the shown Result's spans are read from, as a match popup names them to Python: the drawn units in
- * drawing order (a span's record index is a place in them), the units that draw a record ID (a Circular comparison
- * band names its reference by ID), and whether the committed request holds a comparison source's FASTA (a
- * never-supplied FASTA is known without reading). Null without a committed request (a Result-only Session 27-39),
- * whose spans are read after the next Generate.
+ * drawing order (a span's record index is a place in them), and whether the committed request holds a comparison
+ * source's FASTA (a never-supplied FASTA is known without reading). A span named by a record ID (a Circular comparison
+ * band's reference) goes to Python by that ID, which knows each record's aliases. Null without a committed request (a
+ * Result-only Session 27-39), whose spans are read after the next Generate.
  * @param {FeatureCatalogItem | null | undefined} item The shown Result's stored catalog item.
  * @param {CommittedCanonicalSession | null} committed
  * @returns {MatchSequenceRecords | null}
  */
 export const matchSequenceRecordsOf = (item, committed) => {
   if (!committed || !item || !isStringList(item.recordKeys)) return null;
-  const unitKeys = item.recordKeys;
-  const windowOf = isRecord(item.windowOf) ? item.windowOf : {};
-  /** @type {Map<string, Set<string>>} */
-  const recordKeysById = new Map();
-  (Array.isArray(item.biologicalFeatures) ? item.biologicalFeatures : []).forEach((row) => {
-    const recordId = String(row?.record_id ?? row?.recordId ?? '').trim();
-    if (!recordId || typeof row.recordKey !== 'string') return;
-    if (!recordKeysById.has(recordId)) recordKeysById.set(recordId, new Set());
-    /** @type {Set<string>} */ (recordKeysById.get(recordId)).add(row.recordKey);
-  });
   const fastaFiles = committed.renderRequest.diagramOptions.conservationFastaFiles;
   return {
-    unitKeys,
-    unitKeysOfRecordId: (recordId) => {
-      const keys = recordKeysById.get(recordId);
-      return keys ? unitKeys.filter((unit) => keys.has(windowOf[unit] ?? unit)) : [];
-    },
+    unitKeys: item.recordKeys,
     comparisonSupplied: (sourceIndex) => Array.isArray(fastaFiles) && fastaFiles[sourceIndex] != null
   };
 };

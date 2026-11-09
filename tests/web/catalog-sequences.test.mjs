@@ -10,9 +10,11 @@ import {
   featureSequenceKey,
   featureSequenceReads,
   matchSequenceRecordsOf,
+  readMatchSequencesReply,
   readRowsFasta
 } from '../../gbdraw/web/js/services/catalog-sequences.js';
 import { normalizeCaughtError } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { MATCH_SPAN_REASONS } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { embeddedCatalogItemJson } from '../../gbdraw/web/js/services/standalone-interactivity.js';
 
 const committedOf = (fastaFiles = []) => ({
@@ -177,8 +179,8 @@ test('the records of a match popup come from the shown catalog item and the comm
   };
   const records = matchSequenceRecordsOf(item, committedOf([{ resourceId: 'r1' }, null]));
   assert.deepEqual(records.unitKeys, ['rec-a', 'rec-b']);
-  assert.deepEqual(records.unitKeysOfRecordId('NC_2'), ['rec-b']);
-  assert.deepEqual(records.unitKeysOfRecordId('NC_9'), []);
+  // A record named by ID is found by Python, which knows its aliases; the page holds no ID-to-record map of its own.
+  assert.deepEqual(Object.keys(records), ['unitKeys', 'comparisonSupplied']);
   assert.equal(records.comparisonSupplied(0), true);
   assert.equal(records.comparisonSupplied(1), false, 'a never-supplied FASTA is known without reading');
   assert.equal(records.comparisonSupplied(2), false);
@@ -279,4 +281,15 @@ test('an export read the shown Result outlived gives null; a source missing or g
     const error = await door.readEmbedJson(exportItem).catch((caught) => caught);
     assert.equal(normalizeCaughtError(error).code, 'RESULT_INVALID');
   }
+});
+
+// D5 review r1 (MEDIUM-5): the reasons a span reply may carry are Python's list (generated), so a reason Python adds
+// is read, and a reason Python does not name is refused.
+test('a span reply carries any of Python\'s span reasons and no other', () => {
+  const spans = MATCH_SPAN_REASONS.map((_, index) => ({ kind: 'record', recordKey: `rec-${index}`, start: 1, end: 2 }));
+  const unavailable = (reason) => ({ status: 'unavailable', reason, recordId: '', orientation: '+', length: 0, sequence: '' });
+  assert.deepEqual(MATCH_SPAN_REASONS, ['NEVER_SUPPLIED', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'OUT_OF_RANGE']);
+  assert.equal(readMatchSequencesReply({ spans: MATCH_SPAN_REASONS.map(unavailable) }, spans).length, spans.length);
+  assert.throws(() => readMatchSequencesReply({ spans: [unavailable('ELSEWHERE')] }, spans.slice(0, 1)),
+    (error) => error.code === 'RESULT_INVALID');
 });

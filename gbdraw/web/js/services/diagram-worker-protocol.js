@@ -3,6 +3,7 @@
 /** @import { FontIdentity } from './font-store.js' */
 /** @import { CommittedCanonicalSession } from './session-request.js' */
 /** @import { CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { MATCH_SPAN_REASONS } from '../contracts/schema.generated.js' */
 
 /**
  * A font file the page sends a Worker (init `fonts`, and each font it
@@ -317,6 +318,17 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
+ * A span of a drawn record named by its record ID or an alias (`ReferenceMatchSpan`): a Circular comparison band
+ * names its reference by the ID its hit carries, and Python finds the record among the drawn records by ID, then by
+ * alias (name, accession); coordinates as in `RecordMatchSpan`.
+ * @typedef {object} ReferenceMatchSpan
+ * @property {'reference'} kind
+ * @property {string} recordId
+ * @property {number} start
+ * @property {number} end
+ */
+
+/**
  * A span of a comparison FASTA record (`ComparisonMatchSpan`), by the index of its comparison source and its record ID
  * or alias; coordinates as in `RecordMatchSpan`.
  * @typedef {object} ComparisonMatchSpan
@@ -327,8 +339,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @property {number} end
  */
 
-/** @typedef {RecordMatchSpan | ComparisonMatchSpan} MatchSpanInput */
-/** Why a span's bases cannot be read (`MatchSpanReason`). @typedef {'NEVER_SUPPLIED' | 'RECORD_UNKNOWN' | 'RECORD_AMBIGUOUS' | 'OUT_OF_RANGE'} MatchSpanReason */
+/** @typedef {RecordMatchSpan | ReferenceMatchSpan | ComparisonMatchSpan} MatchSpanInput */
+/** Why a span's bases cannot be read (`MatchSpanReason`, Python's list). @typedef {typeof MATCH_SPAN_REASONS[number]} MatchSpanReason */
 
 /**
  * The bases of one span on its strand, or why they cannot be read (`MatchSpanSequence`).

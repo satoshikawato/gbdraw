@@ -109,9 +109,12 @@ SCHEMA_FIVE_PROMOTION_VECTORS = json.loads(
     "case", SCHEMA_FIVE_PROMOTION_VECTORS, ids=[case["name"] for case in SCHEMA_FIVE_PROMOTION_VECTORS]
 )
 def test_schema_five_promotion_vectors(case: dict) -> None:
-    """D5: shared with tests/web/feature-catalog.test.mjs, so both promotions give the same schema 6 catalog."""
+    """D5: shared with tests/web/feature-catalog.test.mjs, so both promotions give the same schema 6 catalog, with
+    its key order (the qualifier order ranks color rules, so a restored /translation has one place on both sides)."""
 
-    assert promote_legacy_feature_catalog(case["catalog"]) == case["promoted"]
+    promoted = promote_legacy_feature_catalog(case["catalog"])
+    assert promoted == case["promoted"]
+    assert json.dumps(promoted) == json.dumps(case["promoted"])
 
 
 def _combined_catalog_fixture() -> tuple[str, InteractiveSvgContext]:

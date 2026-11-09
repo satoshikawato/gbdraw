@@ -470,7 +470,7 @@ test('match popup span rows use the input-file coordinates of the Interval rows 
     'data-query-record-index': '0', 'data-subject-record-index': '1',
     'data-qstart': '1', 'data-qend': '4', 'data-sstart': '4', 'data-send': '1'
   };
-  const matchSequenceRecords = { unitKeys: ['rec-0', 'rec-1'], unitKeysOfRecordId: () => [], comparisonSupplied: () => true };
+  const matchSequenceRecords = { unitKeys: ['rec-0', 'rec-1'], comparisonSupplied: () => true };
   const payload = buildMatchPopupPayload(
     { ownerSVGElement: svg, style: { fill: '' }, getAttribute: (name) => attributes[name] || '' },
     { matchSequenceRecords }

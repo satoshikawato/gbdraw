@@ -48,8 +48,6 @@ from gbdraw.session_io import (
 )
 
 if TYPE_CHECKING:
-    from Bio.SeqFeature import SeqFeature
-
     from gbdraw.web_support.feature_metadata import FeatureSequences
 
 # Schema 4 added source-anchor profiles; schema 5 adds each rendered feature's
@@ -2444,7 +2442,7 @@ def embed_catalog_part(
     bounded number of bases, so no reply of a large item holds all of it.
     """
 
-    from gbdraw.features.source import drawn_source_features
+    from gbdraw.features.source import bind_source_feature_indexes
     from gbdraw.web_support.feature_metadata import feature_sequence_payload
 
     record_keys = [str(key) for key in cast("Sequence[object]", item["recordKeys"])]
@@ -2452,25 +2450,27 @@ def embed_catalog_part(
         raise GbdrawError("Interactive SVG export records must be the catalog item's drawn records.")
     windows = item.get("windowOf", {})
     identity_keys = [str(windows.get(key, key)) if isinstance(windows, Mapping) else key for key in record_keys]
-    first_unit: dict[str, int] = {}
-    for unit_index, key in enumerate(identity_keys):
-        first_unit.setdefault(key, unit_index)
-    drawn: dict[int, dict[int, SeqFeature]] = {}
+    rows = cast("Sequence[Mapping[str, object]]", item["biologicalFeatures"])
+
+    def wanted(row: Mapping[str, object]) -> tuple[str, int] | None:
+        key, source_index = _text(row.get("recordKey")), row.get("sourceFeatureIndex")
+        return (key, source_index) if key in identity_keys and type(source_index) is int else None
+
+    # Each row binds as the popup read binds its identity: the first drawn unit of its record that has the feature
+    # (a record drawn in windows draws a feature in the window that holds it).
+    bindings = bind_source_feature_indexes(
+        records=records.records, record_keys=identity_keys,
+        features=[found for found in map(wanted, rows) if found is not None],
+    )
 
     def sequences_of(row: Mapping[str, object]) -> FeatureSequences | None:
-        unit = first_unit.get(_text(row.get("recordKey")))
-        source_index = row.get("sourceFeatureIndex")
-        if unit is None or type(source_index) is not int:
+        found = wanted(row)
+        binding = None if found is None else bindings[found][0]
+        if binding is None or binding.feature is None or binding.status != "present":
             return None
-        if unit not in drawn:
-            drawn[unit] = drawn_source_features(records.records[unit])
-        feature = drawn[unit].get(source_index)
-        return None if feature is None else feature_sequence_payload(feature, records.records[unit])
+        return feature_sequence_payload(binding.feature, records.records[binding.record_index])
 
-    biological = [
-        _row_with_sequences(row, sequences_of(row))
-        for row in cast("Sequence[Mapping[str, object]]", item["biologicalFeatures"])
-    ]
+    biological = [_row_with_sequences(row, sequences_of(row)) for row in rows]
     matches = cast("Sequence[Mapping[str, object]]", item.get("comparisonMatches") or ())
     sequence_sources = _deduplicated_sequence_sources(matches, match_sequence_sources(records))
     _reference_reconstructible_nucleotide_sequences(biological, identity_keys, sequence_sources)

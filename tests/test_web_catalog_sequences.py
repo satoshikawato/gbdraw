@@ -381,6 +381,59 @@ def test_match_span_identity_and_reasons(tmp_path: Path) -> None:
     assert read[0]["recordId"] == "same-id" and read[0]["length"] == 3
 
 
+def test_a_drawn_reference_named_by_an_alias_is_read_without_catalog_rows(tmp_path: Path) -> None:
+    """A Circular comparison band names its reference by the record ID its BLAST hit carries; the record is found
+    among the drawn records by ID, then by alias (name, accession, first word), as the match registry found it
+    before D5, also when the record has no feature rows in the catalog."""
+
+    reference = SeqRecord(Seq("AACCGGTTAA"), id="NC_000001.1", name="REFLOCUS", features=[])
+    reference.annotations["accessions"] = ["NC_000001"]
+    other = SeqRecord(Seq("GGGGCCCCAA"), id="NC_000002.1", name="OTHERLOCUS", features=[])
+    with _rendered(tmp_path, reference, other) as (request, paths, output, item):
+        assert item["biologicalFeatures"] == []
+        read = read_match_sequences(request, paths, output, [
+            {"kind": "reference", "recordId": "NC_000001.1", "start": 1, "end": 4},
+            {"kind": "reference", "recordId": "NC_000001", "start": 4, "end": 1},
+            {"kind": "reference", "recordId": "REFLOCUS", "start": 2, "end": 3},
+            {"kind": "reference", "recordId": "OTHERLOCUS", "start": 1, "end": 2},
+            {"kind": "reference", "recordId": "NC_000009", "start": 1, "end": 2},
+        ])["spans"]
+
+    assert [(span["status"], span["reason"], span["recordId"], span["sequence"]) for span in read] == [
+        ("ok", None, "NC_000001.1", "AACC"),
+        ("ok", None, "NC_000001.1", "GGTT"),
+        ("ok", None, "NC_000001.1", "AC"),
+        ("ok", None, "NC_000002.1", "GG"),
+        ("unavailable", "RECORD_UNKNOWN", "", ""),
+    ]
+
+
+def test_a_drawn_reference_id_shared_by_two_records_is_ambiguous() -> None:
+    from gbdraw.web_support.catalog_sequences import _match_source
+
+    records = CatalogSequenceRecords(
+        mode="circular",
+        records=(
+            SeqRecord(Seq("AAAA"), id="same", name="one"),
+            SeqRecord(Seq("CCCC"), id="same", name="two"),
+            SeqRecord(Seq("GGGG"), id="third described", name="three"),
+        ),
+        unit_keys=("key-0", "key-1", "key-2"),
+    )
+    sources = match_sequence_sources(records)
+
+    def found(record_id: str) -> tuple[object, object]:
+        source, reason = _match_source(records, sources, {
+            "kind": "reference", "recordId": record_id, "start": 1, "end": 2,
+        })
+        return (None if source is None else source["sequence"]), reason
+
+    assert found("same") == (None, "RECORD_AMBIGUOUS")
+    assert found("two") == ("CCCC", None)
+    assert found("third") == ("GGGG", None)
+    assert found("") == (None, "RECORD_UNKNOWN")
+
+
 def test_comparison_records_are_found_by_id_then_alias_and_ambiguity_is_a_reason() -> None:
     from gbdraw.web_support.catalog_sequences import _match_source
 
@@ -424,3 +477,48 @@ def test_the_stored_item_never_gains_references_and_the_embed_writes_them(tmp_pa
     assert row["translationFromAminoAcidSequence"] is True and "translation" not in row.get("qualifiers", {})
     with pytest.raises(Exception, match="drawn records"):
         embed_catalog_item(item, CatalogSequenceRecords(mode="linear", records=(query,), unit_keys=("other",)))
+
+
+def test_the_export_of_a_record_drawn_in_windows_embeds_the_sequence_the_popup_reads(tmp_path: Path) -> None:
+    """A feature drawn only in a later window of its record is bound in that window, as the popup read binds it (the
+    first unit of the record that has the feature): the export embeds every row's sequence, equal to the read."""
+
+    from gbdraw.api import GenBankInputSource
+    from gbdraw.io.regions import RecordWindow
+
+    mito = Path(__file__).resolve().parent / "test_inputs" / "HmmtDNA.gbk"
+    document = build_session_document(LinearDiagramRequest(
+        records=(RecordInput(
+            GenBankInputSource(mito), windows=(RecordWindow(100, 900), RecordWindow(5000, 7600)), record_key="mito",
+        ),),
+        output=RenderOutputRequest(output_prefix="windows", formats=("svg",)),
+    ))
+    resources = tmp_path / "resources"
+    resources.mkdir()
+    paths: dict[str, str] = {}
+    for resource_id, source in document.resources.sources.items():
+        with source.open_bytes() as stream:
+            (resources / resource_id).write_bytes(stream.read())
+        paths[resource_id] = str(resources / resource_id)
+    view = drawing_view(embedded_session(document.to_dict(), document.resources.sources))
+    request = view["renderRequest"]
+    reply = render_embedded_canonical_web_request(request, resources=view["resources"], workspace=tmp_path / "render")
+    output = tmp_path / "outputs"
+    output.mkdir()
+    [item] = reply["featureCatalog"]["items"]
+    rows = item["biologicalFeatures"]
+    assert len(item["recordKeys"]) == 2 and {row["recordKey"] for row in rows} == {"mito"}
+
+    read = read_feature_sequences(request, paths, output, [
+        {"recordKey": row["recordKey"], "biologicalFeatureId": row["biologicalFeatureId"]} for row in rows
+    ])["features"]
+    embedded = read_embed_catalog_item(request, paths, output, item)
+    sources = list(embedded.get("sequenceSources") or [])
+    differences = [
+        row["biologicalFeatureId"]
+        for row, got in zip(embedded["biologicalFeatures"], read, strict=True)
+        if _stored_sequences(row, sources)
+        != {key: got[key] for key in ("nucleotideSequence", "aminoAcidSequence", "sequenceWarnings")}  # type: ignore[literal-required]
+    ]
+    assert differences == []
+    assert len(rows) == 25 and all(row["nucleotideSequence"] for row in read)

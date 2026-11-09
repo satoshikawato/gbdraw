@@ -57,6 +57,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         ("'../utils/error-normalization.js'", "'./error-normalization.mjs'"),
         ("'./feature-sequence-fasta.js'", "'./feature-sequence-fasta.mjs'"),
         ("'./feature-placement.js'", "'./feature-placement.mjs'"),
+        ("'../contracts/schema.generated.js'", "'./schema.generated.mjs'"),
     ):
         assert specifier in catalog_sequences_source, specifier
         catalog_sequences_source = catalog_sequences_source.replace(specifier, copy)
@@ -431,7 +432,6 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         let invalidQueryRecordLookups = 0;
         const recordsFor = (unitKeys) => ({{
           get unitKeys() {{ invalidQueryRecordLookups += 1; return unitKeys; }},
-          unitKeysOfRecordId: () => {{ invalidQueryRecordLookups += 1; return unitKeys; }},
           comparisonSupplied: () => {{ invalidQueryRecordLookups += 1; return true; }}
         }});
         const invalidSequencePayload = buildMatchPopupPayload({{

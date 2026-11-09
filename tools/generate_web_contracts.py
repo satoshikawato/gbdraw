@@ -79,6 +79,10 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("SEQUENCE_FEATURE_CATALOG_SCHEMA", "gbdraw.session_io", "SEQUENCE_FEATURE_CATALOG_SCHEMA"),
     # The catalog schema an exported Interactive SVG embeds, with every sequence (the export profile, D5-02).
     ("INTERACTIVE_EMBED_SCHEMA", "gbdraw.web_support.feature_catalog", "INTERACTIVE_EMBED_SCHEMA"),
+    # What a catalog of schema 5 or older stored of the sequences: the promotion drops it, schema 6 refuses it.
+    ("STORED_SEQUENCE_KEYS", "gbdraw.web_support.feature_catalog", "STORED_SEQUENCE_KEYS"),
+    # Why a match span's bases cannot be read (the `readMatchSequences` reply's reasons).
+    ("MATCH_SPAN_REASONS", "gbdraw.web_support.catalog_sequences", "MATCH_SPAN_REASONS"),
     ("FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION", "gbdraw.session_io", "FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION"),
     ("PROTEIN_LOSAT_CACHE_SCHEMA", "gbdraw.analysis.protein_colinearity", "PROTEIN_LOSAT_CACHE_SCHEMA"),
     ("LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA", "gbdraw.analysis.protein_colinearity", "LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA"),

@@ -11,7 +11,7 @@ import {
   stableFeatureOverrideKey,
   validateFeatureCatalog
 } from '../../gbdraw/web/js/services/feature-catalog.js';
-import { SEQUENCE_FEATURE_CATALOG_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
+import { SEQUENCE_FEATURE_CATALOG_SCHEMA, STORED_SEQUENCE_KEYS } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { resolveFeatureAnchor } from '../../gbdraw/web/js/app/record-display/feature-anchor.js';
 import { ruleFeaturePayload } from '../../gbdraw/web/js/app/rule-matching.js';
 
@@ -135,6 +135,8 @@ test('schema-5 promotion gives the schema 6 catalog Python gives', async () => {
   for (const { name, catalog: stored, promoted } of schemaFiveCases) {
     assert.deepEqual(migrateLegacyFeatureCatalog(structuredClone(stored)), promoted, name);
     assert.deepEqual(validateFeatureCatalog(structuredClone(stored), results), promoted, name);
+    // With its key order, as Python's: the qualifier order ranks color rules.
+    assert.equal(JSON.stringify(migrateLegacyFeatureCatalog(structuredClone(stored))), JSON.stringify(promoted), name);
   }
 });
 
@@ -142,12 +144,14 @@ test('a schema-6 catalog is admitted as written and refused when it stores a seq
   const current = migrateLegacyFeatureCatalog(structuredClone(catalog));
   assert.equal(current.schema, FEATURE_CATALOG_SCHEMA);
   assert.deepEqual(validateFeatureCatalog(structuredClone(current), results), current);
-  const stored = [
-    ['nucleotide_sequence', 'CGGT'], ['nucleotideSequence', 'CGGT'], ['amino_acid_sequence', 'MPEPTIDE'],
-    ['aminoAcidSequence', 'MPEPTIDE'], ['sequence_warnings', []], ['sequenceWarnings', []],
-    ['sequenceSourceIndex', 0], ['translationFromAminoAcidSequence', true]
-  ];
-  for (const [key, value] of stored) {
+  // Python's list of what an older catalog stored (generated): the promotion drops each key, schema 6 refuses each.
+  const values = {
+    nucleotide_sequence: 'CGGT', nucleotideSequence: 'CGGT', amino_acid_sequence: 'MPEPTIDE', aminoAcidSequence: 'MPEPTIDE',
+    sequence_warnings: [], sequenceWarnings: [], sequenceSourceIndex: 0, translationFromAminoAcidSequence: true
+  };
+  assert.deepEqual([...STORED_SEQUENCE_KEYS].sort(), Object.keys(values).sort());
+  for (const key of STORED_SEQUENCE_KEYS) {
+    const value = values[key];
     const invalid = structuredClone(current);
     invalid.items[0].biologicalFeatures[0][key] = value;
     assert.throws(() => validateFeatureCatalog(invalid, results), undefined, key);

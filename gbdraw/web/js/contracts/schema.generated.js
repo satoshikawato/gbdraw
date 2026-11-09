@@ -77,6 +77,14 @@ export const SEQUENCE_FEATURE_CATALOG_SCHEMA = 5;
 // gbdraw/web_support/feature_catalog.py: INTERACTIVE_EMBED_SCHEMA
 export const INTERACTIVE_EMBED_SCHEMA = 5;
 
+// gbdraw/web_support/feature_catalog.py: STORED_SEQUENCE_KEYS
+/** @type {readonly string[]} */
+export const STORED_SEQUENCE_KEYS = Object.freeze(['aminoAcidSequence', 'amino_acid_sequence', 'nucleotideSequence', 'nucleotide_sequence', 'sequenceSourceIndex', 'sequenceWarnings', 'sequence_warnings', 'translationFromAminoAcidSequence']);
+
+// gbdraw/web_support/catalog_sequences.py: MATCH_SPAN_REASONS
+/** @type {readonly ['NEVER_SUPPLIED', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'OUT_OF_RANGE']} */
+export const MATCH_SPAN_REASONS = Object.freeze(['NEVER_SUPPLIED', 'RECORD_UNKNOWN', 'RECORD_AMBIGUOUS', 'OUT_OF_RANGE']);
+
 // gbdraw/session_io.py: FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION
 /** @type {Readonly<Record<number, number>>} */
 export const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({

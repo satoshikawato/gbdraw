@@ -462,7 +462,7 @@
     },
     {
       "id": "vector:tests/fixtures/source-feature-index-alias-vectors.json",
-      "concern": "Feature catalog source index alias promotion (schema 3, OV-274)",
+      "concern": "Feature catalog promotion: the schema 3 source index alias (OV-274) and the schema 5 to 6 drop of stored sequences, with the restored /translation in one place (D5)",
       "pythonOwner": [
         "gbdraw/web_support/feature_catalog.py:promote_legacy_feature_catalog"
       ],
@@ -470,7 +470,7 @@
         "gbdraw/web/js/services/feature-catalog.js:migrateLegacyFeatureCatalog"
       ],
       "vector": "tests/fixtures/source-feature-index-alias-vectors.json",
-      "reason": "Both Load paths promote a legacy catalog; the vector pins the blank-alias case.",
+      "reason": "Both Load paths promote a legacy catalog; the vector pins the blank-alias case and the schema 5 promotion with its key order.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (feature catalog promotion; OV-274)"
     },

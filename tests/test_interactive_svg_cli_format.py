@@ -2036,3 +2036,22 @@ def test_cli_interactive_svg_embed_is_byte_identical_to_dev(tmp_path: Path) -> N
     [metadata] = re.findall(r'<metadata id="gbdraw-interactive-feature-metadata".*?</metadata>', svg, re.S)
     assert 'data-schema="5"' in metadata
     assert hashlib.sha256(metadata.encode("utf-8")).hexdigest() == _DEV_BGC_EMBED_SHA256
+
+
+def test_cli_interactive_svg_of_a_record_drawn_in_windows_embeds_every_feature_sequence(tmp_path: Path) -> None:
+    """A feature drawn only in a later window of its record keeps its sequence in the CLI export, as the catalog of
+    dev stored it: the export binds each row in the window that draws its feature."""
+
+    from gbdraw.web_support.feature_catalog import materialize_catalog_nucleotide_sequence
+
+    mito = Path(__file__).resolve().parent / "test_inputs" / "HmmtDNA.gbk"
+    linear_cli.linear_main([
+        "--gbk", str(mito), "--region", "NC_012920.1:100-900", "--region", "NC_012920.1:5000-7600",
+        "-f", "interactive_svg", "-o", str(tmp_path / "windows"),
+    ])
+
+    item = _catalog_item((tmp_path / "windows.interactive.svg").read_text(encoding="utf-8"))
+    rows = item["biologicalFeatures"]
+    sources = list(item.get("sequenceSources") or [])
+    assert len(item["recordKeys"]) == 2 and len(rows) == 25
+    assert [row["biologicalFeatureId"] for row in rows if not materialize_catalog_nucleotide_sequence(row, sources)] == []

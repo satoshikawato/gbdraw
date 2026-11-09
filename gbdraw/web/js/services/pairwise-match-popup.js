@@ -28,7 +28,7 @@ import { msg, t, tm, tmx, tn, tx } from '../utils/i18n.js';
 
 /** @import { AliasSource, FeatureIdentity } from './feature-identity.js' */
 /** @import { FeatureLike } from './feature-utils.js' */
-/** @import { MatchSpanInput, MatchSpanSequence } from './diagram-worker-protocol.js' */
+/** @import { MatchSpanInput, MatchSpanReason, MatchSpanSequence } from './diagram-worker-protocol.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 
 /**
@@ -1972,11 +1972,10 @@ const buildMatchSpans = (element, matchKind) => {
 
 /**
  * The records the shown Result's request draws, as a match popup names them to Python (D5): the drawn units by
- * record key in drawing order (a span's record index is a place in them), the units that draw a record ID (a
- * Circular comparison band names its reference by ID), and whether the request holds the FASTA of a comparison source.
+ * record key in drawing order (a span's record index is a place in them), and whether the request holds the FASTA of
+ * a comparison source.
  * @typedef {object} MatchSequenceRecords
  * @property {readonly string[]} unitKeys
- * @property {(recordId: string) => readonly string[]} unitKeysOfRecordId
  * @property {(sourceIndex: number) => boolean} comparisonSupplied
  */
 
@@ -2019,9 +2018,9 @@ const safeFilePart = (value, fallback = 'sequence') => {
 };
 
 /**
- * The drawn unit or comparison record a span reads, by identity: a drawn unit by its record key (a Linear span's
- * record index, or the one unit that draws a Circular reference's record ID), a comparison record by its source and
- * record ID. A reason when the popup knows at open that the span cannot be read.
+ * The drawn unit or comparison record a span reads, by identity: a drawn unit by its record key (a span's record
+ * index), a drawn record by the record ID a Circular reference names (Python finds it by ID, then alias), a comparison
+ * record by its source and record ID. A reason when the popup knows at open that the span cannot be read.
  * @param {ReturnType<typeof buildMatchSpans>[number]} span
  * @param {MatchKind} matchKind
  * @param {MatchSequenceRecords | null} records
@@ -2040,18 +2039,15 @@ const matchSpanRead = (span, matchKind, records, start, end) => {
     }
     return { read: { kind: 'comparison', sourceIndex: span.sourceIndex, recordId: span.recordId, start, end }, reason: '' };
   }
-  const keys = span.recordIndex !== null
-    ? [records.unitKeys[span.recordIndex]].filter(Boolean)
-    : (records.unitKeys.length === 1 ? records.unitKeys : records.unitKeysOfRecordId(span.recordId));
-  if (keys.length !== 1) {
-    return {
-      read: null,
-      reason: keys.length > 1
-        ? t('Record ID “{id}” is ambiguous in the available sequence sources.', { id: span.recordId })
-        : t('The match does not identify a sequence record.')
-    };
+  if (span.recordIndex === null) {
+    return span.recordId
+      ? { read: { kind: 'reference', recordId: span.recordId, start, end }, reason: '' }
+      : { read: null, reason: t('The match does not identify a sequence record.') };
   }
-  return { read: { kind: 'record', recordKey: keys[0], start, end }, reason: '' };
+  const recordKey = records.unitKeys[span.recordIndex];
+  return recordKey
+    ? { read: { kind: 'record', recordKey, start, end }, reason: '' }
+    : { read: null, reason: t('The match does not identify a sequence record.') };
 };
 
 /**
@@ -2107,8 +2103,11 @@ export const matchSpanFasta = (entry, read) => {
   return `${formatFastaEntry({ id: header, sequence: read.sequence })}\n`;
 };
 
-/** The reason a span Python could not read shows (`MatchSpanReason`). */
-const MATCH_SPAN_REASONS = Object.freeze({
+/**
+ * The reason a span Python could not read shows, for each of Python's reasons.
+ * @type {Readonly<Record<MatchSpanReason, string>>}
+ */
+const MATCH_SPAN_REASON_TEXTS = Object.freeze({
   NEVER_SUPPLIED: msg('Comparison sequence was not supplied for this BLAST source.'),
   RECORD_UNKNOWN: msg('No sequence source matched record “{id}”.'),
   RECORD_AMBIGUOUS: msg('Record ID “{id}” is ambiguous in the available sequence sources.'),
@@ -2120,7 +2119,7 @@ const MATCH_SPAN_REASONS = Object.freeze({
  * @param {MatchSpanSequence} read A span Python could not read.
  */
 export const matchSpanUnavailableReason = (entry, read) => tm(
-  read.reason ? MATCH_SPAN_REASONS[read.reason] : MATCH_SPAN_REASONS.OUT_OF_RANGE, { id: entry.span.recordId || read.recordId }
+  read.reason ? MATCH_SPAN_REASON_TEXTS[read.reason] : MATCH_SPAN_REASON_TEXTS.OUT_OF_RANGE, { id: entry.span.recordId || read.recordId }
 );
 
 /**
