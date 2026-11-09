@@ -503,6 +503,16 @@ write-up of a release.
   Web app shows "Region labels overlap other labels or lines (N)."). A
   feature label counts once, whether the region label meets its letters, its
   leader line, or both. The figure is drawn as before.
+- Fixed: a Circular region label whose letters still met a feature label's
+  letters after it moved along its region (for example "Integration" over
+  "integrase" on lambda with `--labels out`) was drawn over them. The
+  feature labels now make way for it, as in Linear: the region label keeps its
+  place, and the feature labels it meets, with the labels around them, move
+  along their side in the same order, by at most 24 px plus the region label's
+  height, in the CLI, the Python API, and the Web app. A move that would add
+  another overlap or a leader crossing is not made, and a region label the
+  feature labels cannot clear is drawn and warned as before. Figures whose
+  region labels meet no feature label's letters are unchanged.
 - Fixed: a Circular region label drawn along its circle was placed by the
   height of its letters along the ray through its middle, but each letter
   stands upright on the circle, so its corners reach farther from the centre.

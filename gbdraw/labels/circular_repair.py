@@ -69,7 +69,7 @@ from .circular import (
 )
 from .circular_leaders import arrival_contact, contact_end, label_ink_box
 from .circular_types import CircularLabel
-from .fit import LabelShape, covers_definition_text, polylines_cross, shapes_overlap
+from .fit import LabelShape, box_covers_definition_text, covers_definition_text, polylines_cross, shapes_overlap
 
 # LP-D57: repair records with up to this many defects, within this many evaluations.
 MAX_DEFECTS = 100
@@ -118,7 +118,8 @@ ROW_GAP_CAP_PX = 30.0
 _EPS = 1e-9
 
 Side: TypeAlias = Literal["out", "in"]
-DefectKind: TypeAlias = Literal["overlap", "crossing", "definition"]
+# "box": a label over a box it makes way for (a region label's letters, CIR-RGN-YIELD).
+DefectKind: TypeAlias = Literal["overlap", "crossing", "definition", "box"]
 Defect: TypeAlias = tuple[DefectKind, int, int]
 Moved: TypeAlias = dict[int, CircularLabel]
 # (leader of, text of): a leader drawn through another label's text.
@@ -137,6 +138,16 @@ class _Geometry:
     box: Aabb | None
     leader_box: Aabb | None
     reach: Aabb | None
+
+    def covers(self, boxes: Sequence[Aabb]) -> bool:
+        """:func:`~gbdraw.labels.fit.covers_definition_text` from the text box measured already (a repair tests
+        each candidate place against the definition text and the boxes to clear)."""
+
+        if not self.shape.leader or not boxes:
+            return False
+        if self.box is None:
+            return covers_definition_text(self.shape, boxes)  # no finite text point: it refuses as the fit check does
+        return box_covers_definition_text(self.box, boxes)
 
 
 def _angle(x: float, y: float) -> float:
@@ -163,7 +174,16 @@ def _clockwise(first: float, second: float) -> float:
 class _Repair:
     """The search state of one record: copies of its labels, never the caller's."""
 
-    def __init__(self, labels: Sequence[CircularLabel], total_length: int, definition_text: Sequence[Aabb]) -> None:
+    def __init__(
+        self,
+        labels: Sequence[CircularLabel],
+        total_length: int,
+        definition_text: Sequence[Aabb],
+        text_shift_px: float = MAX_TEXT_SHIFT_PX,
+        boxes: Sequence[Aabb] = (),
+    ) -> None:
+        self.text_shift_px = float(text_shift_px)
+        self.boxes = tuple(boxes)
         self.total_length = int(total_length)
         self.definition_text = tuple(definition_text)
         self.labels = [label.copy() for label in labels]
@@ -208,7 +228,7 @@ class _Repair:
         self._refresh()
         # Pairs that a move within the bounds can bring together.
         tallest = max((float(self.labels[index]["height_px"]) for index in self.external), default=0.0)
-        expand = 2.0 * MAX_TEXT_SHIFT_PX + 2.0 * tallest + 4.0
+        expand = 2.0 * self.text_shift_px + 2.0 * tallest + 4.0
         reaches = [geometry.reach for geometry in self.geometry]
         self.peers: list[list[int]] = [
             [
@@ -284,8 +304,10 @@ class _Repair:
             for other in self.peers[index]:
                 if other > index:
                     found.update(self._pair_defects(index, self.geometry[index], other, self.geometry[other]))
-            if covers_definition_text(self.geometry[index].shape, self.definition_text):
+            if self.geometry[index].covers(self.definition_text):
                 found.add(("definition", index, index))
+            if self.geometry[index].covers(self.boxes):
+                found.add(("box", index, index))
         return found
 
     def _local(self, geometry: dict[int, _Geometry]) -> frozenset[Defect]:
@@ -297,8 +319,10 @@ class _Repair:
                 if other in geometry and other < index:
                     continue
                 found.update(self._pair_defects(index, own, other, geometry.get(other, self.geometry[other])))
-            if covers_definition_text(own.shape, self.definition_text):
+            if own.covers(self.definition_text):
                 found.add(("definition", index, index))
+            if own.covers(self.boxes):
+                found.add(("box", index, index))
         return frozenset(found)
 
     def _current_local(self, indices: Sequence[int]) -> frozenset[Defect]:
@@ -384,7 +408,7 @@ class _Repair:
         if half != 0 and _current_half_from_x(float(label["start_x"]), axis_eps_px=HEMISPHERE_AXIS_EPS_PX) != half:
             return False
         text, elbow = self._displacement(index, label)
-        if text > MAX_TEXT_SHIFT_PX + _EPS or elbow > MAX_ELBOW_SHIFT_PX + _EPS:
+        if text > self.text_shift_px + _EPS or elbow > MAX_ELBOW_SHIFT_PX + _EPS:
             return False
         elbow_radius = self._elbow_radius(label)
         elbow_moved = abs(elbow_radius - self.elbow_radius[index]) > _EPS
@@ -596,18 +620,28 @@ class _Repair:
                     yield 2, "elbow", self._elbow(run, [sign * step * at for at in range(len(run))])
 
     # ---- search ---------------------------------------------------------------
-    def run(self) -> bool:
+    def run(self, *, boxes_only: bool = False) -> bool:
         """Repair cluster by cluster, smallest first; stop at the first cluster no move improves.
 
         The search also stops when, at the rate of its last move, the
-        remaining defects would need more than ``MAX_EVALUATIONS``.
+        remaining defects would need more than ``MAX_EVALUATIONS``. With
+        ``boxes_only`` it repairs only the clusters with a label over a box and
+        succeeds once no label is over one; a move still counts every defect it
+        clears or makes, so it never trades a box for another defect.
         """
 
+        def targets(defects: set[Defect]) -> set[Defect]:
+            return {defect for defect in defects if defect[0] == "box"} if boxes_only else defects
+
         found = self.defects()
-        self.seeds = frozenset(index for _kind, *pair in found for index in pair if self.movable[index])
+        self.seeds = frozenset(index for _kind, *pair in targets(found) for index in pair if self.movable[index])
         last_evaluations = 0
-        while found and self.evaluations < MAX_EVALUATIONS:
-            cluster = min(_clusters(found), key=lambda members: (len(members), sorted(members)))
+        while targets(found) and self.evaluations < MAX_EVALUATIONS:
+            targeted = {index for _kind, *pair in targets(found) for index in pair}
+            cluster = min(
+                (members for members in _clusters(found) if members & targeted),
+                key=lambda members: (len(members), sorted(members)),
+            )
             if not any(self.movable[index] for index in cluster):
                 return False
             best: tuple[tuple[int, int, float, int], Moved, bool] | None = None
@@ -645,9 +679,9 @@ class _Repair:
             found = self.defects()
             spent = self.evaluations - last_evaluations
             last_evaluations = self.evaluations
-            if found and (self.evaluations * cleared + len(found) * spent) > MAX_EVALUATIONS * cleared:
+            if targets(found) and (self.evaluations * cleared + len(targets(found)) * spent) > MAX_EVALUATIONS * cleared:
                 return False
-        return not found
+        return not targets(found)
 
     # ---- yield (LP-D59) -------------------------------------------------------
     def _yield_cost(self, index: int, label: CircularLabel, geometry: _Geometry) -> float:
@@ -935,4 +969,51 @@ def repair_circular_labels(
     return repaired
 
 
-__all__ = ["MAX_DEFECTS", "MAX_EVALUATIONS", "defect_count", "repair_circular_labels"]
+def make_way_for_boxes(
+    labels: Sequence[CircularLabel],
+    total_length: int,
+    groups: Sequence[Sequence[Aabb]],
+    *,
+    definition_text: Sequence[Aabb] = (),
+) -> tuple[list[CircularLabel], tuple[int, ...]] | None:
+    """The record's labels moved off each group of ``groups`` they can clear (the letters of one region label drawn
+    over theirs, CIR-RGN-YIELD, OV-3017), and the indices of the groups cleared; None when they clear none.
+
+    The groups are taken in order, each with the groups cleared before it. The
+    local repair moves only the labels over a group's boxes and their
+    neighbours, by its own rules (side, order, a move never adds a defect),
+    and a text may move ``MAX_TEXT_SHIFT_PX`` plus the height of the group's
+    tallest box: a stack of labels opens by that height to let a region label
+    through. A group is skipped when the labels cannot clear it, or clear it
+    only with more defects of their own (overlaps, crossings, the definition
+    text) than they have before it. The labels that made way do not yield
+    room afterwards (LP-D59): only they and the neighbours the repair pushed
+    move. Radial and turned labels do not make way.
+    """
+
+    kept: list[Aabb] = []
+    cleared: list[int] = []
+    current = [label.copy() for label in labels]
+    if any(label.get("placement") == "radial" or label.get("oriented_corners") for label in current):
+        return None
+    own = defect_count(current, total_length, definition_text)
+    for index, group in enumerate(groups):
+        if not group:
+            continue
+        group_shift = MAX_TEXT_SHIFT_PX + max(box.max_y - box.min_y for box in group)
+        repair = _Repair(current, total_length, definition_text, group_shift, (*kept, *group))
+        if not repair.run(boxes_only=True):
+            continue
+        moved = [label.copy() for label in repair.labels]
+        moved_defects = defect_count(moved, total_length, definition_text)
+        if moved_defects > own:
+            continue
+        current, own = moved, moved_defects
+        kept.extend(group)
+        cleared.append(index)
+    if not cleared:
+        return None
+    return current, tuple(cleared)
+
+
+__all__ = ["MAX_DEFECTS", "MAX_EVALUATIONS", "defect_count", "make_way_for_boxes", "repair_circular_labels"]

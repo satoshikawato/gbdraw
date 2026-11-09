@@ -20,9 +20,10 @@ import pytest
 import gbdraw.labels.circular_repair as repair_module
 from gbdraw.circular import circular_main
 from gbdraw.exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
-from gbdraw.labels.circular import _current_half_from_x, _label_bbox_min_radius, _label_bbox_rect
+from gbdraw.labels.circular import _current_half_from_x, _label_bbox_min_radius, _label_bbox_rect, circular_label_shape
 from gbdraw.labels.circular_leaders import arrival_contact, chosen_contact_end, label_ink_box
-from gbdraw.labels.circular_repair import defect_count, repair_circular_labels
+from gbdraw.labels.circular_repair import defect_count, make_way_for_boxes, repair_circular_labels
+from gbdraw.labels.fit import covers_definition_text
 from gbdraw.layout.spatial import Aabb
 
 TEST_INPUTS = Path(__file__).parent / "test_inputs"
@@ -600,3 +601,83 @@ def test_the_ink_box_lies_inside_the_font_box() -> None:
     font = _label_bbox_rect(label, total_length, 0.0)
     assert font[0] - 1e-6 <= ink.min_x and ink.max_x <= font[2] + 1e-6
     assert ink.height < font[3] - font[1]
+
+
+# ---- feature labels make way for a region label (CIR-RGN-YIELD, OV-3017) -----
+
+
+def _region_box_over(name: str, text: str) -> tuple[list[dict], int, tuple[Aabb, ...], Aabb]:
+    """The fixture's labels and a region label's box over the letters of the label ``text``."""
+
+    labels, total_length, definition = _fixture(name)
+    box = label_ink_box(next(label for label in labels if label["label_text"] == text), total_length)
+    assert box is not None
+    return labels, total_length, definition, box
+
+
+def _over_box(labels: list[dict], total_length: int, box: Aabb) -> list[str]:
+    return [
+        label["label_text"]
+        for label in labels
+        if not label.get("is_embedded")
+        and covers_definition_text(circular_label_shape(label, total_length), (box,))
+    ]
+
+
+def test_feature_labels_make_way_for_a_region_label_keeping_side_and_order() -> None:
+    """The labels over a region label's letters move off them along their side, in their order; the text moves at
+    most the repair's 24 px plus the region label's height, and the figure gains no defect."""
+
+    labels, total_length, definition, box = _region_box_over("o_lambda_f14", "Lom outer membrane protein")
+    before = copy.deepcopy(labels)
+    made_way = make_way_for_boxes(labels, total_length, [[box]], definition_text=definition)
+
+    assert labels == before
+    assert made_way is not None
+    moved, cleared = made_way
+    assert cleared == (0,)
+    assert _over_box(before, total_length, box) and not _over_box(moved, total_length, box)
+    _assert_order_kept(before, moved)
+    assert [bool(label.get("is_inner")) for label in moved] == [bool(label.get("is_inner")) for label in before]
+    assert defect_count(moved, total_length, definition) <= defect_count(before, total_length, definition)
+    limit = repair_module.MAX_TEXT_SHIFT_PX + box.height + 1e-6
+    for old, new in zip(before, moved):
+        if not old.get("is_embedded"):
+            shift = math.hypot(float(new["start_x"]) - float(old["start_x"]), float(new["start_y"]) - float(old["start_y"]))
+            assert shift <= limit, (old["label_text"], shift)
+    assert any(old != new for old, new in zip(before, moved))
+
+
+def test_no_label_moves_without_a_region_label_over_feature_letters() -> None:
+    """A figure whose region labels meet no feature label's letters asks no label to make way: it is drawn as
+    today (the assembler passes only the region labels drawn over feature letters)."""
+
+    labels, total_length, definition = _fixture("o_lambda_f14")
+    assert make_way_for_boxes(labels, total_length, [], definition_text=definition) is None
+    assert make_way_for_boxes(labels, total_length, [[]], definition_text=definition) is None
+
+
+def test_a_way_made_only_with_more_defects_is_not_kept(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A move that clears the region label but adds an overlap, a crossing or a definition cover is not kept: the
+    labels stay as they are and the region label is drawn and warned as today."""
+
+    labels, total_length, definition, box = _region_box_over("o_lambda_f14", "Lom outer membrane protein")
+    before = copy.deepcopy(labels)
+    counts = iter((0, 1))
+    monkeypatch.setattr(repair_module, "defect_count", lambda *_args: next(counts))
+    assert make_way_for_boxes(labels, total_length, [[box]], definition_text=definition) is None
+    assert labels == before
+
+
+def test_each_region_label_is_cleared_on_its_own_and_the_others_kept() -> None:
+    """Region labels are taken in order, each with those cleared before it: one the labels cannot clear (here a box
+    over the whole ring of labels) is skipped, and the labels that made way for another keep its letters clear."""
+
+    labels, total_length, definition, box = _region_box_over("o_lambda_f14", "Lom outer membrane protein")
+    ring = Aabb(-2000.0, -2000.0, 2000.0, 2000.0)
+    made_way = make_way_for_boxes(labels, total_length, [[ring], [box]], definition_text=definition)
+
+    assert made_way is not None
+    moved, cleared = made_way
+    assert cleared == (1,)
+    assert not _over_box(moved, total_length, box)
