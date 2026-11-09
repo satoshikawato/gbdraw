@@ -3809,15 +3809,23 @@ def test_a_stored_region_reads_as_the_windows_the_web_promotion_writes(case: dic
     ):
         decoded = _decode_region(region, path="region")
         assert decoded is not None
-        # The record's selector once decoded: the region's, which RecordInput lifts onto the record.
-        selector = decoded.record_selector()
-        assert (
-            None
-            if selector is None
-            else {"kind": "recordId", "value": selector.record_id}
-            if selector.record_id is not None
-            else {"kind": "recordIndex", "index": selector.record_index}
-        ) == case["promotedSelector"]
+        # The record's selector once decoded: its own, or the region's, which RecordInput lifts onto the record.
+        # RecordInput refuses a start or end below 1; those vectors carry no selector.
+        if decoded.start >= 1 and decoded.end >= 1:
+            selector = RecordInput(
+                source=GenBankInputSource(Path("record.gbk")),
+                selector=_decode_selector(case["record"].get("selector"), path="selector"),
+                region=decoded,
+            ).selector
+            assert (
+                None
+                if selector is None
+                else {"kind": "recordId", "value": selector.record_id}
+                if selector.record_id is not None
+                else {"kind": "recordIndex", "index": selector.record_index}
+            ) == case["promotedSelector"]
+        else:
+            assert case["promotedSelector"] is None
         window = case["windows"][0]
         assert (decoded.start, decoded.end, decoded.reverse_complement) == (
             window["start"], window["end"], window["reverseComplement"]

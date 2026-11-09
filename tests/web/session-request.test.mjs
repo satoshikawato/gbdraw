@@ -6587,7 +6587,12 @@ const REGION_WINDOW_VECTORS = JSON.parse(
 for (const { name, record, windows, promotedSelector, refused } of REGION_WINDOW_VECTORS) {
   const promote = () => promoteCanonicalRenderRequestToCurrent({ schema: 9, records: [structuredClone(record)] });
   if (refused) {
-    assert.throws(promote, (error) => error.code === 'INPUT_INVALID', `${name}: refused`);
+    // The reason of the Web's other refusals of a form no writer stored (`refuseUnwrittenForms`).
+    assert.throws(
+      promote,
+      (error) => error.code === 'INPUT_INVALID' && error.context?.reason === 'SESSION_FORMAT',
+      `${name}: refused`
+    );
     continue;
   }
   const promoted = promote().records[0];

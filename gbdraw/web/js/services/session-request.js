@@ -7536,7 +7536,7 @@ const promoteRecordRegionsToWindows = (records) => {
     delete record.region;
     if (isPlainObject(region) && region.selector != null) {
       // One selector names the record; Python's RecordInput refuses a record that has it twice (OV-3000).
-      if (record.selector != null) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+      if (record.selector != null) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
       record.selector = region.selector;
     }
     record.windows = storedRegionWindows(region);

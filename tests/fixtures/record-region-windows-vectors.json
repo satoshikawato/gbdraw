@@ -65,27 +65,6 @@
       "promotedSelector": null
     },
     {
-      "name": "reversed span overrides a false reverseComplement",
-      "record": {
-        "selector": null,
-        "region": {
-          "selector": null,
-          "start": 300,
-          "end": 50,
-          "reverseComplement": false
-        }
-      },
-      "windows": [
-        {
-          "start": 50,
-          "end": 300,
-          "reverseComplement": true,
-          "column": null
-        }
-      ],
-      "promotedSelector": null
-    },
-    {
       "name": "reversed span with reverseComplement true",
       "record": {
         "selector": null,
@@ -126,6 +105,33 @@
         }
       ],
       "promotedSelector": null
+    },
+    {
+      "name": "a selector on the record only stays on the record",
+      "record": {
+        "selector": {
+          "kind": "recordIndex",
+          "index": 2
+        },
+        "region": {
+          "selector": null,
+          "start": 300,
+          "end": 50,
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": 50,
+          "end": 300,
+          "reverseComplement": true,
+          "column": null
+        }
+      ],
+      "promotedSelector": {
+        "kind": "recordIndex",
+        "index": 2
+      }
     },
     {
       "name": "region selector moves to a record without one",
