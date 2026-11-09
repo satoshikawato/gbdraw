@@ -361,8 +361,8 @@ affected.
   tracks leave, nothing is drawn. The command line prints `ERROR:` with the
   message and exits with status 1. Python raises `LabelsDoNotFitError`, a
   `GbdrawError`.
-- If leader lines cross, labels cover the definition text, Linear region
-  (annotation) labels overlap other labels or lines, Circular region labels
+- If leader lines cross, labels cover the definition text, region
+  (annotation) labels of either mode overlap other labels or lines, Circular region labels
   are cut to fit their circle, lie on other tracks, or are left out for want of
   room before the centre or because no letter of them fits their circle, region labels of either mode are left out for want of
   room in a clipped slot, or the definition text
@@ -411,9 +411,9 @@ search share 30 seconds. The first setting is always tried; each later one
 is tried only if drawing the figure once more, as long as the last try took,
 ends within that time. Linear feature labels get only the separate
 overlapping features row, because the Linear layout keeps its other labels
-apart. Linear region labels and Circular region labels that are cut, lie
-on other tracks, or are left out for want of room before the centre or in a
-clipped slot get no row.
+apart. Region labels that overlap other labels or lines, and Circular region
+labels that are cut, lie on other tracks, or are left out for want of room
+before the centre or in a clipped slot, get no row.
 
 The definition text in the centre of a Circular record (not a plot title)
 overlaps a track when the box of one of its lines, as drawn (bold first line
@@ -449,8 +449,18 @@ drawn and takes no room between lanes; its mark is drawn, and it counts as a reg
 (`1 region label left out: no letter fits its circle`). This
 only warns: the Web app shows "Region labels are cut to fit their circle (N)."
 or "Region labels are left out: no letter of them fits their circle (N)."
-over the figure, with no **Choose a fix** button. A label that meets another
-label or line in Circular is still drawn without a warning.
+over the figure, with no **Choose a fix** button.
+
+A Circular region label that still meets another label or a leader line where
+it is drawn (for example two labels that explicit lanes with
+`overflow=compress` keep in one lane, or labels crowded inside the axis) is
+drawn there. Each feature label, leader line, or region label placed before it
+that its letters meet counts as one region label overlap (`1 region label
+overlap`), as in Linear. This only warns: the Web app shows "Region labels
+overlap other labels or lines (N)." over the figure, with no **Choose a fix**
+button. Other lanes, fewer or shorter labels, a smaller label font, or a slot
+outside the axis make room. Region labels over the centre definition text count
+as definition lines over a track (see above).
 
 Circular keeps room for region labels beyond their annotation slot, or, for an
 annotation slot with `side=overlay`, beyond the outermost slot it covers, and

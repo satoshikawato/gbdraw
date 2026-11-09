@@ -391,6 +391,11 @@ write-up of a release.
   (`N region labels left out: no letter fits their circles`) instead of a cut
   one. A label that keeps at least one letter is still drawn as its start and
   `…`.
+- Fixed: a Circular region label drawn over another label or a leader line,
+  for example labels that explicit lanes with `overflow=compress` keep in one
+  lane inside the axis, now warns as in Linear (`N region label overlaps`; the
+  Web app shows "Region labels overlap other labels or lines (N)."). The
+  figure is drawn as before.
 - Changed: a requested figure size that the figure cannot fit is refused
   sooner when the figure stops shrinking. Once the two smallest sizes tried are
   the same, the fit ends instead of trying smaller sizes down to the smallest
