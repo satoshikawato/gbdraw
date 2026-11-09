@@ -577,9 +577,9 @@ const settingsPopup = ref(null);
 const originalLegendOrder = typedRef(/** @type {PythonLegendKey[]} */ ([]));
 const originalLegendColors = ref({}); // Store original colors: { caption: color }
 
-// The Legend editor rows whose stroke options are shown, by caption: app-level
+// The Legend editor rows whose stroke options are shown, by the row's key: app-level
 // view state, which History and the Session do not hold (OV-157).
-const legendStrokeOptionsOpen = reactive(new Set());
+const legendStrokeOptionsOpen = typedReactive(/** @type {Set<PythonLegendKey>} */ (new Set()));
 
 // Original stroke values from SVG generation (gbdraw's auto-determined defaults)
 const originalSvgStroke = ref({ color: null, width: null });

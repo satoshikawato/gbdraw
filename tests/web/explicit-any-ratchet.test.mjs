@@ -53,7 +53,6 @@ const EXPLICIT_ANY_BASELINE = {
   'app/legend.js': 5,
   'app/legend/drag-actions.js': 5,
   'app/legend/entry-actions.js': 1,
-  'app/legend/stroke-actions.js': 1,
   'app/legend/track-data-styles.js': 2,
   'app/linear-track-slots.js': 4,
   'app/preview-runtime.js': 20,

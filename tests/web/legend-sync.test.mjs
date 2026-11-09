@@ -1106,13 +1106,13 @@ const mockLegendEntry = (caption, color, x) => {
     assert.equal(edit(actions), true);
     return state.legendStrokeOverrides[caption];
   };
-  for (const [name, edit] of [
-    ['color', (actions) => actions.updateLegendEntryStrokeColor(0, '#222222')],
-    ['width', (actions) => actions.updateLegendEntryStrokeWidth(0, 3)]
+  // A first edit stores the stroke Python drew and the one field it writes.
+  for (const [name, edit, written] of [
+    ['color', (actions) => actions.updateLegendEntryStrokeColor(0, '#222222'), { strokeColor: '#222222' }],
+    ['width', (actions) => actions.updateLegendEntryStrokeWidth(0, 3), { strokeWidth: 3 }]
   ]) {
     const ordinary = strokeOverridesAfterFirstEdit('Gamma', edit);
-    assert.equal(Object.keys(ordinary).length, 4);
-    assert.deepEqual([ordinary.originalStrokeColor, ordinary.originalStrokeWidth], ['gray', 2]);
+    assert.deepEqual(ordinary, { originalStrokeColor: 'gray', originalStrokeWidth: 2, ...written });
     for (const caption of ['constructor', 'toString']) {
       assert.deepEqual(strokeOverridesAfterFirstEdit(caption, edit), ordinary,
         `a first stroke ${name} edit of the row named ${caption} stores the drawn stroke like any other row`);

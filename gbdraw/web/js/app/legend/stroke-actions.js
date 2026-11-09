@@ -2,11 +2,13 @@
 import { drawnLegendRowStroke, legendRowKeys } from '../../services/legend-svg.js';
 import { clearStrokes, legendEntryKey, setLegendStroke } from '../../services/drawing/paint.js';
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
+/** @import { StrokeOverride } from '../../services/style-overrides.js' */
+/** @import { WebState } from '../../state.js' */
 /** @typedef {{ caption?: unknown, originalCaption?: unknown }} StrokedLegendEntry A listed Legend row. */
 
 /**
  * @typedef {object} LegendStrokeActionsOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Pick<WebState, 'activeDrawing' | 'sessionOperationAvailability' | 'svgContainer' | 'legendStrokeOptionsOpen'>} state
  */
 
 // The Legend row stroke edits write the editor intent only. The editor intent
@@ -57,28 +59,25 @@ export const createLegendStrokeActions = ({ state }) => {
   /** @param {number} idx */
   const getLegendEntryStrokeWidth = (idx) => strokeFieldAt(idx, 'strokeWidth');
 
-  // Writes `field` of the stroke of every row `idx` stands for; a row without
-  // its own override starts from the stroke Python drew on its swatch. No edit
-  // when every row has the value.
+  // Writes one field of the stroke of every row `idx` stands for; a row
+  // without its own override starts from the stroke Python drew on its swatch
+  // and holds only the field written. No edit when every row has the value.
   /**
+   * @template {'strokeColor' | 'strokeWidth'} F
    * @param {number} idx
-   * @param {'strokeColor' | 'strokeWidth'} field
-   * @param {string | number} value
-   * @param {(current: unknown) => boolean} same
+   * @param {F} field
+   * @param {Required<StrokeOverride>[F]} value
+   * @param {(current: unknown) => boolean} same Whether a row's current value of `field` is `value`.
    */
   const writeStrokeField = (idx, field, value, same) => {
     const drawing = state.activeDrawing();
     const row = rowAt(idx);
     if (!row) return false;
-    if (row.keys.every((key) => same(drawing.legendStrokeOverrides[key]?.[field]))) return false;
-    row.keys.forEach((key) => {
-      // A key is free text: only an own entry is an override (OV-532).
-      const existing = Object.hasOwn(drawing.legendStrokeOverrides, key) ? drawing.legendStrokeOverrides[key] : undefined;
-      setLegendStroke(drawing.slices.paint, key, {
-        ...(existing || { ...drawnSwatchStroke(key), strokeColor: '', strokeWidth: '' }),
-        [field]: value
-      });
-    });
+    // A key is free text: only an own entry is an override (OV-532).
+    /** @param {PythonLegendKey} key */
+    const ownOverride = (key) => (Object.hasOwn(drawing.legendStrokeOverrides, key) ? drawing.legendStrokeOverrides[key] : undefined);
+    if (row.keys.every((key) => same(ownOverride(key)?.[field]))) return false;
+    row.keys.forEach((key) => setLegendStroke(drawing.slices.paint, key, { ...(ownOverride(key) || drawnSwatchStroke(key)), [field]: value }));
     return true;
   };
 
@@ -110,8 +109,7 @@ export const createLegendStrokeActions = ({ state }) => {
     const stroked = row.keys.filter((key) => Object.hasOwn(drawing.legendStrokeOverrides[key] || {}, 'strokeColor'));
     stroked.forEach((key) => {
       const { strokeColor: _removed, ...override } = drawing.legendStrokeOverrides[key];
-      const width = override.strokeWidth === undefined || override.strokeWidth === '';
-      setLegendStroke(drawing.slices.paint, key, width ? null : override);
+      setLegendStroke(drawing.slices.paint, key, override.strokeWidth === undefined ? null : override);
     });
     return stroked.length > 0;
   };
