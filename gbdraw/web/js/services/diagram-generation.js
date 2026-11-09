@@ -1,7 +1,7 @@
 // @ts-check
 import { createBoundedJsonReceiver } from './bounded-json-transport.js';
 import { buildPyodideAssetManifest } from './pyodide-assets.js';
-import { normalizeUserFacingError } from '../utils/error-normalization.js';
+import { normalizeUserFacingError, OUT_OF_MEMORY_CODE } from '../utils/error-normalization.js';
 import { validateWebRuntimeCapabilities, DiagramRuntimeCompatibilityError } from './runtime-capabilities.js';
 import {
   DIAGRAM_HELPER_OPERATION_NAMES,
@@ -682,6 +682,23 @@ const terminateWorker = (error = null) => {
 };
 
 /**
+ * Replace the engine that ran out of memory (OV-3027, Owner D-42): the Worker's Python heap never shrinks, so the
+ * Worker is terminated and the next request builds a new one, which receives every input again. A Generate still
+ * waiting on that Worker would never be answered: it ends with the same failure.
+ * @param {Worker} currentWorker The Worker that replied.
+ * @param {unknown} serialized The error of its reply, if any.
+ */
+const replaceEngineOutOfMemory = (currentWorker, serialized) => {
+  const code = serialized && typeof serialized === 'object' ? /** @type {{ code?: unknown }} */ (serialized).code : null;
+  if (code !== OUT_OF_MEMORY_CODE || worker !== currentWorker) return;
+  const pending = activeRequest;
+  if (pending) {
+    settleActiveRequest(pending, () => pending.reject(deserializeWorkerError({ code: OUT_OF_MEMORY_CODE, operation: 'generate', stage: 'unknown' })));
+  }
+  terminateWorker();
+};
+
+/**
  * Stop the kept Worker's canceled requests (D7): write SIGINT into its
  * interrupt buffer, so Python stops at its next checkpoint, and ask it to
  * drain: it drops the replies of every request up to the last one sent and
@@ -1013,12 +1030,8 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
             failWorker(error);
             return;
           }
-          settleActiveRequest(request, () => {
-            resolveRequest(markCurrentWorkerGenerationResponse({
-              requestId,
-              ...normalized
-            }));
-          });
+          settleActiveRequest(request, () => resolveRequest(markCurrentWorkerGenerationResponse({ requestId, ...normalized })));
+          replaceEngineOutOfMemory(currentWorker, data.results?.error);
           return;
         }
         failWorker(deserializeWorkerError(data.error, { operation: 'generate' }));
@@ -1159,6 +1172,7 @@ const runAuxiliaryWorkerRequest = ({
           return;
         }
         rejectRequest(deserializeWorkerError(data.error, { operation }));
+        replaceEngineOutOfMemory(currentWorker, data.error);
       }
 
       function handleError() {

@@ -224,6 +224,9 @@ const REASON_ACTIONS = Object.freeze({ GZIP_EXPANDED_SIZE: ['select-input'], REP
 // OV-449): the label table import and the Specific rules import read it here.
 // A key of its own (OV-1415): the label table's notice shows it with `tm`.
 export const RULE_INPUT_CHANGE_WORDS = msg("colors, color rules, the Legend, or the diagram's inputs");
+// The code of an engine that ran out of memory (its DEFINITIONS entry below): the service that owns the Worker
+// replaces that engine when a reply carries it.
+export const OUT_OF_MEMORY_CODE = 'OUT_OF_MEMORY';
 /**
  * Per code: the message, the actions offered, and the correction guidance when the context gives no reason.
  * @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>}
@@ -238,9 +241,10 @@ const DEFINITIONS = Object.freeze({
   VALIDATION_UNCLASSIFIED: ['Input validation failed. Review the inputs before retrying.', ['review-input', 'retry']],
   // The engine output depends only on the request, so Retry would fail the same way.
   RENDER_FAILED: ['The diagram engine failed while drawing this diagram. Generating again with the same inputs and settings fails the same way. Change the inputs or settings, or save a Session for investigation.', ['save-session']],
-  // Python's MEMORY_REFUSAL_CODE (gbdraw/web_support/error_adapter.py): a MemoryError, by its class. The engine's
-  // memory never shrinks in this page, so a reloaded page draws with all of it (OV-3027).
-  OUT_OF_MEMORY: ['The diagram engine ran out of memory while drawing this diagram. Save a Session, reload the page, open the Session, and Generate again. If it runs out of memory again, draw a smaller region, turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).', ['save-session', 'reload']],
+  // OUT_OF_MEMORY_CODE: Python's MEMORY_REFUSAL_CODE (gbdraw/web_support/error_adapter.py), a MemoryError by its
+  // class. The engine's memory never shrinks, so services/diagram-generation.js replaces that engine and Retry runs
+  // on a new one (OV-3027, Owner D-42).
+  OUT_OF_MEMORY: ['The diagram engine ran out of memory and was replaced with a new one. Generate again. If it runs out of memory again, draw a smaller region, turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).', ['retry', 'save-session']],
   // Python does not draw every forced label (an underlay feature, Embedded Only);
   // Generate fails the same way until the feature's popup choice changes.
   LABEL_NOT_DRAWN: ['Label visibility is On for a feature, but this diagram does not draw its label.', ['edit-input']],

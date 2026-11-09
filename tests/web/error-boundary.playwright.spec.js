@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 
 test('real Python adapters retain causes through one lazy Worker and successful retry', async ({ page }) => {
   test.setTimeout(180000);
@@ -225,6 +226,86 @@ test('a reply too large for the page offers Save Session and no Retry Generate, 
   await expect(alert.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
   await expect(alert.getByRole('button', { name: 'Save Session', exact: true })).toBeVisible();
   await inspectSafeDetails(page, alert, failed.error);
+});
+
+// OV-3027, Owner D-42: the diagram engine runs out of memory while it writes the SVG. A copy of the Worker's Python
+// helpers served only by this case makes the SVG writer raise MemoryError in every Worker started while it is
+// served; the real Python adapter classifies it. The page replaces that engine at once: the panel says so, offers
+// Retry Generate and Save Session, and keeps the Result, the committed request, the draft and History; Retry draws
+// on a new Worker, which receives the inputs again.
+const PYTHON_HELPERS_START = 'export const PYTHON_HELPERS = `\n';
+const SVG_WRITER_OUT_OF_MEMORY = [
+  'import gbdraw.api.render as _test_render',
+  'def _test_out_of_memory(*_args, **_kwargs):',
+  '    raise MemoryError()',
+  '_test_render.write_svg_document = _test_out_of_memory',
+  ''
+].join('\n');
+test('an engine that runs out of memory is replaced, and Retry Generate draws on a new engine', async ({ page }, info) => {
+  test.setTimeout(300000);
+  // Each Worker installs the served helpers; a restored snapshot would not.
+  await forceColdPyodideBoot(page);
+  let outOfMemory = false;
+  await page.context().route('**/js/app/python-helpers.js', async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    expect(body.startsWith(`// @ts-check\n${PYTHON_HELPERS_START}`)).toBe(true);
+    await route.fulfill({ response,
+      body: outOfMemory ? body.replace(PYTHON_HELPERS_START, PYTHON_HELPERS_START + SVG_WRITER_OUT_OF_MEMORY) : body });
+  });
+  await openApp(page);
+  await loadSession(page, 'tobacco-chloroplast');
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const slot = app.adv.circular_track_slots.find(row => row.id === 'gc_content');
+    await window.__GBDRAW_HISTORY__.runUndoable('Pending width', () =>
+      app.updateCircularTrackSlotMeasure(slot, 'width', { value: '0.09', unit: 'factor' }));
+  });
+  const snapshot = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+    const a = window.__GBDRAW_APP__, h = window.__GBDRAW_HISTORY__;
+    return { results: JSON.stringify(a.currentResults()), session: JSON.stringify(getCommittedCanonicalSession()),
+      width: JSON.stringify(state.activeDrawing().adv.circular_track_slots.find(row => row.id === 'gc_content').width),
+      undo: h.getUndoCount(), redo: h.getRedoCount() };
+  });
+  const before = await snapshot();
+  // The next Worker the page starts runs out of memory.
+  outOfMemory = true;
+  await page.evaluate(async () => (await import('./js/services/diagram-generation.js')).disposeDiagramGenerationWorker());
+  const started = (await getDiagramWorkerActivity(page)).constructions;
+  const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(failed).toMatchObject({ status: 'error', recovery: 'preserved', error: { code: 'OUT_OF_MEMORY',
+    operation: 'generate', stage: 'render', context: {}, actions: ['retry', 'save-session'] } });
+  expect(await snapshot()).toEqual(before);
+  const replaced = await getDiagramWorkerActivity(page);
+  expect(replaced.constructions).toBe(started + 1);
+  expect(replaced.instances.at(-1)).toMatchObject({ terminated: true });
+  const alert = page.getByRole('alert', { name: 'Generation Error' });
+  await expect(alert).toContainText('The diagram engine ran out of memory and was replaced with a new one. Generate again.'
+    + ' If it runs out of memory again, draw a smaller region, turn off tracks or labels you do not need, or draw it'
+    + ' with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).');
+  await expect(alert).toContainText('Showing the last successful Result; your changes were not applied.');
+  await expect(alert).not.toContainText('fails the same way');
+  await expect(alert.getByRole('button', { name: 'Save Session', exact: true })).toBeVisible();
+  const retry = alert.getByRole('button', { name: 'Retry Generate', exact: true });
+  await expect(retry).toBeVisible();
+  await alert.screenshot({ path: info.outputPath('out-of-memory-alert.png') });
+  await inspectSafeDetails(page, alert, failed.error);
+  outOfMemory = false;
+  await retry.click();
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 240000 });
+  await expect(alert).toHaveCount(0);
+  const after = await snapshot();
+  expect(after.results).not.toEqual(before.results);
+  expect(after.undo).toBe(before.undo + 1);
+  const retried = await getDiagramWorkerActivity(page);
+  expect(retried.constructions).toBe(started + 2);
+  const engine = retried.instances.at(-1);
+  expect(engine.terminated).not.toBe(true);
+  expect(engine.runs.length).toBeGreaterThanOrEqual(1);
+  expect(engine.runs[0].stagedResourceCount).toBe(engine.runs[0].referencedResourceCount);
+  expect(engine.runs[0].stagedResourceBytes).toBeGreaterThan(0);
 });
 
 // OV-130 (R6): a preserved setting of the other diagram mode (OV-106) fails the

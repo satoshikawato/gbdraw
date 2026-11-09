@@ -667,19 +667,26 @@ test('an unclassified engine failure is a render failure with its exception clas
     assert.deepEqual(model.actions, ['save-session']);
     assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
   }
-  // Memory depends on what the page's engine holds, not on the inputs alone: it is the memory refusal (OV-3027).
-  assert.deepEqual([memory.code, memory.actions], ['OUT_OF_MEMORY', ['save-session', 'reload']]);
+  // Memory depends on what the page's engine holds, not on the inputs alone: it is the memory refusal, and the
+  // page replaces that engine, so Retry runs on a new one (OV-3027, Owner D-42).
+  assert.deepEqual([memory.code, memory.actions], ['OUT_OF_MEMORY', ['retry', 'save-session']]);
 });
 
 // OV-3027: the engine ran out of memory while it wrote the SVG of a large figure, and the writer raised
 // ExportError from the MemoryError. By the exception class in its cause, never its text, it is the memory refusal:
-// the words say memory and what to do, not that the same inputs fail the same way.
+// the words say that the engine ran out of memory and was replaced, and what to do if it happens again, not that
+// the same inputs fail the same way. The page replaces the engine (services/diagram-generation.js), so the panel
+// offers Retry Generate and Save Session (Owner D-42).
 test('a MemoryError under the SVG writer is the memory refusal, not a render failure (OV-3027)', () => {
   const model = roundtrip(invoke({ svgWriteMemoryError: true }).error);
   assert.deepEqual([model.code, model.operation, model.stage, model.context], ['OUT_OF_MEMORY', 'generate', 'render', {}]);
-  assert.match(model.summary, /^The diagram engine ran out of memory while drawing this diagram\. Save a Session, reload the page/);
-  assert.doesNotMatch(model.summary, /fails the same way|Python exception/);
-  assert.deepEqual(model.actions, ['save-session', 'reload']);
+  assert.equal(model.summary, 'The diagram engine ran out of memory and was replaced with a new one. Generate again. '
+    + 'If it runs out of memory again, draw a smaller region, turn off tracks or labels you do not need, or draw it '
+    + 'with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).');
+  assert.doesNotMatch(model.summary, /fails the same way|Python exception|reload/);
+  assert.deepEqual(model.actions, ['retry', 'save-session']);
+  // A live edit that ran out of memory offers Retry: the next request runs on the new engine.
+  assert.deepEqual(liveEditFailure(model).actions, ['retry', 'generate']);
 });
 
 // B10: two user-fixable engine failures carry a producer diagnostic through the
