@@ -16,6 +16,8 @@ import { isRecordMajorDepthFileMatrix } from '../services/depth-track-state.js';
 import { inputSourceFiles } from '../services/input-types.js';
 import { settledCircularCardMarks } from '../services/record-discovery.js';
 import { cardHoldsRecordKey } from '../services/record-draw-selection.js';
+import { cardCropWindow } from '../services/drawing/inputs.js';
+import { circularRangesWithoutCard, circularRecordEntries, circularRecordRange } from '../services/record-options.js';
 import { msg } from '../utils/i18n.js';
 import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../services/layout-preferences.js';
 import { settingsScrollOwner } from '../services/settings-sections.js';
@@ -184,6 +186,11 @@ export const createCircularSourceEdits = ({
   const retireCardRecords = (drawing, uid, retirePresentation) => {
     const kept = drawing.recordsOff.filter((key) => !cardHoldsRecordKey(uid, key));
     if (kept.length !== drawing.recordsOff.length) drawing.recordsOff.splice(0, drawing.recordsOff.length, ...kept);
+    // The grid or batch crops of the card's records go with their presentation (PD-OI-044 scenario revision 5).
+    const ranges = circularRangesWithoutCard(drawing.form.circular_record_ranges, uid);
+    if (retirePresentation && ranges.length !== drawing.form.circular_record_ranges.length) {
+      drawing.form.circular_record_ranges = ranges;
+    }
     if (!cardHoldsRecordKey(uid, String(drawing.form.circular_record_selector || '').trim())) return;
     if (retirePresentation) retireCircularRecordPresentation(drawing);
     else retireCircularRecordSelector(drawing);
@@ -306,6 +313,25 @@ export const createCircularRecordDisplay = ({
   circularRecordPresentationPanel, afterPaint
 }) => {
   const { mode } = state;
+  /**
+   * A record chosen alone in Record select takes the crop its drawing keeps for it in a grid or batch into the
+   * single-record crop fields, where it can be changed (PD-OI-044 scenario revision 5): its one window in Start/End
+   * (or the list, across the origin), and none for a record without one. A drawing that keeps no such crop keeps
+   * its fields.
+   * @param {DrawingState} drawing @param {string} identity
+   */
+  const fillRecordRange = (drawing, identity) => {
+    const { form } = drawing;
+    if (!form.circular_record_ranges.length) return;
+    const entries = circularRecordEntries(drawing.circularRecordList.value);
+    const entry = entries.find((candidate) => candidate.value === identity);
+    const windows = (entry ? circularRecordRange(form.circular_record_ranges, entries, entry)?.windows : null) ?? [];
+    const only = cardCropWindow(windows);
+    form.circular_region_start = only ? only.start : null;
+    form.circular_region_end = only ? only.end : null;
+    form.circular_reverse = only ? only.reverseComplement : false;
+    form.circular_windows = only ? [] : windows.map((window) => ({ ...window }));
+  };
   const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
     && mode.value === 'circular'
     && !state.activeDrawing().form.multi_record_canvas && circularRecordDiscoveryState.value.status === 'ready');
@@ -317,6 +343,7 @@ export const createCircularRecordDisplay = ({
     if (!drawing) return { status: 'unavailable' };
     if (!circularRecordSelectionEnabled.value) return { status: 'unavailable' };
     const normalized = String(value || '').trim();
+    if (normalized && normalized !== drawing.form.circular_record_selector) fillRecordRange(drawing, normalized);
     drawing.form.circular_record_selector = normalized;
     drawing.adv.circular_grouping_intent = normalized ? 'single' : 'auto';
     rebindAnnotationRecords();

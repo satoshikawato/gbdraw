@@ -90,6 +90,7 @@ def test_slice_containers_of_a_version_hold_the_rows_that_version_wrote() -> Non
     assert session_51_rows == {
         ("config.form", "figure_width"), ("config.form", "figure_height"), ("config.form", "circular_windows"),
         ("config.adv", "feature_density_tracks"),
+        ("config.form", "circular_record_ranges"),
     }
     assert {row.since for row in MODE_SCOPED_SETTINGS} == {46, 51}
     assert slice_containers(CURRENT_SESSION_VERSION) == SLICE_CONTAINERS

@@ -134,7 +134,7 @@ const SHORT_AND_LONG = Object.freeze([
 const circularDrawing = (/** @type {Record<string, unknown>} */ form = {}, /** @type {string[]} */ recordsOff = []) => ({
   form: {
     circular_record_selector: '', multi_record_canvas: false,
-    circular_region_start: null, circular_region_end: null, circular_windows: [], ...form
+    circular_region_start: null, circular_region_end: null, circular_windows: [], circular_record_ranges: [], ...form
   },
   adv: { circular_grouping_intent: 'auto' },
   recordsOff,

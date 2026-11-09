@@ -178,8 +178,18 @@ a Session that the Python API saved with `RecordWindow(16000, 100)` loads with t
 it back as the request's window. A stored config without the key reads as an empty list; a value that is not a list
 reads as empty, with its Load repair row. The version does not change (Session 51 has not reached `main`).
 
+A Circular grid or batch drawing of Session 51 keeps the crop that a command line or Python API Session gave each of
+its records (PD-OI-044 scenario revision 5) in `config.form.circular_record_ranges`: a list of
+`{source, record, windows}`, where `source` is the uid of the record's File card, `record` names the record in that
+card's file as the request did (its record ID, `#k`, or empty for the record of a file of one record), and `windows`
+are the request's windows of that record. Load fills it from the request's grid or batch records; the next Generate
+and Save write each record's windows from it while the record is drawn in a grid or batch. A row that names no card,
+no record or no window with both ends is dropped with its Load repair row; a stored config without the key reads as
+an empty list. The version does not change (Session 51 has not reached `main`).
+
 The mode-scoped registry names the first Session version of each row (`since`, 46 unless a later Session added the
-row). `config.form.figure_width`, `config.form.figure_height` and `config.form.circular_windows` are `since` 51: no
+row). `config.form.figure_width`, `config.form.figure_height`, `config.form.circular_windows` and
+`config.form.circular_record_ranges` are `since` 51: no
 Session 46-50 writer wrote them, so a Session 46-50 slice that holds one is refused by Python
 (`slice_containers(version)` in `_validate_mode_slices`, and the band-46 admission shape) and dropped by Web Load with
 a `setting-replaced` row. Python's step of a Session 27-44 through the Session 50 layout writes none of them

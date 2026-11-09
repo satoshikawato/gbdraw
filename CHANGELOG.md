@@ -80,6 +80,16 @@ write-up of a release.
   and in Percent mode, and the scale reads only the windows with a value. A
   record of unknown bases only draws no GC track. Records of A, C, G and T only
   draw as before (OV-2799).
+- Fixed: a Circular Session drawn from a records table or a Python API request
+  (one figure per record or one canvas, also a table of one row) now saves a
+  cropped record as its input file with the record's range, as a single figure
+  already did, so the replay reads the same bases beside the crop. The Web app draws the loaded
+  range of each record, puts it in the crop fields when Record select shows
+  that record alone, and keeps it on Generate and Save. A crop whose features
+  or names were edited after it was cut is now saved as the record it was cut
+  from with those edits (OV-3034). The GC content, GC skew and Depth lines of a
+  crop of a circular record hold their last value up to 12 o'clock, as those of
+  a record that is not circular do.
 - Changed: the Auto GC content and GC skew window is now at most a tenth of the
   drawn length, and the Auto step at most a tenth of the Auto window, so figures
   shorter than 10 kb keep about a hundred samples: a 671 bp region uses a 67 bp

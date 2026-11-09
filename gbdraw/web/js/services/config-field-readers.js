@@ -61,6 +61,7 @@ import { isCardRow, markedRows } from './file-imports.js';
 /** @import { CardMarkedRow, FileImports, PriorityRuleRow, WhitelistRuleRow } from './file-imports.js' */
 /** @import { LoadRepair } from '../utils/load-repairs.js' */
 /** @import { ObjectShape } from '../utils/contract-shape.js' */
+/** @import { CircularRecordRange } from './record-options.js' */
 
 // The readers of the stored settings of a configuration (a drawing's draft, a
 // legacy configuration file) and of a Session's app `ui`, a drawing's `ui`
@@ -98,6 +99,23 @@ import { isCardRow, markedRows } from './file-imports.js';
  * @returns {FieldRow}
  */
 const row = (field, read) => ({ field, read: (value) => read(value) });
+
+/**
+ * The ranges a drawing or a Session stores, read as `CircularRecordRange`s: a row that names no card or no window,
+ * or a window without both ends, is left out; a value that is no list reads as none.
+ * @param {unknown} value
+ * @returns {CircularRecordRange[]}
+ */
+export const readCircularRecordRanges = (value) => (Array.isArray(value) ? value : []).flatMap((item) => {
+  const row = /** @type {Partial<Record<keyof CircularRecordRange, unknown>>} */ (
+    item && typeof item === 'object' && !Array.isArray(item) ? item : {}
+  );
+  const windows = readLinearSeqWindows(row.windows);
+  const source = typeof row.source === 'string' ? row.source.trim() : '';
+  if (!source || typeof row.record !== 'string' || !windows.length
+    || windows.some((window) => window.start === null || window.end === null)) return [];
+  return [{ source, record: row.record.trim(), windows }];
+});
 
 /**
  * How a depth or GC Percent axis is labelled. A Session or request saved before the setting
@@ -890,6 +908,12 @@ const containerTables = (mode) => Object.freeze([
     row('figure_height', (value) => figureLengthFormValue('height', value)),
     // The window list of a Circular record (a window across the origin); anything but a list is none, with its row.
     row('circular_windows', (value) => ({ value: readLinearSeqWindows(value), lost: !Array.isArray(value) && !isUnsetValue(value) })),
+    // The crops of a Circular grid's or batch's records; anything but a list is none, a row that names no record or
+    // window is dropped, each with its row.
+    row('circular_record_ranges', (value) => {
+      const ranges = readCircularRecordRanges(value);
+      return { value: ranges, lost: Array.isArray(value) ? ranges.length !== value.length : !isUnsetValue(value) };
+    }),
     // A null lock is an omission, the historical OFF (`importSessionDocument`; E-OD24, no row); the merge keeps
     // the target's value for one of another kind, with its row.
     row('keep_definition_left_aligned', onlyTrue)

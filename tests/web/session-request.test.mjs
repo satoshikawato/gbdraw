@@ -420,7 +420,7 @@ const state = {
     labels_mode: 'none', show_labels_linear: 'none', track_type: 'tuckin',
     linear_track_layout: 'middle', linear_ruler_on_axis: false, align_center: false,
     keep_definition_left_aligned: false, show_scale: true, scale_style: 'bar',
-    normalize_length: false, circular_windows: []
+    normalize_length: false, circular_windows: [], circular_record_ranges: []
   },
   adv: {
     features: ['CDS'], feature_shapes: { CDS: 'arrow' }, nt: 'GC', evalue: '1e-5',

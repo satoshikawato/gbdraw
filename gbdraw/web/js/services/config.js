@@ -5731,6 +5731,8 @@ export const CIRCULAR_RECORD_FORM_DEFAULTS = Object.freeze((({
 /** @type {readonly string[]} */
 const RECORD_BOUND_ROWS = Object.freeze([
   ...Object.keys(CIRCULAR_RECORD_FORM_DEFAULTS).map((field) => `config.form.${field}`),
+  // The grid or batch crops of the drawing's records (PD-OI-044 scenario revision 5).
+  'config.form.circular_record_ranges',
   'config.adv.multi_record_positions', 'config.recordsOff', 'config.recordDisplayDrafts'
 ]);
 // The registry rows a style copy leaves out (PD-OI-090 〔作成〕(3), R17-4):

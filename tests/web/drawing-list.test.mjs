@@ -838,6 +838,34 @@ test('removing the Circular source returns every record-bound form field to its 
     { ...CIRCULAR_RECORD_FORM_DEFAULTS });
 });
 
+// PD-OI-044 scenario revision 5: a grid or batch crop goes with its card's file when the card is removed, or when
+// its file is replaced and held more than one record; a replaced file of one record keeps it, as a one-record crop.
+test('removing or replacing a Circular file drops or keeps the grid and batch crops of its records', async () => {
+  const app = createAppSetup();
+  app.selectDrawing('circular');
+  const drawing = state.activeDrawing();
+  const { replaceCircularSources, createCircularSource } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  replaceCircularSources(drawing.slices.inputs, ['card-1', 'card-2', 'card-3'].map((uid) => createCircularSource({ uid })));
+  for (const uid of ['card-1', 'card-2', 'card-3']) app.setCircularSourceFile(uid, 'gb', new File(['LOCUS'], `${uid}.gb`));
+  const range = (source, record) => ({ source, record, windows: [{ start: 11, end: 90, reverseComplement: false, column: null }] });
+  drawing.form.circular_record_ranges = [range('card-1', ''), range('card-2', ''), range('card-3', 'B')];
+  // The records each card was read with (a replacement starts a new read).
+  const read = () => {
+    drawing.circularRecordList.value = [
+      { uid: 'card-2', k: 1, identity: 'card-2', record_id: 'A' },
+      { uid: 'card-3', k: 1, identity: 'card-3:1', record_id: 'A' }, { uid: 'card-3', k: 2, identity: 'card-3:2', record_id: 'B' }
+    ];
+  };
+  read();
+  app.setCircularSourceFile('card-1', 'gb', null);
+  read();
+  app.setCircularSourceFile('card-2', 'gb', new File(['LOCUS'], 'card-2-new.gb'));
+  assert.deepEqual(drawing.form.circular_record_ranges.map(({ source }) => source), ['card-2', 'card-3']);
+  read();
+  app.setCircularSourceFile('card-3', 'gb', new File(['LOCUS'], 'card-3-new.gb'));
+  assert.deepEqual(drawing.form.circular_record_ranges.map(({ source }) => source), ['card-2']);
+});
+
 // D-15-186: "Every drawing that uses this file" stays all-or-nothing. While the
 // drawing switch waits it writes nothing, not even the clicked card's upload,
 // and the busy reason is shown once through `onBusy`.

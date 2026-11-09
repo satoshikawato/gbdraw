@@ -24,7 +24,7 @@ import { cloneJsonData } from '../services/json-clone.js';
 import { featureIdentityKey, requestFeaturePlacements } from '../services/feature-placement.js';
 import { committedRecordForKey, committedRecordUsesSource } from '../services/feature-identity.js';
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
-import { circularDrawingCropped } from '../services/record-options.js';
+import { circularDrawingCropped, circularDrawingCroppedRecords } from '../services/record-options.js';
 /** @import { DrawingId } from '../services/drawing-view.js' */
 import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 import { ownEntry } from '../utils/own-entry.js';
@@ -66,9 +66,17 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  * @property {RecordEntryInput[]} records
  * @property {unknown} selector
  * @property {boolean} cropped
+ * @property {ReadonlySet<string>} croppedRecords The identities of its records a Circular grid or batch draws
+ *   cropped (`circularDrawingCroppedRecords`); `cropped` covers every record.
  * @property {boolean} reverse
  * @property {boolean} shown Whether the drawing shows its records' rows (`circularDisplaySources`).
  */
+
+/**
+ * Whether a record row of `source` draws a crop, so it takes no display start.
+ * @param {DrawingRecordSource} source @param {{ identity?: unknown }} row
+ */
+const rowCropped = (source, row) => source.cropped || source.croppedRecords.has(String(row.identity ?? ''));
 
 /**
  * The record sources of a Circular drawing: its source cards, each with the
@@ -89,6 +97,7 @@ const circularDisplaySources = (drawing) => {
     selector: chosen && chosen.uid === uid ? chosen.selector : '',
     shown: !chosen || chosen.uid === uid,
     cropped: circularDrawingCropped(list, drawing),
+    croppedRecords: circularDrawingCroppedRecords(list, drawing),
     reverse: cropFormReverseComplement({ windows: drawing.form.circular_windows, reverse: drawing.form.circular_reverse })
   }));
 };
@@ -194,7 +203,7 @@ export const createRecordDisplayControls = ({
         ...(({ primaryFile, pairedFile }) => ({ source: primaryFile, paired: pairedFile }))(
           inputSourceFiles(drawing.inputType.value, seq)),
         records: linearRecordsFor(drawing, seq), selector: seq.region_record_id,
-        cropped: Boolean(seq.region_start || seq.region_end || seq.windows.length),
+        cropped: Boolean(seq.region_start || seq.region_end || seq.windows.length), croppedRecords: new Set(),
         reverse: cropFormReverseComplement(linearCardCropForm(seq)), shown: true })));
   // The sources of every drawing, in the drawings' order.
   const sources = computed(() => {
@@ -204,12 +213,12 @@ export const createRecordDisplayControls = ({
   });
   const allRows = computed(() => sources.value.flatMap((source) => source.source
     ? buildRecordDisplayRows({ ...source, selector: '' }).map((row) => ({ ...row, drawingId: source.drawingId,
-        cropped: source.cropped, reverse: source.reverse, paired: source.paired })) : []));
+        cropped: rowCropped(source, row), reverse: source.reverse, paired: source.paired })) : []));
   const rows = computed(() => sourcesOf(state.activeDrawing()).filter((source) => source.shown)
     .flatMap((source) => {
       try {
         return source.source ? buildRecordDisplayRows(source).map((row) => ({ ...row, drawingId: source.drawingId,
-          cropped: source.cropped, reverse: source.reverse, paired: source.paired })) : [];
+          cropped: rowCropped(source, row), reverse: source.reverse, paired: source.paired })) : [];
       } catch { return []; } // Existing selector control owns its visible validation error.
     }));
   // A drawing's drafts on the rows of their sources (OV-278). An edit of a

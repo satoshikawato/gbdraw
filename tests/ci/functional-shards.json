@@ -14,6 +14,7 @@
     "tests/web/circular-file-cards.playwright.spec.js": 0.6,
     "tests/web/circular-multi-record-default.playwright.spec.js": 0.37,
     "tests/web/circular-record-presentation.playwright.spec.js": 0.74,
+    "tests/web/circular-record-ranges.playwright.spec.js": 0.6,
     "tests/web/circular-track-measure-input.playwright.spec.js": 2.36,
     "tests/web/color-captions.playwright.spec.js": 2.61,
     "tests/web/comparison-ui.playwright.spec.js": 1.63,
@@ -153,7 +154,8 @@
       "tests/web/setting-application-notes.playwright.spec.js",
       "tests/web/source-recipe-cli-parity.playwright.spec.js",
       "tests/web/source-visibility-reconciliation.playwright.spec.js",
-      "tests/web/region-drawing.playwright.spec.js"
+      "tests/web/region-drawing.playwright.spec.js",
+      "tests/web/circular-record-ranges.playwright.spec.js"
     ],
     [
       "tests/web/auxiliary-file-history.playwright.spec.js",

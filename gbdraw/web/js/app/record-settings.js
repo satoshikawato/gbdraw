@@ -26,7 +26,7 @@ import {
   recordsWithEdits,
   removeRecordEdits
 } from '../services/record-draw-selection.js';
-import { circularRecordEntries, circularRecordSelection, resolveDisambiguatedRecordSelection } from '../services/record-options.js';
+import { circularRecordEntries, circularRecordRange, circularRecordSelection, resolveDisambiguatedRecordSelection } from '../services/record-options.js';
 import { msg } from '../utils/i18n.js';
 import { fileCardLine } from './file-card.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
@@ -156,6 +156,24 @@ export const createRecordSettingsSources = ({
       displaySource: entry.uid, displaySelector: entry.selector
     }));
   };
+  /**
+   * The crop a Circular grid or batch keeps for each read record (PD-OI-044 scenario revision 5), by identity.
+   * @param {DrawingState} drawing
+   */
+  const circularRangeEdits = (drawing) => {
+    const { form } = drawing;
+    if (!form.circular_record_ranges.length) return [];
+    const entries = circularEntriesOf(drawing);
+    return entries.flatMap((entry) => {
+      const range = circularRecordRange(form.circular_record_ranges, entries, entry);
+      return range === null ? [] : [{
+        recordKey: entry.value,
+        remove: () => {
+          form.circular_record_ranges = form.circular_record_ranges.filter((/** @type {unknown} */ row) => row !== range);
+        }
+      }];
+    });
+  };
   /** The record settings owners of a drawing's records. @param {DrawingState} drawing */
   const recordSettingsOwners = (drawing) => (drawing.mode === 'circular' ? circularRecordSettingsOwners(drawing) : drawing.linearSeqs.map((seq) => linearRecordSettingsOwner(drawing, seq)));
   /** @param {DrawingState} drawing @returns {RecordEditData} */
@@ -172,6 +190,7 @@ export const createRecordSettingsSources = ({
       }] : [];
     }),
     recordDisplayDrafts: drawing.recordDisplayDrafts,
+    recordRangeEdits: drawing.mode === 'circular' ? circularRangeEdits(drawing) : [],
     comparisonEdges: drawing.mode === 'linear' ? drawing.linearComparisonPlan.edges : [],
     annotationBindingField: ANNOTATION_RECORD_BINDING_KEY
   });

@@ -123,6 +123,8 @@ _FORM_ROWS = _rows(
     ("circular_reverse", "circular", "own"),
     # The window across the origin a CLI or Python Session gave the record; the Start/End fields cannot hold it.
     ("circular_windows", "circular", "own", 51),
+    # The crop of each record of a Circular grid or batch that a CLI or Python Session gave it (PD-OI-044 rev 5).
+    ("circular_record_ranges", "circular", "own", 51),
     ("circular_record_label", "circular", "own"),
     ("circular_record_subtitle", "circular", "own"),
     ("separate_strands", "both", "copy"),
