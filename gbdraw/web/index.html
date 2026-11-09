@@ -5410,7 +5410,9 @@
                                                 class="grid grid-cols-[minmax(0,1fr)_3rem_auto] items-center gap-1.5"
                                                 :class="{ 'opacity-60': !recordSelection.isDrawn('circular', position.selector) }"
                                             >
-                                                <span class="truncate text-[10px] text-slate-700">{{ getCircularRecordOrderLabel(position.selector) }}<span v-if="!recordSelection.isDrawn('circular', position.selector)" data-record-off-badge class="ml-1 rounded bg-slate-200 px-1 text-[9px]">{{ t('OFF') }}</span></span>
+                                                <!-- The label wraps between words, never inside one (OV-3021): the record ID and the OFF badge
+                                                     stay whole and in view; only a word wider than the row, a long file name, ends in an ellipsis. -->
+                                                <span class="min-w-0 overflow-hidden text-ellipsis break-normal text-[10px] text-slate-700" :title="getCircularRecordOrderLabel(position.selector)">{{ getCircularRecordOrderLabel(position.selector) }} <span v-if="!recordSelection.isDrawn('circular', position.selector)" data-record-off-badge class="whitespace-nowrap rounded bg-slate-200 px-1 text-[9px]">{{ t('OFF') }}</span></span>
                                                 <select
                                                     class="form-input py-0.5 px-1 text-[10px]"
                                                     :aria-label="t('Row for {record}', { record: getCircularRecordOrderLabel(position.selector) })"
