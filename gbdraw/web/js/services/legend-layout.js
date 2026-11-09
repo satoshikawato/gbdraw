@@ -23,6 +23,8 @@ const LEGEND_LINE_HEIGHT_RATIO = 24.0 / 14.0;
 const LEGEND_TEXT_OFFSET_RATIO = 22.0 / 14.0;
 const GRADIENT_BAR_WIDTH_RATIO = 10;
 const GRADIENT_LABEL_GAP_RATIO = 0.2;
+// Python's GRADIENT_TEXT_GAP (gbdraw/legend/metrics.py): between a gradient bar and the text above or below it.
+const GRADIENT_TEXT_GAP = 2.0;
 // The similarity-ring block (gbdraw/legend/circular_layout.py, PD-OI-110).
 const RING_OUTER_CAPTION = 'outer';
 const RING_INNER_CAPTION = 'inner';
@@ -481,7 +483,7 @@ const stackCompactGradientRows = (scaleTexts, { rect, lineHeight, labelHeight, m
   for (const { texts: [minLabelText, maxLabelText], indexes } of groups.values()) {
     if (scales.length) top = scales[scales.length - 1].scaleLabelY + labelHeight + (lineHeight / 2.0);
     indexes.forEach((index, position) => rows.push([index, top + (rect / 2.0) + (position * lineHeight)]));
-    const scaleLabelY = top + rect + ((indexes.length - 1) * lineHeight) + 2.0;
+    const scaleLabelY = top + rect + ((indexes.length - 1) * lineHeight) + GRADIENT_TEXT_GAP;
     scales.push({ minLabelText, maxLabelText, minLabelX, maxLabelX, scaleLabelY });
   }
   return { rows, scales, height: scales[scales.length - 1].scaleLabelY + labelHeight };
@@ -585,6 +587,20 @@ const singleGradientBlockX = (barWidth, titleWidth) => {
 };
 
 /**
+ * Python's `single_gradient_row_ys`: a one-gradient block's title, a gap, its bar, a gap and its scale line, the
+ * title box starting at y = 0 (OV-2982).
+ * @param {number} titleHeight
+ * @param {number} rect
+ * @param {number} labelHeight
+ * @returns {{ barY: number, scaleLabelY: number, height: number }}
+ */
+const singleGradientRowYs = (titleHeight, rect, labelHeight) => {
+  const barY = titleHeight + GRADIENT_TEXT_GAP + (rect / 2.0);
+  const scaleLabelY = barY + (rect / 2.0) + GRADIENT_TEXT_GAP;
+  return { barY, scaleLabelY, height: scaleLabelY + labelHeight };
+};
+
+/**
  * @param {readonly LegendLayoutRow[]} rows
  * @param {(caption: string) => { width: number, height: number }} measure
  * @param {number} rect
@@ -612,13 +628,12 @@ const linearGradientLayout = (rows, measure, rect, lineHeight) => {
   const row = gradients[0];
   const title = measure(row.name);
   const { width, barX } = singleGradientBlockX(barWidth, title.width);
-  const barY = title.height + (rect / 2.0);
-  const scaleLabelY = barY + (rect / 2.0) + 2.0;
+  const { barY, scaleLabelY, height } = singleGradientRowYs(title.height, rect, scaleLabelHeight);
   const [minLabelText, maxLabelText] = gradientScaleTexts(row);
   return {
     compact: false,
     entries: [{ key: row.key, row, titleX: width / 2.0, titleY: 0.0, barX, barY }],
-    width, height: scaleLabelY + scaleLabelHeight, barWidth,
+    width, height, barWidth,
     minLabelText, maxLabelText, minLabelX: barX, maxLabelX: barX + barWidth, scaleLabelY, moreScales: []
   };
 };
@@ -906,7 +921,7 @@ const circularRingLayout = (rings, measure, rect, centred) => {
   const minLabelText = minGradientLabelText(rings[0].row.minValue ?? 0);
   if (perRingRamps) {
     const barX = namesWidth + rect;
-    const scaleLabelY = lastRowY + (rect / 2) + 2;
+    const scaleLabelY = lastRowY + (rect / 2) + GRADIENT_TEXT_GAP;
     return ringBlockAt({
       width: barX + barWidth,
       height: Math.max(scaleLabelY + labelHeight, showCaptions ? innerCaptionY + (rect / 2) : 0.0),
@@ -915,7 +930,7 @@ const circularRingLayout = (rings, measure, rect, centred) => {
   }
   const width = Math.max(namesWidth, barWidth);
   const bandY = innerCaptionY + (RING_BAND_LINE_GAP * line);
-  const scaleLabelY = bandY + (rect / 2) + 2;
+  const scaleLabelY = bandY + (rect / 2) + GRADIENT_TEXT_GAP;
   const block = {
     width, height: scaleLabelY + labelHeight, showCaptions, outerCaptionY, innerCaptionY, rows, barWidth, bandY,
     minLabelText, scaleLabelY
@@ -983,15 +998,13 @@ const circularGradientLayout = (gradients, measure, rect, top) => {
   }
   const entry = gradients[0];
   const title = measure(entry.row.name);
-  const barY = title.height + (rect / 2);
-  const scaleLabelY = barY + (rect / 2) + 2;
-  const height = scaleLabelY + labelHeight;
+  const { barY, scaleLabelY, height } = singleGradientRowYs(title.height, rect, labelHeight);
   const { width, barX } = singleGradientBlockX(barWidth, title.width);
   const [minLabelText, maxLabelText] = gradientScaleTexts(entry.row);
   return {
     compact: false,
     width,
-    height: Math.max(0.0, height),
+    height,
     barWidth,
     barX,
     minLabelText,

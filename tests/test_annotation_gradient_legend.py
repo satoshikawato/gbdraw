@@ -250,3 +250,46 @@ def test_circular_gradient_rows_of_two_scales_draw_two_scale_lines() -> None:
     root = _svg(CircularLegendGroup(measurement, LegendTable(table)).get_group())
     block = _child(root, "conservation_identity_legend")
     assert _texts(block) == ["Pairwise match identity", "Query position", "70%", "100%", "start", "end"]
+
+
+def _single_row_geometry_case(mode: str, legend: str) -> tuple[LegendMeasurement, list[tuple[float, float, float, float]]]:
+    """(title y, bar y, scale line y, block height) of the one-gradient block, per drawn orientation."""
+
+    if mode == "circular":
+        table = {"CDS": {"type": "solid", "fill": "#54bcf8", "stroke": "none", "width": 0}, "Query position": ANNOTATION_ROW}
+        measurement = _circular_measurement(table, legend)
+        rows = measurement.circular_layout.gradient_rows  # type: ignore[union-attr]
+        assert rows is not None and not rows.compact
+        entry = rows.single_entries[0]
+        return measurement, [(entry.title_y, entry.bar_y, rows.scale_label_y, rows.height)]
+    table = {"CDS": {"type": "solid", "fill": "#54bcf8", "stroke": "none", "width": 0}, "Query position": ANNOTATION_ROW}
+    measurement = _linear_measurement(table, legend)
+    layout = measurement.linear_layout
+    assert layout is not None
+    found = []
+    for orientation in (layout.horizontal, layout.vertical):
+        gradient = orientation.gradient
+        assert gradient is not None and not gradient.compact
+        entry = gradient.entries[0]
+        found.append((entry.title_y, entry.bar_y, gradient.scale_label_y, gradient.height))
+    return measurement, found
+
+
+@pytest.mark.parametrize(("mode", "legend"), [("circular", "right"), ("circular", "bottom"), ("linear", "bottom")])
+def test_single_gradient_row_title_ends_one_gap_above_its_bar(mode: str, legend: str) -> None:
+    """OV-2982: a one-gradient block's title box ends ``GRADIENT_TEXT_GAP`` above its bar, the gap its scale line
+    keeps below the bar, so a title's descenders never touch the bar; both modes read one owner."""
+
+    from gbdraw.legend.metrics import GRADIENT_TEXT_GAP, legend_caption_box, single_gradient_row_ys
+
+    measurement, rows = _single_row_geometry_case(mode, legend)
+    rect = measurement.color_rect_size
+    _, title_height = legend_caption_box("Query position", measurement.font_family, measurement.font_size)
+    _, label_height = drawn_text_box("100%", measurement.font_family, measurement.font_size)
+    owner = single_gradient_row_ys(title_height, rect, label_height)
+    assert GRADIENT_TEXT_GAP > 0
+    for title_y, bar_y, scale_label_y, height in rows:
+        bar_top = bar_y - rect / 2
+        assert bar_top - (title_y + title_height) == pytest.approx(GRADIENT_TEXT_GAP)
+        assert scale_label_y - (bar_y + rect / 2) == pytest.approx(GRADIENT_TEXT_GAP)
+        assert (bar_y - title_y, scale_label_y - title_y, height) == (owner.bar_y, owner.scale_label_y, owner.height)

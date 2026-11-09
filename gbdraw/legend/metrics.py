@@ -67,6 +67,31 @@ def single_gradient_block_x(bar_width: float, title_width: float) -> tuple[float
     return width, (width - float(bar_width)) / 2.0
 
 
+# The gap between a gradient bar and the text above or below it: a scale line hangs this far below its bars, and a
+# one-gradient block's title box ends this far above its bar (OV-2982), so the title, the bar and the scale line are
+# spaced alike.
+GRADIENT_TEXT_GAP = 2.0
+
+
+@dataclass(frozen=True, slots=True)
+class SingleGradientRowYs:
+    """The vertical geometry of a one-gradient Legend block whose title box starts at y = 0: the centre of its bar,
+    the top of its scale line, and the block's height (the bottom of that line)."""
+
+    bar_y: float
+    scale_label_y: float
+    height: float
+
+
+def single_gradient_row_ys(title_height: float, color_rect_size: float, label_height: float) -> SingleGradientRowYs:
+    """The title, then ``GRADIENT_TEXT_GAP``, the bar, ``GRADIENT_TEXT_GAP`` and the scale line of a one-gradient
+    Legend block (``label_height`` is the scale line's box). Every Legend layout places a one-gradient block here."""
+
+    bar_y = float(title_height) + GRADIENT_TEXT_GAP + (float(color_rect_size) / 2.0)
+    scale_label_y = bar_y + (float(color_rect_size) / 2.0) + GRADIENT_TEXT_GAP
+    return SingleGradientRowYs(bar_y, scale_label_y, scale_label_y + float(label_height))
+
+
 def gradient_label_text(value: object) -> str:
     """The Legend text of one end of an identity scale: ``70%``, ``72.5%``."""
     # Non-numeric values were never accepted; legend properties are numeric or numeric strings.
@@ -152,7 +177,7 @@ def stack_compact_gradient_rows(
             (index, top + (color_rect_size / 2.0) + (position * line_height))
             for position, index in enumerate(indexes)
         )
-        scale_label_y = top + color_rect_size + ((len(indexes) - 1) * line_height) + 2.0
+        scale_label_y = top + color_rect_size + ((len(indexes) - 1) * line_height) + GRADIENT_TEXT_GAP
         scales.append(GradientScaleLayout(min_text, max_text, min_label_x, max_label_x, scale_label_y))
     return CompactGradientRows(tuple(rows), tuple(scales), scales[-1].scale_label_y + label_height)
 
@@ -160,8 +185,10 @@ def stack_compact_gradient_rows(
 __all__ = [
     "CompactGradientRows",
     "GRADIENT_SCALE_NAME_ATTRIBUTES",
+    "GRADIENT_TEXT_GAP",
     "GradientScaleLayout",
     "LEGEND_SWATCH_SIZE_PATH",
+    "SingleGradientRowYs",
     "gradient_label_text",
     "gradient_scale_texts",
     "legend_caption_box",
@@ -169,6 +196,7 @@ __all__ = [
     "legend_swatch_size",
     "legend_text_x_offset",
     "single_gradient_block_x",
+    "single_gradient_row_ys",
     "stack_compact_gradient_rows",
     "write_gradient_scale_names",
 ]
