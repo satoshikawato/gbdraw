@@ -320,6 +320,49 @@ def test_linear_record_plans_expand_only_records_with_extra_feature_lanes() -> N
 
 
 @pytest.mark.linear
+@pytest.mark.parametrize("record_count", [1, 2])
+def test_default_slots_draw_the_same_svg_as_the_same_explicit_stack(record_count: int) -> None:
+    """A Linear figure without a stack tags its slot groups as the same stack written out does (OV-3012).
+
+    The Web keeps the Result when Use custom stack is turned on, and the next Generate sends the stack, so the
+    two must draw the same SVG, slot ids and group ids included.
+    """
+
+    cfg = apply_config_overrides(None, {"labels.linear.scope": "none"})
+    records = [_record(f"rec{index + 1}") for index in range(record_count)]
+    depth = [[_depth_table(record.id)] for record in records]
+
+    def draw(slots: list[str] | None) -> str:
+        return assemble_linear_diagram_from_records(
+            records,
+            LinearAssemblyInputs(cfg=cfg, legend="none", depth_track_tables=depth, linear_track_slots=slots),
+        ).tostring()
+
+    default_svg = draw(None)
+    explicit_svg = draw(
+        [
+            "features:features@side=overlay",
+            "depth:depth@side=below,track_index=0",
+            "gc_content:dinucleotide_content@side=below,nt=GC",
+            "gc_skew:dinucleotide_skew@side=below,nt=GC",
+        ]
+    )
+
+    tagged = {
+        element.attrib["data-gbdraw-slot-id"]: element.attrib["data-gbdraw-slot-renderer"]
+        for element in ET.fromstring(default_svg).iter()
+        if "data-gbdraw-slot-id" in element.attrib
+    }
+    assert tagged == {
+        "features": "features",
+        "depth": "depth",
+        "gc_content": "dinucleotide_content",
+        "gc_skew": "dinucleotide_skew",
+    }
+    assert default_svg == explicit_svg
+
+
+@pytest.mark.linear
 def test_default_middle_slots_match_explicit_geometry_and_shared_spacing() -> None:
     overrides = {
         "canvas.show_gc": True,

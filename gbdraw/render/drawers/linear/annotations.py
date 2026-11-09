@@ -43,7 +43,6 @@ from gbdraw.render.drawers.annotation_marks import (
     MarkReach,
     annotation_dom_id,
     cap_size,
-    dom_token,
     gradient_fill_group,
     gradient_steps,
     label_ink_offsets,
@@ -543,10 +542,6 @@ def linear_annotation_labels(
     return tuple(labels)
 
 
-def _track_group_id(track: ResolvedAnnotationTrack, record_index: int, dom_group_id: str | None) -> str:
-    return dom_group_id or f"gbdraw-annotation-track-{dom_token(track.slot_id)}-{record_index + 1}"
-
-
 def _label_text(label: LinearAnnotationLabel, font_family: str, y_offset_px: float = 0.0) -> Text:
     """A label's ``<text>``: its runs (``italic_markup_runs``) as ``write_text_runs`` writes them."""
 
@@ -575,8 +570,8 @@ def linear_annotation_track_content(
     font_family: str,
     params: AnnotationTrackParams,
     labels: Sequence[LinearAnnotationLabel] = (),
-    dom_group_id: str | None = None,
-    semantic_slot_id: str | None = None,
+    group_id: str,
+    slot_id: str,
 ) -> GroupContent:
     """Build an annotation track in record-local coordinates (render stage ``annotation_content``).
 
@@ -590,12 +585,10 @@ def linear_annotation_track_content(
     of a clipped track are the content's definitions.
     """
 
-    group_id = _track_group_id(track, record_index, dom_group_id)
     group = Group(id=group_id)
     definitions: dict[str, BaseElement] = {}
-    if semantic_slot_id:
-        group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
-        group.attribs["data-gbdraw-slot-renderer"] = "annotations"
+    group.attribs["data-gbdraw-slot-id"] = slot_id
+    group.attribs["data-gbdraw-slot-renderer"] = "annotations"
     placements, slot_lane_height = _record_lanes(
         track, record_index=record_index, height_px=frame.height_px, params=params
     )
@@ -722,11 +715,7 @@ def linear_annotation_track_content(
     clip_paths: list[BaseElement] = []
     if track.clipped:
         group.attribs["data-gbdraw-annotation-clipped"] = "true"
-        clip_id = (
-            stable_svg_id("annotation_clip", "linear", group_id)
-            if dom_group_id
-            else f"gbdraw-annotation-clip-{dom_token(track.slot_id)}-{record_index + 1}"
-        )
+        clip_id = stable_svg_id("annotation_clip", "linear", group_id)
         clip_paths.append(frame.clip_path(clip_id, y_offset_px=y_offset_px, bar_length_px=bar_length_px, labels=labels))
         group.attribs["clip-path"] = f"url(#{clip_id})"
     return GroupContent.of(group, (*definitions.values(), *clip_paths))
@@ -738,7 +727,7 @@ def linear_region_label_front_content(
     record_index: int,
     font_family: str,
     labels: Sequence[LinearAnnotationLabel],
-    dom_group_id: str | None = None,
+    group_id: str,
 ) -> GroupContent | None:
     """The track's backed labels in front of the record's leader lines (LP-D82 ``RGN-FRONT``), in
     the track's slot-local frame; ``None`` when it has none.
@@ -751,7 +740,7 @@ def linear_region_label_front_content(
     backed = [label for label in labels if label.backed]
     if not backed:
         return None
-    group = Group(id=f"{_track_group_id(track, record_index, dom_group_id)}-front")
+    group = Group(id=f"{group_id}-front")
     for label in backed:
         item = Group()
         item.attribs["data-gbdraw-region-label-for"] = annotation_dom_id(

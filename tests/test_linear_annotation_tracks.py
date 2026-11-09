@@ -100,7 +100,7 @@ def test_linear_highlight_automatically_renders_behind_features() -> None:
         element
         for element in elements
         if element.attrib.get("data-gbdraw-record-id") == "r1"
-        and element.attrib.get("id", "").startswith("record_group_")
+        and element.attrib.get("data-gbdraw-slot-renderer") == "features"
     )
     assert elements.index(highlight_group) < elements.index(record_group)
     highlight_rect = next(element for element in highlight_group if element.tag.endswith("rect"))
@@ -2584,3 +2584,49 @@ def test_multi_record_annotation_lanes_use_final_sequence_width() -> None:
     assert slots["annotations_1"]["heightPx"] == pytest.approx(
         35.0 + bottom - top + 2.0 * style.label_offset + 2.0 * paint
     )
+
+
+@pytest.mark.linear
+def test_linear_region_set_without_a_stack_tags_its_slot_as_the_written_stack_does() -> None:
+    """The automatic Annotations row of a region set is tagged and named as the same stack written out (OV-3012)."""
+
+    record = SeqRecord(Seq("A" * 1000), id="r1", name="r1")
+    record.features = [SeqFeature(FeatureLocation(120, 250, strand=1), type="CDS")]
+    annotations = AnnotationOptions(
+        sets=(AnnotationSet("regions", (RegionAnnotation("region", CoordinateSpan(None, 100, 300), label="Region"),)),)
+    )
+    cfg = apply_config_overrides(None, {"labels.linear.scope": "none"})
+
+    def draw(slots: list[LinearTrackSlot] | None) -> str:
+        return assemble_linear_diagram_from_records(
+            [record],
+            LinearAssemblyInputs(cfg=cfg, legend="none", annotation_options=annotations, linear_track_slots=slots),
+        ).tostring()
+
+    default_svg = draw(None)
+    explicit_svg = draw(
+        [
+            LinearTrackSlot(
+                id="annotations_1", renderer="annotations", side="above", params={"set_id": "regions", "marks": ("band",)}
+            ),
+            LinearTrackSlot(id="features", renderer="features", side="overlay"),
+            LinearTrackSlot(id="gc_content", renderer="dinucleotide_content", side="below", params={"nt": "GC"}),
+            LinearTrackSlot(id="gc_skew", renderer="dinucleotide_skew", side="below", params={"nt": "GC"}),
+        ]
+    )
+
+    def slot_groups(svg: str) -> list[tuple[str, str, str]]:
+        return [
+            (element.attrib["data-gbdraw-slot-id"], element.attrib["data-gbdraw-slot-renderer"], element.attrib["id"])
+            for element in ElementTree.fromstring(svg).iter()
+            if "data-gbdraw-slot-id" in element.attrib
+        ]
+
+    # The automatic row fits its height to its marks, so only the tags and ids are compared.
+    assert [slot_id for slot_id, _renderer, _id in slot_groups(default_svg)] == [
+        "annotations_1",
+        "features",
+        "gc_content",
+        "gc_skew",
+    ]
+    assert slot_groups(default_svg) == slot_groups(explicit_svg)

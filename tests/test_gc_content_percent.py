@@ -68,6 +68,17 @@ def _axis_font_sizes(svg: str, axis_id: str) -> set[str]:
     return set(re.findall(r'font-size="([^"]+)"', match.group(0)))
 
 
+def _slot_group_id(svg: str, renderer: str) -> str:
+    """The id of the one group that draws ``renderer``, found by its slot tag."""
+
+    (group_id,) = [
+        str(element.get("id"))
+        for element in ET.fromstring(svg).iter()
+        if element.get("data-gbdraw-slot-renderer") == renderer
+    ]
+    return group_id
+
+
 def _svg_slot_translate_y(svg: str, renderer: str) -> float:
     root = ET.fromstring(svg)
     group = next(
@@ -224,10 +235,11 @@ def test_linear_gc_content_percent_mode_adds_percent_axis_without_depth_axis() -
         ),
     ).tostring()
 
-    assert 'id="gc_content_axis"' in svg
-    assert 'id="gc_content_percent_background"' in svg
-    assert 'id="gc_content_percent_border"' in svg
-    assert 'id="depth_axis"' not in svg
+    gc_id = _slot_group_id(svg, "dinucleotide_content")
+    assert f'id="{gc_id}_axis"' in svg
+    assert f'id="{gc_id}_percent_background"' in svg
+    assert f'id="{gc_id}_percent_border"' in svg
+    assert 'data-gbdraw-slot-renderer="depth"' not in svg
     assert ">0%<" in svg
     assert ">50%<" in svg
     assert ">100%<" in svg
@@ -309,7 +321,7 @@ def test_default_gc_content_deviation_mode_does_not_emit_percent_axis() -> None:
     ).tostring()
 
     assert 'id="gc_content_axis"' not in circular_svg
-    assert 'id="gc_content_axis"' not in linear_svg
+    assert f'id="{_slot_group_id(linear_svg, "dinucleotide_content")}_axis"' not in linear_svg
     assert "percent_background" not in circular_svg
     assert "percent_border" not in circular_svg
     assert "percent_background" not in linear_svg
@@ -440,8 +452,8 @@ def test_linear_gc_content_percent_axis_inherits_depth_tick_font_size() -> None:
         ),
     ).tostring()
 
-    assert _axis_font_sizes(svg, "depth_axis") == {"11.0"}
-    assert _axis_font_sizes(svg, "gc_content_axis") == {"11.0"}
+    assert _axis_font_sizes(svg, f"{_slot_group_id(svg, 'depth')}_axis") == {"11.0"}
+    assert _axis_font_sizes(svg, f"{_slot_group_id(svg, 'dinucleotide_content')}_axis") == {"11.0"}
 
 
 def test_circular_cli_gc_percent_options_forward_to_api(

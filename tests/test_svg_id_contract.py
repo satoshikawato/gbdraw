@@ -624,8 +624,13 @@ def test_default_dinucleotide_tracks_expose_canonical_slot_hooks(
         "gc_content": "dinucleotide_content",
         "gc_skew": "dinucleotide_skew",
     }
-    assert groups["gc_content"].attrib["id"] == "gc_content"
-    assert groups["gc_skew"].attrib["id"] in {"skew", "gc_skew"}
+    # Circular keeps its preset group names; Linear names every slot group as a written stack does (OV-3012).
+    if mode == "circular":
+        assert groups["gc_content"].attrib["id"] == "gc_content"
+        assert groups["gc_skew"].attrib["id"] == "skew"
+    else:
+        assert groups["gc_content"].attrib["id"].startswith("track_slot_")
+        assert groups["gc_skew"].attrib["id"].startswith("track_slot_")
 
 
 @pytest.mark.circular
@@ -742,16 +747,17 @@ def test_record_group_ids_do_not_collide_with_renderer_owned_groups(
     assert _ids(first) == _ids(second)
     _assert_unique_ids_and_resolved_references(first)
 
+    # A Linear record's group is its features slot group (OV-3012); a Circular record has a record group.
+    group_prefix = "track_slot_" if mode == "linear" else "record_group_"
     record_groups = [
         element
         for element in _root(first).iter()
         if element.tag.rsplit("}", 1)[-1] == "g"
         and element.attrib.get("data-gbdraw-record-id") == record_id
-        and element.attrib.get("id", "").startswith("record_group_")
+        and element.attrib.get("id", "").startswith(group_prefix)
     ]
     assert len(record_groups) == 1
     assert record_groups[0].attrib["id"] != record_id
-    assert record_groups[0].attrib["id"].startswith("record_group_")
     assert record_groups[0].attrib["data-gbdraw-record-index"] == "0"
 
 
@@ -795,10 +801,9 @@ def test_linear_record_id_does_not_collide_with_comparison_group() -> None:
         for element in root.iter()
         if element.tag.rsplit("}", 1)[-1] == "g"
         and element.attrib.get("data-gbdraw-record-id") == "comparison1"
-        and element.attrib.get("id", "").startswith("record_group_")
+        and element.attrib.get("data-gbdraw-slot-renderer") == "features"
     )
     assert len(comparison_groups) == 1
-    assert record_group.attrib["id"].startswith("record_group_")
     assert record_group.attrib["id"] != "comparison1"
 
 
@@ -878,7 +883,7 @@ def test_interactive_asset_ids_do_not_replace_record_groups(record_id: str) -> N
         for element in _root(static_svg).iter()
         if element.attrib.get("data-gbdraw-record-id") == record_id
         and element.tag.rsplit("}", 1)[-1] == "g"
-        and element.attrib.get("id", "").startswith("record_group_")
+        and element.attrib.get("data-gbdraw-slot-renderer") == "features"
     )
 
     interactive_svg = enrich_svg(static_svg)
@@ -888,11 +893,11 @@ def test_interactive_asset_ids_do_not_replace_record_groups(record_id: str) -> N
         for element in _root(interactive_svg).iter()
         if element.attrib.get("data-gbdraw-record-id") == record_id
         and element.tag.rsplit("}", 1)[-1] == "g"
-        and element.attrib.get("id", "").startswith("record_group_")
+        and element.attrib.get("data-gbdraw-slot-renderer") == "features"
     ]
     assert len(interactive_record_groups) == 1
     assert interactive_record_groups[0].attrib["id"] == static_record_group.attrib["id"]
-    assert interactive_record_groups[0].attrib["id"].startswith("record_group_")
+    assert interactive_record_groups[0].attrib["id"] != record_id
 
 
 @pytest.mark.linear
