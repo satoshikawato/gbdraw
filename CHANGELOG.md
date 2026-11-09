@@ -174,6 +174,12 @@ write-up of a release.
   (for example "1.54 Mb"); for windows that overlap, touch, run backwards, or
   are not next to each other it has no length. Rows without windows draw as
   before.
+- Fixed: in the Python API, saving a Session from a resolved Linear request
+  (`resolve_request`, whose records are the drawn windows) wrote each window of
+  a file record as a record of its own, so replaying the Session lost the "//"
+  gap mark and the wider gap between them. The Session now keeps the file
+  record with its windows, as the command line writes it, and replays the
+  figure the live render drew.
 - Changed: in a Linear figure with several records in a row, the text above a
   record that a comparison ribbon reaches is no longer drawn under the ribbon:
   the ribbon ends above the text and the rows move apart by its height
