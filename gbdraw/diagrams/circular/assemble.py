@@ -34,6 +34,13 @@ from ...analysis.conservation import (
     conservation_slot_track,
     conservation_track_gradient_colors,
 )
+from ...analysis.feature_density import FeatureDensityLayer
+from ..feature_density import (
+    feature_density_color,
+    feature_density_histogram_source,
+    feature_density_legend,
+    slot_feature_density_layer,
+)
 from ...analysis.depth_tracks import (
     DepthTrackData,
     depth_track_data_count,
@@ -133,7 +140,13 @@ from ...legend.sources import (
     feature_legend_presence,
     legend_slot_sources,
 )
-from ...legend.table import LegendRowEdits, LegendTable, apply_legend_row_edits, prepare_legend_table
+from ...legend.table import (
+    LegendRowEdits,
+    LegendTable,
+    apply_legend_row_edits,
+    prepare_legend_table,
+    sync_feature_density_legend_entries,
+)
 from ...tracks import (
     CircularTrackSlot,
     ScalarSpec,
@@ -158,6 +171,7 @@ from ...annotations import (
 )
 from ...annotations.planning import prepare_annotation_track_slots
 from ...render.drawers.circular.depth import DepthDrawer
+from ...render.drawers.circular.feature_density import FeatureDensityHeatmapGroup, feature_density_heatmap_ink
 from ...render.drawers.circular.gc_content import GcContentDrawer
 from ...render.groups.circular.conservation import conservation_ring_ink
 from ...render.groups.circular.ticks import TickGroup
@@ -198,6 +212,7 @@ from .builders import (
     add_axis_group_on_canvas,
     add_conservation_group_on_canvas,
     add_depth_group_on_canvas,
+    add_feature_density_heatmap_on_canvas,
     add_gc_content_group_on_canvas,
     add_gc_skew_group_on_canvas,
     add_labels_group_on_canvas,
@@ -1215,6 +1230,8 @@ class CircularTrackInkSources:
     # Each drawn GC content, GC skew and depth slot's data and settings, by slot id (``_slot_paint_data``): only
     # what a drawn slot paints with, not a depth track's label.
     slot_data: Mapping[str, SlotPaintData]
+    # The record's feature density layers by track id: a heatmap slot paints its runs.
+    feature_density: Mapping[str, FeatureDensityLayer] | None
     conservation_tracks: Sequence[ConservationTrack] | None
     conservation_min_identity: float
     # The feature layers the radial layout measured (``_radial_layout_feature_dict``).
@@ -1274,13 +1291,17 @@ def _record_track_ink(
                         data_config.dinucleotide, record_transform,
                     )
                 )
-            elif renderer == "depth" and isinstance(data_config, DepthConfigurator):
+            elif renderer in {"depth", "feature_density"} and isinstance(data_config, DepthConfigurator):
                 inks.extend(
                     DepthDrawer(data_config).ink(
                         canvas_radius, data_df, record_length, float(slot.draw_width_px), norm_factor,
                         record_transform=record_transform,
                     )
                 )
+        elif renderer == "feature_density":
+            layer = slot_feature_density_layer(str(slot.id), slot, sources.feature_density)
+            if layer is not None:
+                inks.extend(feature_density_heatmap_ink(layer, record_length, slot.draw_band_px, record_transform))
         elif renderer == "sequence_conservation":
             track = _slot_conservation_track(slot, sources.conservation_tracks)
             if track is not None:
@@ -2164,6 +2185,8 @@ def _slot_paint_data(
     depth_df: DataFrame | None,
     depth_config: DepthConfigurator | None,
     depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
+    feature_density: Mapping[str, FeatureDensityLayer] | None,
+    profile: CircularRenderProfile,
 ) -> dict[str, SlotPaintData]:
     """The data and settings each drawn GC content, GC skew and depth slot of ``radial_layout`` paints with, by
     slot id, from the sources the drawing reads (``_slot_content_source``, ``_slot_skew_source``,
@@ -2198,6 +2221,11 @@ def _slot_paint_data(
             source = _slot_depth_source(slot, depth_df, depth_config, depth_tracks_by_index)
             if source is not None and source[0] is not None and source[1] is not None:
                 data[str(slot.id)] = (source[0], source[1])
+        elif renderer == "feature_density":
+            # A histogram paints as a depth area; a heatmap band's ink comes from its runs (``_record_track_ink``).
+            layer = slot_feature_density_layer(str(slot.id), slot, feature_density)
+            if layer is not None and layer.track.style == "histogram":
+                data[str(slot.id)] = feature_density_histogram_source(layer, profile)
     return data
 
 
@@ -2449,6 +2477,64 @@ def _add_conservation_ring_rows(
         })
 
 
+def _draw_circular_feature_density_slot(
+    canvas: Drawing,
+    resolved_slot: CircularResolvedSlot,
+    feature_density: Mapping[str, FeatureDensityLayer] | None,
+    *,
+    gb_record: SeqRecord,
+    canvas_config: CircularCanvasConfigurator,
+    render_context: CircularRecordRenderContext,
+    norm_factor_override: float,
+    use_slot_group_id: bool,
+    record_key: str,
+    record_transform: RecordDisplayTransform | None,
+) -> Drawing:
+    """Draw one record's feature density track in its slot: a histogram as a depth area, a heatmap as a band."""
+
+    layer = slot_feature_density_layer(str(resolved_slot.id), resolved_slot, feature_density)
+    if layer is None:
+        return canvas
+    renderer = "feature_density"
+    slot_group_id = (
+        track_slot_svg_id(resolved_slot.id, renderer=renderer, slot_index=int(resolved_slot.slot_index))
+        if use_slot_group_id
+        else None
+    )
+    slot_key = GroupKey(record_key, GroupKind.DEPTH, str(resolved_slot.id))
+    slot_id = str(resolved_slot.id) if use_slot_group_id else None
+    slot_renderer = renderer if use_slot_group_id else None
+    if layer.track.style == "histogram":
+        frame, histogram_config = feature_density_histogram_source(layer, render_context.profile)
+        return add_depth_group_on_canvas(
+            canvas,
+            gb_record,
+            frame,
+            canvas_config,
+            histogram_config,
+            group_key=slot_key,
+            track_width_override=float(resolved_slot.draw_width_px),
+            norm_factor_override=norm_factor_override,
+            group_id=str(resolved_slot.id),
+            slot_group_id=slot_group_id,
+            slot_id=slot_id,
+            slot_renderer=slot_renderer,
+            record_transform=record_transform,
+        )
+    heatmap = FeatureDensityHeatmapGroup(
+        layer,
+        len(gb_record.seq),
+        float(resolved_slot.draw_inner_radius_px),
+        float(resolved_slot.draw_outer_radius_px),
+        feature_density_color(layer, render_context.profile),
+        group_id=slot_group_id or str(resolved_slot.id),
+        record_transform=record_transform,
+    )
+    return add_feature_density_heatmap_on_canvas(
+        canvas, heatmap, canvas_config, group_key=slot_key, slot_id=slot_id, slot_renderer=slot_renderer
+    )
+
+
 def _draw_resolved_circular_slot(
     canvas: Drawing,
     resolved_slot: CircularResolvedSlot,
@@ -2462,6 +2548,7 @@ def _draw_resolved_circular_slot(
     depth_df: DataFrame | None,
     depth_config: DepthConfigurator | None,
     depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
+    feature_density: Mapping[str, FeatureDensityLayer] | None,
     conservation_tracks: Sequence[ConservationTrack] | None,
     conservation_min_identity: float,
     dinucleotide_dataframes: dict[str, DataFrame] | None,
@@ -2625,6 +2712,13 @@ def _draw_resolved_circular_slot(
             selected_depth_config,
             **depth_kwargs,
             record_transform=record_transform,
+        )
+
+    if renderer == "feature_density":
+        return _draw_circular_feature_density_slot(
+            canvas, resolved_slot, feature_density, gb_record=gb_record, canvas_config=canvas_config,
+            render_context=render_context, norm_factor_override=norm_factor_override,
+            use_slot_group_id=use_slot_group_id, record_key=record_key, record_transform=record_transform,
         )
 
     if renderer == "sequence_conservation":
@@ -3490,7 +3584,10 @@ def add_record_on_circular_canvas(
                     depth_df=record.depth_df,
                     depth_config=configurators.depth,
                     depth_tracks_by_index=depth_tracks_by_index,
+                    feature_density=record.feature_density,
+                    profile=canvas_config.profile,
                 ),
+                feature_density=record.feature_density,
                 conservation_tracks=record.conservation_tracks,
                 conservation_min_identity=record.conservation_min_identity,
                 feature_layers=layout_feature_layers,
@@ -3750,6 +3847,7 @@ def add_record_on_circular_canvas(
             depth_df=record.depth_df,
             depth_config=configurators.depth,
             depth_tracks_by_index=depth_tracks_by_index,
+            feature_density=record.feature_density,
             conservation_tracks=record.conservation_tracks,
             conservation_min_identity=record.conservation_min_identity,
             dinucleotide_dataframes=record.dinucleotide_dataframes,
@@ -4007,6 +4105,7 @@ def build_circular_legend_table(
         conservation_colors=conservation_colors,
         conservation_domain=conservation_domain,
     )
+    legend_table = sync_feature_density_legend_entries(legend_table, sources.feature_density, slots=slots)
     if annotations is not None:
         legend_table = sync_annotation_legend_entries(legend_table, annotations, annotation_slots)
     return apply_legend_row_edits(legend_table, edits)
@@ -4107,7 +4206,9 @@ def _assemble_circular_record(
         record_transform=presentation.record_transform,
     )
 
-    legend_sources = LegendSources.of(configurators.feature, configurators.gc, configurators.skew)
+    legend_sources = LegendSources.of(
+        configurators.feature, configurators.gc, configurators.skew, feature_density_legend(record.feature_density, profile)
+    )
     legend_table = LegendTable()
     if canvas_config.legend_position != "none":
         legend_table = circular_legend_table(

@@ -135,6 +135,8 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--depth_track_large_tick_interval VALUE [VALUE ...]]
               [--depth_track_small_tick_interval VALUE [VALUE ...]]
               [--depth_track_tick_font_size VALUE [VALUE ...]]
+              [--feature_density_track KEY=VALUE [KEY=VALUE ...]]
+              [--feature_density_table FEATURE_DENSITY_TABLE]
               [--conservation_blast BLAST [BLAST ...]]
               [--conservation_table TSV]
               [--conservation_sequence FILE [FILE ...]]
@@ -385,6 +387,22 @@ options:
   --depth_track_tick_font_size VALUE [VALUE ...]
                         Depth track tick font size(s). Provide one value or
                         one per --depth_track.
+  --feature_density_track KEY=VALUE [KEY=VALUE ...]
+                        A feature density track, as key=value words: id=<name>
+                        type=<feature type, or * for every type>
+                        [qualifier=<name> [value=<regex>]] [min_length=<bp>]
+                        [max_length=<bp>] [metric=count|coverage]
+                        [style=heatmap|histogram] [window=<bp>] [step=<bp>]
+                        [color=<color>] [caption=<text>]. count: the features
+                        in each window; coverage: the percentage of each
+                        window the features cover. Window and step default to
+                        the GC content window. Repeat the option for more
+                        tracks.
+  --feature_density_table FEATURE_DENSITY_TABLE
+                        Path to a TSV file of feature density tracks: a header
+                        line naming the columns (id, type, qualifier, value,
+                        min_length, max_length, metric, style, window, step,
+                        color, caption) and one track per line (optional)
   --conservation_blast BLAST [BLAST ...]
                         Precomputed BLAST outfmt 6/7 file(s) for circular
                         similarity rings.
@@ -1005,6 +1023,31 @@ ref_a.blast.tsv	Reference A	#E15759
 ref_b.blast.tsv	Reference B	#4E79A7
 ```
 
+### `--feature_density_table`
+
+A feature density track shows, in each window along a record, how many features of a kind lie there (`count`) or what percentage of the window they cover (`coverage`). Use it in either mode, as a band of colored cells (`heatmap`) or as a histogram. Give each track with `--feature_density_track` as `key=value` words, or give them all in a TSV file with `--feature_density_table`, whose first line names the columns; both may be given, the table's tracks first.
+
+| Column | Required | Meaning |
+| --- | --- | --- |
+| `id` | yes | The track's name, without spaces or any of `, @ : = ;`. A track slot names it: `density:feature_density@track=<id>`. |
+| `type` | yes | The feature type to read, or `*` for every type. `source` features are never read. |
+| `qualifier` | optional | A qualifier the features must carry (any case), or `hash`, `location`, `record_location` as in the feature visibility table. |
+| `value` | optional; needs `qualifier` | A regular expression searched in the qualifier's values, ignoring case. |
+| `min_length`, `max_length` | optional | Bounds in bp on the bases a feature covers (the sum of its parts), inclusive. |
+| `metric` | optional | `count` (default): the features in the window, a feature of several parts counted once. `coverage`: the percentage of the window's bases inside the features. |
+| `style` | optional | `heatmap` (default) or `histogram`. |
+| `window`, `step` | optional | Window and step in bp; empty cells take the GC content window and step. |
+| `color` | optional | SVG color name or `#RRGGBB`: the heatmap's top color or the histogram's fill (default: the depth fill color). |
+| `caption` | optional | The Legend row's text; by default it states the query and the window, for example `gene per 20 kbp`. |
+
+Windows wrap round the origin of a circular record and stop at the ends of a linear record or a crop. The tracks of one figure share one scale per track. Without `--circular_track_slot` or `--linear_track_slot`, each track is drawn next to the features as slot `density_<id>`; with explicit slots, only the tracks a slot names are drawn.
+
+```tsv
+id	type	qualifier	value	metric	style	window	step
+genes	gene				heatmap	20000	5000
+ltr	repeat_region	rpt_type	long_terminal_repeat	coverage	histogram	50000	10000
+```
+
 ### `--legend_rows`
 
 Use `--legend_rows` in either mode to rename, hide, or order Legend rows. The
@@ -1203,6 +1246,8 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--depth_track_large_tick_interval VALUE [VALUE ...]]
               [--depth_track_small_tick_interval VALUE [VALUE ...]]
               [--depth_track_tick_font_size VALUE [VALUE ...]]
+              [--feature_density_track KEY=VALUE [KEY=VALUE ...]]
+              [--feature_density_table FEATURE_DENSITY_TABLE]
               [--depth_color DEPTH_COLOR] [--depth_height DEPTH_HEIGHT]
               [--depth_window DEPTH_WINDOW] [--depth_step DEPTH_STEP]
               [--share_depth_axis] [--depth_min DEPTH_MIN]
@@ -1521,6 +1566,22 @@ options:
   --depth_track_tick_font_size VALUE [VALUE ...]
                         Depth track tick font size(s). Provide one value or
                         one per --depth_track.
+  --feature_density_track KEY=VALUE [KEY=VALUE ...]
+                        A feature density track, as key=value words: id=<name>
+                        type=<feature type, or * for every type>
+                        [qualifier=<name> [value=<regex>]] [min_length=<bp>]
+                        [max_length=<bp>] [metric=count|coverage]
+                        [style=heatmap|histogram] [window=<bp>] [step=<bp>]
+                        [color=<color>] [caption=<text>]. count: the features
+                        in each window; coverage: the percentage of each
+                        window the features cover. Window and step default to
+                        the GC content window. Repeat the option for more
+                        tracks.
+  --feature_density_table FEATURE_DENSITY_TABLE
+                        Path to a TSV file of feature density tracks: a header
+                        line naming the columns (id, type, qualifier, value,
+                        min_length, max_length, metric, style, window, step,
+                        color, caption) and one track per line (optional)
   --depth_color DEPTH_COLOR
                         Depth track fill color (optional; default: #4A90E2).
   --depth_height DEPTH_HEIGHT

@@ -127,12 +127,30 @@ class NumericLegendSource:
 
 
 @dataclass(frozen=True)
+class FeatureDensityLegendSource:
+    """The row of one feature density track: its name (the query in words, or its caption), its style, and its
+    colors and scale. A heatmap's row is a gradient from ``low_color`` at 0 to ``color`` at ``max_text``; a
+    histogram's a swatch of ``color``."""
+
+    track_id: str
+    caption: str
+    style: str
+    color: str
+    low_color: str
+    max_value: float
+    max_text: str
+    stroke_color: str
+    stroke_width: float
+
+
+@dataclass(frozen=True)
 class LegendSources:
-    """The feature, GC content and GC skew sources of one drawing's legend."""
+    """The feature, GC content, GC skew and feature density sources of one drawing's legend."""
 
     features: FeatureLegendSource
     gc: NumericLegendSource
     skew: NumericLegendSource
+    feature_density: tuple[FeatureDensityLegendSource, ...] = ()
 
     @classmethod
     def of(
@@ -140,11 +158,13 @@ class LegendSources:
         feature_config: FeatureDrawingConfigurator,
         gc_config: GcContentConfigurator,
         skew_config: GcSkewConfigurator,
+        feature_density: Sequence[FeatureDensityLegendSource] = (),
     ) -> LegendSources:
         return cls(
             FeatureLegendSource.of(feature_config),
             NumericLegendSource.of(gc_config),
             NumericLegendSource.of(skew_config),
+            tuple(feature_density),
         )
 
 
@@ -219,6 +239,7 @@ def legend_slot_sources(slots: Iterable[SlotView] | None) -> tuple[LegendSlotSou
 __all__ = [
     "ComparisonLegendSource",
     "DepthLegendSource",
+    "FeatureDensityLegendSource",
     "FeatureLegendSource",
     "LegendSlotSource",
     "LegendSources",

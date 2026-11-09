@@ -146,6 +146,12 @@ as the record's. A `region` with a key other
 than `selector`, `start`, `end` and `reverseComplement` is refused at Load, as the command line
 refuses it.
 
+Request schema 10 may also hold `diagramOptions.featureDensityTracks`, the
+feature density tracks of `--feature_density_track` and
+`--feature_density_table` (see
+[CLI Reference](../CLI_Reference.md#--feature_density_table)); a request
+without it draws none.
+
 The Python reader (`gbdraw ... --session` and the Python API) checks a
 schema-10 request against `describe_canonical_request()`: it refuses a key
 outside it, such as an older writer's `depthTrack*` input, and a value of

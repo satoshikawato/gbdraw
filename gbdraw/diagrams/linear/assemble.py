@@ -101,6 +101,7 @@ from ...legend.table import (
     apply_legend_row_edits,
     pairwise_identity_legend_from_comparisons,
     prepare_legend_table,
+    sync_feature_density_legend_entries,
 )
 from ...layout.linear import (
     place_linear_definition,
@@ -186,7 +187,22 @@ from ...tracks import (
     default_linear_track_slots,
     normalize_linear_track_slots_with_axis,
 )
-from ...tracks.parsing import depth_slot_track_index, slot_dinucleotide, slot_legend_label, slots_draw_features
+from ...tracks.parsing import (
+    depth_slot_track_index,
+    slot_dinucleotide,
+    slot_legend_label,
+    slots_draw_features,
+    check_feature_density_slots,
+    with_feature_density_slots,
+)
+from ...analysis.feature_density import FeatureDensityLayer
+from ..feature_density import (
+    feature_density_record_layers,
+    feature_density_color,
+    feature_density_histogram_source,
+    feature_density_legend,
+    slot_feature_density_layer,
+)
 from ...annotations import (
     AnnotationOptions,
     LabelSizing,
@@ -202,6 +218,7 @@ from ...annotations import (
     sync_annotation_legend_entries,
 )
 from ...annotations.planning import prepare_annotation_track_slots
+from ...render.drawers.linear.feature_density import FeatureDensityHeatmapGroup
 from ...render.drawers.linear.annotations import (
     linear_annotation_label_extent,
     linear_annotation_label_room,
@@ -225,6 +242,7 @@ from ...render.composition import CompositionPrimary, compose_drawing, place_leg
 from .builders import (
     add_explicit_comparisons_on_linear_canvas,
     add_depth_group,
+    add_feature_density_heatmap_group,
     add_gc_content_group,
     add_gc_skew_group,
     add_length_bar_on_linear_canvas,
@@ -2209,6 +2227,7 @@ def build_linear_legend_table(
         skew=sources.skew,
         depth_tracks=depth_tracks,
     )
+    legend_table = sync_feature_density_legend_entries(legend_table, sources.feature_density, slots=slots)
     return apply_legend_row_edits(sync_annotation_legend_entries(legend_table, annotations, slots), edits)
 
 
@@ -2407,6 +2426,16 @@ def _linear_slot_plan(
             dinucleotide=str(configurators.gc.dinucleotide),
             track_layout=profile.track_layout,
         )
+    density_ids = tuple(track.id for track in track_inputs.feature_density_tracks)
+    if track_inputs.linear_track_slots is None:
+        linear_track_slots = with_feature_density_slots(
+            linear_track_slots,
+            density_ids,
+            lambda track_id: LinearTrackSlot(
+                id=f"density_{track_id}", renderer="feature_density", side="below", params={"track": track_id}
+            ),
+        )
+    check_feature_density_slots(linear_track_slots, density_ids)
     normalized_linear_track_slots = normalize_linear_track_slots_with_axis(
         linear_track_slots,
         track_inputs.linear_track_axis_index,
@@ -2525,6 +2554,8 @@ class _LinearTrackPlan:
     resolved_depth_heights_by_index: dict[int, float]
     primary_depth_track_index: int
     record_feature_lane_geometries: list[LinearFeatureLaneGeometry]
+    # Each record's feature density layers by track id.
+    record_feature_density: Sequence[Mapping[str, FeatureDensityLayer]]
 
 
 def _linear_track_plan(
@@ -2645,6 +2676,13 @@ def _linear_track_plan(
         resolved_depth_heights_by_index=resolved_depth_heights_by_index,
         primary_depth_track_index=min(resolved_depth_heights_by_index, default=0),
         record_feature_lane_geometries=record_feature_lane_geometries,
+        # The records share one window and one scale per track.
+        record_feature_density=feature_density_record_layers(
+            records,
+            track_inputs.feature_density_tracks,
+            windows=[(int(configurators.gc.window), int(configurators.gc.step))] * len(records),
+            transforms=bind_record_transforms(records, record_transforms),
+        ),
     )
 
 
@@ -3171,7 +3209,13 @@ def _linear_legend_table(
     cfg = profile.config
     depth_config = configurators.depth
     render_context = tracks.render_context
-    legend_sources = LegendSources.of(configurators.feature, configurators.gc, configurators.skew)
+    # The records share one scale, so the first record's layers name every record's rows.
+    legend_sources = LegendSources.of(
+        configurators.feature,
+        configurators.gc,
+        configurators.skew,
+        feature_density_legend(tracks.record_feature_density[0] if tracks.record_feature_density else None, profile),
+    )
     legend_table = LegendTable()
     if canvas_config.legend_position != "none":
         singleton_depth = render_context.depth_enabled and depth_track_count(track_inputs.record_depth_tracks) == 1
@@ -3775,6 +3819,7 @@ class _LinearRecordDrawing:
     feature_labels: list[LinearLabel]
     annotation_labels: Mapping[str, tuple[LinearAnnotationLabel, ...]]
     depth_by_index: Mapping[int, DepthTrackData]
+    feature_density: Mapping[str, FeatureDensityLayer]
     gc_df_by_dinucleotide: Mapping[str, DataFrame | None]
     default_gc_df: DataFrame | None
     orthogroup_label_member_ids: set[str | int] | None
@@ -3832,6 +3877,7 @@ def _linear_record_drawing(
         feature_labels=labels.labels_by_record[record_index],
         annotation_labels=labels.annotation_labels_by_record[record_index],
         depth_by_index=plan.depth.record_depth_by_index[record_index],
+        feature_density=plan.tracks.record_feature_density[record_index],
         gc_df_by_dinucleotide={nt: frames[record_index] for nt, frames in plan.gc_frames.by_dinucleotide.items()},
         default_gc_df=plan.gc_frames.default[record_index],
         orthogroup_label_member_ids=member_ids,
@@ -3994,6 +4040,66 @@ def _draw_linear_depth_slot(canvas: Drawing, drawing: _LinearRecordDrawing, slot
     )
 
 
+def _draw_linear_feature_density_slot(
+    canvas: Drawing, drawing: _LinearRecordDrawing, slot: _LinearSlotDrawing
+) -> Drawing:
+    """Draw one record's feature density track in its slot: a histogram as a depth area, a heatmap as a band."""
+
+    layer = slot_feature_density_layer(str(slot.slot.id), slot.slot, drawing.feature_density)
+    if layer is None:
+        return canvas
+    profile = drawing.canvas_config.profile
+    group_id = make_linear_dom_id(
+        slot.slot.id, record_index=drawing.record_index, record_count=drawing.record_count
+    )
+    group_key = GroupKey(drawing.record_key, GroupKind.DEPTH, str(slot.slot.id))
+    slot_id = str(slot.slot.id) if slot.group_id is not None else None
+    slot_renderer = str(slot.slot.renderer) if slot.group_id is not None else None
+    if layer.track.style == "histogram":
+        frame, histogram_config = feature_density_histogram_source(layer, profile)
+        return add_depth_group(
+            canvas,
+            drawing.record,
+            drawing.placement.axis_y,
+            drawing.placement.x,
+            drawing.canvas_config,
+            histogram_config,
+            depth_df=frame,
+            group_id=group_id,
+            axis_group_id=f"{group_id}_axis",
+            dom_group_id=slot.group_id,
+            slot_id=slot_id,
+            slot_renderer=slot_renderer,
+            track_height=slot.slot.height,
+            track_offset_y=slot.resolved.origin_y,
+            sequence_width=drawing.placement.sequence_width,
+            record_transform=drawing.record_transform,
+            row_shifts=slot.row_shifts,
+            group_key=group_key,
+        )
+    heatmap = FeatureDensityHeatmapGroup(
+        layer,
+        len(drawing.record.seq),
+        float(slot.slot.height),
+        feature_density_color(layer, profile),
+        sequence_width=drawing.placement.sequence_width,
+        group_id=slot.group_id or group_id,
+        record_transform=drawing.record_transform,
+        row_shifts=slot.row_shifts,
+    )
+    return add_feature_density_heatmap_group(
+        canvas,
+        heatmap,
+        drawing.placement.axis_y,
+        drawing.placement.x,
+        drawing.canvas_config,
+        track_offset_y=slot.resolved.origin_y,
+        group_key=group_key,
+        slot_id=slot_id,
+        slot_renderer=slot_renderer,
+    )
+
+
 def _slot_gc_df(drawing: _LinearRecordDrawing, nt: str) -> DataFrame | None:
     """The record's GC frame of one dinucleotide, or of the request's dinucleotide when no slot asked for it."""
 
@@ -4065,6 +4171,7 @@ _LINEAR_SLOT_DRAWERS: dict[str, _LinearSlotDrawer] = {
     "features": _draw_linear_feature_slot,
     "annotations": _draw_linear_annotation_slot,
     "depth": _draw_linear_depth_slot,
+    "feature_density": _draw_linear_feature_density_slot,
     "dinucleotide_content": _draw_linear_gc_content_slot,
     "dinucleotide_skew": _draw_linear_gc_skew_slot,
 }

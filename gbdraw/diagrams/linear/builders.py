@@ -14,6 +14,7 @@ from svgwrite import Drawing
 
 from ...canvas import LinearCanvasConfigurator
 from ...features.factory import FeatureBuildResult
+from ...render.drawers.linear.feature_density import FeatureDensityHeatmapGroup
 from ...labels.linear_types import LinearLabel
 from ...layout.linear_multi_record import (
     LinearComparisonEndpoint,
@@ -234,6 +235,29 @@ def add_depth_group(
         depth_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
     position_linear_track_group(depth_group, offset_y, offset_x, canvas_config, track_offset_y)
     canvas.add(depth_group)
+    return canvas
+
+
+def add_feature_density_heatmap_group(
+    canvas: Drawing,
+    heatmap: FeatureDensityHeatmapGroup,
+    offset_y: float,
+    offset_x: float,
+    canvas_config: LinearCanvasConfigurator,
+    *,
+    track_offset_y: float,
+    group_key: GroupKey,
+    slot_id: str | None,
+    slot_renderer: str | None,
+) -> Drawing:
+    """Adds a feature density heatmap band to the linear canvas."""
+    heatmap_group = place_content(canvas, GroupContent.of(heatmap.get_group()), group_key)
+    if slot_id:
+        heatmap_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
+    if slot_renderer:
+        heatmap_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
+    position_linear_track_group(heatmap_group, offset_y, offset_x, canvas_config, track_offset_y)
+    canvas.add(heatmap_group)
     return canvas
 
 
@@ -592,6 +616,7 @@ __all__ = [
     "linear_comparison_content",
     "add_record_group",
     "add_depth_group",
+    "add_feature_density_heatmap_group",
     "add_gc_content_group",
     "add_gc_skew_group",
     "add_record_definition_group",

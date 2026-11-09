@@ -318,6 +318,7 @@ classDiagram
   CanonicalCircularDiagramOptions --> CanonicalTableRef : 5 fields
   CanonicalCircularDiagramOptions --> CanonicalFileRef : 6 fields
   CanonicalCircularDiagramOptions --> CanonicalCircularDepthTrack : depthTracks
+  CanonicalCircularDiagramOptions --> CanonicalFeatureDensityTrack : featureDensityTracks
   CanonicalCircularDiagramOptions --> CanonicalCircularTrackOptions : tracks
   CanonicalCircularDiagramOptions --> CanonicalCircularOutputOptions : output
   class CanonicalCircularLayout
@@ -331,6 +332,7 @@ classDiagram
   CanonicalLinearDiagramOptions --> CanonicalTableRef : 4 fields
   CanonicalLinearDiagramOptions --> CanonicalFileRef : 4 fields
   CanonicalLinearDiagramOptions --> CanonicalLinearDepthTrack : depthTracks
+  CanonicalLinearDiagramOptions --> CanonicalFeatureDensityTrack : featureDensityTracks
   CanonicalLinearDiagramOptions --> CanonicalLinearTrackOptions : tracks
   CanonicalLinearDiagramOptions --> CanonicalLinearOutputOptions : output
   class CanonicalLinearLayout
@@ -369,6 +371,9 @@ classDiagram
   class CanonicalCircularDepthTrack
   CanonicalCircularDepthTrack --> CanonicalFileRef : source
   CanonicalCircularDepthTrack --> CanonicalTableRef : source
+  class CanonicalFeatureDensityTrack
+  CanonicalFeatureDensityTrack --> CanonicalFeatureQuery : query
+  CanonicalFeatureDensityTrack --> CanonicalAnnotationColor : color
   class CanonicalCircularTrackOptions
   CanonicalCircularTrackOptions --> CanonicalCircularTrackSlot : circularTrackSlots
   class CanonicalCircularOutputOptions
@@ -397,6 +402,9 @@ classDiagram
   class CanonicalAnnotationSet
   CanonicalAnnotationSet --> CanonicalRegionAnnotation : annotations
   CanonicalAnnotationSet --> CanonicalRegionAnnotationStyle : defaultStyle
+  class CanonicalFeatureQuery
+  class CanonicalAnnotationColor
+  <<union>> CanonicalAnnotationColor
   class CanonicalCircularTrackSlot
   CanonicalCircularTrackSlot --> CanonicalScalarSpec : radius, width
   class CanonicalLinearTrackSlot
@@ -425,8 +433,6 @@ classDiagram
   class CanonicalFeatureSpan
   CanonicalFeatureSpan --> CanonicalRecordSelector : record
   CanonicalFeatureSpan --> CanonicalFeatureSelector : selectors
-  class CanonicalAnnotationColor
-  <<union>> CanonicalAnnotationColor
   class CanonicalHatchStyle
   CanonicalHatchStyle --> CanonicalAnnotationColor : color
   class CanonicalAnnotationGradient

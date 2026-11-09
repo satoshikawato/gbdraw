@@ -185,6 +185,22 @@ Session 46-50 writer wrote them, so a Session 46-50 slice that holds one is refu
 a `setting-replaced` row. Python's step of a Session 27-44 through the Session 50 layout writes none of them
 (`mode_slice_of_version`), so the drawing takes their defaults. The rows Sessions 48-50 added carry no `since` yet.
 
+## Unreleased: request schema 10 stores feature density tracks
+
+Request schema 10 (not on `main` yet, so its number stays) adds the optional
+`diagramOptions.featureDensityTracks`: a list of tracks, each
+`{id, query: {featureType, qualifier, value, minLength, maxLength}, metric,
+style, window, step, color, caption}`, every key written (`null` where unset).
+`metric` is `count` or `coverage`, `style` `heatmap` or `histogram`. The writer
+is `_encode_feature_density_tracks` in `gbdraw/session_request_codec.py`, the
+typed owner `FeatureDensityTrack` (`gbdraw/analysis/feature_density.py`) and
+`FeatureQuery` (`gbdraw/features/query.py`). An absent key or `null` reads as no
+tracks, as every earlier request does. A track slot names a track by id
+(`feature_density@track=<id>`) in the existing slot lists. Session 51 is
+unchanged: the request sits in its drawings as before. The Web app admits the
+key; until its editor exists it does not keep the tracks in a Generate.
+Fixture: `tests/fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw-session.json.gz`.
+
 ## Unreleased: depth and GC Percent axis label styles
 
 No Session or request version changes. The config leaves `objects.depth.axis_labels` and

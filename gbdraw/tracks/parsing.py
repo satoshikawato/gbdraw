@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import MappingProxyType
 from numbers import Integral
-from typing import TYPE_CHECKING, Any, Collection, Iterable, Literal, Mapping, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Collection, Iterable, Literal, Mapping, Protocol, Sequence, TypeVar
 
 from gbdraw.core.numeric import parse_ascii_integer
+from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import resolve_color_to_hex
 from gbdraw.mode_profiles import validate_dinucleotide
 
@@ -84,6 +85,47 @@ def parse_nonnegative_integer(raw: object, *, field_name: str) -> int:
     if value < 0:
         raise ValueError(f"{field_name} must be >= 0")
     return value
+
+
+def feature_density_slot_track_id(slot_id: str, params: Mapping[str, object]) -> str:
+    """The feature density track a ``feature_density`` slot draws: the id in its ``track`` param."""
+
+    track = str(params.get("track") or "").strip()
+    if not track:
+        raise ValueError(f"feature_density slot '{slot_id}' needs track=<id> naming a feature density track")
+    return track
+
+
+_Slot = TypeVar("_Slot", bound="SlotView")
+
+
+def check_feature_density_slots(slots: Sequence[SlotView] | None, track_ids: Collection[str]) -> None:
+    """Refuse an enabled ``feature_density`` slot that names no defined feature density track."""
+
+    for slot in slots or ():
+        if not slot.enabled or slot.renderer != "feature_density":
+            continue
+        track = feature_density_slot_track_id(slot.id, slot.params)
+        if track not in track_ids:
+            known = ", ".join(sorted(track_ids)) or "none"
+            raise ValidationError(
+                f"feature_density slot '{slot.id}' names track '{track}', which is not a defined feature density "
+                f"track (defined: {known})",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
+
+
+def with_feature_density_slots(
+    slots: Sequence[_Slot], track_ids: Sequence[str], make_slot: Callable[[str], _Slot]
+) -> list[_Slot]:
+    """A stack the reader did not write with one ``feature_density`` slot per track (``make_slot``) after its
+    features slot (at the top without one); a stack that already draws a feature density track is kept."""
+
+    stack = list(slots)
+    if not track_ids or any(slot.renderer == "feature_density" for slot in stack):
+        return stack
+    at = next((index + 1 for index, slot in enumerate(stack) if slot.renderer == "features"), 0)
+    return [*stack[:at], *(make_slot(track_id) for track_id in track_ids), *stack[at:]]
 
 
 def depth_slot_track_index(slot_id: str, params: Mapping[str, object]) -> int:
@@ -174,6 +216,8 @@ SHARED_SLOT_PARAM_KEYS: Mapping[str, frozenset[str]] = MappingProxyType({
         "positive_color", "negative_color", "high_color", "low_color"
     },
     "depth": frozenset({"track_index", *LEGEND_LABEL_PARAM_KEYS}),
+    # A feature density slot names its track by id (``track``), never by its query.
+    "feature_density": frozenset({"track", *LEGEND_LABEL_PARAM_KEYS}),
     "spacer": frozenset(),
 })
 # Keys every non-annotation slot takes and ignores where its renderer does not
@@ -341,6 +385,9 @@ __all__ = [
     "SlotView",
     "SlotWithParams",
     "depth_slot_track_index",
+    "check_feature_density_slots",
+    "feature_density_slot_track_id",
+    "with_feature_density_slots",
     "normalize_dinucleotide_params",
     "parse_bool",
     "parse_nonnegative_integer",

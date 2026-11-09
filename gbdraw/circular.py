@@ -40,7 +40,6 @@ from .api.request_render import (
     render_request,
 )
 from .api.record_planning import (
-    depth_track_inputs_from_cli,
     record_input_manifest_from_paths,
     record_input_manifest_from_table,
 )
@@ -73,12 +72,14 @@ from .comparisons.losat_runtime import COMPARISON_LOSAT_PROGRAMS
 from .core.numeric import argparse_float, argparse_integer, argparse_scale_interval, parse_ascii_finite_float
 from .render.output_paths import preflight_output_paths
 from .cli_utils.common import (
+    add_feature_density_args,
+    depth_track_inputs_from_args,
+    _add_depth_track_source_args,
+    feature_density_tracks_from_args,
     _add_arrow_geometry_args,
     _add_block_stroke_args,
     _add_comparison_filter_args,
     _add_depth_axis_args,
-    _add_depth_track_arg,
-    _add_depth_track_label_color_args,
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
     _add_figure_size_args,
@@ -339,9 +340,9 @@ def _get_args(
         show_gc_default=CIRCULAR_MODE_PROFILE.show_gc,
         show_skew_default=CIRCULAR_MODE_PROFILE.show_skew,
     )
-    _add_depth_track_arg(parser, mode="circular")
-    _add_depth_track_label_color_args(parser)
+    _add_depth_track_source_args(parser, mode="circular")
     _add_depth_track_tick_args(parser)
+    add_feature_density_args(parser)
     parser.add_argument(
         '--conservation_blast',
         metavar='BLAST',
@@ -1077,11 +1078,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     show_gc: bool = args.show_gc
     show_skew: bool = args.show_skew
     depth_track_groups: list[list[str]] | None = args.depth_track
-    depth_track_labels: list[str] | None = list(args.depth_track_label or []) or None
-    depth_track_colors: list[str] | None = list(args.depth_track_color or []) or None
-    depth_track_large_tick_intervals: list[str] | None = list(args.depth_track_large_tick_interval or []) or None
-    depth_track_small_tick_intervals: list[str] | None = list(args.depth_track_small_tick_interval or []) or None
-    depth_track_tick_font_sizes: list[str] | None = list(args.depth_track_tick_font_size or []) or None
     show_depth: bool = bool(depth_track_groups)
     depth_color: str | None = args.depth_color
     depth_width: Optional[float] = args.depth_width
@@ -1164,14 +1160,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     gc_content_tick_font_size: Optional[float] = args.gc_content_tick_font_size
     gc_skew_width: Optional[float] = args.gc_skew_width
     gc_skew_radius: Optional[float] = args.gc_skew_radius
-    depth_tracks = depth_track_inputs_from_cli(
-        depth_track_groups,
-        labels=depth_track_labels,
-        colors=depth_track_colors,
-        large_tick_intervals=depth_track_large_tick_intervals,
-        small_tick_intervals=depth_track_small_tick_intervals,
-        tick_font_sizes=depth_track_tick_font_sizes,
-    )
+    depth_tracks = depth_track_inputs_from_args(args)
     logical_depth_track_count = len(depth_tracks or ())
 
     outer_label_x_radius_offset: Optional[float] = args.outer_label_x_radius_offset
@@ -1439,6 +1428,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         depth_window=depth_window,
         depth_step=depth_step,
         depth_tracks=depth_tracks,
+        feature_density_tracks=feature_density_tracks_from_args(args),
         conservation_blast_files=conservation_blast_files,
         conservation_sequence_files=conservation_sequence_sources,
         conservation_table_file=args.conservation_table,

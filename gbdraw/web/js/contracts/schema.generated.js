@@ -244,8 +244,8 @@ export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   rendering: Object.freeze({
     optionSchema: 3,
     featureRenderings: Object.freeze(['arrow', 'rectangle', 'underlay']),
-    circularTrackRenderers: Object.freeze(['annotations', 'depth', 'dinucleotide_content', 'dinucleotide_skew', 'features', 'sequence_conservation', 'spacer', 'ticks']),
-    linearTrackRenderers: Object.freeze(['annotations', 'depth', 'dinucleotide_content', 'dinucleotide_skew', 'features', 'spacer'])
+    circularTrackRenderers: Object.freeze(['annotations', 'depth', 'dinucleotide_content', 'dinucleotide_skew', 'feature_density', 'features', 'sequence_conservation', 'spacer', 'ticks']),
+    linearTrackRenderers: Object.freeze(['annotations', 'depth', 'dinucleotide_content', 'dinucleotide_skew', 'feature_density', 'features', 'spacer'])
   }),
   analysis: Object.freeze({
     proteinLosatCacheSchema: 4,

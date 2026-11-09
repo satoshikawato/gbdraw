@@ -183,7 +183,7 @@ def _slot_height(
         return max(0.0, _resolve_scalar_px(slot.height, 0.0))
     if slot.renderer == "spacer":
         return max(0.0, _resolve_scalar_px(slot.height, 0.0))
-    if slot.renderer == "depth":
+    if slot.renderer in {"depth", "feature_density"}:
         return max(0.0, _resolve_scalar_px(slot.height, canvas_config.default_depth_height))
     return max(0.0, _resolve_scalar_px(slot.height, canvas_config.default_gc_height))
 
@@ -195,7 +195,7 @@ def _slot_spacing(
 ) -> float:
     if slot.spacing is not None:
         return max(0.0, _resolve_scalar_px(slot.spacing, 0.0))
-    if slot.renderer == "depth":
+    if slot.renderer in {"depth", "feature_density"}:
         return max(0.0, float(canvas_config.configured_depth_padding))
     if slot.renderer in {
         "features",

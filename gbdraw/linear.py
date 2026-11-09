@@ -24,7 +24,6 @@ from .api.session_compat import render_session_compatible_request
 from .api.input_summary import log_input_summary
 from .features.overrides import log_feature_identity_notices
 from .api.record_planning import (
-    depth_track_inputs_from_cli,
     parse_cli_bool,
     record_input_manifest_from_paths,
     record_input_manifest_from_table,
@@ -93,13 +92,15 @@ from .tracks import (
 
 
 from .cli_utils.common import (
+    add_feature_density_args,
+    depth_track_inputs_from_args,
+    _add_depth_track_source_args,
+    feature_density_tracks_from_args,
     COLOR_TABLE_HELP,
     add_identity_scale_arg,
     _add_arrow_geometry_args,
     _add_block_stroke_args,
     _add_depth_axis_args,
-    _add_depth_track_arg,
-    _add_depth_track_label_color_args,
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
     _add_figure_size_args,
@@ -633,8 +634,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         show_skew_default=LINEAR_MODE_PROFILE.show_skew,
     )
     _add_gc_content_axis_args(parser)
-    _add_depth_track_arg(parser, mode="linear")
-    _add_depth_track_label_color_args(parser)
+    _add_depth_track_source_args(parser, mode="linear")
     parser.add_argument(
         '--depth_track_height',
         metavar='PX',
@@ -642,6 +642,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=str,
         nargs='+')
     _add_depth_track_tick_args(parser)
+    add_feature_density_args(parser)
     parser.add_argument(
         '--depth_color',
         help='Depth track fill color (optional; default: #4A90E2).',
@@ -1488,12 +1489,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     manual_window: int = args.window
     manual_step: int = args.step
     depth_track_groups: list[list[str]] | None = args.depth_track
-    depth_track_labels: list[str] | None = list(args.depth_track_label or []) or None
-    depth_track_colors: list[str] | None = list(args.depth_track_color or []) or None
-    depth_track_heights: list[str] | None = list(args.depth_track_height or []) or None
-    depth_track_large_tick_intervals: list[str] | None = list(args.depth_track_large_tick_interval or []) or None
-    depth_track_small_tick_intervals: list[str] | None = list(args.depth_track_small_tick_interval or []) or None
-    depth_track_tick_font_sizes: list[str] | None = list(args.depth_track_tick_font_size or []) or None
     show_depth: bool = bool(depth_track_groups)
     depth_color: str | None = args.depth_color
     depth_height: Optional[float] = args.depth_height
@@ -1794,15 +1789,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         if linear_positions or has_table_placement
         else None
     )
-    depth_tracks = depth_track_inputs_from_cli(
-        depth_track_groups,
-        labels=depth_track_labels,
-        colors=depth_track_colors,
-        heights=depth_track_heights,
-        large_tick_intervals=depth_track_large_tick_intervals,
-        small_tick_intervals=depth_track_small_tick_intervals,
-        tick_font_sizes=depth_track_tick_font_sizes,
-    )
+    depth_tracks = depth_track_inputs_from_args(args, heights=args.depth_track_height)
 
     canonical_config = copy.deepcopy(config_dict)
     request_path = Path(str(out_file_prefix))
@@ -1845,6 +1832,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             depth_window=depth_window,
             depth_step=depth_step,
             depth_tracks=depth_tracks,
+            feature_density_tracks=feature_density_tracks_from_args(args),
             plot_title=plot_title or None,
             plot_title_font_size=plot_title_font_size,
             blast_files=tuple(blast_files) if blast_files else None,

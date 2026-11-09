@@ -261,7 +261,7 @@ def circular_track_width_px(
     base = float(radius) * float(track_ratio)
     if renderer in {"features", "sequence_conservation"}:
         return base * float(factors[0])
-    if renderer == "depth":
+    if renderer in {"depth", "feature_density"}:
         return base * float(factors[1]) * 0.5
     if renderer == "dinucleotide_skew":
         return base * float(factors[2])

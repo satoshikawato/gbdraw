@@ -29,6 +29,7 @@ from gbdraw.analysis.collinearity_units import (
     CollinearityUnitMode,
     normalize_collinearity_unit_mode,
 )
+from gbdraw.analysis.feature_density import FeatureDensityTrack, unique_feature_density_tracks
 from gbdraw.analysis.conservation import (
     ConservationSearchResult,
     normalize_conservation_reference,
@@ -951,6 +952,8 @@ class _ModeDiagramOptions:
     depth_window: int | None = None
     depth_step: int | None = None
     depth_tracks: Sequence[DepthTrackInput] | None = None
+    # Tracks of how many features of a query lie in each window; a ``feature_density`` slot names one by id.
+    feature_density_tracks: Sequence[FeatureDensityTrack] | None = None
     depth_table: DataFrame | None = None
     depth_file: str | None = None
     depth_tables: Sequence[DataFrame] | None = None
@@ -1034,6 +1037,17 @@ class _ModeDiagramOptions:
                 raise ValidationError(str(exc)) from exc
             object.__setattr__(self, "feature_shapes", normalized_shapes)
         validate_feature_type_names(self.selected_features_set, field_name="selected_features_set")
+        if self.feature_density_tracks is not None:
+            if isinstance(self.feature_density_tracks, (str, bytes)) or not all(
+                isinstance(track, FeatureDensityTrack) for track in self.feature_density_tracks
+            ):
+                raise ValidationError(
+                    "feature_density_tracks must contain FeatureDensityTrack values.",
+                    diagnostic={"code": "INPUT_INVALID"},
+                )
+            object.__setattr__(
+                self, "feature_density_tracks", unique_feature_density_tracks(self.feature_density_tracks) or None
+            )
         if self.depth_tracks is not None:
             if (
                 isinstance(self.depth_tracks, (str, bytes))

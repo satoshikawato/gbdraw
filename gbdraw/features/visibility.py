@@ -14,16 +14,12 @@ from pandas import DataFrame
 
 from ..exceptions import InputFileError, ParseError, ValidationError
 from ..io.table_text import read_literal_table, read_table_lines, table_text_stream
+from .query import FeatureQuery
 from .selector_values import (
     _matches_constraint,
     feature_matches_specific_color_rule,
-    get_feature_hash,
-    get_feature_location_str,
-    get_feature_qualifiers,
     get_feature_record_id,
-    get_feature_record_location_str,
     get_feature_type,
-    get_qualifier_values,
 )
 
 logger = logging.getLogger(__name__)
@@ -183,7 +179,7 @@ def compile_feature_visibility_rules(
             )
 
         try:
-            pattern = re.compile(value_pattern, re.IGNORECASE)
+            re.compile(value_pattern, re.IGNORECASE)
         except re.error as e:
             raise ParseError(
                 f"Invalid regex in feature visibility table at row {idx}: '{value_pattern}' ({e})"
@@ -194,10 +190,7 @@ def compile_feature_visibility_rules(
         compiled_rules.append(
             {
                 "record_id": record_id,
-                "feature_type": feature_type,
-                "qualifier": qualifier,
-                "qualifier_normalized": qualifier.lower(),
-                "pattern": pattern,
+                "query": FeatureQuery(feature_type, qualifier, value_pattern),
                 "action": normalized_action,
             }
         )
@@ -205,42 +198,6 @@ def compile_feature_visibility_rules(
     return compiled_rules or None
 
 
-
-
-def _rule_matches_feature(
-    feature: Any,
-    rule: dict[str, Any],
-    record_id: Optional[str],
-    selector: Optional[dict[str, Any]] = None,
-) -> bool:
-    """Match one rule; ``selector`` supplies the drawn feature's hash and
-    locations when the caller has them instead of the feature (the Web)."""
-    qualifier_key = str(rule["qualifier_normalized"])
-    pattern = rule["pattern"]
-
-    if qualifier_key == "record_location":
-        feature_record_location = (
-            selector.get("record_location")
-            if selector is not None
-            else get_feature_record_location_str(feature, record_id)
-        )
-        return bool(feature_record_location and pattern.search(feature_record_location))
-
-    if qualifier_key == "hash":
-        feature_hash = (
-            selector.get("hash") if selector is not None else get_feature_hash(feature, record_id)
-        )
-        return bool(feature_hash and pattern.search(feature_hash))
-
-    if qualifier_key == "location":
-        feature_location = (
-            selector.get("location") if selector is not None else get_feature_location_str(feature)
-        )
-        return bool(feature_location and pattern.search(feature_location))
-
-    qualifiers = get_feature_qualifiers(feature)
-    values = get_qualifier_values(qualifiers, str(rule["qualifier"]))
-    return any(pattern.search(value) for value in values)
 
 
 def _first_matching_visibility_rule(
@@ -252,17 +209,13 @@ def _first_matching_visibility_rule(
     if not feature_visibility_rules:
         return None
 
-    feature_type = get_feature_type(feature)
     resolved_record_id = get_feature_record_id(feature, record_id)
 
     for rule in feature_visibility_rules:
         if not _matches_constraint(str(rule["record_id"]), resolved_record_id):
             continue
-        if not _matches_constraint(str(rule["feature_type"]), feature_type):
-            continue
-        if not _rule_matches_feature(
-            feature, rule, record_id=resolved_record_id, selector=selector
-        ):
+        query: FeatureQuery = rule["query"]
+        if not query.matches(feature, record_id=resolved_record_id, selector=selector):
             continue
         return rule
     return None

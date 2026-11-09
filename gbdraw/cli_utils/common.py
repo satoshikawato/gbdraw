@@ -14,6 +14,12 @@ import sys
 from dataclasses import dataclass, replace
 from typing import Sequence
 
+from gbdraw.analysis.feature_density import (
+    FeatureDensityTrack,
+    parse_feature_density_words,
+    read_feature_density_table,
+    unique_feature_density_tracks,
+)
 from gbdraw.cli_utils.losat_output import parse_positive_int
 from gbdraw.comparisons.identity_scale import IDENTITY_SCALE_RULE, identity_scale_from_config
 from gbdraw.config.models.canvas import (
@@ -34,7 +40,8 @@ from gbdraw.core.figure_length import argparse_figure_length
 from gbdraw.core.numeric import JS_WHITESPACE, argparse_float, argparse_integer, ascii_int, parse_ascii_finite_float
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.exceptions import ValidationError
-from gbdraw.api.record_planning import RecordInputManifest
+from gbdraw.api.options import DepthTrackInput
+from gbdraw.api.record_planning import RecordInputManifest, depth_track_inputs_from_cli
 from gbdraw.api.requests import RecordCardinality, RecordDisplayOptions
 from gbdraw.features.shapes import parse_feature_shape_assignment
 from gbdraw.mode_profiles import CIRCULAR_MODE_PROFILE, DEFAULT_FEATURE_TYPES
@@ -859,6 +866,62 @@ def add_label_args(parser: argparse.ArgumentParser) -> None:
         default='')
 
 
+def _cli_list(values: Sequence[str] | None) -> list[str] | None:
+    return list(values or []) or None
+
+
+def depth_track_inputs_from_args(
+    args: argparse.Namespace, *, heights: Sequence[str] | None = None
+) -> tuple[DepthTrackInput, ...] | None:
+    """The depth tracks of ``--depth_track`` and its per-track options, in either mode (``heights``: Linear's)."""
+
+    return depth_track_inputs_from_cli(
+        args.depth_track,
+        labels=_cli_list(args.depth_track_label),
+        colors=_cli_list(args.depth_track_color),
+        heights=_cli_list(heights),
+        large_tick_intervals=_cli_list(args.depth_track_large_tick_interval),
+        small_tick_intervals=_cli_list(args.depth_track_small_tick_interval),
+        tick_font_sizes=_cli_list(args.depth_track_tick_font_size),
+    )
+
+
+def _add_depth_track_source_args(parser: argparse.ArgumentParser, *, mode: str) -> None:
+    _add_depth_track_arg(parser, mode=mode)
+    _add_depth_track_label_color_args(parser)
+
+
+def add_feature_density_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        '--feature_density_track',
+        metavar='KEY=VALUE',
+        help='A feature density track, as key=value words: id=<name> type=<feature type, or * for every type> '
+        '[qualifier=<name> [value=<regex>]] [min_length=<bp>] [max_length=<bp>] [metric=count|coverage] '
+        '[style=heatmap|histogram] [window=<bp>] [step=<bp>] [color=<color>] [caption=<text>]. '
+        'count: the features in each window; coverage: the percentage of each window the features cover. '
+        'Window and step default to the GC content window. Repeat the option for more tracks.',
+        type=str,
+        nargs='+',
+        action='append')
+    parser.add_argument(
+        '--feature_density_table',
+        help='Path to a TSV file of feature density tracks: a header line naming the columns (id, type, qualifier, '
+        'value, min_length, max_length, metric, style, window, step, color, caption) and one track per line '
+        '(optional)',
+        type=str,
+        default='')
+
+
+def feature_density_tracks_from_args(args: argparse.Namespace) -> tuple[FeatureDensityTrack, ...] | None:
+    """The tracks of ``--feature_density_table`` and then of each ``--feature_density_track``, or None."""
+
+    table: str = args.feature_density_table
+    tracks = list(read_feature_density_table(table)) if table else []
+    for index, words in enumerate(args.feature_density_track or (), start=1):
+        tracks.append(parse_feature_density_words(words, where=f"--feature_density_track #{index}"))
+    return unique_feature_density_tracks(tracks) or None
+
+
 def validate_input_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     """Validate input file argument combinations."""
     records_table = getattr(args, "records_table", None)
@@ -963,6 +1026,9 @@ def handle_output_formats(out_formats: list[str]) -> list[str]:
 
 __all__ = [
     "add_analysis_args",
+    "add_feature_density_args",
+    "depth_track_inputs_from_args",
+    "feature_density_tracks_from_args",
     "COLOR_TABLE_HELP",
     "add_color_args",
     "add_feature_args",

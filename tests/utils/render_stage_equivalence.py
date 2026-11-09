@@ -183,6 +183,7 @@ TABLE_FILE_READERS: Mapping[str, Callable[[str], _NamesFiles]] = {
 VALUE_TABLE_OPTIONS = frozenset(
     {
         "--annotation_table",
+        "--feature_density_table",
         "--feature_override_table",
         "--feature_placement_table",
         "--feature_visibility_table",

@@ -213,6 +213,17 @@ write-up of a release.
   the previous build ran runs them once more at its first Generate, because a
   saved LOSAT result is reused only by the LOSAT build that wrote it; the
   results are the same.
+- Added: feature density tracks show, window by window along each record, how
+  many features of a kind lie there or what percentage of the window they
+  cover, as a band of colored cells or as a histogram, with a Legend row that
+  states which features it reads (`gene per 20 kbp`). A track reads one feature
+  type (or every type), optionally a qualifier whose values match a regular
+  expression, and a length range, so it can show gene density along a
+  eukaryotic chromosome or the share of each window in long terminal repeats.
+  Give tracks with `--feature_density_track` or `--feature_density_table` in
+  `gbdraw circular` and `gbdraw linear`, or as `FeatureDensityTrack` options in
+  the Python API; a saved Session keeps them and replays them in the CLI. The
+  Web app's editor for them comes later.
 - Added: one Linear row can show several windows of one record, leaving out
   the interval between them. Repeat `--region` for a record, or give the rows of
   a records table that are its windows one value in the new `record_group`

@@ -25,6 +25,7 @@ from gbdraw.analysis.collinearity import (
 from gbdraw.analysis.collinearity_units import CollinearityUnitMode
 from gbdraw.analysis.conservation import ConservationInput, ConservationTrack
 from gbdraw.analysis.depth_tracks import DepthTrackData, DepthTrackSpec, ResolvedDepthTracks
+from gbdraw.analysis.feature_density import FeatureDensityLayer, FeatureDensityTrack
 from gbdraw.analysis.protein_colinearity import (
     LosatpCacheManager,
     OrthogroupGraphResult,
@@ -97,6 +98,9 @@ class DiagramAssemblyInputs:
     depth_track_large_tick_intervals: Sequence[float | str | None] | None = None
     depth_track_small_tick_intervals: Sequence[float | str | None] | None = None
     depth_track_tick_font_sizes: Sequence[float | str | None] | None = None
+    # The feature density tracks a ``feature_density`` slot names by id; a stack the reader did not write draws
+    # each of them after its features slot.
+    feature_density_tracks: Sequence[FeatureDensityTrack] | None = None
     annotation_options: AnnotationOptions | None = None
     plot_title: str | None = None
     plot_title_font_size: float | None = None
@@ -183,6 +187,8 @@ class CircularRecordContext:
     precomputed_depth_tracks: Sequence[DepthTrackData] | None = None
     precomputed_depth_track_count: int | None = None
     shared_depth_max: float | None = None
+    # The record's feature density layers, on the scale of the canvas's shared legend; None: the record's own.
+    feature_density: Mapping[str, FeatureDensityLayer] | None = None
     precomputed_conservation_tracks: Sequence[ConservationTrack] | None = None
     annotation_record_index: int = 0
     definition_group_id: str | None = None

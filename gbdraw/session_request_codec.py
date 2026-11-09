@@ -57,6 +57,7 @@ from gbdraw.analysis.collinearity import (
 )
 from gbdraw.analysis.collinearity_units import _COLLINEARITY_UNIT_MODES, COLLINEARITY_UNIT_MODE_SPELLINGS
 from gbdraw.analysis.conservation import _default_label as _default_conservation_label
+from gbdraw.analysis.feature_density import FeatureDensityMetric, FeatureDensityStyle, FeatureDensityTrack
 from gbdraw.analysis.ortholog_paths import OrthologPathCollection
 from gbdraw.analysis.windows import WINDOW_SOURCE_ANNOTATION, WindowSource
 from gbdraw.analysis.protein_colinearity import (
@@ -86,7 +87,8 @@ from gbdraw.session_legacy_values import (
     LEGACY_SCALAR_AXIS_LABELS,
     SCALAR_AXIS_LABEL_PATHS,
 )
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import ParseError, ValidationError
+from gbdraw.features.query import FeatureQuery
 from gbdraw.session_contract import SESSION_ID_RE
 from gbdraw.features.overrides import FeatureOverride
 from gbdraw.features.placement import (
@@ -190,6 +192,7 @@ from .layout.similarity_alignment import (
 
 if TYPE_CHECKING:
     from gbdraw.annotations.models import RegionTarget
+    from gbdraw.contract_shapes import Shape
     from gbdraw.session_resources import RequestResources, SessionResourceTable
 
     from .api.options import LosatpMode
@@ -3034,6 +3037,52 @@ def _decode_depth_tracks(
     return tuple(decoded)
 
 
+def _encode_feature_density_tracks(value: object) -> list[dict[str, object]]:
+    """Each track as one object with a key per field (camelCase), its query as one object with a key per field."""
+
+    encoded: list[dict[str, object]] = []
+    for track in _sequence(value, name="feature_density_tracks"):
+        if not isinstance(track, FeatureDensityTrack):
+            raise CanonicalRequestEncodingError("feature_density_tracks must contain FeatureDensityTrack values.")
+        query = {key: getattr(track.query, item.name) for key, item in _class_field_defs(FeatureQuery).items()}
+        encoded.append({
+            key: query if item.name == "query" else getattr(track, item.name)
+            for key, item in _class_field_defs(FeatureDensityTrack).items()
+        })
+    return encoded
+
+
+def _decode_feature_density_tracks(value: object) -> tuple[FeatureDensityTrack, ...]:
+    path = "renderRequest.diagramOptions.featureDensityTracks"
+    decoded: list[FeatureDensityTrack] = []
+    for index, raw in enumerate(_array(value, path=path)):
+        item_path = f"{path}[{index}]"
+        track = _object(raw, path=item_path, required=frozenset(_class_field_defs(FeatureDensityTrack)))
+        query_path = f"{item_path}.query"
+        query = _object(track["query"], path=query_path, required=frozenset(_class_field_defs(FeatureQuery)))
+        try:
+            decoded.append(FeatureDensityTrack(
+                id=_string(track["id"], f"{item_path}.id"),
+                query=FeatureQuery(
+                    feature_type=_string(query["featureType"], f"{query_path}.featureType"),
+                    qualifier=_optional_string(query["qualifier"], f"{query_path}.qualifier"),
+                    value=_optional_string(query["value"], f"{query_path}.value"),
+                    min_length=_optional_integer(query["minLength"], f"{query_path}.minLength"),
+                    max_length=_optional_integer(query["maxLength"], f"{query_path}.maxLength"),
+                ),
+                # FeatureDensityTrack.__post_init__ refuses a metric or style outside its names.
+                metric=cast("FeatureDensityMetric", _string(track["metric"], f"{item_path}.metric")),
+                style=cast("FeatureDensityStyle", _string(track["style"], f"{item_path}.style")),
+                window=_optional_integer(track["window"], f"{item_path}.window"),
+                step=_optional_integer(track["step"], f"{item_path}.step"),
+                color=_optional_string(track["color"], f"{item_path}.color"),
+                caption=_optional_string(track["caption"], f"{item_path}.caption"),
+            ))
+        except (ParseError, ValidationError) as error:
+            raise CanonicalRequestDecodingError(f"{item_path}: {error}", diagnostic=_REQUEST_FIELDS_INVALID) from error
+    return tuple(decoded)
+
+
 def _without_unwritten_feature_tolerance(name: str, value: object, error_type):
     if name not in {"config", "config_overrides"} or not isinstance(value, MappingABC):
         return value
@@ -3114,6 +3163,8 @@ def _encode_option_value(
         return _encode_assembly_output(value)
     if name == "depth_tracks":
         return _encode_depth_tracks(value, resources=resources)
+    if name == "feature_density_tracks" and value is not None:
+        return _encode_feature_density_tracks(value)
     if name in _TABLE_FIELDS:
         return _table_ref(name, value, resources=resources)
     if name in _FILE_FIELDS:
@@ -3170,6 +3221,8 @@ def _decode_option_value(
         return _decode_assembly_output(value, mode=mode, schema=schema)
     if name == "depth_tracks":
         return _decode_depth_tracks(value, resource_paths=resource_paths)
+    if name == "feature_density_tracks" and value is not None:
+        return _decode_feature_density_tracks(value)
     if name in _TABLE_FIELDS:
         return _decode_table_ref(
             value,
@@ -5026,7 +5079,7 @@ def describe_canonical_typed_resources(resources: Mapping[str, tuple[str, type]]
     """
 
     from .contract_shapes import (
-        BOOLEAN, INTEGER, NULL, NUMBER, STRING, UNKNOWN, Shape, array, literal, obj, record, ref, union,
+        BOOLEAN, INTEGER, NULL, NUMBER, STRING, UNKNOWN, array, literal, obj, record, ref, union,
     )
 
     scalars: dict[object, Shape] = {str: STRING, int: INTEGER, float: NUMBER, bool: BOOLEAN, type(None): NULL}
@@ -5959,6 +6012,29 @@ def describe_legacy_request_tables() -> dict[str, Any]:
     }
 
 
+def _describe_feature_density(data: Callable[..., Shape], of: Callable[[object], Shape], color: Shape) -> None:
+    """Describe a feature query and a density track with ``data``, bounding the fields their ``__post_init__`` bounds.
+
+    A type and an id hold a non-space character, lengths are whole bases, and a window and step are above zero;
+    A track's color is a hex of 3 or 6 digits or a color name, as an annotation's; ``_decode_feature_density_tracks``
+    reads every key.
+    """
+
+    from .contract_shapes import bounded, nullable
+
+    query_hints = _class_type_hints(FeatureQuery)
+    density_hints = _class_type_hints(FeatureDensityTrack)
+    data(FeatureQuery, replace={
+        "feature_type": bounded(of(query_hints["feature_type"]), pattern=r"\S"),
+        **{name: bounded(of(query_hints[name]), minimum=0) for name in ("min_length", "max_length")},
+    })
+    data(FeatureDensityTrack, replace={
+        "id": bounded(of(density_hints["id"]), pattern=r"\S"),
+        "color": nullable(color),
+        **{name: bounded(of(density_hints[name]), exclusiveMinimum=0) for name in ("window", "step")},
+    })
+
+
 def describe_canonical_request() -> dict[str, Any]:
     """Describe the JSON of a current-schema request as neutral data.
 
@@ -5970,8 +6046,7 @@ def describe_canonical_request() -> dict[str, Any]:
     """
 
     from .contract_shapes import (
-        INTEGER, NULL, NUMBER, STRING, UNKNOWN, Shape,
-        array, bounded, literal, non_null, nullable, obj, record, ref, shape_of_hint, shape_violations, tuple_of,
+        INTEGER, NULL, NUMBER, STRING, UNKNOWN, array, bounded, literal, non_null, nullable, obj, record, ref, shape_of_hint, shape_violations, tuple_of,
         union,
     )
     from .mode_profiles import DINUCLEOTIDE_PATTERN
@@ -6184,6 +6259,7 @@ def describe_canonical_request() -> dict[str, Any]:
             return non_null(shape)
         return shape
 
+    _describe_feature_density(data, of, color)
     diagram_options: dict[str, Shape] = {}
     for mode, (options_class, track_class, output_class) in modes.items():
         title = mode.capitalize()
@@ -6355,20 +6431,19 @@ def describe_canonical_request() -> dict[str, Any]:
             "output": _encode_output(RenderOutputRequest()),
         })))
     named("RenderRequest", union(*requests))
-    # A required field that holds null takes null where its stored value
-    # cannot be read: the encoder writes null for an unset value (OV-777).
-    # Null is no empty form where another value decides whether it may be
-    # null: a decision's anchor and the anchor's identity
-    # (AlignmentRecordDecision.__post_init__; the plan finds its reference by
-    # the identity), a slot list an axis index names
-    # (_validate_track_configuration), and the edits of a feature override
-    # (FeatureOverride: at least one edit).
+    # A required field that holds null takes null where its stored value cannot be read: the encoder writes null
+    # for an unset value (OV-777). Null is no empty form where another value decides whether it may be null: a
+    # decision's anchor and the anchor's identity (AlignmentRecordDecision.__post_init__; the plan finds its
+    # reference by the identity), a slot list an axis index names (_validate_track_configuration), the edits of a
+    # feature override (FeatureOverride: at least one edit), and the qualifier a feature query's value searches
+    # (FeatureQuery.__post_init__).
     null_decided_elsewhere = {
         "CanonicalAlignmentRecordDecision": {"anchor"},
         "CanonicalAlignmentAnchorIdentity": {"sourceFeatureIndex", "stableFeatureSvgId"},
         "CanonicalCircularTrackOptions": {"circularTrackSlots"},
         "CanonicalLinearTrackOptions": {"linearTrackSlots"},
         "CanonicalFeatureOverride": {"featureVisibility", "labelText", "labelVisibility"},
+        "CanonicalFeatureQuery": {"qualifier"},
     }
     for name, shape in types_.items():
         if shape["kind"] == "object":
