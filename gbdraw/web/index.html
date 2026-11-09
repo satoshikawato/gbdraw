@@ -2525,7 +2525,7 @@
 
     <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
         <gbdraw-loader class="w-16 h-16 mb-6"></gbdraw-loader>
-        <h3 class="text-xl font-bold text-slate-800 animate-pulse">{{ sequenceSearch.panel.running ? t('Searching sequences...') : findInOtherFiles.dialog.status === 'searching' ? t('Searching other files...') : t('Generating Diagram...') }}</h3>
+        <h3 class="text-xl font-bold text-slate-800 animate-pulse">{{ sequenceSearch.panel.running ? t('Searching sequences...') : findInOtherFiles.dialog.status !== 'searching' ? t('Generating Diagram...') : t('Searching other files...') }}</h3>
         <p data-generation-progress role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
         <!-- CAPACITY-WARN: the labels that may not fit, worded from Python's values (OV-2179), while the render goes on -->
         <div v-if="labelCapacityNotices.length" role="status" aria-live="polite" data-generation-notice
