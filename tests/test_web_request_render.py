@@ -773,8 +773,8 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # the prolog and the joined pieces, the reply has the earlier digest.
     # Updated again when every Linear slot group took its slot id and slot tags (OV-3012, OV-3083): only those
     # group ids and tags moved, in the SVG and in the document pieces' start tags.
-    "similarity_groups": "9e322511a6d66e434242c09cde9b66c4f085c0b2a9dcebec539d8d03470bd88e",
-    "collinear": "20703996666abbe21fd53e18f153a515bbac86412c9ea56023ba8865323f0725",
+    "similarity_groups": "6cb08292c871b9fe4cc80c03087540814586792c298bb1fbf0959307d8421367",
+    "collinear": "4320d007be09018053eee7b3553d7c59fdcc5dec9f0d93de058dd58eec353a7b",
 }
 
 
