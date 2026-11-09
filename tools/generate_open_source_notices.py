@@ -41,6 +41,7 @@ read_project_version = _build_support.read_project_version
 PYODIDE_BUNDLED_WHEELS = _web_assets.PYODIDE_BUNDLED_WHEELS
 WEB_ASSET_NOTICES = _web_assets.WEB_ASSET_NOTICES
 WEB_ROOT = _web_assets.WEB_ROOT
+PYODIDE_RUNTIME_DIR = _web_assets.PYODIDE_RUNTIME_DIR
 
 
 NOTICES_PATH = WEB_ROOT / "open-source-notices.html"
@@ -84,14 +85,14 @@ LICENSE_TEXTS = {
     "license-apache-2.0": (
         "Apache License 2.0",
         lambda: _read_wheel_member_text(
-            Path("vendor") / "pyodide" / "v0.29.0" / "full" / "tzdata-2025.2-py2.py3-none-any.whl",
+            PYODIDE_RUNTIME_DIR.relative_to(WEB_ROOT) / "tzdata-2025.2-py2.py3-none-any.whl",
             "licenses/LICENSE_APACHE",
         ),
     ),
     "license-mpl-2.0": (
         "Mozilla Public License 2.0",
         lambda: _read_wheel_member_text(
-            Path("vendor") / "pyodide" / "v0.29.0" / "full" / "micropip-0.11.0-py3-none-any.whl",
+            PYODIDE_RUNTIME_DIR.relative_to(WEB_ROOT) / "micropip-0.11.0-py3-none-any.whl",
             ".dist-info/licenses/LICENSE",
         ),
     ),

@@ -212,7 +212,7 @@ export const finishReplyBuffers = (result) => {
  * Python's Generate result as JavaScript values, with its reply buffers joined.
  * @param {{ toJs?: (options: { dict_converter: typeof Object.fromEntries }) => unknown } | null | undefined} resultHandle
  */
-const convertGenerationResult = (resultHandle) => {
+export const convertGenerationResult = (resultHandle) => {
   const result = typeof resultHandle?.toJs === 'function'
     ? resultHandle.toJs({ dict_converter: Object.fromEntries })
     : resultHandle;
