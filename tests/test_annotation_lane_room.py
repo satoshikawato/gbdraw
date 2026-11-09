@@ -1988,3 +1988,21 @@ def test_the_lane_packer_finds_the_spans_a_span_meets_as_testing_each_pair_does(
             assert spans.met(queries) == pairwise
             for q_start, q_end in queries:
                 assert spans.meets(q_start, q_end) == any(q_start < end and q_end > start for start, end, _ in kept)
+
+
+def test_the_lane_packer_measures_a_labels_letters_only_in_lanes_its_mark_leaves_free() -> None:
+    # OV-2981: a lane the mark alone meets is taken whatever its label's letters, so the packer measures the letters
+    # (``LettersInLane``) only in lanes the mark leaves free. Six nested bands meet each other: each takes the lane
+    # after the last, and its letters are measured there alone.
+    asked: list[tuple[str, int]] = []
+
+    def letters(annotation: ResolvedRegionAnnotation, _place_bp: float, lane: int) -> LabelExtent:
+        asked.append((annotation.id, lane))
+        return LabelExtent(-50.0, 50.0, 5.0, drawn=True)
+
+    placements = packer.assign_annotation_lanes(
+        _nested(6), record_lengths={0: 10_000}, letters_in_lane=letters, join_origin=True
+    )
+
+    assert sorted((item.annotation.id, item.lane) for item in placements) == [(f"n{index}", index) for index in range(6)]
+    assert asked == [(f"n{index}", index) for index in range(6)]

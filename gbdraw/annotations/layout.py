@@ -471,8 +471,9 @@ def assign_annotation_lanes(
     if overflow not in {"error", "compress", "clip"}:
         raise ValidationError("overflow must be 'error', 'compress', or 'clip'.")
 
-    def occupied_in(annotation: ResolvedRegionAnnotation) -> Callable[[int], dict[int, tuple[tuple[float, float], ...]]]:
+    def occupied_in(annotation: ResolvedRegionAnnotation) -> Callable[[int | None], dict[int, tuple[tuple[float, float], ...]]]:
         # What the annotation occupies on each of its rows with its mark in a lane: its letters are measured there.
+        # Without a lane, its mark alone: the same in every lane, and among what it occupies with its letters.
         length = int(record_lengths[annotation.record_index])
         annotation_padding = max(0.0, float(padding_bp(annotation) if callable(padding_bp) else padding_bp))
         stretch = (
@@ -481,8 +482,12 @@ def assign_annotation_lanes(
             else None
         )
 
-        def rows_in(lane: int) -> dict[int, tuple[tuple[float, float], ...]]:
-            extent = None if stretch is None or letters_in_lane is None else letters_in_lane(annotation, stretch[0].bp, lane)
+        def rows_in(lane: int | None) -> dict[int, tuple[tuple[float, float], ...]]:
+            extent = (
+                None
+                if lane is None or stretch is None or letters_in_lane is None
+                else letters_in_lane(annotation, stretch[0].bp, lane)
+            )
             letters = (
                 None
                 if stretch is None or extent is None
@@ -530,11 +535,10 @@ def assign_annotation_lanes(
                     diagnostic={"code": "TRACK_INVALID", "reason": "ANNOTATION_LANE_CONFLICT"},
                 )
         else:
-            lane = 0
-            rows = rows_in(lane)
-            while lane_is_taken(lane, rows):
+            # A lane the mark alone meets is taken whatever the letters: they are measured only in lanes it leaves free.
+            mark, lane = rows_in(None), 0
+            while lane_is_taken(lane, mark) or lane_is_taken(lane, rows := rows_in(lane)):
                 lane += 1
-                rows = rows_in(lane)
         for row, bounds in rows.items():
             taken = lane_bounds.setdefault((annotation.record_index, row, lane), _Spans())
             for start, end in bounds:
