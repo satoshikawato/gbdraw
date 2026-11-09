@@ -2456,18 +2456,20 @@ assert.deepEqual(
   [{ uid: 'record-1', name: firstName }]
 );
 // OV-2960: a Record Order token `#k` names the committed request's k-th record through the one `#N` reader
-// (`flatRecordSelectorNumber`); `#0` and `#01` are not that selector and stay as they are.
+// (`recordSelectorNumber`), which reads it as Python's renderer does: `#02` is record 2 and `#01` record 1 (the
+// CLI keeps the token's text, `gbdraw circular --multi_record_position '#02@1' --multi_record_position '#01@2'`
+// draws record 2 first); `#0`, which the renderer refuses, names no record and stays as it is.
 const projectedPositions = projectCanonicalSessionRequest({
   renderRequest: {
     ...canonical.renderRequest,
     grouping: 'grid',
     records: ['record-1:1', 'record-1:2'].map((recordKey) => ({ ...canonical.renderRequest.records[0], recordKey })),
-    layout: { ...canonical.renderRequest.layout, multiRecordPositions: ['#0@1', '#01@1', '#2@1', '#1@2'] }
+    layout: { ...canonical.renderRequest.layout, multiRecordPositions: ['#0@1', '#02@1', '#01@2'] }
   },
   resources: canonical.resources
 }).config.adv.multi_record_positions;
 assert.deepEqual(projectedPositions, [
-  { selector: '#0', row: 1 }, { selector: '#01', row: 1 }, { selector: 'record-1:2', row: 1 }, { selector: 'record-1:1', row: 2 }
+  { selector: '#0', row: 1 }, { selector: 'record-1:2', row: 1 }, { selector: 'record-1:1', row: 2 }
 ]);
 
 state.mode = 'linear';

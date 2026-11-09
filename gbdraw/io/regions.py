@@ -26,7 +26,7 @@ from ..core.record_metadata import (
 from ..exceptions import ValidationError
 from ..crop_genbank import check_start_end_coords, crop_and_shift_features
 from ..layout.record_transform import detected_topology, drawn_circular
-from .record_select import RecordSelector, reverse_records
+from .record_select import RecordSelector, record_index_number, reverse_records
 
 logger = logging.getLogger(__name__)
 
@@ -196,8 +196,7 @@ def parse_region_spec(spec: str) -> RegionSpec:
     record_index = None
     if record_selector:
         if record_selector.startswith("#"):
-            index_str = record_selector[1:].strip()
-            number = parse_ascii_nonnegative_integer(index_str)
+            number = record_index_number(record_selector)
             if number is None:
                 raise ValueError(
                     f"Invalid record index in region spec '{text}'. Use #<number>:start-end."

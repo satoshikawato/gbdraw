@@ -15,14 +15,14 @@ import { readAllSequenceRecords, readComparisonSequenceDigest, readOncePerFile }
 /** @import { FileLike } from './session-resource-backing.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 /** @import { CircularConservationLike, OrderedConservationSource } from './conservation-series.js' */
+/** @import { CircularSource } from './drawing/inputs.js' */
 
 /**
  * What the key builder reads of a Circular drawing: its input type, the reference and ring files it binds, and its
  * conservation settings (the ring order and whether the rings read sequences or uploaded BLAST tables).
  * @typedef {{
  *   files: { readonly c_conservation_fastas: (InputFileRef | null)[] },
- *   circularSources: readonly { readonly uid: string, readonly gb: InputFileRef | null, readonly gff: InputFileRef | null,
- *     readonly fasta: InputFileRef | null }[],
+ *   circularSources: readonly Readonly<CircularSource>[],
  *   inputType: { readonly value: string },
  *   circularConservation: CircularConservationLike & { readonly source?: unknown }
  * }} ConservationDrawing

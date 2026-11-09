@@ -118,6 +118,9 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     # The params keys each track renderer takes without reading them; the Source recipe leaves them out.
     ("CIRCULAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.circular", "CIRCULAR_SLOT_UNREAD_PARAM_KEYS"),
     ("LINEAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.linear", "LINEAR_SLOT_UNREAD_PARAM_KEYS"),
+    # The media type a Session writer stores for a resource kind gbdraw makes, and for an input file (OV-2964).
+    ("WRITTEN_RESOURCE_MEDIA_TYPES", "gbdraw.session_io", "WRITTEN_RESOURCE_MEDIA_TYPES"),
+    ("INPUT_FILE_MEDIA_TYPE", "gbdraw.session_io", "INPUT_FILE_MEDIA_TYPE"),
 )
 # (Web name, Python module, function): values a Python function derives from
 # its owner, written in this order after the constants.
@@ -148,6 +151,14 @@ _LITERAL_FIELDS: tuple[tuple[str, str, str, str], ...] = (
     ("ORTHOGROUP_MEMBER_CONFIDENCE", "gbdraw.analysis.protein_colinearity", "OrthogroupMember", "confidence"),
     # How a depth or GC Percent axis is labelled (Web: the Numbered Ticks checkboxes).
     ("SCALAR_AXIS_LABELS", "gbdraw.config.models.objects", "ObjectsDepthConfig", "axis_labels"),
+)
+# (Web name, Python module, name): the regular expression a Python reader reads
+# a text with, as an ECMA-262 pattern that matches the same texts
+# (``_portable_pattern``), written last. The Web matches it against the whole
+# text, as Python's ``fullmatch`` does.
+_PATTERNS: tuple[tuple[str, str, str], ...] = (
+    # A `#N` record selector, as the renderer reads it (OV-2960).
+    ("RECORD_INDEX_SELECTOR_PATTERN", "gbdraw.io.record_select", "RECORD_INDEX_SELECTOR_PATTERN"),
 )
 _IDENTIFIER = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*|0|[1-9][0-9]*")
 
@@ -262,6 +273,9 @@ def render_web_contracts_module() -> str:
         parts.append(
             _owner(module, f"{class_name}.{field_name}") + _literal_field_declaration(web_name, owner, field_name)
         )
+    for web_name, module, name in _PATTERNS:
+        pattern = getattr(importlib.import_module(module), name)
+        parts.append(_owner(module, name) + f"export const {web_name} = {_scalar(_portable_pattern(pattern))};\n")
     return "\n".join(parts)
 
 

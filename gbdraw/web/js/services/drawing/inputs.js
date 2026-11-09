@@ -208,13 +208,13 @@ const generateCircularSourceUid = () => {
 };
 
 /**
+ * A file slot of a Circular File card (`CIRCULAR_SOURCE_FILE_SLOTS`, Python's `CircularSourceCard`).
+ * @typedef {(typeof CIRCULAR_SOURCE_FILE_SLOTS)[number]} CircularSourceFileSlot
+ */
+/**
  * One Circular input source: the drawing's input type picks the files it
  * reads (`gb`, or `gff` with `fasta`, or `fasta`); the others stay as they were.
- * @typedef {object} CircularSource
- * @property {string} uid
- * @property {InputFileRef | null} gb
- * @property {InputFileRef | null} gff
- * @property {InputFileRef | null} fasta
+ * @typedef {{ uid: string } & Record<CircularSourceFileSlot, InputFileRef | null>} CircularSource
  */
 
 /**
@@ -556,7 +556,7 @@ const bindCircularSourceRow = (store, source) => ({
 
 /**
  * A Circular source card as a Load candidate or a rolled-back snapshot holds it.
- * @typedef {{ uid: string, gb: LoadedFileValue | null, gff: LoadedFileValue | null, fasta: LoadedFileValue | null }} LoadedCircularSource
+ * @typedef {{ uid: string } & Record<CircularSourceFileSlot, LoadedFileValue | null>} LoadedCircularSource
  */
 /**
  * A Linear record row as a Load candidate or a rolled-back snapshot holds it.

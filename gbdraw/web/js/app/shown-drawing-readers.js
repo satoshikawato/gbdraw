@@ -10,6 +10,7 @@
 // committed request and its Linear record cards as ports.
 import { inputSummaryOf } from '../services/input-summary.js';
 import { readRegionAxisRecords } from '../services/region-axis.js';
+import { cardHoldsRecordKey } from '../services/record-draw-selection.js';
 import { requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
 import {
   circularDrawingRegionNote, circularDrawingWindowRows, linearCardRegion, regionClampNote, resolveDisambiguatedRecordSelection
@@ -40,6 +41,17 @@ const { computed } = window.Vue;
  */
 
 /**
+ * The record ID a shown Result names a record by, and whether that ID names the
+ * record without its `#k` as far as the committed request tells (`idSuffices`):
+ * the request selects the record by that ID (the Web writes the record's `#k`
+ * instead when the ID repeats in its file or is unsafe), or draws the record's
+ * whole file (a card the CLI or the Python API wrote: `all`, with no selector
+ * and no window), so the Result names every record of the file and an ID that
+ * repeats in it repeats among them.
+ * @typedef {{ recordId: string, idSuffices: boolean }} ShownRecordName
+ */
+
+/**
  * The record ID a Result names each of its records by, by record key (OV-2959):
  * the one Python drew the record with, as the Result's run metadata keeps it
  * (its track-slot geometry, which a Session keeps), else, for a Result saved
@@ -48,17 +60,25 @@ const { computed } = window.Vue;
  * @param {CanonicalRenderRequest | null} request The committed request of the Result.
  * @param {unknown} trackSlotGeometry The run metadata `trackSlotGeometry` of the Result.
  * @param {number} resultCount
- * @returns {ReadonlyMap<string, string>}
+ * @returns {ReadonlyMap<string, ShownRecordName>}
  */
 const recordIdsOfResult = (request, trackSlotGeometry, resultCount) => {
   /** @type {Map<string, string>} */
-  const ids = new Map();
-  for (const { recordKey, selector } of request?.records ?? []) {
-    if (selector?.kind === 'recordId' && selector.value.trim()) ids.set(recordKey, selector.value.trim());
+  const selected = new Map();
+  /** @type {string[]} */
+  const wholeFiles = [];
+  for (const { recordKey, cardinality, selector, windows } of request?.records ?? []) {
+    if (selector?.kind === 'recordId' && selector.value.trim()) selected.set(recordKey, selector.value.trim());
+    if (cardinality === 'all' && !selector && windows.length === 0) wholeFiles.push(recordKey);
   }
+  /** @type {Map<string, ShownRecordName>} */
+  const ids = new Map([...selected].map(([recordKey, recordId]) => [recordKey, { recordId, idSuffices: true }]));
   for (let index = 0; index < resultCount; index += 1) {
     for (const { recordKey, recordId } of readRegionAxisRecords(trackSlotGeometry, index)) {
-      if (recordId) ids.set(recordKey, recordId);
+      if (recordId) {
+        const idSuffices = selected.get(recordKey) === recordId || wholeFiles.some((card) => cardHoldsRecordKey(card, recordKey));
+        ids.set(recordKey, { recordId, idSuffices });
+      }
     }
   }
   return ids;
@@ -176,7 +196,7 @@ export const createShownDrawingReaders = ({
   const shownCommittedRequest = (drawing) => (showsOwnResult(drawing) ? getCommittedCanonicalRenderRequest() : null);
   // The record ID the Result a drawing shows names each of its records by (`recordIdsOfResult`); empty while it shows
   // no Result of its own.
-  /** @param {{ id: string }} drawing @returns {ReadonlyMap<string, string>} */
+  /** @param {{ id: string }} drawing @returns {ReadonlyMap<string, ShownRecordName>} */
   const shownRecordIds = (drawing) => (showsOwnResult(drawing) ? recordIdsOfResult(
     getCommittedCanonicalRenderRequest(), state.trackSlotResolvedGeometry.value, results.value.length
   ) : new Map());

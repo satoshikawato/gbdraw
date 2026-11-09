@@ -29,7 +29,7 @@ import { MODE_SLICE_CONTAINERS } from './mode-scoped-migration.js';
 import { CIRCULAR_SOURCE_UID } from './drawing/inputs.js';
 import { legendEntryKey } from './drawing/paint.js';
 import { withoutUnarrangedEntries } from './linear-record-layout.js';
-import { flatRecordSelectorNumber, isCliRecordKey } from './record-draw-selection.js';
+import { isCliRecordKey, recordSelectorNumber } from './record-draw-selection.js';
 import { normalizeDefaultColor } from '../utils/color-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLegendColorOverrides, normalizeStrokeOverrideMap } from './style-overrides.js';
@@ -740,7 +740,7 @@ export const circularSourcesOfModeScoped = (data) => {
   const positions = Array.isArray(adv.multi_record_positions) ? adv.multi_record_positions : [];
   const numbers = [...recordsOff, form.circular_record_selector, ...positions.map((row) => mapping(row).selector)]
     .flatMap((value) => {
-      const number = flatRecordSelectorNumber(value);
+      const number = recordSelectorNumber(value);
       return number === null ? [] : [number];
     });
   // One card known to hold several records holds every number given.
@@ -751,7 +751,7 @@ export const circularSourcesOfModeScoped = (data) => {
     : cardRecordCounts(cards, records);
   /** The identity of a source selector where it can be placed; any other value as it is. @param {unknown} value @returns {unknown} */
   const identity = (value) => {
-    let number = flatRecordSelectorNumber(value);
+    let number = recordSelectorNumber(value);
     if (number === null || counts === null) return value;
     for (const [index, size] of counts.entries()) {
       if (number <= size) return size > 1 ? `${cards[index].uid}:${number}` : cards[index].uid;

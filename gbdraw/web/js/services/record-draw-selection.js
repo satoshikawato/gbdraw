@@ -1,7 +1,9 @@
 // @ts-check
 import { downloadSafeName } from '../utils/download-names.js';
 /** @import { StoredRecordTranslation } from './linear-record-layout.js' */
-import { CLI_RECORD_KEY_PREFIX, EXPANDED_RECORD_KEY_SEPARATOR } from '../contracts/schema.generated.js';
+import {
+  CLI_RECORD_KEY_PREFIX, EXPANDED_RECORD_KEY_SEPARATOR, RECORD_INDEX_SELECTOR_PATTERN
+} from '../contracts/schema.generated.js';
 import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from './drawing/feature-edits.js';
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
 import { paintOf, setFeatureStroke } from './drawing/paint.js';
@@ -301,24 +303,41 @@ const legacyFlatRecords = (sources) => {
   return flat;
 };
 
-const FLAT_RECORD_SELECTOR = /^#([1-9][0-9]*)$/;
+const RECORD_INDEX_SELECTOR = new RegExp(`^(?:${RECORD_INDEX_SELECTOR_PATTERN})$`);
 /**
- * The N of a source selector `#N` (the N-th record over all the drawing's
- * records, as a Session 46-50 wrote it), null for any other value: the one
- * reader of that shape, for the Session move and for the `#N` it kept (OV-2869).
+ * The N of a `#N` record selector text as Python reads it (`record_index_number`,
+ * gbdraw/io/record_select.py), 0 included, which a reader refuses; null for any
+ * other value. A reader that names that refusal reads it; any other reads
+ * `recordSelectorNumber`.
  * @param {unknown} key
  * @returns {number | null}
  */
-export const flatRecordSelectorNumber = (key) => {
-  const match = typeof key === 'string' ? FLAT_RECORD_SELECTOR.exec(key) : null;
+export const recordIndexNumber = (key) => {
+  const match = typeof key === 'string' ? RECORD_INDEX_SELECTOR.exec(key) : null;
   return match ? Number(match[1]) : null;
+};
+/**
+ * The record, from 1, that a `#N` record selector names, as Python's renderer
+ * reads it (`record_selector_number`, gbdraw/io/record_select.py, whose pattern
+ * the generated contracts carry): spaces around it and after `#` and leading
+ * zeros are allowed, so `#01` is record 1; null for a record ID or any other
+ * value, and for `#0`, which the renderer refuses. The one Web reader of a
+ * record selector's `#N` (OV-2960): the Session move, a kept `#N` (OV-2869),
+ * a committed Record Order token, a Linear card's selector, an annotation
+ * table's record column, and the sequence readers of LOSAT and of a match popup.
+ * @param {unknown} key
+ * @returns {number | null}
+ */
+export const recordSelectorNumber = (key) => {
+  const number = recordIndexNumber(key);
+  return number !== null && Number.isSafeInteger(number) && number >= 1 ? number : null;
 };
 /**
  * Whether a key is a record selector `#N` that a Session 46-50 Session move
  * kept as it was (OV-2869): the N-th record of all the drawing's records.
  * @param {unknown} key
  */
-export const isFlatRecordSelector = (key) => flatRecordSelectorNumber(key) !== null;
+export const isFlatRecordSelector = (key) => recordSelectorNumber(key) !== null;
 
 /**
  * The Circular record choices a Session names records in: the OFF records,
@@ -342,7 +361,7 @@ export const placeFlatRecordSelectors = ({ recordsOff, selector, positions }, so
   const flat = legacyFlatRecords(sources);
   /** @param {string} key @returns {string | null} */
   const place = (key) => {
-    const number = flatRecordSelectorNumber(key);
+    const number = recordSelectorNumber(key);
     return number === null ? key : flat[number - 1]?.identity ?? null;
   };
   return {

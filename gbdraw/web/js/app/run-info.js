@@ -19,7 +19,7 @@ import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
 import { recordKeyBelongsToRequest } from '../services/feature-placement.js';
 import { namedFeatureInstance } from '../services/feature-selector.js';
-import { cliRecordKey, expandedRecordKey, recordKeyExpansion } from '../services/record-draw-selection.js';
+import { cliRecordKey, expandedRecordKey, recordKeyExpansion, recordSelectorNumber } from '../services/record-draw-selection.js';
 import { parseSpecificRules, serializeSpecificRules } from '../services/file-imports.js';
 import {
   CIRCULAR_SLOT_UNREAD_PARAM_KEYS,
@@ -907,10 +907,9 @@ const layoutRows = (request, records) => {
     const selector = separator > 0 ? text.slice(0, separator) : '';
     const row = Number(separator > 0 ? text.slice(separator + 1) : NaN);
     let recordIndex = -1;
-    const indexMatch = selector.match(/^#(\d+)$/);
-    if (indexMatch) {
-      const index = Number(indexMatch[1]) - 1;
-      if (Number.isInteger(index) && index >= 0 && index < records.length) recordIndex = index;
+    const number = recordSelectorNumber(selector);
+    if (number !== null) {
+      if (number <= records.length) recordIndex = number - 1;
     } else {
       const matches = records
         .map((record, index) => (

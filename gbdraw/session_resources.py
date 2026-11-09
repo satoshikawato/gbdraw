@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import mimetypes
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Collection, Mapping
@@ -166,7 +165,7 @@ class SessionResourceTable:
             {
                 **entry, "kind": str(entry.get("kind") or "web-file"), "name": name,
                 "size": len(content_bytes),
-                "type": str(entry.get("type") or "application/octet-stream"),
+                "type": str(entry.get("type") or session_io.INPUT_FILE_MEDIA_TYPE),
                 "encoding": "base64", "data": (
                     entry["data"] if entry.get("encoding") != session_io.DEPTH_FILE_ENCODING
                     else base64.b64encode(content_bytes).decode("ascii")
@@ -366,21 +365,13 @@ def _resource_bytes(resource: CanonicalRequestResource) -> bytes:
 
 def _resource_descriptor(resource: CanonicalRequestResource) -> SessionResourceDescriptor:
     content = _resource_bytes(resource)
-    last_modified = 0
-    if resource.source_path is not None:
-        try:
-            last_modified = int(resource.source_path.stat().st_mtime * 1000)
-        except OSError as exc:
-            raise CanonicalRequestEncodingError(
-                f"Could not read canonical resource: {resource.source_path}"
-            ) from exc
-    media_type = mimetypes.guess_type(resource.name)[0] or "application/octet-stream"
+    metadata = session_io.written_file_metadata(resource.kind)
     return {
         "kind": resource.kind,
         "name": safe_embedded_filename(resource.name),
-        "type": media_type,
+        "type": metadata["type"],
         "size": len(content),
-        "lastModified": last_modified,
+        "lastModified": metadata["lastModified"],
         "encoding": "base64",
         "data": base64.b64encode(content).decode("ascii"),
     }

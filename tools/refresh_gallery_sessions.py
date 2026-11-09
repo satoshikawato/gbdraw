@@ -1268,25 +1268,6 @@ def _keep_created_at(tracked_path: Path, staged_path: Path) -> None:
     _edit_staged_session(staged_path, edit)
 
 
-# What a Gallery Session's resource says of its file besides its name and
-# bytes (OV-2963): nothing the machine that refreshed it chose. The CLI Session
-# writer stores the input file's modification time and the system's guess of
-# its media type, which differ between clones and machines.
-GALLERY_RESOURCE_FILE_METADATA: Mapping[str, object] = {"type": "application/octet-stream", "lastModified": 0}
-
-
-def _without_file_metadata(session: dict[str, Any]) -> int:
-    """Give each resource of a staged Session the Gallery's file metadata; the number of values changed."""
-
-    changed = 0
-    for resource in session.get("resources", {}).values():
-        for key, value in GALLERY_RESOURCE_FILE_METADATA.items():
-            if key in resource and resource[key] != value:
-                resource[key] = value
-                changed += 1
-    return changed
-
-
 def _with_comparisons(comparisons: list[Any], session: dict[str, Any]) -> int:
     """Give a staged Session's request ``comparisons``; 1 when that changes it."""
 
@@ -1785,7 +1766,6 @@ def refresh_gallery_sessions(
             else:
                 _refresh_one_session(session_path, destination_path=staged_path)
             _keep_created_at(session_path, staged_path)
-            _edit_staged_session(staged_path, _without_file_metadata)
             staged_session = load_session(staged_path)
             _validate_staged_gallery_session(
                 session_path,

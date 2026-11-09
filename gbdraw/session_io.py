@@ -4961,18 +4961,20 @@ def decode_depth_payload(payload: Mapping[str, Any]) -> str:
 
 
 def serialize_file_entry(path: str | Path, *, depth: bool = False) -> dict[str, Any]:
-    """Serialize a local file into the GUI session embedded-file shape."""
+    """Serialize a local file into the GUI session embedded-file shape, with an input file's metadata
+    (:func:`written_file_metadata`)."""
 
     file_path = Path(path)
     try:
         data = file_path.read_bytes()
     except OSError as exc:
         raise ValidationError(f"Could not read file for session embedding: {file_path}") from exc
+    metadata = written_file_metadata()
     entry: dict[str, Any] = {
         "name": file_path.name or "file",
-        "type": _guess_file_type(file_path),
+        "type": metadata["type"],
         "size": len(data),
-        "lastModified": int(file_path.stat().st_mtime * 1000),
+        "lastModified": metadata["lastModified"],
     }
     if depth:
         try:
@@ -5478,6 +5480,38 @@ class SessionResourceDescriptor(_SessionResourceDescriptorRequired, total=False)
     lastModified: int
     encoding: str
     checksum: str | None
+
+
+class WrittenFileMetadata(TypedDict):
+    """What a file descriptor gbdraw writes says of its file besides its name and bytes."""
+
+    type: str
+    lastModified: int
+
+
+# The media type of each resource kind gbdraw makes itself: canonical TSV
+# tables and analysis results. The Web writers read both constants from the
+# generated contracts (tools/generate_web_contracts.py).
+WRITTEN_RESOURCE_MEDIA_TYPES: Mapping[str, str] = {
+    "canonical-tsv": "text/tab-separated-values",
+    "collinearity-result": "application/json",
+    "orthogroup-result": "application/json",
+}
+INPUT_FILE_MEDIA_TYPE = "application/octet-stream"
+
+
+def written_file_metadata(kind: str | None = None) -> WrittenFileMetadata:
+    """The ``type`` and ``lastModified`` a Python Session writer stores for a file of resource ``kind``.
+
+    The one owner of that metadata (OV-2964): a kind gbdraw makes itself has
+    its media type, any input file (``kind`` None or an input kind) has
+    ``application/octet-stream``, and ``lastModified`` is 0, so a Session
+    depends only on its inputs' names and bytes and its options, never on the
+    machine's media type guess or an input's modification time. A Web upload
+    keeps the browser's metadata; its writer is the Web's.
+    """
+
+    return {"type": WRITTEN_RESOURCE_MEDIA_TYPES.get(kind or "", INPUT_FILE_MEDIA_TYPE), "lastModified": 0}
 
 
 def is_session_resource_descriptor(value: Mapping[str, object]) -> TypeGuard[SessionResourceDescriptor]:
@@ -7651,15 +7685,6 @@ def _append_depth_row(
         depths.append(depth_value)
         return
     runs.append([position, 1, 1, [depth_value]])
-
-
-def _guess_file_type(path: Path) -> str:
-    suffix = path.suffix.lower()
-    if suffix in {".tsv", ".tab"}:
-        return "text/tab-separated-values"
-    if suffix in {".txt", ".gff", ".gff3", ".fa", ".fasta", ".fna", ".gb", ".gbk", ".gbff"}:
-        return "text/plain"
-    return "application/octet-stream"
 
 
 def _json_clone(value: Any) -> Any:

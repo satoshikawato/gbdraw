@@ -13,7 +13,7 @@ import {
 } from './record-discovery.js';
 import { linearCardRegion } from './record-options.js';
 import { catalogUnitRecords, unitRecordsOf } from './linear-units.js';
-import { linearSeqRecordKey } from './record-draw-selection.js';
+import { linearSeqRecordKey, recordSelectorNumber } from './record-draw-selection.js';
 import { t } from '../utils/i18n.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
@@ -1079,8 +1079,8 @@ const selectInputSequenceRecord = (records, selectorValue) => {
   const selector = text(selectorValue);
   if (!selector) return records[0];
   if (selector.startsWith('#')) {
-    const recordIndex = Number(selector.slice(1)) - 1;
-    return Number.isInteger(recordIndex) ? records[recordIndex] || null : null;
+    const number = recordSelectorNumber(selector);
+    return number === null ? null : records[number - 1] || null;
   }
   const matches = records.filter((record) => (
     record.recordId === selector ||

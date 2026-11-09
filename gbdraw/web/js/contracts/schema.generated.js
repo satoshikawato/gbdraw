@@ -218,6 +218,17 @@ export const LINEAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({
   features: Object.freeze(['color', 'fileName', 'label', 'legend_label'])
 });
 
+// gbdraw/session_io.py: WRITTEN_RESOURCE_MEDIA_TYPES
+/** @type {Readonly<Record<'canonical-tsv' | 'collinearity-result' | 'orthogroup-result', string>>} */
+export const WRITTEN_RESOURCE_MEDIA_TYPES = Object.freeze({
+  "canonical-tsv": 'text/tab-separated-values',
+  "collinearity-result": 'application/json',
+  "orthogroup-result": 'application/json'
+});
+
+// gbdraw/session_io.py: INPUT_FILE_MEDIA_TYPE
+export const INPUT_FILE_MEDIA_TYPE = 'application/octet-stream';
+
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,
@@ -578,3 +589,6 @@ export const SCALAR_AXIS_LABELS = Object.freeze({
   values: /** @type {readonly ('range' | 'numbered')[]} */ (Object.freeze(['range', 'numbered'])),
   default: 'range'
 });
+
+// gbdraw/io/record_select.py: RECORD_INDEX_SELECTOR_PATTERN
+export const RECORD_INDEX_SELECTOR_PATTERN = '[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*#[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*([0-9]+)[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*';

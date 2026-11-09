@@ -110,6 +110,11 @@ write-up of a release.
   app a click on a moved record's name opened another record's settings
   (OV-2931). Each record now keeps the index it was given; the figure looks
   the same.
+- Changed: a Session saved by the command line or the Python API
+  (`--save_session`, `--session_output`) no longer depends on the machine or on
+  when its input files were last changed: each embedded file stores no guessed
+  media type and no modification time, so the same command writes the same
+  Session. Sessions load as before (OV-2964).
 - Fixed (Web app): in a Circular figure with a Depth axis and its ticks beside
   a Percent GC content axis, the GC content **Tick Font Size** field showed an
   Auto size that the figure did not use: the GC axis numbers are drawn in the

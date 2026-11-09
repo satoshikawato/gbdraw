@@ -42,6 +42,7 @@ from typing import Any, Callable, Literal, Mapping, Sequence, TypeAlias, TypedDi
 from gbdraw.api.record_planning import CLI_RECORD_KEY_PREFIX
 from gbdraw.api.requests import EXPANDED_RECORD_KEY_SEPARATOR
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.record_select import record_selector_number
 from gbdraw.session_contract import (
     DRAWING_ID_MAX_LENGTH,
     SESSION_ID_RE,
@@ -968,7 +969,6 @@ def _migrated_drawing_modes(
     return [shown, other]
 
 
-_SOURCE_SELECTOR = re.compile(r"#([1-9][0-9]*)")
 _CLI_RECORD_KEY = re.compile(re.escape(CLI_RECORD_KEY_PREFIX) + r"[1-9][0-9]*")
 
 
@@ -1086,7 +1086,8 @@ def circular_sources_of_mode_scoped(data: Mapping[str, object]) -> dict[str, obj
     selectors = [
         *records_off, form.get("circular_record_selector"), *(_mapping(row).get("selector") for row in positions)
     ]
-    numbers = [int(match.group(1)) for value in selectors if isinstance(value, str) and (match := _SOURCE_SELECTOR.fullmatch(value))]
+    # A source selector ``#N`` is read as the renderer reads it (``record_selector_number``: ``#01`` is ``#1``).
+    numbers = [number for value in selectors if (number := record_selector_number(value)) is not None]
     # One card known to hold several records holds every number given.
     several = len(records) > 1 or bool(records_off) or any(number > 1 for number in numbers)
     counts = (
@@ -1098,10 +1099,9 @@ def circular_sources_of_mode_scoped(data: Mapping[str, object]) -> dict[str, obj
     def identity(value: object) -> object:
         """The identity of a source selector where it can be placed; any other value as it is."""
 
-        match = _SOURCE_SELECTOR.fullmatch(value) if isinstance(value, str) else None
-        if match is None or counts is None:
+        number = record_selector_number(value)
+        if number is None or counts is None:
             return value
-        number = int(match.group(1))
         for card, held in zip(cards, counts):
             if number <= held:
                 return f"{card['uid']}:{number}" if held > 1 else card["uid"]

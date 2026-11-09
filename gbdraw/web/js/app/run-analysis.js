@@ -42,7 +42,9 @@ import { ABSENT_COLLINEAR_INFER_ORTHOGROUPS, DEFAULT_COLLINEAR_ANCHOR_MODE, DEFA
 import {
   losatRecordGencode, losatSearchSequences, prepareLosatSourceBatches, splitLosatSourceResult
 } from '../services/linear-sources.js';
-import { drawnRecordIdentities, linearSeqRecordKey, offRecordRequestRecords, recordKeyMoves } from '../services/record-draw-selection.js';
+import {
+  drawnRecordIdentities, linearSeqRecordKey, offRecordRequestRecords, recordKeyMoves, recordSelectorNumber
+} from '../services/record-draw-selection.js';
 /** @import { DrawnRecordIdentity, RecordIdentitySources } from '../services/record-draw-selection.js' */
 import { moveInstanceRuleRecords } from '../services/feature-selector.js';
 import {
@@ -195,7 +197,8 @@ import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
   ORTHOGROUP_INFERENCE_VERSION,
-  PROTEIN_LOSAT_CACHE_SCHEMA
+  PROTEIN_LOSAT_CACHE_SCHEMA,
+  WRITTEN_RESOURCE_MEDIA_TYPES
 } from '../contracts/schema.generated.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
@@ -1147,8 +1150,8 @@ const selectParsedRecord = (records, selectorRaw) => {
   const selector = normalizeRecordSelectorText(selectorRaw);
   if (!selector) return records[0];
   if (selector.startsWith('#')) {
-    const idx = Number(selector.slice(1).trim()) - 1;
-    if (!Number.isInteger(idx) || idx < 0 || idx >= records.length) {
+    const idx = (recordSelectorNumber(selector) ?? 0) - 1;
+    if (idx < 0 || idx >= records.length) {
       throw new Error(`Record selector ${selector} is out of range (loaded ${records.length} record(s)).`);
     }
     return records[idx];
@@ -4777,8 +4780,8 @@ export const createRunAnalysis = ({
                 }
                 convertedPayload[resourceKey] = JSON.parse(bytesToText(canonical.bytes));
                 bindCanonicalTypedResource(convertedPayload[resourceKey], {
-                  kind: canonical.kind, type: "application/json", size: canonical.size,
-                  lastModified: 0, encoding: "base64", data: bytesToBase64(canonical.bytes)
+                  type: WRITTEN_RESOURCE_MEDIA_TYPES[blastpMode === "collinear" ? "collinearity-result" : "orthogroup-result"],
+                  kind: canonical.kind, size: canonical.size, lastModified: 0, encoding: "base64", data: bytesToBase64(canonical.bytes)
                 });
                 delete convertedPayload.canonicalResource;
               }

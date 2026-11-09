@@ -2514,58 +2514,6 @@ def test_gallery_session_refresh_keeps_the_session_created_at(
     assert tracked.read_bytes() == first_run
 
 
-def test_gallery_session_refresh_stores_no_file_metadata_of_the_machine(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """OV-2963: a refresh gives the same bytes whatever the input files' modification times and media types."""
-
-    tracked = tmp_path / "kept.gbdraw-session.json.gz"
-    original = {"format": "gbdraw-session", "createdAt": "2026-01-02T03:04:05+00:00", "resources": {}}
-    tracked.write_bytes(gzip.compress(json.dumps(original).encode("utf-8"), mtime=0))
-
-    monkeypatch.setattr(refresh_gallery_sessions_module, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(refresh_gallery_sessions_module, "SESSION_ROOT", tmp_path)
-    monkeypatch.setattr(refresh_gallery_sessions_module, "_session_path", lambda name: tmp_path / name)
-    monkeypatch.setattr(refresh_gallery_sessions_module, "load_session", lambda path: {"path": str(path)})
-    monkeypatch.setattr(
-        refresh_gallery_sessions_module, "_validate_staged_gallery_session", lambda *_args, **_kwargs: None
-    )
-    runs = iter([(1793924561868, "text/plain"), (1794131353048, "application/x-gameboy-rom")])
-
-    def fake_refresh(session_path: Path, *, destination_path: Path | None = None) -> None:
-        # The CLI Session writer stores the input's mtime and the system's guess of its media type.
-        assert destination_path is not None
-        modified, media_type = next(runs)
-        resource = {"kind": "genbank", "name": "record-1-genbank-a.gb", "type": media_type, "lastModified": modified}
-        refreshed = {**original, "resources": {"record-1-genbank": resource}}
-        destination_path.write_bytes(gzip.compress(json.dumps(refreshed).encode("utf-8"), mtime=0))
-
-    monkeypatch.setattr(refresh_gallery_sessions_module, "_refresh_one_session", fake_refresh)
-
-    refresh_gallery_sessions_module.refresh_gallery_sessions((tracked.name,))
-    first_run = tracked.read_bytes()
-    refresh_gallery_sessions_module.refresh_gallery_sessions((tracked.name,))
-
-    assert json.loads(gzip.decompress(first_run))["resources"]["record-1-genbank"] == {
-        "kind": "genbank", "name": "record-1-genbank-a.gb", "type": "application/octet-stream", "lastModified": 0
-    }
-    assert tracked.read_bytes() == first_run
-
-
-def test_bundled_gallery_sessions_store_no_file_metadata_of_the_machine() -> None:
-    """OV-2963: every resource of a bundled Gallery Session holds the Gallery's file metadata."""
-
-    for session_path in refresh_gallery_sessions_module._refresh_session_paths(None):
-        document = refresh_gallery_sessions_module._read_session_file(session_path)
-        metadata = {
-            resource_id: {key: resource.get(key) for key in refresh_gallery_sessions_module.GALLERY_RESOURCE_FILE_METADATA}
-            for resource_id, resource in document.get("resources", {}).items()
-        }
-        expected = {resource_id: dict(refresh_gallery_sessions_module.GALLERY_RESOURCE_FILE_METADATA) for resource_id in metadata}
-        assert metadata == expected, session_path.name
-
-
 def test_staged_gallery_validator_requires_one_drawn_drawing(tmp_path: Path) -> None:
     """The staged Session is checked against the one-drawn-drawing rule the Web reads from the generator."""
 
