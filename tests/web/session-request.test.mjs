@@ -1850,7 +1850,8 @@ const conservationProjection = projectCanonicalSessionRequest(conservationCanoni
 assert.equal(conservationProjection.config.circularConservation.enabled, true);
 assert.equal(conservationProjection.config.circularConservation.source, 'upload');
 assert.equal(conservationProjection.config.circularConservation.reference, 'subject');
-assert.equal(conservationProjection.config.circularConservation.labels, 'Comparison');
+// The series owns the ring labels; the projection writes no label list from it (#1777 review 8, OV-3202).
+assert.equal(conservationProjection.config.circularConservation.labels, '');
 assert.equal(conservationProjection.config.circularConservation.ring_width, 14);
 assert.equal(conservationProjection.config.circularConservation.ring_gap, 3);
 assert.deepEqual(

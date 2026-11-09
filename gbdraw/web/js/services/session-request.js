@@ -5,6 +5,7 @@ import {
   recordSourceOf, recordSourceSlotIds
 } from './input-types.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
+/** @import { LosatRequestRing } from './circular-conservation-keys.js' */
 import { cardCropWindow, ringGenomeFileLists, ringGenomeIdLists } from './drawing/inputs.js';
 /** @import { InputSlot } from './input-types.js' */
 import {
@@ -336,15 +337,9 @@ const requestDrawingMode = (drawing) => {
  * @typedef {Omit<CanonicalRecord, 'display'> & { display?: CanonicalRecord['display'] }} RequestDraftRecord
  */
 /**
- * A comparison ring a Generate resolved (LOSAT), as the request reads it.
- * @typedef {object} ResolvedConservationEntry
- * @property {string} [name]
- * @property {string} [text]
- * @property {readonly ResourceEntry[]} [fastas] The files of the ring's comparison genome, in the listed order.
- * @property {string} [label]
- * @property {string} [color]
- * @property {string} [sourceKey]
- * @property {string} [seriesKey]
+ * A comparison ring a LOSAT Generate searched, as the request reads it: the one type of Generate's request rings
+ * (`losatRequestRings`), its genome files as the serialized files hold them.
+ * @typedef {LosatRequestRing<ResourceEntry>} ResolvedConservationEntry
  */
 /**
  * A file slot of a Linear record, as the request reads it: a `LinearSeq`
@@ -3510,7 +3505,7 @@ const conservationSeriesForValidation = ({
     : []
   ).map((entry, index) => ({
     ...entry,
-    sourceKey: String(entry?.sourceKey || entry?.seriesKey || `resolved-${index + 1}`),
+    sourceKey: `resolved-${index + 1}`,
     sourceIndex: index,
     orderIndex: index
   }));
@@ -4302,9 +4297,6 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
   const conservation = publicationClone(config?.circularConservation || {
     enabled: false, reference: 'auto', labels: '', series: []
   });
-  if (!String(conservation.labels || '').trim() && conservation.series?.length)
-    // A row is unvalidated: one without a label, null included, gives an empty label (OV-963).
-    conservation.labels = conservation.series.map((/** @type {UnvalidatedFields<'label'>} */ row) => String(row?.label || '').trim()).join(',');
   const stateRefs = {
     paletteDefinitions: { [palette]: {} }, editableLabels: [],
     similarityAlignmentPlan: canonicalLayout.similarityAlignment || null,
@@ -4883,11 +4875,15 @@ const projectCanonicalRenderInput = ({
         webFiles.conservationBlastSource = 'losat-cache';
       }
     }
+    /** @type {readonly ResolvedConservationEntry[]} The rings a Generate searched (none for any other request). */
+    const searchedRings = Array.isArray(resolvedCircularConservation) ? resolvedCircularConservation : [];
+    // Their genome files, read once: each list sits beside its ring's table.
+    const searchedRingFastas = searchedRings.map((entry) => [...entry.fastas]);
     if (conservationSource === 'losat') {
-      // The rings a Generate searched (its request's rings, so each list sits beside its ring's table), else the rings
-      // in the order Generate draws them, matched by source key (`ringGenomeFilesInRingOrder`).
-      const comparisonFastas = Array.isArray(resolvedCircularConservation) && resolvedCircularConservation.length > 0
-        ? resolvedCircularConservation.map((entry) => [...(entry?.fastas || [])])
+      // The rings a Generate searched, else the rings in the order Generate draws them, matched by source key
+      // (`ringGenomeFilesInRingOrder`).
+      const comparisonFastas = searchedRingFastas.length > 0
+        ? searchedRingFastas
         : ringGenomeFilesInRingOrder({ files: filesData, circularConservation: drawing.circularConservation });
       if (comparisonFastas.length > 0) {
         // Each ring's LOSAT query files, one list of resource IDs per ring.
@@ -4900,26 +4896,22 @@ const projectCanonicalRenderInput = ({
         ));
       }
     }
-    if (
-      Array.isArray(resolvedCircularConservation) &&
-      resolvedCircularConservation.length > 0
-    ) {
-      diagramOptions.conservationBlastFiles = resolvedCircularConservation.map(
+    if (searchedRings.length > 0) {
+      diagramOptions.conservationBlastFiles = searchedRings.map(
         (entry, index) => fileRef(resources.addText(
           `conservation-resolved-blast-${index + 1}`,
           'conservation-blast-file',
-          String(entry?.name || `comparison-${index + 1}.tsv`),
-          String(entry?.text || '')
+          String(entry.name || `comparison-${index + 1}.tsv`),
+          entry.text
         ))
       );
-      const comparisonFastas = resolvedCircularConservation.map((entry) => [...(entry?.fastas || [])]);
-      if (comparisonFastas.some((files) => files.length > 0)) {
-        diagramOptions.conservationFastaFiles = ringFileRefs(resources, 'conservation-resolved-fasta', comparisonFastas);
+      if (searchedRingFastas.some((files) => files.length > 0)) {
+        diagramOptions.conservationFastaFiles = ringFileRefs(resources, 'conservation-resolved-fasta', searchedRingFastas);
       }
       Object.assign(diagramOptions, conservationDiagramOptions(drawing.circularConservation,
-        resolvedCircularConservation.map((entry, index) => ({
-          label: String(entry?.label || `Comparison ${index + 1}`),
-          color: String(entry?.color || '#D9EAF7')
+        searchedRings.map((entry, index) => ({
+          label: entry.label || `Comparison ${index + 1}`,
+          color: entry.color || '#D9EAF7'
         })), 'subject'));
       webFiles.conservationBlastSource = 'losat-cache';
     }
@@ -6144,7 +6136,7 @@ const projectCircularConservationConfig = (options, files) => {
     losat_program: 'blastn',
     subject_gencode: 1,
     reference: String(options.conservationReference || 'auto'),
-    labels: series.map((entry) => entry.label).join(','),
+    labels: '',
     series,
     ring_width: projectOptionalNumber(options.conservationRingWidth, { field: 'conservation_ring_width' }),
     ring_gap: projectOptionalNumber(options.conservationRingGap, { field: 'conservation_ring_gap' })
