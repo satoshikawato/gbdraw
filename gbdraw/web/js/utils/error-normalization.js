@@ -183,6 +183,10 @@ const REASONS = Object.freeze({
   // A BLAST TSV gives the coordinates of one drawn record (gbdraw/api/record_planning.py refuse_file_comparison_of_windows).
   // The browser search reads a crop as one span of its record (gbdraw/web/js/services/linear-units.js, OV-2739).
   WINDOWED_FILE_COMPARISON: 'A record of this pair is drawn in several windows, and a BLAST TSV gives the coordinates of one drawn record. Set the pair to Run LOSAT.',
+  // Generate's Inherit of a saved comparison (services/imported-comparison-intent.js): its indexes count the units
+  // the saved request drew, and this drawing draws other records or windows, or holds no saved comparison.
+  INHERIT_UNITS_CHANGED: 'The drawn records or windows changed since the comparison was saved. Choose Replace or Clear.',
+  INHERIT_SOURCE_MISSING: 'This drawing holds no saved comparison to inherit. Choose Replace or Clear.',
   PAIR_TOPOLOGY: 'Each selected pair must join two different available records on adjacent rows, and appear once.',
   OUTFMT7_FIELDS: 'List all 12 standard BLAST outfmt 6 fields in the "# Fields:" line, or remove the line so that the first 12 columns are read in the standard order.',
   EMPTY_FILE: 'The file is empty.', NOT_GENBANK: 'The file is not a GenBank/DDBJ flat file: it has no record header line.',

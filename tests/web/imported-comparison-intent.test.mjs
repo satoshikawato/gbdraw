@@ -11,7 +11,7 @@ import {
   restoreImportedComparisonIntent,
   serializeImportedComparisonResolution
 } from '../../gbdraw/web/js/services/imported-comparison-intent.js';
-import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { normalizeCaughtError, normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 
 const records = [
   {
@@ -377,8 +377,24 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
     [[0, 2], [1, 2], [undefined, undefined]]);
   // A draft whose windows changed draws other units: the saved indexes name none of them.
   const otherUnits = { renderRequest: request([], { schema: 10, records: [{ ...windowedRecords[0], windows: [window(1, 15000)] }, windowedRecords[1]] }), resources: {} };
-  assert.throws(() => inheritCommittedComparisonIntent({ candidate: otherUnits, committed: committedWindowed }),
-    /The drawn windows changed since the comparison was saved/);
+  // Generate shows the choice in the Comparison panel and why, not the UNKNOWN fallback.
+  /** @param {() => unknown} inherit */
+  const shownFailure = (inherit) => {
+    try {
+      inherit();
+    } catch (error) {
+      return normalizeCaughtError(error, { operation: 'generate', stage: 'request-validation' });
+    }
+    assert.fail('Inherit did not refuse');
+  };
+  const changed = shownFailure(() => inheritCommittedComparisonIntent({ candidate: otherUnits, committed: committedWindowed }));
+  assert.equal(changed.code, 'COMPARISON_CHOICE_REQUIRED');
+  assert.match(changed.summary, /The drawn records or windows changed since the comparison was saved\. Choose Replace or Clear\./);
+  assert.deepEqual(changed.actions, ['edit-comparison']);
+  // A drawing whose comparison Inherit cannot read (no committed request) gets the same choice.
+  const missing = shownFailure(() => inheritCommittedComparisonIntent({ candidate: structuredClone(sameUnits), committed: null }));
+  assert.equal(missing.code, 'COMPARISON_CHOICE_REQUIRED');
+  assert.match(missing.summary, /This drawing holds no saved comparison to inherit\./);
 }
 
 console.log('imported comparison intent tests passed');

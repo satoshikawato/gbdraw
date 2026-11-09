@@ -2,6 +2,7 @@
 /** @import { LinearUnitRecord } from './linear-units.js' */
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import { drawsSeveralUnits, unitRecordsOf } from './linear-units.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
 
 /**
@@ -584,13 +585,14 @@ const collectComparisonResourceIds = (value, target = new Set()) => {
  * @returns {C}
  */
 export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
-  if (!isObject(candidate?.renderRequest) || !isObject(committed?.renderRequest)) {
-    throw new Error('The preserved comparison is unavailable. Reload the Session and try again.');
-  }
+  // A comparison Inherit cannot carry into this request asks for the choice in the Comparison panel, with the reason
+  // the user can act on when there is one.
+  /** @param {string} [reason] */
+  const choiceRequired = (reason) => diagnosticError('COMPARISON_CHOICE_REQUIRED', reason ? { reason } : {},
+    { operation: 'generate' });
+  if (!isObject(candidate?.renderRequest) || !isObject(committed?.renderRequest)) throw choiceRequired('INHERIT_SOURCE_MISSING');
   const comparisons = committed.renderRequest.comparisons;
-  if (!Array.isArray(comparisons) || comparisons.length === 0) {
-    throw new Error('The preserved comparison is unavailable. Choose Replace or Clear.');
-  }
+  if (!Array.isArray(comparisons) || comparisons.length === 0) throw choiceRequired('INHERIT_SOURCE_MISSING');
   const committedRecords = Array.isArray(committed.renderRequest.records)
     ? committed.renderRequest.records
     : [];
@@ -601,9 +603,7 @@ export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
   const candidateIndexByKey = new Map();
   candidateRecords.forEach((record, index) => {
     const key = recordKey(record, index);
-    if (candidateIndexByKey.has(key)) {
-      throw new Error('The current draft has duplicate record identities. Choose Replace or Clear.');
-    }
+    if (candidateIndexByKey.has(key)) throw choiceRequired();
     candidateIndexByKey.set(key, index);
   });
   // The saved indexes count drawn units (OV-2995). Python plans the units from the records' keys and windows
@@ -616,21 +616,14 @@ export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
   const span = (window) => (isObject(window) ? [window.start, window.end, window.reverseComplement] : window);
   /** @param {{ recordKey: string, windows: unknown[] }[]} unitInputs */
   const drawnUnits = (unitInputs) => JSON.stringify(unitInputs.map(({ recordKey: key, windows }) => [key, windows.map(span)]));
-  if (windowed && drawnUnits(committedUnits) !== drawnUnits(candidateUnits)) {
-    throw new Error('The drawn windows changed since the comparison was saved. Choose Replace or Clear.');
-  }
+  if (windowed && drawnUnits(committedUnits) !== drawnUnits(candidateUnits)) throw choiceRequired('INHERIT_UNITS_CHANGED');
   /** @param {unknown} value */
   const remapIndex = (value) => {
     const sourceIndex = Number(value);
     if (windowed && Number.isInteger(sourceIndex) && sourceIndex >= 0) return sourceIndex;
-    if (!Number.isInteger(sourceIndex) || !committedRecords[sourceIndex]) {
-      throw new Error('The preserved comparison references an unavailable record.');
-    }
-    const key = recordKey(committedRecords[sourceIndex], sourceIndex);
-    const candidateIndex = candidateIndexByKey.get(key);
-    if (!Number.isInteger(candidateIndex)) {
-      throw new Error('The current draft no longer contains every record used by the preserved comparison.');
-    }
+    if (!Number.isInteger(sourceIndex) || !committedRecords[sourceIndex]) throw choiceRequired('INHERIT_UNITS_CHANGED');
+    const candidateIndex = candidateIndexByKey.get(recordKey(committedRecords[sourceIndex], sourceIndex));
+    if (candidateIndex === undefined) throw choiceRequired('INHERIT_UNITS_CHANGED');
     return candidateIndex;
   };
   const inheritedComparisons = structuredClone(comparisons);
@@ -661,15 +654,9 @@ export const inheritCommittedComparisonIntent = ({ candidate, committed }) => {
 
   collectComparisonResourceIds(inheritedComparisons).forEach((resourceId) => {
     const descriptor = committed.resources?.[resourceId];
-    if (!isObject(descriptor)) {
-      throw new Error('The preserved comparison is missing a required resource.');
-    }
+    if (!isObject(descriptor)) throw choiceRequired();
     const existing = candidate.resources[resourceId];
-    if (existing && existing !== descriptor) {
-      throw new Error(
-        'The preserved comparison resource conflicts with the current draft. Choose Replace or Clear.'
-      );
-    }
+    if (existing && existing !== descriptor) throw choiceRequired();
     candidate.resources[resourceId] = descriptor;
   });
   return candidate;
