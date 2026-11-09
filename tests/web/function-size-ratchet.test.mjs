@@ -77,7 +77,7 @@ const FUNCTION_LINES = {
   'app/feature-editor/label-actions.js::createFeatureLabelActions': 1243,
   'app/feature-editor/placement-actions.js::createFeaturePlacementActions': 157,
   'app/feature-editor/rule-actions.js::createFeatureRuleActions': 1150,
-  'app/feature-editor/svg-actions.js::createFeatureSvgActions': 1824,
+  'app/feature-editor/svg-actions.js::createFeatureSvgActions': 1820,
   'app/feature-editor/svg-actions.js::createFeatureSvgActions.attachSvgFeatureHandlers': 1100,
   'app/feature-editor/svg-actions.js::createFeatureSvgActions.attachSvgFeatureHandlers.showAlignmentOverlay': 206,
   'app/feature-editor/visibility-actions.js::createFeatureVisibilityActions': 715,

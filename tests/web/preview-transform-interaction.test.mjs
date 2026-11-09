@@ -230,13 +230,13 @@ const { createPanZoom, projectPreviewSurface } = await import(pathToFileURL(join
 projectPreviewSurface(wrapper, uiState);
 const panZoom = createPanZoom(uiState);
 const interactionChanges = [];
-panZoom.previewTransformInteraction.subscribe((change) => interactionChanges.push(change));
+panZoom.subscribePreviewTransformChanges((change) => interactionChanges.push(change));
 
 const wheelEvent = { deltaY: -100, clientX: 500, clientY: 400 };
 panZoom.handleWheel(wheelEvent);
 panZoom.handleWheel(wheelEvent);
 panZoom.handleWheel(wheelEvent);
-assert.equal(panZoom.previewTransformInteraction.isActive(), true);
+assert.equal(panZoom.isPreviewTransformActive(), true);
 assert.equal(interactionChanges.filter((change) => change.active).length, 1);
 assert.equal(wrapper.listenerAdds.get('transitionend'), 1);
 assert.equal(wrapper.listeners.get('transitionend').size, 1);
@@ -244,18 +244,18 @@ assert.equal([...timers.values()].filter((timer) => timer.delay === 220).length,
 assert.equal([...timers.values()].filter((timer) => timer.delay === 260).length, 1);
 wrapper.dispatch('transitionend', { propertyName: 'opacity' });
 wrapper.dispatch('transitionend', { target: canvas, propertyName: 'transform' });
-assert.equal(panZoom.previewTransformInteraction.isActive(), true);
+assert.equal(panZoom.isPreviewTransformActive(), true);
 runTimersAtDelay(220);
-assert.equal(panZoom.previewTransformInteraction.isActive(), true);
+assert.equal(panZoom.isPreviewTransformActive(), true);
 wrapper.dispatch('transitionend', { propertyName: 'transform' });
-assert.equal(panZoom.previewTransformInteraction.isActive(), false);
+assert.equal(panZoom.isPreviewTransformActive(), false);
 assert.equal(wrapper.listeners.get('transitionend').size, 0);
 assert.equal(interactionChanges.filter((change) => !change.active).length, 1);
 completeCase('repeated wheel uses one source, timer pair, and transition listener');
 
 panZoom.handleWheel({ ...wheelEvent, deltaY: 100 });
 runTimersAtDelay(260);
-assert.equal(panZoom.previewTransformInteraction.isActive(), false);
+assert.equal(panZoom.isPreviewTransformActive(), false);
 assert.equal(wrapper.listenerAdds.get('transitionend'), 2);
 assert.equal(wrapper.listenerRemoves.get('transitionend'), 2);
 completeCase('wheel fallback ends a clamped or missing-transition window');
@@ -272,7 +272,7 @@ panZoom.startPan({
   target: backgroundTarget
 });
 assert.equal(uiState.isPanning.value, true);
-assert.equal(panZoom.previewTransformInteraction.isActive(), true);
+assert.equal(panZoom.isPreviewTransformActive(), true);
 assert.equal(canvas.style.cursor, 'grabbing');
 panZoom.doPan({ clientX: 130, clientY: 150 });
 flushFrames();
@@ -284,7 +284,7 @@ assert.equal(`${uiState.canvasPan.x},${uiState.canvasPan.y}`, '30,30');
 assert.equal(`${wrapper.style.transition}|${wrapper.style.willChange}`, 'none|transform');
 panZoom.endPan({ clientX: 130, clientY: 150 });
 assert.equal(uiState.isPanning.value, false);
-assert.equal(panZoom.previewTransformInteraction.isActive(), false);
+assert.equal(panZoom.isPreviewTransformActive(), false);
 assert.equal(canvas.style.cursor, 'grab');
 await Vue.nextTick();
 assert.equal(wrapper.style.transition, 'transform 0.2s');
@@ -314,14 +314,14 @@ panZoom.startPan({
 });
 panZoom.handleWheel(wheelEvent);
 panZoom.endPan({ clientX: 130, clientY: 150 });
-assert.equal(panZoom.previewTransformInteraction.isActive(), true);
+assert.equal(panZoom.isPreviewTransformActive(), true);
 assert.equal(
   interactionChanges.slice(changesBeforePanThenWheel).filter((change) => change.active).length,
   1
 );
 runTimersAtDelay(220);
 wrapper.dispatch('transitionend', { propertyName: 'transform' });
-assert.equal(panZoom.previewTransformInteraction.isActive(), false);
+assert.equal(panZoom.isPreviewTransformActive(), false);
 completeCase('pan then wheel keeps wheel active after pan ends');
 
 const changesBeforeWheelThenPan = interactionChanges.length;
@@ -334,13 +334,13 @@ panZoom.startPan({
   target: backgroundTarget
 });
 runTimersAtDelay(260);
-assert.equal(panZoom.previewTransformInteraction.isActive(), true);
+assert.equal(panZoom.isPreviewTransformActive(), true);
 assert.equal(
   interactionChanges.slice(changesBeforeWheelThenPan).filter((change) => !change.active).length,
   0
 );
 panZoom.endPan({ clientX: 130, clientY: 150 });
-assert.equal(panZoom.previewTransformInteraction.isActive(), false);
+assert.equal(panZoom.isPreviewTransformActive(), false);
 completeCase('wheel then pan keeps pan active after wheel ends');
 
 for (const type of ['pointercancel', 'lostpointercapture']) {
@@ -359,7 +359,7 @@ for (const type of ['pointercancel', 'lostpointercapture']) {
   assert.equal(uiState.canvasPan.y, 40);
   assert.equal(defaultPrevented, true);
   assert.equal(uiState.isPanning.value, false);
-  assert.equal(panZoom.previewTransformInteraction.isActive(), false);
+  assert.equal(panZoom.isPreviewTransformActive(), false);
   completeCase(`${type} preserves the last real pointer and completes cleanup`);
 }
 
@@ -373,7 +373,7 @@ panZoom.startPan({
 panZoom.handleWheel(wheelEvent);
 panZoom.cancelPreviewTransformInteraction({ reconcile: false });
 assert.equal(uiState.isPanning.value, false);
-assert.equal(panZoom.previewTransformInteraction.isActive(), false);
+assert.equal(panZoom.isPreviewTransformActive(), false);
 assert.equal(timers.size, 0);
 assert.equal(wrapper.listeners.get('transitionend').size, 0);
 completeCase('explicit canonical cancel empties every active source and resource');
@@ -393,7 +393,7 @@ completeCase('a cancel during a pan stops its frame and resets the cursor');
 
 panZoom.handleWheel(wheelEvent);
 panZoom.resetPreviewViewport();
-assert.equal(panZoom.previewTransformInteraction.isActive(), false);
+assert.equal(panZoom.isPreviewTransformActive(), false);
 assert.equal(timers.size, 0);
 completeCase('reset cancels the canonical interaction without reconciliation');
 
@@ -447,7 +447,7 @@ panZoom.handleWheel(wheelEvent);
 panZoom.fitPreviewToViewport();
 // 370 / 817 = 0.4529 rounds down to the whole percent, so the diagram fills the frame.
 expectFitted(0.45);
-assert.equal(panZoom.previewTransformInteraction.isActive(), false);
+assert.equal(panZoom.isPreviewTransformActive(), false);
 assert.equal(timers.size, 0);
 const fittedPan = { ...uiState.canvasPan };
 panZoom.fitPreviewToViewport();
@@ -496,7 +496,7 @@ completeCase('fit centres the whole diagram left of the Editor reserve at the la
 
 panZoom.handleWheel(wheelEvent);
 panZoom.disposePanZoom();
-assert.equal(panZoom.previewTransformInteraction.isActive(), false);
+assert.equal(panZoom.isPreviewTransformActive(), false);
 assert.equal(timers.size, 0);
 assert.equal(wrapper.listeners.get('transitionend').size, 0);
 completeCase('pan/zoom dispose removes sources, timers, listeners, and subscriptions');
@@ -683,7 +683,8 @@ const featureActions = createFeatureSvgActions({
   getFeatureColor: () => '#123456',
   getEffectiveLegendCaption: () => '',
   featureSelection,
-  previewTransformInteraction: featurePanZoom.previewTransformInteraction
+  isPreviewTransformActive: featurePanZoom.isPreviewTransformActive,
+  subscribePreviewTransformChanges: featurePanZoom.subscribePreviewTransformChanges
 });
 assert.equal(featureActions.attachSvgFeatureHandlers({ root: svg }), true);
 assert.equal(featureActions.attachSvgFeatureHandlers({ root: svg }), false);
@@ -771,10 +772,10 @@ assert.equal(unrelatedPath.style.writeCount, 0);
 completeCase('active delegated hover events cause zero scan, style, and attribute deltas');
 
 featurePanZoom.endPan(eventAtFeature);
-assert.equal(featurePanZoom.previewTransformInteraction.isActive(), true);
+assert.equal(featurePanZoom.isPreviewTransformActive(), true);
 runTimersAtDelay(220);
 featureInteractionWrapper.dispatch('transitionend', { propertyName: 'transform' });
-assert.equal(featurePanZoom.previewTransformInteraction.isActive(), false);
+assert.equal(featurePanZoom.isPreviewTransformActive(), false);
 flushFrames();
 runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
 assert.equal(featureOne.style.opacity, '0.7');

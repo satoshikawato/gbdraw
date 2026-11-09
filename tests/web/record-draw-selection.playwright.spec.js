@@ -242,7 +242,7 @@ test('Escape on a timing clock closes its tooltip, then the dialog around it', a
   test.setTimeout(180_000);
   await openLinear(page);
   await uploadLinear(page, 'pair.gb', genbank(['A1', 'A2']));
-  const tooltip = page.locator('[role="tooltip"]');
+  const tooltip = page.locator('[role="tooltip"]:not(.feature-hover-summary)');
   const fileCard = page.locator('[data-linear-source-card]').first();
   await fileCard.locator('[data-record-list-open]').click();
   const list = page.locator('[data-record-list-dialog]');

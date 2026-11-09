@@ -380,7 +380,8 @@ const createPreview = ({ features, bands }) => {
     state,
     getFeatureColor: () => '#123456',
     getEffectiveLegendCaption: (feature) => feature.legend || '',
-    previewTransformInteraction: panZoom.previewTransformInteraction
+    isPreviewTransformActive: panZoom.isPreviewTransformActive,
+    subscribePreviewTransformChanges: panZoom.subscribePreviewTransformChanges
   });
   assert.equal(actions.attachSvgFeatureHandlers({ root: svg }), true);
   const hover = (target) => svg.dispatch('mouseover', { target, relatedTarget: null, clientX: 400, clientY: 300 });
@@ -546,7 +547,7 @@ test('OV-936: the alignment overlay is not measured while the preview pans', () 
   const settled = local.viewport.rectCalls;
   assert.ok(settled > 0);
   local.panZoom.startPan({ button: 0, shiftKey: false, clientX: 100, clientY: 120, target: { tagName: 'rect', closest: () => null } });
-  assert.equal(local.panZoom.previewTransformInteraction.isActive(), true);
+  assert.equal(local.panZoom.isPreviewTransformActive(), true);
   for (let step = 0; step < 5; step += 1) {
     mutationObservers.at(-1).callback();
     flushFrames();

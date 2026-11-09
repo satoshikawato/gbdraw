@@ -148,18 +148,12 @@ export const projectPreviewSurface = (element, view) => {
 };
 
 /**
- * What the preview transform interaction shows its readers: whether a wheel zoom or a pan is active, and its
- * start and end.
- * @typedef {Readonly<{ isActive: () => boolean,
- *   subscribe: (listener: PreviewTransformInteractionListener) => () => void }>} PreviewTransformInteraction
- */
-
-/**
  * The preview transform interaction: the wheel zoom and the pan that hold it, as sources, and its readers. A
  * wheel zoom ends once its burst is quiet and the surface's transform transition has ended, or past that
  * transition when a clamped zoom runs none. It writes no view state; a pan the caller stops itself.
  * @param {WebState['svgContainer']} svgContainer The Preview surface, whose transform transition ends a wheel zoom.
- * @returns {{ previewTransformInteraction: PreviewTransformInteraction,
+ * @returns {{ isPreviewTransformActive: () => boolean,
+ *   subscribePreviewTransformChanges: (listener: PreviewTransformInteractionListener) => () => void,
  *   beginPreviewTransformInteraction: (kind: string, event: Event) => boolean,
  *   endPreviewTransformInteraction: (kind: string) => boolean, beginWheelInteraction: (event: WheelEvent) => void,
  *   endEveryInteraction: (reconcile: boolean) => boolean, clearInteractionListeners: () => void }}
@@ -178,16 +172,13 @@ const createPreviewTransformInteraction = (svgContainer) => {
   /** @type {Set<PreviewTransformInteractionListener>} */
   const previewTransformInteractionListeners = new Set();
 
-  /** @type {PreviewTransformInteraction} */
-  const previewTransformInteraction = Object.freeze({
-    isActive: () => previewTransformInteractionSources.size > 0,
-    /** @param {PreviewTransformInteractionListener} listener */
-    subscribe(listener) {
-      if (typeof listener !== 'function') return () => {};
-      previewTransformInteractionListeners.add(listener);
-      return () => previewTransformInteractionListeners.delete(listener);
-    }
-  });
+  const isPreviewTransformActive = () => previewTransformInteractionSources.size > 0;
+  /** @param {PreviewTransformInteractionListener} listener */
+  const subscribePreviewTransformChanges = (listener) => {
+    if (typeof listener !== 'function') return () => {};
+    previewTransformInteractionListeners.add(listener);
+    return () => previewTransformInteractionListeners.delete(listener);
+  };
 
   /**
    * @param {boolean} active
@@ -300,8 +291,9 @@ const createPreviewTransformInteraction = (svgContainer) => {
   };
 
   return {
-    previewTransformInteraction, beginPreviewTransformInteraction, endPreviewTransformInteraction,
-    beginWheelInteraction, endEveryInteraction, clearInteractionListeners: () => previewTransformInteractionListeners.clear()
+    isPreviewTransformActive, subscribePreviewTransformChanges, beginPreviewTransformInteraction,
+    endPreviewTransformInteraction, beginWheelInteraction, endEveryInteraction,
+    clearInteractionListeners: () => previewTransformInteractionListeners.clear()
   };
 };
 
@@ -537,8 +529,8 @@ const createHeldPreviewView = ({ zoom, canvasPan, canvasContainerRef, fit, inFit
 export const createPanZoom = (state) => {
   const { zoom, panStart, canvasPan, canvasContainerRef, svgContainer, previewHiddenUntilShown, previewTransitionHeld } = state;
   const {
-    previewTransformInteraction, beginPreviewTransformInteraction, endPreviewTransformInteraction, beginWheelInteraction,
-    endEveryInteraction, clearInteractionListeners
+    isPreviewTransformActive, subscribePreviewTransformChanges, beginPreviewTransformInteraction,
+    endPreviewTransformInteraction, beginWheelInteraction, endEveryInteraction, clearInteractionListeners
   } = createPreviewTransformInteraction(svgContainer);
   const { startPan, doPan, endPan, stopPan } = createPanGesture(state, {
     beginInteraction: beginPreviewTransformInteraction, endInteraction: endPreviewTransformInteraction
@@ -617,7 +609,8 @@ export const createPanZoom = (state) => {
     storedFigurePreview,
     cancelPreviewTransformInteraction,
     disposePanZoom,
-    previewTransformInteraction
+    isPreviewTransformActive,
+    subscribePreviewTransformChanges
   };
 };
 

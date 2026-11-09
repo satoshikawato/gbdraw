@@ -226,7 +226,7 @@ test('status, selection, and input build no tables; each Generate builds its lab
   }
   const help = page.locator('.help-tip > button[aria-describedby="linear-definition-lock-help"]');
   const tip = await observe(page, () => help.click());
-  const tooltip = page.locator('[role="tooltip"]');
+  const tooltip = page.locator('[role="tooltip"]:not(.feature-hover-summary)');
   await expect(tooltip).toContainText('ON aligns Linear definitions');
   expect(tip.undo).toBe(0);
   expectNoStatusWork(tip, 'help-tip');

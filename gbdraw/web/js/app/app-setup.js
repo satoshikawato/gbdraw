@@ -966,7 +966,7 @@ export const createAppSetup = () => {
     fitPreviewToViewport,
     cancelPreviewTransformInteraction,
     disposePanZoom,
-    previewTransformInteraction,
+    isPreviewTransformActive, subscribePreviewTransformChanges,
     holdPreviewViewport,
     releasePreviewViewport,
     heldPreviewViewport, hidePreviewUntilShown, showHiddenPreview, storedFigurePreview
@@ -1162,7 +1162,7 @@ export const createAppSetup = () => {
     getResultIdentity: previewRuntime.getResultIdentity,
     showEditorIntent: (options) => showEditorIntent(options),
     selectResult,
-    previewTransformInteraction,
+    isPreviewTransformActive, subscribePreviewTransformChanges,
     projectPaletteAndRules,
     projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true }),
     readUserDefaultColor: resultsManager.readUserDefaultColor,

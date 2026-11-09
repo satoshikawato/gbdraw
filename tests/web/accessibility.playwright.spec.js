@@ -368,7 +368,7 @@ test('help tips open from the keyboard and on hover, and Escape closes them', as
   test.setTimeout(180_000);
   await openApp(page);
   const { section, input, button } = await windowTip(page);
-  const tooltip = page.locator('[role="tooltip"]');
+  const tooltip = page.locator('[role="tooltip"]:not(.feature-hover-summary)');
   // The visible label text stays exactly the label; the tip text is only a
   // referenced description.
   await expect(section.getByText('Window', { exact: true })).toHaveCount(1);
@@ -402,7 +402,7 @@ test.describe('390 px touch', () => {
     test.setTimeout(180_000);
     await openApp(page);
     const { button } = await windowTip(page);
-    const tooltip = page.locator('[role="tooltip"]');
+    const tooltip = page.locator('[role="tooltip"]:not(.feature-hover-summary)');
     await button.tap();
     await expect(tooltip).toBeVisible();
     await expect(tooltip).toContainText('Window size for GC content/skew');
