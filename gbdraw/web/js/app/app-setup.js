@@ -1754,10 +1754,10 @@ export const createAppSetup = () => {
     readDrawingRecordIdentities,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
-    losatResultRowsOf,
+    losatResultRowsOf, clearableLosatResultRows,
     downloadLosatCache: downloadLosatCacheOfDrawing,
     downloadLosatPair: downloadLosatPairOfDrawing,
-    clearLosatCache: clearLosatCacheOfDrawing,
+    clearLosatCache,
     getLosatPairDefaultName: losatPairDefaultNameOfDrawing,
     captureGeneratedArtifactRuntimeState,
     restoreGeneratedArtifactRuntimeState
@@ -1861,7 +1861,6 @@ export const createAppSetup = () => {
   const downloadLosatPair = (edgeKey, customName) => downloadLosatPairOfDrawing(state.activeDrawing(), edgeKey, customName);
   const losatResultRows = computed(() => losatResultRowsOf(state.activeDrawing()));
   const downloadLosatCache = () => downloadLosatCacheOfDrawing(state.activeDrawing());
-  const clearLosatCache = () => clearLosatCacheOfDrawing(state.activeDrawing());
   /** @param {string} edgeKey */
   const getLosatPairDefaultName = (edgeKey) => losatPairDefaultNameOfDrawing(state.activeDrawing(), edgeKey);
   // R1 (c), PD-OI-102: a History step, a checkpoint (Reset Settings, a rule
@@ -3972,7 +3971,7 @@ export const createAppSetup = () => {
     requestPaletteChange,
     selectPalette,
     requestResetColors,
-    losatResultRows,
+    losatResultRows, clearableLosatResults: computed(clearableLosatResultRows),
     downloadLosatCache,
     downloadLosatPair,
     clearLosatCache,

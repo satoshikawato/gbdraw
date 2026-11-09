@@ -199,6 +199,7 @@ import {
   writtenLegacyProteinArtifacts,
   losatResultRowsOfDrawing,
   losatRowsOfOtherDrawings,
+  losatRowsOnePerKey,
   CIRCULAR_CONSERVATION_FLOW
 } from '../services/losat-cache.js';
 import {
@@ -6381,9 +6382,8 @@ export const createRunAnalysis = ({
   /** @returns {LosatCacheInfoEntry[]} */
   const cacheInfoRows = () => (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : []);
   /**
-   * The LOSAT results of a drawing, the one reader of its panel (#1777 review 9, OV-3203, OV-3204): the
-   * **Clear N LOSAT results** count and **Save Raw LOSAT TSV** read its rows, one per cache key, never another
-   * drawing's, and **Clear LOSAT results** clears them.
+   * The LOSAT results of a drawing, the one reader of its results (#1777 review 9, OV-3203, OV-3204): **Save Raw
+   * LOSAT TSV** and Run Info read its rows, one per cache key, never another drawing's.
    * @param {DrawingState} drawing
    */
   const losatResultRowsOf = (drawing) => losatResultRowsOfDrawing(cacheInfoRows(), drawing.id);
@@ -6425,23 +6425,23 @@ export const createRunAnalysis = ({
     }
   };
 
-  // Clear LOSAT results clears the shown drawing's results: its rows, and every cached search that no other
-  // drawing's row names. The protein and derived caches serve the remaining searches; they go with the last one.
-  /** @param {DrawingState} drawing */
-  const clearLosatCache = (drawing) => {
+  /**
+   * The searches **Clear LOSAT results** removes: every drawing's rows, one per cache key (OV-3203). Clear clears the
+   * whole project, as PD-OI-022 states (Clear Cache invalidates retained evidence).
+   * @returns {LosatCacheInfoEntry[]}
+   */
+  const clearableLosatResultRows = () => losatRowsOnePerKey(cacheInfoRows());
+
+  const clearLosatCache = () => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const kept = losatRowsOfOtherDrawings(cacheInfoRows(), drawing.id);
-    const keptKeys = new Set(kept.map(({ key }) => key));
     completedLosatSearch = null;
-    losatCache.value = new Map([...(losatCache.value || [])].filter(([key]) => keptKeys.has(key)));
-    if (losatCache.value.size === 0) {
-      losatDerivedCache.value = new Map();
-      proteinIdentityManifest.value = emptyProteinIdentityManifest();
-      legacyProteinRawCandidates.value = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] };
-      legacyProteinDerivedEvidence.value = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
-    }
-    losatCacheInfo.value = kept;
+    losatCache.value = new Map();
+    losatDerivedCache.value = new Map();
+    proteinIdentityManifest.value = emptyProteinIdentityManifest();
+    legacyProteinRawCandidates.value = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] };
+    legacyProteinDerivedEvidence.value = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
+    losatCacheInfo.value = [];
   };
 
   // A run that is not a Generate (a Sequence search, PD-OI-117; Find in other files, PD-OI-123) under the
@@ -6521,6 +6521,7 @@ export const createRunAnalysis = ({
     releaseSourceInputFailure,
     downloadCliHelperFiles,
     losatResultRowsOf,
+    clearableLosatResultRows,
     downloadLosatCache,
     downloadLosatPair,
     clearLosatCache,

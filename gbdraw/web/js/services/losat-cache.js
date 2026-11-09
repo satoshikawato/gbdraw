@@ -74,7 +74,8 @@ export const losatEntryDrawingKind = ({ flow }) => (flow === CIRCULAR_CONSERVATI
 /**
  * Cache-info rows one per raw cache key, each its key's first row: rows that share a key (two rings of one genome,
  * two drawings that hold one entry) name one LOSAT result, with the first row's file name, as the CLI raw cache keeps
- * one file per key. Save writes one entry for each; a panel shows each once (`losatResultRowsOfDrawing`).
+ * one file per key. Save writes one entry for each, **Clear N LOSAT results** counts the project's (every drawing's)
+ * rows this way, and a drawing's results show each once (`losatResultRowsOfDrawing`).
  * @template {{ key: unknown }} Row
  * @param {readonly Row[]} rows
  * @returns {Row[]}
@@ -89,8 +90,8 @@ export const losatRowsOnePerKey = (rows) => {
 };
 
 /**
- * The LOSAT results of a drawing: its cache-info rows, one per raw key. Its panel counts them (**Clear N LOSAT
- * results**), **Save Raw LOSAT TSV** saves them and Run Info lists their runtimes (OV-3203, OV-3204).
+ * The LOSAT results of a drawing: its cache-info rows, one per raw key. **Save Raw LOSAT TSV** saves them and Run
+ * Info lists their runtimes (OV-3203, OV-3204).
  * @template {{ key: unknown, drawingId: DrawingId }} Row
  * @param {readonly Row[]} rows @param {DrawingId} drawingId
  * @returns {Row[]}
@@ -98,7 +99,7 @@ export const losatRowsOnePerKey = (rows) => {
 export const losatResultRowsOfDrawing = (rows, drawingId) => losatRowsOnePerKey(rows.filter((row) => row.drawingId === drawingId));
 
 /**
- * The cache-info rows of the other drawings: what a drawing's Generate, ring edit or **Clear LOSAT results** leaves.
+ * The cache-info rows of the other drawings: what a drawing's Generate or ring edit leaves.
  * @template {{ drawingId: DrawingId }} Row
  * @param {readonly Row[]} rows @param {DrawingId} drawingId
  * @returns {Row[]}

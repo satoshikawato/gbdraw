@@ -1644,12 +1644,14 @@ test('a ring comparison genome of two files is one read of both, kept for those 
   assert.equal(sent.length, 3);
 });
 
-// #1777 review 9 (OV-3203, OV-3204): the Circular and the Linear panel count their LOSAT results ("Clear N LOSAT
-// results") through the one reader that Save Raw LOSAT TSV and Clear read, never the project's rows.
-test('both LOSAT result panels count the shown drawing\'s results through the one reader', () => {
+// #1777 review 9 and round 12 (OV-3203, OV-3204): Save Raw LOSAT TSV reads the shown drawing's results; both
+// panels' "Clear N LOSAT results" count the searches Clear removes, the project's, one per cache key (PD-OI-022).
+test('Save Raw LOSAT TSV reads the shown drawing\'s results and both Clear buttons count the project\'s searches', () => {
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   assert.equal(html.includes('losatCacheInfo'), false);
-  assert.equal(html.match(/tn\(losatResultRows\.length, 'Clear \{count\} LOSAT result'/g)?.length, 2);
+  assert.equal(html.match(/tn\(clearableLosatResults\.length, 'Clear \{count\} LOSAT result'/g)?.length, 2);
+  assert.equal(html.match(/@click="clearLosatCache"[^>]*:disabled="!semanticMutationAvailable \|\| \(clearableLosatResults\.length === 0\)"/g)?.length, 2);
+  assert.match(html, /@click="downloadLosatCache"[^>]*:disabled="losatResultRows\.length === 0"/);
 });
 
 test('neutral conservation replay delegates lazy resources to the shared reader', async () => {
@@ -1891,8 +1893,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.deepEqual(state.losatCacheInfo.value.map((row) => [row.key.startsWith('linear-pair') || row.key === 'stale-ring' ? row.key : 'ring', row.drawingId]),
       [['linear-pair-0', 'linear'], ['linear-pair-1', 'linear'], ...cacheEntries.map(() => ['ring', state.activeDrawing().id])]);
 
-    // #1777 review 9 (OV-3203, OV-3204): a panel counts, downloads (Save Raw LOSAT TSV) and clears the LOSAT results
-    // of the drawing it shows, one per cache key, through one reader (`losatResultRowsOf`).
+    // #1777 review 9 (OV-3203, OV-3204): Save Raw LOSAT TSV saves the LOSAT results of the drawing a panel shows,
+    // one per cache key, through one reader (`losatResultRowsOf`); Clear counts the project's searches, one per key
+    // (`clearableLosatResultRows`), and clears them all, as on dev (PD-OI-022).
     const ringKeys = state.losatCacheInfo.value.filter(({ drawingId }) => drawingId === 'circular').map(({ key }) => key);
     assert.equal(ringKeys.length, 3);
     const panelOf = async (drawingId) => {
@@ -1906,6 +1909,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       'the Circular panel says 3 and saves only its 3 rings, not the Linear pairs');
     assert.equal(new Set(ringFiles).size, 3, JSON.stringify(ringFiles));
     assert.deepEqual((await panelOf(linearId)).keys, linearRows.map(({ key }) => key), 'the Linear panel says 2');
+    assert.equal(runner.clearableLosatResultRows().length, 5, 'Clear removes the 2 pairs and the 3 ring searches');
     // Two rings of one genome in one drawing share a cache key: one result (as on dev, where Save writes one entry).
     const generatedRows = state.losatCacheInfo.value;
     state.losatCacheInfo.value = [...generatedRows, { ...generatedRows.at(-1), filename: 'same-genome-again.tsv' }];
@@ -1926,13 +1930,17 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       for (const drawingId of [copy.id, 'circular']) {
         assert.deepEqual(await panelOf(drawingId), { keys: ringKeys, downloads: ringFiles }, drawingId);
       }
-      // Clear in the copy clears the copy's results; the results the other drawings list stay.
+      // Two drawings hold the 3 ring searches: Clear still counts 5 searches, not 8 rows.
+      assert.equal(runner.clearableLosatResultRows().length, 5);
+      // Clear from the copy's panel clears the project, as on dev: every drawing's rows and every search.
+      const kept = { cache: state.losatCache.value, rows: state.losatCacheInfo.value, derived: state.losatDerivedCache.value };
       installShownDrawing(copy.id);
-      runner.clearLosatCache(state.activeDrawing());
-      assert.deepEqual(runner.losatResultRowsOf(state.activeDrawing()), []);
-      assert.deepEqual(await panelOf('circular'), { keys: ringKeys, downloads: ringFiles }, 'Clear left the other drawing');
-      assert.deepEqual([...state.losatCache.value.keys()], ringKeys);
-      assert.deepEqual((await panelOf(linearId)).keys, linearRows.map(({ key }) => key));
+      runner.clearLosatCache();
+      assert.deepEqual([state.losatCacheInfo.value, state.losatCache.value.size, runner.clearableLosatResultRows()], [[], 0, []]);
+      assert.deepEqual([...await Promise.all(['circular', linearId].map(async (drawingId) => (await panelOf(drawingId)).keys))], [[], []]);
+      state.losatCache.value = kept.cache;
+      state.losatCacheInfo.value = kept.rows;
+      state.losatDerivedCache.value = kept.derived;
     } finally {
       installShownDrawing('circular');
       state.removeDrawing(copy.id, { takeSlot: () => null });

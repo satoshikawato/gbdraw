@@ -16,7 +16,7 @@ import { drawingViewAt, savedDrawingView, withSavedDrawingView } from './helpers
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { createHash } from 'node:crypto';
-import { losatResultRowsOfDrawing } from '../../gbdraw/web/js/services/losat-cache.js';
+import { losatResultRowsOfDrawing, losatRowsOnePerKey } from '../../gbdraw/web/js/services/losat-cache.js';
 
 globalThis.window = {
   Vue: {
@@ -1534,6 +1534,8 @@ test('a Load gives a ring entry one cache-info row for each Circular drawing tha
     // drawing's panel, none in the Linear one's.
     assert.deepEqual(holders.map((id) => losatResultRowsOfDrawing(state.losatCacheInfo.value, id).length),
       holders.map((id) => (id.startsWith('circular') ? 1 : 0)), name);
+    // Clear counts the project's searches, one per cache key (round 12): two drawings, one ring, 1.
+    assert.equal(losatRowsOnePerKey(state.losatCacheInfo.value).length, 1, name);
   }
   const legacy = fixtureSession('two-mode-linear-shown.v48');
   legacy.losatCache.entries.push(ringCacheEntry());
