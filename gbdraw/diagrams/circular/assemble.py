@@ -18,6 +18,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from functools import partial
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Callable, Collection, Generic, Literal, Mapping, NamedTuple, Sequence, TypeAlias, TypedDict, TypeVar, cast
 
 from Bio.SeqRecord import SeqRecord
@@ -81,6 +82,7 @@ from ...labels.circular import (
     x_overlap,
     y_overlap,
 )
+from ...labels.circular_repair import make_way_for_boxes
 from ...labels.circular_capacity import CircularLabelCapacity, CircularLabelCapacityExceeded
 from ...labels.circular_fit import CircularDefinitionFitProbe, CircularLabelFitProbe, CircularLabelLayout
 from ...labels.circular_radial import RADIAL_GROWTH_TOLERANCE_PX
@@ -184,6 +186,8 @@ from ...render.drawers.circular.annotations import (
     CircularLabelRoom,
     CircularObstacleLabel,
     LeaderSegment,
+    RegionLabelOverLetters,
+    RegionLabelPlace,
     circular_annotation_label_extent,
     circular_annotation_label_room,
     circular_annotation_lanes_meeting,
@@ -1075,6 +1079,12 @@ class _RegionLabelsNotClear(NamedTuple):
 
     without_letters: tuple[CircularAnnotationLabel, ...] = ()
     overlaps: int = 0
+    # The drawn labels whose letters meet a feature label's letters, by slot id (OV-3017).
+    over_feature_letters: Mapping[str, tuple[RegionLabelOverLetters, ...]] = MappingProxyType({})
+
+
+# The places along their regions that the feature labels made way for, by slot id (CIR-RGN-YIELD).
+_RegionLabelsMadeWay: TypeAlias = Mapping[str, tuple[RegionLabelPlace, ...]]
 
 
 def _circular_annotation_labels_by_slot(
@@ -1085,18 +1095,22 @@ def _circular_annotation_labels_by_slot(
     record_length: int,
     font_family: str,
     obstacles: CircularLabelObstacles,
+    made_way: _RegionLabelsMadeWay,
 ) -> tuple[_SlotLabels, _RegionLabelsNotClear]:
     """The drawn labels of each annotation slot of a record, measured once for the drawer and the canvas bounds,
     and, for the label fit warning, the labels the slots leave out because no letter fits their circle and what the
     drawn labels still overlap (``CircularAnnotationLabels``).
 
     The letters clear the axis circle's paint too where they would meet it, and
-    move along their regions off ``obstacles`` and the labels of earlier slots.
+    move along their regions off ``obstacles`` and the labels of earlier slots,
+    except those drawn where the feature labels made way for them
+    (``made_way``, by slot id).
     """
 
     axis_paint = radial_layout.axis.paint_band_px
     labels: dict[str, tuple[CircularAnnotationLabel, ...]] = {}
     without_letters: list[CircularAnnotationLabel] = []
+    over_feature_letters: dict[str, tuple[RegionLabelOverLetters, ...]] = {}
     overlaps = 0
     for slot in radial_layout.slots:
         layout = (annotation_track_layouts or {}).get(slot.id)
@@ -1108,6 +1122,7 @@ def _circular_annotation_labels_by_slot(
             str(slot.side),
             annotation_track_params_from_mapping(slot.params),
         )
+        obstacles = replace(obstacles, made_way=made_way.get(slot.id, ()))
         measured = _kept_measure(
             lambda measures: measures.labels,
             (record_index, record_length, inner, outer, side, font_family, slot.spans_slots),
@@ -1129,9 +1144,37 @@ def _circular_annotation_labels_by_slot(
         )
         labels[slot.id] = measured.drawn
         without_letters.extend(measured.without_letters)
+        if measured.over_feature_letters:
+            over_feature_letters[slot.id] = measured.over_feature_letters
         overlaps += measured.overlaps
         obstacles = obstacles.with_labels(measured.drawn)
-    return labels, _RegionLabelsNotClear(tuple(without_letters), overlaps)
+    return labels, _RegionLabelsNotClear(tuple(without_letters), overlaps, over_feature_letters)
+
+
+def _feature_labels_making_way(
+    labels: Sequence[CircularLabel],
+    not_clear: _RegionLabelsNotClear,
+    total_length: int,
+    definition_text: Sequence[Aabb],
+) -> tuple[list[CircularLabel], _RegionLabelsMadeWay] | None:
+    """The feature labels moved off the letters of each region label drawn over them, and the places
+    they made way for, by slot id (CIR-RGN-YIELD, OV-3017); None when they clear none. The feature label repair
+    moves them (``make_way_for_boxes``, the one owner of their positions); a region label it cannot clear is drawn
+    where it was and warns (CIR-REGION-WARN)."""
+
+    blocked = [(slot_id, label) for slot_id, labels_over in not_clear.over_feature_letters.items() for label in labels_over]
+    made_way = (
+        make_way_for_boxes(labels, total_length, [label.boxes for _slot_id, label in blocked], definition_text=definition_text)
+        if labels and blocked
+        else None
+    )
+    if made_way is None:
+        return None
+    moved, cleared = made_way
+    places: dict[str, tuple[RegionLabelPlace, ...]] = {}
+    for slot_id, label in (blocked[index] for index in cleared):
+        places[slot_id] = (*places.get(slot_id, ()), label.place)
+    return moved, places
 
 
 def _region_label_warnings(
@@ -1411,6 +1454,7 @@ def _feature_label_obstacles(
                     LeaderSegment(start, end, 0.5 * label_leader_width_px(label))
                     for start, end in zip(shape.leader, shape.leader[1:])
                 ),
+                feature=True,
             )
             for label, shape, drawn in shapes
         ),
@@ -3709,7 +3753,9 @@ def add_record_on_circular_canvas(
     gc_content_tick_font_size_override = _gc_content_axis_font_size(configurators, scalar_axes, resolved_track_slots)
 
     # Annotation labels lie outside the radial bands too: the canvas holds them and a legend or title avoids them.
-    # They move along their regions off the feature labels and leaders, so they follow the feature labels.
+    # They move off the feature labels and leaders, which make way for one still over their letters (CIR-RGN-YIELD).
+    region_labels_made_way: _RegionLabelsMadeWay = {}
+
     def place_annotation_labels() -> tuple[_SlotLabels, tuple[Aabb, ...], _RegionLabelsNotClear]:
         labels_by_slot, not_clear = _circular_annotation_labels_by_slot(
             radial_layout,
@@ -3718,6 +3764,7 @@ def add_record_on_circular_canvas(
             record_length=len(record.gb_record.seq),
             font_family=str(cfg.objects.text.font_family),
             obstacles=_feature_label_obstacles(precalculated_labels or (), len(record.gb_record.seq), canvas_config),
+            made_way=region_labels_made_way,
         )
         return labels_by_slot, tuple(
             label.ink_bounds.translated(float(canvas_config.offset_x), float(canvas_config.offset_y))
@@ -3744,6 +3791,11 @@ def add_record_on_circular_canvas(
         )
 
     annotation_labels, annotation_label_obstacles, region_labels_not_clear = place_annotation_labels()
+    if made_way := _feature_labels_making_way(
+        precalculated_labels or (), region_labels_not_clear, len(record.gb_record.seq), definition_text
+    ):
+        precalculated_labels, region_labels_made_way = made_way
+        annotation_labels, annotation_label_obstacles, region_labels_not_clear = place_annotation_labels()
     overlay_obstacles = (
         *_external_label_obstacles_on_canvas(precalculated_labels or (), len(record.gb_record.seq), canvas_config),
         *annotation_label_obstacles,

@@ -1477,7 +1477,8 @@ def test_circular_annotation_labels_keep_off_what_the_feature_label_style_draws(
     drawn = _feature_label_drawings(ElementTree.fromstring(drawing.tostring()))
     expected = ({"box"} if protection == "box" else set()) | ({"underline"} if line == "under" else set())
     assert {kind for kind, _feature, _polygon in drawn} == expected
-    (obstacles,) = seen
+    # The feature labels as drawn: the last obstacles, after any made way for the region label (CIR-RGN-YIELD).
+    obstacles = seen[-1]
     parts = [part for label in obstacles.labels for part in label.parts]
     for kind, feature, polygon in drawn:
         assert any(
@@ -1577,8 +1578,78 @@ def test_circular_region_label_over_a_feature_label_and_its_leader_counts_one_ov
     index = _ObstacleIndex(CircularLabelObstacles(labels=(feature,), clearance=0.0))
     over_both = SimpleNamespace(parts=(((8.0, 0.0), (15.0, 0.0), (15.0, 20.0), (8.0, 20.0)),))
     over_leader = SimpleNamespace(parts=(((8.0, 15.0), (15.0, 15.0), (15.0, 20.0), (8.0, 20.0)),))
-    assert (index.conflicts(over_both), index.overlaps(over_both)) == (2, 1)
-    assert (index.conflicts(over_leader), index.overlaps(over_leader)) == (1, 1)
+    assert (index.conflicts(over_both), index.overlaps(over_both).obstacles) == (2, 1)
+    assert (index.conflicts(over_leader), index.overlaps(over_leader).obstacles) == (1, 1)
+
+
+_LAMBDA_REGIONS = (
+    ("head", 1, 9500, "Head genes"),
+    ("tail", 9600, 19000, "Tail genes"),
+    ("b2", 22000, 27000, "b2 region"),
+    ("int", 27500, 29500, "Integration"),
+    ("early", 33000, 38000, "Early left"),
+    ("repl", 38500, 40500, "Replication"),
+    ("lysis", 44000, 46500, "Lysis"),
+)
+
+
+@pytest.mark.parametrize(
+    ("labels", "font_size", "overlaps", "not_cleared"),
+    [("out", 14, 7, []), pytest.param("both", 20, 4, ["lysis"], marks=pytest.mark.slow)],
+)
+def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, labels: str, font_size: int, overlaps: int, not_cleared: list[str]
+) -> None:
+    """OV-3017, CIR-RGN-YIELD: on lambda with outside regions, "Integration" was drawn over "integrase" and
+    "Replication" over other feature labels, with no letter-free place along their regions. The feature labels make
+    way (side and order kept): no drawn region label's letters meet a feature label's letters but those of a label
+    they cannot clear ("Lysis" at 20 pt with --labels both), drawn and warned; the leader lines behind region letters
+    stay warned too (lambda --labels out 10 -> 7, --labels both 8 -> 4)."""
+
+    import gbdraw.diagrams.circular.assemble as circular_assemble
+    from gbdraw.circular import _get_args, run_circular_from_namespace
+    from gbdraw.layout.text_geometry import convex_polygons_intersect
+
+    passes: list[tuple[object, object]] = []
+    original_labels = circular_assemble.circular_annotation_labels
+
+    def labels_spy(*args, **kwargs):
+        passes.append((kwargs["obstacles"], original_labels(*args, **kwargs)))
+        return passes[-1][1]
+
+    monkeypatch.setattr(circular_assemble, "circular_annotation_labels", labels_spy)
+    table = tmp_path / "regions.tsv"
+    table.write_text(
+        "set_id\tid\tmark\tstart\tend\tlabel\tlabel_orientation\tlabel_font_size\n"
+        + "".join(f"regions\t{id_}\tline\t{start}\t{end}\t{label}\thorizontal\t{font_size}\n" for id_, start, end, label in _LAMBDA_REGIONS)
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        run_circular_from_namespace(
+            _get_args(
+                [
+                    "--gbk", str(Path(__file__).parent / "test_inputs" / "NC_001416.gb"),
+                    "--labels", labels,
+                    "--annotation_table", str(table),
+                    "--circular_track_slot", "features:features",
+                    "--circular_track_slot", "regions:annotations@set_id=regions,side=outside",
+                    "-f", "svg", "-o", str(tmp_path / "lambda"),
+                ]
+            )
+        )
+    # The one annotation slot keeps off the feature labels only: every obstacle is a feature label.
+    obstacles, placed = passes[-1]
+    letters = [part for label in obstacles.labels for part in label.parts]
+    drawn = {label.annotation_id: label for label in placed.drawn}
+    assert drawn.keys() == {id_ for id_, *_rest in _LAMBDA_REGIONS}
+    covering = sorted(
+        id_ for id_, label in drawn.items() if any(convex_polygons_intersect(a, b) for a in label.parts for b in letters)
+    )
+    assert covering == not_cleared
+    assert sorted(label.place.annotation_id for label in placed.over_feature_letters) == not_cleared
+    assert any(f"({overlaps} region label overlaps)" in str(warning.message) for warning in caught), [
+        str(warning.message) for warning in caught
+    ]
 
 
 def _draw_span_regions(
