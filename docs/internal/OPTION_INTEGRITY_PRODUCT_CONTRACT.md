@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `131`
+- Contract revision: `132`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -4973,6 +4973,51 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
+- Revision 132 changes: `PD-OI-044` is replaced for scenario revision `5`
+  (concern `diagram-generation.circular-transform-discoverability`; the outcome
+  `A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS` is kept). A record of a
+  Circular grid (Multi-Record Canvas) or batch (separate figures, a batch of
+  one record included) that the command line records table or a range given
+  in the Python API crops, reverse-complemented after the crop or not, is
+  saved in the Session as its source record and range instead of a copy of
+  the drawn sequence. The command line replay and the Web Load draw the
+  figure drawn before saving. While the Web draws the record in a grid or
+  batch, it adds no control for the range and its Generate and Save keep it;
+  choosing the record alone in Record select puts the range in the
+  single-record crop fields, where it can be changed as a single-record crop.
+  The range is held per record: record ON/OFF, the Multi-Record Canvas
+  switch, Undo, and drawing duplicates keep it; Reset Settings clears it, as
+  it clears a single-record crop and Linear regions (`PD-OI-070`); removing
+  the file drops it, and replacing the file keeps it only when a one-record
+  file replaces a one-record file, as for a single-record crop. The conditions
+  under which the Web's crop and reverse controls apply are unchanged.
+  Sessions saved before keep their copies and draw as before.
+  - On `2026-11-09` the Product Decision Owner `satoshikawato` was asked
+    question OV-2921 of the campaign `multi-contig-locus-20261108`
+    (`DECISIONS.md` `D-80`): a Circular batch or grid crop read the positions
+    next to the crop when drawn but not when its Session was replayed, so the
+    GC and Depth lines at 12 o'clock differed. Options: A, save the crop as
+    its source record and range and let the Web load and draw it without new
+    controls; B, crops in batch and grid read no flanks; C, keep. Reply:
+    「OV-2921=A」. The complete receipt below was approved with
+    「PD-OI-044 第 5 版を承認する」 on `2026-11-09`.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms. Scenario revision `5` repeats scenario revision `4` and
+    appends one passage to the end of each of its Rationale, Must preserve,
+    May retire, and Accepted residual risk; its Decision date is
+    `2026-11-09`.
+  - New receipt SHA-256: `PD-OI-044` scenario revision `5`
+    `a71df44c9612ecbb3e1f23b8d112466d667a45117ba4a6c80b7f1b9ff08e3528`.
+  - `PD-OI-091` cites 「PD-OI-044 revision 2 の May retire」. Scenario
+    revision `5` keeps that May retire text byte for byte and adds one
+    passage after it, so the citation keeps its meaning.
+  - `PD-OI-070` is not amended: it names Linear record settings, and this
+    receipt states the Circular range it does not name.
+  - The Session format is unchanged: a grid or batch record already holds a
+    source, a selector, and windows.
+  - No other record is amended or retired.
+  - This change is Contract-only: the runtime that implements it merges after
+    it in a separate pull request, and the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -6833,16 +6878,15 @@ Decision date: 2026-10-13
 ### PD-OI-044: Applicable Circular controls and truthful record discovery
 
 - Concern key: `diagram-generation.circular-transform-discoverability`
-- Scenario revision: `4`
-- Supersedes: `PD-OI-044`, scenario revision `3` (`A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS`).
-  Scenario revision `4` changes two things only: the Session version of the
-  project and drawing format in its Rationale, from `48` to `49` (`PD-OI-090`
-  scenario revision `4`), and a Session `46` or `47` that holds protein
-  comparison results stored on a reversed record, which shows its stored
-  figure at once and starts Python once at Load to move those results to the
-  search coordinates (Rationale, Must preserve, Accepted residual risk).
-  Scenario revision `3` superseded scenario revision `2`, which superseded
-  scenario revision `1`.
+- Scenario revision: `5`
+- Supersedes: `PD-OI-044`, scenario revision `4` (`A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS`).
+  Scenario revision `5` adds one passage to the end of each of its Rationale,
+  Must preserve, May retire, and Accepted residual risk, and changes its
+  Decision date: a crop of a record in a Circular grid or batch drawing made by
+  the command line or the Python API is saved in the Session as its source
+  record and range, and the Web draws it without new controls (Revision 132
+  entry above). Scenario revision `4` superseded scenario revision `3`, which
+  superseded scenario revision `2`, which superseded scenario revision `1`.
 - Status: `ACCEPTED`
 - Selected outcome: `A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
@@ -6850,40 +6894,41 @@ Decision date: 2026-10-13
 - Decision source: the Owner replies quoted verbatim in the Revision 37 entry
   above (R1-4 and the receipt approval), and for scenario revision `3` those
   quoted in the Revision 62 entry above, and for scenario revision `4` those
-  quoted in the Revision 64 entry above. The Owner approved the receipt text
+  quoted in the Revision 64 entry above, and for scenario revision `5` those
+  quoted in the Revision 132 entry above. The Owner approved the receipt text
   below as written. Its two references to the drawings record carry the
   recorded ID `PD-OI-090` in place of the draft ID `PD-OI-087` (Revision 37).
   Dependent runtime requires this authority merged into its base; this record
   supplies no runtime acceptance evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `896078be8ce11203eedaddae8d048ae312bceb46f4f89f63f19ff14baadcb398`.
+  `a71df44c9612ecbb3e1f23b8d112466d667a45117ba4a6c80b7f1b9ff08e3528`.
 
 ```text
 PRODUCT_DECISION
 Concern: diagram-generation.circular-transform-discoverability
-Scenario revision: 4
-Supersedes: PD-OI-044, scenario revision 3
+Scenario revision: 5
+Supersedes: PD-OI-044, scenario revision 4
 Choice: A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS
-Rationale: source の探索状況と一件用 crop の適用条件を区別して示し、編集可能になった一件用 controls は selection の直後に見えるようにする。通常 upload の自動探索と保存済みプレビューの軽い閲覧を両立する。保存済みプレビューの軽い閲覧は、現在の形式（version 46 以降）の Session で保つ。version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものも、保存された図はすぐに示し、その結果は Python が読み込み時に一度だけ探索の座標に移す（D-124、D-126）。version 27〜44 の Session は、Session を project と drawing の形式（version 49、PD-OI-090）へ移すために、Python が一度だけ読み込み時に変換する。
-Must preserve: valid native upload の自動 record discovery と Generate 前の rotation controls、既存 parser/helper 境界、exact source-bound identity、explicit single/grid/batch、fresh shared-canvas default、saved explicit choices、一件 crop と topology/start/reverse の適用条件、手動 close/expand、元の focus、keyboard/390 px、現在の形式（version 46 以降）の Session の preview-only Load の Python Worker 0（version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものを除く）、active draft と saved artifact の分離、失敗時の旧 Result、Retry/Replace/Remove/Inspect/Generate の継続。version 27〜44 の Session と、その version 46 と 47 の Session の Load でも、保存された図はすぐに示し、変換に失敗したときは何も変えない（PD-OI-045、PD-OI-046）。
-May retire: 適用可能になった一件用 section が常に collapsed で始まる挙動、valid fresh upload に manual Load が必須であるかのような prompt、実行中でない deferred discovery を loading と表す UI。全 record subset editing や複数 source support の選択は含まない。以前の形式（version 27〜44）の Session の Load で Python を起動しないこと。
-Accepted residual risk: applicable になった時に一件用 section が展開されて pane 高さが変わる。操作元の focus と scroll anchor を維持し、無関係な更新で再展開しない。科学的意味の変更、先頭 record の自動選択、grouping の自動切替、現在の形式（version 46 以降）の Session の preview-only Load による Python 初期化は受容しない（version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものを除く）。その Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して結果を探索の座標に移し、その間（約 8 秒）は編集を待つ。どちらの座標にも合わない結果を持つ Session は、読み込みを取り消して理由を示す（PD-OI-046）。新しい形式で保存し直すと起こらない。以前の形式（version 27〜44）の Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して project の形式に移し、その間（約 8 秒）は編集を待つ（PD-OI-090）。新しい形式で保存し直すと起こらない。version 45 は開発版だけで、読まない。
+Rationale: source の探索状況と一件用 crop の適用条件を区別して示し、編集可能になった一件用 controls は selection の直後に見えるようにする。通常 upload の自動探索と保存済みプレビューの軽い閲覧を両立する。保存済みプレビューの軽い閲覧は、現在の形式（version 46 以降）の Session で保つ。version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものも、保存された図はすぐに示し、その結果は Python が読み込み時に一度だけ探索の座標に移す（D-124、D-126）。version 27〜44 の Session は、Session を project と drawing の形式（version 49、PD-OI-090）へ移すために、Python が一度だけ読み込み時に変換する。コマンドラインと Python API で作った Circular の grid（Multi-Record Canvas）と batch（record ごとの別々の図）の図で crop した record も、Session に元の record と crop の範囲として保存し、その Session から描き直した図を保存前の図と同じにする（crop の両端の GC と Depth の窓は、分子の上で crop の外側に続く位置も読む）。
+Must preserve: valid native upload の自動 record discovery と Generate 前の rotation controls、既存 parser/helper 境界、exact source-bound identity、explicit single/grid/batch、fresh shared-canvas default、saved explicit choices、一件 crop と topology/start/reverse の適用条件、手動 close/expand、元の focus、keyboard/390 px、現在の形式（version 46 以降）の Session の preview-only Load の Python Worker 0（version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものを除く）、active draft と saved artifact の分離、失敗時の旧 Result、Retry/Replace/Remove/Inspect/Generate の継続。version 27〜44 の Session と、その version 46 と 47 の Session の Load でも、保存された図はすぐに示し、変換に失敗したときは何も変えない（PD-OI-045、PD-OI-046）。コマンドラインの records table、または Python API で record に範囲を指定して、Circular の grid と batch（record が 1 つの batch を含む）の record を crop したとき（crop してから逆向きにしたものを含み、範囲を指定せずに自分で短くした配列を渡したときを除く）、Session はその record を元の record と crop の範囲として保存する。コマンドラインの再生と Web の読み込みは保存前と同じ図を描く。Web で grid と batch として描く間は、その範囲を描くだけで変える操作は加えず、Generate と保存はその範囲を保ち、それがなくなるのは、後に挙げる Reset Settings、Delete settings、ファイルを外すときと置き換えるときだけである。Record の select でその record を 1 つだけ選ぶと、その範囲は一件用 crop の欄に入り、一件 crop と同じく変えられる。すべての record に戻すと、その record は読み込んだ範囲で描き、一件用 crop の欄で変えた範囲は、一件 crop と同じく、その record を 1 つだけ選んだときだけ描く。ほかの record を選ぶと、欄はその record の範囲に替わる。その範囲は record ごとに持ち、record の ON/OFF、Multi-Record Canvas の切り替え、drawing の複製でも残り、Undo ではほかの設定と同じく元に戻る。Reset Settings は一件 crop と同じくその範囲を消し、その record は全体を描く（PD-OI-070 の Linear の region と同じ）。record の Delete settings（PD-OI-091）はその範囲も消す。ファイルを外すとその範囲もなくなり、ファイルを置き換えたときは、一件 crop と同じく、置き換える前のファイルが 1 つの record だけのときに残る。Web の crop と reverse（逆向き）の controls を使える条件は変えない。
+May retire: 適用可能になった一件用 section が常に collapsed で始まる挙動、valid fresh upload に manual Load が必須であるかのような prompt、実行中でない deferred discovery を loading と表す UI。全 record subset editing や複数 source support の選択は含まない。以前の形式（version 27〜44）の Session の Load で Python を起動しないこと。コマンドラインと Python API の Circular の grid と batch の Session が、crop した record を crop した後の配列として別のファイルに保存すること。そのため Web がその record を丸ごとの record として読み込み、その表示開始位置を変えられたこと。
+Accepted residual risk: applicable になった時に一件用 section が展開されて pane 高さが変わる。操作元の focus と scroll anchor を維持し、無関係な更新で再展開しない。科学的意味の変更、先頭 record の自動選択、grouping の自動切替、現在の形式（version 46 以降）の Session の preview-only Load による Python 初期化は受容しない（version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものを除く）。その Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して結果を探索の座標に移し、その間（約 8 秒）は編集を待つ。どちらの座標にも合わない結果を持つ Session は、読み込みを取り消して理由を示す（PD-OI-046）。新しい形式で保存し直すと起こらない。以前の形式（version 27〜44）の Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して project の形式に移し、その間（約 8 秒）は編集を待つ（PD-OI-090）。新しい形式で保存し直すと起こらない。version 45 は開発版だけで、読まない。Web では、grid と batch で描く間は、読み込んだ record の crop の範囲を変えられず、crop した record の表示開始位置は、一件 crop と同じく選べない。grid と batch で描く範囲を変えるときは、records table または Python API の範囲を直して描き直す。この変更の前に保存した、crop した後の配列を持つ Session は今までどおりその配列を描く。その 12 時の前後（crop の両端）の GC と Depth の値は、元のコマンドや Python API で今描く図と違う。描き直して保存し直すと同じになる。
 Owner: satoshikawato
-Decision date: 2026-10-18
+Decision date: 2026-11-09
 ```
 
 ```json
 {
   "concern": "diagram-generation.circular-transform-discoverability",
-  "scenarioRevision": 4,
-  "supersedes": "PD-OI-044, scenario revision 3",
+  "scenarioRevision": 5,
+  "supersedes": "PD-OI-044, scenario revision 4",
   "choice": "A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS",
-  "rationale": "source の探索状況と一件用 crop の適用条件を区別して示し、編集可能になった一件用 controls は selection の直後に見えるようにする。通常 upload の自動探索と保存済みプレビューの軽い閲覧を両立する。保存済みプレビューの軽い閲覧は、現在の形式（version 46 以降）の Session で保つ。version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものも、保存された図はすぐに示し、その結果は Python が読み込み時に一度だけ探索の座標に移す（D-124、D-126）。version 27〜44 の Session は、Session を project と drawing の形式（version 49、PD-OI-090）へ移すために、Python が一度だけ読み込み時に変換する。",
-  "mustPreserve": "valid native upload の自動 record discovery と Generate 前の rotation controls、既存 parser/helper 境界、exact source-bound identity、explicit single/grid/batch、fresh shared-canvas default、saved explicit choices、一件 crop と topology/start/reverse の適用条件、手動 close/expand、元の focus、keyboard/390 px、現在の形式（version 46 以降）の Session の preview-only Load の Python Worker 0（version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものを除く）、active draft と saved artifact の分離、失敗時の旧 Result、Retry/Replace/Remove/Inspect/Generate の継続。version 27〜44 の Session と、その version 46 と 47 の Session の Load でも、保存された図はすぐに示し、変換に失敗したときは何も変えない（PD-OI-045、PD-OI-046）。",
-  "mayRetire": "適用可能になった一件用 section が常に collapsed で始まる挙動、valid fresh upload に manual Load が必須であるかのような prompt、実行中でない deferred discovery を loading と表す UI。全 record subset editing や複数 source support の選択は含まない。以前の形式（version 27〜44）の Session の Load で Python を起動しないこと。",
-  "acceptedResidualRisk": "applicable になった時に一件用 section が展開されて pane 高さが変わる。操作元の focus と scroll anchor を維持し、無関係な更新で再展開しない。科学的意味の変更、先頭 record の自動選択、grouping の自動切替、現在の形式（version 46 以降）の Session の preview-only Load による Python 初期化は受容しない（version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものを除く）。その Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して結果を探索の座標に移し、その間（約 8 秒）は編集を待つ。どちらの座標にも合わない結果を持つ Session は、読み込みを取り消して理由を示す（PD-OI-046）。新しい形式で保存し直すと起こらない。以前の形式（version 27〜44）の Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して project の形式に移し、その間（約 8 秒）は編集を待つ（PD-OI-090）。新しい形式で保存し直すと起こらない。version 45 は開発版だけで、読まない。",
+  "rationale": "source の探索状況と一件用 crop の適用条件を区別して示し、編集可能になった一件用 controls は selection の直後に見えるようにする。通常 upload の自動探索と保存済みプレビューの軽い閲覧を両立する。保存済みプレビューの軽い閲覧は、現在の形式（version 46 以降）の Session で保つ。version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものも、保存された図はすぐに示し、その結果は Python が読み込み時に一度だけ探索の座標に移す（D-124、D-126）。version 27〜44 の Session は、Session を project と drawing の形式（version 49、PD-OI-090）へ移すために、Python が一度だけ読み込み時に変換する。コマンドラインと Python API で作った Circular の grid（Multi-Record Canvas）と batch（record ごとの別々の図）の図で crop した record も、Session に元の record と crop の範囲として保存し、その Session から描き直した図を保存前の図と同じにする（crop の両端の GC と Depth の窓は、分子の上で crop の外側に続く位置も読む）。",
+  "mustPreserve": "valid native upload の自動 record discovery と Generate 前の rotation controls、既存 parser/helper 境界、exact source-bound identity、explicit single/grid/batch、fresh shared-canvas default、saved explicit choices、一件 crop と topology/start/reverse の適用条件、手動 close/expand、元の focus、keyboard/390 px、現在の形式（version 46 以降）の Session の preview-only Load の Python Worker 0（version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものを除く）、active draft と saved artifact の分離、失敗時の旧 Result、Retry/Replace/Remove/Inspect/Generate の継続。version 27〜44 の Session と、その version 46 と 47 の Session の Load でも、保存された図はすぐに示し、変換に失敗したときは何も変えない（PD-OI-045、PD-OI-046）。コマンドラインの records table、または Python API で record に範囲を指定して、Circular の grid と batch（record が 1 つの batch を含む）の record を crop したとき（crop してから逆向きにしたものを含み、範囲を指定せずに自分で短くした配列を渡したときを除く）、Session はその record を元の record と crop の範囲として保存する。コマンドラインの再生と Web の読み込みは保存前と同じ図を描く。Web で grid と batch として描く間は、その範囲を描くだけで変える操作は加えず、Generate と保存はその範囲を保ち、それがなくなるのは、後に挙げる Reset Settings、Delete settings、ファイルを外すときと置き換えるときだけである。Record の select でその record を 1 つだけ選ぶと、その範囲は一件用 crop の欄に入り、一件 crop と同じく変えられる。すべての record に戻すと、その record は読み込んだ範囲で描き、一件用 crop の欄で変えた範囲は、一件 crop と同じく、その record を 1 つだけ選んだときだけ描く。ほかの record を選ぶと、欄はその record の範囲に替わる。その範囲は record ごとに持ち、record の ON/OFF、Multi-Record Canvas の切り替え、drawing の複製でも残り、Undo ではほかの設定と同じく元に戻る。Reset Settings は一件 crop と同じくその範囲を消し、その record は全体を描く（PD-OI-070 の Linear の region と同じ）。record の Delete settings（PD-OI-091）はその範囲も消す。ファイルを外すとその範囲もなくなり、ファイルを置き換えたときは、一件 crop と同じく、置き換える前のファイルが 1 つの record だけのときに残る。Web の crop と reverse（逆向き）の controls を使える条件は変えない。",
+  "mayRetire": "適用可能になった一件用 section が常に collapsed で始まる挙動、valid fresh upload に manual Load が必須であるかのような prompt、実行中でない deferred discovery を loading と表す UI。全 record subset editing や複数 source support の選択は含まない。以前の形式（version 27〜44）の Session の Load で Python を起動しないこと。コマンドラインと Python API の Circular の grid と batch の Session が、crop した record を crop した後の配列として別のファイルに保存すること。そのため Web がその record を丸ごとの record として読み込み、その表示開始位置を変えられたこと。",
+  "acceptedResidualRisk": "applicable になった時に一件用 section が展開されて pane 高さが変わる。操作元の focus と scroll anchor を維持し、無関係な更新で再展開しない。科学的意味の変更、先頭 record の自動選択、grouping の自動切替、現在の形式（version 46 以降）の Session の preview-only Load による Python 初期化は受容しない（version 46 と 47 の Session で、逆向きにした record を含むタンパク質比較の保存された結果を持つものを除く）。その Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して結果を探索の座標に移し、その間（約 8 秒）は編集を待つ。どちらの座標にも合わない結果を持つ Session は、読み込みを取り消して理由を示す（PD-OI-046）。新しい形式で保存し直すと起こらない。以前の形式（version 27〜44）の Session を開くときは、保存された図をすぐに示したうえで Python を一度起動して project の形式に移し、その間（約 8 秒）は編集を待つ（PD-OI-090）。新しい形式で保存し直すと起こらない。version 45 は開発版だけで、読まない。Web では、grid と batch で描く間は、読み込んだ record の crop の範囲を変えられず、crop した record の表示開始位置は、一件 crop と同じく選べない。grid と batch で描く範囲を変えるときは、records table または Python API の範囲を直して描き直す。この変更の前に保存した、crop した後の配列を持つ Session は今までどおりその配列を描く。その 12 時の前後（crop の両端）の GC と Depth の値は、元のコマンドや Python API で今描く図と違う。描き直して保存し直すと同じになる。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-18"
+  "decisionDate": "2026-11-09"
 }
 ```
 
