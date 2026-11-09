@@ -368,7 +368,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   await expect(lock).toHaveAccessibleDescription(new RegExp(['ON aligns Linear definitions in a common left column',
     'OFF centers them in a common column width and follows row offsets'].join('.*')));
   const helpButton = page.locator('.help-tip > button[aria-describedby="linear-definition-lock-help"]');
-  const tooltip = page.locator('[role="tooltip"]');
+  const tooltip = page.locator('[role="tooltip"]:not(.feature-hover-summary)');
   await expect(tooltip).toHaveCount(0);
   await lock.focus();
   await page.keyboard.press('Tab');
