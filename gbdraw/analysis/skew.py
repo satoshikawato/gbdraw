@@ -22,20 +22,32 @@ from gbdraw.mode_profiles import validate_dinucleotide
 _COUNT_CHUNK = 1 << 20
 
 
+# Multiplying a word of eight 0/1 bytes by this constant sums them into its top byte.
+_BYTE_SUM = np.uint64(0x0101010101010101)
+_TOP_BYTE = np.uint64(56)
+_EIGHT = np.arange(8)
+
+
 def _prefix_counts_at(segments: Sequence[bytes], bases: Sequence[int], positions: np.ndarray) -> np.ndarray:
     """Row ``i``, column ``k``: ``b"".join(segments)[:p].count(bases[i])`` for each position ``p = positions[k]``
     (0 to the joined length).
 
     The segments are read once for every base together, a chunk at a time and never joined: the positions are
-    sorted once, each chunk takes the positions that fall in it, reads their counts from the chunk's own
-    occurrences, and adds the total of the chunks before it. The extra memory is the positions plus one chunk's
-    mask and offsets, never an array as long as the sequence.
+    sorted once, each chunk takes the positions that fall in it, and each base's mask of the chunk is read as
+    8-byte words whose set bytes one multiplication sums, so a position's count is the words before it, the bytes
+    of its own word before it, and the total of the chunks before; the cost does not depend on how often the base
+    occurs (a run of N fills whole chunks). The mask and the word sums are buffers of one chunk, reused for every
+    chunk and base, never an array as long as the sequence.
     """
     length = sum(len(segment) for segment in segments)
     order = np.argsort(positions, kind="stable")
     wanted = np.clip(positions[order], 0, length)
     counts = np.empty((len(bases), len(wanted)), dtype=np.int64)
     running = np.zeros(len(bases), dtype=np.int64)
+    size = -(-min(_COUNT_CHUNK, max((len(segment) for segment in segments), default=0)) // 8) * 8
+    mask = np.zeros(size, dtype=bool)
+    words = np.empty(size // 8, dtype=np.uint64)
+    before = np.zeros(size // 8 + 1, dtype=np.int64)
     offset = 0
     for segment in segments:
         sequence = np.frombuffer(segment, dtype=np.uint8)
@@ -43,11 +55,19 @@ def _prefix_counts_at(segments: Sequence[bytes], bases: Sequence[int], positions
             chunk = sequence[start : start + _COUNT_CHUNK]
             first = offset + start
             lo, hi = np.searchsorted(wanted, (first, first + len(chunk)), side="left")
-            local = (wanted[lo:hi] - first).astype(np.intp)
+            word, place = np.divmod((wanted[lo:hi] - first).astype(np.intp), 8)
+            in_word = _EIGHT < place[:, None]
+            count = -(-len(chunk) // 8)
+            chunk_mask, chunk_words = mask[: 8 * count], words[:count]
+            chunk_mask[len(chunk) :] = False
             for row, base in enumerate(bases):
-                chunk_hits = np.flatnonzero(chunk == base)
-                counts[row, lo:hi] = running[row] + np.searchsorted(chunk_hits, local, side="left")
-                running[row] += len(chunk_hits)
+                np.equal(chunk, base, out=chunk_mask[: len(chunk)])
+                np.multiply(chunk_mask.view(np.uint64), _BYTE_SUM, out=chunk_words)
+                np.right_shift(chunk_words, _TOP_BYTE, out=chunk_words)
+                np.cumsum(chunk_words.view(np.int64), out=before[1 : count + 1])
+                partial = np.count_nonzero(chunk_mask.view(np.uint8).reshape(-1, 8)[word] & in_word, axis=1)
+                counts[row, lo:hi] = running[row] + before[word] + partial
+                running[row] += before[count]
         offset += len(sequence)
     counts[:, np.searchsorted(wanted, length, side="left") :] = running[:, None]
     prefix = np.empty_like(counts)
