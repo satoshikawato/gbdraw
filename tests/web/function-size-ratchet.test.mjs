@@ -85,7 +85,7 @@ const FUNCTION_LINES = {
   'app/feature-selection.js::createFeatureSelection': 513,
   'app/font-settings.js::createFontSettings': 324,
   'app/history-inputs.js::setupHistoryInputs': 181,
-  'app/legend-layout/diagram-drag.js::createDiagramDragActions': 546,
+  'app/legend-layout/diagram-drag.js::createDiagramDragActions': 545,
   'app/legend/drag-actions.js::createLegendDragActions': 223,
   'app/legend/entry-actions.js::createLegendEntryActions': 889,
   'app/linear-record-selector.js::createLinearRecordSelector': 320,

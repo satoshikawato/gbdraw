@@ -10,10 +10,15 @@ import { closestRecordGroup, isMultiRecordCanvasSvg } from '../record-groups.js'
 import { setClassToken } from '../../services/svg-serialization.js';
 import { LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
 import { msg } from '../../utils/i18n.js';
+/** @import { WebState } from '../../state.js' */
 
 /**
  * @typedef {object} DiagramDragActionsOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Pick<WebState, 'activeDrawing' | 'sessionOperationAvailability' | 'svgContainer' | 'diagramElements'
+ *   | 'diagramElementIds' | 'diagramElementOriginalTransforms' | 'diagramOffset' | 'diagramDragging'
+ *   | 'diagramDragStart' | 'lengthBarElement' | 'lengthBarOriginalTransform' | 'lengthBarUserOffset'
+ *   | 'plotTitleElement' | 'plotTitleDragging' | 'plotTitleDragStart' | 'plotTitleAutoTransform'
+ *   | 'plotTitleUserOffset' | 'layoutRepositionMode' | 'zoom'>} state
  * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
  *   History's begin of one step (R11); resolves to the transaction, or null when History is busy.
  * @property {((transaction: any, options?: Record<string, any>) => Promise<any>) | null} [commitHistoryTransaction]
@@ -284,8 +289,6 @@ export const createDiagramDragActions = ({
     }
     const group = target.closest('g[id]');
     if (!group || isLegendOwnedGroup(group) || isLengthBarGroup(group) || isPlotTitleGroup(group)) return null;
-    // setupDiagramDrag stores the bound primary groups (or []) in `diagramElements`.
-    /** @type {SVGGraphicsElement[]} */
     const targets = diagramElements.value;
     return targets.length > 0 ? { mode: 'group', targets } : null;
   };
@@ -294,8 +297,7 @@ export const createDiagramDragActions = ({
   // press drags (a Linear record definition) shows no drag cursor (PD-OI-053).
   const refreshDiagramDragAffordances = () => {
     const enabled = isLayoutRepositionModeEnabled();
-    /** @type {SVGGraphicsElement[]} */
-    const elements = Array.isArray(diagramElements.value) ? diagramElements.value : [];
+    const elements = diagramElements.value;
     const oneRecord = enabled && dragsOneRecord();
 
     elements.forEach((el) => {
@@ -304,7 +306,7 @@ export const createDiagramDragActions = ({
 
     [lengthBarElement.value, plotTitleElement.value].forEach((element) => {
       setClassToken(element, 'gbdraw-preview-layout-target', true);
-      setElementCursor(element, activeDragElements.includes(element) && diagramDragging.value
+      setElementCursor(element, element !== null && activeDragElements.includes(element) && diagramDragging.value
         ? 'grabbing' : enabled ? 'grab' : 'help');
     });
   };
@@ -375,34 +377,36 @@ export const createDiagramDragActions = ({
     pressDragTargets([group]);
   };
 
-  /** @param {MouseEvent & { target: Element }} e A mouse event on the mounted SVG, whose targets are elements. */
+  /** @param {MouseEvent} e A mouse event on the mounted SVG. */
   const startDiagramDrag = (e) => {
+    // A mouse event on an SVG element has an element target.
+    const target = /** @type {Element} */ (e.target);
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!isLayoutRepositionModeEnabled()) return;
     if (e.shiftKey) return;
     if (
-      e.target.closest('#legend') ||
-      e.target.closest('text[data-label-editable="true"]') ||
-      e.target.closest('path[id^="f"], polygon[id^="f"], rect[id^="f"]')
+      target.closest('#legend') ||
+      target.closest('text[data-label-editable="true"]') ||
+      target.closest('path[id^="f"], polygon[id^="f"], rect[id^="f"]')
     ) {
       return;
     }
     if (!svgContainer.value?.querySelector('svg')) return;
 
-    const clickedLengthBar = e.target.closest(`#${LENGTH_BAR_ID}`);
+    const clickedLengthBar = target.closest(`#${LENGTH_BAR_ID}`);
     if (clickedLengthBar) {
       startLengthBarDrag(e, /** @type {SVGGraphicsElement} */ (clickedLengthBar)); // the `g#length_bar` group
       return;
     }
 
-    const clickedPlotTitle = e.target.closest(`#${PLOT_TITLE_ID}`);
+    const clickedPlotTitle = target.closest(`#${PLOT_TITLE_ID}`);
     if (clickedPlotTitle) {
       startPlotTitleDrag(e, /** @type {SVGGraphicsElement} */ (clickedPlotTitle)); // the `g#plot_title` group
       return;
     }
 
-    const drag = diagramDragOf(e.target);
+    const drag = diagramDragOf(target);
     if (!drag) return;
     activeDragMode = drag.mode;
 
