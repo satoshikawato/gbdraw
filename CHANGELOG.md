@@ -115,6 +115,13 @@ write-up of a release.
   when its input files were last changed: each embedded file stores no guessed
   media type and no modification time, so the same command writes the same
   Session. Sessions load as before (OV-2964).
+- Fixed: in the Web app, a Circular Record Order row cut its label with an
+  ellipsis at the sidebar's default width, so the record ID that tells two
+  records of a file apart, and at phone width the OFF badge, were hidden. A row
+  now wraps its label between words and shows the record ID and the OFF badge
+  whole; only a word wider than the row, such as a long file name, ends in an
+  ellipsis, with the full label on hover (OV-3021). The OFF badge is also read
+  as a word of its own (OV-3036).
 - Fixed (Web app): in a Circular figure with a Depth axis and its ticks beside
   a Percent GC content axis, the GC content **Tick Font Size** field showed an
   Auto size that the figure did not use: the GC axis numbers are drawn in the
