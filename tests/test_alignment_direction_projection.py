@@ -22,7 +22,8 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import capture_source_features
 from gbdraw.io.regions import RecordWindow, parse_region_spec
 from gbdraw.session_request_codec import encode_canonical_request
-from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_payload, _anchor, _record_fact
+from gbdraw.web_support.error_adapter import serialize_web_error
+from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_payload, _anchor
 from gbdraw.render.composition import applied_composition_plan
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -375,15 +376,23 @@ def test_helper_center_is_the_renderer_center(tmp_path, windows, reverse, center
         (candidate,) = row['candidates']
         return candidate['displayCenter'], candidate['displayedStrand'], candidate['usable']
 
-    # The helper's own placement, with the 1000-bp length Python reads from the committed request (D5), is the
-    # renderer's.
-    (record,) = [record for record in helper['records'] if record['recordKey'] == 'circ']
-    (member,) = [member for member in helper['members'] if member['anchor']['recordKey'] == 'circ']
-    placed, _reverse = _record_fact(record, 'circ', {'circ': 1000}).placed((member['sourceStart'] + member['sourceEnd']) / 2)
-    assert placed == circ_center(rendered)[0]
+    # The helper places the anchor where the renderer draws it on the committed request (D5-13).
     assert circ_center(rendered)[0] == center
     assert rendered['plan']['records'][1]['status'] == ('aligned' if center is not None else 'skipped')
     # The flip variant turns the record round from the direction it is drawn in: reversed by its presentation, or when
     # every window is (the Web reads it so, ``canonicalRecordReverseComplement``).
     drawn_reverse = reverse or bool(windows) and all(window.reverse_complement for window in windows)
     assert rendered['projection']['geometryOrientations']['circ'] is (not drawn_reverse)
+
+
+# A window whose start is after its end runs across the origin (OV-2771). The helper places anchors on the
+# committed request, so a window the crop refuses is refused with the crop's diagnostic, which names no record.
+@pytest.mark.parametrize('window', [RecordWindow(1011, 1020), RecordWindow(1011, 2)])
+def test_a_window_the_crop_refuses_is_refused_with_its_diagnostic(tmp_path, window):
+    helper, context, paths = _circular_fixture(tmp_path, windows=(window,))
+    with pytest.raises(ValidationError) as caught:
+        resolve_similarity_alignment_payload(helper, projection=context, resource_paths=paths)
+    result = serialize_web_error(caught.value, operation='resolveSimilarityAlignment', stage='helper')
+    assert result['code'] == 'REGION_INVALID'
+    assert result['context'] == {'field': 'region', 'reason': 'RECORD_BOUNDS'}
+    assert 'circ' not in json.dumps(result)

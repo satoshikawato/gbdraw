@@ -6,9 +6,11 @@ import {
   formatSearchMatchLine,
   getFeatureSearchFieldOptions,
   isRichFeatureSearchField,
+  isSequenceFeatureSearchField,
   normalizeFeatureSearchField,
   runFeatureSearch
 } from './search-core.js';
+import { featureSequenceReads } from '../../services/catalog-sequences.js';
 import {
   applyPreviewActiveSearchMatch,
   centerPreviewFeature,
@@ -23,7 +25,11 @@ import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
 import { ownEntry } from '../../utils/own-entry.js';
 import { t, tn } from '../../utils/i18n.js';
-/** @import { FeatureSearchIndex } from './search-core.js' */
+import { normalizeCaughtError } from '../../utils/error-normalization.js';
+import { reactive } from '../../utils/reactivity.js';
+/** @import { FeatureSearchIndex, FeatureSearchSequences } from './search-core.js' */
+/** @import { FeatureSequenceRead } from '../../services/catalog-sequences.js' */
+/** @import { UserFacingError } from '../../utils/error-normalization.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
 /** @import { FeatureElementIndex } from './preview-svg.js' */
 /** @import { EditableLabelEntry } from '../../services/label-override-table.js' */
@@ -40,7 +46,100 @@ import { t, tn } from '../../utils/i18n.js';
  * @property {(() => boolean) | null} [isActiveResultReady] preview runtime port
  * @property {() => void} focusSearchQuery focuses the search bar's query input
  * @property {() => void} focusSearchToggle focuses the toolbar button that shows and hides the search bar
+ * @property {(features: readonly FeatureSequenceRead[]) => Promise<FeatureSearchSequences | null>} readFeatureSequences
+ *   reads the features' sequences from Python for the shown Result (the catalog-sequence door); null when the shown
+ *   Result changed before they arrived; throws on failure
  */
+
+/**
+ * The sequences the Nucleotide and Amino acid fields search (D5): Python reads them for the shown Result's features
+ * once, and they are kept only with that Result's features (`drop` when the Features list changes). While they are
+ * read the panel says so; a failure keeps its error for Retry. A read is current while its number is the last one,
+ * so a reply to a read that ended, or a stale one (null: the shown Result changed), writes nothing.
+ * @param {PreviewFeatureSearchOptions['readFeatureSequences']} readFeatureSequences
+ * @param {PreviewFeatureSearchOptions['computed']} computed
+ */
+const createSearchSequences = (readFeatureSequences, computed) => {
+  /** @type {FeatureSearchSequences | null} */
+  let sequences = null;
+  let readId = 0;
+  const status = reactive({ reading: false, error: /** @type {UserFacingError | null} */ (null) });
+  /** Ends the read: a reply still on its way writes nothing. */
+  const end = () => {
+    readId += 1;
+    if (status.reading) status.reading = false;
+    if (status.error) status.error = null;
+  };
+  /**
+   * Reads the features' sequences unless a read runs, then calls `done` with them kept.
+   * @param {readonly FeatureLike[]} features @param {() => void} done
+   */
+  const read = async (features, done) => {
+    if (status.reading) return;
+    const id = ++readId;
+    Object.assign(status, { reading: true, error: null });
+    try {
+      const reply = await readFeatureSequences(featureSequenceReads(features));
+      if (id !== readId) return;
+      status.reading = false;
+      if (!reply) return;
+      sequences = reply;
+      done();
+    } catch (error) {
+      if (id !== readId) return;
+      Object.assign(status, {
+        reading: false, error: normalizeCaughtError(error, { operation: 'readFeatureSequences', stage: 'helper' })
+      });
+    }
+  };
+  /**
+   * Whether a search of `field` can run now. Another field can, and ends a read; a sequence field can once the
+   * sequences are read, and else starts the read, which schedules the search again with `options` when they are.
+   * @param {string} field @param {readonly FeatureLike[]} features
+   * @param {(options: { preserveActive: boolean, center: boolean }) => void} schedule
+   * @param {{ preserveActive: boolean, center: boolean }} options
+   */
+  const ready = (field, features, schedule, options) => {
+    if (!isSequenceFeatureSearchField(field)) end();
+    else if (!sequences) void read(features, () => schedule(options));
+    return !isSequenceFeatureSearchField(field) || sequences !== null;
+  };
+  return {
+    status,
+    ready,
+    end,
+    /** The sequences read for the shown Result, or null before a sequence field searched it. */
+    current: () => sequences,
+    drop: () => {
+      sequences = null;
+      end();
+    },
+    /** The status line of a read that runs or failed, or null. */
+    statusText: () => (status.reading ? t('Reading the sequence…') : status.error ? '' : null),
+    /**
+     * A failed read while its search is shown, with its Retry: that search runs, and so reads, again.
+     * @param {() => boolean} active @param {(options: { preserveActive: boolean }) => void} schedule
+     */
+    failure: (active, schedule) => computed(() => (active() && status.error ? { error: status.error, retry: () => schedule({ preserveActive: false }) } : null))
+  };
+};
+
+/**
+ * @typedef {object} SearchDraft
+ * @property {string} input
+ * @property {string} query
+ * @property {string} field
+ * @property {string} qualifierKey
+ * @property {boolean} useRegex
+ * @property {string} appliedField
+ * @property {string} appliedQualifierKey
+ * @property {boolean} appliedUseRegex
+ */
+/** @type {Readonly<SearchDraft>} */
+const EMPTY_SEARCH = Object.freeze({
+  input: '', query: '', field: 'all', qualifierKey: '', useRegex: false,
+  appliedField: 'all', appliedQualifierKey: '', appliedUseRegex: false
+});
 
 /**
  * @param {PreviewFeatureSearchOptions} options
@@ -54,7 +153,8 @@ export const createPreviewFeatureSearch = ({
   resolveOrthogroups = () => state.orthogroups.value,
   isActiveResultReady = null,
   focusSearchQuery,
-  focusSearchToggle
+  focusSearchToggle,
+  readFeatureSequences
 }) => {
   const {
     svgContainer,
@@ -102,6 +202,7 @@ export const createPreviewFeatureSearch = ({
   const invalidateSearchIndex = () => {
     searchIndex = null;
   };
+  const searchSequences = createSearchSequences(readFeatureSequences, computed);
   const invalidateFeatureElementIndex = () => {
     featureElementIndex = null;
     featureElementIndexSvg = null;
@@ -113,7 +214,7 @@ export const createPreviewFeatureSearch = ({
   let featuresBySearchId = new Map();
   /** @param {DrawingState} drawing */
   const ensureSearchIndex = (drawing) => {
-    if (!searchIndex) {
+    if (!searchIndex || searchIndex.sequencesRead !== (searchSequences.current() !== null)) {
       /** @type {Map<string, EditableLabelEntry>} */
       const labels = new Map((state.editableLabels?.value || []).map((/** @type {EditableLabelEntry} */ entry) => [entry.featureId, entry]));
       featuresBySearchId = new Map();
@@ -139,7 +240,8 @@ export const createPreviewFeatureSearch = ({
           };
         }),
         popupMode: getPopupMode(),
-        orthogroups: resolveOrthogroups()
+        orthogroups: resolveOrthogroups(),
+        sequences: searchSequences.current()
       });
       recordStructuralMetric('featureSearchIndexBuildCount', 1, { phase: 'feature-search' });
     }
@@ -175,6 +277,7 @@ export const createPreviewFeatureSearch = ({
     if (previewFeatureSearchError.value) return previewFeatureSearchError.value;
     // No count before a search; after one, the active match of all.
     if (!String(previewFeatureSearchQuery.value || '').trim()) return '';
+    if (searchSequences.statusText() !== null) return searchSequences.statusText();
     const total = previewFeatureSearchMatches.value.length;
     if (!total) return t('No matches');
     const current = previewFeatureSearchActiveIndex.value >= 0
@@ -195,12 +298,13 @@ export const createPreviewFeatureSearch = ({
   /** @param {DrawingState} drawing */
   const refreshSearchNow = (drawing, { preserveActive = true, center = false } = {}) => {
     const popupMode = getPopupMode();
-    const normalizedField = normalizeFeatureSearchField(appliedSearchField, { popupMode });
-    appliedSearchField = normalizedField;
+    const normalizedField = (appliedSearchField = normalizeFeatureSearchField(appliedSearchField, { popupMode }));
 
     const previousActiveId = preserveActive ? getActiveMatchId() : '';
     const svg = getSvg();
-    if (!String(previewFeatureSearchQuery.value || '').trim()) {
+    // A search of a sequence field waits for the sequences Python reads, then runs again (D5).
+    if (!String(previewFeatureSearchQuery.value || '').trim() || !searchSequences.ready(normalizedField,
+      featureList.value.rows, scheduleRefreshSearch, { preserveActive, center })) {
       updateRenderedCount();
       previewFeatureSearchError.value = '';
       previewFeatureSearchMatches.value = [];
@@ -364,22 +468,6 @@ export const createPreviewFeatureSearch = ({
   const goToNext = () => goToMatch(previewFeatureSearchActiveIndex.value + 1);
   const goToPrevious = () => goToMatch(previewFeatureSearchActiveIndex.value - 1);
 
-  /**
-   * @typedef {object} SearchDraft
-   * @property {string} input
-   * @property {string} query
-   * @property {string} field
-   * @property {string} qualifierKey
-   * @property {boolean} useRegex
-   * @property {string} appliedField
-   * @property {string} appliedQualifierKey
-   * @property {boolean} appliedUseRegex
-   */
-  /** @type {Readonly<SearchDraft>} */
-  const EMPTY_SEARCH = Object.freeze({
-    input: '', query: '', field: 'all', qualifierKey: '', useRegex: false,
-    appliedField: 'all', appliedQualifierKey: '', appliedUseRegex: false
-  });
   /** @returns {SearchDraft} */
   const captureSearch = () => ({
     input: String(previewFeatureSearchInput.value || ''),
@@ -450,8 +538,13 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchVisible.value = true;
   };
 
+  // What a change of the index's inputs does: the index is built again, and an active search runs again.
+  const reindexSearch = () => {
+    invalidateSearchIndex();
+    if (queryIsActive() && isActiveResultReady?.()) scheduleRefreshSearch();
+  };
   watch(
-    () => getPopupMode(),
+    getPopupMode,
     () => {
       if (getPopupMode() === 'simple' && isRichFeatureSearchField(previewFeatureSearchField.value)) {
         previewFeatureSearchField.value = 'all';
@@ -459,28 +552,22 @@ export const createPreviewFeatureSearch = ({
       if (getPopupMode() === 'simple' && isRichFeatureSearchField(appliedSearchField)) {
         appliedSearchField = 'all';
       }
-      invalidateSearchIndex();
-      if (queryIsActive() && isActiveResultReady?.()) scheduleRefreshSearch();
+      reindexSearch();
     }
   );
   watch([featureList, orthogroups], () => {
     updateRenderedCount();
-    invalidateSearchIndex();
-    if (queryIsActive() && isActiveResultReady?.()) scheduleRefreshSearch();
+    searchSequences.drop();
+    reindexSearch();
   });
-  watch([selectedResultIndex, svgContent], () => {
-    invalidateFeatureElementIndex();
-  });
+  watch([selectedResultIndex, svgContent], invalidateFeatureElementIndex);
   watch([
     () => (state.editableLabels?.value || []).map((/** @type {EditableLabelEntry} */ entry) => [entry.featureId, entry.sourceText, entry.text]),
     () => Object.values(state.activeDrawing().featureOverrides || {}).map((row) => [row.recordKey, row.biologicalFeatureId, row.labelText]),
     () => state.activeDrawing().labelTextBulkOverrides,
     () => state.activeDrawing().orthogroupNameOverrides,
     () => state.activeDrawing().orthogroupDescriptionOverrides
-  ], () => {
-    invalidateSearchIndex();
-    if (queryIsActive() && isActiveResultReady?.()) scheduleRefreshSearch();
-  }, { deep: true });
+  ], reindexSearch, { deep: true });
 
   updateRenderedCount();
 
@@ -493,6 +580,7 @@ export const createPreviewFeatureSearch = ({
 
   const dispose = () => {
     refreshRequestId += 1;
+    searchSequences.end();
     disposePreviewFeatureSearchDomState(appliedSearchDomState);
   };
 
@@ -505,6 +593,7 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchStatusText,
     previewFeatureSearchActiveDetail,
     previewFeatureSearchHiddenMatchCount,
+    previewFeatureSearchSequenceFailure: searchSequences.failure(queryIsActive, scheduleRefreshSearch),
     hideSearchBar,
     toggleSearchBar,
     setQuery,

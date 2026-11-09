@@ -40,6 +40,8 @@ await copyModule('gbdraw/web/js/utils/color-utils.js', 'utils/color-utils.js');
 await copyModule('gbdraw/web/js/utils/named-colors.js', 'utils/named-colors.js');
 await copyModule('gbdraw/web/js/services/record-source-coordinates.js', 'services/record-source-coordinates.js');
 await copyModule('gbdraw/web/js/app/feature-search/search-core.js', 'app/feature-search/search-core.js');
+// search-core.js finds a feature's sequences by the catalog-sequence door's key.
+await copyModule('gbdraw/web/js/services/catalog-sequences.js', 'services/catalog-sequences.js');
 await copyModule(
   'gbdraw/web/js/services/standalone-interactivity-assets.js',
   'services/standalone-interactivity-assets.js'
@@ -90,7 +92,7 @@ const standaloneSource = await readFile(
 );
 await writeFile(
   join(tempDir, 'services', 'standalone-interactivity.js'),
-  `${standaloneSource}\nexport { buildStandaloneBiologicalFeaturePayloads, buildStandaloneOrthogroupPayloads, catalogItemWithStandaloneOverrides, createStandaloneBiologicalFeatureResolver, getStandaloneDisplayLabel, getStandaloneFeatureOrthogroupEntry, selectStandaloneCatalogItem, selectStandaloneSequenceSources };\n`,
+  `${standaloneSource}\nexport { buildStandaloneBiologicalFeaturePayloads, buildStandaloneOrthogroupPayloads, catalogItemWithStandaloneOverrides, createStandaloneBiologicalFeatureResolver, getStandaloneDisplayLabel, getStandaloneFeatureOrthogroupEntry };\n`,
   'utf8'
 );
 await writeFile(join(tempDir, 'app', 'feature-editor-svg-actions.js'), `
@@ -192,9 +194,7 @@ const {
   catalogItemWithStandaloneOverrides,
   createStandaloneBiologicalFeatureResolver,
   getStandaloneDisplayLabel,
-  getStandaloneFeatureOrthogroupEntry,
-  selectStandaloneCatalogItem,
-  selectStandaloneSequenceSources
+  getStandaloneFeatureOrthogroupEntry
 } = await import(
   pathToFileURL(join(tempDir, 'services', 'standalone-interactivity.js'))
 );
@@ -1120,71 +1120,6 @@ assert.equal(
   ),
   standaloneCanonicalEntry
 );
-const catalogSelectionItem = { resultIndex: 0, resultName: 'result-zero' };
-assert.equal(
-  selectStandaloneCatalogItem({
-    featureCatalog: { schema: 5, items: [catalogSelectionItem] },
-    catalogResultIndex: '0',
-    catalogResultName: 'result-zero'
-  }),
-  catalogSelectionItem
-);
-for (const invalidCatalogIndex of [
-  '-1',
-  '0.5',
-  'bogus',
-  '9007199254740992'
-]) {
-  assert.equal(
-    selectStandaloneCatalogItem({
-      featureCatalog: { schema: 5, items: [catalogSelectionItem] },
-      catalogResultIndex: invalidCatalogIndex,
-      catalogResultName: 'result-zero'
-    }),
-    null
-  );
-}
-const linearSequenceSource = {
-  origin: 'linear-record',
-  recordIndex: 1,
-  recordId: 'record-one',
-  sequence: 'ACGT'
-};
-assert.deepEqual(
-  selectStandaloneSequenceSources(
-    [{ match_kind: 'pairwise', query_record_index: '1', query_record_id: 'record-one' }],
-    [linearSequenceSource]
-  ),
-  [linearSequenceSource]
-);
-for (const invalidRecordIndex of [
-  '-1',
-  '1.5',
-  'bogus',
-  '9007199254740992'
-]) {
-  assert.deepEqual(
-    selectStandaloneSequenceSources(
-      [{ match_kind: 'pairwise', query_record_index: invalidRecordIndex }],
-      [linearSequenceSource]
-    ),
-    []
-  );
-}
-assert.deepEqual(
-  selectStandaloneSequenceSources(
-    [{ match_kind: 'pairwise', query_record_index: '1' }],
-    [{ ...linearSequenceSource, recordIndex: '9007199254740992' }]
-  ),
-  []
-);
-assert.deepEqual(
-  selectStandaloneSequenceSources(
-    [{ match_kind: 'pairwise', query_record_index: '1', query_record_id: 'wrong-record' }],
-    [linearSequenceSource]
-  ),
-  []
-);
 for (const unresolved of [
   { fileIdx: 0, stable_svg_id: 'shared-stable' },
   { stable_svg_id: 'shared-stable' },
@@ -1361,14 +1296,23 @@ const searchableFeature = {
     note: ['core enzyme'],
     translation: ['MPEPTIDE']
   },
-  nucleotideSequence: 'ATGGCN'
+  recordKey: 'record-1',
+  biologicalFeatureId: 'searchable-feature'
 };
+// The sequence fields search what Python read for the feature (D5); its amino acid sequence is the /translation.
+const { featureSequenceKey } = await import(pathToFileURL(join(tempDir, 'services', 'catalog-sequences.js')).href);
+const searchableSequences = new Map([[
+  featureSequenceKey({ recordKey: 'record-1', biologicalFeatureId: 'searchable-feature' }),
+  { recordKey: 'record-1', biologicalFeatureId: 'searchable-feature', nucleotideSequence: 'ATGGCN',
+    aminoAcidSequence: 'MPEPTIDE', sequenceWarnings: [] }
+]]);
 const search = (query, field = 'all', popupMode = 'rich') => runFeatureSearch({
   features: [searchableFeature],
   renderedFeatureIds: new Set(['searchable-feature']),
   query,
   field,
-  popupMode
+  popupMode,
+  sequences: searchableSequences
 });
 for (const [query, field] of [
   ['polymerase', 'all'],
@@ -1410,11 +1354,16 @@ const state = {
     { definition: 'record-b' },
     { definition: 'record-c' }
   ],
-  extractedFeatures: ref(generatedFeatures),
+  // As a schema-6 catalog writes them, every rendered row names its catalog identity.
+  extractedFeatures: ref(generatedFeatures.map((feature, index) => (
+    feature.recordKey ? feature : { ...feature, recordKey: `record-key-${'a_b'[index]}`, biologicalFeatureId: `biological-${'a_b'[index]}` }
+  ))),
   biologicalFeatures: ref([
     {
       fileIdx: 0,
       record_id: 'record-a',
+      recordKey: 'record-key-a',
+      biologicalFeatureId: 'biological-a',
       svg_id: 'stable-x',
       stable_svg_id: 'stable-x',
       locus_tag: 'LOC_A',
@@ -1424,6 +1373,8 @@ const state = {
     {
       fileIdx: 1,
       record_id: 'record-b',
+      recordKey: 'record-key-b',
+      biologicalFeatureId: 'biological-b',
       svg_id: 'stable-x',
       stable_svg_id: 'stable-x',
       locus_tag: 'LOC_B',
@@ -1441,10 +1392,24 @@ const state = {
       nucleotide_sequence: 'GGGG',
       amino_acid_sequence: 'MQ'
     }
-  ])
+  ]),
+  errorLog: ref(null)
 };
 
-const editor = createOrthogroupEditor({ state: withDrawings(state), runAnalysis: null });
+// The rows still carry a schema-5 catalog's sequences, which no member takes: Python's reply (D5) is the only
+// source, here made of the same values. Each read is recorded.
+const sequenceReplies = new Map(state.biologicalFeatures.value.map((row) => [featureSequenceKey(row), {
+  recordKey: row.recordKey, biologicalFeatureId: row.biologicalFeatureId,
+  nucleotideSequence: row.nucleotide_sequence, aminoAcidSequence: row.amino_acid_sequence, sequenceWarnings: []
+}]));
+const sequenceReads = [];
+const readFeatureSequences = async (features) => {
+  sequenceReads.push(features);
+  return new Map(features.map((feature) => [featureSequenceKey(feature), sequenceReplies.get(featureSequenceKey(feature))]));
+};
+/** Lets the reads and clipboard writes queued so far run. */
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+const editor = createOrthogroupEditor({ state: withDrawings(state), runAnalysis: null, readFeatureSequences });
 // OV-1010: a member's null or blank bound is missing, not 0, so a member
 // without identifiers gets no `1-20(+)` location as its display ID.
 for (const missing of [null, '', '  ']) {
@@ -1486,20 +1451,21 @@ assert.equal(editor.selectOrthogroup(generatedFeatures[1].orthogroupId), true);
 assert.equal(state.selectedOrthogroupId.value, 'og_1');
 assert.equal(editor.selectOrthogroup('missing-group'), false);
 const members = editor.getEnrichedOrthogroupMembers(group);
-assert.deepEqual(members.map((member) => member.nucleotideSequence), ['AAAA', 'CCCC', 'GGGG']);
+// Each member resolves its own catalog row and carries none of its sequences.
+assert.deepEqual(members.map((member) => member.sequenceFeature), state.biologicalFeatures.value);
+assert.deepEqual(members.map((member) => Object.hasOwn(member, 'nucleotideSequence') || Object.hasOwn(member, 'aminoAcidSequence')),
+  [false, false, false]);
 assert.deepEqual(members.map((member) => member.displayProteinId), ['LOC_A', 'LOC_B', 'CAG34720.1']);
 const wrongRecordMember = editor.getEnrichedOrthogroupMembers({
   id: 'og_wrong_record',
   members: [{ recordIndex: 1, stableFeatureSvgId: 'canonical-stable-id' }]
 })[0];
-assert.equal(wrongRecordMember.nucleotideSequence, undefined);
-assert.equal(wrongRecordMember.aminoAcidSequence, undefined);
+assert.equal(wrongRecordMember.sequenceFeature, undefined);
 const canonicalOnlyMember = editor.getEnrichedOrthogroupMembers({
   id: 'og_canonical_only',
   members: [{ recordKey: 'record-key-c', biologicalFeatureId: 'biological-c' }]
 })[0];
-assert.equal(canonicalOnlyMember.nucleotideSequence, 'GGGG');
-assert.equal(canonicalOnlyMember.aminoAcidSequence, 'MQ');
+assert.equal(canonicalOnlyMember.sequenceFeature, state.biologicalFeatures.value[2]);
 for (const invalidMember of [
   { stableFeatureSvgId: 'canonical-stable-id' },
   {
@@ -1519,8 +1485,7 @@ for (const invalidMember of [
     id: 'og_invalid_identity',
     members: [invalidMember]
   })[0];
-  assert.equal(unresolved.nucleotideSequence, undefined);
-  assert.equal(unresolved.aminoAcidSequence, undefined);
+  assert.equal(unresolved.sequenceFeature, undefined);
 }
 const originalBiologicalFeatures = state.biologicalFeatures.value;
 state.biologicalFeatures.value = [
@@ -1531,11 +1496,13 @@ const duplicateSequenceMember = editor.getEnrichedOrthogroupMembers({
   id: 'og_duplicate_sequence_identity',
   members: [{ recordIndex: 0, stableFeatureSvgId: 'stable-x' }]
 })[0];
-assert.equal(duplicateSequenceMember.nucleotideSequence, undefined);
-assert.equal(duplicateSequenceMember.aminoAcidSequence, undefined);
+assert.equal(duplicateSequenceMember.sequenceFeature, undefined);
 state.biologicalFeatures.value = originalBiologicalFeatures;
-assert.equal(editor.getOrthogroupSequenceCount(group, 'nt'), 3);
+assert.equal(editor.getOrthogroupSequenceCount(group), 3);
 await editor.copyOrthogroupSequences(group, 'nt');
+// One read asks every member once.
+assert.deepEqual(sequenceReads.at(-1).map((feature) => feature.biologicalFeatureId),
+  ['biological-a', 'biological-b', 'biological-c']);
 assert.equal(
   editor.orthogroupCopyFeedbackLabel(group, 'nt', 'Copy nt'),
   'Copied!'
@@ -1623,6 +1590,7 @@ navigator.clipboard.writeText = () => new Promise((resolve, reject) => {
 });
 const firstCopy = editor.copyOrthogroupSequences(group, 'aa', 'race-case');
 const secondCopy = editor.copyOrthogroupSequences(group, 'aa', 'race-case');
+await settle();
 resolveSecondCopy();
 await secondCopy;
 assert.equal(
@@ -1713,20 +1681,22 @@ Object.defineProperty(globalThis.URL, 'revokeObjectURL', {
   configurable: true,
   value: () => {}
 });
-editor.downloadOrthogroupMemberSequence(
+// A member that carries its catalog row (identity only) downloads what Python read for it.
+const downloadRow = { recordKey: 'record-key-c', biologicalFeatureId: 'biological-c' };
+await editor.downloadOrthogroupMemberSequence(
   {
     proteinId: runtimeHandle,
     sourceProteinId: 'WP_DOWNLOAD.1',
-    aminoAcidSequence: 'MK'
+    sequenceFeature: downloadRow
   },
   'aa',
   { id: 'og_download' }
 );
-editor.downloadOrthogroupMemberSequence(
+await editor.downloadOrthogroupMemberSequence(
   {
     proteinId: runtimeHandle,
     stableFeatureSvgId: featureAnalysisId,
-    aminoAcidSequence: 'MK'
+    sequenceFeature: downloadRow
   },
   'aa',
   { id: 'og_download' }
@@ -1991,7 +1961,7 @@ assert.equal(visibleElement.getAttribute('stroke-width'), '0.5');
 
 console.log('orthogroup stable identity tests passed');
 
-// Resolving one member must not read or normalize every unrelated source sequence.
+// Resolving one member reads no row's sequence: not an unrelated row's, which a schema-5 catalog still carries.
 {
   const unrelated = { recordKey: 'unrelated-record', biologicalFeatureId: 'unrelated-feature',
     fileIdx: 3, stable_svg_id: 'unrelated-stable' };
@@ -2003,8 +1973,8 @@ console.log('orthogroup stable identity tests passed');
   const lazyEditor = createOrthogroupEditor({ state: withDrawings(lazyState) });
   const member = lazyEditor.getEnrichedOrthogroupMembers({ id: 'selected-only',
     members: [{ recordKey: 'record-key-c', biologicalFeatureId: 'biological-c' }] })[0];
-  assert.equal(member.nucleotideSequence, 'GGGG');
-  assert.equal(member.aminoAcidSequence, 'MQ');
+  assert.equal(member.sequenceFeature, originalBiologicalFeatures[2]);
+  assert.equal(Object.hasOwn(member, 'nucleotideSequence'), false);
 }
 
 // Record selection: a member's record index is a position in the records of
@@ -2061,7 +2031,7 @@ console.log('orthogroup stable identity tests passed');
   );
 }
 
-// The member sequence lookup reads the feature rows through `toRaw`, as state.js does: Vue tracks the two array refs,
+// The member catalog lookup reads the feature rows through `toRaw`, as state.js does: Vue tracks the two array refs,
 // which every writer replaces, and none of the alias keys of every row (L4-03).
 {
   let proxiedReads = 0;
@@ -2083,12 +2053,13 @@ console.log('orthogroup stable identity tests passed');
   const trackedEditor = createOrthogroupEditor({ state: withDrawings(trackedState) });
   const resolve = () => trackedEditor.getEnrichedOrthogroupMembers({ id: 'tracked',
     members: [{ recordKey: 'record-key-c', biologicalFeatureId: 'biological-c' }] })[0];
-  assert.equal(resolve().nucleotideSequence, 'GGGG');
+  assert.equal(resolve().sequenceFeature, originalBiologicalFeatures[2]);
   assert.equal(proxiedReads, 0);
   // A writer replaces the array; the lookup follows it.
-  trackedState.biologicalFeatures.value = deepProxy(originalBiologicalFeatures.map((feature) => (
-    feature.biologicalFeatureId === 'biological-c' ? { ...feature, nucleotide_sequence: 'TTTT' } : feature
-  )));
-  assert.equal(resolve().nucleotideSequence, 'TTTT');
+  const replacedRows = originalBiologicalFeatures.map((feature) => (
+    feature.biologicalFeatureId === 'biological-c' ? { ...feature, locus_tag: 'LOC_C2' } : feature
+  ));
+  trackedState.biologicalFeatures.value = deepProxy(replacedRows);
+  assert.equal(resolve().sequenceFeature, replacedRows[2]);
   assert.equal(proxiedReads, 0);
 }

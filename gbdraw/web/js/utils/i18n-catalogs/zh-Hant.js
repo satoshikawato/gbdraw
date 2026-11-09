@@ -533,7 +533,6 @@ export default Object.freeze({
   "Comparison {n}": "比較{n}",
   "Comparisons must connect adjacent rows.": "比較必須連接相鄰的列。",
   "Comparisons must connect records in different rows.": "比較必須連接不同列中的記錄。",
-  "Comparisons: the sequences of the saved comparison matches could not be read again from the input files; the SVG preview stays, and the next Generate reads them.": "比較：無法從輸入檔案重新讀取已儲存比較中各比對的序列；SVG預覽會保留，下次產生時會讀取這些序列。",
   "Composition metadata is invalid or unavailable.": "構圖中繼資料無效或無法使用。",
   "Compress": "壓縮",
   "Computing…": "正在計算…",

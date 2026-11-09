@@ -7,8 +7,8 @@ import {
   locationRangeText,
   resolveDisplayProteinId
 } from './feature-utils.js';
-import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
-import { buildMatchSequenceBundle } from './match-sequences.js';
+import { formatFastaEntry } from './feature-sequence-fasta.js';
+import { featureSequenceReads } from './catalog-sequences.js';
 import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
 import {
   groupMetadataScopeLabel,
@@ -27,7 +27,8 @@ import { msg, t, tm, tmx, tn, tx } from '../utils/i18n.js';
 
 /** @import { AliasSource, FeatureIdentity } from './feature-identity.js' */
 /** @import { FeatureLike } from './feature-utils.js' */
-/** @import { SequenceSource, SequenceSourceResolution, SequenceSourceResolver } from './match-sequences.js' */
+/** @import { MatchSpanInput, MatchSpanSequence } from './diagram-worker-protocol.js' */
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
 
 /**
  * A rendered or source feature row of the catalogs, or a saved group member:
@@ -68,10 +69,8 @@ import { msg, t, tm, tmx, tn, tx } from '../utils/i18n.js';
  * @property {FeatureListRow[]} [featureRows]
  * @property {MemberRow[]} [memberRows]
  * @property {string} [memberCopyText]
- * @property {string} [memberNtFasta]
- * @property {string} [memberAaFasta]
- * @property {number} [memberNtCount]
- * @property {number} [memberAaCount]
+ * @property {number} [memberSequenceCount] The members whose sequences can be read (they have a catalog identity).
+ * @property {SequenceReadState} [memberRead] The read of the members' FASTA.
  * @property {string} [memberNtFilename]
  * @property {string} [memberAaFilename]
  * @property {GroupView[]} [blockOrthogroups]
@@ -159,7 +158,7 @@ import { msg, t, tm, tmx, tn, tx } from '../utils/i18n.js';
  * @property {PopupGroup[]} [orthogroups]
  * @property {OrthogroupTextOverrides} [orthogroupNameOverrides]
  * @property {OrthogroupTextOverrides} [orthogroupDescriptionOverrides]
- * @property {import('./match-sequences.js').SequenceSourceResolver | null} [resolveSequenceSource]
+ * @property {MatchSequenceRecords | null} [matchSequenceRecords] The shown Result's records the spans read (D5).
  */
 
 /**
@@ -184,8 +183,6 @@ const MATCH_KIND_TITLES = {
 const MATCH_KIND_ALIASES = new Set(['pairwise', 'orthogroup', 'collinear', 'homology']);
 /** @param {unknown} value */
 const normalizeText = (value) => String(value === null || value === undefined ? '' : value).trim();
-/** @param {unknown} value */
-const normalizeSequence = (value) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
 
 /**
  * @param {Element | null | undefined} element
@@ -262,15 +259,6 @@ const addUniqueDisplayText = (values, value) => {
   const text = normalizeText(value);
   if (!text || isInternalDisplayId(text) || values.includes(text)) return;
   values.push(text);
-};
-
-/** @param {...unknown} values */
-const firstSequenceText = (...values) => {
-  for (const value of values) {
-    const sequence = normalizeSequence(value);
-    if (sequence) return sequence;
-  }
-  return '';
 };
 
 /**
@@ -1224,30 +1212,6 @@ const memberLocationText = (member) => {
   return range && strand ? `${range} (${strand})` : range;
 };
 
-/**
- * @param {PopupMember | null | undefined} member
- * @param {PopupFeature | null | undefined} feature
- * @param {SequenceKind} sequenceKind
- */
-const memberSequence = (member, feature, sequenceKind) => {
-  if (sequenceKindLabel(sequenceKind) === 'aa') {
-    return firstSequenceText(
-      member?.aminoAcidSequence,
-      member?.amino_acid_sequence,
-      member?.proteinSequence,
-      member?.sequence,
-      feature?.aminoAcidSequence,
-      feature?.amino_acid_sequence
-    );
-  }
-  return firstSequenceText(
-    member?.nucleotideSequence,
-    member?.nucleotide_sequence,
-    feature?.nucleotideSequence,
-    feature?.nucleotide_sequence
-  );
-};
-
 /** @param {unknown} strand */
 const normalizeMemberStrand = (strand) => {
   if (strand === -1 || String(strand).trim() === '-1') return '-';
@@ -1256,12 +1220,11 @@ const normalizeMemberStrand = (strand) => {
 };
 
 /**
+ * The header fields of a member's FASTA entries; the bases are read from Python when a FASTA action is pressed.
  * @param {PopupMember | null | undefined} member
  * @param {PopupFeature | null | undefined} feature
- * @param {string} nucleotideSequence
- * @param {string} aminoAcidSequence
  */
-const buildMemberFeaturePayload = (member, feature, nucleotideSequence, aminoAcidSequence) => {
+const buildMemberFeaturePayload = (member, feature) => {
   const sourceFeature = feature && typeof feature === 'object' ? feature : {};
   const displayProteinId = resolveDisplayProteinId(
     sourceFeature,
@@ -1279,27 +1242,7 @@ const buildMemberFeaturePayload = (member, feature, nucleotideSequence, aminoAci
     product: sourceFeature.product || member?.product,
     note: sourceFeature.note || member?.note,
     gene: sourceFeature.gene || member?.gene,
-    organism: sourceFeature.organism || member?.organism,
-    nucleotide_sequence: nucleotideSequence,
-    amino_acid_sequence: aminoAcidSequence
-  };
-};
-
-/**
- * @param {PopupMember | null | undefined} member
- * @param {PopupFeature | null | undefined} feature
- * @param {string} nucleotideSequence
- * @param {string} aminoAcidSequence
- */
-const buildMemberFastas = (member, feature, nucleotideSequence, aminoAcidSequence) => {
-  const fastaFeature = buildMemberFeaturePayload(member, feature, nucleotideSequence, aminoAcidSequence);
-  const fastas = buildFeatureSequenceFastas(fastaFeature, {
-    nucleotideSequence,
-    aminoAcidSequence
-  });
-  return {
-    ntFasta: fastas.nucleotideFasta ? `${fastas.nucleotideFasta}\n` : '',
-    aaFasta: fastas.aminoAcidFasta ? `${fastas.aminoAcidFasta}\n` : ''
+    organism: sourceFeature.organism || member?.organism
   };
 };
 
@@ -1394,14 +1337,7 @@ const buildOrthogroupMemberRows = (group, context, orthogroupId) => (
     .map(({ member }) => {
       const feature = context.featureForMember(member);
       const renderedFeature = context.renderedFeatureForMember(member, feature);
-      const nucleotideSequence = memberSequence(member, feature, 'nt');
-      const aminoAcidSequence = memberSequence(member, feature, 'aa');
-      const fastas = buildMemberFastas(
-        member,
-        feature,
-        nucleotideSequence,
-        aminoAcidSequence
-      );
+      const read = feature ? featureSequenceReads([feature])[0] ?? null : null;
       const role = firstText(member?.role, member?.memberRole, member?.member_role);
       const confidence = firstText(member?.confidence, member?.memberConfidence, member?.member_confidence);
       return {
@@ -1415,13 +1351,13 @@ const buildOrthogroupMemberRows = (group, context, orthogroupId) => (
         roleNote: memberRoleNote(role, confidence),
         assignmentReason: firstText(member?.assignmentReason, member?.assignment_reason),
         productOrNote: firstText(member?.product, member?.note),
-        ntFasta: fastas.ntFasta,
-        aaFasta: fastas.aaFasta,
+        read,
+        fastaFeature: buildMemberFeaturePayload(member, feature),
         ntFilename: orthogroupMemberSequenceFilename(member, orthogroupId, 'nt'),
         aaFilename: orthogroupMemberSequenceFilename(member, orthogroupId, 'aa')
       };
     })
-    .filter((row) => row.record || row.coordinates || row.proteinId || row.role || row.confidence || row.assignmentReason || row.productOrNote || row.ntFasta || row.aaFasta)
+    .filter((row) => row.record || row.coordinates || row.proteinId || row.role || row.confidence || row.assignmentReason || row.productOrNote || row.read)
 );
 
 /**
@@ -1648,31 +1584,15 @@ const orthogroupMemberCopyText = (memberRows) => {
 
 /**
  * @param {MemberRow[]} memberRows
- * @param {SequenceKind} sequenceKind
- */
-const orthogroupMemberSequenceText = (memberRows, sequenceKind) => {
-  const key = sequenceKindLabel(sequenceKind) === 'aa' ? 'aaFasta' : 'ntFasta';
-  return (Array.isArray(memberRows) ? memberRows : [])
-    .map((row) => String(row?.[key] ?? ''))
-    .filter((text) => text.trim())
-    .join('');
-};
-
-/**
- * @param {MemberRow[]} memberRows
  * @param {unknown} orthogroupId
  * @param {unknown} displayName
  */
 const orthogroupMemberSectionExtras = (memberRows, orthogroupId, displayName) => {
-  const ntFasta = orthogroupMemberSequenceText(memberRows, 'nt');
-  const aaFasta = orthogroupMemberSequenceText(memberRows, 'aa');
   return {
     memberRows,
     memberCopyText: orthogroupMemberCopyText(memberRows),
-    memberNtFasta: ntFasta,
-    memberAaFasta: aaFasta,
-    memberNtCount: memberRows.filter((row) => normalizeText(row.ntFasta)).length,
-    memberAaCount: memberRows.filter((row) => normalizeText(row.aaFasta)).length,
+    memberSequenceCount: memberRows.filter((row) => row.read).length,
+    memberRead: unreadSequence(),
     memberNtFilename: orthogroupSequenceFilename(orthogroupId, displayName, 'nt'),
     memberAaFilename: orthogroupSequenceFilename(orthogroupId, displayName, 'aa')
   };
@@ -2084,51 +2004,157 @@ const buildMatchSpans = (element, matchKind) => {
 };
 
 /**
+ * The records the shown Result's request draws, as a match popup names them to Python (D5): the drawn units by
+ * record key in drawing order (a span's record index is a place in them), the units that draw a record ID (a
+ * Circular comparison band names its reference by ID), and whether the request holds the FASTA of a comparison source.
+ * @typedef {object} MatchSequenceRecords
+ * @property {readonly string[]} unitKeys
+ * @property {(recordId: string) => readonly string[]} unitKeysOfRecordId
+ * @property {(sourceIndex: number) => boolean} comparisonSupplied
+ */
+
+/**
+ * One span of a match popup: what it shows at open (input-file coordinates, strand, the length its coordinates
+ * span) and where Python reads its bases when Copy or FASTA is pressed (`read`, null when the popup knows at open
+ * that it cannot be read, with the reason).
+ * @typedef {object} MatchSpanEntry
+ * @property {{ role: 'query' | 'subject', recordId: string, start: number, end: number, displayRole: string }} span
+ * @property {'+' | '-'} orientation
+ * @property {number} sequenceLength
+ * @property {MatchSpanInput | null} read
+ * @property {boolean} available
+ * @property {string} unavailableReason
+ * @property {string} matchId
+ * @property {string} filename
+ */
+
+/**
+ * The state of a popup's sequence read (`app/sequence-reads.js`): none, Python reading, the read held no sequence,
+ * or failed (the error the popup shows with Details and Copy diagnostics, and its Retry).
+ * @typedef {{ status: '' | 'reading' | 'empty' | 'failed', error: UserFacingError | null, retry: (() => unknown) | null }} SequenceReadState
+ */
+
+/** @returns {SequenceReadState} */
+const unreadSequence = () => ({ status: '', error: null, retry: null });
+
+/**
+ * The spans of a match popup and the state of their read.
+ * @typedef {object} MatchSequenceBundle
+ * @property {MatchSpanEntry[]} entries
+ * @property {string} combinedFilename
+ * @property {SequenceReadState} read
+ */
+
+/** @param {unknown} value @param {string} [fallback] */
+const safeFilePart = (value, fallback = 'sequence') => {
+  const cleaned = normalizeText(value).replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '');
+  return cleaned || fallback;
+};
+
+/**
+ * The drawn unit or comparison record a span reads, by identity: a drawn unit by its record key (a Linear span's
+ * record index, or the one unit that draws a Circular reference's record ID), a comparison record by its source and
+ * record ID. A reason when the popup knows at open that the span cannot be read.
+ * @param {ReturnType<typeof buildMatchSpans>[number]} span
+ * @param {MatchKind} matchKind
+ * @param {MatchSequenceRecords | null} records
+ * @param {number} start
+ * @param {number} end
+ * @returns {{ read: MatchSpanInput | null, reason: string }}
+ */
+const matchSpanRead = (span, matchKind, records, start, end) => {
+  if (!span.identityValid) return { read: null, reason: t('The sequence identifier metadata for this match is invalid.') };
+  // A Result without its request (a Result-only Session 27-39): the reason the read would give (SEQUENCE_REQUIRES_GENERATE).
+  if (!records) return { read: null, reason: t('This Result was saved without the settings it was drawn with, so its sequences are read after the next Generate.') };
+  if (matchKind === 'homology' && span.role !== span.referenceSide) {
+    if (span.sourceIndex === null) return { read: null, reason: t('The match does not identify a sequence record.') };
+    if (!records.comparisonSupplied(span.sourceIndex)) {
+      return { read: null, reason: t('Comparison sequence was not supplied for this BLAST source.') };
+    }
+    return { read: { kind: 'comparison', sourceIndex: span.sourceIndex, recordId: span.recordId, start, end }, reason: '' };
+  }
+  const keys = span.recordIndex !== null
+    ? [records.unitKeys[span.recordIndex]].filter(Boolean)
+    : (records.unitKeys.length === 1 ? records.unitKeys : records.unitKeysOfRecordId(span.recordId));
+  if (keys.length !== 1) {
+    return {
+      read: null,
+      reason: keys.length > 1
+        ? t('Record ID “{id}” is ambiguous in the available sequence sources.', { id: span.recordId })
+        : t('The match does not identify a sequence record.')
+    };
+  }
+  return { read: { kind: 'record', recordKey: keys[0], start, end }, reason: '' };
+};
+
+/**
+ * The spans of a match as the popup shows them when it opens (D5): no base is read until Copy or FASTA.
  * @param {Element} element
  * @param {MatchKind} matchKind
  * @param {string} matchId
- * @param {SequenceSourceResolver | null} resolveSequenceSource
+ * @param {MatchSequenceRecords | null} records
+ * @returns {MatchSequenceBundle | null}
  */
-const buildSequenceBundleForMatch = (element, matchKind, matchId, resolveSequenceSource) => {
+const buildSequenceBundleForMatch = (element, matchKind, matchId, records) => {
   const spans = buildMatchSpans(element, matchKind);
   if (!spans.length) return null;
-  const bundle = buildMatchSequenceBundle(spans, {
-    matchId,
-    resolveSequenceSource: (sourceKey, recordId, context) => {
-      /** @type {SequenceSourceResolution | (SequenceSource & { source?: undefined }) | null} */
-      const resolved = typeof resolveSequenceSource === 'function'
-        ? resolveSequenceSource(sourceKey, recordId, context)
-        : null;
-      const resolvedSource = resolved?.source !== undefined ? resolved.source : resolved;
-      if (matchKind === 'homology' && context?.origin === 'homology-comparison' && !resolvedSource) {
-        return {
-          source: null,
-          reason: t('Comparison sequence was not supplied for this BLAST source.')
-        };
-      }
-      return resolved;
-    },
-    contextForSpan: (span) => {
-      if (matchKind !== 'homology') {
-        return { origin: 'linear-record', recordIndex: span.recordIndex };
-      }
-      const isReference = span.role === span.referenceSide;
-      return isReference
-        ? { origin: 'circular-reference', recordIndex: span.recordIndex }
-        : { origin: 'homology-comparison', sourceIndex: span.sourceIndex };
-    },
-    unavailableReasonForSpan: (span) => (
-      span.identityValid ? '' : t('The sequence identifier metadata for this match is invalid.')
-    )
+  const entries = spans.map((span) => {
+    const role = span.role === 'subject' ? 'subject' : 'query';
+    const [start, end] = [span.start, span.end].map((value) => (/^\d+$/.test(value) ? Number(value) : Number.NaN));
+    const whole = Number.isSafeInteger(start) && Number.isSafeInteger(end);
+    const { read, reason } = whole ? matchSpanRead(span, matchKind, records, start, end)
+      : { read: null, reason: t('Coordinates must be whole 1-based values.') };
+    // The span rows and the FASTA header show input-file coordinates (PD-OI-076); the bases are read on the
+    // displayed record.
+    const source = whole ? recordSourceInterval(span.sourceSpan, start, end) : null;
+    const coords = source || { start, end };
+    /** @type {MatchSpanEntry} */
+    const entry = {
+      span: { role, recordId: span.recordId, start: coords.start, end: coords.end, displayRole: span.displayRole },
+      orientation: coords.start <= coords.end ? '+' : '-',
+      sequenceLength: whole ? Math.abs(end - start) + 1 : 0,
+      read,
+      available: Boolean(read),
+      unavailableReason: reason,
+      matchId,
+      filename: `${safeFilePart(matchId)}_${role}_${safeFilePart(span.recordId)}_${coords.start}-${coords.end}.fna`
+    };
+    return entry;
   });
-  // The span rows show input-file coordinates, as the Interval rows and the
-  // FASTA headers do (R5, CI-05); the bases are read on the displayed record.
-  bundle.entries = bundle.entries.map((entry, index) => {
-    const source = recordSourceInterval(spans[index].sourceSpan, entry.span.start, entry.span.end);
-    return source ? { ...entry, span: { ...entry.span, start: source.start, end: source.end } } : entry;
-  });
-  return bundle;
+  return { entries, combinedFilename: `${safeFilePart(matchId)}_both.fna`, read: unreadSequence() };
 };
+
+/**
+ * The FASTA text of a span from the bases Python read (`MatchSpanSequence`): its header names the match, the role,
+ * the record, and the input-file coordinates and strand (PD-OI-076).
+ * @param {MatchSpanEntry} entry
+ * @param {MatchSpanSequence} read
+ */
+export const matchSpanFasta = (entry, read) => {
+  const header = [
+    `${safeFilePart(entry.matchId, 'match')}_${entry.span.role}`,
+    `record=${entry.span.recordId || read.recordId}`,
+    `coords=${entry.span.start}..${entry.span.end}`,
+    `strand=${entry.orientation}`
+  ].join('|');
+  return `${formatFastaEntry({ id: header, sequence: read.sequence })}\n`;
+};
+
+/** The reason a span Python could not read shows (`MatchSpanReason`). */
+const MATCH_SPAN_REASONS = Object.freeze({
+  NEVER_SUPPLIED: msg('Comparison sequence was not supplied for this BLAST source.'),
+  RECORD_UNKNOWN: msg('No sequence source matched record “{id}”.'),
+  RECORD_AMBIGUOUS: msg('Record ID “{id}” is ambiguous in the available sequence sources.'),
+  OUT_OF_RANGE: msg('Coordinates exceed the sequence length.')
+});
+
+/**
+ * @param {MatchSpanEntry} entry
+ * @param {MatchSpanSequence} read A span Python could not read.
+ */
+export const matchSpanUnavailableReason = (entry, read) => tm(
+  read.reason ? MATCH_SPAN_REASONS[read.reason] : MATCH_SPAN_REASONS.OUT_OF_RANGE, { id: entry.span.recordId || read.recordId }
+);
 
 /**
  * The Summary rows of a pairwise or homology match: its records, intervals,
@@ -2325,7 +2351,7 @@ export const buildMatchPopupPayload = (
     orthogroups = [],
     orthogroupNameOverrides = null,
     orthogroupDescriptionOverrides = null,
-    resolveSequenceSource = null
+    matchSequenceRecords = null
   } = {}
 ) => {
   if (!element) return null;
@@ -2385,7 +2411,7 @@ export const buildMatchPopupPayload = (
     element,
     matchKind,
     matchId || 'match',
-    resolveSequenceSource
+    matchSequenceRecords
   );
 
   /** @param {'query' | 'subject'} role */

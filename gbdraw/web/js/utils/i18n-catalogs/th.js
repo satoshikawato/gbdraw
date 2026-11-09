@@ -533,7 +533,6 @@ export default Object.freeze({
   "Comparison {n}": "การเปรียบเทียบ {n}",
   "Comparisons must connect adjacent rows.": "การเปรียบเทียบต้องเชื่อมแถวที่อยู่ติดกัน",
   "Comparisons must connect records in different rows.": "การเปรียบเทียบต้องเชื่อมระเบียนที่อยู่ต่างแถวกัน",
-  "Comparisons: the sequences of the saved comparison matches could not be read again from the input files; the SVG preview stays, and the next Generate reads them.": "การเปรียบเทียบ: อ่านลำดับของการจับคู่ที่บันทึกไว้จากไฟล์อินพุตซ้ำไม่ได้ ภาพตัวอย่าง SVG ยังคงอยู่ และการสร้างครั้งถัดไปจะอ่านลำดับเหล่านั้น",
   "Composition metadata is invalid or unavailable.": "ข้อมูลเมตาขององค์ประกอบแผนภาพไม่ถูกต้องหรือไม่พร้อมใช้งาน",
   "Compress": "บีบให้พอดี",
   "Computing…": "กำลังคำนวณ…",

@@ -846,7 +846,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       assert.equal(state.results.value, ownerSet.results);
       assert.equal(state.featureCatalog.value, ownerSet.featureCatalog);
       assert.equal(state.losatCache.value, ownerSet.losatCache);
-      assert.equal(state.matchSequenceRegistry.captureTrustedOwner(), ownerSet.matchSequenceOwner);
+      // A Generate's owner set holds no record sequences (D5).
+      assert.ok(!Object.keys(ownerSet).some((key) => /sequence/i.test(key)), Object.keys(ownerSet).join());
     },
     waitForAfterPaint: async () => {
       lifecycleEvents.push('test.after-paint-returned');

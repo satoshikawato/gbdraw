@@ -781,10 +781,8 @@ test('a Load canceled within its History baseline keeps both modes\' Results', a
   const historyBefore = await counts();
   await page.evaluate(async () => {
     const config = await import('/gbdraw/web/js/services/config.js');
-    const { state } = await import('/gbdraw/web/js/state.js');
     window.__E1_BEFORE_LOAD__ = {
-      committed: config.getCommittedCanonicalSession(),
-      owner: state.matchSequenceRegistry.captureTrustedOwner()
+      committed: config.getCommittedCanonicalSession()
     };
     window.__GBDRAW_TEST_HOOKS__.onSessionLifecycleEvent = (event) => {
       if (event.name !== 'history-baseline-start') return;
@@ -798,12 +796,10 @@ test('a Load canceled within its History baseline keeps both modes\' Results', a
   await settleLive(page);
   expect(await page.evaluate(async () => {
     const config = await import('/gbdraw/web/js/services/config.js');
-    const { state } = await import('/gbdraw/web/js/state.js');
     return {
-      committed: config.getCommittedCanonicalSession() === window.__E1_BEFORE_LOAD__.committed,
-      owner: state.matchSequenceRegistry.captureTrustedOwner() === window.__E1_BEFORE_LOAD__.owner
+      committed: config.getCommittedCanonicalSession() === window.__E1_BEFORE_LOAD__.committed
     };
-  })).toEqual({ committed: true, owner: true });
+  })).toEqual({ committed: true });
   expect(await shown(page)).toMatchObject({ mode: 'circular', generatedDrawingId: 'circular', identity: circular.identity, mounted: true });
   expect(await counts()).toEqual(historyBefore);
   await showMode(page, 'linear');

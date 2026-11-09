@@ -39,7 +39,6 @@ import { listText, t, tm, tn } from './i18n.js';
  *   | 'legend-edit-overwritten-session46'
  *   | 'legend-edit-rekey-dropped'
  *   | 'feature-recovery-failed'
- *   | 'match-sequences-unrestored'
  *   | 'record-id-unresolved'
  * } LoadRepairCode
  */
@@ -301,9 +300,6 @@ const WORDING = {
       'LOSAT cache: {count} saved values ({path}) could not be read and were dropped.', { path }))),
   'feature-recovery-failed': () => [
     t('Features: the feature information of the saved diagram could not be restored from this file; the SVG preview stays, and the next Generate restores it.')
-  ],
-  'match-sequences-unrestored': () => [
-    t('Comparisons: the sequences of the saved comparison matches could not be read again from the input files; the SVG preview stays, and the next Generate reads them.')
   ],
   // OV-3311: a stored record ID that reads like a record number, whose place in its file Load could not read.
   'record-id-unresolved': (repairs) => repairs.map(({ path, stored }) => (

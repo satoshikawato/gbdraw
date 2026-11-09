@@ -22,7 +22,7 @@ const { computed } = window.Vue;
  * @property {(groupOrId: GroupOrId) => OrthogroupMember[]} getEnrichedOrthogroupMembers
  * @property {(members: unknown) => { recordIndex: number, recordLabel: string, members: OrthogroupMember[] }[]} groupOrthogroupMembersByRecord
  * @property {(groupOrId: GroupOrId, drawing: DrawingState | null) => string} resolveOrthogroupName
- * @property {(groupOrId: GroupOrId, sequenceKind: unknown) => number} getOrthogroupSequenceCount
+ * @property {(groupOrId: GroupOrId) => number} getOrthogroupSequenceCount The members whose sequences can be read.
  * @property {(groupOrId: GroupOrId) => string} orthogroupScope
  * @property {(groupOrId: GroupOrId) => string} orthogroupScopeLabel
  * @property {(orthogroupId: string) => void} highlightOrthogroupById
@@ -81,8 +81,7 @@ export const createOrthogroupPopup = ({
       recordCoverage,
       countText: groupCountText(memberCount, recordCoverage),
       genesText: groupCountText(memberCount, 0),
-      ntSequenceCount: getOrthogroupSequenceCount(group, 'nt'),
-      aaSequenceCount: getOrthogroupSequenceCount(group, 'aa'),
+      sequenceCount: getOrthogroupSequenceCount(group),
       currentMember,
       membersByRecord,
       scopeLabel: orthogroupScope(group) === 'global'

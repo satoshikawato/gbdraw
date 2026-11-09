@@ -276,6 +276,90 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @property {string} fasta
  */
 
+// The sequences the feature catalog does not store (D5), read by Python from the committed request
+// (gbdraw/web_support/catalog_sequences.py; each typedef below is the twin of the TypedDict it names).
+
+/**
+ * One feature by identity (`FeatureSequenceInput`): the record key and the biological feature ID of its catalog row.
+ * @typedef {object} FeatureSequenceInput
+ * @property {string} recordKey
+ * @property {string} biologicalFeatureId
+ */
+
+/**
+ * One feature's sequences with the identity asked (`FeatureSequencesOf`).
+ * @typedef {object} FeatureSequencesOf
+ * @property {string} recordKey
+ * @property {string} biologicalFeatureId
+ * @property {string} nucleotideSequence
+ * @property {string} aminoAcidSequence
+ * @property {readonly string[]} sequenceWarnings
+ */
+
+/**
+ * The payload of `readFeatureSequences`: the committed request, its resources, and the features (each once).
+ * @typedef {object} FeatureSequencesPayload
+ * @property {CanonicalRenderRequest} canonicalRequest
+ * @property {CommittedCanonicalSession['resources']} resources
+ * @property {readonly FeatureSequenceInput[]} features
+ */
+
+/** The `readFeatureSequences` reply (`FeatureSequencesReply`): the features in the order asked. @typedef {{ features: readonly FeatureSequencesOf[] }} FeatureSequencesReply */
+
+/**
+ * A span of a drawn record by the record key of its drawn unit (`RecordMatchSpan`): displayed coordinates, 1-based
+ * and inclusive; a start after the end is the reverse strand.
+ * @typedef {object} RecordMatchSpan
+ * @property {'record'} kind
+ * @property {string} recordKey
+ * @property {number} start
+ * @property {number} end
+ */
+
+/**
+ * A span of a comparison FASTA record (`ComparisonMatchSpan`), by the index of its comparison source and its record ID
+ * or alias; coordinates as in `RecordMatchSpan`.
+ * @typedef {object} ComparisonMatchSpan
+ * @property {'comparison'} kind
+ * @property {number} sourceIndex
+ * @property {string} recordId
+ * @property {number} start
+ * @property {number} end
+ */
+
+/** @typedef {RecordMatchSpan | ComparisonMatchSpan} MatchSpanInput */
+/** Why a span's bases cannot be read (`MatchSpanReason`). @typedef {'NEVER_SUPPLIED' | 'RECORD_UNKNOWN' | 'RECORD_AMBIGUOUS' | 'OUT_OF_RANGE'} MatchSpanReason */
+
+/**
+ * The bases of one span on its strand, or why they cannot be read (`MatchSpanSequence`).
+ * @typedef {object} MatchSpanSequence
+ * @property {'ok' | 'unavailable'} status
+ * @property {MatchSpanReason | null} reason
+ * @property {string} recordId
+ * @property {'+' | '-'} orientation
+ * @property {number} length
+ * @property {string} sequence
+ */
+
+/**
+ * The payload of `readMatchSequences`: the committed request, its resources, and the spans.
+ * @typedef {object} MatchSequencesPayload
+ * @property {CanonicalRenderRequest} canonicalRequest
+ * @property {CommittedCanonicalSession['resources']} resources
+ * @property {readonly MatchSpanInput[]} spans
+ */
+
+/** The `readMatchSequences` reply (`MatchSequencesReply`): the spans in the order asked. @typedef {{ spans: readonly MatchSpanSequence[] }} MatchSequencesReply */
+
+/**
+ * The payload of `readEmbedSequences`: the committed request, its resources, and the stored catalog item of the
+ * Result to export; the reply is that item in the export encoding (`embed_catalog_item`).
+ * @typedef {object} EmbedSequencesPayload
+ * @property {CanonicalRenderRequest} canonicalRequest
+ * @property {CommittedCanonicalSession['resources']} resources
+ * @property {Readonly<Record<string, unknown>>} item
+ */
+
 /** @type {readonly string[]} */
 export const DIAGRAM_HELPER_STAGING_OPERATIONS = Object.freeze(Object.keys(STAGED_HELPER_REFERENCES));
 

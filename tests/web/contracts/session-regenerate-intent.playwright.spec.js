@@ -157,7 +157,7 @@ const loadCurrentSession = async (page, filePath, session) => {
     window.__GBDRAW_SESSION_INTENT_PROBE__.snapshot()
   ));
   const ready = probe.lifecycle.find((event) => event.name === 'interactiveReady');
-  expect(ready).toMatchObject({ status: 'success', degradedRecovery: false });
+  expect(ready).toMatchObject({ status: 'success' });
   expect(probe.metrics.currentWriterActiveConfigRestoreCount).toBe(1);
   expect(probe.metrics.activeConfigCanonicalOverwriteCount || 0).toBe(0);
 

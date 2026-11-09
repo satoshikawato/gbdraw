@@ -533,7 +533,6 @@ export default Object.freeze({
   "Comparison {n}": "Perbandingan {n}",
   "Comparisons must connect adjacent rows.": "Perbandingan harus menghubungkan baris yang bersebelahan.",
   "Comparisons must connect records in different rows.": "Perbandingan harus menghubungkan record di baris yang berbeda.",
-  "Comparisons: the sequences of the saved comparison matches could not be read again from the input files; the SVG preview stays, and the next Generate reads them.": "Perbandingan: sekuens kecocokan perbandingan yang tersimpan tidak dapat dibaca ulang dari file input; pratinjau SVG tetap ditampilkan, dan sekuens tersebut dibaca pada pembuatan diagram berikutnya.",
   "Composition metadata is invalid or unavailable.": "Metadata komposisi tidak valid atau tidak tersedia.",
   "Compress": "Padatkan",
   "Computing…": "Menghitung…",

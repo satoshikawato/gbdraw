@@ -533,7 +533,6 @@ export default Object.freeze({
   "Comparison {n}": "So sánh {n}",
   "Comparisons must connect adjacent rows.": "So sánh phải nối các hàng liền kề.",
   "Comparisons must connect records in different rows.": "So sánh phải nối các bản ghi ở những hàng khác nhau.",
-  "Comparisons: the sequences of the saved comparison matches could not be read again from the input files; the SVG preview stays, and the next Generate reads them.": "So sánh: không đọc lại được trình tự của các đoạn khớp so sánh đã lưu từ tệp đầu vào; bản xem trước SVG vẫn giữ nguyên, và lần tạo tiếp theo sẽ đọc lại chúng.",
   "Composition metadata is invalid or unavailable.": "Siêu dữ liệu về cấu trúc sơ đồ không hợp lệ hoặc không khả dụng.",
   "Compress": "Nén",
   "Computing…": "Đang tính…",

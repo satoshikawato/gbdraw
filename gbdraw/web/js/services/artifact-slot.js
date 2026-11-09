@@ -74,7 +74,6 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFAC
  *   (`originalLegendOrder`). The Legend owner keeps each Result's inventory (OV-47), so an install
  *   does not write it: the mode transition hands it to the Legend owner, which adopts it when the
  *   Result is displayed.
- * @property {any} matchSequenceOwner The match-sequence registry's trusted owner, or null.
  * @property {Record<string, any> | null} runtimeState The runtime owner's state (committed Session, CLI helper files).
  * @property {Readonly<Record<string, any>> | null} transportIdentity The History transport identity of the artifact.
  * @property {number} retainedBytes
@@ -142,12 +141,12 @@ export const installShownSetLegend = (refs, { originalOrder, originalColors }) =
  * A slot of `drawing`'s artifact; a value it is not given is the empty
  * slot's for the drawing's mode.
  * @param {{ drawing: DrawingIdentity, values: ArtifactSlot['values'], legendInventory?: ArtifactSlot['legendInventory'],
- *   matchSequenceOwner?: ArtifactSlot['matchSequenceOwner'], runtimeState?: ArtifactSlot['runtimeState'],
+ *   runtimeState?: ArtifactSlot['runtimeState'],
  *   transportIdentity?: ArtifactSlot['transportIdentity'], retainedBytes?: number }} slot
  * @returns {Readonly<ArtifactSlot>}
  */
 export const createArtifactSlot = ({
-  drawing, values, legendInventory = [], matchSequenceOwner = null, runtimeState = null,
+  drawing, values, legendInventory = [], runtimeState = null,
   transportIdentity = null, retainedBytes = 0
 }) => {
   // The cast widens the key list, so that a field of any name can be looked up in it.
@@ -159,7 +158,6 @@ export const createArtifactSlot = ({
       key, Object.hasOwn(values, key) ? values[key] : ARTIFACT_SLOT_EMPTY[key](drawing.mode, null)
     ]))),
     legendInventory: Object.freeze(resultSetInventory(Object.hasOwn(values, 'results') ? values.results : [], legendInventory)),
-    matchSequenceOwner,
     runtimeState,
     transportIdentity,
     retainedBytes: Math.max(0, Number(retainedBytes) || 0)
@@ -178,7 +176,6 @@ const withArtifactSlotValues = (slot, drawing, values) => createArtifactSlot({
   drawing,
   values: { ...slot?.values, ...values },
   legendInventory: slot?.legendInventory,
-  matchSequenceOwner: slot?.matchSequenceOwner ?? null,
   runtimeState: slot?.runtimeState ?? null,
   transportIdentity: slot?.transportIdentity ?? null,
   retainedBytes: slot?.retainedBytes ?? 0

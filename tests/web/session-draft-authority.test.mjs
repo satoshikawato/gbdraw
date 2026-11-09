@@ -1144,15 +1144,6 @@ state.clickedPairwiseMatch.value = clickedPairwiseMatch;
 floatSettingsSection(state, 'titles', { x: 31, y: 32, maxHeight: 0 });
 state.featureExtractionPending.value = true;
 state.setFeatureEditorStatus('failed', 'keep extraction error');
-state.matchSequenceRegistry.reset([{
-  key: 'keep-sequence',
-  recordId: 'KEEP.1',
-  aliases: ['KEEP'],
-  sequence: 'AACCGGTT',
-  origin: 'linear-record',
-  recordIndex: 0,
-  sourceIndex: null
-}]);
 const circularDrawing = modeDrawing(state, 'circular');
 circularDrawing.circularRecordList.value = [{
   selector: '#1',
@@ -1277,7 +1268,6 @@ const rollbackState = () => ({
   settingsPopup: structuredClone(state.settingsPopup.value),
   featureExtractionPending: state.featureExtractionPending.value,
   featureEditorStatus: structuredClone(state.featureEditorStatus.value),
-  matchSequenceSources: structuredClone(state.matchSequenceRegistry.values()),
   circularRecordList: structuredClone(circularDrawing.circularRecordList.value),
   circularRecordDiscovery: { ...circularDrawing.circularRecordDiscovery },
   diagramElements: [...state.diagramElements.value],

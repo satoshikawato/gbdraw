@@ -4,21 +4,19 @@ from __future__ import annotations
 
 import json
 import hashlib
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 from collections.abc import Mapping, Sequence, Set
 from typing import Any, TypedDict, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import (
-    ResolvedRecordCollection, _source_details, alignment_record_keys, first_unit_holding,
+    ResolvedRecordCollection, _source_details, alignment_record_keys,
     project_similarity_alignment_anchor_fact, similarity_alignment_evidence_edges,
 )
 from gbdraw.api.request_render import LinearRequestPlan, plan_linear_request, resolve_request_records
 from gbdraw.api.requests import LinearDiagramRequest
-from gbdraw.io.regions import RecordWindow, region_slice, window_drawn_reverse
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.session_request_codec import StoredRecordWindow, _decode_windows, decode_canonical_request
+from gbdraw.session_request_codec import StoredRecordWindow, decode_canonical_request
 from gbdraw.layout.similarity_alignment import (
     SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
     AlignmentAnchorIdentity,
@@ -123,9 +121,11 @@ class AlignmentHelperPresentation(TypedDict):
 class AlignmentHelperRecord(TypedDict):
     """One displayed record of a helper request, as the Web's ``buildHelperRequest`` sends it.
 
-    ``windows`` are the record's windows as request schema 10 stores them
-    (``StoredRecordWindow``), empty for a whole record. The record's complete
-    source length is read here, from the committed request's records (D5).
+    ``windows`` and ``presentation`` are the record as request schema 10
+    stores them (``StoredRecordWindow``, empty for a whole record); the page
+    reads them back to check the reply's projection. Python reads only the
+    key: it places each anchor on the committed request of the projection,
+    whose records own their windows, orientation and source length (D5-13).
     """
 
     recordKey: str
@@ -133,102 +133,11 @@ class AlignmentHelperRecord(TypedDict):
     presentation: AlignmentHelperPresentation
 
 
-@dataclass(frozen=True)
-class _RecordFact:
-    """A validated helper request record: the windows it draws and its orientation."""
+def _record_key(value: object, path: str) -> str:
+    """The key of a helper request record."""
 
-    record_key: str
-    record_length: int | None
-    windows: tuple[RecordWindow, ...]
-    presentation_reverse: bool
-
-    def placed(self, source_center: float) -> tuple[float | None, bool]:
-        """Where the record draws the source boundary ``source_center``: the display offset on the drawn unit that
-        holds it, and whether that unit is drawn reverse-complemented.
-
-        A record drawn in several windows is anchored in the first window, in drawing order, that holds the position,
-        by the renderer's rule (``first_unit_holding``, D-50). The offset is ``None`` when no window holds the
-        position, or when the map needs the source length and it is unknown; the orientation is then the first
-        window's.
-        """
-
-        units: tuple[RecordWindow | None, ...] = self.windows or (None,)
-        position, offset = first_unit_holding(self._unit_offset(window, source_center) for window in units)
-        window = units[position]
-        return offset, window_drawn_reverse(window is not None and window.reverse_complement, self.presentation_reverse)
-
-    def _unit_offset(self, window: RecordWindow | None, source_center: float) -> float | None:
-        """The display offset at which the unit of ``window`` (the whole record for ``None``) draws ``source_center``.
-
-        The crop draws a window as a unit whose coordinate map starts at the
-        window's start, or at its end when the unit is reversed (by the window
-        or by the presentation, applied after the crop); the unit's
-        ``RecordDisplayTransform`` maps the source onto its axis, round the
-        origin for a window across it.
-        """
-
-        length = self.record_length
-        if window is None:
-            if not self.presentation_reverse:
-                return source_center
-            if length is None or source_center > length:
-                return None
-            transform = RecordDisplayTransform(length, length, -1, None, False)
-            return transform.source_position_to_display_offset(source_center)
-        reverse = window_drawn_reverse(window.reverse_complement, self.presentation_reverse)
-        if window.crosses_origin and length is None:
-            return None
-        bound = length if length is not None else window.end
-        if not 0.0 <= source_center <= float(bound):
-            return None
-        span = bound - window.start + 1 + window.end if window.crosses_origin else window.end - window.start + 1
-        transform = RecordDisplayTransform(
-            bound, window.end if reverse else window.start, -1 if reverse else 1, None,
-            window.crosses_origin, display_length=span, crosses_origin=window.crosses_origin,
-        )
-        offset = transform.source_position_to_display_offset(source_center)
-        return offset if 0.0 <= offset <= span else None
-
-
-def _record_fact(value: object, path: str, source_lengths: Mapping[str, int | None]) -> _RecordFact:
-    """A helper request record, with its complete source length from ``source_lengths`` (``None`` when unknown)."""
-
-    raw = cast(AlignmentHelperRecord, _object(
-        value,
-        {"recordKey", "windows", "presentation"},
-        path,
-    ))
-    record_key = _text(raw["recordKey"], f"{path}.recordKey")
-    record_length = source_lengths.get(record_key)
-    presentation = _object(
-        raw["presentation"], {"reverseComplement"}, f"{path}.presentation"
-    )
-    presentation_reverse = _boolean(
-        presentation["reverseComplement"], f"{path}.presentation.reverseComplement"
-    )
-    try:
-        stored = _decode_windows(raw["windows"], path=f"{path}.windows")
-    except ValueError as exc:
-        raise ValidationError(f"{path}.windows is invalid: {exc}") from exc
-    if any(window.reverse_complement for window in stored) and presentation_reverse:
-        raise ValidationError(f"{path} cannot reverse complement both window and presentation.")
-    windows = tuple(_drawn_window(window, record_length, record_key) for window in stored)
-    return _RecordFact(record_key, record_length, windows, presentation_reverse)
-
-
-def _drawn_window(window: RecordWindow, record_length: int | None, record_key: str) -> RecordWindow:
-    """A window as the crop draws it: its bounds read by the crop's slice rule (``region_slice``).
-
-    The crop clamps an End past the record end and refuses a window that
-    starts past it or runs across the origin outside the record, so the helper
-    places the record as the drawing places it. Without the record length the
-    window is read as stored.
-    """
-
-    if record_length is None:
-        return window
-    _start_0, end_0 = region_slice(record_length, window.start, window.end, record_key)
-    return window if window.crosses_origin or end_0 == window.end else replace(window, end=end_0)
+    raw = cast(AlignmentHelperRecord, _object(value, {"recordKey", "windows", "presentation"}, path))
+    return _text(raw["recordKey"], f"{path}.recordKey")
 
 
 def _member_candidate(
@@ -236,8 +145,11 @@ def _member_candidate(
     path: str,
     *,
     group_id: str,
-    record_facts: Mapping[str, _RecordFact],
+    collection: ResolvedRecordCollection,
+    record_keys: Set[str],
 ) -> SimilarityAlignmentCandidate:
+    """A group member, placed where the committed request draws it (``project_similarity_alignment_anchor_fact``)."""
+
     raw = _object(
         value,
         {
@@ -257,8 +169,7 @@ def _member_candidate(
     if _text(raw["groupId"], f"{path}.groupId") != group_id:
         raise ValidationError(f"{path} belongs to another Similarity Group.")
     anchor = _anchor(raw["anchor"], f"{path}.anchor")
-    record = record_facts.get(anchor.record_key)
-    if record is None:
+    if anchor.record_key not in record_keys:
         raise ValidationError(f"{path} belongs to an unknown displayed record.")
     start = _integer(raw["sourceStart"], f"{path}.sourceStart")
     end = _integer(raw["sourceEnd"], f"{path}.sourceEnd")
@@ -274,18 +185,16 @@ def _member_candidate(
     if not isinstance(role, str) or "\0" in role:
         raise ValidationError(f"{path}.role must be text without NUL.")
 
-    display_center, reverse = record.placed((start + end) / 2)
-    displayed_strand = (
-        None if source_strand is None
-        else source_strand * (-1 if reverse else 1)
-    )
+    fact = project_similarity_alignment_anchor_fact(collection, anchor)
+    if (start, end, source_strand) != (fact.source_start, fact.source_end, fact.source_strand):
+        raise ValidationError("Alignment projection source anchor facts changed.")
     display_name = raw.get("displayName", anchor.biological_feature_id)
     return SimilarityAlignmentCandidate(
         group_id=group_id,
         anchor=anchor,
-        displayed_strand=displayed_strand,
-        center_mappable=display_center is not None,
-        display_center=display_center,
+        displayed_strand=fact.displayed_strand,
+        center_mappable=fact.display_center is not None,
+        display_center=fact.display_center,
         identity_is_unique=_boolean(
             raw["identityIsUnique"], f"{path}.identityIsUnique"
         ),
@@ -546,10 +455,14 @@ def _resource_evidence_edges(context, group_id, candidates) -> list[AlignmentEvi
 
 
 def resolve_similarity_alignment_payload(
-    payload: object, *, projection: object = None,
+    payload: object, *, projection: object,
     resource_paths: Mapping[str, str] | None = None, output_directory: str = "/tmp",
 ) -> dict[str, object]:
-    """Validate Web facts, call the shared resolver, and serialize its result."""
+    """Validate Web facts, call the shared resolver, and serialize its result.
+
+    ``projection`` names the committed request (``canonicalRequest``) on which every candidate is placed; a payload
+    without one is malformed (D5-13).
+    """
 
     raw = _object(
         payload,
@@ -567,75 +480,36 @@ def resolve_similarity_alignment_payload(
     if type(raw["schema"]) is not int or raw["schema"] != SIMILARITY_ALIGNMENT_PLAN_SCHEMA:
         raise ValidationError(f"request.schema must be {SIMILARITY_ALIGNMENT_PLAN_SCHEMA}.")
     group_id = _text(raw["groupId"], "request.groupId")
-    context = None
-    source_lengths: dict[str, int | None] = {}
-    if projection is not None:
-        context = _projection_context(projection, resource_paths or {}, output_directory)
-        # Each record's complete source length, as the committed request resolves it (D5: Python owns it).
-        for provenance in context[2].provenance:
-            source_lengths.setdefault(provenance.record_identity_key, provenance.source_length)
-    records = [
-        _record_fact(value, f"request.records[{index}]", source_lengths)
+    context = _projection_context(projection, resource_paths or {}, output_directory)
+    collection = context[2]
+    record_keys = [
+        _record_key(value, f"request.records[{index}]")
         for index, value in enumerate(_list(raw["records"], "request.records"))
     ]
-    record_keys = [record.record_key for record in records]
     if not record_keys or len(record_keys) != len(set(record_keys)):
         raise ValidationError("request.records must have unique record keys.")
-    record_facts = {record.record_key: record for record in records}
+    if alignment_record_keys(collection) != tuple(record_keys):
+        raise ValidationError("Alignment projection record binding changed.", diagnostic={"code": "INPUT_INVALID"})
     reference = _anchor(raw["reference"], "request.reference")
+    displayed = set(record_keys)
     candidates = [
         _member_candidate(
             value,
             f"request.members[{index}]",
             group_id=group_id,
-            record_facts=record_facts,
+            collection=collection,
+            record_keys=displayed,
         )
         for index, value in enumerate(_list(raw["members"], "request.members"))
     ]
-    if context is not None:
-        collection = context[2]
-        if alignment_record_keys(collection) != tuple(record_keys):
-            raise ValidationError("Alignment projection record binding changed.", diagnostic={"code": "INPUT_INVALID"})
-        verified = []
-        for candidate, member in zip(candidates, raw["members"], strict=True):
-            fact = project_similarity_alignment_anchor_fact(collection, candidate.anchor)
-            if (member["sourceStart"], member["sourceEnd"], member["sourceStrand"]) != (
-                fact.source_start, fact.source_end, fact.source_strand,
-            ):
-                raise ValidationError("Alignment projection source anchor facts changed.")
-            verified.append(replace(candidate, displayed_strand=fact.displayed_strand,
-                                    display_center=fact.display_center, center_mappable=fact.display_center is not None))
-        candidates = verified
-    candidate_keys = {candidate.anchor.canonical_key for candidate in candidates}
-    edges = []
-    direct_edges = _list(raw["directEdges"], "request.directEdges")
-    if context is not None:
-        # The committed request's orthogroup resource is the only evidence
-        # authority; the UI catalog carries no graph.
-        if direct_edges:
-            raise ValidationError(
-                "request.directEdges must be empty; direct evidence comes from "
-                "the committed orthogroup resource."
-            )
-        edges = _resource_evidence_edges(context, group_id, candidates)
-    for index, value in enumerate(direct_edges):
-        path = f"request.directEdges[{index}]"
-        edge = _object(value, {"groupId", "query", "subject", "edgeKind"}, path)
-        edge_group_id = _text(edge["groupId"], f"{path}.groupId")
-        query = _anchor(edge["query"], f"{path}.query")
-        subject = _anchor(edge["subject"], f"{path}.subject")
-        if edge_group_id != group_id or any(
-            anchor.canonical_key not in candidate_keys for anchor in (query, subject)
-        ):
-            raise ValidationError(f"{path} is not direct evidence for current members.")
-        edges.append(
-            AlignmentEvidenceEdge(
-                group_id=edge_group_id,
-                query=query,
-                subject=subject,
-                edge_kind=_text(edge["edgeKind"], f"{path}.edgeKind"),
-            )
+    # The committed request's orthogroup resource is the only evidence
+    # authority; the UI catalog carries no graph.
+    if _list(raw["directEdges"], "request.directEdges"):
+        raise ValidationError(
+            "request.directEdges must be empty; direct evidence comes from "
+            "the committed orthogroup resource."
         )
+    edges = _resource_evidence_edges(context, group_id, candidates)
     choices = []
     for index, value in enumerate(_list(raw["choices"], "request.choices")):
         path = f"request.choices[{index}]"
@@ -676,12 +550,12 @@ def resolve_similarity_alignment_payload(
             )
         ],
         "plan": _serialize_plan(plan) if plan is not None else None,
-        "projection": _serialize_projection(context, candidates, raw) if context is not None else None,
+        "projection": _serialize_projection(context, candidates, raw),
     }
 
 
 def resolve_similarity_alignment_json(
-    payload_json: object, projection_json: object = "null", resource_paths_json: object = "{}",
+    payload_json: object, projection_json: object, resource_paths_json: object = "{}",
     output_directory: str = "/tmp",
 ) -> str:
     """JSON boundary used by the existing lazy diagram Worker."""

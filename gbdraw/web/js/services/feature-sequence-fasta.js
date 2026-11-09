@@ -15,12 +15,11 @@ const FASTA_LINE_WIDTH = 60;
  */
 
 /**
- * The sequences a caller already holds for a feature; they win over the feature's own fields.
+ * A feature's sequences as Python read them (`FeatureSequencesOf` of `diagram-worker-protocol.js`); the catalog
+ * stores none (D5).
  * @typedef {object} FastaSequences
- * @property {unknown} [nucleotideSequence]
- * @property {unknown} [nucleotide_sequence]
- * @property {unknown} [aminoAcidSequence]
- * @property {unknown} [amino_acid_sequence]
+ * @property {string} nucleotideSequence
+ * @property {string} aminoAcidSequence
  */
 
 /** @param {unknown} value */
@@ -210,16 +209,13 @@ const getProteinFastaId = (feature) =>
   ]) || getNucleotideFastaId(feature);
 
 /**
+ * The FASTA texts of a feature: the header from the feature's fields, the entries from its read sequences.
  * @param {FastaFeature | null | undefined} feature
- * @param {FastaSequences} [sequences]
+ * @param {FastaSequences} sequences
  */
-export const buildFeatureSequenceFastas = (feature, sequences = {}) => {
-  const nucleotideSequence = sequenceText(
-    sequences.nucleotideSequence ?? sequences.nucleotide_sequence ?? feature?.nucleotide_sequence ?? feature?.nucleotideSequence
-  );
-  const aminoAcidSequence = sequenceText(
-    sequences.aminoAcidSequence ?? sequences.amino_acid_sequence ?? feature?.amino_acid_sequence ?? feature?.aminoAcidSequence
-  );
+export const buildFeatureSequenceFastas = (feature, sequences) => {
+  const nucleotideSequence = sequenceText(sequences.nucleotideSequence);
+  const aminoAcidSequence = sequenceText(sequences.aminoAcidSequence);
   const description = getFeatureDescription(feature);
   return {
     nucleotideFasta: formatFastaEntry({

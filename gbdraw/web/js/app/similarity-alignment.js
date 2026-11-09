@@ -12,7 +12,6 @@ import { linearRecordNames } from '../services/linear-sources.js';
 import { recordTranslationsFor } from '../services/linear-record-layout.js';
 import { canonicalRecordReverseComplement, cropFormReverseComplement, linearCardCropForm } from '../services/record-display-model.js';
 /** @import { LinearSeq, WebState } from '../state.js' */
-import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import {
   featureIdentity,
@@ -30,8 +29,6 @@ import { ownEntry } from '../utils/own-entry.js';
 import { catalogNameIndex } from '../services/feature-catalog.js';
 
 /**
- * @import { FeatureCatalog } from '../services/feature-catalog.js'
- * @import { AnnotationCatalogRecord, AnnotationRecordCatalog } from './annotations/record-catalog.js'
  * @import { AliasSource, CommittedRecord } from '../services/feature-identity.js'
  * @import { OrthogroupGroup, OrthogroupMember } from '../services/orthogroup-feature-metadata.js'
  * @import { CommittedCanonicalSession } from '../services/session-request.js'
@@ -109,18 +106,19 @@ const { computed, ref, watch } = window.Vue;
  *   schema: 2, status: 'resolved' | 'ambiguous', groupId: string, reference: AnchorIdentity,
  *   referenceDisplayedStrand: DisplayedStrand, referenceDisplayCenter: number,
  *   records: (AlignmentDecision | AlignmentAmbiguity)[], plan: AlignmentPlan | null,
- *   projection: AlignmentProjection | null
- * }} AlignmentResolution The validated helper response.
+ *   projection: AlignmentProjection
+ * }} AlignmentResolution The validated helper response: Python places every candidate on the committed request
+ *   that the call names, and returns its projection (D5-13).
  * @typedef {{ recordKey: string, kind: 'select' | 'skip', anchor: AnchorIdentity | null }} AlignmentChoice
  * @typedef {{
  *   groupId: string, anchor: AnchorIdentity, sourceStart: number, sourceEnd: number, sourceStrand: DisplayedStrand,
  *   identityIsUnique: boolean, hidden: boolean, representative: boolean, role: string
  * }} AlignmentMemberFacts
  * @typedef {{
- *   recordKey: string, recordLength: number | null, windows: CanonicalRecordWindow[],
- *   presentation: { reverseComplement: boolean }
- * }} AlignmentRequestRecord A displayed record of a helper request: its windows as the request stores them (Python's
- *   `AlignmentHelperRecord`, which maps an anchor through the window that holds it).
+ *   recordKey: string, windows: CanonicalRecordWindow[], presentation: { reverseComplement: boolean }
+ * }} AlignmentRequestRecord A displayed record of a helper request: its windows and orientation as the committed
+ *   request stores them, which the page reads to check the projection. Python's `AlignmentHelperRecord` reads only
+ *   the key: the committed request owns each record's windows and source length (D5).
  * @typedef {{
  *   schema: 2, groupId: string, records: AlignmentRequestRecord[], reference: AnchorIdentity,
  *   members: AlignmentMemberFacts[], directEdges: never[], choices: AlignmentChoice[]
@@ -734,10 +732,9 @@ const validatePlan = (value, response, path) => {
 /**
  * @param {unknown} value
  * @param {AlignmentHelperRequest} request
- * @returns {AlignmentProjection | null}
+ * @returns {AlignmentProjection}
  */
 const validateProjection = (value, request) => {
-  if (value === null) return null;
   const raw = exactObject(value, ['binding', 'geometryOrientations', 'records'], 'alignment projection');
   const keys = request.records.map(({ recordKey }) => recordKey);
   if (typeof raw.binding !== 'string' || !/^[a-f0-9]{64}$/.test(raw.binding) || !Array.isArray(raw.records)
@@ -951,7 +948,7 @@ export const validateSimilarityAlignmentResolution = (value, request) => {
     records, plan: /** @type {AlignmentPlan | null} */ (null),
     projection: validateProjection(raw.projection, request)
   };
-  response.projection?.records.forEach((fact, index) => {
+  response.projection.records.forEach((fact, index) => {
     const current = fact.variants[Number(fact.beforeReverseComplement)];
     const candidates = records[index].candidates;
     candidates.forEach((candidate) => {
@@ -991,57 +988,14 @@ const strandValue = (value, path) => {
   throw new Error(`${path} has an invalid source strand.`);
 };
 
-// `drawnSeqs`: the drawn Linear cards, which the record catalog's `sourceIndex` counts.
-/**
- * @param {Partial<FeatureCatalog> | null | undefined} catalog
- * @param {AnnotationRecordCatalog | null | undefined} recordCatalog
- * @param {readonly { uid?: unknown }[] | null | undefined} drawnSeqs
- */
-const recordLengths = (catalog, recordCatalog, drawnSeqs) => {
-  /** @type {Map<string, number>} */
-  const lengths = new Map();
-  (Array.isArray(catalog?.items) ? catalog.items : []).forEach((item) => {
-    const keys = Array.isArray(item?.recordKeys) ? item.recordKeys : [];
-    const sources = Array.isArray(item?.sequenceSources) ? item.sequenceSources : [];
-    if (keys.length !== sources.length) return;
-    keys.forEach((recordKey, index) => {
-      const sequence = sources[index]?.sequence;
-      if (typeof sequence === 'string' && sequence.length > 0) {
-        lengths.set(String(recordKey), sequence.length);
-      }
-    });
-  });
-  if (recordCatalog?.status === 'ready') {
-    /** @type {Map<number, AnnotationCatalogRecord | null>} */
-    const discovered = new Map();
-    // Number.isSafeInteger holds only for a number: each cast below follows that check.
-    (recordCatalog.records || []).forEach((record) => {
-      const index = record?.sourceIndex;
-      if (!Number.isSafeInteger(index) || /** @type {number} */ (index) < 0) return;
-      discovered.set(/** @type {number} */ (index), discovered.has(/** @type {number} */ (index)) ? null : record);
-    });
-    discovered.forEach((record, index) => {
-      const key = String(drawnSeqs?.[index]?.uid || '');
-      if (key && record && Number.isSafeInteger(record.recordLength)
-          && /** @type {number} */ (record.recordLength) > 0 && !lengths.has(key)) {
-        lengths.set(key, /** @type {number} */ (record.recordLength));
-      }
-    });
-  }
-  return lengths;
-};
-
 /**
  * @param {{
  *   group: AliasSource | null | undefined, members: OrthogroupMemberFacts[],
- *   reference: AliasSource | null | undefined, request: CommittedAlignmentRequest,
- *   catalog: Partial<FeatureCatalog> | null | undefined, recordCatalog: AnnotationRecordCatalog | null | undefined,
- *   drawnSeqs: readonly { uid?: unknown }[] | null | undefined, choices: AlignmentChoice[]
+ *   reference: AliasSource | null | undefined, request: CommittedAlignmentRequest, choices: AlignmentChoice[]
  * }} options
  * @returns {AlignmentHelperRequest}
  */
-const buildHelperRequest = ({ group, members, reference, request, catalog,
-  recordCatalog, drawnSeqs, choices }) => {
+const buildHelperRequest = ({ group, members, reference, request, choices }) => {
   const groupStatus = orthogroupIdStatus(group);
   if (!groupStatus.valid || !groupStatus.supplied) {
     throw new Error('The selected Similarity Group identity is invalid.');
@@ -1050,13 +1004,11 @@ const buildHelperRequest = ({ group, members, reference, request, catalog,
   if (!request || request.mode !== 'linear' || !Array.isArray(request.records)) {
     throw new Error('Generate a Linear diagram before aligning a Similarity Group.');
   }
-  const lengths = recordLengths(catalog, recordCatalog, drawnSeqs);
   const records = request.records.map((record, index) => {
     const recordKey = text(record?.recordKey, `renderRequest.records[${index}].recordKey`);
-    // The windows go as the request stores them; Python validates them and places each anchor by its window.
+    // The windows go as the request stores them; the page checks the projection against them.
     return {
       recordKey,
-      recordLength: lengths.get(recordKey) || null,
       windows: record.windows.map(({ start, end, reverseComplement, column }) => ({ start, end, reverseComplement, column })),
       presentation: { reverseComplement: record.presentation.reverseComplement }
     };
@@ -1156,7 +1108,6 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
  * @property {{ readonly value: SelectedGroupDetail | null }} selectedOrthogroupDetail
  *   the orthogroup owner's detail of the drawer's selected group (OV-920)
  * @property {() => Record<string, any> | null} getCommittedRequest
- * @property {(() => AnnotationRecordCatalog) | null} [getRecordCatalog]
  * @property {() => Record<string, any> | null} getCommittedSession
  * @property {(args: Record<string, any>) => Record<string, any>} projectCommittedAlignment
  * @property {(run: AlignmentCandidateRun) => Promise<Record<string, any>>} runRecordAlignment
@@ -1212,7 +1163,6 @@ export const createSimilarityAlignmentActions = ({
   getEnrichedOrthogroupMembers,
   selectedOrthogroupDetail,
   getCommittedRequest,
-  getRecordCatalog = null,
   getCommittedSession,
   projectCommittedAlignment,
   runRecordAlignment,
@@ -1229,10 +1179,6 @@ export const createSimilarityAlignmentActions = ({
   const shownLinearCards = () => {
     const drawing = state.activeDrawing();
     return drawing.mode === 'linear' ? drawing.linearSeqs : [];
-  };
-  const drawnLinearCards = () => {
-    const drawing = state.activeDrawing();
-    return drawing.mode === 'linear' ? drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff) : [];
   };
   if (
     !state
@@ -1442,7 +1388,7 @@ export const createSimilarityAlignmentActions = ({
   const projectDraft = (response = draft.value?.response, choices = rowChoices()) => (
     projectSimilarityAlignmentDirections({ resolution: response,
       // The fallback is read only without a draft, where the response has its projection (`installReviewDraft`).
-      expectedBinding: draft.value?.binding || /** @type {AlignmentProjection} */ (response.projection).binding,
+      expectedBinding: draft.value?.binding || response.projection.binding,
       intent: draft.value?.intent || { mode: 'keep' }, choices })
   );
   // The draft as the review opens with it. The records without a choice then are a fact of
@@ -1455,7 +1401,6 @@ export const createSimilarityAlignmentActions = ({
    */
   const installReviewDraft = (response, request,
     rows = reviewRows(response, request, displayFacts, recordLabels), extra = {}) => {
-    if (!response.projection) throw new Error('Source-bound alignment facts are required.');
     draft.value = deepFreeze({ response, binding: response.projection.binding,
       intent: { mode: 'keep' },
       reference: referenceView(response, request, displayFacts, recordLabels),
@@ -1589,9 +1534,6 @@ export const createSimilarityAlignmentActions = ({
       const request = buildHelperRequest({
         group, members, reference,
         request: activeBaseline.request,
-        catalog: state.featureCatalog.value,
-        recordCatalog: getRecordCatalog?.(),
-        drawnSeqs: drawnLinearCards(),
         choices: []
       });
       setReviewNames(request, members, activeBaseline.request);
@@ -1847,8 +1789,7 @@ export const createSimilarityAlignmentActions = ({
         const plan = current.request.layout.similarityAlignment;
         const members = resetSourceMembers(plan, catalogNameIndex(state.featureCatalog.value).rows);
         const request = buildHelperRequest({group:{id:plan.groupId}, members,
-          reference:plan.reference, request:current.request, catalog:state.featureCatalog.value,
-          recordCatalog:getRecordCatalog?.(), drawnSeqs:drawnLinearCards(), choices:planChoices(plan)});
+          reference:plan.reference, request:current.request, choices:planChoices(plan)});
         const vector = Object.fromEntries(orientations.map(direction => [direction.recordKey,direction.reverseComplement]));
         const helper = await runHelperOperation(resolveOperation, {request,
           projection:{canonicalRequest:current.request,orientations:vector},resources:current.canonical.resources});
@@ -1991,9 +1932,6 @@ export const createSimilarityAlignmentActions = ({
         members,
         reference: plan.reference,
         request: currentRequest(),
-        catalog: state.featureCatalog.value,
-        recordCatalog: getRecordCatalog?.(),
-        drawnSeqs: drawnLinearCards(),
         choices: planChoices(plan)
       });
     } catch (cause) {
@@ -2004,7 +1942,11 @@ export const createSimilarityAlignmentActions = ({
       return prepareStaleTargetRepair(plan, request, goneRecordKeys, expectedActionId);
     }
     try {
-      const helper = await runHelperOperation(resolveOperation, { request });
+      // Python places the plan's anchors on the committed request, as every helper call does (D5-13).
+      const committed = baseline({ materializePlan: true });
+      const helper = await runHelperOperation(resolveOperation, { request,
+        projection: { canonicalRequest: committed.request, orientations: null },
+        resources: committed.canonical.resources });
       if (expectedActionId !== actionId) return { status: 'stale' };
       validateSimilarityAlignmentResolution(helper?.result, request);
     } catch (_cause) {

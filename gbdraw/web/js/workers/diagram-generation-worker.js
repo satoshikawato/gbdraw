@@ -868,22 +868,15 @@ const HELPER_OPERATION_SPECS = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: {
     keys: ['request', 'projection'],
     fileRoles: [],
-    run: async (pyodide, payload, _paths, _operation, workspace) => {
-      let resourcePaths = {};
-      let identities = {};
-      if (payload.projection !== undefined) {
-        resourcePaths = await prepareCanonicalResources(
-          pyodide, `${workspace}/projection`, payload
-        );
-        identities = buildPreparedResourceIdentityMap(payload.resourceManifest);
-      } else if (payload.resourceManifest !== undefined || payload.stagedResources !== undefined) {
-        throw new TypeError('Alignment resources require a projection context.');
-      }
-      return callJsonHelper(pyodide, 'resolve_similarity_alignment_json', [
+    // The projection (the committed request and its orientations) is required: Python places each candidate as
+    // the renderer does (D5-13).
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'resolve_similarity_alignment_json', [
         jsonArgument(payload.request, null), jsonArgument(payload.projection, null),
-        jsonArgument(resourcePaths, {}), workspace, jsonArgument(identities, {})
-      ]);
-    }
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/projection`, payload), {}), workspace,
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
   },
   // Align at feature: Python resolves the anchor on the committed request,
   // staged as Generate stages it, and returns the record translations.
@@ -1357,17 +1350,17 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
-  // The sequence fields an exported Interactive SVG embeds, in the export encoding, for records of the shown
-  // Result's request (D5).
+  // The stored catalog item of the shown Result with every sequence an exported Interactive SVG embeds, in the export
+  // encoding, read from the shown Result's request (D5).
   [DIAGRAM_HELPER_OPERATIONS.READ_EMBED_SEQUENCES]: {
-    keys: ['canonicalRequest', 'recordKeys'],
+    keys: ['canonicalRequest', 'item'],
     fileRoles: [],
     run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
       pyodide, 'read_embed_sequences_json', [
         jsonArgument(payload.canonicalRequest, null),
         jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
         `${workspace}/output`,
-        jsonArgument(payload.recordKeys, []),
+        jsonArgument(payload.item, {}),
         jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]
     )

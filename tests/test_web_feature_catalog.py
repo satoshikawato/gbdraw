@@ -99,6 +99,21 @@ def test_schema_three_promotion_source_index_alias_vectors(case: dict) -> None:
     assert promoted.get("sourceFeatureIndex") == case["promotedSourceFeatureIndex"]
 
 
+SCHEMA_FIVE_PROMOTION_VECTORS = json.loads(
+    (Path(__file__).resolve().parent / "fixtures" / "source-feature-index-alias-vectors.json")
+    .read_text(encoding="utf-8")
+)["schemaFiveCases"]
+
+
+@pytest.mark.parametrize(
+    "case", SCHEMA_FIVE_PROMOTION_VECTORS, ids=[case["name"] for case in SCHEMA_FIVE_PROMOTION_VECTORS]
+)
+def test_schema_five_promotion_vectors(case: dict) -> None:
+    """D5: shared with tests/web/feature-catalog.test.mjs, so both promotions give the same schema 6 catalog."""
+
+    assert promote_legacy_feature_catalog(case["catalog"]) == case["promoted"]
+
+
 def _combined_catalog_fixture() -> tuple[str, InteractiveSvgContext]:
     context = InteractiveSvgContext(
         record_keys=("record-a", "record-b"),

@@ -533,7 +533,6 @@ export default Object.freeze({
   "Comparison {n}": "비교 {n}",
   "Comparisons must connect adjacent rows.": "비교는 인접한 행을 연결해야 합니다.",
   "Comparisons must connect records in different rows.": "비교는 서로 다른 행의 레코드를 연결해야 합니다.",
-  "Comparisons: the sequences of the saved comparison matches could not be read again from the input files; the SVG preview stays, and the next Generate reads them.": "비교: 저장된 비교 매치의 서열을 입력 파일에서 다시 읽을 수 없었습니다. SVG 미리 보기는 유지되며, 다음 생성 시 서열을 읽습니다.",
   "Composition metadata is invalid or unavailable.": "다이어그램 배치 메타데이터가 유효하지 않거나 사용할 수 없습니다.",
   "Compress": "압축",
   "Computing…": "계산 중…",

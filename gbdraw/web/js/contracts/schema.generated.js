@@ -71,6 +71,12 @@ export const ANCHOR_FEATURE_CATALOG_SCHEMA = 4;
 // gbdraw/web_support/feature_catalog.py: LEGACY_FEATURE_CATALOG_SCHEMA
 export const LEGACY_FEATURE_CATALOG_SCHEMA = 3;
 
+// gbdraw/session_io.py: SEQUENCE_FEATURE_CATALOG_SCHEMA
+export const SEQUENCE_FEATURE_CATALOG_SCHEMA = 5;
+
+// gbdraw/web_support/feature_catalog.py: INTERACTIVE_EMBED_SCHEMA
+export const INTERACTIVE_EMBED_SCHEMA = 5;
+
 // gbdraw/session_io.py: FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION
 /** @type {Readonly<Record<number, number>>} */
 export const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({

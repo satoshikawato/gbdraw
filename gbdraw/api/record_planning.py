@@ -921,8 +921,8 @@ def first_unit_holding(offsets: Iterable[float | None]) -> tuple[int, float | No
 
     ``offsets`` are the position's display offsets on the record's units in drawing order, ``None`` on a unit that
     does not hold it. When no unit holds it the result is the first unit and ``None``. The renderer
-    (``alignment_anchor_unit``) and the Web helper (``similarity_alignment._RecordFact.placed``) anchor a record
-    drawn in several windows by this one rule.
+    (``alignment_anchor_unit``) anchors a record drawn in several windows by this rule, and the Web helper reads its
+    placements from the renderer (``project_similarity_alignment_anchor_fact``).
     """
 
     for position, offset in enumerate(offsets):

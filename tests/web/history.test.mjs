@@ -1977,19 +1977,840 @@ const createLayoutPreferences = () => ({
     losatCache: ref(new Map([['raw-a', rawCacheValueA]])),
     losatDerivedCache: ref(new Map([['derived-a', derivedCacheValueA]])),
     losatCacheInfo: ref(losatCacheInfoA),
-    matchSequenceRegistry: (() => {
-      let owner = Object.freeze({
-        sources: new Map([['record-a', {
-          key: 'record-a', recordId: 'record-a', aliases: [], sequence: 'ACGT'
-        }]]),
-        ambiguousKeys: new Set()
-      });
-      return {
-        captureTrustedOwner: () => owner,
-        replaceTrustedOwner: (nextOwner) => { owner = nextOwner; },
-        values: () => Array.from(owner.sources.values())
-      };
-    })(),
+    skipCaptureBaseConfig: ref(false),
+    skipExtractOnSvgChange: ref(false)
+  };
+  const snapshots = createHistorySnapshotService({
+    state: withTwoDrawings(state),
+    fileStore,
+    currentResults: () => state.results.value,
+    nextTick: async () => {},
+    buildConfigData: () => ({
+      form: state.form,
+      adv: state.adv,
+      modeProfiles,
+      linearComparisonPlan: {
+        mode: state.linearComparisonPlan.mode,
+        defaultSource: state.linearComparisonPlan.defaultSource,
+        edges: state.linearComparisonPlan.edges.map(({ file: _file, ...edge }) => edge)
+      }
+    }),
+    applyConfigData: (_drawing, config) => {
+      state.form = { ...config.form };
+      state.adv = { ...config.adv };
+      modeProfiles = structuredClone(config.modeProfiles);
+      state.linearComparisonPlan.mode = config.linearComparisonPlan.mode;
+      state.linearComparisonPlan.defaultSource = config.linearComparisonPlan.defaultSource;
+      state.linearComparisonPlan.edges.splice(
+        0,
+        state.linearComparisonPlan.edges.length,
+        ...structuredClone(config.linearComparisonPlan.edges).map((edge) => ({
+          ...edge,
+          file: null
+        }))
+      );
+    }
+  });
+
+  // Each drawing's checkpoint holds its own inputs slice capture (S-1) and its
+  // comparison plan's files; a Linear drawing's also holds its generated
+  // comparisons.
+  const snapshot = await snapshots.drawingHistory('circular').buildCheckpoint();
+  state.mode.value = 'linear';
+  const linearSnapshot = await snapshots.drawingHistory('linear').buildCheckpoint();
+  state.mode.value = 'circular';
+  assert.equal(Object.hasOwn(snapshot.files, 'linearCanonicalComparisons'), false);
+  assert.equal(Object.hasOwn(linearSnapshot.files, 'linearCanonicalComparisons'), true);
+  state.form.prefix = 'after';
+  state.form.show_scale = false;
+  state.adv.arrow_head_length_ratio = null;
+  state.adv.arrow_shaft_width_ratio = 1.0;
+  state.circularSources[0].gb = null;
+  state.files.c_conservation_blasts_source = null;
+  state.files.linearCanonicalComparisons = [];
+  state.linearComparisonPlan.mode = 'none';
+  state.linearComparisonPlan.defaultSource = 'upload';
+  state.linearComparisonPlan.edges.splice(0);
+  state.results.value = [{ name: 'r2', content: '<svg id="b"></svg>' }];
+  state.featureColorOverrides.f1.color = '#222222';
+  modeProfiles.profiles.circular.values.identity = 70;
+
+  assert.equal(snapshot.config.form.prefix, 'before');
+  assert.equal(snapshot.files.circularSources[0].gb.name, 'restore.gb');
+  await snapshots.drawingHistory('circular').applyCheckpoint(snapshot);
+  state.mode.value = 'linear';
+  await snapshots.drawingHistory('linear').applyCheckpoint(linearSnapshot);
+  state.mode.value = 'circular';
+  assert.equal(state.form.prefix, 'before');
+  assert.equal(state.form.show_scale, true);
+  assert.equal(state.adv.feature_shapes.CDS, 'arrow');
+  assert.equal(state.adv.arrow_head_length_ratio, 1.5);
+  assert.equal(state.adv.arrow_shaft_width_ratio, 0.25);
+  assert.equal(state.circularSources[0].gb.name, 'restore.gb');
+  assert.equal(state.files.c_conservation_blasts_source, 'losat-cache');
+  assert.equal(state.files.c_conservation_fastas.length, 2);
+  assert.equal(state.files.c_conservation_fastas[0], null);
+  assert.equal(state.files.c_conservation_fastas[1].name, 'comparison-2.fa');
+  assert.equal(state.linearComparisonPlan.mode, 'selected');
+  assert.equal(state.linearComparisonPlan.defaultSource, 'losat');
+  assert.equal(state.linearComparisonPlan.edges[0].id, 'edge-a-b');
+  assert.equal(state.linearComparisonPlan.edges[0].source, 'upload');
+  assert.equal(state.linearComparisonPlan.edges[0].included, true);
+  assert.equal(state.linearComparisonPlan.edges[0].fileActive, true);
+  assert.equal(state.linearComparisonPlan.edges[0].losatFilenameActive, true);
+  assert.equal(state.linearComparisonPlan.edges[0].losatFilename, 'custom-query.fna');
+  assert.equal(state.linearComparisonPlan.edges[0].file.name, 'selected-comparison.tsv');
+  assert.equal(
+    state.files.linearCanonicalComparisons[0].file.name,
+    'resolved-protein.tsv'
+  );
+  assert.equal(
+    state.files.linearCanonicalComparisons[1].file.name,
+    'orthogroups.json'
+  );
+  assert.equal(
+    state.files.linearCanonicalComparisons[2].valueKind,
+    'blocks'
+  );
+  assert.equal(
+    state.files.linearCanonicalComparisons[2].file.name,
+    'collinearity.json'
+  );
+  assert.equal(
+    state.files.linearCanonicalComparisons[3].settings.alignOrthogroupFeature,
+    'feature-anchor'
+  );
+  assert.equal(state.results.value[0].name, 'r1');
+  assert.equal(state.featureColorOverrides.f1.color, '#111111');
+  assert.equal(modeProfiles.profiles.circular.values.identity, 88);
+  assert.equal(modeProfiles.profiles.circular.managed.identity, false);
+  assert.equal(modeProfiles.profiles.linear.values.identity, 77);
+  assert.deepEqual(state.featureVisibilityManualRules, []);
+  assert.equal(state.canvasPadding.top, 1);
+
+  // The comparison files are the Linear drawing's: its History records them.
+  state.mode.value = 'linear';
+  const history = createHistoryManager({
+    fileStore,
+    ...snapshots.drawingHistory('linear')
+  });
+  await history.captureBaseline('P3 baseline');
+  const stableResults = state.results.value;
+  const stableExtractedFeatures = state.extractedFeatures.value;
+  await history.runUndoable('Hide coordinate scale', () => {
+    state.form.show_scale = false;
+  });
+  assert.equal(state.form.show_scale, false);
+  await history.undo();
+  assert.equal(state.form.show_scale, true);
+  assert.equal(state.results.value, stableResults);
+  assert.equal(state.extractedFeatures.value, stableExtractedFeatures);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
+  const serializedAfterConfigUndo = await snapshots.drawingHistory('linear').buildCheckpoint();
+  assert.equal(
+    fileStore.fileOf(serializedAfterConfigUndo.files.linearComparisons[0].file),
+    comparisonUpload
+  );
+  await history.redo();
+  assert.equal(state.form.show_scale, false);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
+  await history.undo();
+  assert.equal(state.form.show_scale, true);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
+
+  const replacementComparisonUpload = makeFile('replacement-comparison.tsv', 39);
+  await history.runUndoable('Replace comparison upload', () => {
+    state.linearComparisonPlan.edges[0].file = fileStore.registerFile(replacementComparisonUpload);
+  });
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), replacementComparisonUpload);
+  await history.undo();
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
+  await history.redo();
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), replacementComparisonUpload);
+  await history.undo();
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
+
+  await history.runUndoable('Edit arrow geometry', () => {
+    state.adv.arrow_head_length_ratio = 2;
+    state.adv.arrow_shaft_width_ratio = 0.75;
+  });
+  assert.equal(state.adv.arrow_head_length_ratio, 2);
+  assert.equal(state.adv.arrow_shaft_width_ratio, 0.75);
+  await history.undo();
+  assert.equal(state.adv.arrow_head_length_ratio, 1.5);
+  assert.equal(state.adv.arrow_shaft_width_ratio, 0.25);
+  await history.redo();
+  assert.equal(state.adv.arrow_head_length_ratio, 2);
+  assert.equal(state.adv.arrow_shaft_width_ratio, 0.75);
+  await history.undo();
+
+  await history.runUndoable('Edit Annotation lane gap', () => {
+    state.adv.circular_track_slots[0].params.lane_gap_px = 9;
+  });
+  assert.deepEqual(
+    state.adv.circular_track_slots[0].params.style_override,
+    nestedStyleOverride
+  );
+  await history.undo();
+  assert.equal(state.adv.circular_track_slots[0].params.lane_gap_px, 5);
+  assert.deepEqual(
+    state.adv.circular_track_slots[0].params.style_override,
+    nestedStyleOverride
+  );
+  await history.redo();
+  assert.equal(state.adv.circular_track_slots[0].params.lane_gap_px, 9);
+  assert.deepEqual(
+    state.adv.circular_track_slots[0].params.style_override,
+    nestedStyleOverride
+  );
+
+  const beforeCustomReset = structuredClone({
+    slots: state.adv.circular_track_slots,
+    axisIndex: state.adv.circular_track_slots_axis_index,
+    linearSlots: state.adv.linear_track_slots,
+    linearEnabled: state.adv.linear_track_slots_enabled
+  });
+  await history.runUndoable('Reset Circular Custom Tracks', () => {
+    state.adv.circular_track_slots.splice(
+      0,
+      state.adv.circular_track_slots.length,
+      {
+        id: 'features',
+        renderer: 'features',
+        enabled: true,
+        side: 'inside',
+        params: { lane_direction: 'inside' }
+      }
+    );
+    state.adv.circular_track_slots_axis_index = 0;
+  });
+  await history.undo();
+  assert.deepEqual(state.adv.circular_track_slots, beforeCustomReset.slots);
+  assert.equal(
+    state.adv.circular_track_slots_axis_index,
+    beforeCustomReset.axisIndex
+  );
+  assert.deepEqual(state.adv.linear_track_slots, beforeCustomReset.linearSlots);
+  assert.equal(
+    state.adv.linear_track_slots_enabled,
+    beforeCustomReset.linearEnabled
+  );
+  assert.deepEqual(
+    state.adv.circular_track_slots[0].params.style_override,
+    nestedStyleOverride
+  );
+  await history.redo();
+  assert.deepEqual(
+    state.adv.circular_track_slots.map((slot) => slot.id),
+    ['features']
+  );
+}
+
+{
+  const fileStore = createInputFileStore();
+  let pendingModeReset = false;
+  const mode = {
+    _value: 'circular',
+    get value() {
+      return this._value;
+    },
+    set value(next) {
+      if (next !== this._value) pendingModeReset = true;
+      this._value = next;
+    }
+  };
+  const state = {
+    form: { prefix: '', legend: 'bottom' },
+    adv: { features: ['CDS'], plot_title_position: 'bottom' },
+    files: {
+      c_depth: null,
+      c_conservation_blasts: [],
+      c_conservation_fastas: []
+    },
+    circularSources: [],
+    linearSeqs: [],
+    results: ref([]),
+    selectedResultIndex: ref(0),
+    mode,
+    cInputType: ref('gb'),
+    lInputType: ref('gb'),
+    downloadDpi: ref(300),
+    canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 },
+    layoutPreferences: createLayoutPreferences(),
+    extractedFeatures: ref([]),
+    featureRecordIds: ref([]),
+    selectedFeatureRecordIdx: ref(0),
+    featureColorOverrides: {},
+    featureVisibilityManualRules: [],
+    featureOverrides: {},
+    featureStrokeOverrides: {},
+    labelTextBulkOverrides: {},
+    orthogroups: ref([]),
+    selectedOrthogroupId: ref(''),
+    selectedOrthogroupAlignmentFeature: ref(''),
+    orthogroupNameOverrides: {},
+    orthogroupDescriptionOverrides: {},
+    lastRunInfo: ref(null),
+    pairwiseMatchFactors: ref({}),
+    skipCaptureBaseConfig: ref(false),
+    skipExtractOnSvgChange: ref(false)
+  };
+  const snapshots = createHistorySnapshotService({
+    state: withDrawings(state),
+    fileStore,
+    currentResults: () => state.results.value,
+    nextTick: async () => {
+      if (!pendingModeReset) return;
+      pendingModeReset = false;
+      state.extractedFeatures.value = [];
+      state.featureRecordIds.value = [];
+      state.orthogroups.value = [];
+      state.selectedOrthogroupId.value = '';
+    },
+    applyConfigData: (_drawing, config) => {
+      state.form = { ...state.form, ...config.form };
+      state.adv = { ...state.adv, ...config.adv };
+    }
+  });
+  // PD-OI-090: a checkpoint restores its own drawing, the shown one; the
+  // `mode` it holds is not written (a drawing switch is no History step).
+  await snapshots.drawingHistory('circular').applyCheckpoint({
+    config: { form: { prefix: 'restored', legend: 'bottom' }, adv: { features: ['CDS'] } },
+    ui: { mode: 'linear', lInputType: 'gb', selectedResultIndex: 0 },
+    files: { linearSeqs: [] },
+    results: [{ name: 'linear.svg', content: '<svg></svg>' }],
+    features: {
+      extractedFeatures: [{ id: 'feat-1', svg_id: 'f1', type: 'CDS' }],
+      featureRecordIds: ['record-1'],
+      selectedFeatureRecordIdx: 0
+    },
+    orthogroupState: {
+      groups: [{ id: 'og_1', members: [] }],
+      selectedOrthogroupId: 'og_1'
+    },
+    editorState: {},
+    runState: {}
+  });
+
+  assert.equal(state.mode.value, 'circular');
+  assert.equal(pendingModeReset, false);
+  assert.equal(state.extractedFeatures.value.length, 1);
+  assert.equal(state.featureRecordIds.value.length, 1);
+  assert.equal(state.orthogroups.value.length, 1);
+  assert.equal(state.selectedOrthogroupId.value, 'og_1');
+}
+
+{
+  let setting = 0;
+  let artifact = { id: 'artifact-a', svg: '<svg>' + 'x'.repeat(100_000) + '</svg>' };
+  let checkpointBuilds = 0;
+  const history = createHistoryManager({
+    buildIntent: async () => ({ setting }),
+    applyIntent: async (intent) => {
+      setting = intent.setting;
+    },
+    buildCheckpoint: async () => {
+      checkpointBuilds += 1;
+      return { setting, artifact };
+    },
+    applyCheckpoint: async (checkpoint) => {
+      setting = checkpoint.setting;
+      artifact = checkpoint.artifact;
+    }
+  });
+
+  await history.captureBaseline('large artifact baseline');
+  const baseline = history.getDiagnostics();
+  const originalArtifact = artifact;
+  for (let index = 1; index <= 10; index += 1) {
+    await history.runUndoable(`Setting ${index}`, () => {
+      setting = index;
+    });
+  }
+  const afterEdits = history.getDiagnostics();
+  assert.equal(checkpointBuilds, 1);
+  assert.equal(afterEdits.artifactCheckpointBuilds - baseline.artifactCheckpointBuilds, 0);
+  assert.equal(afterEdits.signatureComputations - baseline.signatureComputations, 20);
+  assert.equal(afterEdits.byteEstimateComputations - baseline.byteEstimateComputations, 10);
+  assert.equal(afterEdits.historySvgBytes - baseline.historySvgBytes, 0);
+  assert.equal(artifact, originalArtifact);
+
+  const beforeNoop = history.getDiagnostics();
+  await history.runUndoable('No-op setting', () => {});
+  const afterNoop = history.getDiagnostics();
+  assert.equal(history.getUndoCount(), 10);
+  assert.equal(afterNoop.byteEstimateComputations, beforeNoop.byteEstimateComputations);
+
+  await history.undo();
+  assert.equal(setting, 9);
+  assert.equal(artifact, originalArtifact);
+  await history.redo();
+  assert.equal(setting, 10);
+  assert.equal(artifact, originalArtifact);
+
+  const replacementArtifact = { id: 'artifact-b', svg: '<svg id="b" />' };
+  await history.runUndoableCheckpoint('Generate', () => {
+    artifact = replacementArtifact;
+  });
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Generate');
+  await history.undo();
+  assert.equal(artifact, originalArtifact);
+  await history.redo();
+  assert.equal(artifact, replacementArtifact);
+}
+
+{
+  let setting = 0;
+  let rejectRestore = false;
+  const history = createHistoryManager({
+    buildIntent: async () => ({ setting }),
+    applyIntent: async (intent) => {
+      if (rejectRestore) throw new Error('restore rejected');
+      setting = intent.setting;
+    },
+    buildCheckpoint: async () => ({ setting }),
+    applyCheckpoint: async (checkpoint) => {
+      setting = checkpoint.setting;
+    }
+  });
+  await history.captureBaseline();
+  await history.runUndoable('Set one', () => {
+    setting = 1;
+  });
+  rejectRestore = true;
+  await assert.rejects(history.undo(), /restore rejected/);
+  assert.equal(history.getUndoCount(), 1);
+  assert.equal(history.getRedoCount(), 0);
+}
+
+{
+  const fileStore = createInputFileStore();
+  let forbiddenArtifactBuilds = 0;
+  const state = {
+    form: { setting: 1 },
+    adv: {},
+    files: {
+      c_depth: null,
+      c_conservation_blasts: [],
+      c_conservation_blasts_source: 'losat-cache',
+      c_conservation_fastas: [],
+      c_conservation_sequence_sources: [fileStore.registerFile(makeFile('generated-source.fa', 9_000_000))],
+      linearCanonicalComparisons: [{ kind: 'generated', pairs: ['x'.repeat(100_000)] }]
+    },
+    circularSources: [],
+    linearSeqs: [],
+    linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
+    results: ref([{ name: 'large.svg', content: '<svg>' + 'x'.repeat(100_000) + '</svg>' }]),
+    selectedResultIndex: ref(0),
+    mode: ref('circular'),
+    cInputType: ref('gb'),
+    lInputType: ref('gb'),
+    downloadDpi: ref(300),
+    canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 },
+    layoutPreferences: createLayoutPreferences(),
+    extractedFeatures: ref([{ featureCatalog: 'x'.repeat(100_000) }]),
+    selectedFeatureRecordIdx: ref(0),
+    featureColorOverrides: {},
+    featureVisibilityManualRules: [],
+    featureOverrides: {},
+    featureStrokeOverrides: {},
+    labelTextBulkOverrides: {},
+    orthogroups: ref([{ members: ['x'.repeat(100_000)] }]),
+    selectedOrthogroupId: ref(''),
+    selectedOrthogroupAlignmentFeature: ref(''),
+    orthogroupNameOverrides: {},
+    orthogroupDescriptionOverrides: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([]),
+    legendColorOverrides: {},
+    legendStrokeOverrides: {},
+    addedLegendCaptions: ref(new Set()),
+    semanticFileWatchersSuppressed: ref(false)
+  };
+  state.legendEntries = Object.create({ value: [{ caption: 'tRNA', color: '#e8b441' }] });
+  state.deletedLegendEntries = Object.create({ value: [] });
+  const snapshots = createHistorySnapshotService({
+    state: withDrawings(state),
+    fileStore,
+    buildConfigData: () => ({ form: state.form, adv: state.adv }),
+    buildFeatureStateData: () => {
+      forbiddenArtifactBuilds += 1;
+      throw new Error('feature artifacts must not be built for intent');
+    },
+    buildEditorStateData: () => {
+      forbiddenArtifactBuilds += 1;
+      throw new Error('feature catalog must not be built for intent');
+    },
+    buildOrthogroupStateData: () => {
+      forbiddenArtifactBuilds += 1;
+      throw new Error('orthogroup artifacts must not be built for intent');
+    },
+    currentResults: () => {
+      forbiddenArtifactBuilds += 1;
+      throw new Error('Results must not be read for intent');
+    }
+  });
+  // R13: the composition owner is created after the snapshot service and
+  // registers its capture once it exists. Until then the intent holds no
+  // capture, as a service without that owner. U3b: the Legend list is intent,
+  // so History captures no Legend row owners.
+  const unregisteredIntent = await snapshots.drawingHistory('circular').buildIntent();
+  assert.equal(Object.hasOwn(unregisteredIntent.ui, 'compositionUserDeltas'), false);
+  assert.throws(() => snapshots.registerCapture('legendOrder', () => []), /Unknown History intent capture: legendOrder/);
+  assert.throws(() => snapshots.registerCapture('legend', () => []), /Unknown History intent capture: legend/);
+  const compositionRecord = { 'result-2': { primary: [[4, 5]] } };
+  snapshots.registerCapture('composition', () => compositionRecord);
+  const intent = await snapshots.drawingHistory('circular').buildIntent();
+  assert.deepEqual(intent.editorState.legend.entries, [{ caption: 'tRNA', color: '#e8b441' }]);
+  assert.deepEqual(intent.ui.compositionUserDeltas, compositionRecord);
+  compositionRecord['result-2'].primary[0][0] = 9;
+  assert.deepEqual(intent.ui.compositionUserDeltas['result-2'].primary, [[4, 5]], 'the intent holds a copy of the capture');
+  snapshots.registerCapture('composition', null);
+  assert.equal(Object.hasOwn((await snapshots.drawingHistory('circular').buildIntent()).ui, 'compositionUserDeltas'), false);
+  state.legendEntries.value = [{ caption: 'tRNA', color: '#c026d3' }];
+  await snapshots.drawingHistory('circular').applyIntent(intent, { changes: [{ path: ['editorState'] }] });
+  assert.deepEqual(state.legendEntries.value, [{ caption: 'tRNA', color: '#e8b441' }]);
+  assert.equal(Object.hasOwn(intent.editorState.legend, 'entryOwners'), false);
+  assert.equal(forbiddenArtifactBuilds, 0);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent, 'results'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent, 'runState'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.features, 'extractedFeatures'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.editorState, 'featureCatalog'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.orthogroupState, 'groups'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'linearCanonicalComparisons'), false);
+  // B23: a LOSAT-cache replay's comparison sequences are held by reference only.
+  assert.deepEqual(intent.files.c_conservation_blasts, []);
+  assert.deepEqual(
+    Object.keys(intent.files.c_conservation_sequence_sources[0]).sort(),
+    ['fileId', 'lastModified', 'name', 'size', 'sourceId', 'type']
+  );
+
+  // B21: with uploaded BLAST rows, the optional comparison sequence is a user
+  // choice, so the intent holds it and Undo restores it.
+  state.files.c_conservation_blasts_source = null;
+  const uploadIntent = await snapshots.drawingHistory('circular').buildIntent();
+  assert.equal(uploadIntent.files.c_conservation_sequence_sources.length, 1);
+  state.files.c_conservation_sequence_sources = [];
+  await snapshots.drawingHistory('circular').applyIntent(uploadIntent, { changes: [{ path: ['files'] }] });
+  assert.deepEqual(state.files.c_conservation_sequence_sources.map((file) => file?.name), ['generated-source.fa']);
+
+  // B23: in a LOSAT-cache replay the ring rows and managed track slots name the
+  // derived BLAST rows, so Undo and Redo of a ring removal restore those rows
+  // and their comparison sequences with the ring files.
+  // The bindings hold refs of the store, as the app's writers bind them.
+  const derivedBlasts = ['b', 'c', 'd'].map((id) => fileStore.registerFile(makeFile(`comparison-${id}.losatn.tsv`, 60)));
+  const derivedSources = ['b', 'c', 'd'].map((id) => fileStore.registerFile(makeFile(`comparison-${id}.fasta`, 1234)));
+  const ringFastas = ['b', 'c', 'd'].map((id) => fileStore.registerFile(makeFile(`comparison-${id}.fasta`, 1234)));
+  Object.assign(state.files, {
+    c_conservation_blasts: [...derivedBlasts],
+    c_conservation_blasts_source: 'losat-cache',
+    c_conservation_fastas: [...ringFastas],
+    c_conservation_sequence_sources: [...derivedSources]
+  });
+  const replayHistory = createHistoryManager({
+    fileStore,
+    collectCurrentFileIds: snapshots.collectCurrentFileIds,
+    ...snapshots.drawingHistory('circular'),
+    buildCheckpoint: () => {
+      throw new Error('a ring removal must not build an artifact checkpoint');
+    },
+    applyCheckpoint: snapshots.drawingHistory('circular').applyCheckpoint
+  });
+  await replayHistory.initializeIntentBaseline('Loaded session');
+  const replayRows = () => ({
+    blasts: [...state.files.c_conservation_blasts],
+    source: state.files.c_conservation_blasts_source,
+    fastas: [...state.files.c_conservation_fastas],
+    sequenceSources: [...state.files.c_conservation_sequence_sources]
+  });
+  const loadedRows = replayRows();
+  await replayHistory.runUndoable('Remove series', () => {
+    state.files.c_conservation_blasts = derivedBlasts.slice(1);
+    state.files.c_conservation_fastas = ringFastas.slice(1);
+    state.files.c_conservation_sequence_sources = derivedSources.slice(1);
+  });
+  const removedRows = replayRows();
+  await replayHistory.undo();
+  assert.deepEqual(replayRows(), loadedRows);
+  replayRows().blasts.forEach((file, index) => assert.equal(file, derivedBlasts[index]));
+  await replayHistory.redo();
+  assert.deepEqual(replayRows(), removedRows);
+  await replayHistory.undo();
+  assert.deepEqual(replayRows(), loadedRows);
+}
+
+{
+  const fileStore = createInputFileStore();
+  const circularPrimary = makeFile('circular-primary.gb', 101);
+  const circularDepth = makeFile('circular-depth.tsv', 102);
+  const conservationBlast = makeFile('derived-conservation.tsv', 103);
+  const conservationFasta = makeFile('conservation-subject.fa', 104);
+  const conservationSequenceSource = makeFile('derived-conservation-source.fa', 105);
+  const linearPrimary = makeFile('linear-primary.gb', 106);
+  const linearDepth = makeFile('linear-depth.tsv', 107);
+  const linearComparison = makeFile('linear-comparison.tsv', 108);
+  const canonicalProtein = makeFile('canonical-protein.tsv', 109);
+  const canonicalOrthogroups = makeFile('canonical-orthogroups.json', 110);
+  const canonicalCollinearity = makeFile('canonical-collinearity.json', 111);
+  const unreferenced = makeFile('unreferenced.tmp', 112);
+  const retainedFiles = [
+    circularPrimary,
+    circularDepth,
+    conservationBlast,
+    conservationFasta,
+    conservationSequenceSource,
+    linearPrimary,
+    linearDepth,
+    linearComparison,
+    canonicalProtein,
+    canonicalOrthogroups,
+    canonicalCollinearity
+  ];
+  const retainedIds = retainedFiles.map((file) => fileStore.registerFile(file).fileId);
+  const unreferencedId = fileStore.registerFile(unreferenced).fileId;
+  // The bindings hold the store's refs, as the app's writers bind them.
+  const ref = (file) => fileStore.registerFile(file);
+  const state = {
+    files: {
+      c_depth: [ref(circularDepth)],
+      c_conservation_blasts: [ref(conservationBlast)],
+      c_conservation_blasts_source: 'losat-cache',
+      c_conservation_fastas: [ref(conservationFasta)],
+      c_conservation_sequence_sources: [ref(conservationSequenceSource)],
+      linearCanonicalComparisons: [
+        { kind: 'precomputedProteinComparison', file: ref(canonicalProtein) },
+        { kind: 'orthogroupResult', file: ref(canonicalOrthogroups) },
+        { kind: 'collinearityResult', file: ref(canonicalCollinearity) }
+      ]
+    },
+    circularSources: [{ uid: 'card-1', gb: ref(circularPrimary), gff: null, fasta: null }],
+    linearSeqs: [{
+      uid: 'linear-a',
+      gb: ref(linearPrimary),
+      gff: null,
+      fasta: null,
+      depth: [ref(linearDepth)]
+    }],
+    linearComparisonPlan: {
+      mode: 'selected',
+      defaultSource: 'upload',
+      edges: [{ id: 'edge-a-b', file: ref(linearComparison) }]
+    }
+  };
+  let setting = 'loaded';
+  let artifactBuilds = 0;
+  const snapshots = createHistorySnapshotService({ state: withDrawings(state), fileStore, currentResults: () => state.results.value });
+  const history = createHistoryManager({
+    fileStore,
+    collectCurrentFileIds: snapshots.collectCurrentFileIds,
+    buildIntent: async () => ({ setting }),
+    applyIntent: async (intent) => {
+      setting = intent.setting;
+    },
+    buildCheckpoint: () => {
+      artifactBuilds += 1;
+      throw new Error('lightweight baseline must not build an artifact checkpoint');
+    },
+    applyCheckpoint: snapshots.drawingHistory('circular').applyCheckpoint
+  });
+
+  await history.initializeIntentBaseline('Loaded session');
+  assert.equal(artifactBuilds, 0);
+  retainedIds.forEach((fileId) => assert.equal(fileStore.has(fileId), true));
+  assert.equal(fileStore.has(unreferencedId), false);
+
+  await history.runUndoable('Change ordinary setting', () => {
+    setting = 'edited';
+  });
+  await history.undo();
+  assert.equal(setting, 'loaded');
+  retainedIds.forEach((fileId) => assert.equal(fileStore.has(fileId), true));
+  await history.redo();
+  assert.equal(setting, 'edited');
+  retainedIds.forEach((fileId) => assert.equal(fileStore.has(fileId), true));
+}
+
+{
+  const fileStore = createInputFileStore();
+  const state = {
+    form: {},
+    adv: {},
+    files: {},
+    circularSources: [],
+    linearSeqs: [],
+    linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
+    results: ref([]),
+    selectedResultIndex: ref(0),
+    selectedAnnotation: ref({ setId: 'set-a', id: 'annotation-a' }),
+    selectedSpecificPreset: ref('bakta'),
+    newSpecRule: { feat: 'CDS', qual: 'product', val: 'before', color: '#112233', cap: 'Before' },
+    newPriorityRule: { feat: 'CDS', order: 'product,gene' },
+    newColorFeat: ref('gene'),
+    newColorVal: ref('#123456'),
+    newFeatureToAdd: ref('mobile_element'),
+    semanticFileWatchersSuppressed: ref(false)
+  };
+  const snapshots = createHistorySnapshotService({
+    state: withDrawings(state),
+    fileStore,
+    buildUiStateData: () => ({}),
+    applyUiStateData: () => {},
+    currentResults: () => [],
+    applyResultsData: () => {}
+  });
+  // The drafts are Session-level values: the router's project stream records them (R15-23).
+  const history = createHistoryRouter({
+    drawingIds: ['circular'],
+    activeDrawingId: () => 'circular',
+    managerOptions: () => ({ fileStore, ...snapshots.drawingHistory('circular') }),
+    sessionHistory: snapshots.sessionHistory()
+  });
+  const draftState = () => ({
+    selectedAnnotation: structuredClone(state.selectedAnnotation.value),
+    selectedSpecificPreset: state.selectedSpecificPreset.value,
+    newSpecRule: structuredClone(state.newSpecRule),
+    newPriorityRule: structuredClone(state.newPriorityRule),
+    newColorFeat: state.newColorFeat.value,
+    newColorVal: state.newColorVal.value,
+    newFeatureToAdd: state.newFeatureToAdd.value
+  });
+  const before = draftState();
+
+  await history.captureBaseline('draft baseline');
+  await history.runUndoable('Edit rule drafts', () => {
+    state.selectedAnnotation.value = { setId: 'set-b', id: 'annotation-b' };
+    state.selectedSpecificPreset.value = 'pharokka';
+    Object.assign(state.newSpecRule, { val: 'after', cap: 'After' });
+    Object.assign(state.newPriorityRule, { feat: 'gene', order: 'gene,note' });
+    state.newColorFeat.value = 'CDS';
+    state.newColorVal.value = '#abcdef';
+    state.newFeatureToAdd.value = 'repeat_region';
+  });
+  const after = draftState();
+
+  assert.equal(history.getUndoCount(), 1);
+  await history.undo();
+  assert.deepEqual(draftState(), before);
+  await history.redo();
+  assert.deepEqual(draftState(), after);
+
+  await history.runUndoableCheckpoint('Reset settings', () => {
+    state.selectedAnnotation.value = null;
+    state.selectedSpecificPreset.value = '';
+    Object.assign(state.newSpecRule, { feat: 'CDS', qual: 'product', val: '', color: '#ff0000', cap: '' });
+    Object.assign(state.newPriorityRule, { feat: 'CDS', order: 'product,gene,locus_tag' });
+    state.newColorFeat.value = 'gene';
+    state.newColorVal.value = '#d3d3d3';
+    state.newFeatureToAdd.value = 'mobile_element';
+  });
+  await history.undo();
+  assert.deepEqual(draftState(), after);
+
+  // R15-2 retired Add legend item and its form drafts. A Session-level step
+  // that still carries them restores the other drafts and writes nothing for
+  // them, even where a holder of the old name exists. A drawing's checkpoint
+  // holds no drafts and writes none (R15-23).
+  const retiredDrafts = { newLegendCaption: 'Old draft', newLegendColor: '#123123' };
+  const sessionPorts = snapshots.sessionHistory();
+  const oldSession = { ...sessionPorts.buildIntent() };
+  oldSession.drafts = { ...oldSession.drafts, ...retiredDrafts };
+  const oldCheckpoint = { ...(await snapshots.drawingHistory('circular').buildCheckpoint()) };
+  assert.equal(Object.hasOwn(oldCheckpoint, 'drafts'), false);
+  oldCheckpoint.drafts = { ...oldSession.drafts, newColorVal: '#000003' };
+  state.newLegendCaption = ref('');
+  state.newLegendColor = ref('#808080');
+  state.newColorVal.value = '#000001';
+  await sessionPorts.applyIntent(oldSession);
+  assert.deepEqual(draftState(), after);
+  state.newColorVal.value = '#000002';
+  await snapshots.drawingHistory('circular').applyCheckpoint(oldCheckpoint);
+  assert.equal(state.newColorVal.value, '#000002');
+  assert.deepEqual([state.newLegendCaption.value, state.newLegendColor.value], ['', '#808080']);
+  assert.equal(Object.hasOwn(sessionPorts.buildIntent().drafts, 'newLegendCaption'), false);
+  assert.equal(Object.hasOwn(await snapshots.drawingHistory('circular').buildIntent(), 'drafts'), false);
+}
+
+{
+  const fileStore = createInputFileStore();
+  const resultA = { name: 'a.svg', content: '<svg id="a" />' };
+  const extractedA = [{ svg_id: 'feature-a', payload: 'x'.repeat(100_000) }];
+  const biologicalA = [{ biological_feature_id: 'bio-a', payload: 'y'.repeat(100_000) }];
+  const catalogA = { schema: 3, items: [{ payload: 'z'.repeat(100_000) }] };
+  const groupsA = [{ id: 'group-a', members: ['feature-a'] }];
+  const proteinIdentityManifestA = { schema: 2, records: [{ id: 'manifest-a' }] };
+  const legacyProteinRawCandidatesA = { schema: 1, entries: [{ id: 'raw-a' }] };
+  const legacyProteinDerivedEvidenceA = {
+    schema: 1,
+    entries: [{ id: 'derived-evidence-a' }]
+  };
+  const rawCacheValueA = { text: 'raw-a\n' };
+  const derivedCacheValueA = { payload: { id: 'derived-a' } };
+  const losatCacheInfoA = [{ key: 'raw-a' }];
+  const appliedPaletteColorsA = { CDS: '#54bcf8' };
+  const pendingPaletteColorsA = {};
+  const noticesA = [{
+    recordKey: 'record-a', biologicalFeatureId: 'gone', status: 'unresolved', kinds: ['label_text'], resultIndex: 0
+  }];
+  const state = {
+    files: {},
+    circularSources: [{ uid: 'card-1', gb: null, gff: null, fasta: null }],
+    linearSeqs: [],
+    linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
+    mode: ref('circular'),
+    cInputType: ref('gb'),
+    lInputType: ref('gb'),
+    results: ref([resultA]),
+    selectedResultIndex: ref(0),
+    extractedFeatures: ref(extractedA),
+    biologicalFeatures: ref(biologicalA),
+    featureCatalog: ref(catalogA),
+    featureRecordIds: ref(['record-a']),
+    selectedFeatureRecordIdx: ref(0),
+    featureColorOverrides: { 'feature-a': '#112233' },
+    featureVisibilityManualRules: [],
+    featureOverrides: {},
+    // Python's identity notices are an artifact-owned value (design Q4 6.3).
+    featureIdentityNotices: ref(noticesA),
+    canonicalLabelOverrideRows: ref([]),
+    labelTextBulkOverrides: {},
+    legendEntries: ref([{ caption: 'A', color: '#112233' }]),
+    deletedLegendEntries: ref([]),
+    originalLegendOrder: ref(['A']),
+    originalLegendColors: ref({ A: '#112233' }),
+    legendColorOverrides: {},
+    legendStrokeOverrides: {},
+    addedLegendCaptions: ref(new Set()),
+    featureStrokeOverrides: {},
+    originalSvgStroke: ref({ color: '#000000', width: 1 }),
+    orthogroups: ref(groupsA),
+    featureOrthogroupIndex: ref(new Map([['feature-a', 'group-a']])),
+    selectedOrthogroupId: ref('group-a'),
+    selectedOrthogroupAlignmentFeature: ref('feature-a'),
+    orthogroupNameOverrides: {},
+    orthogroupDescriptionOverrides: {},
+    collinearGroups: ref([]),
+    lastRunInfo: ref({ resultCount: 1 }),
+    pairwiseMatchFactors: ref({}),
+    trackSlotResolvedGeometry: ref({ schema: 1 }),
+    appliedPaletteName: ref('default'),
+    appliedPaletteColors: ref(appliedPaletteColorsA),
+    pendingPaletteName: ref(''),
+    pendingPaletteColors: ref(pendingPaletteColorsA),
+    resultGenerationKey: ref(1),
+    resultPanelTab: ref('preview'),
+    zoom: ref(1),
+    canvasPan: { x: 0, y: 0 },
+    errorLog: ref(null),
+    editableLabels: ref([]),
+    labelTextScopeDialog: {},
+    featureEditorStatus: ref({ status: 'summary-ready', error: null }),
+    featureExtractionPending: ref(false),
+    proteinIdentityManifest: ref(proteinIdentityManifestA),
+    legacyProteinRawCandidates: ref(legacyProteinRawCandidatesA),
+    legacyProteinDerivedEvidence: ref(legacyProteinDerivedEvidenceA),
+    losatCache: ref(new Map([['raw-a', rawCacheValueA]])),
+    losatDerivedCache: ref(new Map([['derived-a', derivedCacheValueA]])),
+    losatCacheInfo: ref(losatCacheInfoA),
     skipCaptureBaseConfig: ref(false),
     skipExtractOnSvgChange: ref(false),
     trustedArtifactRestoreInProgress: ref(false),
@@ -2144,10 +2965,6 @@ const createLayoutPreferences = () => ({
   const poisonCache = new Proxy(new Map(), {
     get() { throw new Error('Cache properties and iterators must not be read during capture.'); }
   });
-  const poisonSequenceOwner = {};
-  Object.defineProperty(poisonSequenceOwner, 'sources', {
-    get() { throw new Error('Sequence owners must not be traversed during capture.'); }
-  });
   const poisonResource = { name: 'poison.gb', size: 123, type: 'text/plain' };
   Object.defineProperty(poisonResource, 'data', {
     get() { throw new Error('Resource payloads must not be read during capture.'); }
@@ -2164,7 +2981,6 @@ const createLayoutPreferences = () => ({
   state.featureCatalog.value = poisonCatalog;
   state.losatCache.value = poisonCache;
   state.losatDerivedCache.value = poisonCache;
-  state.matchSequenceRegistry.replaceTrustedOwner(poisonSequenceOwner);
   state.featureIdentityNotices.value = poisonNotices;
   state.circularSources[0].gb = poisonResource;
   snapshots.setGeneratedArtifactRuntimeOwner({
@@ -2182,7 +2998,8 @@ const createLayoutPreferences = () => ({
   assert.equal(poisonHandle.ownerSet.results[0], poisonResult);
   assert.equal(poisonHandle.ownerSet.featureCatalog, poisonCatalog);
   assert.equal(poisonHandle.ownerSet.losatCache, poisonCache);
-  assert.equal(poisonHandle.ownerSet.matchSequenceOwner, poisonSequenceOwner);
+  // A step holds no record sequences: the page keeps none, Python reads them on demand (D5).
+  assert.ok(!Object.keys(poisonHandle.ownerSet).some((key) => /sequence/i.test(key)), Object.keys(poisonHandle.ownerSet).join());
   assert.equal(poisonHandle.ownerSet.featureIdentityNotices, poisonNotices);
   assert.equal(
     poisonHandle.retainedBytes,

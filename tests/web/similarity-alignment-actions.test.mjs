@@ -50,11 +50,7 @@ const state = () => {
     ...drawingStore({ recordsOff: [] }, { recordsOff: [] }),
     activeDrawing: () => ({ mode: 'linear', recordsOff: [], linearSeqs }),
     mode: ref('linear'),
-    featureCatalog: ref({ items: [{
-      recordKeys: ['a', 'b', 'c'],
-      sequenceSources: [{ sequence: 'A'.repeat(300) }, { sequence: 'C'.repeat(300) },
-        { sequence: 'G'.repeat(300) }]
-    }] }),
+    featureCatalog: ref({ items: [{ recordKeys: ['a', 'b', 'c'] }] }),
     selectedOrthogroupId: ref('og-1'),
     similarityAlignmentPlan: ref(null),
     similarityAlignmentResetReceipt:ref(null),
@@ -277,6 +273,15 @@ test('the helper request carries each record\'s windows as stored, a window acro
       presentation: { reverseComplement: false } }
   ]);
   assert.deepEqual(payload.projection.orientations, { a: false, b: true, c: false });
+});
+
+// D5: Python reads each record's length from the committed request, so the page sends none.
+test('the helper request record carries no record length', async () => {
+  const fixture = create();
+  assert.deepEqual(await startReview(fixture), { status: 'reviewing' });
+  const [{ payload }] = fixture.helperCalls;
+  assert.deepEqual(payload.request.records.map((record) => Object.keys(record).sort()),
+    [0, 1, 2].map(() => ['presentation', 'recordKey', 'windows']));
 });
 
 test('normal Align applies only-usable and unusable targets with one helper and one Result', async () => {
@@ -704,6 +709,11 @@ test('active schema-2 plan validates on regeneration and supports Reset and stab
   const calls = fixture.helperCalls.length;
   assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
   assert.equal(fixture.helperCalls.length, calls + 1);
+  // The check resolves on the committed request, as every helper call does (D5-13: the projection is required).
+  const { payload: check } = fixture.helperCalls.at(-1);
+  assert.equal(check.projection.canonicalRequest.records.length, 3);
+  assert.equal(check.projection.orientations, null);
+  assert.ok(check.resources.source);
   fixture.actions.retainForStableReorder(['c', 'a', 'b']);
   assert.deepEqual(fixture.state.similarityAlignmentPlan.value.records.map(({ recordKey }) => recordKey),
     ['c', 'a', 'b']);

@@ -16,13 +16,13 @@ const modulePaths = [
   'gbdraw/web/js/services/pairwise-match-popup.js',
   'gbdraw/web/js/services/feature-utils.js',
   'gbdraw/web/js/services/feature-sequence-fasta.js',
-  'gbdraw/web/js/services/match-sequences.js',
-  // match-sequences.js reads a catalog's drawn units as their records (`unitRecordsOf`).
+  // The popup names the reads of member and span sequences (D5); Python reads them when a sequence action is pressed.
+  'gbdraw/web/js/services/catalog-sequences.js',
+  // feature-catalog.js reads a catalog's drawn units as their records (`catalogUnitRecords`).
   'gbdraw/web/js/services/linear-units.js',
   'gbdraw/web/js/services/linear-comparisons.js',
   'gbdraw/web/js/services/linear-comparison-retained.js',
   'gbdraw/web/js/services/input-types.js',
-  'gbdraw/web/js/services/record-options.js',
   'gbdraw/web/js/services/record-draw-selection.js',
   'gbdraw/web/js/services/drawing/feature-edits.js',
   'gbdraw/web/js/services/drawing/paint.js',
@@ -31,24 +31,14 @@ const modulePaths = [
   'gbdraw/web/js/utils/reactivity.js',
   'gbdraw/web/js/utils/download-names.js',
   'gbdraw/web/js/services/record-source-coordinates.js',
-  'gbdraw/web/js/services/genbank-header.js',
-  'gbdraw/web/js/services/conservation-series.js',
-  // conservation-series.js reads a ring's files through the drawing inputs slice.
-  'gbdraw/web/js/services/drawing/inputs.js',
-  'gbdraw/web/js/services/history-files.js',
-  'gbdraw/web/js/utils/conservation-colors.generated.js',
-  'gbdraw/web/js/utils/color-utils.js',
-  'gbdraw/web/js/utils/named-colors.js',
   'gbdraw/web/js/utils/vue-raw.js',
   'gbdraw/web/js/services/losat-normalization.js',
   'gbdraw/web/js/contracts/request-shape.generated.js',
   'gbdraw/web/js/utils/contract-shape.js',
-  'gbdraw/web/js/utils/field-reading.js',
   'gbdraw/web/js/utils/optional-positive-number.js',
   'gbdraw/web/js/utils/error-normalization.js',
   // error-normalization.js reads Python's figure length units from the generated mode profiles.
   'gbdraw/web/js/mode-profiles.generated.js',
-  'gbdraw/web/js/services/file-content-cache.js',
   'gbdraw/web/js/services/feature-catalog.js',
   'gbdraw/web/js/contracts/schema.generated.js',
   'gbdraw/web/js/services/feature-identity.js',
@@ -61,19 +51,8 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 for (const relativePath of modulePaths) {
   const target = join(tempRoot, relativePath);
   await mkdir(dirname(target), { recursive: true });
-  const source = relativePath.endsWith('/file-content-cache.js')
-    ? 'export const readFileText = (file) => file.text();\n'
-    : await readFile(new URL(relativePath, repoRoot), 'utf8');
-  await writeFile(target, source, 'utf8');
+  await writeFile(target, await readFile(new URL(relativePath, repoRoot), 'utf8'), 'utf8');
 }
-// match-sequences.js reads restored Session files through record-discovery.js, which this test does not use.
-await writeFile(join(tempRoot, 'gbdraw/web/js/services/record-discovery.js'), [
-  "const unused = () => { throw new Error('record-discovery.js is not part of this test'); };",
-  'export const gffFastaReaderSelector = unused;',
-  'export const readAllSequenceRecords = unused;',
-  'export const readComparisonSequenceRecords = unused;',
-  ''
-].join('\n'), 'utf8');
 
 const popupPath = join(tempRoot, 'gbdraw/web/js/services/pairwise-match-popup.js');
 const instrumentedPopupPath = join(
@@ -88,24 +67,24 @@ const replaceOnce = (source, from, to) => {
 };
 const instrumentedPopupSource = [
   [
-    "import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';",
-    "import { buildFeatureSequenceFastas as buildFeatureSequenceFastasBase } from './feature-sequence-fasta.js';"
+    "import { formatFastaEntry } from './feature-sequence-fasta.js';",
+    "import { formatFastaEntry as formatFastaEntryBase } from './feature-sequence-fasta.js';"
   ], [
-    "import { buildMatchSequenceBundle } from './match-sequences.js';",
-    "import { buildMatchSequenceBundle as buildMatchSequenceBundleBase } from './match-sequences.js';"
+    "import { featureSequenceReads } from './catalog-sequences.js';",
+    "import { featureSequenceReads as featureSequenceReadsBase } from './catalog-sequences.js';"
   ], [
     '  featureIdentity,\n  identityMatches,\n  renderedFeatureIdentity,',
     '  featureIdentity as featureIdentityBase,\n  identityMatches,\n  renderedFeatureIdentity as renderedFeatureIdentityBase,'
   ], [
     'export const PAIRWISE_MATCH_SELECTOR = [',
     `const pairwiseMetrics = () => globalThis.__GBDRAW_PAIRWISE_TEST_METRICS__;
-const buildFeatureSequenceFastas = (...args) => {
+const formatFastaEntry = (...args) => {
   if (pairwiseMetrics()) pairwiseMetrics().fastaCalls += 1;
-  return buildFeatureSequenceFastasBase(...args);
+  return formatFastaEntryBase(...args);
 };
-const buildMatchSequenceBundle = (...args) => {
-  if (pairwiseMetrics()) pairwiseMetrics().sequenceBundleCalls += 1;
-  return buildMatchSequenceBundleBase(...args);
+const featureSequenceReads = (features) => {
+  if (pairwiseMetrics()) pairwiseMetrics().sequenceReadNames += features.length;
+  return featureSequenceReadsBase(features);
 };
 const featureIdentity = (source, options = {}) => {
   if (pairwiseMetrics()) pairwiseMetrics().identityCalls.push({
@@ -142,9 +121,9 @@ const { admitFeatureCatalog } = await import(pathToFileURL(join(
   tempRoot,
   'gbdraw/web/js/services/feature-catalog.js'
 )));
-const { createSequenceSourceRegistry } = await import(pathToFileURL(join(
+const { matchSequenceRecordsOf } = await import(pathToFileURL(join(
   tempRoot,
-  'gbdraw/web/js/services/match-sequences.js'
+  'gbdraw/web/js/services/catalog-sequences.js'
 )));
 
 const elementFrom = (attributes) => ({
@@ -192,9 +171,7 @@ const makeSyntheticState = () => {
     end: 18,
     strand: '+',
     protein_id: 'QUERY.1',
-    product: 'query enzyme',
-    nucleotide_sequence: 'ATGAAATAA',
-    amino_acid_sequence: 'MK'
+    product: 'query enzyme'
   };
   const renderedSubject = {
     fileIdx: 1,
@@ -222,9 +199,7 @@ const makeSyntheticState = () => {
     proteinId: 'QUERY.1',
     role: 'anchor',
     confidence: 'high',
-    product: 'query enzyme',
-    nucleotideSequence: 'ATGAAATAA',
-    aminoAcidSequence: 'MK'
+    product: 'query enzyme'
   };
   const subjectMember = {
     recordIndex: 1,
@@ -303,31 +278,20 @@ const commonAttributes = {
   fill: '#123456'
 };
 
+// The records the synthetic Result draws (`matchSequenceRecordsOf`): two drawn units, one per record ID.
+const syntheticSequenceRecords = ({ comparisonSupplied = true } = {}) => ({
+  unitKeys: ['query-unit', 'subject-unit'],
+  unitKeysOfRecordId: (recordId) => ({ 'query-record': ['query-unit'], 'subject-record': ['subject-unit'] })[recordId] ?? [],
+  comparisonSupplied: () => comparisonSupplied
+});
+
 const buildSyntheticCases = () => {
   const state = makeSyntheticState();
-  const sources = createSequenceSourceRegistry([
-    {
-      key: 'linear:record:0',
-      recordId: 'query-record',
-      aliases: [],
-      sequence: 'AAAAAAAAAATGAAATAACCCCC',
-      origin: 'linear-record',
-      recordIndex: 0
-    },
-    {
-      key: 'linear:record:1',
-      recordId: 'subject-record',
-      aliases: [],
-      sequence: 'CCCCCCCCCCCCCCCCCCCCCCCCCCCCCATGAAATAAGGGG',
-      origin: 'linear-record',
-      recordIndex: 1
-    }
-  ]);
   const fullOptions = {
     featureLookup: state.featureLookup,
     sourceFeatures: state.sourceFeatures,
     orthogroups: [state.globalGroup, state.localGroup],
-    resolveSequenceSource: sources.resolve
+    matchSequenceRecords: syntheticSequenceRecords()
   };
   const duplicateRendered = {
     ...state.renderedQuery,
@@ -378,7 +342,8 @@ const buildSyntheticCases = () => {
         'data-track-label': 'Comparison ring',
         'data-reference-record-id': 'query-record'
       }),
-      options: { resolveSequenceSource: () => null },
+      // The comparison source supplied no FASTA: its span says so; the reference reads its drawn unit.
+      options: { matchSequenceRecords: syntheticSequenceRecords({ comparisonSupplied: false }) },
       featureReferences: []
     },
     ambiguousFeature: {
@@ -434,7 +399,7 @@ const buildSyntheticCases = () => {
   };
 };
 
-const SYNTHETIC_BASELINES_GZIP = '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';
+const SYNTHETIC_BASELINES_GZIP = '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';
 const SYNTHETIC_BASELINES = SYNTHETIC_BASELINES_GZIP
   ? JSON.parse(gunzipSync(Buffer.from(SYNTHETIC_BASELINES_GZIP, 'base64')).toString('utf8'))
   : {};
@@ -455,7 +420,8 @@ test('compact pairwise payloads and hover rows match the accepted semantic basel
       assert.equal(exposed, true, `${name} lost a canonical Feature object reference`);
     }
   }
-  assert.deepStrictEqual(captured, SYNTHETIC_BASELINES);
+  // The baselines are JSON: a member's FASTA header fields (`fastaFeature`) leave a field the feature lacks undefined.
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(captured)), SYNTHETIC_BASELINES);
 });
 
 const expectedHoverSummary = (payload) => ({
@@ -503,7 +469,7 @@ test('lightweight hover summaries match accepted compact payload-derived rows', 
 const createPairwiseMetrics = () => ({
   contextCreations: 0,
   fastaCalls: 0,
-  sequenceBundleCalls: 0,
+  sequenceReadNames: 0,
   identityCalls: []
 });
 
@@ -555,7 +521,7 @@ test('hover cannot touch full payload, Feature, source, member, FASTA, or sequen
   assert.equal(orthogroupSummary.rows.at(-1).value, '2');
   assert.equal(metrics.contextCreations, 0);
   assert.equal(metrics.fastaCalls, 0);
-  assert.equal(metrics.sequenceBundleCalls, 0);
+  assert.equal(metrics.sequenceReadNames, 0);
   delete globalThis.__GBDRAW_PAIRWISE_TEST_METRICS__;
 });
 
@@ -571,8 +537,17 @@ const countedArray = (values, onTraversal) => new Proxy(values, {
   }
 });
 
-test('one full payload request traverses each input once and builds one FASTA pair per member', () => {
+// The popup opens without a base (D5): it names one read per member and per span, and Python reads them when a
+// sequence action is pressed (app/sequence-reads.js), so opening it builds no FASTA.
+test('one full payload request traverses each input once and builds no FASTA when it opens', () => {
   const state = makeSyntheticState();
+  // The catalog rows carry the identity their sequences are read by (and, as every catalog row, no sequence).
+  for (const [feature, recordKey, biologicalFeatureId] of [
+    [state.renderedQuery, 'query-unit', 'query-bio'], [state.sourceQuery, 'query-unit', 'query-bio'],
+    [state.renderedSubject, 'subject-unit', 'subject-bio'], [state.sourceSubject, 'subject-unit', 'subject-bio']
+  ]) {
+    Object.assign(feature, { recordKey, biologicalFeatureId });
+  }
   const traversalCounts = {
     rendered: 0,
     source: 0,
@@ -598,24 +573,6 @@ test('one full payload request traverses each input once and builds one FASTA pa
   const orthogroups = countedArray([group], () => {
     traversalCounts.orthogroup += 1;
   });
-  const sequenceRegistry = createSequenceSourceRegistry([
-    {
-      key: 'linear:record:0',
-      recordId: 'query-record',
-      aliases: [],
-      sequence: 'AAAAAAAAAATGAAATAACCCCC',
-      origin: 'linear-record',
-      recordIndex: 0
-    },
-    {
-      key: 'linear:record:1',
-      recordId: 'subject-record',
-      aliases: [],
-      sequence: 'CCCCCCCCCCCCCCCCCCCCCCCCCCCCCATGAAATAAGGGG',
-      origin: 'linear-record',
-      recordIndex: 1
-    }
-  ]);
   const element = elementFrom({
     ...commonAttributes,
     'data-match-kind': 'pairwise',
@@ -628,7 +585,7 @@ test('one full payload request traverses each input once and builds one FASTA pa
     featureLookup,
     sourceFeatures,
     orthogroups,
-    resolveSequenceSource: sequenceRegistry.resolve
+    matchSequenceRecords: syntheticSequenceRecords()
   });
   delete globalThis.__GBDRAW_PAIRWISE_TEST_METRICS__;
 
@@ -639,11 +596,25 @@ test('one full payload request traverses each input once and builds one FASTA pa
     members: 1
   });
   assert.equal(metrics.contextCreations, 1);
-  assert.equal(metrics.sequenceBundleCalls, 1);
   const memberRows = payload.group.memberRows;
   const resolvedMemberCount = memberRows.filter((row) => row.feature).length;
   assert.equal(resolvedMemberCount, 2);
-  assert.equal(metrics.fastaCalls, resolvedMemberCount);
+  // One read named per resolved member, by its catalog identity; no FASTA text is built.
+  assert.equal(metrics.sequenceReadNames, resolvedMemberCount);
+  assert.equal(metrics.fastaCalls, 0);
+  assert.deepStrictEqual(memberRows.map((row) => row.read), [
+    { recordKey: 'query-unit', biologicalFeatureId: 'query-bio', bases: 9 },
+    { recordKey: 'subject-unit', biologicalFeatureId: 'subject-bio', bases: 9 }
+  ]);
+  assert.equal(payload.group.memberSequenceCount, 2);
+  assert.deepStrictEqual(payload.group.memberRead, { status: '', error: null, retry: null });
+  // The spans name their reads by the drawn unit and the displayed coordinates.
+  assert.deepStrictEqual(payload.sequenceBundle.entries.map((entry) => entry.read), [
+    { kind: 'record', recordKey: 'query-unit', start: 10, end: 18 },
+    { kind: 'record', recordKey: 'subject-unit', start: 30, end: 38 }
+  ]);
+  const payloadText = JSON.stringify(payload);
+  assert.doesNotMatch(payloadText, /"(?:nt|aa|member(?:Nt|Aa))Fasta"|combinedFasta|"fasta"|_sequence"|Sequence":"/);
 
   const identityCounts = new Map();
   metrics.identityCalls.forEach(({ source, mode }) => {
@@ -815,14 +786,19 @@ const exactState = exactAdmission.featureState;
 const exactFeatureLookup = new Map(
   exactState.extractedFeatures.map((feature) => [feature.svg_id, feature])
 );
-const exactSequenceRegistry = createSequenceSourceRegistry(exactState.sequenceSources);
+// The Gallery Session's Result and the request it was drawn from: its Linear spans read drawn units.
+const exactSequenceRecords = matchSequenceRecordsOf(
+  exactAdmission.catalog.items.find((item) => item.resultIndex === 0),
+  { renderRequest: exactSession.renderRequest, resources: {} }
+);
+assert.ok(exactSequenceRecords, 'the exact fixture names no records for its spans');
 const exactOptions = {
   featureLookup: exactFeatureLookup,
   sourceFeatures: exactState.biologicalFeatures,
   // The app passes the catalog groups, collinear presentation groups included
   // (svg-actions.js groupsForMatch); adding collinearGroups would list them twice.
   orthogroups: exactState.orthogroups,
-  resolveSequenceSource: exactSequenceRegistry.resolve
+  matchSequenceRecords: exactSequenceRecords
 };
 const exactFeatureTokens = new WeakMap([
   ...exactState.extractedFeatures.map((feature) => [feature, `rendered:${feature.svg_id}`]),
@@ -848,7 +824,8 @@ const EXACT_BASELINES = {
     },
     // The Gallery Session uploads the pinned NZ_CP006932.1 revision (tutorial-data), whose WP_025208444.1 product
     // is "GGDEF domain-containing protein"; the earlier Session's copy read "DHH family phosphoesterase".
-    digest: 'f6a0f4e3b14bdcf00dc6384b5c28aa0006c939d18ddc177773c14957ef43a0df',
+    // D5: the payload names the reads of the spans and the members' sequences, and holds no FASTA text.
+    digest: 'b6e1f43ee2121aabca28c4cb9db4d979f42be5f4822ae524835bfda33fd7429b',
     hoverRows: [
       { id: 'Kind', label: 'Kind', value: 'Collinear block' },
       { id: 'Identity', label: 'Identity', value: '43.9684414414' },
@@ -863,7 +840,11 @@ const EXACT_BASELINES = {
     featureRowCount: 30,
     exposedFeatureCount: 105,
     sequenceAvailability: [true, true],
-    combinedSequenceLength: 33898
+    sequenceLengths: [16791,  16405],
+    sequenceReads: [
+      { kind: 'record', recordKey: 'linear-seq-2ccc54ef-3738-475f-9303-b61e2655f5b9', start: 61879, end: 78669 },
+      { kind: 'record', recordKey: 'linear-seq-0a4f5060-b01d-4f8d-b5c8-c938c8083c7c', start: 19161, end: 35565 }
+    ]
   },
   laterDistinctBlock: {
     target: {
@@ -871,7 +852,7 @@ const EXACT_BASELINES = {
       blockId: 'block_0155',
       orthogroupIds: 'og_274;og_275;og_276;og_277;og_278;og_279;og_280;og_281;og_282;og_283;og_284;og_285;og_286;og_287;og_288;og_289;og_290;og_291;og_292;og_293'
     },
-    digest: '4e37391022ef00e144508b14a4f2cdb30662b1840e9cad563d8834a625998a74',
+    digest: '5460321d024aafb70dbc93db79e734587ab46bacd23ed58c426b17131ed71ba4',
     hoverRows: [
       { id: 'Kind', label: 'Kind', value: 'Collinear block' },
       { id: 'Identity', label: 'Identity', value: '64.1326369725' },
@@ -886,7 +867,11 @@ const EXACT_BASELINES = {
     featureRowCount: 40,
     exposedFeatureCount: 140,
     sequenceAvailability: [true, true],
-    combinedSequenceLength: 19668
+    sequenceLengths: [9524,  9671],
+    sequenceReads: [
+      { kind: 'record', recordKey: 'linear-seq-2ccc54ef-3738-475f-9303-b61e2655f5b9', start: 484749, end: 494272 },
+      { kind: 'record', recordKey: 'linear-seq-0a4f5060-b01d-4f8d-b5c8-c938c8083c7c', start: 586163, end: 595833 }
+    ]
   }
 };
 
@@ -924,7 +909,8 @@ test('exact large-fixture payloads retain canonical digests, structure, and Feat
       featureRowCount: featureRows.length,
       exposedFeatureCount: exposedFeatures.length,
       sequenceAvailability: payload.sequenceBundle.entries.map((entry) => entry.available),
-      combinedSequenceLength: payload.sequenceBundle.combinedFasta.length
+      sequenceLengths: payload.sequenceBundle.entries.map((entry) => entry.sequenceLength),
+      sequenceReads: payload.sequenceBundle.entries.map((entry) => entry.read)
     };
   }
   assert.deepStrictEqual(captured, EXACT_BASELINES);

@@ -4,7 +4,6 @@ import {
   getFeatureElements,
   getFeatureIdentity
 } from './feature-editor/svg-actions.js';
-import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';
 import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
@@ -17,7 +16,9 @@ import {
 } from '../services/feature-utils.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { linearRecordNames } from '../services/linear-sources.js';
-import { copyTextToClipboard } from '../utils/clipboard.js';
+import { featureSequenceReads, readRowsFasta } from '../services/catalog-sequences.js';
+import { copyPendingTextToClipboard } from '../utils/clipboard.js';
+import { normalizeCaughtError } from '../utils/error-normalization.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { clearDormantGroupNames, clearGroupRename, setGroupDescription, setGroupName } from '../services/drawing/group-names.js';
@@ -39,6 +40,8 @@ import { msg, t, tm } from '../utils/i18n.js';
 /** @import { FeatureIdentity } from '../services/feature-identity.js' */
 /** @import { FeatureSvgRoot } from '../services/feature-dom.js' */
 /** @import { OrthogroupGroup, OrthogroupMember } from '../services/orthogroup-feature-metadata.js' */
+/** @import { FeatureLike } from '../services/feature-utils.js' */
+/** @import { CatalogSequences, FeatureSequenceRead } from '../services/catalog-sequences.js' */
 /** @typedef {OrthogroupGroup | string | null | undefined} GroupOrId A group row, or the id of one. */
 
 export { resolveUniqueOrthogroupMemberForFeature } from '../services/feature-identity.js';
@@ -46,12 +49,18 @@ export { resolveUniqueOrthogroupMemberForFeature } from '../services/feature-ide
 const { computed, nextTick, reactive, watch, toDisplayString } = window.Vue;
 
 const COPY_FEEDBACK_DURATION_MS = 1500;
-// Keyed by `success` and `failure`, which are the only statuses this module
-// stores; a missing status reads undefined.
-/** @type {Readonly<Record<string, string | undefined>>} */
+/**
+ * What a sequence action's button says: its read runs (`reading`, until it ends), the text was copied, the read
+ * held no sequence, or the copy or download failed.
+ * @typedef {'reading' | 'success' | 'failure' | 'empty' | 'download-failure'} SequenceActionStatus
+ */
+/** @type {Readonly<Record<SequenceActionStatus, string>>} */
 const COPY_FEEDBACK_LABELS = Object.freeze({
+  reading: msg('Reading the sequence…'),
   success: msg('Copied!'),
-  failure: msg('Copy failed')
+  failure: msg('Copy failed'),
+  empty: msg('No sequence available'),
+  'download-failure': msg('Download failed')
 });
 
 /** @param {unknown} value */
@@ -85,18 +94,6 @@ const memberCopyFeedbackIdentity = (member) => {
     normalizeText(member?.strand),
     normalizeText(resolveDisplayProteinId(/** @type {Record<string, unknown> | null | undefined} */ (member?.sequenceFeature), member, ''))
   ]);
-};
-
-/** @param {unknown} value */
-const normalizeSequence = (value) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
-
-/** @param {unknown[]} values */
-const firstSequenceText = (...values) => {
-  for (const value of values) {
-    const normalized = normalizeSequence(value);
-    if (normalized) return normalized;
-  }
-  return '';
 };
 
 /** @param {unknown} value @param {string} [fallback] */
@@ -134,13 +131,6 @@ const compareOrthogroupId = (left, right) => {
 
 /** @param {OrthogroupGroup | null | undefined} group @returns {OrthogroupMember[]} */
 const getGroupMembers = (group) => (Array.isArray(group?.members) ? group.members : []);
-
-/** @param {OrthogroupMember | null | undefined} member @param {unknown} sequenceKind */
-const getMemberSequence = (member, sequenceKind) => (
-  sequenceKindLabel(sequenceKind) === 'aa'
-    ? firstSequenceText(member?.aminoAcidSequence, member?.amino_acid_sequence, member?.proteinSequence, member?.sequence)
-    : firstSequenceText(member?.nucleotideSequence, member?.nucleotide_sequence)
-);
 
 /** @param {OrthogroupMember | null | undefined} member */
 const memberLocationText = (member) => {
@@ -181,21 +171,122 @@ const buildMemberFeaturePayload = (member) => {
     product: sourceFeature.product || member?.product,
     note: sourceFeature.note || member?.note,
     gene: sourceFeature.gene || member?.gene,
-    organism: sourceFeature.organism || member?.organism,
-    nucleotide_sequence: getMemberSequence(member, 'nt'),
-    amino_acid_sequence: getMemberSequence(member, 'aa')
+    organism: sourceFeature.organism || member?.organism
   };
 };
 
-/** @param {OrthogroupMember | null | undefined} member @param {unknown} sequenceKind */
-const memberFastaText = (member, sequenceKind) => {
-  const feature = buildMemberFeaturePayload(member);
-  const fastas = buildFeatureSequenceFastas(feature, {
-    nucleotideSequence: getMemberSequence(member, 'nt'),
-    aminoAcidSequence: getMemberSequence(member, 'aa')
+/**
+ * The read of an enriched member's sequences: the identity and bases of the catalog row it resolved to, or null
+ * when it resolved to none or the row has no identity. Such a member is the one a sequence action can read, so it
+ * is also what "has a sequence" means before the read (D5): whether it holds one is known only by reading it.
+ * @param {OrthogroupMember} member
+ * @returns {FeatureSequenceRead | null}
+ */
+const memberSequenceRead = (member) => {
+  const row = member.sequenceFeature;
+  return row && typeof row === 'object' ? featureSequenceReads([/** @type {FeatureLike} */ (row)])[0] ?? null : null;
+};
+
+/**
+ * The FASTA text of enriched members for one sequence kind, read from Python in one read; a member whose read holds
+ * no sequence of that kind is left out. '' when none has one; null when the shown Result changed before the reply.
+ * @param {readonly OrthogroupMember[]} members
+ * @param {unknown} sequenceKind
+ * @param {CatalogSequences['readFeatures']} readFeatureSequences
+ * @returns {Promise<string | null>}
+ */
+const readMembersFasta = (members, sequenceKind, readFeatureSequences) => readRowsFasta(
+  members.map((member) => ({ read: memberSequenceRead(member), feature: buildMemberFeaturePayload(member) })),
+  sequenceKindLabel(sequenceKind) === 'aa' ? 'aa' : 'nt', readFeatureSequences
+);
+
+/**
+ * The status each sequence action's button shows, by feedback key. An action supersedes the earlier one on its key,
+ * whose end then writes nothing; `reading` lasts until the action ends, the others for a moment.
+ */
+const makeSequenceActionFeedback = () => {
+  /** @type {Record<string, { operationId: number, status: SequenceActionStatus }>} */
+  const byKey = reactive({});
+  /** @type {Map<string, number>} */
+  const timers = new Map();
+  /** @type {Map<string, number>} */
+  const operationIds = new Map();
+  let nextOperationId = 0;
+  /** @param {string} key */
+  const stopTimer = (key) => {
+    const timer = timers.get(key);
+    if (timer !== undefined) window.clearTimeout(timer);
+    timers.delete(key);
+  };
+  /** @param {string} key @param {number} operationId */
+  const isCurrent = (key, operationId) => operationIds.get(key) === operationId;
+  /** @param {string} key @param {number} operationId @param {SequenceActionStatus | null} status null ends it */
+  const show = (key, operationId, status) => {
+    if (!isCurrent(key, operationId)) return;
+    stopTimer(key);
+    if (status === null) {
+      delete byKey[key];
+      operationIds.delete(key);
+      return;
+    }
+    byKey[key] = { operationId, status };
+    if (status !== 'reading') timers.set(key, window.setTimeout(() => show(key, operationId, null), COPY_FEEDBACK_DURATION_MS));
+  };
+  /** @param {string} key */
+  const begin = (key) => {
+    nextOperationId += 1;
+    operationIds.set(key, nextOperationId);
+    show(key, nextOperationId, 'reading');
+    return nextOperationId;
+  };
+  const clear = () => {
+    timers.forEach((timer) => window.clearTimeout(timer));
+    timers.clear();
+    operationIds.clear();
+    Object.keys(byKey).forEach((key) => delete byKey[key]);
+  };
+  /** @param {string} key @returns {SequenceActionStatus | undefined} */
+  const statusOf = (key) => byKey[key]?.status;
+  return { begin, show, isCurrent, clear, statusOf };
+};
+
+const NO_TEXT = Symbol('no text');
+
+/**
+ * Copies or downloads the FASTA text one read makes, with the button's feedback on `key`. The read and the clipboard
+ * write start at once (a click allows the write only while it is current). A stale read writes nothing; a read
+ * without a sequence says so; a failed read says so on the button and is reported, while its action is current.
+ * @param {{ feedback: ReturnType<typeof makeSequenceActionFeedback>, key: string, readText: () => Promise<string | null>,
+ *   download: (() => string) | null, reportReadFailure: (error: unknown) => void }} action
+ *   `download` names the file to download, or null to copy
+ * @returns {Promise<boolean>} whether the text was copied or downloaded
+ */
+const runSequenceAction = async ({ feedback, key, readText, download, reportReadFailure }) => {
+  const operationId = feedback.begin(key);
+  const read = { failed: false, stale: false };
+  const text = readText().then((value) => {
+    if (!value) {
+      read.stale = value === null;
+      throw NO_TEXT;
+    }
+    return value;
+  }, (error) => {
+    read.failed = true;
+    throw error;
   });
-  const text = sequenceKindLabel(sequenceKind) === 'aa' ? fastas.aminoAcidFasta : fastas.nucleotideFasta;
-  return text ? `${text}\n` : '';
+  try {
+    if (download) downloadTextFile(download(), await text, 'text/plain;charset=utf-8');
+    else await copyPendingTextToClipboard(text);
+    feedback.show(key, operationId, download ? null : 'success');
+    return true;
+  } catch (error) {
+    if (error === NO_TEXT) feedback.show(key, operationId, read.stale ? null : 'empty');
+    else {
+      if (read.failed && feedback.isCurrent(key, operationId)) reportReadFailure(error);
+      feedback.show(key, operationId, download ? 'download-failure' : 'failure');
+    }
+    return false;
+  }
 };
 
 /** @param {OrthogroupMember | null | undefined} member */
@@ -315,7 +406,7 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  * `'linear'`.
  * @typedef {Pick<WebState, 'orthogroups' | 'activeDrawing' | 'selectedOrthogroupId' | 'orthogroupSearch'
  *   | 'orthogroupSortMode' | 'clickedFeature' | 'showRightDrawer' | 'rightDrawerTab' | 'svgContainer'
- *   | 'extractedFeatures' | 'biologicalFeatures' | 'sessionOperationAvailability'>} OrthogroupEditorState
+ *   | 'extractedFeatures' | 'biologicalFeatures' | 'sessionOperationAvailability' | 'errorLog'>} OrthogroupEditorState
  */
 
 /** @import { GroupNamesSlice, GroupNamesView } from '../services/drawing/group-names.js' */
@@ -335,9 +426,11 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  */
 
 /**
- * @param {{ state: OrthogroupEditorState, getCommittedRequest?: CommittedRequestPort }} options
+ * @param {{ state: OrthogroupEditorState, getCommittedRequest?: CommittedRequestPort,
+ *   readFeatureSequences: CatalogSequences['readFeatures'] }} options
+ *   `readFeatureSequences` reads members' sequences from Python for the shown Result (the catalog-sequence door).
  */
-export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null }) => {
+export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null, readFeatureSequences }) => {
   const {
     orthogroups,
     selectedOrthogroupId,
@@ -351,25 +444,22 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     biologicalFeatures
   } = state;
 
-  const copyFeedbackByKey = reactive({});
-  /** @type {Map<string, number>} */
-  const copyFeedbackTimers = new Map();
-  /** @type {Map<string, number>} */
-  const copyOperationIds = new Map();
-  let nextCopyOperationId = 0;
+  const feedback = makeSequenceActionFeedback();
+  const clearCopyFeedback = feedback.clear;
+  /** @param {unknown} error */
+  const reportReadFailure = (error) => {
+    state.errorLog.value = normalizeCaughtError(error, { operation: 'readFeatureSequences', stage: 'helper' });
+  };
 
   /**
+   * The feedback key of one sequence action's button.
    * @param {GroupOrId} groupOrId
    * @param {unknown} sequenceKind
    * @param {OrthogroupMember | null} [member]
    * @param {string} [context]
+   * @param {'copy' | 'download'} [action]
    */
-  const orthogroupCopyFeedbackKey = (
-    groupOrId,
-    sequenceKind,
-    member = null,
-    context = 'drawer'
-  ) => {
+  const orthogroupCopyFeedbackKey = (groupOrId, sequenceKind, member = null, context = 'drawer', action = 'copy') => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const groupId = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     return JSON.stringify([
@@ -377,58 +467,9 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
       member ? 'member' : 'group',
       groupId,
       member ? memberCopyFeedbackIdentity(member) : '',
-      sequenceKindLabel(sequenceKind)
+      sequenceKindLabel(sequenceKind),
+      action
     ]);
-  };
-
-  /** @param {string} key @param {number} operationId @param {string} status */
-  const updateCopyFeedback = (key, operationId, status) => {
-    if (copyOperationIds.get(key) !== operationId) return;
-    const previousTimer = copyFeedbackTimers.get(key);
-    if (previousTimer !== undefined) window.clearTimeout(previousTimer);
-    copyFeedbackByKey[key] = { operationId, status };
-    const timer = window.setTimeout(() => {
-      if (
-        copyOperationIds.get(key) !== operationId ||
-        copyFeedbackByKey[key]?.operationId !== operationId
-      ) return;
-      delete copyFeedbackByKey[key];
-      copyFeedbackTimers.delete(key);
-      copyOperationIds.delete(key);
-    }, COPY_FEEDBACK_DURATION_MS);
-    copyFeedbackTimers.set(key, timer);
-  };
-
-  /** @param {string} key */
-  const beginCopyFeedback = (key) => {
-    const previousTimer = copyFeedbackTimers.get(key);
-    if (previousTimer !== undefined) window.clearTimeout(previousTimer);
-    copyFeedbackTimers.delete(key);
-    delete copyFeedbackByKey[key];
-    nextCopyOperationId += 1;
-    copyOperationIds.set(key, nextCopyOperationId);
-    return nextCopyOperationId;
-  };
-
-  const clearCopyFeedback = () => {
-    copyFeedbackTimers.forEach((timer) => window.clearTimeout(timer));
-    copyFeedbackTimers.clear();
-    copyOperationIds.clear();
-    Object.keys(copyFeedbackByKey).forEach((key) => delete copyFeedbackByKey[key]);
-  };
-
-  /** @param {string} text @param {string} key */
-  const copyWithFeedback = async (text, key) => {
-    if (!text) return false;
-    const operationId = beginCopyFeedback(key);
-    try {
-      await copyTextToClipboard(text);
-      updateCopyFeedback(key, operationId, 'success');
-      return true;
-    } catch {
-      updateCopyFeedback(key, operationId, 'failure');
-      return false;
-    }
   };
 
   /**
@@ -437,17 +478,18 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
    * @param {unknown} originalLabel
    * @param {OrthogroupMember | null} [member]
    * @param {string} [context]
+   * @param {'copy' | 'download'} [action]
    */
   const orthogroupCopyFeedbackLabel = (
     groupOrId,
     sequenceKind,
     originalLabel,
     member = null,
-    context = 'drawer'
+    context = 'drawer',
+    action = 'copy'
   ) => {
-    const key = orthogroupCopyFeedbackKey(groupOrId, sequenceKind, member, context);
-    const status = copyFeedbackByKey[key]?.status;
-    return (status && tm(COPY_FEEDBACK_LABELS[status] ?? '')) || String(originalLabel || t('Copy'));
+    const status = feedback.statusOf(orthogroupCopyFeedbackKey(groupOrId, sequenceKind, member, context, action));
+    return (status && tm(COPY_FEEDBACK_LABELS[status])) || String(originalLabel || t('Copy'));
   };
 
   if (typeof watch === 'function') {
@@ -635,10 +677,10 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     }));
   });
 
-  // The lookup depends on the two array refs, which every writer replaces (services/config.js,
+  // The catalog row of a member, by its identity. The lookup depends on the two array refs, which every writer replaces (services/config.js,
   // services/history-snapshot.js); it reads the rows through `toRaw`, as state.js does, so Vue records no dependency
   // on each alias key of every row that `featureIdentity` reads.
-  const featureSequenceLookup = computed(() => {
+  const featureCatalogLookup = computed(() => {
     const biological = toRaw(biologicalFeatures.value);
     const extracted = Array.isArray(extractedFeatures.value) ? toRaw(extractedFeatures.value) : [];
     const hasBiologicalFeatures = Array.isArray(biological) && biological.length > 0;
@@ -662,46 +704,18 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
               ? { ...identity, renderedId: renderedMatches[0].renderedId }
               : identity
           );
-      return {
-        identity: resolvedIdentity,
-        get entry() {
-          return {
-            nucleotideSequence: firstSequenceText(feature?.nucleotideSequence, feature?.nucleotide_sequence),
-            aminoAcidSequence: firstSequenceText(feature?.aminoAcidSequence, feature?.amino_acid_sequence),
-            sequenceFeature: feature,
-            sequenceWarnings: Array.isArray(feature?.sequence_warnings)
-              ? feature.sequence_warnings
-              : (Array.isArray(feature?.sequenceWarnings) ? feature.sequenceWarnings : [])
-          };
-        }
-      };
+      return { identity: resolvedIdentity, feature };
     });
     return indexFeatureIdentities(entries, (entry) => entry.identity);
   });
 
-  /** @param {OrthogroupMember} member */
+  // A member with the catalog row it resolved to (`sequenceFeature`); it carries no sequence (D5).
+  /** @param {OrthogroupMember} member @returns {OrthogroupMember} */
   const enrichOrthogroupMember = (member) => {
-    const memberSequenceFeature = member?.sequenceFeature || null;
-    const memberIdentity = featureIdentity(member);
-    const matches = featureSequenceLookup.value(memberIdentity);
-    const sequenceEntry = matches.length === 1 ? matches[0].entry : null;
-    const sequenceFeature = sequenceEntry?.sequenceFeature || memberSequenceFeature;
-    const resolvedDisplayProteinId = resolveDisplayProteinId(
-      sequenceFeature,
-      member,
-      memberLocationText(member)
-    );
-    if (!sequenceEntry) return { ...member, displayProteinId: resolvedDisplayProteinId };
-    return {
-      ...member,
-      displayProteinId: resolvedDisplayProteinId,
-      nucleotideSequence: firstSequenceText(member?.nucleotideSequence, member?.nucleotide_sequence, sequenceEntry.nucleotideSequence),
-      aminoAcidSequence: firstSequenceText(member?.aminoAcidSequence, member?.amino_acid_sequence, sequenceEntry.aminoAcidSequence),
-      sequenceFeature: member?.sequenceFeature || sequenceEntry.sequenceFeature,
-      sequenceWarnings: Array.isArray(member?.sequenceWarnings)
-        ? member.sequenceWarnings
-        : (Array.isArray(member?.sequence_warnings) ? member.sequence_warnings : sequenceEntry.sequenceWarnings)
-    };
+    const matches = featureCatalogLookup.value(featureIdentity(member));
+    const sequenceFeature = (matches.length === 1 ? matches[0].feature : null) || member?.sequenceFeature || null;
+    const displayProteinId = resolveDisplayProteinId(sequenceFeature, member, memberLocationText(member));
+    return sequenceFeature ? { ...member, displayProteinId, sequenceFeature } : { ...member, displayProteinId };
   };
 
   /** @param {GroupOrId} groupOrId */
@@ -747,13 +761,14 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
       }));
   };
 
-  /** @param {GroupOrId} groupOrId @param {unknown} sequenceKind */
-  const getOrthogroupSequenceCount = (groupOrId, sequenceKind) =>
-    getEnrichedOrthogroupMembers(groupOrId).filter((member) => getMemberSequence(member, sequenceKind)).length;
+  // A member's sequences are known only by reading them, so a member with a catalog identity counts as having
+  // them, for both kinds (`memberSequenceRead`).
+  /** @param {GroupOrId} groupOrId */
+  const getOrthogroupSequenceCount = (groupOrId) =>
+    getEnrichedOrthogroupMembers(groupOrId).filter((member) => memberSequenceRead(member)).length;
 
-  /** @param {OrthogroupMember} member @param {unknown} sequenceKind */
-  const hasOrthogroupMemberSequence = (member, sequenceKind) =>
-    Boolean(getMemberSequence(enrichOrthogroupMember(member), sequenceKind));
+  /** @param {OrthogroupMember} member */
+  const hasOrthogroupMemberSequence = (member) => memberSequenceRead(enrichOrthogroupMember(member)) !== null;
 
   // OV-920: what the drawer shows of the selected group, built when the group
   // or a sequence source changes. Every render of the app reads it, with the
@@ -764,46 +779,24 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
    * @property {unknown} id the id the drawer's controls pass (`group.id`)
    * @property {OrthogroupMember[]} members the enriched members
    * @property {ReturnType<typeof groupOrthogroupMembersByRecord>} membersByRecord
-   * @property {{ nt: boolean, aa: boolean }} hasSequence whether a member has an nt or aa sequence
-   * @property {(member: OrthogroupMember, sequenceKind: 'nt' | 'aa') => boolean} hasMemberSequence
+   * @property {boolean} hasSequence whether a member has a sequence to read
+   * @property {(member: OrthogroupMember) => boolean} hasMemberSequence
    */
   /** @type {{ readonly value: SelectedOrthogroupDetail | null }} */
   const selectedOrthogroupDetail = computed(() => {
     const group = selectedOrthogroup.value;
     if (!group) return null;
     const members = getEnrichedOrthogroupMembers(group);
-    /** @type {Map<OrthogroupMember, { nt: boolean, aa: boolean }>} */
-    const memberSequences = new Map(members.map((member) => [member, {
-      nt: hasOrthogroupMemberSequence(member, 'nt'),
-      aa: hasOrthogroupMemberSequence(member, 'aa')
-    }]));
+    const readable = new Set(members.filter((member) => memberSequenceRead(member)));
     return {
       group,
       id: group.id,
       members,
       membersByRecord: groupOrthogroupMembersByRecord(members),
-      hasSequence: {
-        nt: members.some((member) => getMemberSequence(member, 'nt')),
-        aa: members.some((member) => getMemberSequence(member, 'aa'))
-      },
-      hasMemberSequence: (/** @type {OrthogroupMember} */ member, /** @type {'nt' | 'aa'} */ sequenceKind) => (
-        Boolean(memberSequences.get(member)?.[sequenceKind])
-      )
+      hasSequence: readable.size > 0,
+      hasMemberSequence: (/** @type {OrthogroupMember} */ member) => readable.has(member)
     };
   });
-
-  /** @param {GroupOrId} groupOrId @param {unknown} sequenceKind */
-  const buildOrthogroupFasta = (groupOrId, sequenceKind) => {
-    const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
-    return getEnrichedOrthogroupMembers(group)
-      .map((member) => memberFastaText(member, sequenceKind))
-      .filter(Boolean)
-      .join('');
-  };
-
-  /** @param {OrthogroupMember} member @param {unknown} sequenceKind */
-  const buildOrthogroupMemberFasta = (member, sequenceKind) =>
-    memberFastaText(enrichOrthogroupMember(member), sequenceKind);
 
   /** @param {GroupOrId} groupOrId @param {unknown} sequenceKind */
   const orthogroupSequenceFilename = (groupOrId, sequenceKind) => {
@@ -833,50 +826,38 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     return `${stem}.${sequenceExtension(sequenceKind)}`;
   };
 
+  /**
+   * Copies or downloads the FASTA of a group's members, or of one member, read from Python when pressed.
+   * @param {'copy' | 'download'} action
+   * @param {GroupOrId} groupOrId
+   * @param {unknown} sequenceKind
+   * @param {OrthogroupMember | null} member
+   * @param {string} context
+   */
+  const runOrthogroupSequenceAction = (action, groupOrId, sequenceKind, member, context) => {
+    const shown = member ? enrichOrthogroupMember(member) : null;
+    return runSequenceAction({
+      feedback, reportReadFailure,
+      key: orthogroupCopyFeedbackKey(groupOrId, sequenceKind, member, context, action),
+      readText: () => readMembersFasta(shown ? [shown] : getEnrichedOrthogroupMembers(groupOrId), sequenceKind,
+        readFeatureSequences),
+      download: action === 'copy' ? null : () => (shown
+        ? orthogroupMemberSequenceFilename(shown, sequenceKind, groupOrId)
+        : orthogroupSequenceFilename(groupOrId, sequenceKind))
+    });
+  };
   /** @param {GroupOrId} [groupOrId] @param {unknown} [sequenceKind] @param {string} [context] */
-  const copyOrthogroupSequences = async (
-    groupOrId = selectedOrthogroup.value,
-    sequenceKind = 'nt',
-    context = 'drawer'
-  ) => {
-    const text = buildOrthogroupFasta(groupOrId, sequenceKind);
-    const key = orthogroupCopyFeedbackKey(groupOrId, sequenceKind, null, context);
-    return copyWithFeedback(text, key);
-  };
-
-  /** @param {GroupOrId} [groupOrId] @param {unknown} [sequenceKind] */
-  const downloadOrthogroupSequences = (groupOrId = selectedOrthogroup.value, sequenceKind = 'nt') => {
-    const text = buildOrthogroupFasta(groupOrId, sequenceKind);
-    if (!text) return;
-    downloadTextFile(
-      orthogroupSequenceFilename(groupOrId, sequenceKind),
-      text,
-      'text/plain;charset=utf-8'
-    );
-  };
-
+  const copyOrthogroupSequences = (groupOrId = selectedOrthogroup.value, sequenceKind = 'nt', context = 'drawer') =>
+    runOrthogroupSequenceAction('copy', groupOrId, sequenceKind, null, context);
+  /** @param {GroupOrId} [groupOrId] @param {unknown} [sequenceKind] @param {string} [context] */
+  const downloadOrthogroupSequences = (groupOrId = selectedOrthogroup.value, sequenceKind = 'nt', context = 'drawer') =>
+    runOrthogroupSequenceAction('download', groupOrId, sequenceKind, null, context);
   /** @param {OrthogroupMember} member @param {unknown} [sequenceKind] @param {GroupOrId} [groupOrId] @param {string} [context] */
-  const copyOrthogroupMemberSequence = async (
-    member,
-    sequenceKind = 'nt',
-    groupOrId = selectedOrthogroup.value,
-    context = 'drawer'
-  ) => {
-    const text = buildOrthogroupMemberFasta(member, sequenceKind);
-    const key = orthogroupCopyFeedbackKey(groupOrId, sequenceKind, member, context);
-    return copyWithFeedback(text, key);
-  };
-
-  /** @param {OrthogroupMember} member @param {unknown} [sequenceKind] @param {GroupOrId} [groupOrId] */
-  const downloadOrthogroupMemberSequence = (member, sequenceKind = 'nt', groupOrId = selectedOrthogroup.value) => {
-    const text = buildOrthogroupMemberFasta(member, sequenceKind);
-    if (!text) return;
-    downloadTextFile(
-      orthogroupMemberSequenceFilename(member, sequenceKind, groupOrId),
-      text,
-      'text/plain;charset=utf-8'
-    );
-  };
+  const copyOrthogroupMemberSequence = (member, sequenceKind = 'nt', groupOrId = selectedOrthogroup.value, context = 'drawer') =>
+    runOrthogroupSequenceAction('copy', groupOrId, sequenceKind, member, context);
+  /** @param {OrthogroupMember} member @param {unknown} [sequenceKind] @param {GroupOrId} [groupOrId] @param {string} [context] */
+  const downloadOrthogroupMemberSequence = (member, sequenceKind = 'nt', groupOrId = selectedOrthogroup.value, context = 'drawer') =>
+    runOrthogroupSequenceAction('download', groupOrId, sequenceKind, member, context);
 
   /** @param {unknown} orthogroupId */
   const selectOrthogroup = (orthogroupId) => {

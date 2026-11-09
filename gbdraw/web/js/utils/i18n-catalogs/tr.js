@@ -533,7 +533,6 @@ export default Object.freeze({
   "Comparison {n}": "Karşılaştırma {n}",
   "Comparisons must connect adjacent rows.": "Karşılaştırmalar bitişik satırları bağlamalıdır.",
   "Comparisons must connect records in different rows.": "Karşılaştırmalar farklı satırlardaki kayıtları bağlamalıdır.",
-  "Comparisons: the sequences of the saved comparison matches could not be read again from the input files; the SVG preview stays, and the next Generate reads them.": "Karşılaştırmalar: kaydedilmiş karşılaştırma eşleşmelerinin dizileri girdi dosyalarından yeniden okunamadı; SVG önizlemesi korunur ve diziler bir sonraki oluşturmada okunur.",
   "Composition metadata is invalid or unavailable.": "Bileşim meta verisi geçersiz veya kullanılamıyor.",
   "Compress": "Sıkıştır",
   "Computing…": "Hesaplanıyor…",

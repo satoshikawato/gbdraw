@@ -31,7 +31,7 @@ const copyModule = async (source, destination = source) => writeFile(
   'utf8'
 );
 for (const source of [
-  'utils/error-normalization.js', 'app/ui.js', 'services/feature-dom.js',
+  'utils/error-normalization.js', 'app/ui.js', 'services/feature-dom.js', 'utils/vue-raw.js',
   // error-normalization.js reads Python's figure length units from the generated mode profiles.
   'mode-profiles.generated.js',
   'app/feature-editor/svg-actions.js', 'services/feature-popup.js', 'utils/popup-bounds.js', 'services/runtime-test-hooks.js',
@@ -98,6 +98,8 @@ const stubs = {
     'export const runWhenPrepared = (_state, _preparations, commit) => commit();'
   ],
   'services/feature-sequence-fasta.js': ['export const buildFeatureSequenceFastas = () => ({ nucleotideFasta: "", aminoAcidFasta: "" });'],
+  // A match popup names its spans' records from the shown Result's catalog item (D5); this test opens none.
+  'services/catalog-sequences.js': ['export const matchSequenceRecordsOf = () => null;'],
   'services/feature-override-identity.js': ['export const getFeatureOverride = () => null;'],
   'services/legend-svg.js': [
     'export const COMPARISON_LEGEND_SELECTOR = "[data-gbdraw-role=comparison-legend]";',
@@ -381,7 +383,7 @@ const createPreview = ({ features, bands }) => {
     orthogroups: ref([]), orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {},
     extractedFeatures: ref(features), biologicalFeatures: ref([]), featuresBySvgId: ref(featureMap),
     svgContainer: ref(surface), clickedFeature: ref(null), clickedFeaturePos: { x: 0, y: 0 },
-    clickedPairwiseMatch: ref(null), clickedPairwiseMatchPos: { x: 0, y: 0 }, matchSequenceRegistry: null,
+    clickedPairwiseMatch: ref(null), clickedPairwiseMatchPos: { x: 0, y: 0 },
     selectedAnnotation: ref(null), featurePopupSize: { width: 0, height: 0 }, featureSelectionDrag: { active: false }
   });
   const actions = createFeatureSvgActions({

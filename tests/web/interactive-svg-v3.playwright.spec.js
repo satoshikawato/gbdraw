@@ -981,6 +981,7 @@ test('browser export embeds the exact selected current-schema item and expands r
     const { enrichSvgWithStandaloneInteractivity } = await import(
       `${origin}/gbdraw/web/js/services/standalone-interactivity.js`
     );
+    const { INTERACTIVE_EMBED_SCHEMA } = await import(`${origin}/gbdraw/web/js/contracts/schema.generated.js`);
     const fullNote = `${'x'.repeat(49)}😀tail`;
     const catalog = {
       schema: catalogSchema,
@@ -1138,11 +1139,10 @@ test('browser export embeds the exact selected current-schema item and expands r
         data-gbdraw-annotation-mark="band" data-gbdraw-annotation-label="Review window">
         <rect x="5" y="25" width="20" height="6" fill="#94a3b8" />
       </g>`;
+    // The item as Python's export encoder returns it (`readEmbedItem`, D5): the export embeds it as given.
     const enriched = enrichSvgWithStandaloneInteractivity(svg, {
       popupMode: 'rich',
-      featureCatalog: catalog,
-      catalogResultIndex: 0,
-      catalogResultName: 'diagram.svg',
+      embedItem: catalog.items[0],
       requireFeatureCatalog: true,
       labelTextFeatureOverrides: {
         'rendered-visible': 'Edited visible label'
@@ -1158,6 +1158,7 @@ test('browser export embeds the exact selected current-schema item and expands r
     return {
       enriched,
       catalog,
+      embedSchema: INTERACTIVE_EMBED_SCHEMA,
       embedded: JSON.parse(metadata.textContent),
       schema: metadata.getAttribute('data-schema'),
       resultIndex: metadata.getAttribute('data-result-index'),
@@ -1169,7 +1170,9 @@ test('browser export embeds the exact selected current-schema item and expands r
   }, { origin, catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA });
 
   expect(exported.enriched).toBe(true);
-  expect(exported.embedded.schema).toBe(CURRENT_FEATURE_CATALOG_SCHEMA);
+  // The export profile's schema (D5-02), which the CLI writes too, not the stored catalog's.
+  expect(exported.embedded.schema).toBe(exported.embedSchema);
+  expect(exported.embedSchema).not.toBe(CURRENT_FEATURE_CATALOG_SCHEMA);
   expect(exported.embedded.items).toHaveLength(1);
   expect(exported.embedded.items[0].features[0].displayLabel)
     .toBe('Edited visible label');
@@ -1181,7 +1184,7 @@ test('browser export embeds the exact selected current-schema item and expands r
   expect(exported.sourceDisplayLabel).toBeUndefined();
   expect(exported.sourceGroup.display_name).toBeUndefined();
   expect(exported.sourceGroup.description).toBe('Original group description');
-  expect(exported.schema).toBe(String(CURRENT_FEATURE_CATALOG_SCHEMA));
+  expect(exported.schema).toBe(String(exported.embedSchema));
   expect(exported.resultIndex).toBe('0');
   expect(exported.resultName).toBe('diagram.svg');
   expect(exported.svgText.match(/data-gbdraw-interactive-feature="true"/g)).toHaveLength(2);
@@ -1557,9 +1560,7 @@ test('standalone rejects conflicting compact provenance markers', async ({
           x="5" y="5" width="20" height="10" />`;
       enrichSvgWithStandaloneInteractivity(svg, {
         popupMode: 'rich',
-        featureCatalog: catalog,
-        catalogResultIndex: 0,
-        catalogResultName: 'invalid.svg',
+        embedItem: catalog.items[0],
         requireFeatureCatalog: true
       });
       return {
@@ -1683,7 +1684,12 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     URL.revokeObjectURL = () => {};
     HTMLAnchorElement.prototype.click = () => {};
     try {
-      await downloadInteractiveSVG(captureSvgExport(state, state.drawingOf(state.generatedDrawingId.value), { interactive: true }));
+      // The export embeds the item Python returns for the captured one (`readEmbedItem`, D5); this item holds no
+      // sequence, so the stand-in returns it as captured.
+      const captured = captureSvgExport(state, state.drawingOf(state.generatedDrawingId.value), { interactive: true });
+      await downloadInteractiveSVG({
+        ...captured, interactivity: { ...captured.interactivity, embedItem: captured.interactivity.catalogItem }
+      });
       const svgText = await downloadedBlob.text();
       const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
       const metadata = doc.querySelector('#gbdraw-interactive-feature-metadata');
