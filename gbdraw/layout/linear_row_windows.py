@@ -13,7 +13,10 @@ interval between them.
 This module is the one owner of those values: which rows are windowed, the row
 name, the numbers, the list lines, the edge and gap marks, the omitted-length
 text, the sizes of the marks and the room they take beside each window. The
-layout and the drawing read them from here.
+layout and the drawing read them from here. The units of a row, and each one's
+span, orientation and record, come from the figure's unit list
+(``gbdraw.layout.record_units``); the row's name and list labels come from the
+records' presentations.
 """
 
 from __future__ import annotations
@@ -21,14 +24,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Sequence
 
-from Bio.SeqRecord import SeqRecord
-
 from gbdraw.config.models import GbdrawConfig
-from gbdraw.core.record_metadata import record_identity_key, record_window_span
 from gbdraw.core.text import drawn_text_box
 from gbdraw.layout.linear import VerticalBand
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_labels import record_map_span
+from gbdraw.layout.record_units import RecordUnit
 
 EdgeMark = Literal["bar", "dash"]
 
@@ -40,67 +39,10 @@ LIST_LABEL_SEPARATOR = " · "
 LIST_TEXT_FILL = "#6b6b6b"
 
 
-@dataclass(frozen=True)
-class RowWindowUnit:
-    """One drawn unit of a row as the row's captions and marks read it.
+def _edge_mark(unit: RecordUnit, base: int) -> EdgeMark:
+    """A bar at the first or last base of a linear record; a dashed axis anywhere else."""
 
-    ``span`` is the part of the record the unit shows in source bases, start before end in the record's stored
-    order (``start > end`` runs across the origin of a circular record); ``reverse`` is true when the unit is drawn
-    reverse-complemented; ``has_region`` is false for a record drawn whole.
-    """
-
-    record_index: int
-    identity_key: str
-    record_id: str
-    label: str
-    span: tuple[int, int]
-    reverse: bool
-    source_length: int
-    circular: bool
-    has_region: bool
-
-    @property
-    def length(self) -> int:
-        start, end = self.span
-        return end - start + 1 if start <= end else self.source_length - start + 1 + end
-
-    def edge_bases(self) -> tuple[int, int]:
-        """The source bases at the unit's drawn left and right ends."""
-
-        start, end = self.span
-        return (end, start) if self.reverse else (start, end)
-
-    def edge_mark(self, base: int) -> EdgeMark:
-        """A bar at the first or last base of a linear record; a dashed axis anywhere else."""
-
-        return "bar" if not self.circular and base in (1, self.source_length) else "dash"
-
-
-def row_window_unit(
-    record: SeqRecord,
-    record_index: int,
-    transform: RecordDisplayTransform,
-    label: str | None,
-    axis_length: int,
-) -> RowWindowUnit:
-    """Read one drawn unit: its record identity, its window span (or the bases it draws when whole), its
-    orientation and its record's length and topology (``transform``)."""
-
-    window = record_window_span(record)
-    if window is None:
-        low, high = sorted(record_map_span(record, axis_length))
-        window = (max(1, low), min(transform.length, high))
-    return RowWindowUnit(
-        record_index=record_index,
-        identity_key=str(record_identity_key(record) or f"record-{record_index + 1}"),
-        record_id=str(record.id),
-        label=(label or "").strip(),
-        span=(int(window[0]), int(window[1])),
-        reverse=transform.source_step == -1,
-        source_length=int(transform.length),
-        circular=bool(transform.is_circular),
-        has_region=record_window_span(record) is not None,
-    )
+    return "bar" if not unit.circular and base in (1, unit.source_length) else "dash"
 
 
 def window_span_text(start: int, end: int) -> str:
@@ -180,17 +122,17 @@ class LinearRowWindows:
         return next((gap for gap in self.gaps if gap.left_record_index == record_index), None)
 
 
-def is_windowed_row(units: Sequence[RowWindowUnit]) -> bool:
+def is_windowed_row(units: Sequence[RecordUnit]) -> bool:
     """Two or more units, at least one a window with a region."""
 
-    return len(units) >= 2 and any(unit.has_region for unit in units)
+    return len(units) >= 2 and any(unit.is_window for unit in units)
 
 
 def _arc_contains(start: int, end: int, base: int) -> bool:
     return start <= base <= end if start <= end else base >= start or base <= end
 
 
-def _source_interval_left_out(earlier: RowWindowUnit, later: RowWindowUnit) -> tuple[int, int] | None:
+def _source_interval_left_out(earlier: RecordUnit, later: RecordUnit) -> tuple[int, int] | None:
     """The source interval between ``earlier``'s end and ``later``'s start, read in the record's stored order,
     or ``None`` when the two overlap, touch or (on a linear record) run backwards. On a circular record the
     interval runs forward from ``earlier``'s end to ``later``'s start, through the origin when needed, for every
@@ -206,7 +148,7 @@ def _source_interval_left_out(earlier: RowWindowUnit, later: RowWindowUnit) -> t
     return ((first - 1) % length + 1, (last - 1) % length + 1)
 
 
-def _omitted_bp(left: RowWindowUnit, right: RowWindowUnit, others: Sequence[RowWindowUnit]) -> int | None:
+def _omitted_bp(left: RecordUnit, right: RecordUnit, others: Sequence[RecordUnit]) -> int | None:
     if left.reverse != right.reverse:
         return None
     earlier, later = (right, left) if left.reverse else (left, right)
@@ -225,26 +167,26 @@ def _omitted_bp(left: RowWindowUnit, right: RowWindowUnit, others: Sequence[RowW
     return end - start + 1 if start <= end else left.source_length - start + 1 + end
 
 
-def plan_row_windows(units: Sequence[RowWindowUnit]) -> LinearRowWindows | None:
+def plan_row_windows(units: Sequence[RecordUnit], labels: Sequence[str]) -> LinearRowWindows | None:
     """The captions and marks of a row whose units are ``units`` in drawing order, or ``None`` when the row is
-    not windowed (it keeps the text of each record above it)."""
+    not windowed (it keeps the text of each record above it). ``labels`` are the units' record labels, in the
+    same order (empty for a unit without one)."""
 
     if not is_windowed_row(units):
         return None
-    named = next((unit for unit in units if unit.label), None)
-    name = named.label if named is not None else ""
+    labelled = [(unit, label.strip()) for unit, label in zip(units, labels, strict=True)]
+    named = next(((unit, label) for unit, label in labelled if label), None)
+    name = named[1] if named is not None else ""
     lines = tuple(
         RowWindowLine(
             number=number,
             record_index=unit.record_index,
-            label=unit.label if unit.label and unit.label != name else "",
+            label=label if label and label != name else "",
             text=f"{unit.record_id}:{window_span_text(*unit.span)}{REVERSE_MARK if unit.reverse else ''}",
         )
-        for number, unit in enumerate(units, 1)
+        for number, (unit, label) in enumerate(labelled, 1)
     )
-    edges = tuple(
-        (unit.edge_mark(unit.edge_bases()[0]), unit.edge_mark(unit.edge_bases()[1])) for unit in units
-    )
+    edges = tuple((_edge_mark(unit, unit.edge_bases()[0]), _edge_mark(unit, unit.edge_bases()[1])) for unit in units)
     gaps = tuple(
         RowGapMark(
             left.record_index,
@@ -255,16 +197,16 @@ def plan_row_windows(units: Sequence[RowWindowUnit]) -> LinearRowWindows | None:
                 [
                     unit
                     for unit in units
-                    if unit.identity_key == left.identity_key and unit not in (left, right)
+                    if unit.record_key == left.record_key and unit not in (left, right)
                 ],
             ),
         )
         for left, right in zip(units, units[1:])
-        if left.identity_key == right.identity_key
+        if left.record_key == right.record_key
     )
     return LinearRowWindows(
         record_indices=tuple(unit.record_index for unit in units),
-        name_record_index=named.record_index if named is not None else None,
+        name_record_index=named[0].record_index if named is not None else None,
         lines=lines,
         edges=edges,
         gaps=gaps,
@@ -423,11 +365,9 @@ __all__ = [
     "RowGapMark",
     "RowWindowLine",
     "RowWindowStyle",
-    "RowWindowUnit",
     "is_windowed_row",
     "omitted_length_text",
     "plan_row_windows",
     "row_window_insets",
-    "row_window_unit",
     "window_span_text",
 ]
