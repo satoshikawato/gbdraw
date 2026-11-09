@@ -82,6 +82,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "services" / "drawing" / "inputs.js")
         .read_text(encoding="utf-8")
         .replace("../history-files.js", "./history-files.mjs")
+        .replace("../../contracts/schema.generated.js", "./schema.generated.mjs")
         .replace("../../utils/error-normalization.js", "./error-normalization.mjs")
         .replace("../../utils/reactivity.js", "./reactivity.mjs")
         .replace("./slice-handle.js", "./drawing-slice-handle.mjs"),
