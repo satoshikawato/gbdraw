@@ -151,6 +151,13 @@ const sessionSlotOf = (bindings, inputType) => (file) => {
   return null;
 };
 
+// D-32: one record replacing one record (a new version of the same genome)
+// keeps its crop and titles; a removed file or a replaced multi-record file
+// retires them. The record selector names a record of the old file, so any
+// replacement retires it.
+/** @param {{ removed: boolean, previousRecordCount: number }} replacement */
+const sourceReplacementRetiresPresentation = ({ removed, previousRecordCount }) => removed || previousRecordCount > 1;
+
 /**
  * The edits of a Circular drawing's source cards (circular-multi-file D-01):
  * add cards with their files, replace or remove one file of a card, remove a
@@ -192,12 +199,6 @@ export const createCircularSourceEdits = ({
     form.circular_record_label = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_label;
     form.circular_record_subtitle = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_subtitle;
   };
-  // D-32: one record replacing one record (a new version of the same genome)
-  // keeps its crop and titles; a removed file or a replaced multi-record file
-  // retires them. The record selector names a record of the old file, so any
-  // replacement retires it.
-  /** @param {{ removed: boolean, previousRecordCount: number }} replacement */
-  const sourceReplacementRetiresPresentation = ({ removed, previousRecordCount }) => removed || previousRecordCount > 1;
   /**
    * The card's records leave the drawing's references: its OFF records, and the
    * Record select (with the presentation when `retirePresentation`) when it
