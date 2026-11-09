@@ -27,8 +27,6 @@ many decoded bases stay in memory, never what a read returns.
 from __future__ import annotations
 
 import bisect
-import codecs
-import locale
 import re
 import shutil
 import tempfile
@@ -46,7 +44,7 @@ from Bio import BiopythonParserWarning
 from Bio.Seq import Seq, SequenceDataAbstractBaseClass
 from Bio.SeqRecord import SeqRecord
 
-from .input_text import GZIP_SIGNATURE, FlatFileFormat, expanded_gzip_input
+from .input_text import GZIP_SIGNATURE, FlatFileFormat, expanded_gzip_input, in_sequence_encoding
 
 SequenceFormat = Literal["genbank", "embl", "fasta"]
 
@@ -748,16 +746,13 @@ def _check_embl_first_line(text: str) -> None:
 
 
 def _with_encoding(source: _SequenceFile, read: Callable[[], _Read]) -> _Read:
-    """``read()`` with the file read as UTF-8, else again in the locale's encoding (the rule of ``read_sequence_text``)."""
+    """``read()`` with the file read in the encoding of every sequence file (:func:`in_sequence_encoding`)."""
 
-    try:
-        return read()
-    except UnicodeDecodeError:
-        encoding = locale.getpreferredencoding(False)
-        if codecs.lookup(encoding).name == "utf-8":
-            raise
+    def read_in(encoding: str) -> _Read:
         source.encoding = encoding
         return read()
+
+    return in_sequence_encoding(read_in)
 
 
 def _attach(records: list[SeqRecord], slots: list[_Slot]) -> list[SeqRecord]:

@@ -166,15 +166,27 @@ def read_sequence_text(path: str | PathLike[str], read: Callable[[Iterator[str]]
     the UTF-8 error stands. ``read`` takes every line it needs before it returns.
     """
 
-    try:
-        with open_input_text(path) as handle:
+    def read_in(encoding: str) -> _Read:
+        with open_input_text(path, encoding=encoding) as handle:
             return read(text_lines(handle))
+
+    return in_sequence_encoding(read_in)
+
+
+def in_sequence_encoding(read: Callable[[str], _Read]) -> _Read:
+    """``read("utf-8")``, else, when that meets text that is not UTF-8, ``read`` in the locale's encoding.
+
+    The one rule of the encoding a sequence or annotation file is read in
+    (:func:`read_sequence_text`, :mod:`gbdraw.io.record_sequences`).
+    """
+
+    try:
+        return read("utf-8")
     except UnicodeDecodeError:
         encoding = locale.getpreferredencoding(False)
         if codecs.lookup(encoding).name == "utf-8":
             raise
-        with open_input_text(path, encoding=encoding) as handle:
-            return read(text_lines(handle))
+        return read(encoding)
 
 
 def read_input_bytes(path: str | PathLike[str]) -> bytes:
@@ -356,5 +368,6 @@ __all__ = [
     "open_input_text",
     "read_input_bytes",
     "read_sequence_text",
+    "in_sequence_encoding",
     "text_lines",
 ]
