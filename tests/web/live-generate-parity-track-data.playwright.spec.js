@@ -1054,24 +1054,22 @@ test.describe('OV-104 a decoration moved on one mode\'s Result', () => {
 // Result, committed SVG and drawn tracks included.
 const TRACK_TOGGLES = {
   circular: {
-    'GC content': { form: 'suppress_gc', toggled: true, group: 'content' },
-    'GC skew': { form: 'suppress_skew', toggled: true, group: 'skew' }
+    'GC content': { form: 'suppress_gc', toggled: true, group: 'DINUCLEOTIDE_CONTENT_GROUPS' },
+    'GC skew': { form: 'suppress_skew', toggled: true, group: 'DINUCLEOTIDE_SKEW_GROUPS' }
   },
   linear: {
-    'GC content': { form: 'show_gc', toggled: false, group: 'content' },
-    'GC skew': { form: 'show_skew', toggled: false, group: 'skew' }
+    'GC content': { form: 'show_gc', toggled: false, group: 'DINUCLEOTIDE_CONTENT_GROUPS' },
+    'GC skew': { form: 'show_skew', toggled: false, group: 'DINUCLEOTIDE_SKEW_GROUPS' }
   }
 };
 
-// The track group `group` is drawn in the committed Result: present and not
-// hidden by display none.
-const trackDrawn = (page, group) => page.evaluate((base) => {
+// The track groups of kind `group` (drawn-groups.js) are drawn in the committed
+// Result: present and not hidden by display none.
+const trackDrawn = (page, group) => page.evaluate(async (name) => {
+  const drawnGroups = await import('./js/services/drawn-groups.js');
   const app = window.__GBDRAW_APP__;
   const root = new DOMParser().parseFromString(app.currentResults()[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
-  // Circular names the groups gc_content_N and skew_N, Linear gc_content and gc_skew.
-  const groups = [...root.querySelectorAll('g[id]')].filter((element) => (
-    new RegExp(`^(gc_)?${base}(_\\d+)?$`).test(element.id)
-  ));
+  const groups = drawnGroups.findTrackGroups(root, drawnGroups[name]);
   return groups.length > 0 && groups.every((element) => element.getAttribute('display') !== 'none');
 }, group);
 
