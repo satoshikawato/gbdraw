@@ -11,7 +11,7 @@ from pandas import DataFrame
 import pytest
 
 from gbdraw.api import DepthTrackInput
-from gbdraw.exceptions import ComparisonIdentityError, ParseError, ValidationError
+from gbdraw.exceptions import ComparisonIdentityError, ExportError, ParseError, ValidationError
 from gbdraw.features.visibility import compile_feature_visibility_rules
 from gbdraw.io.record_select import parse_record_selector, select_record
 from gbdraw.labels.filtering import _build_label_override_rules
@@ -322,3 +322,16 @@ def test_a_genbank_slot_file_without_records_says_what_it_looks_like(helpers, tm
     assert result['error'] == {'code': 'NO_RECORDS', 'operation': 'listSequenceRecords',
                                'stage': 'helper', 'context': {'reason': reason}}
     assert 'PRIVATE' not in json.dumps(result)
+
+
+@pytest.mark.parametrize('stage', ['render', 'result-admission', 'request-validation'])
+def test_a_memory_error_is_the_memory_refusal_by_its_class_raised_or_as_a_cause(stage):
+    # OV-3027: the SVG writer raised ExportError from the MemoryError of a large figure; it was a RENDER_FAILED
+    # ("fails the same way"). The class decides, at any depth of the cause chain, never the message.
+    wrapped = ExportError('Failed to generate SVG: PRIVATE_SENTINEL')
+    wrapped.__cause__ = MemoryError('PRIVATE_SENTINEL')
+    for error in (MemoryError(), wrapped):
+        result = serialize_web_error(error, operation='generate', stage=stage)
+        assert result == {'code': 'OUT_OF_MEMORY', 'operation': 'generate', 'stage': stage, 'context': {}}
+    # A message that names memory is not a MemoryError.
+    assert serialize_web_error(ExportError('MemoryError'), operation='generate', stage='render')['code'] == 'RENDER_FAILED'

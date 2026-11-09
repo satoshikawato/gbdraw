@@ -89,8 +89,12 @@ _RECORD_NAME = re.compile(r"[\x21-\x7e][\x20-\x7e]{0,79}")
 
 # The engine computes a Result from the request alone, so an unclassified failure
 # in these stages repeats for the same inputs (RENDER_FAILED offers no Retry).
-# MemoryError depends on the runtime, not the inputs, and stays UNKNOWN.
 RENDER_FAILURE_STAGES = frozenset({"render", "result-admission"})
+# A MemoryError anywhere in the chain (raised, or the cause of an ExportError the
+# writer raised): the engine ran out of memory, which depends on what this page's
+# engine holds, not on the request alone. Classified by the exception class, never
+# by its text; the Web wording owner (utils/error-normalization.js) words the code.
+MEMORY_REFUSAL_CODE = "OUT_OF_MEMORY"
 # Bounded exception-class context: the most specific listed class in the MRO.
 EXCEPTION_TYPES = (
     ValidationError, ParseError, ConfigError, ExportError, GbdrawError,
@@ -323,6 +327,8 @@ def _validation(error: BaseException) -> tuple[str, dict]:
 def _classify_native(error: BaseException, chain: list[BaseException], stage: str) -> tuple[str, dict, str]:
     """Fallback for producers without ``diagnostic=``; see the producer ratchet."""
 
+    if any(isinstance(cause, MemoryError) for cause in chain):
+        return MEMORY_REFUSAL_CODE, {}, stage
     for cause in chain:
         if isinstance(cause, ComparisonIdentityError):
             return "COMPARISON_IDENTITY", {"reason": cause.reason}, "render"
@@ -350,7 +356,7 @@ def _classify_native(error: BaseException, chain: list[BaseException], stage: st
         not validation and isinstance(error, (InputFileError, OSError))
     ):
         return "INPUT_UNREADABLE", {}, stage
-    if stage in RENDER_FAILURE_STAGES and not isinstance(error, MemoryError):
+    if stage in RENDER_FAILURE_STAGES:
         name = next((cls.__name__ for cls in type(error).__mro__ if cls in EXCEPTION_TYPES), None)
         return "RENDER_FAILED", {"exceptionType": name} if name else {}, stage
     return "VALIDATION_UNCLASSIFIED" if validation else "UNKNOWN", {}, stage

@@ -238,6 +238,9 @@ const DEFINITIONS = Object.freeze({
   VALIDATION_UNCLASSIFIED: ['Input validation failed. Review the inputs before retrying.', ['review-input', 'retry']],
   // The engine output depends only on the request, so Retry would fail the same way.
   RENDER_FAILED: ['The diagram engine failed while drawing this diagram. Generating again with the same inputs and settings fails the same way. Change the inputs or settings, or save a Session for investigation.', ['save-session']],
+  // Python's MEMORY_REFUSAL_CODE (gbdraw/web_support/error_adapter.py): a MemoryError, by its class. The engine's
+  // memory never shrinks in this page, so a reloaded page draws with all of it (OV-3027).
+  OUT_OF_MEMORY: ['The diagram engine ran out of memory while drawing this diagram. Save a Session, reload the page, open the Session, and Generate again. If it runs out of memory again, draw a smaller region, turn off tracks or labels you do not need, or draw it with the gbdraw command line (Save Session, then `gbdraw circular --session` or `gbdraw linear --session`).', ['save-session', 'reload']],
   // Python does not draw every forced label (an underlay feature, Embedded Only);
   // Generate fails the same way until the feature's popup choice changes.
   LABEL_NOT_DRAWN: ['Label visibility is On for a feature, but this diagram does not draw its label.', ['edit-input']],

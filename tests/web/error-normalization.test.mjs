@@ -245,7 +245,7 @@ from gbdraw.web_support import error_adapter as a
 exact = list(a._EXACT.values())
 print(json.dumps(dict(
     operations=sorted(a.OPERATIONS), stages=sorted(a.STAGES), fields=sorted(a.FIELDS),
-    codes=sorted(a.DIAGNOSTIC_CODES | {code for code, _ in exact} | {row[1] for row in a._TEMPLATES}),
+    codes=sorted(a.DIAGNOSTIC_CODES | {code for code, _ in exact} | {row[1] for row in a._TEMPLATES} | {a.MEMORY_REFUSAL_CODE}),
     reasons=sorted(a.DIAGNOSTIC_REASONS | {ctx["reason"] for _, ctx in exact if "reason" in ctx}
         | {row[2] for row in a._TEMPLATES} | set(a._CONSTRAINTS.values())),
     contextKeys=sorted(a._DIAGNOSTIC_INTEGER_KEYS | {"configPath"}),
@@ -667,8 +667,19 @@ test('an unclassified engine failure is a render failure with its exception clas
     assert.deepEqual(model.actions, ['save-session']);
     assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
   }
-  // Memory depends on the runtime, not the inputs: that failure keeps Retry.
-  assert.deepEqual([memory.code, memory.actions], ['UNKNOWN', ['retry', 'save-session']]);
+  // Memory depends on what the page's engine holds, not on the inputs alone: it is the memory refusal (OV-3027).
+  assert.deepEqual([memory.code, memory.actions], ['OUT_OF_MEMORY', ['save-session', 'reload']]);
+});
+
+// OV-3027: the engine ran out of memory while it wrote the SVG of a large figure, and the writer raised
+// ExportError from the MemoryError. By the exception class in its cause, never its text, it is the memory refusal:
+// the words say memory and what to do, not that the same inputs fail the same way.
+test('a MemoryError under the SVG writer is the memory refusal, not a render failure (OV-3027)', () => {
+  const model = roundtrip(invoke({ svgWriteMemoryError: true }).error);
+  assert.deepEqual([model.code, model.operation, model.stage, model.context], ['OUT_OF_MEMORY', 'generate', 'render', {}]);
+  assert.match(model.summary, /^The diagram engine ran out of memory while drawing this diagram\. Save a Session, reload the page/);
+  assert.doesNotMatch(model.summary, /fails the same way|Python exception/);
+  assert.deepEqual(model.actions, ['save-session', 'reload']);
 });
 
 // B10: two user-fixable engine failures carry a producer diagnostic through the
