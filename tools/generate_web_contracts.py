@@ -114,6 +114,9 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("DEFAULT_PNG_DPI", "gbdraw.render.export_limits", "DEFAULT_PNG_DPI"),
     # What an absent axis label style reads as: every writer before the setting drew numbered ticks.
     ("LEGACY_SCALAR_AXIS_LABELS", "gbdraw.session_legacy_values", "LEGACY_SCALAR_AXIS_LABELS"),
+    # The params keys each track renderer takes without reading them; the Source recipe leaves them out.
+    ("CIRCULAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.circular", "CIRCULAR_SLOT_UNREAD_PARAM_KEYS"),
+    ("LINEAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.linear", "LINEAR_SLOT_UNREAD_PARAM_KEYS"),
 )
 # (Web name, Python module, function): values a Python function derives from
 # its owner, written in this order after the constants.

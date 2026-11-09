@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import replace
 from typing import Callable, Literal, Sequence, TypeVar, cast
 
@@ -13,8 +12,6 @@ from ..layout.record_coordinates import DisplayFragment, RecordDisplayTransform,
 from .models import AnnotationOptions, ResolvedAnnotationBundle
 from .resolve import resolve_annotations
 
-
-logger = logging.getLogger(__name__)
 
 SlotT = TypeVar("SlotT")
 
@@ -51,32 +48,59 @@ def _highlight_overlay_slot(
     )
 
 
+def _bundle_set_ids(bundle: ResolvedAnnotationBundle) -> tuple[str, ...]:
+    return bundle.set_ids or tuple(dict.fromkeys(item.set_id for item in bundle.annotations))
+
+
+def _named_set_ids(slots: Sequence[object], *, enabled_only: bool) -> set[str]:
+    return {
+        str(getattr(slot, "params", {}).get("set_id", "")).strip()
+        for slot in slots
+        if _renderer(slot) == "annotations" and (not enabled_only or getattr(slot, "enabled", True))
+    }
+
+
+def _features_slot(slots: Sequence[SlotT]) -> SlotT | None:
+    return next(
+        (slot for slot in slots if _renderer(slot) == "features" and getattr(slot, "enabled", True)), None
+    )
+
+
+def _kept_overlay_set_ids(
+    slots: Sequence[object], bundle: ResolvedAnnotationBundle, set_ids: Sequence[str]
+) -> tuple[str, ...]:
+    """The sets an explicit stack draws as their automatic highlight overlay: each set that keeps it
+    (``AnnotationSet.keep_highlight_overlay``, a sequence search's set, PD-OI-117), has highlights, and that no
+    enabled slot names, while the stack has an enabled feature track."""
+
+    if _features_slot(slots) is None or not bundle.highlight_overlay_set_ids:
+        return ()
+    named = _named_set_ids(slots, enabled_only=True)
+    highlighted = {item.set_id for item in bundle.annotations if item.mark == "highlight"}
+    return tuple(
+        set_id for set_id in set_ids
+        if set_id in bundle.highlight_overlay_set_ids and set_id not in named and set_id in highlighted
+    )
+
+
 def _with_kept_highlight_overlays(
     slots: list[SlotT],
     bundle: ResolvedAnnotationBundle,
     set_ids: Sequence[str],
     slot_factory: Callable[..., SlotT],
 ) -> list[SlotT]:
-    """An explicit stack with the automatic highlight overlay of each set that keeps it
-    (``AnnotationSet.keep_highlight_overlay``, a sequence search's set, PD-OI-117) and that no enabled slot names:
+    """An explicit stack with the automatic highlight overlay of each set that keeps it (``_kept_overlay_set_ids``):
     after the stack's own slots, so its axis index stays, in front of the stack's feature track. A slot that names
     the set wins; a stack without a feature track draws no overlay. Other sets follow the stack."""
 
-    features = next(
-        (slot for slot in slots if _renderer(slot) == "features" and getattr(slot, "enabled", True)), None
-    )
-    if features is None or not bundle.highlight_overlay_set_ids:
+    kept = set(_kept_overlay_set_ids(slots, bundle, set_ids))
+    features = _features_slot(slots)
+    if not kept or features is None:
         return slots
-    named = {
-        str(getattr(slot, "params", {}).get("set_id", "")).strip()
-        for slot in slots
-        if _renderer(slot) == "annotations" and getattr(slot, "enabled", True)
-    }
-    highlighted = {item.set_id for item in bundle.annotations if item.mark == "highlight"}
     used = {str(getattr(slot, "id")) for slot in slots}
     added: list[SlotT] = []
     for index, set_id in enumerate(set_ids, start=1):
-        if set_id not in bundle.highlight_overlay_set_ids or set_id in named or set_id not in highlighted:
+        if set_id not in kept:
             continue
         slot_id, suffix = f"annotations_{index}", 1
         while slot_id in used:
@@ -125,7 +149,7 @@ def prepare_annotation_track_slots(
             projected.append(item)
         bundle = replace(bundle, annotations=tuple(projected))
 
-    set_ids = bundle.set_ids or tuple(dict.fromkeys(item.set_id for item in bundle.annotations))
+    set_ids = _bundle_set_ids(bundle)
     if slots is None:
         generated: list[SlotT] = []
         for index, set_id in enumerate(set_ids, start=1):
@@ -153,21 +177,11 @@ def prepare_annotation_track_slots(
     else:
         slots = _with_kept_highlight_overlays(slots, bundle, set_ids, slot_factory)
 
-    requested = {
-        str(getattr(slot, "params", {}).get("set_id", "")).strip()
-        for slot in slots
-        if _renderer(slot) == "annotations"
-    }
-    unknown = requested - set(set_ids)
+    unknown = _named_set_ids(slots, enabled_only=False) - set(set_ids)
     if unknown:
         raise ValidationError(
             f"Annotation track references unknown set_id(s): {', '.join(sorted(unknown))}"
         )
-    for set_id in set_ids:
-        if set_id not in requested and any(item.set_id == set_id for item in bundle.annotations):
-            logger.warning(
-                "Annotation set %s is not referenced by a %s track slot.", set_id, mode
-            )
 
     extent_name = "width" if mode == "circular" else "height"
     auto_slot_ids = frozenset(
@@ -177,3 +191,18 @@ def prepare_annotation_track_slots(
         and getattr(slot, extent_name) is None
     )
     return slots, bundle, auto_slot_ids
+
+
+def annotation_sets_left_out(
+    bundle: ResolvedAnnotationBundle, slots: Sequence[object] | None
+) -> tuple[str, ...]:
+    """The sets with annotations that the explicit track stack ``slots`` draws nothing of: no annotations slot names
+    them, and they get no kept highlight overlay (``_kept_overlay_set_ids``). Without a stack (``None``) every set
+    gets its automatic slots, so none is left out. The input summary reports them (OV-3007)."""
+
+    if slots is None:
+        return ()
+    set_ids = _bundle_set_ids(bundle)
+    drawn = _named_set_ids(slots, enabled_only=False) | set(_kept_overlay_set_ids(slots, bundle, set_ids))
+    with_annotations = {item.set_id for item in bundle.annotations}
+    return tuple(set_id for set_id in set_ids if set_id not in drawn and set_id in with_annotations)

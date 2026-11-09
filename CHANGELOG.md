@@ -92,6 +92,17 @@ write-up of a release.
   which the custom stack does not use, instead of the width of the Depth row
   (for example 8 px shown, 5.5 px drawn for a 25 px row). They now show the
   size the figure draws (OV-2876).
+- Fixed: a custom track stack (**Use custom stack** in the Web app,
+  `--circular_track_slot` or `--linear_track_slot` on the command line) with no
+  Annotations row for a Region Annotation set left the set out of the figure
+  without a word. The run now says which set is not drawn and that an
+  annotations track slot for it (`set_id=<set>`) draws it: a `WARNING:` line on
+  the command line, and **Part of the input was not drawn.** in the Web app
+  (OV-3007).
+- Fixed (Web app): Run Info gave no Source recipe for a Circular custom stack
+  with comparison rings ("semantic field ... params.managed has no current CLI
+  projection"). The recipe now leaves out the ring rows' own bookkeeping, which
+  does not change the figure, and the command draws the same figure (OV-3009).
 - Changed: when the Circular similarity rings are not all one color, each
   Legend row now shows the ring's name with that ring's own identity ramp
   (white to its color), with one scale line under the last ramp, instead of a

@@ -14,6 +14,7 @@ from .parsing import (
     parse_track_slot_text,
     reject_unread_slot_params,
     split_kv_list,
+    unread_slot_param_keys,
     validate_annotation_slot_side,
     validate_overlay_annotation_anchors,
 )
@@ -124,16 +125,28 @@ DEFAULT_TICK_LABEL_LAYOUT = "label_out_tick_in"
 _FEATURE_LANE_VALUES = {"inside", "outside", "split"}
 _SIDE_VALUES = {"inside", "outside", "overlay"}
 
-# The params keys each non-annotation Circular renderer takes (OV-477), besides
-# the keys every slot carries (`CARRIED_SLOT_PARAM_KEYS`). A
-# sequence_conservation slot reads track_index and source_index and carries the
-# Web's managed and series_key (Owner LP-D66), which released Sessions hold.
-_CIRCULAR_SLOT_PARAM_KEYS: Mapping[str, frozenset[str]] = MappingProxyType({
+# The params keys each non-annotation Circular renderer reads (OV-477).
+_CIRCULAR_SLOT_READ_PARAM_KEYS: Mapping[str, frozenset[str]] = MappingProxyType({
     **SHARED_SLOT_PARAM_KEYS,
     "features": frozenset({"lane_direction", "lanes", "stack_preset", "preset"}),
     "ticks": frozenset({"tick_label_layout", "preset", "track_preset"}),
-    "sequence_conservation": frozenset({"track_index", "source_index", "managed", "series_key"}),
+    "sequence_conservation": frozenset({"track_index", "source_index"}),
 })
+# A sequence_conservation slot also carries the Web's managed and series_key
+# (Owner LP-D66), which released Sessions hold, and does not read them.
+_CIRCULAR_SLOT_CARRIED_PARAM_KEYS: Mapping[str, frozenset[str]] = MappingProxyType({
+    "sequence_conservation": frozenset({"managed", "series_key"}),
+})
+# The params keys each non-annotation Circular renderer takes, besides the keys
+# every slot carries (`CARRIED_SLOT_PARAM_KEYS`).
+_CIRCULAR_SLOT_PARAM_KEYS: Mapping[str, frozenset[str]] = MappingProxyType({
+    renderer: keys | _CIRCULAR_SLOT_CARRIED_PARAM_KEYS.get(renderer, frozenset())
+    for renderer, keys in _CIRCULAR_SLOT_READ_PARAM_KEYS.items()
+})
+# The keys each of them takes without reading them (the Web's Source recipe leaves them out).
+CIRCULAR_SLOT_UNREAD_PARAM_KEYS = unread_slot_param_keys(
+    _CIRCULAR_SLOT_READ_PARAM_KEYS, _CIRCULAR_SLOT_CARRIED_PARAM_KEYS
+)
 
 
 @dataclass(frozen=True)

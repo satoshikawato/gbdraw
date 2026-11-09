@@ -4,7 +4,7 @@ from typing import Any, Mapping
 import pytest
 
 from gbdraw.annotations.models import ResolvedAnnotationBundle
-from gbdraw.annotations.planning import prepare_annotation_track_slots
+from gbdraw.annotations.planning import annotation_sets_left_out, prepare_annotation_track_slots
 from gbdraw.exceptions import ValidationError
 
 
@@ -156,3 +156,23 @@ def test_the_kept_overlay_takes_an_unused_slot_id() -> None:
         slot_factory=CircularTrackSlot,
     )
     assert slots is not None and [slot.id for slot in slots][-1] == "annotations_2_2"
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_the_sets_an_explicit_stack_leaves_out_are_the_ones_it_draws_nothing_of(mode: str) -> None:
+    """OV-3007: the input summary names a set no annotations slot names; a kept set drawn as its overlay, a set a
+    slot names (on or off), a set without annotations, and every set without a stack are not left out."""
+    from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
+
+    factory = CircularTrackSlot if mode == "circular" else LinearTrackSlot
+    side = "outside" if mode == "circular" else "above"
+    bundle = _search_bundle()
+    assert annotation_sets_left_out(bundle, None) == ()
+    # The kept search set is drawn as its overlay in front of the feature track; "other" is left out.
+    assert annotation_sets_left_out(bundle, _stack(mode)) == ("other",)
+    named_off = factory(id="o", renderer="annotations", side=side, enabled=False, params={"set_id": "other"})
+    assert annotation_sets_left_out(bundle, _stack(mode, named_off)) == ()
+    # Without a feature track the kept set has no overlay to be drawn in.
+    assert annotation_sets_left_out(bundle, [factory(id="gc", renderer="gc_content")]) == ("other", "search_1")
+    empty = ResolvedAnnotationBundle(annotations=(), set_ids=("empty",))
+    assert annotation_sets_left_out(empty, _stack(mode)) == ()

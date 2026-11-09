@@ -1,6 +1,7 @@
 """What one diagram read from its inputs, and what it drew of them: the input summary.
 
-A render that draws nothing from a file it read must say why. This module is the
+A render that draws nothing from a file it read, or from a region annotation set it was
+given, must say why. This module is the
 one owner of that report for every surface: the CLI logs :func:`input_summary_lines`
 as INFO and each :class:`InputWarning` as WARNING, and the Web shows the same text,
 which the Worker carries as :func:`input_summary_payload` beside its Results.
@@ -42,10 +43,12 @@ InputWarningCode = Literal[
     "no_drawable_features",
     "comparison_rows_filtered_out",
     "comparison_table_empty",
+    "annotation_set_not_drawn",
 ]
 NO_DRAWABLE_FEATURES: InputWarningCode = "no_drawable_features"
 COMPARISON_ROWS_FILTERED_OUT: InputWarningCode = "comparison_rows_filtered_out"
 COMPARISON_TABLE_EMPTY: InputWarningCode = "comparison_table_empty"
+ANNOTATION_SET_NOT_DRAWN: InputWarningCode = "annotation_set_not_drawn"
 
 _THRESHOLD_WORDING: dict[ComparisonThresholdName, tuple[str, str, str]] = {
     # name: (relation of a left-out row, threshold name, unit)
@@ -112,6 +115,9 @@ class InputSummary:
 
     records: tuple[RecordInputSummary, ...]
     comparisons: tuple[ComparisonTableTally, ...] = ()
+    # The region annotation sets with annotations that the explicit track stack draws nothing of
+    # (``gbdraw.annotations.planning.annotation_sets_left_out``), in the order the sets were given.
+    annotation_sets_left_out: tuple[str, ...] = ()
 
 
 class InputWarningPayload(TypedDict):
@@ -218,12 +224,15 @@ def summarize_inputs(
     record_features: Sequence[ResolvedRecordFeatureInputs] = (),
     comparisons: Sequence[ComparisonTableTally] = (),
     draws_features: bool = True,
+    annotation_sets_left_out: Sequence[str] = (),
 ) -> InputSummary:
     """The input summary of the drawn ``records`` (aligned with their ``provenance``).
 
     ``record_features`` is empty or aligned with ``records``; the other feature
     arguments are the ones the drawing reads. ``draws_features`` is false when
     the track stack has no features track: no feature is counted as drawn.
+    ``annotation_sets_left_out`` names the region annotation sets the track
+    stack draws nothing of.
     """
 
     summaries = []
@@ -249,7 +258,11 @@ def summarize_inputs(
             ) if draws_features else (),
             features_track=draws_features,
         ))
-    return InputSummary(records=tuple(summaries), comparisons=tuple(comparisons))
+    return InputSummary(
+        records=tuple(summaries),
+        comparisons=tuple(comparisons),
+        annotation_sets_left_out=tuple(annotation_sets_left_out),
+    )
 
 
 def _count(value: int, noun: str, plural: str | None = None) -> str:
@@ -366,7 +379,7 @@ def _no_feature_reason(record: RecordInputSummary) -> str:
 
 
 def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
-    """The reasons the drawing shows nothing of a record or of a comparison table."""
+    """The reasons the drawing shows nothing of a record, of a comparison table, or of a region annotation set."""
 
     warnings = [
         InputWarning(
@@ -390,6 +403,14 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
                 f"{label}: the thresholds leave out all {_count(tally.rows_read, 'row')}, so no match is drawn: "
                 + "; ".join(_threshold_text(item) for item in tally.thresholds) + ".",
             ))
+    warnings.extend(
+        InputWarning(
+            ANNOTATION_SET_NOT_DRAWN,
+            f"Region annotation set {set_id} is not drawn: no annotations track slot names it. "
+            f"Add an annotations track slot for it (set_id={set_id}) to draw it.",
+        )
+        for set_id in summary.annotation_sets_left_out
+    )
     return tuple(warnings)
 
 
@@ -409,7 +430,8 @@ def with_source_names(summary: InputSummary, names: Mapping[str, str]) -> InputS
     knows the name of the file it read.
     """
 
-    return InputSummary(
+    return replace(
+        summary,
         records=tuple(
             replace(record, source_name=names.get(record.source_name, record.source_name))
             for record in summary.records
@@ -461,6 +483,7 @@ def input_summary_payload(
 
 
 __all__ = [
+    "ANNOTATION_SET_NOT_DRAWN",
     "COMPARISON_ROWS_FILTERED_OUT",
     "COMPARISON_TABLE_EMPTY",
     "FeatureTypeTally",

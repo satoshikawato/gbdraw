@@ -1569,6 +1569,53 @@ const webRenderMatches = async (session, cliSvg, field, plainValue) => {
   assert.deepEqual(outcome, { edited: true, plain: false }, `${field}: ${differences.join('\n')}`);
 };
 
+// OV-3009: a comparison ring row of a custom stack carries the Web's bookkeeping (managed, series_key, label, color,
+// fileName), which Python takes and does not read (gbdraw/tracks/circular.py CIRCULAR_SLOT_UNREAD_PARAM_KEYS). The
+// Source recipe leaves it out, and the CLI draws the Web Result.
+test('a custom stack with a managed comparison ring row gives a Source recipe that the CLI replays', async () => {
+  const testa = `${(await readFile(join(repoRoot, 'tests', 'fixtures', 'web_batch_two_records.gb'), 'utf8'))
+    .split(/^\/\/\s*$/m)[0].trim()}\n//\n`;
+  const blast = ['TESTB\tTESTA\t100.0\t600\t0\t0\t301\t900\t301\t900\t1e-80\t900',
+    'TESTB\tTESTA\t85.0\t400\t20\t0\t2001\t2400\t2001\t2400\t1e-60\t500'].join('\n') + '\n';
+  const session = canonical({
+    mode: 'circular',
+    records: [{
+      recordKey: 'testa', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'source' },
+      selector: null, windows: [], presentation: presentation()
+    }],
+    resources: { source: resource('genbank', 'source-testa.gbk', testa), ring: resource('conservation-blast-file', 'ring-b.tsv', blast) },
+    webFiles: { resourceOriginalNames: { source: 'testa.gbk', ring: 'ring-b.tsv' } }
+  });
+  const options = session.renderRequest.diagramOptions;
+  options.conservationBlastFiles = [{ resourceId: 'ring', representation: 'file' }];
+  options.conservationLabels = ['Ring B'];
+  options.conservationColors = [''];
+  const row = (id, renderer, side, params) => ({
+    kind: 'circularTrackSlot', id, renderer, enabled: true, side, radius: null, width: null, z: 0, params,
+    innerGapPx: null, outerGapPx: null
+  });
+  const plainTracks = structuredClone(options.tracks);
+  options.tracks.circularTrackSlots = [
+    row('features', 'features', 'overlay', { lane_direction: 'split' }),
+    row('conservation_1', 'sequence_conservation', 'inside', {
+      managed: 'circular_conservation', series_key: 'ring-b.tsv:0', source_index: '0', track_index: '1',
+      label: 'Ring B', color: '', fileName: 'ring-b.tsv'
+    })
+  ];
+  options.tracks.circularTrackAxisIndex = 1;
+  const recipe = await buildSourceRecipe(session);
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  const tokens = recipe.args.filter((_, index) => recipe.args[index - 1] === '--circular_track_slot');
+  const ring = tokens.find((token) => token.startsWith('conservation_1:'));
+  assert.match(ring, /^conservation_1:sequence_conservation@/, JSON.stringify(tokens));
+  assert.doesNotMatch(ring, /managed|series_key|fileName|label=|color=/, ring);
+  await assertCliParserAccepts(recipe);
+  const cliSvg = await materializeAndRunRecipe(
+    session, recipe, buildRunInfo({ mode: recipe.mode, sourceRecipe: recipe }), 'managed ring row'
+  );
+  await webRenderMatches(session, cliSvg, 'tracks', plainTracks);
+});
+
 test('feature edit recipe writes --feature_override_table and the CLI draws the Web Result', async () => {
   const [first, second, third] = await sourceFeatureIds(IDENTITY_GENBANK);
   assert.equal(first.replace(/~0$/, '~1'), second);

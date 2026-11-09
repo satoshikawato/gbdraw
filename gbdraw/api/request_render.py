@@ -75,6 +75,7 @@ from gbdraw.annotations import (
     read_annotation_options,
     resolve_annotations,
 )
+from gbdraw.annotations.planning import annotation_sets_left_out
 from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losat, ring_subject_records
 from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
 from gbdraw.comparisons.losat_jobs import losat_record_uids, losat_source_ids, losatp_job_specs
@@ -3294,10 +3295,12 @@ def _plan_input_summary(
     plan: CircularRequestPlan | LinearRequestPlan,
     comparisons: Sequence[ComparisonTableTally] = (),
 ) -> InputSummary:
-    """The input summary of a built plan, from the feature inputs its drawing read."""
+    """The input summary of a built plan, from the feature inputs and the track stack its drawing read."""
 
+    slots = _plan_track_slots(plan)
+    left_out = annotation_sets_left_out(cast(ResolvedAnnotationBundle, plan.resolved_annotations), slots)
     if not plan.provenance:  # A plan built without record planning has no sources to name.
-        return InputSummary((), tuple(comparisons))
+        return InputSummary((), tuple(comparisons), left_out)
     inputs = plan.inputs
     return summarize_inputs(
         plan.records,
@@ -3307,23 +3310,25 @@ def _plan_input_summary(
         specific_color_rules=inputs.features.specific_color_rules if inputs is not None else None,
         record_features=inputs.record_features if inputs is not None else (),
         comparisons=comparisons,
-        draws_features=_plan_draws_features(plan),
+        draws_features=slots_draw_features(slots),
+        annotation_sets_left_out=left_out,
     )
 
 
-def _plan_draws_features(plan: CircularRequestPlan | LinearRequestPlan) -> bool:
-    """Whether the plan's track stack draws features: the slot list the drawing reads, parsed as it parses it."""
+def _plan_track_slots(
+    plan: CircularRequestPlan | LinearRequestPlan,
+) -> list[CircularTrackSlot] | list[LinearTrackSlot] | None:
+    """The plan's explicit track stack, parsed as the drawing parses it; ``None`` without one."""
 
-    slots: list[CircularTrackSlot] | list[LinearTrackSlot] | None = None
     if isinstance(plan, CircularRequestPlan):
         circular = plan.request.options.tracks
         if circular is not None and circular.circular_track_slots is not None:
-            slots = parse_circular_track_slots(list(circular.circular_track_slots))
-    else:
-        linear = plan.request.options.tracks
-        if linear is not None and linear.linear_track_slots is not None:
-            slots = parse_linear_track_slots(list(linear.linear_track_slots))
-    return slots_draw_features(slots)
+            return parse_circular_track_slots(list(circular.circular_track_slots))
+        return None
+    linear = plan.request.options.tracks
+    if linear is not None and linear.linear_track_slots is not None:
+        return parse_linear_track_slots(list(linear.linear_track_slots))
+    return None
 
 
 def build_request_diagram(

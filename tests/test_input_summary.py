@@ -101,6 +101,45 @@ def test_cli_says_a_track_stack_without_a_features_slot_draws_no_feature(tmp_pat
     assert not any(line.startswith("WARNING:") for line in lines), lines
 
 
+REGION_SET_TABLE = "set_id\tid\tmark\tstart\tend\tlabel\nislands\tisland1\tbracket\t500\t1500\tIsland 1\n"
+REGION_SET_LEFT_OUT_WARNING = (
+    "WARNING: Region annotation set islands is not drawn: no annotations track slot names it. "
+    "Add an annotations track slot for it (set_id=islands) to draw it."
+)
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_cli_warns_once_about_a_region_set_the_track_stack_leaves_out(tmp_path: Path, mode: str) -> None:
+    """A custom stack draws only the sets its annotations slots name; the run says which set it leaves out and how
+    to draw it, once (OV-3007)."""
+    table = tmp_path / "regions.tsv"
+    table.write_text(REGION_SET_TABLE, encoding="utf-8")
+    slot = f"--{mode}_track_slot"
+    run = _gbdraw(
+        mode, "--gbk", str(QUERY), "--annotation_table", str(table), slot, "features:features",
+        "-o", "out", "-f", "svg", cwd=tmp_path,
+    )
+
+    assert run.returncode == 0, run.stderr
+    assert [line for line in _lines(run) if line.startswith("WARNING:")] == [REGION_SET_LEFT_OUT_WARNING]
+    assert (tmp_path / "out.svg").is_file()
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize("slots", [(), ("features:features", "islands:annotations@set_id=islands")])
+def test_cli_keeps_quiet_when_every_region_set_is_drawn(tmp_path: Path, mode: str, slots: tuple[str, ...]) -> None:
+    """Without a stack every set gets its automatic slot; a stack that names the set draws it (OV-3007)."""
+    table = tmp_path / "regions.tsv"
+    table.write_text(REGION_SET_TABLE, encoding="utf-8")
+    extra = [arg for spec in slots for arg in (f"--{mode}_track_slot", spec)]
+    run = _gbdraw(
+        mode, "--gbk", str(QUERY), "--annotation_table", str(table), *extra, "-o", "out", "-f", "svg", cwd=tmp_path,
+    )
+
+    assert run.returncode == 0, run.stderr
+    assert not any(line.startswith("WARNING:") for line in _lines(run)), run.stderr
+
+
 def test_cli_warns_when_the_thresholds_leave_out_every_comparison_row(tmp_path: Path) -> None:
     run = _gbdraw(
         "linear", "--gbk", str(QUERY), str(SUBJECT), "-b", str(ROWS_BELOW_IDENTITY), "--identity", "70",
@@ -222,6 +261,48 @@ def test_web_reply_warns_about_a_record_with_no_feature(tmp_path: Path) -> None:
 
     assert reply["metadata"]["inputSummaries"][0]["warnings"] == [
         {"code": "no_drawable_features", "message": ZERO_FEATURES_WARNING.removeprefix("WARNING: ")}
+    ]
+
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_web_reply_names_a_region_set_the_track_stack_leaves_out(tmp_path: Path, mode: str) -> None:
+    """The Web shows the warning the CLI logs, from the same owner (OV-3007)."""
+    from gbdraw.api import (
+        AnnotationOptions,
+        CircularDiagramOptions,
+        CircularDiagramRequest,
+        CircularRequestTrackOptions,
+        LinearRequestTrackOptions,
+    )
+
+    table = tmp_path / "regions.tsv"
+    table.write_text(REGION_SET_TABLE, encoding="utf-8")
+    annotations = AnnotationOptions(table_file=str(table))
+    records = (RecordInput(source=GenBankInputSource(QUERY)),)
+    output = RenderOutputRequest(output_prefix="stack", formats=("svg",))
+    request = (
+        CircularDiagramRequest(
+            records=records, output=output,
+            options=CircularDiagramOptions(
+                annotations=annotations, tracks=CircularRequestTrackOptions(circular_track_slots=("features:features",)),
+            ),
+        )
+        if mode == "circular"
+        else LinearDiagramRequest(
+            records=records, output=output,
+            options=LinearDiagramOptions(
+                annotations=annotations, tracks=LinearRequestTrackOptions(linear_track_slots=("features:features",)),
+            ),
+        )
+    )
+    document = build_session_document(request).to_dict()
+    reply = render_embedded_canonical_web_request(
+        document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
+    )
+
+    assert reply["metadata"]["inputSummaries"][0]["warnings"] == [
+        {"code": "annotation_set_not_drawn", "message": REGION_SET_LEFT_OUT_WARNING.removeprefix("WARNING: ")}
     ]
 
 
