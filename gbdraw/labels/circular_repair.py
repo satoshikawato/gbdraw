@@ -38,20 +38,22 @@ reach it.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
 from ..layout.spatial import (
     Aabb,
+    BoxedLetters,
+    BoxedPart,
     aabbs_touch,
+    boxed_parts_meet,
     bounding_aabb,
     finite_aabb,
     touching_aabb_indices,
     union_aabbs,
 )
 from .circular import (
-    FITS,
     HEMISPHERE_AXIS_EPS_PX,
     _current_half_from_x,
     _label_bbox_max_radius,
@@ -63,13 +65,13 @@ from .circular import (
     _segments_through_rect_interior,
     angle_from_middle_unwrapped,
     assign_leader_start_points,
-    circular_label_fits,
+    circular_label_defects,
     circular_label_shape,
     normalize_angle_near_reference,
 )
 from .circular_leaders import arrival_contact, contact_end, label_ink_box
 from .circular_types import CircularLabel
-from .fit import LabelShape, box_covers_definition_text, covers_definition_text, polylines_cross, shapes_overlap
+from .fit import LabelShape, Polygon, box_covers_definition_text, covers_definition_text, polylines_cross, shapes_overlap
 
 # LP-D57: repair records with up to this many defects, within this many evaluations.
 MAX_DEFECTS = 100
@@ -118,12 +120,23 @@ ROW_GAP_CAP_PX = 30.0
 _EPS = 1e-9
 
 Side: TypeAlias = Literal["out", "in"]
-# "box": a label over a box it makes way for (a region label's letters, CIR-RGN-YIELD).
-DefectKind: TypeAlias = Literal["overlap", "crossing", "definition", "box"]
+# "box": a label over the letters of the region label it makes way for; "region": over another region label's
+# letters (CIR-RGN-YIELD).
+DefectKind: TypeAlias = Literal["overlap", "crossing", "definition", "box", "region"]
 Defect: TypeAlias = tuple[DefectKind, int, int]
 Moved: TypeAlias = dict[int, CircularLabel]
 # (leader of, text of): a leader drawn through another label's text.
 Through: TypeAlias = frozenset[tuple[int, int]]
+# What a feature label's style draws besides its letters (its underline and white box), as convex polygons.
+FeatureLabelDrawnParts: TypeAlias = Callable[[CircularLabel], tuple[Polygon, ...]]
+# What each region label of the record overlaps where it is drawn, in a fixed order, with the feature labels at these
+# places and the region labels of these indices drawn where the feature labels made way for them: the labels its
+# warning counts, by their index (``CircularAnnotationLabels.overlapped``), in the order of the region labels.
+RegionLabelOverlaps: TypeAlias = Callable[[Sequence[CircularLabel], Sequence[int]], tuple[frozenset[int], ...]]
+
+
+def _no_drawn_parts(_label: CircularLabel) -> tuple[Polygon, ...]:
+    return ()
 
 
 @dataclass(frozen=True)
@@ -138,10 +151,14 @@ class _Geometry:
     box: Aabb | None
     leader_box: Aabb | None
     reach: Aabb | None
+    # What its style draws, letters, underline and white box, each part with its box, and the box around them all:
+    # what a region label's letters may not meet (``boxed_parts_meet``); empty when no region label is made way for.
+    drawn: tuple[BoxedPart, ...] = ()
+    drawn_box: Aabb | None = None
 
     def covers(self, boxes: Sequence[Aabb]) -> bool:
         """:func:`~gbdraw.labels.fit.covers_definition_text` from the text box measured already (a repair tests
-        each candidate place against the definition text and the boxes to clear)."""
+        each candidate place against the definition text)."""
 
         if not self.shape.leader or not boxes:
             return False
@@ -179,15 +196,31 @@ class _Repair:
         labels: Sequence[CircularLabel],
         total_length: int,
         definition_text: Sequence[Aabb],
-        text_shift_px: float = MAX_TEXT_SHIFT_PX,
-        boxes: Sequence[Aabb] = (),
+        text_shift_px: float | Sequence[float] = MAX_TEXT_SHIFT_PX,
+        *,
+        target: Sequence[BoxedPart] = (),
+        others: Sequence[Sequence[BoxedPart]] = (),
+        origin: Sequence[CircularLabel] | None = None,
+        drawn_parts: FeatureLabelDrawnParts = _no_drawn_parts,
     ) -> None:
-        self.text_shift_px = float(text_shift_px)
-        self.boxes = tuple(boxes)
+        """``text_shift_px`` is how far a text may move, one for every label or each label's own; ``target`` the
+        letters of a region label to clear and ``others`` those of the record's other region labels, each part with
+        its box; ``origin`` the places shifts are measured from (the labels' own places when None), so that clearing
+        one region label after another moves no text further in all than once."""
+
+        self.text_shift_px = (
+            (float(text_shift_px),) * len(labels)
+            if isinstance(text_shift_px, (int, float))
+            else tuple(float(limit) for limit in text_shift_px)
+        )
+        self.target = tuple(target)
+        self.others = tuple((union_aabbs(box for box, _part in region), tuple(region)) for region in others if region)
+        self.target_box = union_aabbs(box for box, _part in self.target)
+        self.drawn_parts = drawn_parts
         self.total_length = int(total_length)
         self.definition_text = tuple(definition_text)
         self.labels = [label.copy() for label in labels]
-        self.original = [label.copy() for label in labels]
+        self.original = [label.copy() for label in (labels if origin is None else origin)]
         self.count = len(self.labels)
         self.movable = [not label.get("is_embedded") for label in self.labels]
         self.external = [index for index in range(self.count) if self.movable[index]]
@@ -228,7 +261,7 @@ class _Repair:
         self._refresh()
         # Pairs that a move within the bounds can bring together.
         tallest = max((float(self.labels[index]["height_px"]) for index in self.external), default=0.0)
-        expand = 2.0 * self.text_shift_px + 2.0 * tallest + 4.0
+        expand = 2.0 * max(self.text_shift_px, default=0.0) + 2.0 * tallest + 4.0
         reaches = [geometry.reach for geometry in self.geometry]
         self.peers: list[list[int]] = [
             [
@@ -255,7 +288,34 @@ class _Repair:
         box = bounding_aabb(text)
         leader_box = bounding_aabb(shape.leader)
         reach = union_aabbs((box, leader_box)) if box is not None and leader_box is not None else None
-        return _Geometry(shape, box, leader_box, reach)
+        if not (self.target or self.others):
+            return _Geometry(shape, box, leader_box, reach)
+        drawn = tuple(
+            (part_box, part)
+            for part in (*shape.parts, *self.drawn_parts(label))
+            if (part_box := bounding_aabb(part)) is not None
+        )
+        return _Geometry(shape, box, leader_box, reach, drawn, union_aabbs(part_box for part_box, _part in drawn))
+
+    def _region_defects(self, index: int, geometry: _Geometry) -> list[Defect]:
+        """A label over the letters of the region label it makes way for (``box``), and over another one's
+        (``region``)."""
+
+        found: list[Defect] = []
+        if geometry.drawn_box is None:
+            return found
+        if (
+            self.target_box is not None
+            and aabbs_touch(geometry.drawn_box, self.target_box)
+            and boxed_parts_meet(geometry.drawn, self.target)
+        ):
+            found.append(("box", index, index))
+        if any(
+            aabbs_touch(geometry.drawn_box, region_box) and boxed_parts_meet(geometry.drawn, region)
+            for region_box, region in self.others
+        ):
+            found.append(("region", index, index))
+        return found
 
     def _fit_box(self, label: CircularLabel) -> Aabb | None:
         """The label's fit box (`_label_fit_box`) as a box; None for a non-finite bound."""
@@ -306,8 +366,7 @@ class _Repair:
                     found.update(self._pair_defects(index, self.geometry[index], other, self.geometry[other]))
             if self.geometry[index].covers(self.definition_text):
                 found.add(("definition", index, index))
-            if self.geometry[index].covers(self.boxes):
-                found.add(("box", index, index))
+            found.update(self._region_defects(index, self.geometry[index]))
         return found
 
     def _local(self, geometry: dict[int, _Geometry]) -> frozenset[Defect]:
@@ -321,8 +380,7 @@ class _Repair:
                 found.update(self._pair_defects(index, own, other, geometry.get(other, self.geometry[other])))
             if own.covers(self.definition_text):
                 found.add(("definition", index, index))
-            if own.covers(self.boxes):
-                found.add(("box", index, index))
+            found.update(self._region_defects(index, own))
         return frozenset(found)
 
     def _current_local(self, indices: Sequence[int]) -> frozenset[Defect]:
@@ -408,7 +466,7 @@ class _Repair:
         if half != 0 and _current_half_from_x(float(label["start_x"]), axis_eps_px=HEMISPHERE_AXIS_EPS_PX) != half:
             return False
         text, elbow = self._displacement(index, label)
-        if text > self.text_shift_px + _EPS or elbow > MAX_ELBOW_SHIFT_PX + _EPS:
+        if text > self.text_shift_px[index] + _EPS or elbow > MAX_ELBOW_SHIFT_PX + _EPS:
             return False
         elbow_radius = self._elbow_radius(label)
         elbow_moved = abs(elbow_radius - self.elbow_radius[index]) > _EPS
@@ -931,8 +989,7 @@ def _clusters(defects: set[Defect]) -> list[set[int]]:
 def defect_count(labels: Sequence[CircularLabel], total_length: int, definition_text: Sequence[Aabb] = ()) -> int:
     """Overlapping pairs, crossing pairs and labels over the definition text of one record, as the fit check counts them."""
 
-    fit = sum(circular_label_fits(labels, total_length, definition_text=definition_text).values(), FITS)
-    return fit.overlap_pairs + fit.crossing_pairs + fit.definition_overlaps
+    return len(circular_label_defects(labels, total_length, definition_text=definition_text))
 
 
 def repair_circular_labels(
@@ -969,51 +1026,86 @@ def repair_circular_labels(
     return repaired
 
 
-def make_way_for_boxes(
+def make_way_for_region_labels(
     labels: Sequence[CircularLabel],
     total_length: int,
-    groups: Sequence[Sequence[Aabb]],
+    regions: Sequence[BoxedLetters],
+    blocked: Sequence[int],
     *,
+    overlapped: Sequence[frozenset[int]],
+    region_overlaps: RegionLabelOverlaps,
     definition_text: Sequence[Aabb] = (),
+    drawn_parts: FeatureLabelDrawnParts = _no_drawn_parts,
 ) -> tuple[list[CircularLabel], tuple[int, ...]] | None:
-    """The record's labels moved off each group of ``groups`` they can clear (the letters of one region label drawn
-    over theirs, CIR-RGN-YIELD, OV-3017), and the indices of the groups cleared; None when they clear none.
+    """The record's labels moved off the letters of each region label of ``blocked`` they can clear (indices into
+    ``regions``, a region label drawn over their letters, CIR-RGN-YIELD, OV-3017), and the indices cleared; None when
+    they clear none.
 
-    The groups are taken in order, each with the groups cleared before it. The
-    local repair moves only the labels over a group's boxes and their
-    neighbours, by its own rules (side, order, a move never adds a defect),
-    and a text may move ``MAX_TEXT_SHIFT_PX`` plus the height of the group's
-    tallest box: a stack of labels opens by that height to let a region label
-    through. A group is skipped when the labels cannot clear it, or clear it
-    only with more defects of their own (overlaps, crossings, the definition
-    text) than they have before it. The labels that made way do not yield
-    room afterwards (LP-D59): only they and the neighbours the repair pushed
-    move. Radial and turned labels do not make way.
+    ``regions`` holds the letters of every region label the record draws and
+    their height, grown by the label spacing; ``overlapped`` what each of them
+    overlaps where it is drawn now, in the same order: the labels its warning
+    counts; and ``region_overlaps`` what each overlaps where it is drawn after
+    a move. The blocked region labels are taken
+    in order. The local repair moves only the labels over one of them and
+    their neighbours, by its own rules (side, order, a move never adds a
+    defect, the other region labels' letters included). A text moves no
+    further from where it was before the first one than ``MAX_TEXT_SHIFT_PX``
+    plus the height of the tallest region label it made way for itself (its
+    letters' height across their baseline, grown by the spacing): a stack of labels opens by that height to
+    let a region label through. A region label is skipped when the labels
+    cannot clear it, or clear it only by adding a defect of their own that
+    they did not have (an overlapping or crossing pair, a label over the
+    definition text, ``circular_label_defects``), or a label to what any
+    region label overlaps where it is drawn then (its letters, or leader
+    lines behind them), even where another goes. The labels that made way do
+    not yield room afterwards (LP-D59): only they and the neighbours the
+    repair pushed move. Radial and turned labels do not make way.
     """
 
-    kept: list[Aabb] = []
+    if any(label.get("placement") == "radial" or label.get("oriented_corners") for label in labels):
+        return None
     cleared: list[int] = []
     current = [label.copy() for label in labels]
-    if any(label.get("placement") == "radial" or label.get("oriented_corners") for label in current):
-        return None
-    own = defect_count(current, total_length, definition_text)
-    for index, group in enumerate(groups):
-        if not group:
+    own, overlaps = set(circular_label_defects(current, total_length, definition_text=definition_text)), tuple(overlapped)
+    # The height of the tallest region label each label made way for, by the label's index.
+    made_way_for = [0.0] * len(current)
+    for index in blocked:
+        target, height = regions[index]
+        if not target:
             continue
-        group_shift = MAX_TEXT_SHIFT_PX + max(box.max_y - box.min_y for box in group)
-        repair = _Repair(current, total_length, definition_text, group_shift, (*kept, *group))
+        repair = _Repair(
+            current,
+            total_length,
+            definition_text,
+            [MAX_TEXT_SHIFT_PX + max(height, before) for before in made_way_for],
+            target=target,
+            others=[region.parts for at, region in enumerate(regions) if at != index],
+            origin=labels,
+            drawn_parts=drawn_parts,
+        )
         if not repair.run(boxes_only=True):
             continue
         moved = [label.copy() for label in repair.labels]
-        moved_defects = defect_count(moved, total_length, definition_text)
-        if moved_defects > own:
+        moved_defects = set(circular_label_defects(moved, total_length, definition_text=definition_text))
+        moved_overlaps = region_overlaps(moved, (*cleared, index))
+        if not moved_defects <= own or any(not after <= before for after, before in zip(moved_overlaps, overlaps)):
             continue
-        current, own = moved, moved_defects
-        kept.extend(group)
+        made_way_for = [
+            max(before, height) if new != old else before for before, new, old in zip(made_way_for, moved, current)
+        ]
+        current, own, overlaps = moved, moved_defects, moved_overlaps
         cleared.append(index)
     if not cleared:
         return None
     return current, tuple(cleared)
 
 
-__all__ = ["MAX_DEFECTS", "MAX_EVALUATIONS", "defect_count", "make_way_for_boxes", "repair_circular_labels"]
+__all__ = [
+    "MAX_DEFECTS",
+    "MAX_EVALUATIONS",
+    "FeatureLabelDrawnParts",
+    "RegionLabelOverlaps",
+    "defect_count",
+    "make_way_for_region_labels",
+    "repair_circular_labels",
+]

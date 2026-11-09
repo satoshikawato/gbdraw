@@ -28,7 +28,7 @@ from .circular_types import (
     CircularLabel,
     CircularLabelCandidateCache,
 )
-from .fit import FITS, LabelFit, LabelKind, LabelShape, Polygon, label_fits_by_kind
+from .fit import FITS, LabelDefect, LabelFit, LabelKind, LabelShape, Polygon, label_defects, label_fits_by_kind
 from .label_style import CIRCULAR_LABEL_GAP_EM, LabelFontStyle
 from ..config.models import (
     CircularRenderProfile,
@@ -434,12 +434,28 @@ def circular_label_fits(
 ) -> dict[LabelKind, LabelFit]:
     """The fit of one record's drawn labels by kind (horizontal labels touch with their margins)."""
 
-    radial = any(label.get("oriented_corners") for label in labels)
     return label_fits_by_kind(
-        circular_label_shapes(labels, total_length),
-        touching=not radial,
-        definition_text=definition_text,
+        circular_label_shapes(labels, total_length), touching=_touching(labels), definition_text=definition_text
     )
+
+
+def circular_label_defects(
+    labels: Sequence[CircularLabel],
+    total_length: int,
+    *,
+    definition_text: Sequence[Aabb] = (),
+) -> tuple[LabelDefect, ...]:
+    """The defects ``circular_label_fits`` counts, by the labels' indices."""
+
+    return label_defects(
+        circular_label_shapes(labels, total_length), touching=_touching(labels), definition_text=definition_text
+    )
+
+
+def _touching(labels: Sequence[CircularLabel]) -> bool:
+    """Whether labels touching with their margins overlap: horizontal labels only, none once a label is radial."""
+
+    return not any(label.get("oriented_corners") for label in labels)
 
 
 def _label_y_bounds(label: CircularLabel, total_len: int, minimum_margin: float) -> tuple[float, float]:
@@ -5832,6 +5848,7 @@ __all__ = [
     "radial_label_inner_reserve_px",
     "CircularLabelProbeStopped",
     "calculate_angle_degrees",
+    "circular_label_defects",
     "circular_label_fits",
     "circular_label_shape",
     "circular_label_shapes",
