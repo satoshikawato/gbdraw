@@ -447,6 +447,20 @@ into the `[Unreleased]` list below.
   with comparison rings ("semantic field ... params.managed has no current CLI
   projection"). The recipe now leaves out the ring rows' own bookkeeping, which
   does not change the figure, and the command draws the same figure (OV-3009).
+- Fixed (Web app): a Rotate, an Align or another change that redraws the
+  Result without a new search undid the edits made to the similarity rings
+  since the last Generate (a removed or moved ring, a new label, color,
+  genetic code or stack row width). Those edits now stay until the next
+  Generate draws them (OV-3194).
+- Fixed (Web app): **Remove series**, Session Load and **Add Seq** could give
+  a similarity ring another ring's name, color, stack row or genetic code, for
+  example after removing a ring above it or loading a Session whose ring
+  genome file was missing. Each ring now keeps its own (OV-3089, OV-3091,
+  OV-3152, OV-3195).
+- Fixed (Web app): editing a Circular drawing's similarity rings, or a
+  Generate of that drawing, also cleared the LOSAT results the Session keeps
+  for another drawing. They now clear only that drawing's results (OV-3196,
+  OV-3201).
 - Changed: when the Circular similarity rings are not all one color, each
   Legend row now shows the ring's name with that ring's own identity ramp
   (white to its color), with one scale line under the last ramp, instead of a
