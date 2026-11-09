@@ -196,6 +196,17 @@ write-up of a release.
   each Region Annotation set that no row names its Annotations rows, placed
   where the figure draws the set without a stack, so turning the stack on no
   longer leaves the set out of the figure (OV-3007).
+- Fixed (Web app): in a Circular custom stack, setting the features row's
+  **Lane direction** to split (Feature on axis) turned an Overlay Annotations
+  row on the features, such as the tint row **Use custom stack** gives a set of
+  highlights, into an Inside row, and Generate then refused the stack. Such a
+  row now stays an Overlay row, and the stack shows **Axis** on the features
+  row only, not also on the Overlay row (OV-3082).
+- Fixed (docs and Gallery): the tobacco chloroplast tutorials and the
+  region-annotation how-to added an Annotations row for a set that
+  **Use custom stack** had already given a row, so the set got a second row:
+  the figure drew it twice, or Generate stopped on the first row's lane
+  overflow. They now edit the row the stack starts with (OV-3151, OV-3081).
 - Fixed (Web app): Run Info gave no Source recipe for a Circular custom stack
   with comparison rings ("semantic field ... params.managed has no current CLI
   projection"). The recipe now leaves out the ring rows' own bookkeeping, which

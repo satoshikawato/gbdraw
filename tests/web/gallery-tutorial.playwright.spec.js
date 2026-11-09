@@ -561,12 +561,12 @@ test('Gallery restores the tobacco chloroplast region-annotation example', async
   await expect(tutorialPanel.getByRole('row', { name: 'Circular Label Placement Radial' })).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'plastome_tint Annotations Annotation set: plastome_tint; Annotation placement: overlay; Enabled drawable anchor: features; Annotation layer: underlay; Extend to: gc_content; Show annotation labels: off; Padding: 0'
+      name: 'plastome_tint Annotations Annotation set: plastome_tint; Annotation placement: overlay; Enabled drawable anchor: features; Annotation layer: underlay; Cover anchor: on; Extend to: gc_content; Show annotation labels: off; Padding: 0'
     })
   ).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'plastome_regions Annotations Inside 0.65 ×R 20 px Annotation set: plastome_regions; Show annotation labels: on; Overflow: Compress; Padding: 1; Inner and Outer gap: 1'
+      name: 'plastome_regions Annotations Inside axis 0.65 ×R 20 px Annotation set: plastome_regions; Show annotation labels: on; Overflow: Compress; Padding: 1; Inner and Outer gap: 1'
     })
   ).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Multi-Record Canvas Off' })).toBeVisible();

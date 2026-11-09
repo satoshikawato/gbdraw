@@ -71,6 +71,7 @@ import {
   effectiveSlotPlacement,
   enforceSingleOnAxisSlot,
   inferLegacyAxisIndexFromFeature,
+  isOnAxisSlot,
   laneDirectionForPreset,
   laneDirectionForSide,
   makeSlot,
@@ -921,13 +922,7 @@ export const createCircularTrackSlotEditor = ({
         ? /** @type {number} */ (preferredInsertIndex)
         : axis;
       const insideFloor = committed.reduce((floor, slot, index) => {
-        if (
-          index < axis ||
-          slot?.renderer === 'annotations' ||
-          effectiveSlotPlacement(slot, drawing.form.track_type) !== 'overlay'
-        ) {
-          return floor;
-        }
+        if (index < axis || !isOnAxisSlot(slot, drawing.form.track_type)) return floor;
         return Math.max(floor, index + 1);
       }, axis);
       const insertIndex = Math.max(
@@ -1364,8 +1359,7 @@ export const createCircularTrackSlotEditor = ({
       if (!movedSlot) return;
       const movedPreviousPlacement = effectiveSlotPlacement(movedSlot, drawing.form.track_type);
       const existingAxisIndex = drawing.adv.circular_track_slots.findIndex((/** @type {CircularTrackSlot} */ slot, /** @type {number} */ slotIndex) => (
-        slotIndex !== idx &&
-        effectiveSlotPlacement(slot, drawing.form.track_type) === 'overlay'
+        slotIndex !== idx && isOnAxisSlot(slot, drawing.form.track_type)
       ));
       if (existingAxisIndex >= 0) {
         const existingAxisSlot = drawing.adv.circular_track_slots[existingAxisIndex];
@@ -1393,7 +1387,7 @@ export const createCircularTrackSlotEditor = ({
       drawing.adv.circular_track_slots_axis_index = axis;
     } else {
       const onAxisIndex = drawing.adv.circular_track_slots.findIndex((/** @type {CircularTrackSlot} */ candidate) => (
-        effectiveSlotPlacement(candidate, drawing.form.track_type) === 'overlay'
+        isOnAxisSlot(candidate, drawing.form.track_type)
       ));
       const insertIndex = onAxisIndex >= 0 ? onAxisIndex + 1 : axis;
       drawing.adv.circular_track_slots.splice(insertIndex, 0, slot);
@@ -1759,7 +1753,7 @@ export const createCircularTrackSlotEditor = ({
     const entries = [];
     let axisRendered = false;
     slots.forEach((slot, index) => {
-      const onAxis = effectiveSlotPlacement(slot, drawing.form.track_type) === 'overlay';
+      const onAxis = isOnAxisSlot(slot, drawing.form.track_type);
       if (index === axisIndex && !onAxis) {
         entries.push({ kind: STACK_ENTRY_AXIS, key: 'axis' });
         axisRendered = true;

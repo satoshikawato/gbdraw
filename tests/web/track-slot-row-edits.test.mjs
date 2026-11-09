@@ -393,6 +393,33 @@ test('circular: Reset to preset keeps the Depth row while Show Depth is off', ()
   assert.equal(editor.slots().filter((slot) => slot.renderer === 'depth').length, 1);
 });
 
+test('circular: putting the features on the Axis keeps an Overlay Annotations row on them as it is', () => {
+  // The tint row Use custom stack gives a set of highlights is listed just above the features it covers.
+  const tint = circularRow('annotations_2', 'annotations', { set_id: 'tint', marks: ['highlight'], anchor_slot: 'features',
+    layer: 'underlay', cover_anchor: true, padding_px: 0 }, 'overlay');
+  tint.z = -1;
+  const { state, editor, slots } = MODES.circular([
+    circularRow('annotations_1', 'annotations', { set_id: 'regions', marks: ['line'] }, 'outside'),
+    tint,
+    circularRow('features', 'features'),
+    circularRow('gc_content', 'dinucleotide_content')
+  ]);
+  state.adv.circular_track_slots_axis_index = 2;
+  state.annotationSets = [{ id: 'regions', annotations: [{ mark: 'line' }] }, { id: 'tint', annotations: [{ mark: 'highlight' }] }];
+  editor.updateCircularTrackFeatureLane(slots().find((slot) => slot.id === 'features'), 'split');
+  const byId = Object.fromEntries(slots().map((slot) => [slot.id, slot]));
+  assert.equal(byId.features.side, 'overlay');
+  assert.equal(byId.features.params.lane_direction, 'split');
+  assert.equal(byId.annotations_2.side, 'overlay');
+  assert.equal(byId.annotations_2.params.anchor_slot, 'features');
+  assert.equal(byId.annotations_1.side, 'outside');
+  assert.equal(slots()[state.adv.circular_track_slots_axis_index].id, 'features');
+  assert.deepEqual(slots().map((slot, index) => editor.circularTrackSlotIssue(slot, index)).filter(Boolean), []);
+  // The editor marks one row as the Axis: the features, not the Overlay row on them.
+  assert.deepEqual(editor.circularTrackStackEntries().filter((entry) => entry.kind !== 'slot' || entry.onAxis)
+    .map((entry) => entry.slot?.id ?? entry.kind), ['features']);
+});
+
 test('circular: a renderer change back to Ticks leaves a valid Ticks row', () => {
   const editor = MODES.circular(ROWS.circular());
   const index = editor.slots().findIndex((slot) => slot.id === 'ticks');

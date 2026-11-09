@@ -112,17 +112,21 @@ be imported again through **Import TSV**, including any edits made here.
 
 ### Step 5: Build the four-slot Gallery stack
 
-Open **Custom Track Slots**, turn on **Use custom stack**, and remove the
-**Ticks** and **GC skew** rows. Configure this exact order. Move a new row
-into place before you set it to **Overlay anchor**; an overlay row's
-**Move outward** and **Move inward** arrows are disabled.
+Open **Custom Track Slots** and turn on **Use custom stack**. The stack
+starts with a row for each annotation set: `annotations_1` for
+`plastome_regions`, outside the axis, and `annotations_2` for `plastome_tint`,
+an **Overlay anchor** row under the features with only **Highlight** marked
+and **padding** `0`. Remove the **Ticks** and **GC skew** rows. Rename
+`annotations_1` to `plastome_regions` and `annotations_2` to `plastome_tint`,
+then set the rows as in the table. **Inside axis** puts `plastome_regions` between
+the features and GC content.
 
 | Slot | Renderer | Position | Radius | Width | Other settings |
 | --- | --- | --- | ---: | ---: | --- |
+| `plastome_tint` | Annotations | Overlay anchor | — | — | Set `plastome_tint`; anchor `features`; **Underlay**; **Cover anchor** on; **Extend to** `gc_content`; **Marks**: **Highlight** only; **Labels** off; **padding** `0` |
 | `features` | Features | On axis | Auto | Auto | Feature on axis / split |
-| `plastome_tint` | Annotations | Overlay anchor | — | — | Set `plastome_tint`; anchor `features`; **Underlay**; **Extend to** `gc_content`; **Marks**: **Highlight** only; **Labels** off; **padding** `0` |
-| `plastome_regions` | Annotations | Inside | `0.65 ×R` | `20 px` | Set `plastome_regions`; labels on; compress; inner/outer gap `1`; padding `1` |
-| `gc_content` | Dinucleotide content | Inside | `0.56 ×R` | `0.08 ×R` | GC |
+| `plastome_regions` | Annotations | Inside axis | `0.65 ×R` | `20 px` | Set `plastome_regions`; labels on; compress; inner/outer gap `1`; padding `1` |
+| `gc_content` | Dinucleotide content | Inside axis | `0.56 ×R` | `0.08 ×R` | GC |
 
 Enter the number and select **px** or **×R** in each Width/Radius control.
 R is the base circle radius. Keep the features fields empty for Auto.
