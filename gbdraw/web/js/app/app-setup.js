@@ -453,7 +453,7 @@ const readShownRecordSpans = (spans) => requestRecordSpanSequences(
 const runCatalogSequenceHelper = (operation, payload) => runDiagramHelperOperation(operation, { ...payload, resources: /** @type {GenerationPayload['resources']} */ (payload.resources) });
 const catalogSequences = createCatalogSequences({ getCommittedSession: getCommittedCanonicalSession, helpers: catalogSequenceHelpers(runCatalogSequenceHelper, DIAGRAM_HELPER_OPERATIONS) });
 const sequenceReads = createSequenceReads({ readFeatures: catalogSequences.readFeatures, readSpans: catalogSequences.readSpans,
-  copyPending: copyPendingTextToClipboard, downloadText: downloadTextFile });
+  copyPending: copyPendingTextToClipboard, downloadText: downloadTextFile, isShown: (popup) => state.clickedFeature.value === popup });
 // The annotation sets of the committed request the shown Result was made from (Sequence search names a new set apart).
 const shownCommittedSets = () => getCommittedCanonicalSession()?.renderRequest.diagramOptions.annotations?.sets ?? [];
 // The features (identity and name) the shown Result's admitted catalog holds under a committed record key, or null.
@@ -798,7 +798,7 @@ export const createAppSetup = () => {
   });
 
   // Before the History snapshot service, which clears its copy feedback (D-37).
-  const orthogroupActions = createOrthogroupEditor({ state, getCommittedRequest: getCommittedCanonicalRenderRequest, readFeatureSequences: catalogSequences.readFeatures });
+  const orthogroupActions = createOrthogroupEditor({ state, getCommittedRequest: getCommittedCanonicalRenderRequest, memberAction: sequenceReads.memberAction });
   const historySnapshots = createHistorySnapshotService({
     state,
     fileStore: state.inputFiles,
@@ -3876,7 +3876,7 @@ export const createAppSetup = () => {
     orthogroupRows: orthogroupActions.orthogroupRows,
     isOrthogroupRenamed: orthogroupActions.isOrthogroupRenamed,
     hasOrthogroupMemberSequence: orthogroupActions.hasOrthogroupMemberSequence,
-    orthogroupCopyFeedbackLabel: orthogroupActions.orthogroupCopyFeedbackLabel,
+    orthogroupCopyFeedbackLabel: orthogroupActions.orthogroupCopyFeedbackLabel, orthogroupMemberRead: orthogroupActions.orthogroupMemberRead,
     orthogroupMemberRangeText: orthogroupActions.memberRangeText,
     copyOrthogroupSequences: orthogroupActions.copyOrthogroupSequences,
     downloadOrthogroupSequences: orthogroupActions.downloadOrthogroupSequences,

@@ -8,6 +8,7 @@
 // so a second read waits for nothing. The replies live only here: never in the catalog, a History step, or a Session.
 // A reply that arrives after the shown Result changed (Generate, Undo, Redo, a drawing switch, a Load) is discarded:
 // the read resolves to `null` and its caller shows nothing of it.
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { FeatureSequenceInput, FeatureSequencesOf, FeatureSequencesPayload, MatchSpanInput, MatchSpanSequence, MatchSequencesPayload, EmbedSequencesPayload, EmbedPartText, EmbedItemPart, EmbedItemFile, EmbedPartInput } from './diagram-worker-protocol.js' */
 /** @import { CommittedCanonicalSession } from './session-request.js' */
 /** @import { FeatureLike } from './feature-utils.js' */
@@ -142,6 +143,17 @@ export const embedReadParts = (item, limit) => {
 export const FEATURE_READ_BASES = 8_000_000;
 /** The characters the page keeps of replies for the shown Result; past it the oldest are dropped. */
 export const KEPT_SEQUENCE_CHARACTERS = 64 * 1024 * 1024;
+
+/**
+ * The state of a popup's read through this door (written by `app/sequence-reads.js`, shown by the
+ * `sequence-read-line` component): none, Python reading, the read held no sequence, failed (the error the popup
+ * shows with Details and Copy diagnostics, and its Retry), or the browser refused to copy the text read (Retry).
+ * @typedef {{ status: '' | 'reading' | 'empty' | 'failed' | 'copy-failed', error: UserFacingError | null,
+ *   retry: (() => unknown) | null }} SequenceReadState
+ */
+
+/** @returns {SequenceReadState} */
+export const unreadSequence = () => ({ status: '', error: null, retry: null });
 
 /** A feature's reply is kept and found by its identity key (the draft owner's). @param {FeatureSequenceInput} feature */
 const featureKey = ({ recordKey, biologicalFeatureId }) => featureIdentityKey(recordKey, biologicalFeatureId);
@@ -299,6 +311,70 @@ export const catalogSequenceHelpers = (run, operations) => ({
   readEmbedSequences: (payload) => run(operations.READ_EMBED_SEQUENCES, payload)
 });
 
+/** An export read that another shown Result outlived: the door answers null. */
+const OUTLIVED = Symbol('outlived');
+
+/**
+ * The replies kept for one committed request; a read in flight is kept as its promise, so a second asker waits
+ * for the same reply, and a failed read is forgotten, so Retry reads again. An export's embed is kept by its
+ * catalog item (the shown Result's stored item, the same object each export), so a second export reads nothing.
+ * @typedef {{ committed: CommittedCanonicalSession | null, features: Map<string, Promise<FeatureSequencesOf>>,
+ *   spans: Map<string, Promise<MatchSpanSequence>>, embeds: Map<string, Promise<EmbeddedSequencesJson>>,
+ *   sizes: Map<string, number>, characters: number }} Kept
+ */
+/** @returns {Kept} */
+const fresh = (/** @type {CommittedCanonicalSession | null} */ committed) => ({
+  committed, features: new Map(), spans: new Map(), embeds: new Map(), sizes: new Map(), characters: 0
+});
+/** The key of an export's catalog item among the embeds kept. @type {WeakMap<object, string>} */
+const itemKeys = new WeakMap();
+let nextItemKey = 0;
+/** @param {object} item */
+const itemKey = (item) => {
+  const key = itemKeys.get(item) ?? String(nextItemKey += 1);
+  itemKeys.set(item, key);
+  return key;
+};
+/** @param {Kept} owner @param {string} kind */
+const keptOf = (owner, kind) => /** @type {Map<string, Promise<unknown>>} */ (
+  kind === 'f' ? owner.features : kind === 's' ? owner.spans : owner.embeds);
+
+/**
+ * Python's encoding of one catalog item with its sequences, read part by part.
+ * @param {CatalogSequenceHelpers['readEmbedSequences']} readEmbedSequences
+ * @param {Pick<EmbedSequencesPayload, 'canonicalRequest' | 'resources'>} request
+ * @param {Readonly<Record<string, unknown>>} item
+ * @param {number} featureReadBases
+ * @param {() => boolean} stillShown Whether the Result the read began for is still shown.
+ * @returns {Promise<EmbeddedSequencesJson>} Rejects with `OUTLIVED` when another Result is shown before the last part.
+ */
+const encodeEmbed = async (readEmbedSequences, request, item, featureReadBases, stillShown) => {
+  const invalid = () => diagnosticError('RESULT_INVALID', {}, failure('readEmbedSequences'));
+  // One part at a time, each kept as the text Python wrote (no parse in the Worker or the page): no reply, and no
+  // copy in the page, holds the whole item with its sequences as objects.
+  /** @type {string[]} */
+  const rows = [];
+  /** @type {(string | undefined)[] | null} */
+  let sources = null;
+  for (const part of embedReadParts(item, featureReadBases)) {
+    const files = /** @type {[EmbedItemFile]} */ ([{
+      role: 'embedItem', blob: new Blob([JSON.stringify(part.item)], { type: 'application/json' })
+    }]);
+    const reply = readEmbedSequencesReply(
+      (await readEmbedSequences({ ...request, files, part: part.part }))?.result, part.item.biologicalFeatures);
+    if (!stillShown()) throw OUTLIVED;
+    sources ??= new Array(reply.sourceCount).fill(undefined);
+    if (sources.length !== reply.sourceCount) throw invalid();
+    if (reply.rowCount) rows.push(reply.biologicalFeatures);
+    for (const { index, source } of reply.sequenceSources) {
+      if (sources[index] !== undefined) throw invalid();
+      sources[index] = source;
+    }
+  }
+  if (!sources || sources.some((source) => source === undefined)) throw invalid();
+  return { biologicalFeatures: `[${rows.join(',')}]`, sequenceSources: sources.length ? `[${sources.join(',')}]` : null };
+};
+
 /**
  * @param {{ getCommittedSession: () => CommittedCanonicalSession | null, helpers: CatalogSequenceHelpers,
  *   keptCharacters?: number, featureReadBases?: number }} ports
@@ -307,16 +383,6 @@ export const catalogSequenceHelpers = (run, operations) => ({
 export const createCatalogSequences = ({
   getCommittedSession, helpers, keptCharacters = KEPT_SEQUENCE_CHARACTERS, featureReadBases = FEATURE_READ_BASES
 }) => {
-  /**
-   * The replies kept for one committed request; a read in flight is kept as its promise, so a second asker waits
-   * for the same reply, and a failed read is forgotten, so Retry reads again.
-   * @typedef {{ committed: CommittedCanonicalSession | null, features: Map<string, Promise<FeatureSequencesOf>>,
-   *   spans: Map<string, Promise<MatchSpanSequence>>, sizes: Map<string, number>, characters: number }} Kept
-   */
-  /** @returns {Kept} */
-  const fresh = (/** @type {CommittedCanonicalSession | null} */ committed) => ({
-    committed, features: new Map(), spans: new Map(), sizes: new Map(), characters: 0
-  });
   let kept = fresh(null);
   /** The replies of the shown Result: a Result of another request drops them. */
   const shown = () => {
@@ -326,17 +392,46 @@ export const createCatalogSequences = ({
   };
   /**
    * Keeps one settled reply's size and drops the oldest replies past the bound.
-   * @param {Kept} owner @param {Map<string, Promise<unknown>>} map @param {string} key @param {number} size
+   * @param {Kept} owner @param {'f' | 's' | 'e'} kind features, spans or embeds @param {string} key @param {number} size
    */
-  const account = (owner, map, key, size) => {
-    if (owner.committed !== kept.committed || map.get(key) === undefined) return;
-    owner.sizes.set(`${map === owner.features ? 'f' : 's'}${key}`, size);
+  const account = (owner, kind, key, size) => {
+    if (owner.committed !== kept.committed || keptOf(owner, kind).get(key) === undefined) return;
+    owner.sizes.set(`${kind}${key}`, size);
     owner.characters += size;
     for (const [sizeKey, sizeOf] of owner.sizes) {
       if (owner.characters <= keptCharacters) break;
       owner.sizes.delete(sizeKey);
       owner.characters -= sizeOf;
-      (sizeKey[0] === 'f' ? owner.features : owner.spans).delete(sizeKey.slice(1));
+      keptOf(owner, sizeKey[0]).delete(sizeKey.slice(1));
+    }
+  };
+  /**
+   * Keeps `read` under `key` while it runs and after it settles; a failed read is forgotten.
+   * @template T
+   * @param {Kept} owner @param {'f' | 's' | 'e'} kind @param {string} key @param {Promise<T>} read
+   * @param {(value: T) => number} sizeOf
+   */
+  const keep = (owner, kind, key, read, sizeOf) => {
+    const map = keptOf(owner, kind);
+    map.set(key, read);
+    read.then((value) => account(owner, kind, key, sizeOf(value)), () => {
+      if (map.get(key) === read) map.delete(key);
+    });
+  };
+  /**
+   * The answer of a read for the Result shown when it began, or null when another Result is shown when it ends,
+   * whether it read or failed: a popup never shows what a Result it no longer shows read, nor why that failed.
+   * @template T
+   * @param {Kept} owner @param {() => Promise<T>} read
+   * @returns {Promise<T | null>}
+   */
+  const forShown = async (owner, read) => {
+    try {
+      const value = await read();
+      return getCommittedSession() === owner.committed ? value : null;
+    } catch (error) {
+      if (getCommittedSession() !== owner.committed) return null;
+      throw error;
     }
   };
   /**
@@ -359,20 +454,11 @@ export const createCatalogSequences = ({
       const identities = chunk.map(({ recordKey, biologicalFeatureId }) => ({ recordKey, biologicalFeatureId }));
       const reply = helpers.readFeatureSequences({ ...request, features: identities })
         .then((result) => readFeatureSequencesReply(result?.result, identities));
-      identities.forEach((identity, index) => {
-        const key = featureKey(identity);
-        const read = reply.then((sequences) => sequences[index]);
-        owner.features.set(key, read);
-        read.then((sequences) => account(owner, owner.features, key,
-          sequences.nucleotideSequence.length + sequences.aminoAcidSequence.length), () => {
-          if (owner.features.get(key) === read) owner.features.delete(key);
-        });
-      });
+      identities.forEach((identity, index) => keep(owner, 'f', featureKey(identity), reply.then((sequences) => sequences[index]),
+        (sequences) => sequences.nucleotideSequence.length + sequences.aminoAcidSequence.length));
     });
-    const read = await Promise.all(asked.map((feature) => /** @type {Promise<FeatureSequencesOf>} */ (
-      owner.features.get(featureKey(feature)))));
-    if (getCommittedSession() !== owner.committed) return null;
-    return new Map(read.map((sequences) => [featureKey(sequences), sequences]));
+    const reads = asked.map((feature) => /** @type {Promise<FeatureSequencesOf>} */ (owner.features.get(featureKey(feature))));
+    return forShown(owner, async () => new Map((await Promise.all(reads)).map((sequences) => [featureKey(sequences), sequences])));
   };
 
   /** @type {CatalogSequences['readSpans']} */
@@ -383,46 +469,23 @@ export const createCatalogSequences = ({
     if (missing.length) {
       const reply = helpers.readMatchSequences({ ...request, spans: missing })
         .then((result) => readMatchSequencesReply(result?.result, missing));
-      missing.forEach((span, index) => {
-        const key = spanKey(span);
-        const read = reply.then((sequences) => sequences[index]);
-        owner.spans.set(key, read);
-        read.then((sequence) => account(owner, owner.spans, key, sequence.length), () => {
-          if (owner.spans.get(key) === read) owner.spans.delete(key);
-        });
-      });
+      missing.forEach((span, index) => keep(owner, 's', spanKey(span), reply.then((sequences) => sequences[index]),
+        (sequence) => sequence.length));
     }
-    const read = await Promise.all(spans.map((span) => /** @type {Promise<MatchSpanSequence>} */ (
-      owner.spans.get(spanKey(span)))));
-    return getCommittedSession() === owner.committed ? read : null;
+    const reads = spans.map((span) => /** @type {Promise<MatchSpanSequence>} */ (owner.spans.get(spanKey(span))));
+    return forShown(owner, () => Promise.all(reads));
   };
 
   /** @type {CatalogSequences['readEmbedJson']} */
   const readEmbedJson = async (item) => {
     const { owner, request } = committedOf('readEmbedSequences');
-    const invalid = () => diagnosticError('RESULT_INVALID', {}, failure('readEmbedSequences'));
-    // One part at a time, each kept as the text Python wrote (no parse in the Worker or the page): no reply, and no
-    // copy in the page, holds the whole item with its sequences as objects.
-    /** @type {string[]} */
-    const rows = [];
-    /** @type {(string | undefined)[] | null} */
-    let sources = null;
-    for (const part of embedReadParts(item, featureReadBases)) {
-      const itemBytes = new TextEncoder().encode(JSON.stringify(part.item));
-      const files = /** @type {[EmbedItemFile]} */ ([{ role: 'embedItem', bytes: itemBytes.buffer }]);
-      const reply = readEmbedSequencesReply(
-        (await helpers.readEmbedSequences({ ...request, files, part: part.part }))?.result, part.item.biologicalFeatures);
-      if (getCommittedSession() !== owner.committed) return null;
-      sources ??= new Array(reply.sourceCount).fill(undefined);
-      if (sources.length !== reply.sourceCount) throw invalid();
-      if (reply.rowCount) rows.push(reply.biologicalFeatures);
-      for (const { index, source } of reply.sequenceSources) {
-        if (sources[index] !== undefined) throw invalid();
-        sources[index] = source;
-      }
+    const key = itemKey(item);
+    if (!owner.embeds.has(key)) {
+      keep(owner, 'e', key, encodeEmbed(helpers.readEmbedSequences, request, item, featureReadBases,
+        () => getCommittedSession() === owner.committed),
+        (embed) => embed.biologicalFeatures.length + (embed.sequenceSources?.length ?? 0));
     }
-    if (!sources || sources.some((source) => source === undefined)) throw invalid();
-    return { biologicalFeatures: `[${rows.join(',')}]`, sequenceSources: sources.length ? `[${sources.join(',')}]` : null };
+    return forShown(owner, () => /** @type {Promise<EmbeddedSequencesJson>} */ (owner.embeds.get(key)));
   };
 
   return { readFeatures, readSpans, readEmbedJson };

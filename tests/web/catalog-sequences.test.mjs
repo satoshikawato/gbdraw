@@ -113,6 +113,34 @@ test('a reply that arrives after the shown Result changed is discarded', async (
   assert.equal(await pendingSpans, null);
 });
 
+// D5 review r1 (LOW-7): a failure is discarded like a reply when the shown Result changed while it read, so a
+// popup never shows the failure of a Result it no longer shows.
+test('a failure that arrives after the shown Result changed is discarded too', async () => {
+  const harness = doorWith(committedOf());
+  harness.hold();
+  harness.failNextWith(new Error('worker restarted'));
+  const pending = harness.door.readFeatures([kinase]);
+  await Promise.resolve();
+  harness.setCommitted(committedOf());
+  harness.release();
+  assert.equal(await pending, null);
+  let committed = committedOf();
+  const spans = createCatalogSequences({
+    getCommittedSession: () => committed,
+    helpers: { readMatchSequences: async () => { committed = committedOf(); throw new Error('worker restarted'); } }
+  });
+  assert.equal(await spans.readSpans([{ kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }]), null);
+  const embed = createCatalogSequences({
+    getCommittedSession: () => committed, featureReadBases: 25,
+    helpers: { readEmbedSequences: async () => { committed = committedOf(); throw new Error('worker restarted'); } }
+  });
+  assert.equal(await embed.readEmbedJson(exportItem), null);
+  // The same failure while the Result stays shown is the popup's to show.
+  const fixed = doorWith(committedOf());
+  fixed.failNextWith(new Error('worker down'));
+  await assert.rejects(fixed.door.readFeatures([kinase]), /worker down/);
+});
+
 test('the Worker receives plain spans and features even when the popup state holds them as reactive proxies', async () => {
   // The match popup's entries live in Vue state; postMessage cannot clone a Proxy (DataCloneError), so the door
   // sends copies holding only the identity and range fields.
@@ -281,6 +309,37 @@ test('an export read the shown Result outlived gives null; a source missing or g
     const error = await door.readEmbedJson(exportItem).catch((caught) => caught);
     assert.equal(normalizeCaughtError(error).code, 'RESULT_INVALID');
   }
+});
+
+// D5 review r1 (LOW-9): an export's embed is kept for the shown Result, as feature reads are: a second export of the
+// same Result reads nothing, and another Result reads again.
+test('a second export of the shown Result reads its embed from what the first export kept', async () => {
+  let committed = committedOf();
+  let parts = 0;
+  const door = createCatalogSequences({
+    getCommittedSession: () => committed, featureReadBases: 25,
+    helpers: { readEmbedSequences: async (payload) => { parts += 1; return { result: embedPartReply(payload) }; } }
+  });
+  const first = await door.readEmbedJson(exportItem);
+  const read = parts;
+  assert.ok(read > 0);
+  assert.deepEqual(await door.readEmbedJson(exportItem), first);
+  assert.equal(parts, read, 'the second export reads nothing');
+  committed = committedOf();
+  assert.deepEqual(await door.readEmbedJson(exportItem), first);
+  assert.equal(parts, 2 * read, 'another Result reads again');
+  // A failed read is forgotten, so Retry reads again.
+  let fail = true;
+  const retried = createCatalogSequences({
+    getCommittedSession: () => committed, featureReadBases: 25,
+    helpers: { readEmbedSequences: async (payload) => {
+      if (fail) throw new Error('worker down');
+      return { result: embedPartReply(payload) };
+    } }
+  });
+  await assert.rejects(retried.readEmbedJson(exportItem), /worker down/);
+  fail = false;
+  assert.deepEqual(await retried.readEmbedJson(exportItem), first);
 });
 
 // D5 review r1 (MEDIUM-5): the reasons a span reply may carry are Python's list (generated), so a reason Python adds

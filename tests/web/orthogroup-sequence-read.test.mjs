@@ -1,7 +1,9 @@
 // Copy and Download of a Similarity group member's or a whole group's FASTA read the sequences from Python through
 // the catalog-sequence door (D5): the members carry none, a member is available when its catalog row has an
-// identity, one read asks every member once, a stale reply writes nothing, an empty read says so, and a failure
-// says so and reaches the page's error log.
+// identity, one read asks every member once, and the read runs through the one owner of a popup's member read state
+// (app/sequence-reads.js), which the Similarity group popup of a match uses too: "Reading the sequence…" while
+// Python reads, "No sequence available", or the failure with Details, Copy diagnostics and Retry in place. A stale
+// reply writes nothing, and a read the popup no longer shows writes nothing to the state it shows.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { withDrawings } from './helpers/drawing-state.mjs';
@@ -11,19 +13,10 @@ const Vue = loadPageVue();
 globalThis.window = { Vue, setTimeout, clearTimeout };
 globalThis.isSecureContext = true;
 let copied = null;
-Object.defineProperty(globalThis, 'navigator', {
-  configurable: true,
-  value: { clipboard: { writeText: async (value) => { copied = String(value); } } }
-});
 const downloads = [];
-globalThis.document = {
-  createElement: () => ({ addEventListener() {}, click() { downloads.push(this.download); } }),
-  body: { appendChild() {} }
-};
-globalThis.URL.createObjectURL = () => 'blob:orthogroup-sequence-read';
-globalThis.URL.revokeObjectURL = () => {};
 
 const { createOrthogroupEditor } = await import('../../gbdraw/web/js/app/orthogroups.js');
+const { createSequenceReads } = await import('../../gbdraw/web/js/app/sequence-reads.js');
 const { featureSequenceKey } = await import('../../gbdraw/web/js/services/catalog-sequences.js');
 const { diagnosticError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
 const { ref, reactive } = Vue;
@@ -53,19 +46,26 @@ const setup = (answer) => {
     selectedOrthogroupId: ref('og_1'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
     clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
     svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]),
-    biologicalFeatures: ref([alpha, beta]), errorLog: ref(null)
+    biologicalFeatures: ref([alpha, beta])
   };
-  const editor = createOrthogroupEditor({
-    state: withDrawings(state),
-    readFeatureSequences: (features) => {
+  const sequenceReads = createSequenceReads({
+    readFeatures: (features) => {
       reads.push(features);
       return answer(features);
-    }
+    },
+    readSpans: async () => null,
+    copyPending: async (pending) => {
+      copied = await pending;
+      return copied;
+    },
+    downloadText: (filename) => downloads.push(filename)
   });
+  const editor = createOrthogroupEditor({ state: withDrawings(state), memberAction: sequenceReads.memberAction });
   return { editor, state, reads };
 };
 const label = (editor, kind, original, memberOrNull = null, action = 'copy') =>
   editor.orthogroupCopyFeedbackLabel(group, kind, original, memberOrNull, 'drawer', action);
+const readState = (editor, context = 'drawer') => editor.orthogroupMemberRead(context);
 
 test('members carry no sequences, and a member with a catalog identity is available', () => {
   const { editor } = setup(async () => new Map());
@@ -84,7 +84,7 @@ test('members carry no sequences, and a member with a catalog identity is availa
   assert.deepEqual(detail.members.map((enriched) => detail.hasMemberSequence(enriched)), [true, true, false]);
 });
 
-test('a member Copy reads that member through the port and copies the reply', async () => {
+test('a member Copy reads that member, shows the read in place, and copies the reply', async () => {
   let release;
   const { editor, reads } = setup((features) => new Promise((resolve) => {
     release = () => resolve(new Map([sequencesOf(alpha, 'ATGAAATGA', 'MK')]));
@@ -93,10 +93,12 @@ test('a member Copy reads that member through the port and copies the reply', as
   const [first] = editor.getEnrichedOrthogroupMembers(group);
   const copying = editor.copyOrthogroupMemberSequence(first, 'nt', group);
   assert.deepEqual(reads, [[{ recordKey: 'rec-1', biologicalFeatureId: 'alpha', bases: 12 }]]);
-  assert.equal(label(editor, 'nt', 'Copy nt', first), 'Reading the sequence…');
+  assert.equal(readState(editor).status, 'reading');
+  assert.equal(readState(editor, 'feature-popup').status, '');
   release();
   assert.equal(await copying, true);
   assert.equal(copied, '>REC:1-12 ALPHA\nATGAAATGA\n');
+  assert.equal(readState(editor).status, '');
   assert.equal(label(editor, 'nt', 'Copy nt', first), 'Copied!');
 });
 
@@ -110,39 +112,50 @@ test('a group FASTA reads every member once and skips members without a sequence
   assert.equal(label(editor, 'aa', 'Copy aa'), 'Copied!');
 });
 
-test('a read with no sequence copies nothing and says so', async () => {
+test('a read with no sequence copies nothing and says so in place', async () => {
   const { editor } = setup(async () => new Map([sequencesOf(alpha, '', ''), sequencesOf(beta, '', '')]));
   copied = null;
   assert.equal(await editor.copyOrthogroupSequences(group, 'nt'), false);
   assert.equal(copied, null);
-  assert.equal(label(editor, 'nt', 'Copy nt'), 'No sequence available');
+  assert.equal(readState(editor).status, 'empty');
+  assert.equal(label(editor, 'nt', 'Copy nt'), 'Copy nt');
 });
 
 test('a stale reply writes nothing', async () => {
-  const { editor, state } = setup(async () => null);
+  const { editor } = setup(async () => null);
   copied = null;
   assert.equal(await editor.copyOrthogroupSequences(group, 'nt'), false);
   assert.equal(copied, null);
   assert.equal(label(editor, 'nt', 'Copy nt'), 'Copy nt');
-  assert.equal(state.errorLog.value, null);
+  assert.equal(readState(editor).status, '');
   downloads.length = 0;
   assert.equal(await editor.downloadOrthogroupSequences(group, 'nt'), false);
   assert.deepEqual(downloads, []);
 });
 
-test('a failed read says Copy failed and reports the error', async () => {
-  const { editor, state } = setup(async () => {
-    throw diagnosticError('SEQUENCE_REQUIRES_GENERATE', {}, { stage: 'helper', operation: 'readFeatureSequences' });
+test('a failed read shows its error with Retry in place, and Retry reads again', async () => {
+  let fail = true;
+  const { editor, reads } = setup(async () => {
+    if (fail) throw diagnosticError('SEQUENCE_REQUIRES_GENERATE', {}, { stage: 'helper', operation: 'readFeatureSequences' });
+    return new Map([sequencesOf(alpha, 'ATG', 'M')]);
   });
   copied = null;
-  assert.equal(await editor.copyOrthogroupSequences(group, 'nt'), false);
+  assert.equal(await editor.copyOrthogroupSequences(group, 'nt', 'feature-popup'), false);
   assert.equal(copied, null);
-  assert.equal(label(editor, 'nt', 'Copy nt'), 'Copy failed');
-  assert.equal(state.errorLog.value?.code, 'SEQUENCE_REQUIRES_GENERATE');
+  const shown = readState(editor, 'feature-popup');
+  assert.equal(shown.status, 'failed');
+  assert.equal(shown.error?.code, 'SEQUENCE_REQUIRES_GENERATE');
+  assert.equal(typeof shown.retry, 'function');
+  assert.equal(readState(editor).status, '');
+  fail = false;
+  assert.equal(await shown.retry(), true);
+  assert.equal(reads.length, 2);
+  assert.equal(copied, '>REC:1-12 ALPHA\nATG\n');
+  assert.equal(readState(editor, 'feature-popup').status, '');
 });
 
-test('Download reads through the port, names the file, and gives the same feedback', async () => {
-  const { editor, state } = setup(async () => new Map([sequencesOf(beta, 'ACGT', 'MP')]));
+test('Download reads through the port, names the file, and shows a failure in place', async () => {
+  const { editor } = setup(async () => new Map([sequencesOf(beta, 'ACGT', 'MP')]));
   downloads.length = 0;
   const [, second] = editor.getEnrichedOrthogroupMembers(group);
   assert.equal(await editor.downloadOrthogroupMemberSequence(second, 'aa', group), true);
@@ -150,12 +163,32 @@ test('Download reads through the port, names the file, and gives the same feedba
   assert.equal(label(editor, 'aa', 'Download aa', second, 'download'), 'Download aa');
   const empty = setup(async () => new Map([sequencesOf(alpha, '', ''), sequencesOf(beta, '', '')]));
   assert.equal(await empty.editor.downloadOrthogroupSequences(group, 'nt'), false);
-  assert.equal(label(empty.editor, 'nt', 'Download nt', null, 'download'), 'No sequence available');
+  assert.equal(readState(empty.editor).status, 'empty');
   const failing = setup(async () => { throw new Error('worker down'); });
   assert.equal(await failing.editor.downloadOrthogroupSequences(group, 'nt'), false);
-  assert.equal(label(failing.editor, 'nt', 'Download nt', null, 'download'), 'Download failed');
-  assert.ok(failing.state.errorLog.value);
-  assert.equal(state.errorLog.value, null);
+  assert.equal(readState(failing.editor).status, 'failed');
+  assert.ok(failing.editor.orthogroupMemberRead('drawer').error);
+  assert.equal(label(failing.editor, 'nt', 'Download nt', null, 'download'), 'Download nt');
+});
+
+test('a read the popup no longer shows writes nothing to the state it shows', async () => {
+  let reject;
+  const { editor, state } = setup(() => new Promise((_, rejectRead) => { reject = rejectRead; }));
+  const reading = editor.copyOrthogroupSequences(group, 'nt', 'feature-popup');
+  assert.equal(readState(editor, 'feature-popup').status, 'reading');
+  // Another feature is clicked: the popup shows the new feature, with no read.
+  state.clickedFeature.value = { feat: {} };
+  assert.equal(readState(editor, 'feature-popup').status, '');
+  reject(new Error('worker down'));
+  assert.equal(await reading, false);
+  assert.equal(readState(editor, 'feature-popup').status, '');
+});
+
+test('the editor reports no read failure to the page error log', async () => {
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../../gbdraw/web/js/app/orthogroups.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /errorLog/);
+  assert.doesNotMatch(source, /copyPendingTextToClipboard|downloadTextFile/);
 });
 
 test('the orthogroup panel and the match popup take a member FASTA header from one owner', async () => {

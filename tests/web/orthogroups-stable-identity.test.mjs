@@ -115,6 +115,9 @@ const orthogroupSource = (await readFile(
   "from './feature-editor-svg-actions.js';"
 );
 await writeFile(join(tempDir, 'app', 'orthogroups.js'), orthogroupSource, 'utf8');
+// The member actions read through the one owner of a popup's member read (D5 review r1, MEDIUM-4).
+await copyModule('gbdraw/web/js/app/sequence-reads.js', 'app/sequence-reads.js');
+await copyModule('gbdraw/web/js/services/pairwise-match-popup.js', 'services/pairwise-match-popup.js');
 
 let copyFeedbackNow = 0;
 let nextCopyFeedbackTimerId = 1;
@@ -1395,7 +1398,6 @@ const state = {
       amino_acid_sequence: 'MQ'
     }
   ]),
-  errorLog: ref(null)
 };
 
 // The rows still carry a schema-5 catalog's sequences, which no member takes: Python's reply (D5) is the only
@@ -1411,7 +1413,14 @@ const readFeatureSequences = async (features) => {
 };
 /** Lets the reads and clipboard writes queued so far run. */
 const settle = () => new Promise((resolve) => setImmediate(resolve));
-const editor = createOrthogroupEditor({ state: withDrawings(state), runAnalysis: null, readFeatureSequences });
+const { createSequenceReads } = await import(pathToFileURL(join(tempDir, 'app', 'sequence-reads.js')).href);
+const { copyPendingTextToClipboard } = await import(pathToFileURL(join(tempDir, 'utils', 'clipboard.js')).href);
+const { downloadTextFile } = await import(pathToFileURL(join(tempDir, 'services', 'text-download.js')).href);
+const memberReads = createSequenceReads({
+  readFeatures: readFeatureSequences, readSpans: async () => null, copyPending: copyPendingTextToClipboard,
+  downloadText: downloadTextFile, isShown: () => true
+});
+const editor = createOrthogroupEditor({ state: withDrawings(state), runAnalysis: null, memberAction: memberReads.memberAction });
 // OV-1010: a member's null or blank bound is missing, not 0, so a member
 // without identifiers gets no `1-20(+)` location as its display ID.
 for (const missing of [null, '', '  ']) {
@@ -1566,23 +1575,24 @@ globalThis.document = {
 navigator.clipboard.writeText = async () => {
   throw new Error('denied');
 };
-await editor.copyOrthogroupSequences(group, 'aa', 'failure-case');
-assert.equal(
-  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'failure-case'),
-  'Copy failed'
-);
-assert.notEqual(
-  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'failure-case'),
-  'Copied!'
-);
+// A copy the browser refuses says "Copy failed", with Retry, in the popup's read state.
+editor.clearCopyFeedback();
+await editor.copyOrthogroupSequences(group, 'aa', 'feature-popup');
+assert.equal(editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'feature-popup'), 'Copy aa');
+assert.equal(editor.orthogroupMemberRead('feature-popup').status, 'copy-failed');
+assert.equal(typeof editor.orthogroupMemberRead('feature-popup').retry, 'function');
+assert.equal(editor.orthogroupMemberRead('drawer').status, '');
+editor.clearCopyFeedback();
+assert.equal(editor.orthogroupMemberRead('feature-popup').status, '');
 
 navigator.clipboard.writeText = undefined;
 globalThis.document.execCommand = () => true;
-await editor.copyOrthogroupSequences(group, 'aa', 'fallback-case');
+await editor.copyOrthogroupSequences(group, 'aa', 'feature-popup');
 assert.equal(
-  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'fallback-case'),
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'feature-popup'),
   'Copied!'
 );
+editor.clearCopyFeedback();
 
 let rejectFirstCopy;
 let resolveSecondCopy;
@@ -1590,34 +1600,37 @@ navigator.clipboard.writeText = () => new Promise((resolve, reject) => {
   if (!rejectFirstCopy) rejectFirstCopy = reject;
   else resolveSecondCopy = resolve;
 });
-const firstCopy = editor.copyOrthogroupSequences(group, 'aa', 'race-case');
-const secondCopy = editor.copyOrthogroupSequences(group, 'aa', 'race-case');
+// A later copy supersedes the earlier one: the earlier one's refusal writes nothing.
+const firstCopy = editor.copyOrthogroupSequences(group, 'aa', 'feature-popup');
+const secondCopy = editor.copyOrthogroupSequences(group, 'aa', 'feature-popup');
 await settle();
 resolveSecondCopy();
 await secondCopy;
 assert.equal(
-  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'race-case'),
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'feature-popup'),
   'Copied!'
 );
 rejectFirstCopy(new Error('stale denial'));
 await firstCopy;
 assert.equal(
-  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'race-case'),
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'feature-popup'),
   'Copied!'
 );
+assert.equal(editor.orthogroupMemberRead('feature-popup').status, '');
+editor.clearCopyFeedback();
 
 navigator.clipboard.writeText = async () => {};
-await editor.copyOrthogroupSequences(group, 'aa', 'rapid-case');
+await editor.copyOrthogroupSequences(group, 'aa', 'feature-popup');
 advanceCopyFeedbackTime(1000);
-await editor.copyOrthogroupSequences(group, 'aa', 'rapid-case');
+await editor.copyOrthogroupSequences(group, 'aa', 'feature-popup');
 advanceCopyFeedbackTime(600);
 assert.equal(
-  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa (2)', null, 'rapid-case'),
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa (2)', null, 'feature-popup'),
   'Copied!'
 );
 advanceCopyFeedbackTime(900);
 assert.equal(
-  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa (2)', null, 'rapid-case'),
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa (2)', null, 'feature-popup'),
   'Copy aa (2)'
 );
 
@@ -1626,9 +1639,7 @@ for (const [sequenceKind, originalLabel, member, context] of [
   ['nt', 'Copy nt', null, 'drawer'],
   ['aa', 'Copy aa', null, 'drawer'],
   ['aa', 'aa', members[0], 'drawer'],
-  ['aa', 'Copy aa', null, 'failure-case'],
-  ['aa', 'Copy aa', null, 'fallback-case'],
-  ['aa', 'Copy aa', null, 'race-case']
+  ['aa', 'Copy aa', null, 'feature-popup']
 ]) {
   assert.equal(
     editor.orthogroupCopyFeedbackLabel(group, sequenceKind, originalLabel, member, context),

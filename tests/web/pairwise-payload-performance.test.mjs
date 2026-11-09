@@ -72,8 +72,8 @@ const instrumentedPopupSource = [
     "import { formatFastaEntry, memberFastaFeature } from './feature-sequence-fasta.js';",
     "import { formatFastaEntry as formatFastaEntryBase, memberFastaFeature } from './feature-sequence-fasta.js';"
   ], [
-    "import { featureSequenceReads } from './catalog-sequences.js';",
-    "import { featureSequenceReads as featureSequenceReadsBase } from './catalog-sequences.js';"
+    "import { featureSequenceReads, unreadSequence } from './catalog-sequences.js';",
+    "import { featureSequenceReads as featureSequenceReadsBase, unreadSequence } from './catalog-sequences.js';"
   ], [
     '  featureIdentity,\n  identityMatches,\n  renderedFeatureIdentity,',
     '  featureIdentity as featureIdentityBase,\n  identityMatches,\n  renderedFeatureIdentity as renderedFeatureIdentityBase,'

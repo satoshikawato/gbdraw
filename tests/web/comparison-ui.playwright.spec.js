@@ -1624,7 +1624,7 @@ const prepareUploadedTablePair = async (page) => {
   return { hit, generateWithTable };
 };
 
-test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory tables keep the Result', async ({ page }) => {
+test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory tables keep the Result', async ({ page }, testInfo) => {
   // CO-06 (PD-OI-074): unknown IDs keep positional placement with endpoint
   // metadata, so match FASTA resolves; a swapped table fails before drawing.
   test.setTimeout(300000);
@@ -1652,6 +1652,26 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
     { role: 'query', available: true, reason: '' },
     { role: 'subject', available: true, reason: '' }
   ]);
+  // D5 review r1 (MEDIUM-3): Copy and FASTA of both spans are offered only when every span can be read, so a file or
+  // the clipboard never holds one span under the name of both; the span that cannot be read says why in its row.
+  const bothSpans = matchDialog.locator('[data-match-both-spans]').getByRole('button');
+  await expect(bothSpans).toHaveCount(2);
+  await expect(bothSpans.nth(0)).toBeEnabled();
+  await expect(bothSpans.nth(1)).toBeEnabled();
+  const subjectUnavailable = 'The subject record was not supplied.';
+  await page.evaluate((reason) => {
+    const [, subject] = window.__GBDRAW_APP__.clickedPairwiseMatch.sequenceBundle.entries;
+    Object.assign(subject, { available: false, unavailableReason: reason });
+  }, subjectUnavailable);
+  await expect(bothSpans.nth(0)).toBeDisabled();
+  await expect(bothSpans.nth(1)).toBeDisabled();
+  await expect(matchDialog.getByText(subjectUnavailable)).toBeVisible();
+  await matchDialog.screenshot({ path: testInfo.outputPath('medium3-both-spans-need-every-span.png') });
+  await page.evaluate(() => {
+    const [, subject] = window.__GBDRAW_APP__.clickedPairwiseMatch.sequenceBundle.entries;
+    Object.assign(subject, { available: true, unavailableReason: '' });
+  });
+  await expect(bothSpans.nth(0)).toBeEnabled();
   // OV-1264: in a narrow popup a span line wraps between its parts, never
   // inside a coordinate pair or between a length and its unit.
   await matchDialog.evaluate((dialog) => { dialog.style.width = '240px'; });

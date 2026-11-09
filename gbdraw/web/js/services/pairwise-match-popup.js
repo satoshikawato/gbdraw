@@ -9,7 +9,7 @@ import {
   resolveDisplayProteinId
 } from './feature-utils.js';
 import { formatFastaEntry, memberFastaFeature } from './feature-sequence-fasta.js';
-import { featureSequenceReads } from './catalog-sequences.js';
+import { featureSequenceReads, unreadSequence } from './catalog-sequences.js';
 import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
 import {
   groupMetadataScopeLabel,
@@ -29,7 +29,7 @@ import { msg, t, tm, tmx, tn, tx } from '../utils/i18n.js';
 /** @import { AliasSource, FeatureIdentity } from './feature-identity.js' */
 /** @import { FeatureLike } from './feature-utils.js' */
 /** @import { MatchSpanInput, MatchSpanReason, MatchSpanSequence } from './diagram-worker-protocol.js' */
-/** @import { UserFacingError } from '../utils/error-normalization.js' */
+/** @import { SequenceReadState } from './catalog-sequences.js' */
 
 /**
  * A rendered or source feature row of the catalogs, or a saved group member:
@@ -1993,15 +1993,6 @@ const buildMatchSpans = (element, matchKind) => {
  * @property {string} matchId
  * @property {string} filename
  */
-
-/**
- * The state of a popup's sequence read (`app/sequence-reads.js`): none, Python reading, the read held no sequence,
- * or failed (the error the popup shows with Details and Copy diagnostics, and its Retry).
- * @typedef {{ status: '' | 'reading' | 'empty' | 'failed', error: UserFacingError | null, retry: (() => unknown) | null }} SequenceReadState
- */
-
-/** @returns {SequenceReadState} */
-const unreadSequence = () => ({ status: '', error: null, retry: null });
 
 /**
  * The spans of a match popup and the state of their read.

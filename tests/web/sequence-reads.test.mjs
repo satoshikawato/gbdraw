@@ -18,10 +18,11 @@ const popupOf = () => buildFeaturePopup(feat, {
 });
 const sequencesOf = (read) => ({ ...read, nucleotideSequence: 'ATGAAA', aminoAcidSequence: 'MK', sequenceWarnings: ['partial'] });
 
-const harness = ({ readFeatures, readSpans } = {}) => {
+const harness = ({ readFeatures, readSpans, isShown } = {}) => {
   const copied = [];
   const downloaded = [];
   const reads = createSequenceReads({
+    isShown: isShown || (() => true),
     readFeatures: readFeatures || (async (asked) => new Map(asked.map((read) => [featureSequenceKey(read), sequencesOf(read)]))),
     readSpans: readSpans || (async (spans) => spans.map((span) => ({
       status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT'
@@ -81,6 +82,25 @@ test('a tab read the door discarded is read again for the Result now shown', asy
   await reads.showFeatureSequence(popup);
   assert.equal(calls, 2);
   assert.equal(popup.sequence.status, 'ready');
+});
+
+// D5 review r1 (LOW-7): the tab reads again for the Result now shown only while its popup is shown; a closed popup
+// (or one showing another feature) stops the loop and keeps nothing it would show as reading.
+test('a discarded tab read stops reading when its popup is no longer shown', async () => {
+  let calls = 0;
+  let shown = true;
+  const popup = popupOf();
+  const { reads } = harness({
+    readFeatures: async () => {
+      calls += 1;
+      shown = false;
+      return null;
+    },
+    isShown: (asked) => shown && asked === popup
+  });
+  await reads.showFeatureSequence(popup);
+  assert.equal(calls, 1);
+  assert.equal(popup.sequence.status, 'idle', 'the tab reads again when it is shown again');
 });
 
 const entryOf = (role, read) => ({
@@ -169,6 +189,46 @@ test('a discarded span read writes nothing; a failed one keeps its error and Ret
   assert.equal(await bundle.read.retry(), true);
   assert.equal(bundle.read.status, '');
   assert.equal(copied.length, 1);
+});
+
+// D5 review r1 (MEDIUM-4): a refused clipboard write is told apart from a failed read: the text was read, so the
+// popup says "Copy failed" with Retry, as the Similarity group buttons said before D5, not an unknown failure.
+test('a clipboard write the browser refuses says Copy failed with Retry; a later action supersedes an earlier one', async () => {
+  let refuse = true;
+  const reads = createSequenceReads({
+    isShown: () => true,
+    readFeatures: async (asked) => new Map(asked.map((read) => [featureSequenceKey(read), sequencesOf(read)])),
+    readSpans: async () => null,
+    copyPending: async (pending) => {
+      const text = await pending;
+      if (refuse) throw new Error('denied');
+      return text;
+    },
+    downloadText: () => {}
+  });
+  const state = { status: '', error: null, retry: null };
+  const row = { read: { recordKey: 'rec-1', biologicalFeatureId: 'kinase', bases: 6 }, fastaFeature: feat };
+  assert.equal(await reads.memberAction(state, [row], 'nt', 'copy', 'x.fna'), false);
+  assert.equal(state.status, 'copy-failed');
+  assert.equal(state.error, null);
+  refuse = false;
+  assert.equal(await state.retry(), true);
+  assert.equal(state.status, '');
+  let release;
+  const slow = createSequenceReads({
+    isShown: () => true,
+    readFeatures: () => new Promise((_, reject) => { release = () => reject(new Error('worker down')); }),
+    readSpans: async () => null, copyPending: async (pending) => pending, downloadText: () => {}
+  });
+  const first = slow.memberAction(state, [row], 'nt', 'copy', 'x.fna');
+  const firstRelease = release;
+  const second = slow.memberAction(state, [row], 'nt', 'copy', 'x.fna');
+  firstRelease();
+  assert.equal(await first, false);
+  assert.equal(state.status, 'reading', 'the earlier action writes nothing once a later one runs');
+  release();
+  assert.equal(await second, false);
+  assert.equal(state.status, 'failed');
 });
 
 test('member FASTA reads the members when pressed and copies the kind asked', async () => {

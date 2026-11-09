@@ -1198,6 +1198,15 @@ export const OperationError = {
   }
 };
 
+// The read of a popup's sequence action (`SequenceReadState` of services/catalog-sequences.js, written by
+// app/sequence-reads.js): "Reading the sequence…" while Python reads, "No sequence available", or the failure with
+// Details, Copy diagnostics and Retry. One view for every popup and panel that reads sequences.
+export const SequenceReadLine = {
+  template: '#sequence-read-line-template',
+  props: { read: { type: Object, default: null } },
+  components: { OperationError }
+};
+
 // The Specific color rules rows: a child of the root, so a root update that
 // leaves the rules unchanged renders no row (OV-251). The root keeps the
 // actions; a row emits them with the arguments it passed before.
