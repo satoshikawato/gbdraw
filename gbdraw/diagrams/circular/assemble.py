@@ -173,6 +173,7 @@ from ...annotations import (
     sync_annotation_legend_entries,
 )
 from ...annotations.planning import prepare_annotation_track_slots
+from ...annotations.models import slots_in_paint_order
 from ...render.drawers.circular.depth import DepthDrawer
 from ...render.drawers.circular.feature_density import FeatureDensityHeatmapGroup, feature_density_heatmap_ink
 from ...render.drawers.circular.gc_content import GcContentDrawer
@@ -3917,7 +3918,7 @@ def add_record_on_circular_canvas(
         slot for slot in resolved_track_slots
         if str(slot.renderer) != "feature_labels"
     ]
-    for resolved_slot in sorted(drawable_slots, key=lambda item: (int(item.z), int(item.slot_index))):
+    for resolved_slot in slots_in_paint_order(drawable_slots):
         canvas = _draw_resolved_circular_slot(
             canvas,
             resolved_slot,

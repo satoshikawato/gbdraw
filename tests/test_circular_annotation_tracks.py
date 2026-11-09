@@ -325,6 +325,38 @@ def test_circular_annotation_to_slot_ignores_order_cover_anchor_and_own_width(sp
     assert bands["regions"] == reference["regions"]
 
 
+def _painted_slot_ids(drawing) -> list[str]:
+    """The slot ids in the order their groups paint (SVG document order)."""
+
+    painted: list[str] = []
+    for element in ElementTree.fromstring(drawing.tostring()).iter():
+        slot_id = element.attrib.get("data-gbdraw-slot-id")
+        if slot_id is not None and slot_id not in painted:
+            painted.append(slot_id)
+    return painted
+
+
+@pytest.mark.parametrize(
+    ("slots", "painted"),
+    [
+        # A foreground overlay written before a row of its z that it covers paints over it (OV-3184).
+        (
+            ("features:features", _span_slot("anchor_slot=features,to_slot=skew,layer=foreground,z=1"),
+             "gc:dinucleotide_content@z=1", "skew:dinucleotide_skew"),
+            ["features", "skew", "gc", "regions"],
+        ),
+        # An underlay written after a row of its z that it covers paints under it.
+        (
+            ("features:features@z=1", "gc:dinucleotide_content",
+             _span_slot("anchor_slot=features,to_slot=skew,layer=underlay,z=0"), "skew:dinucleotide_skew@z=1"),
+            ["regions", "gc", "features", "skew"],
+        ),
+    ],
+)
+def test_circular_overlay_paints_on_its_layer_side_of_every_row_of_its_z(slots, painted) -> None:
+    assert _painted_slot_ids(_build_circular_span(*slots)) == painted
+
+
 def test_circular_annotation_to_slot_padding_shrinks_both_edges() -> None:
     bands = _circular_bands(
         _build_circular_span(

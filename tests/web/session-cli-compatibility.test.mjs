@@ -503,8 +503,8 @@ await test('a request without an Axis index loads each slot on the side Python d
     { axis: 1, slots: [['c', 'outside'], ['features', 'overlay'], ['s', 'inside']] });
 });
 
-// OV-3079: a set's row without a side loads outside, as the CLI draws it, and an Overlay set row keeps its place
-// before the row after it.
+// OV-3079: a set's row without a side loads outside, as the CLI draws it, and an Overlay set row stays before the
+// Annotations row written after it, where the Legend lists its entry.
 await test('a Circular CLI stack with blank sides and an Overlay set row loads on the sides the CLI drew (OV-3079)', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-axis-'));
   try {
@@ -522,7 +522,7 @@ await test('a Circular CLI stack with blank sides and an Overlay set row loads o
     const drawing = modeDrawing(state, 'circular');
     assert.deepEqual({
       axis: drawing.adv.circular_track_slots_axis_index, slots: drawing.adv.circular_track_slots.map(({ id, side }) => [id, side])
-    }, { axis: 2, slots: [['regions', 'outside'], ['hl', 'overlay'], ['features', 'inside']] });
+    }, { axis: 2, slots: [['hl', 'overlay'], ['regions', 'outside'], ['features', 'inside']] });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
