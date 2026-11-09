@@ -532,6 +532,13 @@ write-up of a release.
   U+FEFF does not. A record key of U+FEFF alone no longer drops the saved
   diagram settings at Load, and one of U+001C alone now drops them there, with
   a row in the repair dialog, instead of loading and failing at Generate.
+- Fixed: the Web app reads a record's `region` in a Session or request saved
+  before schema 10 as the command line and the Python API do. A record that
+  names its record both on itself and in its `region` is refused at Load
+  instead of drawing the record's own choice, which the command line refuses;
+  no released version wrote such a file. A `region` whose numbers are not
+  integers is no longer read as a reversed span, and a `region` with no start
+  or end is read as the whole record (OV-2958, OV-3000).
 - Changed: a Session saved with a `.gz` name (CLI, Python, and the Gallery
   Sessions) is written as "rsyncable" gzip. The compressor restarts at points
   chosen from the content, so a Session saved again after a small change keeps

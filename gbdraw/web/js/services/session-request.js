@@ -7524,8 +7524,7 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
  * one window, and the record its selector names is the record's selector, as
  * Python's decoder reads it (`decode_canonical_request`, D-09). Edited in
  * place; a record that is no object is left to the repair, and one that names its record on itself and in its
- * region is refused (OV-3000). A record naming its record twice, on itself and in its
- * region, is refused as Python refuses it.
+ * region is refused as Python refuses it (OV-3000).
  * @param {unknown} records
  */
 const promoteRecordRegionsToWindows = (records) => {
