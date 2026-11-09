@@ -1,37 +1,23 @@
 // A Generate reply crosses from Python to the Worker whatever its address in the
-// Pyodide heap (OV-2800). Pyodide 0.29.0 reads a Python buffer's address as a
+// Pyodide heap (OV-2800). Pyodide 0.29 reads a Python buffer's address as a
 // signed 32-bit number, so a chunk above 2 GiB failed with a RangeError when
 // the Worker read it through a buffer view; it now crosses through a file.
-// The real vendored Pyodide runs here; the heap is pushed past 2 GiB with blocks
-// that are allocated but never touched, so the process stays small.
+// The real vendored Pyodide runs here (helpers/pyodide-high-heap.mjs).
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { HIGH_ADDRESS as HIGH, allocateAboveTwoGiB, loadVendoredPyodide } from './helpers/pyodide-high-heap.mjs';
 
 globalThis.self = {};
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const indexURL = `${root}gbdraw/web/vendor/pyodide/v0.29.0/full/`;
-const { loadPyodide } = await import(new URL('../../gbdraw/web/vendor/pyodide/v0.29.0/full/pyodide.mjs', import.meta.url).href);
 const { createReplyBuffer, finishReplyBuffers } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
 
-const pyodide = await loadPyodide({ indexURL });
+const pyodide = await loadVendoredPyodide();
 pyodide.FS.writeFile('/home/pyodide/reply_buffers.py', readFileSync(`${root}gbdraw/web_support/reply_buffers.py`));
 
-const HIGH = 2 ** 31;
-const highAddress = pyodide.runPython(`
-def high_address():
-    return id(b"x" * (1 << 20))
-high_address`);
-// Untouched blocks of about 1 GiB each until a new 1 MiB bytes object lands above 2 GiB.
-const pads = [];
-while (highAddress() < HIGH) {
-  assert.ok(pads.length < 4, 'the Pyodide heap did not grow past 2 GiB');
-  const pad = pyodide._module._PyMem_RawMalloc(2 ** 30 - 2 ** 20);
-  assert.notEqual(pad, 0);
-  pads.push(pad);
-}
+const release = allocateAboveTwoGiB(pyodide);
 
 try {
   const write = pyodide.runPython(`
@@ -63,7 +49,7 @@ write`);
   // The chunk file is gone once its chunk is taken.
   assert.equal(pyodide.FS.analyzePath(reply.buffer.path).exists, false);
 } finally {
-  pads.forEach((pad) => pyodide._module._PyMem_RawFree(pad));
+  release();
 }
 
 console.log('reply buffer high-heap tests passed');
