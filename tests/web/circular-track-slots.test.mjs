@@ -23,6 +23,10 @@ await cp(
   join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'conservation-series.js'),
   join(tempRoot, 'services', 'conservation-series.js')
 );
+// conservation-series.js reads a ring's files through the drawing inputs slice.
+for (const file of ['drawing/inputs.js', 'drawing/slice-handle.js', 'history-files.js']) {
+  await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', file), join(tempRoot, 'services', file));
+}
 // The slice editors and svg-serialization resolve a drawing's ID by its mode.
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempRoot, 'services', 'drawing-view.js'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
