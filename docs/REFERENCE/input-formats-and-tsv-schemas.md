@@ -18,9 +18,9 @@ depth file, or a Session. gbdraw tells a gzip file by its first two bytes, not
 its name, and reads it as the plain file it holds, in the command line, the
 Python API, and the Web app alike. A Session saved from a gzip upload holds the
 gzip file as it is, under the uploaded name. bzip2, xz, and zstd files are not read.
-A gzip input file expands to at most 512 MiB (536,870,912 bytes): a larger one
-is refused with its name, because a small gzip file can expand to many
-gigabytes. Decompress it and give the plain file, which has no size limit. A
+A gzip input file expands to at most 2 GiB (2,048 MiB, 2,147,483,648 bytes):
+a larger one is refused with its name, because a small gzip file can expand to
+many gigabytes. Decompress it and give the plain file, which has no size limit. A
 Session file keeps its own limits.
 
 A flat file, GFF3, or FASTA file, a comparison genome included, is read as

@@ -91,7 +91,7 @@ pinned hash.
   `'unsafe-eval'` for scripts, so the SVG sanitizer, not the policy, is the
   main defense against script in a crafted input.
 - The command line and the Python API read a whole input or Session into
-  memory. A gzip input file is read up to 512 MiB expanded and refused past it,
+  memory. A gzip input file is read up to 2 GiB (2,048 MiB) expanded and refused past it,
   there and in the Web app; a plain input file, and a Session on the command
   line or in the Python API, have no size limit. The Web app refuses a Session
   over 200 MiB compressed or 512 MiB expanded.

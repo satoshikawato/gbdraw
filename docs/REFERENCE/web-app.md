@@ -92,9 +92,9 @@ Every file input also takes a gzip-compressed file (`.gb.gz`, `.fna.gz`,
 `.gff.gz`, a gzip TSV): it is read as the plain file it holds, told by its
 first two bytes, and a saved Session keeps the gzip file as it is
 ([input formats](input-formats-and-tsv-schemas.md#sequence-and-annotation-files)).
-A gzip file that expands to more than 512 MiB is refused with its name as soon
-as it is chosen, and one in a loaded Session when you Generate; choose its
-plain file instead.
+A gzip file that expands to more than 2 GiB (2,048 MiB) is refused with its
+name as soon as it is chosen, and one in a loaded Session when you Generate;
+choose its plain file instead.
 
 A Circular GenBank upload starts in **Add GenBank/DDBJ files**, and its File
 card then holds the file in **GenBank/DDBJ File**. Each Linear **File** card
