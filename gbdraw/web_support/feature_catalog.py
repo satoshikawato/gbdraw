@@ -2440,8 +2440,8 @@ def embed_catalog_part(
     that belong to the records ``source_record_keys`` name (each drawn unit of such a record; ``None``: every
     record) and, with
     ``comparison_sources``, those of the comparison FASTA records, each with its index among the item's sources. The
-    CLI and Python export read the whole item as one part (``embed_catalog_item``); the Web export reads one part per
-    record, so no reply holds the whole item.
+    CLI and Python export read the whole item as one part (``embed_catalog_item``); the Web export reads parts of a
+    bounded number of bases, so no reply of a large item holds all of it.
     """
 
     from gbdraw.features.source import drawn_source_features

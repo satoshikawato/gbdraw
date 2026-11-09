@@ -11,7 +11,7 @@ Copy FASTA of Select region (``record_spans.py``). Python resolves the records a
   key) or of a comparison FASTA record (named by its source and record ID): the Copy and FASTA of a match popup.
 - ``read_embed_catalog_item``: a stored catalog item with every sequence an exported Interactive SVG embeds, in the
   export encoding (``embed_catalog_item``); ``read_embed_catalog_part`` reads one part of it (the rows of some records
-  and the whole-record sources they own, ``embed_catalog_part``), which the Web export reads record by record, as
+  and the whole-record sources they own, ``embed_catalog_part``), which the Web export reads in parts of bounded size, as
   the export's text (``read_embed_sequences_json``).
 
 Nothing is found by caption, label or display text.

@@ -217,13 +217,15 @@ const exportItem = {
   orthogroups: [], annotations: [], comparisonMatches: [{ id: 'm1' }]
 };
 
-test('an export reads one part per record, never the whole item, with each source once', () => {
+test('an export reads parts of at most the read limit of bases across records, with each source once', () => {
   const parts = embedReadParts(exportItem, 25);
   assert.deepEqual(parts.map(({ item, part }) => [item.biologicalFeatures.map((row) => row.biologicalFeatureId), part]), [
     [['a1'], { sourcesOf: ['rec-a'], comparisonSources: false }],
-    [['a2'], { sourcesOf: [], comparisonSources: false }],
-    [['b1'], { sourcesOf: ['rec-b'], comparisonSources: true }]
+    [['a2', 'b1'], { sourcesOf: ['rec-b'], comparisonSources: true }]
   ]);
+  // A small item is one part.
+  assert.deepEqual(embedReadParts(exportItem, 1000).map(({ part }) => part),
+    [{ sourcesOf: ['rec-a', 'rec-b'], comparisonSources: true }]);
   assert.deepEqual(Object.keys(parts[0].item), ['recordKeys', 'comparisonMatches', 'biologicalFeatures']);
   // A record without rows gives its sources with the last part; an item without rows is one part.
   const noRows = embedReadParts({ ...exportItem, biologicalFeatures: exportItem.biologicalFeatures.slice(2) }, 25);
@@ -248,7 +250,7 @@ test('the parts written as they arrive are the item Python encodes whole, byte f
   assert.deepEqual(asked.map((payload) => [Object.keys(payload).sort(), payload.files.map(({ role }) => role)]),
     asked.map(() => [['canonicalRequest', 'files', 'part', 'resources'], ['embedItem']]));
   assert.ok(asked.every((payload) => payload.files[0].bytes instanceof ArrayBuffer));
-  assert.equal(sent.length, 3);
+  assert.equal(sent.length, 2);
   const whole = embedPartObjects({ item: exportItem, part: { sourcesOf: ['rec-a', 'rec-b'], comparisonSources: true } });
   assert.equal(embeddedCatalogItemJson(exportItem, sequences), JSON.stringify({
     ...exportItem, biologicalFeatures: whole.biologicalFeatures, sequenceSources: whole.sequenceSources.map(({ source }) => source)

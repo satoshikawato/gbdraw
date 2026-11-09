@@ -100,9 +100,9 @@ export const readEmbedSequencesReply = (result, rows) => {
  */
 
 /**
- * The parts one export read sends, so no reply holds the whole item: the rows in their stored order, a part per run
- * of rows of one record (split at `limit` bases as feature reads are); each record's sources come with the part of
- * its first row, the sources of records without rows and of the comparison FASTA records with the last part.
+ * The parts one export read sends, so no reply holds more than `limit` bases of rows: the rows in their stored order,
+ * in chunks of at most `limit` bases as feature reads are; each record's sources come with the part of its first
+ * row, the sources of records without rows and of the comparison FASTA records with the last part.
  * @param {Readonly<Record<string, unknown>>} item The stored catalog item.
  * @param {number} limit
  * @returns {{ item: EmbedItemPart, part: EmbedPartInput }[]}
@@ -112,16 +112,10 @@ export const embedReadParts = (item, limit) => {
   const windowOf = isRecord(item.windowOf) ? /** @type {Record<string, string>} */ (item.windowOf) : {};
   const rows = /** @type {Readonly<Record<string, unknown>>[]} */ (
     Array.isArray(item.biologicalFeatures) ? item.biologicalFeatures : []);
-  /** @type {Readonly<Record<string, unknown>>[][]} */
-  const runs = [];
-  rows.forEach((row, index) => {
-    if (index === 0 || row.recordKey !== rows[index - 1].recordKey) runs.push([]);
-    runs[runs.length - 1].push(row);
-  });
-  const chunks = runs.flatMap((run) => featureReadChunks(run, (row) => {
+  const chunks = featureReadChunks(rows, (row) => {
     const bases = Math.abs(Number(row.end) - Number(row.start));
     return Number.isFinite(bases) ? bases : 1;
-  }, limit));
+  }, limit);
   if (!chunks.length) chunks.push([]);
   /** @type {Set<string>} */
   const owned = new Set();

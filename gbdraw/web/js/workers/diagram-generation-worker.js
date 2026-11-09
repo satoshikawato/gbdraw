@@ -1359,8 +1359,8 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     )
   },
   // One part of the stored catalog item of the shown Result with every sequence an exported Interactive SVG embeds,
-  // in the export encoding, read from the shown Result's request (D5): the export reads it record by record. The
-  // part's rows come as a file (`embedItem`), not as a string argument.
+  // in the export encoding, read from the shown Result's request (D5): the export reads it in parts of at most
+  // FEATURE_READ_BASES bases of rows. The part's rows come as a file (`embedItem`), not as a string argument.
   [DIAGRAM_HELPER_OPERATIONS.READ_EMBED_SEQUENCES]: {
     keys: ['files', 'canonicalRequest', 'part'],
     fileRoles: ['embedItem'],
