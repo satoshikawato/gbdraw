@@ -888,13 +888,25 @@ jobs:
           node-version-file: .node-version
           cache: npm
 
+      # A pull request plan comes from the trusted base, so the trusted base's helper reads it,
+      # as in PR / gate; the plan's job list then matches the policy that reads it.
+      - name: Checkout trusted CI policy
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .ci-trusted-base
+          sparse-checkout: tools
+          fetch-depth: 1
+          persist-credentials: false
+
       # A leaf-test plan runs only the changed specs; a shard without one skips its setup and
       # succeeds (docs/internal/SELECTIVE_CI.md "Jobs for changed leaf tests").
       - name: Select the changed specs of this shard
         id: shard
         env:
           CI_IMPACT_PLAN_JSON: ${{ needs.ci-impact.outputs.plan }}
-        run: node tools/ci-impact.mjs shard-files ${{ matrix.shard }}
+        run: node ${{ github.event_name == 'pull_request' && '.ci-trusted-base/' || '' }}tools/ci-impact.mjs shard-files ${{ matrix.shard }}
 
       - name: Set up Python 3.11
         if: steps.shard.outputs.files != ''

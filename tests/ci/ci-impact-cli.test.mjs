@@ -1452,10 +1452,15 @@ test('functional shards intersect their assigned specs with the changed leaf spe
   for (const shard of [0, 9, 1.5]) {
     assert.throws(() => functionalShardFiles({ plan, shards: TEST_SHARDS, shard }), { code: 'INVALID_SHARD' });
   }
-  // A trusted base plan of another schema runs the whole shard; a malformed current plan fails.
+  // The helper that reads a plan is the helper whose policy made it (the trusted base's on a pull
+  // request), so a plan of another schema or job list fails like any malformed plan.
   const olderSchema = { ...JSON.parse(JSON.stringify(plan)), schemaVersion: IMPACT_PLAN_SCHEMA_VERSION - 1 };
   delete olderSchema.leafTests;
-  assert.deepEqual(functionalShardFiles({ plan: olderSchema, shards: TEST_SHARDS, shard: 1 }), TEST_SHARDS[0]);
+  assert.throws(() => functionalShardFiles({ plan: olderSchema, shards: TEST_SHARDS, shard: 1 }),
+    { code: 'INVALID_PLAN_SCHEMA' });
+  const otherJobs = { ...fullDevPlan(), requiredJobs: fullDevPlan().requiredJobs.slice(1) };
+  assert.throws(() => functionalShardFiles({ plan: otherJobs, shards: TEST_SHARDS, shard: 1 }),
+    { code: 'REQUIRED_JOBS_MISMATCH' });
   assert.throws(() => functionalShardFiles({ plan: { ...plan, leafTests: [] }, shards: TEST_SHARDS, shard: 1 }),
     { code: 'INVALID_LEAF_TESTS' });
   const browserOnly = devLeafPlan([{ path: 'tests/web/label-editor.test.mjs', kind: 'node', jobs: ['browser'] }]);
@@ -1559,7 +1564,18 @@ test('functional shards skip setup when no changed spec is assigned to them', ()
   const select = step('Select the changed specs of this shard');
   assert.match(select, /id: shard/);
   assert.match(select, /CI_IMPACT_PLAN_JSON: \$\{\{ needs\.ci-impact\.outputs\.plan \}\}/);
-  assert.match(select, /run: node tools\/ci-impact\.mjs shard-files \$\{\{ matrix\.shard \}\}/);
+  // A pull request plan comes from the trusted base, so the trusted base's helper reads it, as in
+  // PR / gate: the plan's job list then matches the policy that reads it even when the pull
+  // request adds a job. Other events read their own plan with their own helper.
+  assert.match(select, new RegExp(String.raw`run: node \$\{\{ github\.event_name == 'pull_request' && '\.ci-trusted-base/' \|\| '' \}\}tools/ci-impact\.mjs shard-files \$\{\{ matrix\.shard \}\}\n`));
+  const trusted = step('Checkout trusted CI policy');
+  const planner = workflowJobOf(readTestsWorkflow(), 'ci-impact');
+  const plannerTrusted = planner.match(/\n      - name: Checkout trusted CI policy\n[\s\S]*?(?=\n      - |$)/)?.[0] || '';
+  assert.ok(plannerTrusted, 'the planner checks out the trusted base');
+  // A step ends at its blank line; the comment after it belongs to the next step.
+  const stepBody = (text) => text.split('\n\n')[0].trimEnd();
+  assert.equal(stepBody(trusted), stepBody(plannerTrusted), 'the shard reads the plan with the helper that made it');
+  assert.ok(job.indexOf(trusted) < job.indexOf(select));
   assert.ok(job.indexOf(step('Set up Node.js')) < job.indexOf(select));
   for (const name of [
     'Set up Python 3.11',

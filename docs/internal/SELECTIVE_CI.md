@@ -335,9 +335,11 @@ For a restricted functional run, each of the eight shards runs
 `node tools/ci-impact.mjs shard-files <shard>`, which intersects its list in
 `tests/ci/functional-shards.json` with the changed specs, and passes only those
 files to Playwright. A shard with no changed spec skips its setup and succeeds,
-so the shard matrix and its aggregate stay unchanged. Every other plan, and a
-pull request plan from a trusted base with an older plan schema, runs the whole
-shard list.
+so the shard matrix and its aggregate stay unchanged. Every other plan runs the
+whole shard list. On a pull request the shard runs the trusted base's
+`tools/ci-impact.mjs`, the helper whose policy made the plan, as `PR / gate`
+does. The plan then matches the policy that checks it, even when the pull
+request adds a job or changes the plan schema.
 
 `Gallery publication` runs `browser` (`npm run test:web:gallery-publication`)
 only when a changed leaf test is a spec it runs, which today is only the Gallery
