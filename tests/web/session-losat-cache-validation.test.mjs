@@ -1074,7 +1074,7 @@ ORIGIN
 test('ring Generates over one comparison FASTA count its bytes once in the History file estimate (OV-3019)', async () => {
   const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
   const { resourceIdOwnedBy } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
-  const { bindDrawingInputFileList } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const genbank = 'LOCUS       REFERENCE                   8 bp    DNA     linear   UNK 01-JAN-1980\nFEATURES             Location/Qualifiers\nORIGIN\n        1 aaccggtt\n//\n';
   const fasta = new File(['>comparison\naaaacccc\n'], 'comparison.fna', { type: 'text/plain' });
   installShownDrawing('circular');
@@ -1087,8 +1087,9 @@ test('ring Generates over one comparison FASTA count its bytes once in the Histo
   Object.assign(drawing.circularConservation, { enabled: true, source: 'losat', reference: 'subject', labels: '' });
   drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length,
     { sourceIndex: 0, fileName: fasta.name, label: 'comparison', color: '#4e79a7', losat_gencode: 11 });
-  bindDrawingInputFileList(state.inputFiles, inputs, 'c_conservation_fastas', [fasta]);
-  bindDrawingInputFileList(state.inputFiles, inputs, 'c_conservation_sequence_sources', []);
+  // One ring whose comparison genome is one file.
+  bindDrawingInputFileTree(state.inputFiles, inputs, 'c_conservation_fastas', [[fasta]]);
+  bindDrawingInputFileTree(state.inputFiles, inputs, 'c_conservation_sequence_sources', []);
   const fileIds = state.inputFiles.collectIds(drawing.files);
   // A ring Generate (run-analysis.js): its request names the comparison FASTA for the search and for the ring.
   const ringGenerate = async () => {
@@ -1096,7 +1097,7 @@ test('ring Generates over one comparison FASTA count its bytes once in the Histo
     const canonical = buildCanonicalRenderRequest({
       state, drawing, filesData,
       resolvedCircularConservation: [{ sourceIndex: 0, name: 'comparison.tsv', text: '', label: 'comparison',
-        color: '#4e79a7', fasta: filesData.c_conservation_fastas[0] }]
+        color: '#4e79a7', fastas: filesData.c_conservation_fastas[0] }]
     });
     assert.equal(adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing, conservationPairs: 'committed' }), true);
     state.inputFiles.collectIds(drawing.files, fileIds);
@@ -1105,8 +1106,8 @@ test('ring Generates over one comparison FASTA count its bytes once in the Histo
   await ringGenerate();
   await ringGenerate();
   const { resources, renderRequest } = await ringGenerate();
-  const [ringFasta] = renderRequest.diagramOptions.conservationFastaFiles;
-  const [view] = drawing.files.c_conservation_fastas;
+  const [[ringFasta]] = renderRequest.diagramOptions.conservationFastaFiles;
+  const [[view]] = drawing.files.c_conservation_fastas;
   assert.ok(fileIds.size > 3, 'every ring Generate bound new views of the comparison FASTA');
   assert.equal(state.inputFiles.estimateBytes([...fileIds].filter((fileId) => (
     state.inputFiles.fileOf({ fileId })?.name === fasta.name)), sessionConfig.inputFilePayload), fasta.size);
