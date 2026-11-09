@@ -1027,7 +1027,7 @@ def test_circular_region_label_keeps_a_letter_or_is_left_out(text: str) -> None:
     params = annotation_track_params_from_mapping({"set_id": "s"})
     track = layout_annotation_track(
         "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
-        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)), join_origin=True,
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0, drawn=True)), join_origin=True,
     )
     seen: dict[str, tuple[bool, bool]] = {}
     for step in range(200, 0, -1):
@@ -1041,6 +1041,130 @@ def test_circular_region_label_keeps_a_letter_or_is_left_out(text: str) -> None:
     assert seen["Region"] == (True, False)
     assert seen["R\u2026"] == (True, True)
     assert seen["\u2026"] == (False, True)
+
+
+@pytest.mark.parametrize(("text", "start"), (("Region 3 xxx", 2184), ("Region 3 xxx", 8990), ("<i>Region</i>", 2000)))
+@pytest.mark.parametrize("font_size", (10.0, 60.0))
+def test_circular_region_label_letters_fit_their_innermost_circle(text: str, start: int, font_size: float) -> None:
+    # OV-2806: a label along a circle about as small as its letters keeps only the letters that fit along the
+    # circle its letters come nearest the centre on, and stays off its mark; with no such letter it is left out
+    # (RGN-CUT-EMPTY-OMIT). Labels of an inside slot nearer and nearer the centre, tops toward the centre (lower
+    # half) and away from it.
+    from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
+    from gbdraw.core.text import text_runs_glyph_outlines
+    from gbdraw.layout.text_geometry import glyphs_meet_on_circle
+    from gbdraw.render.drawers.circular.annotations import _MAX_HALF_PATH_DEG, _label_ink, circular_annotation_labels
+
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    style = RegionAnnotationStyle(label_orientation="auto", label_font_size=font_size)
+    region = RegionAnnotation("r0", CoordinateSpan(None, start, start + 1000), label=text, style=style)
+    bundle = resolve_annotations((AnnotationSet("s", (region,)),), [record], mode="circular")
+    params = annotation_track_params_from_mapping({"set_id": "s"})
+    track = layout_annotation_track(
+        "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0, drawn=True)), join_origin=True,
+    )
+    ink = _label_ink("Liberation Sans", font_size, "auto")
+    kept: set[bool] = set()
+    for step in range(400, 0, -1):
+        inner = 0.5 * step
+        labels = circular_annotation_labels(
+            track, record_index=0, record_length=10000, inner_radius_px=inner, outer_radius_px=inner + 10.0,
+            side="inside", font_family="Liberation Sans", params=params,
+        )
+        kept.add(bool(labels.drawn))
+        for label in labels.drawn:
+            near, far = label.ink_radii
+            left, right, _top, _bottom = ink(label.runs)
+            # Off its mark, and along the circle its letters come nearest the centre on, one em short of each end.
+            assert far <= inner, (inner, label.runs, label.ink_radii)
+            assert max(-left, right) + font_size <= math.radians(_MAX_HALF_PATH_DEG) * near + 1e-6, (inner, label.runs, near)
+            # And no two of its letters' ink overlaps where they stand.
+            glyphs = text_runs_glyph_outlines(label.runs, "Liberation Sans", font_size)
+            assert not glyphs_meet_on_circle(glyphs, label.arc.radius, tops_in=label.arc.flipped), (inner, label.runs)
+    assert kept == {True, False}
+
+
+def test_a_curved_region_label_whose_letters_close_up_on_its_circle_is_cut_before_they_meet() -> None:
+    # The x's of "Region 3 xxxxxxxx" at 60 pt stand apart on a line, but along a circle of about 200 px with their
+    # tops toward the centre (lower half) the top corners of each x cross the next one's: the label keeps the start
+    # whose letters stand apart. With their tops away from the centre (upper half) the whole label is drawn.
+    from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
+    from gbdraw.render.drawers.circular.annotations import circular_annotation_labels
+
+    texts = {}
+    for start in (2184, 7184):
+        record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+        style = RegionAnnotationStyle(label_orientation="auto", label_font_size=60.0)
+        region = RegionAnnotation("r0", CoordinateSpan(None, start, start + 1000), label="Region 3 xxxxxxxx", style=style)
+        bundle = resolve_annotations((AnnotationSet("s", (region,)),), [record], mode="circular")
+        params = annotation_track_params_from_mapping({"set_id": "s"})
+        track = layout_annotation_track(
+            "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
+            labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0, drawn=True)), join_origin=True,
+        )
+        labels = circular_annotation_labels(
+            track, record_index=0, record_length=10000, inner_radius_px=260.0, outer_radius_px=270.0,
+            side="inside", font_family="Liberation Sans", params=params,
+        )
+        ((label,),) = [labels.drawn]
+        texts[start] = "".join(run for run, _style in label.runs)
+
+    assert texts[7184] == "Region 3 xxxxxxxx"
+    assert texts[2184].startswith("Region 3 x") and texts[2184].endswith("\u2026") and "xx" not in texts[2184], texts
+
+
+@pytest.mark.parametrize("start", [2184, 7184])
+@pytest.mark.parametrize("inner", [85.0, 100.0, 140.0, 260.0])
+def test_a_curved_region_labels_shape_turns_as_far_as_its_glyph_ink(start: int, inner: float) -> None:
+    # OV-2851: a glyph stands upright and unbent along the circle, so nearer the centre than its baseline its ink
+    # spans a wider turn than the text's arc on the baseline. The label's shape (``parts``), which the packer, the
+    # drawer's placement and later slots read, turns as far each way as its glyphs' outlines as the textPath sets them.
+    from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
+    from gbdraw.core.text import text_runs_glyph_outlines, text_runs_ink_offsets
+    from gbdraw.render.drawers.circular.annotations import circular_annotation_labels
+
+    font_size = 60.0
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    style = RegionAnnotationStyle(label_orientation="auto", label_font_size=font_size)
+    region = RegionAnnotation("r0", CoordinateSpan(None, start, start + 1000), label="Region 3 xx", style=style)
+    bundle = resolve_annotations((AnnotationSet("s", (region,)),), [record], mode="circular")
+    params = annotation_track_params_from_mapping({"set_id": "s"})
+    track = layout_annotation_track(
+        "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0, drawn=True)), join_origin=True,
+    )
+    labels = circular_annotation_labels(
+        track, record_index=0, record_length=10000, inner_radius_px=inner, outer_radius_px=inner + 10.0,
+        side="inside", font_family="Liberation Sans", params=params,
+    )
+    ((label,),) = [labels.drawn]
+    arc = label.arc
+    assert arc is not None
+    runs = label.runs
+    start_left = text_runs_ink_offsets(runs, "Liberation Sans", font_size, dominant_baseline="alphabetic", text_anchor="start")
+    middle_left = text_runs_ink_offsets(runs, "Liberation Sans", font_size, dominant_baseline="alphabetic", text_anchor="middle")
+    assert start_left is not None and middle_left is not None
+    advance = 2.0 * (start_left[0] - middle_left[0])
+    # Along the reading direction: clockwise with tops out, anticlockwise with tops toward the centre.
+    sign, tops = (-1.0, -1.0) if arc.flipped else (1.0, 1.0)
+
+    def turn_from_anchor(point: tuple[float, float]) -> float:
+        return (math.atan2(point[1], point[0]) - math.radians(arc.angle) + math.pi) % (2 * math.pi) - math.pi
+
+    corners = [turn_from_anchor(corner) for part in label.parts for corner in part]
+    ink = []
+    for glyph in text_runs_glyph_outlines(runs, "Liberation Sans", font_size):
+        turn = math.radians(arc.angle) + sign * (glyph.middle - advance / 2.0) / arc.radius
+        radial = (math.cos(turn), math.sin(turn))
+        along = (-sign * radial[1], sign * radial[0])
+        for contour in glyph.contours:
+            for x, y in contour:
+                ink.append(turn_from_anchor((
+                    (arc.radius + tops * y) * radial[0] + x * along[0],
+                    (arc.radius + tops * y) * radial[1] + x * along[1],
+                )))
+    assert min(corners) - 1e-3 <= min(ink) and max(ink) <= max(corners) + 1e-3, (inner, start, runs, min(ink), max(ink), min(corners), max(corners))
 
 
 def test_circular_region_labels_count_an_earlier_curved_label_as_one_obstacle(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1356,7 +1480,7 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
     params = annotation_track_params_from_mapping({"set_id": "s"})
     track = layout_annotation_track(
         "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
-        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0)), join_origin=True,
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0, drawn=True)), join_origin=True,
     )
 
     def labels(*polygons):

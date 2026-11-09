@@ -4,7 +4,9 @@ import math
 
 import pytest
 
+from gbdraw.core.text import GlyphOutline, text_runs_glyph_outlines
 from gbdraw.layout.text_geometry import (
+    glyphs_meet_on_circle,
     oriented_boxes_intersect,
     oriented_text_box,
     rotate_point,
@@ -90,3 +92,39 @@ def test_grown_convex_polygon_moves_every_edge_of_a_sector_part_out_by_the_same_
             # The grown corner's distance from the line of each edge it touches.
             distance = abs((x2 - x1) * (y1 - gy) - (x1 - gx) * (y2 - y1)) / math.hypot(x2 - x1, y2 - y1)
             assert distance == pytest.approx(3.0)
+
+
+@pytest.mark.parametrize(
+    ("radius", "tops_in", "meet"),
+    (
+        (1e6, True, False),
+        (500.0, True, False),
+        (200.0, True, True),
+        (60.0, True, True),
+        (200.0, False, False),
+        (60.0, False, False),
+    ),
+)
+def test_letters_that_stand_apart_on_a_line_close_up_at_their_tops_on_the_inner_side_of_a_circle(
+    radius: float, tops_in: bool, meet: bool
+) -> None:
+    # "xx" at 60 px: the two x's stand a fraction of a px apart on a line; along a circle of 200 px with their tops
+    # toward the centre their top corners cross, and with their tops away from it they part.
+    glyphs = text_runs_glyph_outlines((("xx", "normal"),), "Liberation Sans", 60.0)
+
+    assert len(glyphs) == 2
+    assert glyphs_meet_on_circle(glyphs, radius, tops_in=tops_in) is meet
+
+
+def test_glyphs_meet_when_one_holds_the_other_or_their_turns_wrap_around() -> None:
+    square = ((-10.0, 0.0), (10.0, 0.0), (10.0, 20.0), (-10.0, 20.0))
+    small = ((-2.0, 5.0), (2.0, 5.0), (2.0, 9.0), (-2.0, 9.0))
+    # A glyph inside another's ink with no edge crossing: they meet.
+    assert glyphs_meet_on_circle((GlyphOutline(0.0, (square,)), GlyphOutline(0.0, (small,))), 100.0, tops_in=False)
+    # Inside a hole of the other (even-odd): they do not.
+    ring = (square, ((-5.0, 2.0), (5.0, 2.0), (5.0, 18.0), (-5.0, 18.0)))
+    assert not glyphs_meet_on_circle((GlyphOutline(0.0, ring), GlyphOutline(0.0, (small,))), 100.0, tops_in=False)
+    # Nearly a whole turn on, overlapping the first.
+    turn = 2 * math.pi * 100.0
+    assert glyphs_meet_on_circle((GlyphOutline(0.0, (square,)), GlyphOutline(turn - 5.0, (square,))), 100.0, tops_in=True)
+    assert not glyphs_meet_on_circle((GlyphOutline(0.0, (square,)), GlyphOutline(turn / 2, (square,))), 100.0, tops_in=True)

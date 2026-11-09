@@ -67,6 +67,21 @@ def test_white_space_collapses_as_drawn_and_keeps_no_break_spaces(raw: str, draw
     assert collapse_svg_white_space(raw) == drawn
 
 
+def test_spaces_at_the_ends_of_a_text_of_runs_are_not_drawn() -> None:
+    # A renderer drops the spaces at the start and the end of the whole text, across its runs (tspans), so a label
+    # "Region 3 " centred on its middle stands where "Region 3" does (OV-pending-S3b: measured with the space, a
+    # curved label stood half a space off its drawn place and met the next label).
+    from gbdraw.core.text import collapse_runs_white_space, text_runs_ink_offsets
+
+    assert collapse_runs_white_space(((" ", "normal"), (" Region ", "italic"), ("3 ", "normal"), (" ", "normal"))) == [
+        ("", "normal"), ("Region ", "italic"), ("3", "normal"), ("", "normal"),
+    ]
+    for anchor in ("start", "middle"):
+        bare = text_runs_ink_offsets((("Region 3", "normal"),), "Liberation Sans", 60.0, dominant_baseline="alphabetic", text_anchor=anchor)
+        spaced = text_runs_ink_offsets((("Region 3 ", "normal"),), "Liberation Sans", 60.0, dominant_baseline="alphabetic", text_anchor=anchor)
+        assert spaced == bare, anchor
+
+
 @pytest.mark.parametrize("face", FACES)
 def test_repeated_spaces_tabs_and_line_breaks_measure_as_one_space(face: str) -> None:
     one_space = _advance_units(face, "a b")

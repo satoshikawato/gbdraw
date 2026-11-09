@@ -65,9 +65,18 @@ PlacementPolicy = Literal["hard", "preferred", "auto", "overlay"]
 # slots' whole bands ("whole"), ``cover_anchor`` over the anchor's draw band ("draw"), and an overlay that spans
 # nothing draws its own width on the anchor's draw band ("own").
 SpanExtent = Literal["whole", "draw", "own"]
-# How far an annotation slot's labels reach beyond its band, gap included: for the band, the axis, the slot's side and
-# params, and whether the band is a span over other slots.
-AnnotationLabelRoom = Callable[[RadialBand, CircularAxisLayout, str, Mapping[str, Any], bool], float]
+
+
+class AnnotationLabelRoom(Protocol):
+    """How far an annotation slot's labels reach beyond its band, gap included: for the band, the axis, the slot's
+    side and params, and whether the band is a span over other slots. ``drops_labels`` says whether the slot at a
+    band leaves out, for want of a letter, a label its lanes draw where they were packed (OV-2848)."""
+
+    def __call__(
+        self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any], covers_slots: bool
+    ) -> float: ...
+
+    def drops_labels(self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any]) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -189,8 +198,10 @@ class _RadialSlotIntent:
     reserve: bool
     placement_policy: PlacementPolicy
     params: Mapping[str, Any]
-    # The room of an annotation slot's labels on their side, for a band (``AnnotationLabelRoom`` on this axis).
+    # The room of an annotation slot's labels on their side, for a band (``AnnotationLabelRoom`` on this axis), and
+    # whether the slot at a band leaves out a label its lanes draw (``AnnotationLabelRoom.drops_labels``).
     label_room: Callable[[RadialBand], float] | None = None
+    drops_labels: Callable[[RadialBand], bool] | None = None
     # The rooms of the span overlays whose outermost covered slot this is: reserved past its band while it is packed.
     span_label_rooms: tuple[_SpanLabelRoom, ...] = ()
     # The narrowest width (px) an Auto width may take: 0 keeps the readable minimums alone; the "move" pass of rule L
@@ -694,6 +705,9 @@ def _slot_intents(
                 label_room=_bound_label_room(annotation_label_rooms.get(slot.id), axis, slot)
                 if slot.renderer == "annotations" and slot.side != "overlay"
                 else None,
+                drops_labels=_bound_drops_labels(annotation_label_rooms.get(slot.id), axis, slot)
+                if slot.renderer == "annotations" and slot.side != "overlay"
+                else None,
             )
         )
     span_rooms = _span_label_rooms_by_slot(intents, axis, annotation_label_rooms)
@@ -816,6 +830,12 @@ def _bound_label_room(
     room: AnnotationLabelRoom | None, axis: CircularAxisLayout, slot: NormalizedCircularTrackSlot
 ) -> Callable[[RadialBand], float] | None:
     return None if room is None else lambda band: room(band, axis, slot.side, slot.params, False)
+
+
+def _bound_drops_labels(
+    room: AnnotationLabelRoom | None, axis: CircularAxisLayout, slot: NormalizedCircularTrackSlot
+) -> Callable[[RadialBand], bool] | None:
+    return None if room is None else lambda band: room.drops_labels(band, axis, slot.side, slot.params)
 
 
 def _measure_radial_slot(
@@ -1190,6 +1210,12 @@ def _try_measure_inside_interval(
                     # Only the span labels' room meets the row above: the slot moves in by the overlap.
                     anchor_offset -= float(reserved.outer_px) - float(conflict[1].inner_px)
                     continue
+                break
+            # A place where the slot leaves out a label its lanes draw, for want of a letter, is not taken: losing
+            # the label would free its room (OV-2848). Inward its circles only shrink, so the next seed is tried.
+            if intent.drops_labels is not None and resolved.packing_band_px is not None and intent.drops_labels(
+                resolved.packing_band_px
+            ):
                 break
             return resolved
     return None

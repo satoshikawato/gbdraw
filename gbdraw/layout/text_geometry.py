@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Iterable, Literal, Sequence, TypeAlias, cast
+from typing import Iterable, Literal, Protocol, Sequence, TypeAlias, cast
+
+import numpy as np
+from numpy.typing import NDArray
 
 TextAnchor: TypeAlias = Literal["start", "middle", "end"]
 Point: TypeAlias = tuple[float, float]
@@ -338,9 +341,127 @@ def segment_intersects_polygon(
     )
 
 
+class GlyphInk(Protocol):
+    """One glyph of a text as ``gbdraw.core.text.GlyphOutline`` gives it: the middle of its advance from the start of
+    the text's (px), and its outline as closed polygons, x from that middle and y up from the baseline."""
+
+    @property
+    def middle(self) -> float: ...
+
+    @property
+    def contours(self) -> Sequence[Sequence[Point]]: ...
+
+
+def _edges(contours: Sequence[NDArray[np.float64]]) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """The edges of closed polygons: their start and end points."""
+
+    return np.concatenate(contours), np.concatenate([np.roll(contour, -1, axis=0) for contour in contours])
+
+
+def _cross(a: NDArray[np.float64], b: NDArray[np.float64]) -> NDArray[np.float64]:
+    return a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0]
+
+
+def _holds(contours: Sequence[NDArray[np.float64]], points: NDArray[np.float64]) -> bool:
+    """Whether the even-odd fill of ``contours`` holds any of ``points``."""
+
+    starts, ends = _edges(contours)
+    x, y = points[:, None, 0], points[:, None, 1]
+    spans = (starts[None, :, 1] > y) != (ends[None, :, 1] > y)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        cross_x = starts[None, :, 0] + (y - starts[None, :, 1]) * (ends[None, :, 0] - starts[None, :, 0]) / (
+            ends[None, :, 1] - starts[None, :, 1]
+        )
+    return bool(((spans & (x < cross_x)).sum(axis=1) % 2 == 1).any())
+
+
+def _outlines_overlap(first: Sequence[NDArray[np.float64]], second: Sequence[NDArray[np.float64]]) -> bool:
+    """Whether the even-odd fills of two sets of closed polygons overlap: an edge of one crosses an edge of the
+    other, or, when none does, one fill holds a contour of the other."""
+
+    a0, a1 = _edges(first)
+    b0, b1 = _edges(second)
+    if (
+        min(a0[:, 0].min(), a1[:, 0].min()) > max(b0[:, 0].max(), b1[:, 0].max())
+        or min(b0[:, 0].min(), b1[:, 0].min()) > max(a0[:, 0].max(), a1[:, 0].max())
+        or min(a0[:, 1].min(), a1[:, 1].min()) > max(b0[:, 1].max(), b1[:, 1].max())
+        or min(b0[:, 1].min(), b1[:, 1].min()) > max(a0[:, 1].max(), a1[:, 1].max())
+    ):
+        return False
+    a_dir, b_dir = (a1 - a0)[:, None, :], (b1 - b0)[None, :, :]
+    a_sides = _cross(a_dir, b0[None, :, :] - a0[:, None, :]) * _cross(a_dir, b1[None, :, :] - a0[:, None, :])
+    b_sides = _cross(b_dir, a0[:, None, :] - b0[None, :, :]) * _cross(b_dir, a1[:, None, :] - b0[None, :, :])
+    if bool(((a_sides < 0) & (b_sides < 0)).any()):
+        return True
+    return _holds(second, np.array([contour[0] for contour in first])) or _holds(
+        first, np.array([contour[0] for contour in second])
+    )
+
+
+def _glyphs_on_circle(
+    glyphs: Sequence[GlyphInk], radius: float, *, tops_in: bool, from_px: float = 0.0
+) -> list[tuple[list[NDArray[np.float64]], float, float]]:
+    """Each of ``glyphs`` standing along a circle of ``radius``, its baseline, as an SVG ``textPath`` sets it: upright
+    and unbent at the point of its advance's middle, turned to the circle there, its tops toward the centre when
+    ``tops_in``. For each, its outline turned about the centre, and how far (radians) its ink turns at least and at
+    most from the ray through ``from_px`` along the baseline (the text's start when 0)."""
+
+    side = -1.0 if tops_in else 1.0
+    placed: list[tuple[list[NDArray[np.float64]], float, float]] = []
+    for glyph in glyphs:
+        turn = (glyph.middle - from_px) / radius
+        cos, sin = math.cos(turn), math.sin(turn)
+        contours: list[NDArray[np.float64]] = []
+        angles: list[NDArray[np.float64]] = []
+        for contour in glyph.contours:
+            points = np.asarray(contour, dtype=float)
+            x, y = points[:, 0], radius + side * points[:, 1]
+            # Turned clockwise by ``turn`` about the centre, from the glyph standing at the top of the circle.
+            contours.append(np.column_stack((cos * x + sin * y, cos * y - sin * x)))
+            angles.append(np.arctan2(x, y) + turn)
+        every = np.concatenate(angles)
+        placed.append((contours, float(every.min()), float(every.max())))
+    return placed
+
+
+def glyphs_meet_on_circle(glyphs: Sequence[GlyphInk], radius: float, *, tops_in: bool) -> bool:
+    """Whether the ink of two of ``glyphs`` (one text, ``text_runs_glyph_outlines``) overlaps when the text stands
+    along a circle of ``radius``, its baseline, as an SVG ``textPath`` sets it (``_glyphs_on_circle``). Letters that
+    stand apart on a line close up at their tops on the inner side of a circle."""
+
+    placed = _glyphs_on_circle(glyphs, radius, tops_in=tops_in)
+    for index, (contours, start, end) in enumerate(placed):
+        for other, other_start, other_end in placed[index + 1 :]:
+            # Glyphs whose turns from the centre are apart, a whole turn either way included, cannot meet.
+            if any(
+                start < other_end + shift and other_start + shift < end for shift in (-2 * math.pi, 0.0, 2 * math.pi)
+            ) and _outlines_overlap(contours, other):
+                return True
+    return False
+
+
+def glyphs_half_turn_on_circle(glyphs: Sequence[GlyphInk], radius: float, *, tops_in: bool) -> float | None:
+    """How far (radians) the ink of ``glyphs`` (one text, ``text_runs_glyph_outlines``) reaches about the centre each
+    way from the middle of its ink along the baseline, at most, when the text stands along a circle of ``radius`` as
+    an SVG ``textPath`` sets it (``_glyphs_on_circle``): its widest turn, which its letters take where they come
+    nearest the centre, since a glyph does not bend to the circle (OV-2851). None when no glyph paints."""
+
+    if not glyphs:
+        return None
+    reach = [
+        (glyph.middle + min(x for x, _y in contour), glyph.middle + max(x for x, _y in contour))
+        for glyph in glyphs
+        for contour in glyph.contours
+    ]
+    middle = 0.5 * (min(low for low, _high in reach) + max(high for _low, high in reach))
+    placed = _glyphs_on_circle(glyphs, radius, tops_in=tops_in, from_px=middle)
+    return max(max(-start, end) for _contours, start, end in placed)
+
+
 __all__ = [
     "AabbTuple",
     "GEOMETRY_EPSILON",
+    "GlyphInk",
     "OrientedTextBox",
     "Point",
     "SECTOR_PART_DEG",
@@ -349,6 +470,8 @@ __all__ = [
     "anchor_x_bounds",
     "annular_sector_parts",
     "convex_polygons_intersect",
+    "glyphs_half_turn_on_circle",
+    "glyphs_meet_on_circle",
     "grown_convex_polygon",
     "normalize_text_anchor",
     "oriented_boxes_intersect",
