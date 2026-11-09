@@ -1594,10 +1594,10 @@ _LAMBDA_REGIONS = (
 
 
 def _lambda_region_passes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, labels: str, rows: tuple[tuple[str, int, int, str, int], ...]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, labels: str, rows: tuple[tuple[str, int, int, str, int, str], ...]
 ) -> tuple[list[tuple], list]:
-    """Each placement of the region labels when lambda is drawn with ``rows`` (id, start, end, label, font size) as
-    horizontal outside region labels: the feature labels as obstacles, the drawn region labels by slot, and what
+    """Each placement of the region labels when lambda is drawn with ``rows`` (id, start, end, label, font size,
+    orientation) as outside region labels: the feature labels as obstacles, the drawn region labels by slot, and what
     they could not draw clear (``_RecordRegionLabels.place``); and the warnings."""
 
     import gbdraw.api.diagram as api_diagram
@@ -1630,7 +1630,10 @@ def _lambda_region_passes(
     table = tmp_path / "regions.tsv"
     table.write_text(
         "set_id\tid\tmark\tstart\tend\tlabel\tlabel_orientation\tlabel_font_size\n"
-        + "".join(f"regions\t{id_}\tline\t{start}\t{end}\t{label}\thorizontal\t{size}\n" for id_, start, end, label, size in rows)
+        + "".join(
+            f"regions\t{id_}\tline\t{start}\t{end}\t{label}\t{orientation}\t{size}\n"
+            for id_, start, end, label, size, orientation in rows
+        )
     )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -1653,8 +1656,7 @@ def _region_label_overlaps(pass_: tuple) -> dict[str, frozenset[int]]:
     """What each region label of one placement overlaps, as its warning counts it (its letters, or leader lines
     behind them), by annotation id."""
 
-    (labels_of_slot,) = pass_[1].values()
-    return {label.annotation_id: met for label, met in zip(labels_of_slot, pass_[2].overlapped, strict=True)}
+    return {annotation_id: met for (_slot_id, annotation_id), met in pass_[2].overlapped.items()}
 
 
 @pytest.mark.parametrize(
@@ -1672,7 +1674,7 @@ def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
 
     from gbdraw.layout.text_geometry import convex_polygons_intersect
 
-    rows = tuple((id_, start, end, label, font_size) for id_, start, end, label in _LAMBDA_REGIONS)
+    rows = tuple((id_, start, end, label, font_size, "horizontal") for id_, start, end, label in _LAMBDA_REGIONS)
     passes, caught = _lambda_region_passes(tmp_path, monkeypatch, labels, rows)
     assert len(passes) >= 2
     # The one annotation slot keeps off the feature labels only: every obstacle is a feature label.
@@ -1700,20 +1702,20 @@ def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
 # letters lets "Recombination" (r11), over no feature letters, take another place along its region when the region
 # labels are placed again, over "cos".
 _LAMBDA_CROWDED_REGIONS = (
-    ("r0", 784, 3403, "Integration", 10),
-    ("r1", 3549, 3943, "cos", 20),
-    ("r2", 4443, 6254, "Recombination", 10),
-    ("r3", 7200, 8479, "Late", 16),
-    ("r4", 9279, 10080, "Replication", 24),
-    ("r5", 10215, 12884, "Recombination", 20),
-    ("r6", 12648, 14866, "Late", 20),
-    ("r7", 24522, 26347, "Ori", 16),
-    ("r8", 25405, 26303, "cos", 12),
-    ("r9", 25768, 26875, "Recombination", 12),
-    ("r10", 31461, 33725, "Head genes", 24),
-    ("r11", 32781, 35253, "Recombination", 10),
-    ("r12", 33338, 33820, "cos", 24),
-    ("r13", 43019, 45806, "Ori", 24),
+    ("r0", 784, 3403, "Integration", 10, "horizontal"),
+    ("r1", 3549, 3943, "cos", 20, "horizontal"),
+    ("r2", 4443, 6254, "Recombination", 10, "horizontal"),
+    ("r3", 7200, 8479, "Late", 16, "horizontal"),
+    ("r4", 9279, 10080, "Replication", 24, "horizontal"),
+    ("r5", 10215, 12884, "Recombination", 20, "horizontal"),
+    ("r6", 12648, 14866, "Late", 20, "horizontal"),
+    ("r7", 24522, 26347, "Ori", 16, "horizontal"),
+    ("r8", 25405, 26303, "cos", 12, "horizontal"),
+    ("r9", 25768, 26875, "Recombination", 12, "horizontal"),
+    ("r10", 31461, 33725, "Head genes", 24, "horizontal"),
+    ("r11", 32781, 35253, "Recombination", 10, "horizontal"),
+    ("r12", 33338, 33820, "cos", 24, "horizontal"),
+    ("r13", 43019, 45806, "Ori", 24, "horizontal"),
 )
 
 
@@ -1729,6 +1731,69 @@ def test_circular_feature_labels_keep_no_way_that_moves_another_region_label_ove
     assert len(passes) >= 2
     first, drawn_counts = _region_label_overlaps(passes[0]), _region_label_overlaps(passes[-1])
     assert all(drawn_counts[id_] <= first[id_] for id_ in first), (first, drawn_counts)
+
+
+# Curved region labels on lambda (found by a seeded search): "Early left" (r6, arc) is drawn over feature letters on
+# the left of the circle, where one part of its letters reaches 24 px up and down, though the letters stand 13 px
+# tall across their baseline with the spacing.
+_LAMBDA_CURVED_REGIONS = (
+    ("r0", 10263, 10599, "b2 region", 20, "arc"),
+    ("r1", 10944, 11551, "Replication", 20, "arc"),
+    ("r2", 11771, 12524, "Tail genes", 10, "arc"),
+    ("r3", 17082, 19853, "Early left", 16, "arc"),
+    ("r4", 19145, 19701, "Late", 10, "auto"),
+    ("r5", 32106, 33297, "Early left", 10, "arc"),
+    ("r6", 33103, 35509, "Early left", 16, "arc"),
+    ("r7", 44568, 46341, "Lysis", 24, "arc"),
+)
+
+
+def test_circular_feature_labels_make_way_for_a_curved_region_label_by_its_height(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CIR-RGN-YIELD: a feature label moves at most 24 px plus the height of the region labels it makes way for,
+    their letters' height across their baseline with the spacing, for curved labels too (not the reach of one part
+    of their letters along the screen's vertical)."""
+
+    import gbdraw.diagrams.circular.assemble as circular_assemble
+    import gbdraw.labels.circular_repair as repair_module
+
+    made_way: list[tuple] = []
+    repairs: list[tuple[list[dict], object]] = []
+    original_make_way = circular_assemble.make_way_for_region_labels
+    original_repair = repair_module._Repair
+
+    def make_way_spy(labels, total_length, regions, blocked, **kwargs):
+        repairs.clear()
+        result = original_make_way(labels, total_length, regions, blocked, **kwargs)
+        made_way.append((list(labels), list(regions), result, list(repairs)))
+        return result
+
+    class Recorded(original_repair):
+        def __init__(self, labels, *args, **kwargs) -> None:
+            super().__init__(labels, *args, **kwargs)
+            repairs.append(([label.copy() for label in labels], kwargs.get("target")))
+
+    monkeypatch.setattr(circular_assemble, "make_way_for_region_labels", make_way_spy)
+    monkeypatch.setattr(repair_module, "_Repair", Recorded)
+    _lambda_region_passes(tmp_path, monkeypatch, "out", _LAMBDA_CURVED_REGIONS)
+
+    labels, regions, result, steps = made_way[0]
+    assert result is not None
+    moved, _cleared = result
+    # The region label each repair cleared, and the labels it moved: those that differ from the next repair's start.
+    starts = [start for start, _target in steps] + [moved]
+    tallest = [0.0] * len(labels)
+    for (start, target), after in zip(steps, starts[1:]):
+        height = next(region.height for region in regions if region.parts is target)
+        for at, (old, new) in enumerate(zip(start, after)):
+            if old != new:
+                tallest[at] = max(tallest[at], height)
+    for old, new, height in zip(labels, moved, tallest):
+        if old.get("is_embedded"):
+            continue
+        shift = math.hypot(float(new["start_x"]) - float(old["start_x"]), float(new["start_y"]) - float(old["start_y"]))
+        assert shift <= 24.0 + height + 1e-6, (old["label_text"], shift, height)
 
 
 def _draw_span_regions(

@@ -44,6 +44,7 @@ from typing import Literal, TypeAlias
 
 from ..layout.spatial import (
     Aabb,
+    BoxedLetters,
     BoxedPart,
     aabbs_touch,
     boxed_parts_meet,
@@ -130,7 +131,7 @@ Through: TypeAlias = frozenset[tuple[int, int]]
 FeatureLabelDrawnParts: TypeAlias = Callable[[CircularLabel], tuple[Polygon, ...]]
 # What each region label of the record overlaps where it is drawn, in a fixed order, with the feature labels at these
 # places and the region labels of these indices drawn where the feature labels made way for them: the labels its
-# warning counts, by their index (``CircularAnnotationLabels.overlapped``).
+# warning counts, by their index (``CircularAnnotationLabels.overlapped``), in the order of the region labels.
 RegionLabelOverlaps: TypeAlias = Callable[[Sequence[CircularLabel], Sequence[int]], tuple[frozenset[int], ...]]
 
 
@@ -1028,9 +1029,10 @@ def repair_circular_labels(
 def make_way_for_region_labels(
     labels: Sequence[CircularLabel],
     total_length: int,
-    regions: Sequence[Sequence[BoxedPart]],
+    regions: Sequence[BoxedLetters],
     blocked: Sequence[int],
     *,
+    overlapped: Sequence[frozenset[int]],
     region_overlaps: RegionLabelOverlaps,
     definition_text: Sequence[Aabb] = (),
     drawn_parts: FeatureLabelDrawnParts = _no_drawn_parts,
@@ -1039,16 +1041,17 @@ def make_way_for_region_labels(
     ``regions``, a region label drawn over their letters, CIR-RGN-YIELD, OV-3017), and the indices cleared; None when
     they clear none.
 
-    ``regions`` holds the letters of every region label the record draws,
-    grown by the label spacing, each part with its box; ``region_overlaps``
-    gives what each of them overlaps where it is then drawn, in the same
-    order: the labels its warning counts. The blocked region labels are taken
+    ``regions`` holds the letters of every region label the record draws and
+    their height, grown by the label spacing; ``overlapped`` what each of them
+    overlaps where it is drawn now, in the same order: the labels its warning
+    counts; and ``region_overlaps`` what each overlaps where it is drawn after
+    a move. The blocked region labels are taken
     in order. The local repair moves only the labels over one of them and
     their neighbours, by its own rules (side, order, a move never adds a
     defect, the other region labels' letters included). A text moves no
     further from where it was before the first one than ``MAX_TEXT_SHIFT_PX``
-    plus the height of the tallest region label it made way for itself (the
-    letters grown by the spacing): a stack of labels opens by that height to
+    plus the height of the tallest region label it made way for itself (its
+    letters' height across their baseline, grown by the spacing): a stack of labels opens by that height to
     let a region label through. A region label is skipped when the labels
     cannot clear it, or clear it only by adding a defect of their own that
     they did not have (an overlapping or crossing pair, a label over the
@@ -1063,21 +1066,20 @@ def make_way_for_region_labels(
         return None
     cleared: list[int] = []
     current = [label.copy() for label in labels]
-    own, overlaps = set(circular_label_defects(current, total_length, definition_text=definition_text)), region_overlaps(current, ())
+    own, overlaps = set(circular_label_defects(current, total_length, definition_text=definition_text)), tuple(overlapped)
     # The height of the tallest region label each label made way for, by the label's index.
     made_way_for = [0.0] * len(current)
     for index in blocked:
-        target = regions[index]
+        target, height = regions[index]
         if not target:
             continue
-        height = max(box.max_y - box.min_y for box, _part in target)
         repair = _Repair(
             current,
             total_length,
             definition_text,
             [MAX_TEXT_SHIFT_PX + max(height, before) for before in made_way_for],
             target=target,
-            others=[region for at, region in enumerate(regions) if at != index],
+            others=[region.parts for at, region in enumerate(regions) if at != index],
             origin=labels,
             drawn_parts=drawn_parts,
         )

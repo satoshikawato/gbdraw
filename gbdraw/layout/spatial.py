@@ -10,7 +10,7 @@ import math
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from itertools import product
-from typing import Sequence, TypeAlias, cast
+from typing import NamedTuple, Sequence, TypeAlias, cast
 
 from .text_geometry import Point, convex_polygons_intersect
 
@@ -195,6 +195,14 @@ def finite_aabb(min_x: float, min_y: float, max_x: float, max_y: float) -> Aabb 
 
 
 BoxedPart: TypeAlias = tuple["Aabb", Sequence[Point]]
+
+
+class BoxedLetters(NamedTuple):
+    """A label's letters as convex parts, each with its box (``boxed_parts_meet``), and how tall they stand across
+    their baseline, both grown by the same clearance."""
+
+    parts: tuple[BoxedPart, ...]
+    height: float
 
 
 def boxed_parts_meet(first: Sequence[BoxedPart], second: Sequence[BoxedPart]) -> bool:
@@ -529,6 +537,7 @@ def candidate_aabb_partners(
 __all__ = [
     "Aabb",
     "AabbIndex",
+    "BoxedLetters",
     "BoxedPart",
     "Interval",
     "boxed_parts_meet",

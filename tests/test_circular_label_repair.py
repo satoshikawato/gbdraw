@@ -31,7 +31,7 @@ from gbdraw.labels.circular import (
 from gbdraw.labels.circular_leaders import arrival_contact, chosen_contact_end, label_ink_box
 from gbdraw.labels.circular_repair import defect_count, make_way_for_region_labels, repair_circular_labels
 from gbdraw.labels.fit import LabelDefect
-from gbdraw.layout.spatial import Aabb, bounding_aabb, boxed_parts_meet
+from gbdraw.layout.spatial import Aabb, BoxedLetters, bounding_aabb, boxed_parts_meet
 
 TEST_INPUTS = Path(__file__).parent / "test_inputs"
 FIXTURES = TEST_INPUTS / "label_repair"
@@ -622,10 +622,13 @@ def _region_box_over(name: str, text: str) -> tuple[list[dict], int, tuple[Aabb,
     return labels, total_length, definition, box
 
 
-def _letters(box: Aabb) -> list[tuple[Aabb, tuple[tuple[float, float], ...]]]:
-    """A region label's letters as one part with its box (``boxed_parts_meet``)."""
+def _letters(box: Aabb) -> BoxedLetters:
+    """A region label's letters as one part with its box (``boxed_parts_meet``), as tall as the box."""
 
-    return [(box, ((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y)))]
+    return BoxedLetters(
+        ((box, ((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y))),),
+        box.height,
+    )
 
 
 def _no_overlaps(_labels: object, _cleared: object) -> tuple[frozenset[int], ...]:
@@ -635,7 +638,7 @@ def _no_overlaps(_labels: object, _cleared: object) -> tuple[frozenset[int], ...
 def _over(labels: list[dict], total_length: int, box: Aabb) -> list[str]:
     """The labels whose letters meet a region label's letters ``box``, by the one test the placer asks too."""
 
-    region = _letters(box)
+    region = _letters(box).parts
     return [
         label["label_text"]
         for label in labels
@@ -662,7 +665,7 @@ def test_feature_labels_make_way_for_a_region_label_keeping_side_and_order() -> 
     labels, total_length, definition, box = _region_box_over("o_lambda_f14", "Lom outer membrane protein")
     before = copy.deepcopy(labels)
     made_way = make_way_for_region_labels(
-        labels, total_length, [_letters(box)], [0], region_overlaps=_no_overlaps, definition_text=definition
+        labels, total_length, [_letters(box)], [0], overlapped=(), region_overlaps=_no_overlaps, definition_text=definition
     )
 
     assert labels == before
@@ -683,9 +686,9 @@ def test_no_label_moves_without_a_region_label_over_feature_letters() -> None:
     today (the assembler passes only the region labels drawn over feature letters as blocked)."""
 
     labels, total_length, definition, box = _region_box_over("o_lambda_f14", "Lom outer membrane protein")
-    kwargs = {"region_overlaps": _no_overlaps, "definition_text": definition}
+    kwargs = {"overlapped": (), "region_overlaps": _no_overlaps, "definition_text": definition}
     assert make_way_for_region_labels(labels, total_length, [_letters(box)], [], **kwargs) is None
-    assert make_way_for_region_labels(labels, total_length, [[]], [0], **kwargs) is None
+    assert make_way_for_region_labels(labels, total_length, [BoxedLetters((), 0.0)], [0], **kwargs) is None
 
 
 @pytest.mark.parametrize(
@@ -709,7 +712,7 @@ def test_a_way_that_adds_a_defect_is_not_kept(
     found = iter((before_defects, after_defects))
     monkeypatch.setattr(repair_module, "circular_label_defects", lambda *_args, **_kwargs: next(found))
     assert make_way_for_region_labels(
-        labels, total_length, [_letters(box)], [0], region_overlaps=_no_overlaps, definition_text=definition
+        labels, total_length, [_letters(box)], [0], overlapped=(), region_overlaps=_no_overlaps, definition_text=definition
     ) is None
     assert labels == before
 
@@ -729,15 +732,27 @@ def test_the_fit_counts_are_the_defects_counted() -> None:
 def test_a_way_that_raises_what_a_region_label_overlaps_is_not_kept() -> None:
     """A move that clears one region label's letters but adds a label to what another region label overlaps, as its
     warning counts it (a leader line moved behind its letters, say), is not kept, even when it takes another label
-    off that region label so that its count stays."""
+    off that region label so that its count stays. What they overlap before any move is the placement's own
+    (``overlapped``): the region labels are placed again only to judge a move."""
 
     labels, total_length, definition, box = _region_box_over("o_lambda_f14", "Lom outer membrane protein")
     far = Aabb(box.min_x + 3000.0, box.min_y, box.max_x + 3000.0, box.max_y)
-    counts = iter(((frozenset({1}), frozenset({3})), (frozenset(), frozenset({4}))))
+    asked: list[tuple[int, ...]] = []
+
+    def overlaps_after(_labels: object, cleared: tuple[int, ...]) -> tuple[frozenset[int], ...]:
+        asked.append(tuple(cleared))
+        return (frozenset(), frozenset({4}))
+
     assert make_way_for_region_labels(
-        labels, total_length, [_letters(box), _letters(far)], [0], region_overlaps=lambda _labels, _cleared: next(counts),
+        labels,
+        total_length,
+        [_letters(box), _letters(far)],
+        [0],
+        overlapped=(frozenset({1}), frozenset({3})),
+        region_overlaps=overlaps_after,
         definition_text=definition,
     ) is None
+    assert asked == [(0,)]
 
 
 def test_the_shift_limit_holds_for_each_label_across_region_labels() -> None:
@@ -750,7 +765,7 @@ def test_the_shift_limit_holds_for_each_label_across_region_labels() -> None:
 
     labels, total_length, definition, box = _region_box_over("o_lambda_f14", "Lom outer membrane protein")
     lom = next(at for at, label in enumerate(labels) if label["label_text"] == "Lom outer membrane protein")
-    first = make_way_for_region_labels(labels, total_length, [_letters(box)], [0], region_overlaps=_no_overlaps, definition_text=definition)
+    first = make_way_for_region_labels(labels, total_length, [_letters(box)], [0], overlapped=(), region_overlaps=_no_overlaps, definition_text=definition)
     assert first is not None
     moved_box = label_ink_box(first[0][lom], total_length)
     assert moved_box is not None
@@ -759,7 +774,7 @@ def test_the_shift_limit_holds_for_each_label_across_region_labels() -> None:
     )
     middle = Aabb(band.min_x, band.min_y + 0.125 * band.height, band.max_x, band.max_y - 0.125 * band.height)
     made_way = make_way_for_region_labels(
-        labels, total_length, [_letters(box), _letters(middle)], [0, 1], region_overlaps=_no_overlaps, definition_text=definition
+        labels, total_length, [_letters(box), _letters(middle)], [0, 1], overlapped=(), region_overlaps=_no_overlaps, definition_text=definition
     )
 
     assert made_way is not None and 0 in made_way[1]
@@ -790,7 +805,7 @@ def test_a_label_moves_by_the_height_of_the_region_labels_it_makes_way_for() -> 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(repair_module, "_Repair", Recorded)
         made_way = make_way_for_region_labels(
-            labels, total_length, [_letters(tall), _letters(short)], [0, 1], region_overlaps=_no_overlaps, definition_text=definition
+            labels, total_length, [_letters(tall), _letters(short)], [0, 1], overlapped=(), region_overlaps=_no_overlaps, definition_text=definition
         )
 
     assert made_way is not None and made_way[1] == (0, 1)
@@ -821,7 +836,7 @@ def test_a_label_makes_way_for_a_region_label_over_what_its_style_draws() -> Non
 
     assert not _over([lom], total_length, beside)
     made_way = make_way_for_region_labels(
-        labels, total_length, [_letters(beside)], [0], region_overlaps=_no_overlaps, definition_text=definition, drawn_parts=drawn_parts
+        labels, total_length, [_letters(beside)], [0], overlapped=(), region_overlaps=_no_overlaps, definition_text=definition, drawn_parts=drawn_parts
     )
     if made_way is not None:
         moved = next(label for label in made_way[0] if label["label_text"] == "Lom outer membrane protein")
@@ -838,18 +853,18 @@ def test_each_region_label_is_cleared_on_its_own_and_the_others_kept() -> None:
     labels, total_length, definition, box = _region_box_over("o_lambda_f14", "Lom outer membrane protein")
     ring = Aabb(-2000.0, -2000.0, 2000.0, 2000.0)
     skipped = make_way_for_region_labels(
-        labels, total_length, [_letters(box), _letters(ring)], [1, 0], region_overlaps=_no_overlaps, definition_text=definition
+        labels, total_length, [_letters(box), _letters(ring)], [1, 0], overlapped=(), region_overlaps=_no_overlaps, definition_text=definition
     )
     assert skipped is not None and skipped[1] == (0,)
 
     labels, total_length, definition, own = _region_box_over("o_lambda_f14", "tail terminator")
-    alone = make_way_for_region_labels(labels, total_length, [_letters(own)], [0], region_overlaps=_no_overlaps, definition_text=definition)
+    alone = make_way_for_region_labels(labels, total_length, [_letters(own)], [0], overlapped=(), region_overlaps=_no_overlaps, definition_text=definition)
     assert alone is not None
     taken = label_ink_box(next(label for label in alone[0] if label["label_text"] == "tail terminator"), total_length)
     assert taken is not None and not _over(labels, total_length, taken)
 
     made_way = make_way_for_region_labels(
-        labels, total_length, [_letters(own), _letters(taken)], [0], region_overlaps=_no_overlaps, definition_text=definition
+        labels, total_length, [_letters(own), _letters(taken)], [0], overlapped=(), region_overlaps=_no_overlaps, definition_text=definition
     )
 
     assert made_way is not None and made_way[1] == (0,)

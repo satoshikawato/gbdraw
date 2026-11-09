@@ -131,7 +131,7 @@ from ...layout.composition import (
     LegendPlacement,
     plan_composition,
 )
-from ...layout.spatial import Aabb, BoxedPart, bounding_aabb, union_aabbs
+from ...layout.spatial import Aabb, BoxedLetters, bounding_aabb, union_aabbs
 from ...comparisons.identity_scale import IdentityColorDomain, identity_color_domain
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
@@ -1073,15 +1073,19 @@ def _external_label_obstacles_on_canvas(
 _SlotLabels: TypeAlias = dict[str, tuple[CircularAnnotationLabel, ...]]
 
 
+# A drawn region label of a record: its slot id and its annotation's id.
+_RegionLabelKey: TypeAlias = tuple[str, str]
+
+
 class _RegionLabelsNotClear(NamedTuple):
     """What a record's annotation slots could not draw clear (``CircularAnnotationLabels``): the labels left out
     because no letter fits their circle, and what each drawn label still overlaps (OV-3015); with the letters each
-    drawn label keeps clear, which the feature labels clear when they make way (CIR-RGN-YIELD). The drawn labels are
-    in slot order, then in each slot's order."""
+    drawn label keeps clear and their height, which the feature labels clear when they make way (CIR-RGN-YIELD).
+    Both are keyed by slot id and annotation id, in slot order, then in each slot's order."""
 
     without_letters: tuple[CircularAnnotationLabel, ...] = ()
-    overlapped: tuple[frozenset[int], ...] = ()
-    letters: tuple[tuple[BoxedPart, ...], ...] = ()
+    overlapped: Mapping[_RegionLabelKey, frozenset[int]] = MappingProxyType({})
+    letters: Mapping[_RegionLabelKey, BoxedLetters] = MappingProxyType({})
     # The places of the drawn labels whose letters meet a feature label's letters, by slot id (OV-3017).
     over_feature_letters: Mapping[str, tuple[RegionLabelPlace, ...]] = MappingProxyType({})
 
@@ -1089,7 +1093,7 @@ class _RegionLabelsNotClear(NamedTuple):
     def overlaps(self) -> int:
         """How many things the drawn labels still overlap, as the region label warning counts them."""
 
-        return sum(len(met) for met in self.overlapped)
+        return sum(len(met) for met in self.overlapped.values())
 
 
 # The places along their regions that the feature labels made way for, by slot id (CIR-RGN-YIELD).
@@ -1120,8 +1124,8 @@ def _circular_annotation_labels_by_slot(
     labels: dict[str, tuple[CircularAnnotationLabel, ...]] = {}
     without_letters: list[CircularAnnotationLabel] = []
     over_feature_letters: dict[str, tuple[RegionLabelPlace, ...]] = {}
-    overlapped: list[frozenset[int]] = []
-    letters: list[tuple[BoxedPart, ...]] = []
+    overlapped: dict[_RegionLabelKey, frozenset[int]] = {}
+    letters: dict[_RegionLabelKey, BoxedLetters] = {}
     for slot in radial_layout.slots:
         layout = (annotation_track_layouts or {}).get(slot.id)
         if str(slot.renderer) != "annotations" or layout is None:
@@ -1156,15 +1160,14 @@ def _circular_annotation_labels_by_slot(
         without_letters.extend(measured.without_letters)
         if measured.over_feature_letters:
             over_feature_letters[slot.id] = measured.over_feature_letters
-        overlapped.extend(measured.overlapped)
-        letters.extend(measured.letters)
+        overlapped.update(((slot.id, annotation_id), met) for annotation_id, met in measured.overlapped.items())
+        letters.update(((slot.id, annotation_id), drawn) for annotation_id, drawn in measured.letters.items())
         obstacles = obstacles.with_labels(measured.drawn)
-    return labels, _RegionLabelsNotClear(tuple(without_letters), tuple(overlapped), tuple(letters), over_feature_letters)
+    return labels, _RegionLabelsNotClear(tuple(without_letters), overlapped, letters, over_feature_letters)
 
 
 def _feature_labels_making_way(
     labels: Sequence[CircularLabel],
-    region_labels: _SlotLabels,
     not_clear: _RegionLabelsNotClear,
     total_length: int,
     definition_text: Sequence[Aabb],
@@ -1172,32 +1175,37 @@ def _feature_labels_making_way(
     placed: Callable[[Sequence[CircularLabel], _RegionLabelsMadeWay], _RegionLabelsNotClear],
 ) -> tuple[list[CircularLabel], _RegionLabelsMadeWay] | None:
     """The feature labels moved off the letters of each region label drawn over them, and the places they made way
-    for, by slot id (CIR-RGN-YIELD, OV-3017); None when they clear none. ``region_labels`` and ``not_clear`` are
-    what ``placed`` drew with the feature labels at ``labels``. The feature label repair moves them
-    (``make_way_for_region_labels``, the one owner of their positions) off every drawn region label's letters, and
-    keeps no move that raises what a region label overlaps where ``placed`` then draws it, as its warning counts it;
-    a region label it cannot clear is drawn and warns (CIR-REGION-WARN)."""
+    for, by slot id (CIR-RGN-YIELD, OV-3017); None when they clear none. ``not_clear`` is what ``placed`` drew with
+    the feature labels at ``labels``. The feature label repair moves them (``make_way_for_region_labels``, the one
+    owner of their positions) off every drawn region label's letters, and keeps no move that raises what a region
+    label overlaps where ``placed`` then draws it, as its warning counts it; a region label it cannot clear is drawn
+    and warns (CIR-REGION-WARN). Every region label is found by its slot id and annotation id."""
 
-    drawn = [(slot_id, label.annotation_id) for slot_id, slot_labels in region_labels.items() for label in slot_labels]
+    keys = list(not_clear.letters)
     places = {
         (slot_id, place.annotation_id): place for slot_id, over in not_clear.over_feature_letters.items() for place in over
     }
-    blocked = [at for at, key in enumerate(drawn) if key in places]
+    blocked = [at for at, key in enumerate(keys) if key in places]
     if not labels or not blocked:
         return None
 
     def made_way_at(cleared: Sequence[int]) -> _RegionLabelsMadeWay:
         made_way: dict[str, tuple[RegionLabelPlace, ...]] = {}
-        for slot_id, annotation_id in (drawn[at] for at in cleared):
+        for slot_id, annotation_id in (keys[at] for at in cleared):
             made_way[slot_id] = (*made_way.get(slot_id, ()), places[slot_id, annotation_id])
         return made_way
+
+    def region_overlaps(moved: Sequence[CircularLabel], cleared: Sequence[int]) -> tuple[frozenset[int], ...]:
+        overlapped = placed(moved, made_way_at(cleared)).overlapped
+        return tuple(overlapped[key] for key in keys)
 
     made_way = make_way_for_region_labels(
         labels,
         total_length,
-        not_clear.letters,
+        [not_clear.letters[key] for key in keys],
         blocked,
-        region_overlaps=lambda moved, cleared: placed(moved, made_way_at(cleared)).overlapped,
+        overlapped=[not_clear.overlapped[key] for key in keys],
+        region_overlaps=region_overlaps,
         definition_text=definition_text,
         drawn_parts=lambda label: _feature_label_drawn_parts(label, total_length, style),
     )
@@ -1211,8 +1219,7 @@ def _feature_labels_making_way(
 class _RecordRegionLabels:
     """The annotation labels of one record, placed off its feature labels and leaders, and the places along their
     regions that the feature labels made way for (CIR-RGN-YIELD): the one owner of those places across the record's
-    label passes, so every later placement draws those labels where the feature labels made way. ``drawn`` holds the
-    labels its last ``place`` drew, which ``make_way`` keeps the feature labels off."""
+    label passes, so every later placement draws those labels where the feature labels made way."""
 
     radial_layout: CircularRadialLayout
     annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack] | None
@@ -1221,7 +1228,6 @@ class _RecordRegionLabels:
     font_family: str
     canvas_config: CircularCanvasConfigurator
     made_way: _RegionLabelsMadeWay = field(default_factory=dict)
-    drawn: _SlotLabels = field(default_factory=dict)
 
     def _placed(
         self, feature_labels: Sequence[CircularLabel], made_way: _RegionLabelsMadeWay
@@ -1244,7 +1250,6 @@ class _RecordRegionLabels:
         they could not draw clear (``_circular_annotation_labels_by_slot``)."""
 
         labels_by_slot, not_clear = self._placed(feature_labels, self.made_way)
-        self.drawn = labels_by_slot
         offset_x, offset_y = float(self.canvas_config.offset_x), float(self.canvas_config.offset_y)
         return labels_by_slot, tuple(
             label.ink_bounds.translated(offset_x, offset_y) for labels in labels_by_slot.values() for label in labels
@@ -1253,13 +1258,12 @@ class _RecordRegionLabels:
     def make_way(
         self, feature_labels: Sequence[CircularLabel], not_clear: _RegionLabelsNotClear, definition_text: Sequence[Aabb]
     ) -> list[CircularLabel] | None:
-        """The feature labels moved off the region labels the last ``place`` drew still over their letters, keeping
+        """The feature labels moved off the region labels that ``not_clear`` found still over their letters, keeping
         the places they made way for; None when they clear none (``_feature_labels_making_way``, which judges each
         move by where the next ``place`` draws the region labels)."""
 
         made_way = _feature_labels_making_way(
             feature_labels,
-            self.drawn,
             not_clear,
             self.record_length,
             definition_text,

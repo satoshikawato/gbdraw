@@ -36,7 +36,7 @@ from gbdraw.annotations.models import RegionAnnotationStyle, ResolvedRegionAnnot
 from gbdraw.core.text import GlyphOutlines, TextRun, italic_markup_runs, text_runs_glyph_outlines
 from gbdraw.layout.circular import RadialBand
 from gbdraw.layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_pad_px
-from gbdraw.layout.spatial import Aabb, BoxedPart, boxed_parts_meet, union_aabbs
+from gbdraw.layout.spatial import Aabb, BoxedLetters, BoxedPart, boxed_parts_meet, union_aabbs
 from gbdraw.layout.text_geometry import (
     Point,
     annular_sector_parts,
@@ -137,7 +137,9 @@ class CircularAnnotationLabel:
     its painted letters (the turned ink box, or an annular sector cut into
     nearly flat parts), which the room, the conflict count, later slots and
     the canvas bounds all read; ``ink_radii`` are how near the centre and how
-    far from it those letters come. ``runs`` are the styled runs it draws
+    far from it those letters come, and ``height`` how tall they stand across
+    their baseline (the ink box's top to bottom for straight text, ``ink_radii``
+    for curved text). ``runs`` are the styled runs it draws
     (``italic_markup_runs`` of the region's label). A ``cut`` label is curved
     text longer than its circle, drawn as the start of its runs and an ellipsis;
     one cut so far that no letter is left keeps no letter (``keeps_no_letter``).
@@ -153,6 +155,7 @@ class CircularAnnotationLabel:
     parts: tuple[Polygon, ...]
     ink_radii: tuple[float, float]
     label_offset: float
+    height: float
     arc: CircularLabelArc | None = None
     cut: bool = False
 
@@ -184,22 +187,22 @@ class CircularAnnotationLabels:
     left out is not drawn and takes no place, room, obstacle or canvas bounds; the label fit warning counts it,
     with its font size. With obstacles, each drawn label also has what it still overlaps where it is drawn
     (``overlapped``): the labels or leader lines of the obstacles, then the labels of the track placed before it, by
-    their index, that its letters meet with no clearance kept (REGION-WARN, OV-3015); and its letters grown by the
-    obstacles' clearance, each part with its box (``letters``, ``boxed_parts_meet``), which the feature labels keep
-    clear when they make way (CIR-RGN-YIELD). ``over_feature_letters`` are the places of the drawn labels whose
+    their index, that its letters meet with no clearance kept (REGION-WARN, OV-3015); and its letters and their
+    height grown by the obstacles' clearance (``letters``), which the feature labels keep clear when they make way
+    (CIR-RGN-YIELD). Both are keyed by annotation id. ``over_feature_letters`` are the places of the drawn labels whose
     letters meet a feature label's letters (OV-3017)."""
 
     drawn: tuple[CircularAnnotationLabel, ...]
     without_letters: tuple[CircularAnnotationLabel, ...]
-    overlapped: tuple[frozenset[int], ...] = ()
-    letters: tuple[tuple[BoxedPart, ...], ...] = ()
+    overlapped: Mapping[str, frozenset[int]] = field(default_factory=dict)
+    letters: Mapping[str, BoxedLetters] = field(default_factory=dict)
     over_feature_letters: tuple[RegionLabelPlace, ...] = ()
 
     @property
     def overlaps(self) -> int:
         """What the region label warning counts: each obstacle or earlier label a drawn label overlaps, once."""
 
-        return sum(len(met) for met in self.overlapped)
+        return sum(len(met) for met in self.overlapped.values())
 
 
 def _record_lanes(
@@ -648,7 +651,7 @@ def circular_annotation_labels(
     room = max((_reach(label, inner_radius_px, outer_radius_px, outward) for _entry, label in kept), default=0.0)
     placed: list[CircularAnnotationLabel] = []
     index = _ObstacleIndex(obstacles)
-    overlapped: list[frozenset[int]] = []
+    overlapped: dict[str, frozenset[int]] = {}
     over_letters: list[RegionLabelPlace] = []
     made_way = {place.annotation_id: place.place_bp for place in obstacles.made_way}
     for (annotation, label_at), default in kept:
@@ -671,7 +674,7 @@ def circular_annotation_labels(
                 join_origin=track.join_origin,
             )
             met = index.overlaps(label)
-        overlapped.append(met.met)
+        overlapped[annotation.id] = met.met
         if met.feature_letters:
             over_letters.append(RegionLabelPlace(annotation.id, place))
         placed.append(label)
@@ -679,8 +682,13 @@ def circular_annotation_labels(
     return CircularAnnotationLabels(
         tuple(placed),
         without_letters,
-        tuple(overlapped),
-        tuple(tuple(_grown_label_parts(label.parts, obstacles.clearance)) for label in placed),
+        overlapped,
+        {
+            label.annotation_id: BoxedLetters(
+                tuple(_grown_label_parts(label.parts, obstacles.clearance)), label.height + 2.0 * obstacles.clearance
+            )
+            for label in placed
+        },
         tuple(over_letters),
     )
 
@@ -978,6 +986,7 @@ def _label_at(
         y=y,
         rotation=rotation,
         ink_radii=ink_radii,
+        height=bottom - top,
         parts=(
             tuple(
                 (x + cx * cos - cy * sin, y + cx * sin + cy * cos)
@@ -1071,6 +1080,7 @@ def _curved_label(
         y=radius * math.sin(theta),
         rotation=0.0,
         ink_radii=(near, far),
+        height=far - near,
         # Letters near the centre cover at most one turn (OV-2665: an inside lane that rooms carry past the centre).
         parts=(
             *annular_sector_parts(near, far, centre, min(180.0, math.degrees(half_turn))),
