@@ -23,7 +23,7 @@ test('group lookup reuses valid identities and invalidates on ID edits, new alia
     mode: 'linear', orthogroups: ref([source]),
     orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
     selectedOrthogroupId: ref('one'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
-    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
+    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'), sessionOperationAvailability: () => null,
     svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]), biologicalFeatures: ref([])
   };
   const editor = createOrthogroupEditor({ state: withDrawings(state) });
@@ -75,7 +75,7 @@ test('the group list, a rendered name and the search follow the first rename of 
     mode: 'linear', orthogroups: ref([{ id: 'og_1', name: 'LivB', description: 'Python text', members: [] }]),
     orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
     selectedOrthogroupId: ref('og_1'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
-    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
+    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'), sessionOperationAvailability: () => null,
     svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]), biologicalFeatures: ref([])
   };
   const editor = createOrthogroupEditor({ state: withDrawings(state) });
@@ -104,7 +104,7 @@ test('the Edited marker of a group follows its first name and its first descript
     mode: 'linear', orthogroups: ref([{ id: 'og_1', name: 'LivB', members: [] }, { id: 'constructor', name: 'Own name', members: [] }]),
     orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
     selectedOrthogroupId: ref('og_1'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
-    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
+    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'), sessionOperationAvailability: () => null,
     svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]), biologicalFeatures: ref([])
   };
   const editor = createOrthogroupEditor({ state: withDrawings(state) });
@@ -139,7 +139,7 @@ test('the Description field shows only the group\'s own edit and follows its fir
     mode: 'linear', orthogroups: ref([{ id: 'constructor', name: 'Own name', description: 'Python text', members: [] }]),
     orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
     selectedOrthogroupId: ref('constructor'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
-    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
+    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'), sessionOperationAvailability: () => null,
     svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]), biologicalFeatures: ref([])
   };
   const editor = createOrthogroupEditor({ state: withDrawings(state) });
@@ -202,7 +202,7 @@ test('member tables name each record in plain text, as the diagram heading reads
     mode: 'linear', orthogroups: ref([]),
     orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
     selectedOrthogroupId: ref(''), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
-    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
+    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'), sessionOperationAvailability: () => null,
     svgContainer: ref(null), extractedFeatures: ref([]), biologicalFeatures: ref([]),
     linearSeqs: reactive([
       { uid: 'record-1', definition: '<i>Streptomyces lividus</i> CBS 844.73', gb: { name: 'BGC0000708' } },
@@ -239,7 +239,7 @@ test('the selected group detail is built once per change of its inputs (OV-920)'
     ] }, { id: 'og_2', members: [] }]),
     orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
     selectedOrthogroupId: ref('og_1'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
-    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
+    clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'), sessionOperationAvailability: () => null,
     svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]),
     biologicalFeatures: ref([
       { record_idx: 0, stable_svg_id: 'stable-a', nucleotide_sequence: 'AAAA', amino_acid_sequence: 'MK' },

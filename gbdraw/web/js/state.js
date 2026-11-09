@@ -224,16 +224,17 @@ const proteinIdentityManifest = ref({
 });
 const legacyProteinRawCandidates = ref({ schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] });
 const legacyProteinDerivedEvidence = ref({ schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] });
-const orthogroups = ref([]);
+/** @import { OrthogroupGroup } from './services/orthogroup-feature-metadata.js' */
+const orthogroups = typedRef(/** @type {OrthogroupGroup[]} */ ([]));
 const collinearGroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
 const selectedOrthogroupAlignmentFeature = ref('');
 const similarityAlignmentPlan = ref(null);
 const similarityAlignmentResetReceipt = ref(null);
 const linearRecordTranslations = ref([]);
-const selectedOrthogroupId = ref('');
-const orthogroupSearch = ref('');
-const orthogroupSortMode = ref('id');
+const selectedOrthogroupId = typedRef('');
+const orthogroupSearch = typedRef('');
+const orthogroupSortMode = typedRef('id');
 const showRightDrawer = typedRef(false);
 /** @import { RightDrawerTab } from './services/right-drawer-state.js' */
 const rightDrawerTab = typedRef(/** @type {RightDrawerTab} */ ('features'));
