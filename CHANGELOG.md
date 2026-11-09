@@ -533,6 +533,11 @@ write-up of a release.
   Circular map with 150 labelled regions in an `inside` slot is drawn in about
   45 % less time, and one with 400 regions in about 30 % less; the figure is
   the same (OV-2981).
+- Performance: region annotation slots are packed into lanes with less work:
+  a lane is tested only against the marks and letters near each region, and a
+  label's letters are measured only in lanes its mark leaves free. A Circular
+  map with 400 labelled regions in an `inside` slot is drawn in about 30 %
+  less time; the figure is the same (OV-2981).
 - Fixed: after a font file was registered for a font family that had already
   been used, curved Circular region labels were still checked against the
   earlier font's letters (for overlaps and for their reach), while their size
