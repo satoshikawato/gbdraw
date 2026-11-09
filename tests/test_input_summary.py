@@ -409,7 +409,7 @@ def test_a_cropped_record_with_nothing_to_draw_names_its_region() -> None:
     from gbdraw.api.input_summary import FeatureTypeTally, InputSummary, RecordInputSummary
 
     record = RecordInputSummary(
-        record_index=0, record_id="ctg1", source_name="genes.gff3", source_record_index=0,
+        record_index=0, record_id="ctg1", source_name="genes.gff3", source_paths=("genes.gff3",), source_record_index=0,
         source_record_count=1, drawn_length=101, source_length=3000, region=(2900, 3000),
         features=(FeatureTypeTally("exon", 0, 0, 0, 3),),
     )

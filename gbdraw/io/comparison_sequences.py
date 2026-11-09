@@ -184,6 +184,8 @@ class RepeatedRecordIds:
 
     source_name: str
     record_ids: tuple[str, ...]
+    # The file's path as the request named it: its identity, which the shown ``source_name`` is not.
+    source_path: str
 
     @property
     def message(self) -> str:
@@ -235,7 +237,7 @@ class ComparisonGenome:
                 counts[str(record.id)] = counts.get(str(record.id), 0) + 1
             ids = tuple(record_id for record_id, count in counts.items() if count > 1)
             if ids:
-                repeated.append(RepeatedRecordIds(os.path.basename(file.path), ids))
+                repeated.append(RepeatedRecordIds(os.path.basename(file.path), ids, file.path))
         return tuple(repeated)
 
 

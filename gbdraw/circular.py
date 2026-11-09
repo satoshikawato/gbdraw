@@ -57,7 +57,7 @@ from .api.requests import (
 )
 from .config.modify import modify_config_dict
 from .layout.record_placement import parse_record_row_position
-from .api.input_summary import log_input_summary
+from .api.input_summary import InputWarningKey, log_input_summary
 from .features.overrides import log_feature_identity_notices
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
@@ -1097,10 +1097,10 @@ def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[t
 def _log_render_notices(rendered_items: Sequence[RequestRenderResult]) -> None:
     """Log each Result's annotation warnings, feature notices and input summary.
 
-    A warning the Results of a batch share (one comparison file every Result reads) is logged once.
+    A warning of an input the Results of a batch share (one comparison file every Result reads) is logged once.
     """
 
-    warned: set[str] = set()
+    warned: set[InputWarningKey] = set()
     for rendered_item in rendered_items:
         for warning in rendered_item.annotation_warnings:
             logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,

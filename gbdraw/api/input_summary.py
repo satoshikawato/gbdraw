@@ -86,6 +86,9 @@ class RecordInputSummary:
     record_index: int
     record_id: str
     source_name: str
+    # The files it was read from, as the request named them: with ``source_record_index`` and ``region``, the record's
+    # identity, which a batch's log tells apart (two files of one base name in two folders are two inputs).
+    source_paths: tuple[str, ...]
     source_record_index: int
     source_record_count: int
     drawn_length: int
@@ -112,6 +115,13 @@ class InputWarning:
 
     code: InputWarningCode
     message: str
+    # The input it concerns, by identity: a record's place in its files, a comparison table's file and record pair,
+    # a region annotation set's ID, a comparison sequence file's path. A batch logs one warning of a code per input.
+    subject: tuple[str, ...]
+
+
+# A warning of one input (``InputWarning.code``, ``InputWarning.subject``): what a batch logs once.
+InputWarningKey = tuple[InputWarningCode, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -249,6 +259,7 @@ def summarize_inputs(
             record_index=index,
             record_id=str(record.id),
             source_name=item.source_name,
+            source_paths=item.source_paths,
             source_record_index=item.source_record_index,
             source_record_count=item.source_record_count,
             drawn_length=len(record.seq),
@@ -296,6 +307,11 @@ def _types_not_read_in_record(record: RecordInputSummary) -> list[tuple[str, int
     if record.region is None:
         return []
     return [(item.feature_type, item.not_read) for item in record.features if item.not_read]
+
+
+def _record_subject(record: RecordInputSummary) -> tuple[str, ...]:
+    region = "" if record.region is None else _region_text(record.region)
+    return (str(record.source_record_index), region, *record.source_paths)
 
 
 def _record_label(record: RecordInputSummary) -> str:
@@ -393,6 +409,7 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
         InputWarning(
             NO_DRAWABLE_FEATURES,
             f"{_record_label(record)} has no feature to draw: {_no_feature_reason(record)}.",
+            _record_subject(record),
         )
         for record in summary.records
         # A stack without a features track draws none by request; the inputs are not the reason.
@@ -401,47 +418,56 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
     for table in summary.comparisons:
         tally = table.tally
         label = _comparison_label(table, summary.records)
+        # A Linear comparison: a table's file, or a record pair (a Linear run draws one Result).
+        table_subject = (table.source_name or "", str(table.query_record_index), str(table.subject_record_index))
         if table.protein_matches and tally.rows_kept == 0:
-            warnings.append(InputWarning(COMPARISON_TABLE_EMPTY, f"{label} has no protein match to draw."))
+            warnings.append(InputWarning(COMPARISON_TABLE_EMPTY, f"{label} has no protein match to draw.", table_subject))
         elif tally.rows_read == 0:
-            warnings.append(InputWarning(COMPARISON_TABLE_EMPTY, f"{label} has no rows, so no match is drawn."))
+            warnings.append(
+                InputWarning(COMPARISON_TABLE_EMPTY, f"{label} has no rows, so no match is drawn.", table_subject)
+            )
         elif tally.rows_kept == 0:
             warnings.append(InputWarning(
                 COMPARISON_ROWS_FILTERED_OUT,
                 f"{label}: the thresholds leave out all {_count(tally.rows_read, 'row')}, so no match is drawn: "
                 + "; ".join(_threshold_text(item) for item in tally.thresholds) + ".",
+                table_subject,
             ))
     warnings.extend(
         InputWarning(
             ANNOTATION_SET_NOT_DRAWN,
             f"Region annotation set {set_id} is not drawn: no annotations track slot names it. "
             f"Add an annotations track slot for it (set_id={set_id}) to draw it.",
+            (set_id,),
         )
         for set_id in summary.annotation_sets_left_out
     )
     warnings.extend(
-        InputWarning(COMPARISON_RECORD_ID_REPEATED, item.message) for item in summary.repeated_comparison_ids
+        InputWarning(COMPARISON_RECORD_ID_REPEATED, item.message, (item.source_path,))
+        for item in summary.repeated_comparison_ids
     )
     return tuple(warnings)
 
 
-def log_input_warnings(summary: InputSummary, *, warned: set[str] | None = None) -> None:
+def log_input_warnings(summary: InputSummary, *, warned: set[InputWarningKey] | None = None) -> None:
     """Write the summary's warnings as WARNING lines (the Python API's ``draw_circular`` and ``draw_linear``).
 
-    ``warned`` holds the warnings the earlier Results of a batch wrote: a warning
-    they share (one comparison file every Result reads) is written once, and the
-    new ones join it.
+    ``warned`` holds the warnings the earlier Results of a batch wrote, by code and
+    input: a warning of an input they share (one comparison file every Result
+    reads) is written once, and the new ones join it. Two inputs whose warnings
+    read alike (two files of one base name) are each written.
     """
 
     for warning in input_warnings(summary):
         if warned is not None:
-            if warning.message in warned:
+            key: InputWarningKey = (warning.code, warning.subject)
+            if key in warned:
                 continue
-            warned.add(warning.message)
+            warned.add(key)
         logger.warning("%s", warning.message)
 
 
-def log_input_summary(summary: InputSummary, *, warned: set[str] | None = None) -> None:
+def log_input_summary(summary: InputSummary, *, warned: set[InputWarningKey] | None = None) -> None:
     """Write the summary as CLI INFO lines and its warnings as WARNING lines, each of a batch once (``warned``)."""
 
     for line in input_summary_lines(summary):
@@ -523,6 +549,7 @@ __all__ = [
     "InputSummaryPayload",
     "InputWarning",
     "InputWarningCode",
+    "InputWarningKey",
     "InputWarningPayload",
     "LinearWrapPayload",
     "NO_DRAWABLE_FEATURES",

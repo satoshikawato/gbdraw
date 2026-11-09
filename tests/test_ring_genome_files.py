@@ -186,6 +186,36 @@ def test_a_circular_batch_warns_once_of_a_comparison_file_that_repeats_a_record_
     assert len([message for message in warned if message.startswith("Comparison sequence file repeated.fna:")]) == 1
 
 
+def test_a_circular_batch_warns_of_each_input_once_even_when_two_inputs_read_alike(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """#1777 review 3, finding 3: a batch logs one warning per input it concerns, not one per warning text.
+
+    Two files of one name in two folders, each with a record ``contig_1`` that holds only a ``source`` feature, are
+    two inputs; their warnings read alike (the text names the file's base name), and both are logged.
+    """
+
+    record = (
+        "LOCUS       contig_1               1200 bp    DNA     circular BCT 01-JAN-2000\n"
+        "DEFINITION  test.\nACCESSION   contig_1\nVERSION     contig_1.1\n"
+        "FEATURES             Location/Qualifiers\n     source          1..1200\n"
+        "                     /organism=\"x\"\nORIGIN\n"
+        + "".join(f"{start:>9} " + " ".join(["ACGTACGTAC"] * 6) + "\n" for start in range(1, 1200, 60))
+        + "//\n"
+    )
+    inputs = []
+    for folder in ("a", "b"):
+        (tmp_path / folder).mkdir()
+        inputs.append(tmp_path / folder / "x.gb")
+        inputs[-1].write_text(record)
+    prefix = tmp_path / "out" / "ring"
+    with caplog.at_level("WARNING"):
+        circular_main(["--gbk", *map(str, inputs), "-o", str(prefix), "-f", "svg"])
+    assert sorted(path.name for path in prefix.parent.glob("*.svg")) == ["ring_1.svg", "ring_2.svg"]
+    warned = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    assert len([message for message in warned if message.startswith("Record contig_1.1 (x.gb) has no feature to draw")]) == 2
+
+
 def test_an_empty_file_in_a_genome_of_several_files_is_refused(tmp_path: Path) -> None:
     """Review 1 of #1777, item 4: an empty file is not dropped from a genome silently."""
 
