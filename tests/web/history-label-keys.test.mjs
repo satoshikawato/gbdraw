@@ -79,7 +79,10 @@ test('the check refuses a label built at run time and an unmarked text, and sees
     "scopeChoiceWithHistory(() => 'Not a key', fn, cancel)",
     "restoreLegendItems('Not a key', fn)",
     "commitSpecificRules((current) => current, 'Not a key', { drawing })",
-    "askTrackHide(ports, { rows, label: 'Not a key', mode })"
+    "askTrackHide(ports, { rows, label: 'Not a key', mode })",
+    // A comment's apostrophe or quote opens no literal.
+    "askTrackHide(ports, {\n  // the drawing's rows\n  rows, label: 'Not a key', mode })",
+    "askTrackHide(ports, { /* it's */ rows, label: 'Not a key', mode })"
   ];
   for (const source of shapes) assert.equal(unkeyedLabels(source, keys).length, 1, source);
   for (const source of [

@@ -8,6 +8,7 @@ import {
 /** @import { LosatRequestRing } from './circular-conservation-keys.js' */
 import { cardCropWindow, ringGenomeFileLists, ringGenomeIdLists } from './drawing/inputs.js';
 /** @import { InputSlot } from './input-types.js' */
+/** @import { CircularLayoutDraft } from './one-circle-layout.js' */
 import {
   canonicalFeatureOverrides,
   canonicalFeaturePlacements,
@@ -147,6 +148,7 @@ import { repairByDescription } from '../utils/contract-repair.js';
 import { isPlainObject } from '../utils/contract-shape.js';
 import { DEFINITION_LINE_STYLE_KINDS, requireDefinitionLineFontSizes } from './definition-line-style-state.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
+import { drawsOneCircle, oneCircleAdvOfLayout, oneCircleLeftOfRequest, oneCircleRequestLayout } from './one-circle-layout.js';
 import {
   DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap, readCircularRecordRanges, readScalarAxisLabels
 } from './config-field-readers.js';
@@ -254,7 +256,7 @@ import {
   webFileBindingsWithoutDepth
 } from './session-resource-backing.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
-import { createDefaultLosatExecution } from './session-active-config-contract.js';
+import { createDefaultAdv, createDefaultForm, createDefaultLosatExecution } from './session-active-config-contract.js';
 import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
 import {
   getResourcePayloadIdentity,
@@ -2574,6 +2576,8 @@ const trackPlanProjection = (request, drawing, context) => {
     judged
   };
 };
+/** One circle's settings in a request layout (`oneCircleRequestLayout`). */
+const ONE_CIRCLE_FIELDS = /** @type {const} */ (['oneCircleGapDegrees', 'oneCircleMinLength', 'oneCircleRecordBand']);
 /**
  * The projector of each request path a live `SETTING_APPLICATION` row names
  * (services/setting-application.js). Context a value depends on (the mode,
@@ -2616,6 +2620,14 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
     (/** @type {RequestDrawing} */ drawing, /** @type {CanonicalRenderRequest} */ request) => (
       /** @type {LiveSettingWrite[]} */ ([[['layout', field], project(drawing.adv, circularRequestIdentities(request.records))]])
     )
+  ])),
+  // One circle's settings, as Generate stores them (`oneCircleRequestLayout`); none while the draft is the grid.
+  ...Object.fromEntries(ONE_CIRCLE_FIELDS.map((field) => [
+    `layout.${field}`,
+    (/** @type {RequestDrawing} */ drawing) => {
+      const layout = oneCircleRequestLayout(drawing.adv);
+      return /** @type {LiveSettingWrite[]} */ ('recordLayout' in layout ? [[['layout', field], layout[field]]] : []);
+    }
   ])),
   // G2 (PD-OI-103 rev 2, PD-OI-059 rev 3). Default font size: the Circular
   // leaf, or the Linear `.short` / `.long` pair.
@@ -2731,6 +2743,7 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
 /** The request paths that live setting rows may name. */
 export const LIVE_SETTING_REQUEST_PATHS = Object.freeze(Object.keys(LIVE_SETTING_PROJECTORS));
 const CIRCULAR_GRID_REQUEST_PATHS = new Set(Object.keys(CIRCULAR_MULTI_RECORD_LAYOUT).map((field) => `layout.${field}`));
+const ONE_CIRCLE_REQUEST_PATHS = new Set(ONE_CIRCLE_FIELDS.map((field) => `layout.${field}`));
 const CANVAS_POSITION_REQUEST_PATHS = new Set(['diagramOptions.output.legend', 'diagramOptions.output.plotTitlePosition']);
 const COMPARISON_HEIGHT_REQUEST_PATH = `diagramOptions.configOverrides.${CONFIG_OVERRIDE_PATHS.comparisonHeight}`;
 /**
@@ -2777,7 +2790,10 @@ export const liveSettingApplies = (request, requestPath, drawing, inputs, resour
     return Object.hasOwn(request.diagramOptions, 'pairwiseMatchStyle')
       || (request.comparisons.length > 0 && !drawsNoComparison(request.comparisons));
   }
-  if (CIRCULAR_GRID_REQUEST_PATHS.has(requestPath)) return grid;
+  // The grid's settings apply to a grid Result, one circle's to a one-circle Result (`layout.recordLayout`).
+  const oneCircle = request.mode === 'circular' && request.layout?.recordLayout === 'one_circle';
+  if (CIRCULAR_GRID_REQUEST_PATHS.has(requestPath)) return grid && !oneCircle;
+  if (ONE_CIRCLE_REQUEST_PATHS.has(requestPath)) return oneCircle;
   if (requestPath === 'records') {
     return request.mode === 'circular'
       ? request.grouping === 'single'
@@ -2786,6 +2802,14 @@ export const liveSettingApplies = (request, requestPath, drawing, inputs, resour
   return !CANVAS_POSITION_REQUEST_PATHS.has(requestPath) || request.mode !== 'circular'
     || Boolean(drawing.form.multi_record_canvas) === grid;
 };
+/**
+ * Whether a Circular canvas change of `drawing` that waits for Generate (a Legend or Plot Title position,
+ * `liveSettingApplies`) enters or leaves One circle: the committed request draws one circle, or the draft does.
+ * The setting note then names One circle, not Multi-Record Canvas (`settingApplicationNote`).
+ * @param {CanonicalRenderRequest} request @param {CircularLayoutDraft} drawing
+ */
+export const canvasChangeIsOneCircle = (request, drawing) => request.mode === 'circular'
+  && (request.layout?.recordLayout === 'one_circle' || drawsOneCircle(drawing));
 // The context of the notes read with one inputs object: a note render reads
 // every path of its row with the same inputs, so the track projection runs
 // once for its five keys.
@@ -4223,8 +4247,11 @@ const buildLayout = (state, drawing, records = [], drawnIdentities = []) => {
     };
   }
   if (!drawing.form.multi_record_canvas) return {};
-  return /** @type {CanonicalCircularLayout} */ (Object.fromEntries(Object.entries(CIRCULAR_MULTI_RECORD_LAYOUT)
-    .map(([field, project]) => [field, project(drawing.adv, drawnIdentities)])));
+  return /** @type {CanonicalCircularLayout} */ ({
+    ...Object.fromEntries(Object.entries(CIRCULAR_MULTI_RECORD_LAYOUT)
+      .map(([field, project]) => [field, project(drawing.adv, drawnIdentities)])),
+    ...oneCircleRequestLayout(drawing.adv)
+  });
 };
 
 // A draft without a per-feature edit field (a Session written by the CLI, the
@@ -7174,6 +7201,7 @@ export const projectCanonicalSessionRequest = ({
     ...currentComparisonDefaults,
     alignmentLength: currentComparisonDefaults.alignment_length
   };
+  const quantitativeDraft = projectQuantitativeTrackDraft(overrides, projectedDepthColor);
   const adv = {
     features: options.selectedFeaturesSet ?? [...sparseFeatureTypes],
     feature_shapes: projectedFeatureShapes,
@@ -7227,6 +7255,10 @@ export const projectCanonicalSessionRequest = ({
     multi_record_min_radius_ratio: renderRequest.layout?.multiRecordMinRadiusRatio ?? 0.55,
     multi_record_column_gap_ratio: renderRequest.layout?.multiRecordColumnGapRatio ?? 0.10,
     multi_record_row_gap_ratio: renderRequest.layout?.multiRecordRowGapRatio ?? 0.05,
+    ...oneCircleAdvOfLayout(renderRequest.mode === 'circular' ? renderRequest.layout : null, oneCircleLeftOfRequest(
+      { gc_content_mode: String(quantitativeDraft.gc_content_mode), suppress_skew: form.suppress_skew },
+      { gc_content_mode: createDefaultAdv('circular').gc_content_mode, suppress_skew: createDefaultForm().suppress_skew }
+    )),
     center_reserved_radius: tracks.centerReservedRadius ?? null,
     resolve_overlaps: Boolean(overrides.resolve_overlaps),
     feature_overlap_tolerance_bp: overrides.feature_overlap_tolerance_bp ?? 0,
@@ -7245,7 +7277,7 @@ export const projectCanonicalSessionRequest = ({
       : overrides.linear_definition_show_length !== false ? 'show' : 'hide',
     keep_full_definition_with_plot_title: Boolean(options.keepFullDefinitionWithPlotTitle),
     show_definition: renderRequest.mode !== 'circular' || overrides.show_definition !== false,
-    ...projectQuantitativeTrackDraft(overrides, projectedDepthColor),
+    ...quantitativeDraft,
     depth_window_size: options.depthWindow ?? null,
     depth_step_size: options.depthStep ?? null,
     depth_tracks: projectedDepthTracks,

@@ -175,6 +175,16 @@ comparison genome in the listed order, or an empty list for a ring without
 one. A schema 1–9 request wrote one reference or `null` per ring; it reads as a
 ring of that one file or a ring without a comparison genome.
 
+A schema-10 Circular request may also draw its records one after another
+on one circle: `layout.recordLayout` is `"one_circle"` and
+`oneCircleGapDegrees`, `oneCircleMinLength` and `oneCircleRecordBand` hold
+its settings (`gbdraw circular --one_circle`). They are written only for one
+circle; a request without them draws the grid. A schema 1–9 request with
+these keys is refused. The web app keeps them in each drawing's
+`config.adv.circular_record_layout`, `one_circle_gap_degrees`,
+`one_circle_min_length` and `one_circle_record_band`, and writes them into the
+request at Generate and Save.
+
 The Python reader (`gbdraw ... --session` and the Python API) checks a
 schema-10 request against `describe_canonical_request()`: it refuses a key
 outside it, such as an older writer's `depthTrack*` input, and a value of

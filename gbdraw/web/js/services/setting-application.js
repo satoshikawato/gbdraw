@@ -29,7 +29,9 @@ import { msg, t, tm } from '../utils/i18n.js';
  * One setting, or a group of settings with one application. `note` replaces
  * the class text where parts of the change apply at different times (on a
  * live row it names the part that waits for Generate); `partialNote` is a live
- * row's note while the shown Result can draw only some of its request paths.
+ * row's note while the shown Result can draw only some of its request paths,
+ * and `oneCirclePartialNote` replaces it while the change that waits enters or
+ * leaves One circle (`canvasChangeIsOneCircle`, services/session-request.js).
  * `help` is the opening sentence of an editor tab's help, which says what the
  * tab's edits change at once (`settingApplicationHelp`). `refitPaths` name
  * the draft fields of an editor row that Python draws and sizes, by their
@@ -38,7 +40,7 @@ import { msg, t, tm } from '../utils/i18n.js';
  * they draw asks the automatic rerender to fit the figure again (Figure size,
  * PD-OI-114 rev 2; `refitFieldsBeforeStep`), and the help says so in
  * `refitHelp`, which names the edits that do (review S4, D-61).
- * @typedef {{ readonly id: SettingApplicationId, readonly application: SettingApplicationClass, readonly note?: string, readonly partialNote?: string, readonly help?: string, readonly requestPaths?: SettingRequestPaths, readonly refitPaths?: Readonly<Record<string, RefitField>>, readonly refitHelp?: string }} SettingApplicationRow
+ * @typedef {{ readonly id: SettingApplicationId, readonly application: SettingApplicationClass, readonly note?: string, readonly partialNote?: string, readonly oneCirclePartialNote?: string, readonly help?: string, readonly requestPaths?: SettingRequestPaths, readonly refitPaths?: Readonly<Record<string, RefitField>>, readonly refitHelp?: string }} SettingApplicationRow
  */
 /**
  * A drawing's draft field that Python draws and sizes: the Legend's listed and
@@ -59,6 +61,7 @@ import { msg, t, tm } from '../utils/i18n.js';
 /** @param {SettingApplicationClass} application @param {SettingApplicationId[]} ids @returns {SettingApplicationRow[]} */
 const rows = (application, ids) => ids.map((id) => ({ id, application }));
 const CANVAS_CHANGE_NOTE = msg('Live edit; the position applies on Generate after the Multi-Record Canvas change.');
+const ONE_CIRCLE_CHANGE_NOTE = msg('Live edit; the position applies on Generate after the One circle change.');
 // The GT set (PD-OI-104 rev 5): one projection (`projectTrackPlan`,
 // services/session-request.js) writes these request paths together, so every
 // draft input of a drawn GC, skew or Depth track requests all of them.
@@ -89,14 +92,16 @@ export const SETTING_APPLICATION = Object.freeze([
   // for Circular per single or multi-record canvas): a pending Multi-Record
   // Canvas change draws the other canvas's position on Generate (OV-1077), and
   // the position applies when the draft draws the shown canvas again (OV-1078).
-  { id: 'legend', application: /** @type {const} */ ('live'), partialNote: CANVAS_CHANGE_NOTE, requestPaths: {
+  { id: 'legend', application: /** @type {const} */ ('live'), partialNote: CANVAS_CHANGE_NOTE, oneCirclePartialNote: ONE_CIRCLE_CHANGE_NOTE,
+    requestPaths: {
     'ui.layoutPreferences.linear.legend': 'diagramOptions.output.legend',
     'ui.layoutPreferences.circular.*.legend': 'diagramOptions.output.legend',
     'config.form.multi_record_canvas': 'diagramOptions.output.legend',
     'config.adv.legend_box_size': 'diagramOptions.configOverrides.objects.legends.color_rect_size',
     'config.adv.legend_font_size': 'diagramOptions.configOverrides.objects.legends.font_size'
   } },
-  { id: 'plot-title', application: /** @type {const} */ ('live'), partialNote: CANVAS_CHANGE_NOTE, requestPaths: {
+  { id: 'plot-title', application: /** @type {const} */ ('live'), partialNote: CANVAS_CHANGE_NOTE, oneCirclePartialNote: ONE_CIRCLE_CHANGE_NOTE,
+    requestPaths: {
     'config.form.plot_title': 'diagramOptions.plotTitle',
     'ui.layoutPreferences.linear.plotTitlePosition': 'diagramOptions.output.plotTitlePosition',
     'ui.layoutPreferences.circular.*.plotTitlePosition': 'diagramOptions.output.plotTitlePosition',
@@ -110,7 +115,10 @@ export const SETTING_APPLICATION = Object.freeze([
     'config.adv.multi_record_min_radius_ratio': 'layout.multiRecordMinRadiusRatio',
     'config.adv.multi_record_column_gap_ratio': 'layout.multiRecordColumnGapRatio',
     'config.adv.multi_record_row_gap_ratio': 'layout.multiRecordRowGapRatio',
-    'config.adv.multi_record_positions': 'layout.multiRecordPositions'
+    'config.adv.multi_record_positions': 'layout.multiRecordPositions',
+    'config.adv.one_circle_gap_degrees': 'layout.oneCircleGapDegrees',
+    'config.adv.one_circle_min_length': 'layout.oneCircleMinLength',
+    'config.adv.one_circle_record_band': 'layout.oneCircleRecordBand'
   } },
   // Linear Lock Definition Column (PD-OI-103 G1).
   { id: 'definition-column', application: /** @type {const} */ ('live'), requestPaths: {
@@ -231,23 +239,33 @@ const rowOf = (id) => {
  * setup provides `committedSettingNotePredicate` (services/config.js).
  */
 export const SETTING_NOTE_APPLIES = Symbol('setting-note-applies');
+/**
+ * The Vue injection key of whether the change that waits for Generate enters
+ * or leaves One circle, which `SettingNote` passes to `settingApplicationNote`:
+ * the app setup provides `committedOneCircleChange` (services/config.js).
+ */
+export const SETTING_NOTE_ONE_CIRCLE_CHANGE = Symbol('setting-note-one-circle-change');
 
 /**
  * The note a `<setting-note>` shows; empty text shows none. A live setting
  * row applies on Generate while the shown Result can draw none of its request
  * paths (`applies`, `liveSettingApplies` of the committed request: a Circular
  * layout field without a committed grid), and shows its `partialNote` while
- * it can draw some (a Circular position during a Multi-Record Canvas change).
+ * it can draw some (a Circular position during a Multi-Record Canvas change,
+ * or its `oneCirclePartialNote` during a change that enters or leaves One
+ * circle, `oneCircleChange`).
  * @param {SettingApplicationId} id
  * @param {(requestPath: string) => boolean} [applies]
+ * @param {boolean} [oneCircleChange]
  * @returns {SettingApplicationNote}
  */
-export const settingApplicationNote = (id, applies = () => true) => {
+export const settingApplicationNote = (id, applies = () => true, oneCircleChange = false) => {
   const row = rowOf(id);
   const paths = [...new Set(Object.values(row.requestPaths || {}).flat())];
   const drawn = paths.filter((path) => applies(path)).length;
   if (drawn === paths.length) return noteOf(row.application, row.note || TEXT[row.application], row.application === 'live' && Boolean(row.note));
-  return drawn > 0 && row.partialNote ? noteOf(row.application, row.partialNote, true) : noteOf('generate', TEXT.generate, false);
+  const partialNote = (oneCircleChange && row.oneCirclePartialNote) || row.partialNote;
+  return drawn > 0 && partialNote ? noteOf(row.application, partialNote, true) : noteOf('generate', TEXT.generate, false);
 };
 
 /**

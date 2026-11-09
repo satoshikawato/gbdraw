@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `144`
+- Contract revision: `145`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -5444,6 +5444,50 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and
     the Review is `REQUIRED`.
+- Revision 145 changes: `PD-OI-019` gains scenario revision `2` (concern
+  `diagram-generation.web-multi-record-layout-defaults`; the outcome
+  `A WEB-ONE-CIRCLE-CHOICE`). The Circular record layout gains a third
+  choice, One circle, beside a figure per record and Multi-Record Canvas:
+  the records are drawn one after another on one circle, each with its own
+  arc, ticks, and GC content, as `gbdraw circular --one_circle` draws them,
+  with three settings (the gap between records, the shortest record drawn,
+  and the record band). Choosing it turns Hide GC Skew on and draws GC
+  content in percent; leaving it restores the layout and those two settings
+  it left. A Session that selects One circle, saved from the command line,
+  Python, or the Web, loads with it selected, and Generate draws the
+  command's figure. Depth tracks, conservation rings, and region tracks are
+  not drawn on one circle; Generate refuses them with the command's text.
+  The defaults of a new document and of Reset Settings stay Multi-Record
+  Canvas and Arrange in rows.
+  - The Product Decision Owner `satoshikawato` answered 「すべて推奨通り」 on
+    `2026-11-09` (`DECISIONS.md` `D-33`) to the questions of the campaign
+    `euk-feasibility-20261108`. Its Q8, option A, made One circle a layout
+    used only when chosen, beside the figure per record and the grid, and
+    left the defaults unchanged.
+  - On `2026-11-10` (`DECISIONS.md` `D-53`) the complete receipt below was
+    shown in a question that asked whether the Owner approved, as the full
+    text shown, the receipt of `PD-OI-019` revision `2` for One circle on the
+    Web, to be recorded as Contract Revision `138`; the Owner answered
+    「この全文で承認（推奨）」.
+    The shown text's last line was the placeholder
+    「Decision date: （承認の日）」. The serialized receipt fills it with the
+    date of the approval, `2026-11-10`, and changes nothing else (shown text
+    SHA-256 `befb05d0b0cc99fa24aa4233e18c55af61ea41c276723eff62c54523aaa4b889`).
+  - The question named Revision `138`, the free revision on `dev` when it
+    was asked; other pull requests took Revisions `138` to `144` before
+    this one merged, so the record is serialized at the next free revision,
+    `145`. The receipt names no revision.
+  - The session drafted the receipt's fields; the Owner approved them as
+    written. The receipt and JSON reproduce the approved fields without
+    translation or additional terms. The scenario revision `1` record is
+    kept as it was approved; the scenario revision `2` receipt keeps every
+    term of it that it does not name.
+  - New receipt SHA-256: `PD-OI-019` scenario revision `2`
+    `ffb03c45c15512a16b9aab8e151f0afc98f61cae441cae12ff91f9876a0ab05b`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and
+    the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -6327,27 +6371,83 @@ Scenario revision `5` narrows the `customLayoutRule` below in the same way: a Fi
 ### PD-OI-019: Fresh Web multi-record layout defaults
 
 - Concern key: `diagram-generation.web-multi-record-layout-defaults`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-019`, scenario revision `1` (Revision 3 entry above).
+  Scenario revision `2` adds One circle to the Circular record layouts and
+  keeps the defaults; every scenario revision `1` term that its receipt does
+  not name stays in force. Scenario revision `1` superseded none.
 - Status: `ACCEPTED`
-- Normative outcome: In a fresh Web document and after Reset Settings, Linear
+- Selected outcome: `A WEB-ONE-CIRCLE-CHOICE` (scenario revision `2`;
+  scenario revision `1` named no outcome)
+- Normative outcome: the scenario revision `1` outcome below, read together
+  with exactly the complete approved scenario revision `2`
+  `PRODUCT_DECISION` receipt and its nine-field JSON representation below.
+- Normative outcome (scenario revision `1`): In a fresh Web document and after Reset Settings, Linear
   defaults to Arrange in rows, grouping records from each source file into the
   same row while retaining independent per-record placement controls. Circular
   defaults to Multiple records in a single canvas (Multi-Record Canvas).
   Repeated record accessions retain distinct feature identities on that canvas.
   Explicitly saved layout choices take precedence on Session import; disabling
   either setting remains supported.
-- Rationale: The maintainer explicitly requested these two defaults as part of
-  restoring complete multi-record workflows.
-- Must preserve: All loaded records; independent placement; explicit saved
-  settings; the ability to choose separate rows or disable Circular shared
-  canvas; comparison scope as specified in `PD-OI-018`.
-- May retire: none. Both existing layout choices remain available.
-- Accepted residual risk: Complete all-record comparisons retain the computation
-  and memory cost accepted under `PD-OI-018`.
+- Rationale (scenario revision `1`): The maintainer explicitly requested
+  these two defaults as part of restoring complete multi-record workflows.
+- Must preserve (scenario revision `1`): All loaded records; independent
+  placement; explicit saved settings; the ability to choose separate rows or
+  disable Circular shared canvas; comparison scope as specified in
+  `PD-OI-018`.
+- May retire (scenario revision `1`): none. Both existing layout choices
+  remain available.
+- Accepted residual risk (scenario revision `1`): Complete all-record
+  comparisons retain the computation and memory cost accepted under
+  `PD-OI-018`.
 - Acceptance contracts: `OIC-004`, `OIC-006`, `OIC-015`.
-- Decision source: Explicit maintainer follow-up requesting same-file Linear
-  rows and Circular shared canvas as defaults in the same decision session.
-- Owner and decision date: `satoshikawato`, `2026-09-13`.
+- Decision source (scenario revision `1`): Explicit maintainer follow-up
+  requesting same-file Linear rows and Circular shared canvas as defaults in
+  the same decision session.
+- Owner and decision date (scenario revision `1`): `satoshikawato`,
+  `2026-09-13`.
+- Decision source (scenario revision `2`): the Product Decision Owner's
+  approval of `2026-11-10` described in the Revision 145 entry above. The
+  receipt and JSON below reproduce all nine fields of the approved receipt
+  without translation or additional terms. The runtime that implements it
+  merges with it (static Product Contract co-change); this record supplies
+  no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final
+  newline): `ffb03c45c15512a16b9aab8e151f0afc98f61cae441cae12ff91f9876a0ab05b`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.web-multi-record-layout-defaults（Web で複数の record を 1 つの図に描くときの配置）
+Scenario revision: 2
+Choice: A WEB-ONE-CIRCLE-CHOICE
+  - Circular の record の配置に、record ごとに別の図、Multi-Record Canvas（格子）に加えて、3 つ目の選択肢 One circle（すべての record を 1 つの円に順に並べ、record ごとに自分の弧、目盛り、GC content を持つ。コマンドの `gbdraw circular --one_circle` と同じ図）を置く。画面では Multi-Record Canvas と One circle の 2 つのチェックボックスで、片方を On にするともう片方は Off になる。両方 Off なら record ごとに別の図になる。One circle の間、record の選択や record ごとの設定の説明は Multi-Record Canvas ではなく One circle の名前で示す。
+  - One circle を選ぶと、その設定が 3 つ表示される。"Gap between records (degrees)"（record の間の角度、既定 1）、"Shortest record drawn (bp)"（これより短い record は描かず、その数を円の中央の文に示す。中央の定義の文を隠していても、数の行は示す。既定 1000）、"Record band"（各 record の名前を示す帯をトラックの外側に描く。名前は染色体、プラスミドまたはオルガネラの名前で、弧に入らなければオルガネラの標準の略称（ミトコンドリアは mt、葉緑体（chloroplast、plastid:chloroplast と、種類の書かれていない plastid）は cp）、それも入らなければ入力の中での record の番号を示す。番号も入らないときだけ名前を示さない。既定 On）。3 つの値の既定と範囲は、Python（コマンドと同じ）のものを生成した request の契約から読む。設定の変更は、表示中の Result が One circle の図なら、すぐ反映される設定と同じく再描画する。
+  - One circle を選ぶと、コマンドと同じく Hide GC Skew が On になり、GC content は percent で描く。One circle の間に変えた値は、One circle の間そのまま使う。One circle を外すと、選ぶ前の配置（Multi-Record Canvas か record ごとの別の図）と、そのときの Hide GC Skew と GC content の描き方に戻る。選ぶことも外すことも、それぞれ 1 回の Undo で戻る 1 つの操作で、custom track stack を使っていても Hide GC Skew の確認は出さない。
+  - 新しい文書と Reset Settings の既定は Multi-Record Canvas のまま（One circle の 3 つの設定も既定に戻る）。
+  - コマンドライン、Python、Web のどれで保存した Session でも、One circle の Session を読み込むと One circle とその設定が選ばれた状態になり、Generate はコマンドと同じ One circle の図を描く。コマンドラインや Python の Session で One circle を外すと、Multi-Record Canvas と、新しい文書の Hide GC Skew と GC content の描き方に戻る（Session がコマンドの One circle と違う値を指定していれば、その値）。Save Session はその設定を書き、Undo と drawing の複製はその設定を保つ。Run info のコマンドは `--one_circle` とその設定を示す。
+  - One circle では Depth のトラック、conservation ring、region のトラックは描かず、Generate はコマンドと同じ文で断る。"Depth tracks are not drawn when several records share one circle."、"Conservation rings are not drawn when several records share one circle."、"Region tracks are not drawn when several records share one circle."。英語が原文で、新しい語と文はほかの言語へ翻訳の一括作業で訳す。
+  - Linear の既定（Arrange in rows）と、ここに書いていない revision 1 の内容は変えない。
+Rationale: One circle は、この変更でコマンドラインと Python に加わる配置で、dev と main にはまだ One circle の Session はない。D-33 Q8=A（2026-11-09）は One circle を、record ごとの図と格子の図に並ぶ、選んだときだけ使う配置とし、既定は変えないとした。Web でも同じ配置を選べて、コマンドラインや Python の Session から同じ図を描けるようにする。
+Must preserve: 新しい文書と Reset Settings の既定（Circular は Multi-Record Canvas、Linear は Arrange in rows）。record ごとの別の図と Multi-Record Canvas を選べること。読み込んだ record をすべて描くか、描かない record の数を図に示すこと、保存した配置の選択を読み込みで優先すること（revision 1）。比較の範囲（PD-OI-018）。drawing の複製がすべての設定を写すこと（PD-OI-090）。Generate が断られても直前の Result、request、draft、History が残ること（PD-OI-016）。
+May retire: なし
+Accepted residual risk: One circle で Depth、conservation ring、region のトラックを使う図は、Web でもコマンドでも描けない（Generate が断る）。
+Owner: satoshikawato
+Decision date: 2026-11-10
+```
+
+```json
+{
+  "concern": "diagram-generation.web-multi-record-layout-defaults（Web で複数の record を 1 つの図に描くときの配置）",
+  "scenarioRevision": 2,
+  "choice": "A WEB-ONE-CIRCLE-CHOICE\n  - Circular の record の配置に、record ごとに別の図、Multi-Record Canvas（格子）に加えて、3 つ目の選択肢 One circle（すべての record を 1 つの円に順に並べ、record ごとに自分の弧、目盛り、GC content を持つ。コマンドの `gbdraw circular --one_circle` と同じ図）を置く。画面では Multi-Record Canvas と One circle の 2 つのチェックボックスで、片方を On にするともう片方は Off になる。両方 Off なら record ごとに別の図になる。One circle の間、record の選択や record ごとの設定の説明は Multi-Record Canvas ではなく One circle の名前で示す。\n  - One circle を選ぶと、その設定が 3 つ表示される。\"Gap between records (degrees)\"（record の間の角度、既定 1）、\"Shortest record drawn (bp)\"（これより短い record は描かず、その数を円の中央の文に示す。中央の定義の文を隠していても、数の行は示す。既定 1000）、\"Record band\"（各 record の名前を示す帯をトラックの外側に描く。名前は染色体、プラスミドまたはオルガネラの名前で、弧に入らなければオルガネラの標準の略称（ミトコンドリアは mt、葉緑体（chloroplast、plastid:chloroplast と、種類の書かれていない plastid）は cp）、それも入らなければ入力の中での record の番号を示す。番号も入らないときだけ名前を示さない。既定 On）。3 つの値の既定と範囲は、Python（コマンドと同じ）のものを生成した request の契約から読む。設定の変更は、表示中の Result が One circle の図なら、すぐ反映される設定と同じく再描画する。\n  - One circle を選ぶと、コマンドと同じく Hide GC Skew が On になり、GC content は percent で描く。One circle の間に変えた値は、One circle の間そのまま使う。One circle を外すと、選ぶ前の配置（Multi-Record Canvas か record ごとの別の図）と、そのときの Hide GC Skew と GC content の描き方に戻る。選ぶことも外すことも、それぞれ 1 回の Undo で戻る 1 つの操作で、custom track stack を使っていても Hide GC Skew の確認は出さない。\n  - 新しい文書と Reset Settings の既定は Multi-Record Canvas のまま（One circle の 3 つの設定も既定に戻る）。\n  - コマンドライン、Python、Web のどれで保存した Session でも、One circle の Session を読み込むと One circle とその設定が選ばれた状態になり、Generate はコマンドと同じ One circle の図を描く。コマンドラインや Python の Session で One circle を外すと、Multi-Record Canvas と、新しい文書の Hide GC Skew と GC content の描き方に戻る（Session がコマンドの One circle と違う値を指定していれば、その値）。Save Session はその設定を書き、Undo と drawing の複製はその設定を保つ。Run info のコマンドは `--one_circle` とその設定を示す。\n  - One circle では Depth のトラック、conservation ring、region のトラックは描かず、Generate はコマンドと同じ文で断る。\"Depth tracks are not drawn when several records share one circle.\"、\"Conservation rings are not drawn when several records share one circle.\"、\"Region tracks are not drawn when several records share one circle.\"。英語が原文で、新しい語と文はほかの言語へ翻訳の一括作業で訳す。\n  - Linear の既定（Arrange in rows）と、ここに書いていない revision 1 の内容は変えない。",
+  "rationale": "One circle は、この変更でコマンドラインと Python に加わる配置で、dev と main にはまだ One circle の Session はない。D-33 Q8=A（2026-11-09）は One circle を、record ごとの図と格子の図に並ぶ、選んだときだけ使う配置とし、既定は変えないとした。Web でも同じ配置を選べて、コマンドラインや Python の Session から同じ図を描けるようにする。",
+  "mustPreserve": "新しい文書と Reset Settings の既定（Circular は Multi-Record Canvas、Linear は Arrange in rows）。record ごとの別の図と Multi-Record Canvas を選べること。読み込んだ record をすべて描くか、描かない record の数を図に示すこと、保存した配置の選択を読み込みで優先すること（revision 1）。比較の範囲（PD-OI-018）。drawing の複製がすべての設定を写すこと（PD-OI-090）。Generate が断られても直前の Result、request、draft、History が残ること（PD-OI-016）。",
+  "mayRetire": "なし",
+  "acceptedResidualRisk": "One circle で Depth、conservation ring、region のトラックを使う図は、Web でもコマンドでも描けない（Generate が断る）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-10"
+}
+```
 
 
 ### PD-OI-020: LOSAT total-thread allocation and control agreement

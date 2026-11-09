@@ -187,6 +187,34 @@ def _line_value(left: tuple[float, float], right: tuple[float, float], position:
 
 
 @dataclass(frozen=True)
+class CirclePlace:
+    """Where one record is drawn on a circle it shares with other records: its display axis starts ``offset``
+    display bases into the circle, whose display length is ``length`` (records and the gaps between them).
+    ``scale_length`` is the record length the circle's scale is spaced and numbered for (its longest record), so
+    every record is numbered from its own start at one interval. ``position`` is the record's place in drawing
+    order; the first record (position 0, at 12 o'clock) draws the circle's scalar axes. ``record_spans`` holds the
+    ``(offset, drawn length)`` of every record drawn on the circle, in drawing order, which the one range label of
+    those axes reads to find a record that holds it."""
+
+    offset: int
+    length: int
+    scale_length: int
+    position: int = 0
+    record_spans: tuple[tuple[int, int], ...] = ()
+
+    @property
+    def draws_scalar_axes(self) -> bool:
+        """Whether this record draws the scalar axes of the circle (once, on its first record)."""
+
+        return self.position == 0
+
+    def __post_init__(self) -> None:
+        _integer(self.length, "Circle length", 1, self.length)
+        _integer(self.offset, "Circle offset", 0, self.length - 1)
+        _integer(self.scale_length, "Circle scale length", 1, self.length)
+
+
+@dataclass(frozen=True)
 class RecordDisplayTransform:
     length: int
     source_base: int
@@ -201,6 +229,8 @@ class RecordDisplayTransform:
     # ``source_base`` round the origin, so the source maps onto it modulo ``length``.
     # A crop takes no display start (``resolve_record_display``), so the two never meet.
     crosses_origin: bool = False
+    # Set at the draw boundary (``with_circle``) when the record is one of several drawn on one circle.
+    circle: CirclePlace | None = None
     _anchor_boundary: int = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -234,6 +264,11 @@ class RecordDisplayTransform:
             _integer(self.wrap_length, "Wrap length", 1, self.wrap_length)
         if self.display_length is not None:
             _integer(self.display_length, "Display length", 1, self.length)
+        if self.circle is not None and self.circle.offset + self.drawn_length > self.circle.length:
+            raise ValidationError(
+                "A record placed on a circle must end on it.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "RECORD_BOUNDS"},
+            )
 
     @property
     def _source_extent(self) -> int:
@@ -251,10 +286,18 @@ class RecordDisplayTransform:
         """This record drawn over rows of ``wrap_length`` bp along its ``display_length`` bases."""
         return replace(self, wrap_length=wrap_length, display_length=display_length)
 
+    def with_circle(self, place: CirclePlace) -> RecordDisplayTransform:
+        """This record drawn at ``place`` on a circle it shares with other records."""
+        return replace(self, circle=place)
+
+    @property
+    def _circle_offset(self) -> int:
+        return 0 if self.circle is None else self.circle.offset
+
     @property
     def projects(self) -> bool:
         """Whether geometry goes through display fragments, not the unset local path."""
-        return self.start_coordinate is not None or self.wrap_length is not None
+        return self.start_coordinate is not None or self.wrap_length is not None or self.circle is not None
 
     @property
     def drawn_length(self) -> int:
@@ -283,8 +326,8 @@ class RecordDisplayTransform:
         _integer(base, "Source base", 1, self.length)
         rotation = self._rotation
         if rotation is None:
-            return self.source_step * (base - self.source_base)
-        return self.source_step * (base - rotation) % self.length
+            return self._circle_offset + self.source_step * (base - self.source_base)
+        return self._circle_offset + self.source_step * (base - rotation) % self.length
 
     def source_boundary_to_display_offset(self, boundary: int) -> int:
         _integer(boundary, "Source boundary", 0, self._source_extent)
@@ -305,10 +348,11 @@ class RecordDisplayTransform:
 
     def _boundary_offset(self, boundary: _Coordinate) -> _Coordinate:
         offset = self.source_step * (boundary - self._anchor_boundary)
-        return offset if self._rotation is None else offset % self.length
+        return self._circle_offset + (offset if self._rotation is None else offset % self.length)
 
     def display_index_to_source_base(self, index: int) -> int:
-        _integer(index, "Display base index", 0, self.length - 1)
+        _integer(index, "Display base index", self._circle_offset, self._circle_offset + self.length - 1)
+        index -= self._circle_offset
         rotation = self._rotation
         if rotation is None:
             base = self.source_base + self.source_step * index
@@ -324,7 +368,7 @@ class RecordDisplayTransform:
     def local_boundary_to_display_offset(self, boundary: int) -> int:
         _integer(boundary, "Local boundary", 0, self.length)
         if self.start_coordinate is None:
-            return boundary
+            return self._circle_offset + boundary
         return self.source_boundary_to_display_offset(
             self._local_boundary_to_source(boundary)
         )
@@ -356,7 +400,8 @@ class RecordDisplayTransform:
             leading = start if self.source_step == 1 else end
             display_start = self.source_boundary_to_display_offset(leading)
             # Without a display start the record's own axis is its display axis (also round the origin).
-            local_start, local_end = (display_start, display_start + end - start) if self.start_coordinate is None else sorted(
+            local_display = display_start - self._circle_offset
+            local_start, local_end = (local_display, local_display + end - start) if self.start_coordinate is None else sorted(
                 (
                     self.source_step * (start - local_anchor),
                     self.source_step * (end - local_anchor),
@@ -520,15 +565,16 @@ class RecordDisplayTransform:
         )
         seam_sampled = None
         if self.start_coordinate is not None:
-            seam_sampled = mapped[0][0] == 0
+            seam = self._circle_offset
+            seam_sampled = mapped[0][0] == seam
             if seam_sampled:
                 seam_value, seam_index = mapped[0][1:]
             else:
                 left, right = mapped[-1], mapped[0]
-                seam_value = _line_value((left[0] - self.length, left[1]), right[:2], 0)
+                seam_value = _line_value((left[0] - self.length, left[1]), right[:2], seam)
                 seam_index = None
-                mapped.insert(0, (0, seam_value, seam_index))
-            mapped.append((self.length, seam_value, seam_index))
+                mapped.insert(0, (seam, seam_value, seam_index))
+            mapped.append((seam + self.length, seam_value, seam_index))
         return self._split_series_rows(
             DisplaySeries(
                 tuple(SeriesPoint(position, value) for position, value, _ in mapped),
@@ -583,10 +629,16 @@ class RecordDisplayTransform:
         if not self.projects:
             return points
         if self.start_coordinate is None:
-            # A local position already is the display offset of an affine axis.
+            # A local position already is the display offset of an affine axis (on a circle, after the
+            # record's offset on it).
             order = sorted(range(len(points)), key=lambda i: points[i].position)
+            shift = self._circle_offset
             segments = self._split_series_rows(
-                DisplaySeries(tuple(points[i] for i in order), tuple(range(len(order))), None)
+                DisplaySeries(
+                    tuple(replace(points[i], position=points[i].position + shift) if shift else points[i] for i in order),
+                    tuple(range(len(order))),
+                    None,
+                )
             )
         else:
             source_points = []

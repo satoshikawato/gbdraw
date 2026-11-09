@@ -298,10 +298,12 @@ test('every row renders its note or its class text', () => {
   // A live setting row says Applies on Generate while the committed request
   // cannot draw one of its request paths (review F2 of #1145).
   assert.match(component[1], /const appliesFor = .*\(inject\(SETTING_NOTE_APPLIES, \(\) => \(\) => true\)\);/);
-  assert.match(component[1], /note: computed\(\(\) => \(props\.application \? settingClassNote\(props\.application\) : settingApplicationNote\(props\.setting, appliesFor\(props\.item\)\)\)\)/);
-  // The app setup provides the predicate of the committed request.
+  assert.match(component[1], /const oneCircleChange = .*\(inject\(SETTING_NOTE_ONE_CIRCLE_CHANGE, \(\) => false\)\);/);
+  assert.match(component[1], /note: computed\(\(\) => \(props\.application \? settingClassNote\(props\.application\)\s+: settingApplicationNote\(props\.setting, appliesFor\(props\.item\), oneCircleChange\(\)\)\)\)/);
+  // The app setup provides the predicate of the committed request, and whether its pending canvas change is One circle's.
   const setup = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'app', 'app-setup.js'), 'utf8');
   assert.match(setup, /provide\(SETTING_NOTE_APPLIES, committedSettingNotePredicate\);/);
+  assert.match(setup, /provide\(SETTING_NOTE_ONE_CIRCLE_CHANGE, committedOneCircleChange\);/);
   assert.match(component[1], /:data-applies-on-generate="note\.application === 'generate' \? setting : null"/);
   assert.match(component[1], /<help-tip :id="id" :text="note\.text" :label="label">/);
 });
@@ -361,4 +363,20 @@ test('no timing note is written as literal text in index.html', () => {
     .filter((match) => !comments.some(([start, end]) => match.index >= start && match.index < end))
     .map((match) => `${match[0]} at line ${html.slice(0, match.index).split('\n').length}`);
   assert.deepEqual(literal, []);
+});
+
+test('the Legend and Plot Title position notes keep their translated text for a Multi-Record Canvas change (OV-3168)', async () => {
+  const { readdirSync } = await import('node:fs');
+  const catalogs = join(process.cwd(), 'gbdraw', 'web', 'js', 'utils', 'i18n-catalogs');
+  const canvasNote = 'Live edit; the position applies on Generate after the Multi-Record Canvas change.';
+  for (const id of ['legend', 'plot-title']) {
+    const row = SETTING_APPLICATION.find((candidate) => candidate.id === id);
+    assert.equal(row.partialNote, canvasNote, id);
+    assert.equal(row.oneCirclePartialNote, 'Live edit; the position applies on Generate after the One circle change.', id);
+  }
+  // Every catalog translates the note, so no UI language shows it in English.
+  for (const file of readdirSync(catalogs).filter((name) => name.endsWith('.js'))) {
+    const { default: catalog } = await import(join(catalogs, file));
+    assert.equal(typeof catalog[canvasNote], 'string', file);
+  }
 });

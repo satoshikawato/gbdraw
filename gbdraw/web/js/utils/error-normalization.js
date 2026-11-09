@@ -54,6 +54,10 @@ const REASONS = Object.freeze({
   UNDERLAY_FEATURE_SLOTS: 'Feature types drawn as Underlay (repeat_region by default) need exactly one enabled Features row. Keep one Features row enabled, or set those types to Arrow or Rectangle in Feature Types.',
 
   CIRCULAR_MULTI_RECORD_SIZE_MODE: 'Choose Auto (Default), Linear, or Equal.',
+  // One circle draws neither of these yet; the words are the command's (`gbdraw circular --one_circle`).
+  ONE_CIRCLE_DEPTH: 'Depth tracks are not drawn when several records share one circle.',
+  ONE_CIRCLE_CONSERVATION: 'Conservation rings are not drawn when several records share one circle.',
+  ONE_CIRCLE_REGIONS: 'Region tracks are not drawn when several records share one circle.',
   LINEAR_TRACK_LAYOUT: 'Choose Above, Features on axis, or Below.',
   LINEAR_LABEL_PLACEMENT: 'Choose Auto or Above Feature.',
   PROTEIN_BLASTP_MODE: 'Choose Pairwise matches, Similarity groups, or Collinear blocks.',

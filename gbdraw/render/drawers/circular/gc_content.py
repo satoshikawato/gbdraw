@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+
+import math
+
 from pandas import DataFrame
 from gbdraw.svg.elements import Circle, Group, Path
 
@@ -22,7 +25,11 @@ from ....layout.scalar_axis import (
     scaled_scalar_fraction,
 )
 from ....layout.circular_ink import CircularInk, CircularInkProfile, CircularInkRing, paint_shows, stroke_pad_px
+from ....svg.circular_arcs import circle_arc
 from ....svg.circular_tracks import (
+    circle_record_turns,
+    circle_unit_arc,
+    circle_unit_turns,
     circular_gc_content_line,
     generate_circular_gc_content_path_desc,
     circular_scalar_area_line,
@@ -31,7 +38,14 @@ from ....svg.circular_tracks import (
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from .scalar_axis import circular_scalar_axis_group
+from .scalar_axis import circular_range_label_elements, circular_scalar_axis_group
+
+
+def _draws_scalar_axes(record_transform: RecordDisplayTransform) -> bool:
+    """Whether the record draws its track's axis: always alone, once on a circle several records share."""
+
+    return record_transform.circle is None or record_transform.circle.draws_scalar_axes
+
 
 class GcContentDrawer:
     """
@@ -96,9 +110,23 @@ class GcContentDrawer:
         track_width: float,
         norm_factor: float,
         group_id: str,
+        unit_arc: tuple[float, float] | None = None,
     ) -> Group:
         baseline_radius, outer_radius = self._percent_radii(radius, track_width, norm_factor)
         middle_radius = baseline_radius + (0.5 * float(track_width))
+        if unit_arc is not None:
+            # A record that shares its circle: the background is the record's own arc of the ring.
+            group.add(
+                Path(
+                    id=f"{group_id}_percent_background",
+                    d=circle_arc(middle_radius, *unit_arc),
+                    fill="none",
+                    stroke=self.percent_background_color,
+                    stroke_width=float(track_width),
+                    stroke_opacity=self.percent_background_opacity,
+                )
+            )
+            return group
         group.add(
             Circle(
                 id=f"{group_id}_percent_background",
@@ -118,11 +146,22 @@ class GcContentDrawer:
         baseline_radius: float,
         outer_radius: float,
         group_id: str,
+        unit_arc: tuple[float, float] | None = None,
     ) -> Group:
         if self.percent_border_width <= 0:
             return group
         border_group = Group(id=f"{group_id}_percent_border")
         for border_radius in (baseline_radius, outer_radius):
+            if unit_arc is not None:
+                border_group.add(
+                    Path(
+                        d=circle_arc(border_radius, *unit_arc),
+                        fill="none",
+                        stroke=self.percent_border_color,
+                        stroke_width=self.percent_border_width,
+                    )
+                )
+                continue
             border_group.add(
                 Circle(
                     center=(0, 0),
@@ -136,10 +175,12 @@ class GcContentDrawer:
         return group
 
     def _percent_axis_ticks(
-        self, baseline_radius: float, track_width: float
+        self, baseline_radius: float, track_width: float, record_transform: RecordDisplayTransform | None
     ) -> tuple[list[ScalarAxisTick], CircularRangeLabel | None]:
         """The percent axis ticks as drawn, small ticks first, then large ticks with their numbers; and the range
-        label."""
+        label this record draws: on a circle several records share, the label lies on the first record that holds
+        it (``on_shared_circle``), never over a gap between records, and only that record draws it, after its own
+        band, so no later record paints over it."""
 
         font_size = self._tick_font_size(track_width)
         axis_labels = percent_axis_labels(
@@ -172,6 +213,13 @@ class GcContentDrawer:
         range_label = circular_range_label(
             axis_labels.range_label, baseline_radius + float(track_width), font_size=font_size
         )
+        place = None if record_transform is None else record_transform.circle
+        if range_label is not None and place is not None:
+            record_turns = circle_record_turns(place)
+            range_label = range_label.on_shared_circle(record_turns, self.font_family)
+            own_start, own_end = record_turns[place.position]
+            if range_label is not None and not own_start <= range_label.start_rad / (2.0 * math.pi) < own_end:
+                range_label = None
         return ticks, range_label
 
     def _add_percent_axis(
@@ -181,12 +229,13 @@ class GcContentDrawer:
         track_width: float,
         norm_factor: float,
         axis_group_id: str,
+        record_transform: RecordDisplayTransform | None = None,
     ) -> Group:
         if not self.show_axis:
             return group
 
         baseline_radius, outer_radius = self._percent_radii(radius, track_width, norm_factor)
-        ticks, range_label = self._percent_axis_ticks(baseline_radius, track_width)
+        ticks, range_label = self._percent_axis_ticks(baseline_radius, track_width, record_transform)
         axis_group = circular_scalar_axis_group(
             axis_group_id,
             baseline_radius,
@@ -197,6 +246,8 @@ class GcContentDrawer:
             stroke_width=self.axis_stroke_width,
             font_size=self._tick_font_size(track_width),
             font_family=self.font_family,
+            # A record of a shared circle draws its baseline as its own border arc.
+            baseline_circle=record_transform is None or record_transform.circle is None,
         )
 
         group.add(axis_group)
@@ -225,7 +276,9 @@ class GcContentDrawer:
                 return ()
             base = float(radius) * float(norm_factor)
             area = CircularInkProfile.between(line.positions, line.radii, record_length=record_len, base_px=base, pad_px=pad)
-            return (area, CircularInkRing(RadialBand(base - pad, base + pad))) if pad > 0 else (area,)
+            # The baseline closes along the record's own arc (``circle_unit_turns``), the whole circle for a record alone.
+            baseline = CircularInkRing(RadialBand(base - pad, base + pad), *circle_unit_turns(record_transform))
+            return (area, baseline) if pad > 0 else (area,)
         plot_df = gc_content_percent_df(
             gc_df, dinucleotide=dinucleotide, min_percent=self.min_percent, max_percent=self.max_percent
         )
@@ -241,13 +294,16 @@ class GcContentDrawer:
                                        pad_px=pad)
         ]
         outer_radius = baseline_radius + float(track_width)
+        unit_arc = circle_unit_arc(record_transform)
+        # The arc of the ring a record that shares its circle paints; the whole ring else.
+        turns = circle_unit_turns(record_transform)
         if float(track_width) > 0 and self._paints_background():
-            inks.append(CircularInkRing(RadialBand(baseline_radius, outer_radius)))
+            inks.append(CircularInkRing(RadialBand(baseline_radius, outer_radius), *turns))
         if self._paints_border():
             half = 0.5 * self.percent_border_width
-            inks.extend(CircularInkRing(RadialBand(edge - half, edge + half)) for edge in (baseline_radius, outer_radius))
-        if self.show_axis:
-            ticks, range_label = self._percent_axis_ticks(baseline_radius, track_width)
+            inks.extend(CircularInkRing(RadialBand(edge - half, edge + half), *turns) for edge in (baseline_radius, outer_radius))
+        if self.show_axis and _draws_scalar_axes(record_transform):
+            ticks, range_label = self._percent_axis_ticks(baseline_radius, track_width, record_transform)
             inks.extend(
                 scalar_axis_ink(
                     baseline_radius,
@@ -256,8 +312,13 @@ class GcContentDrawer:
                     font_size=self._tick_font_size(track_width),
                     font_family=self.font_family,
                     range_label=range_label,
+                    baseline_circle=unit_arc is None,
                 )
             )
+        elif self.show_axis:
+            _, range_label = self._percent_axis_ticks(baseline_radius, track_width, record_transform)
+            if range_label is not None:
+                inks.append(range_label.ink(self.font_family))
         return tuple(inks)
 
     def draw(
@@ -296,8 +357,9 @@ class GcContentDrawer:
             )
         if not gc_path_desc:
             return group
+        unit_arc = circle_unit_arc(record_transform)
         if self.mode == "percent":
-            self._add_percent_container(group, radius, track_width, norm_factor, group_id)
+            self._add_percent_container(group, radius, track_width, norm_factor, group_id, unit_arc)
         gc_path: Path = Path(
             d=gc_path_desc,
             fill=self.gc_path_fill_color,
@@ -313,9 +375,29 @@ class GcContentDrawer:
         group.add(gc_path)
         if self.mode == "percent":
             baseline_radius, outer_radius = self._percent_radii(radius, track_width, norm_factor)
-            self._add_percent_border(group, baseline_radius, outer_radius, group_id)
-            self._add_percent_axis(group, radius, track_width, norm_factor, f"{group_id}_axis")
+            self._add_percent_border(group, baseline_radius, outer_radius, group_id, unit_arc)
+            if _draws_scalar_axes(record_transform):
+                self._add_percent_axis(group, radius, track_width, norm_factor, f"{group_id}_axis", record_transform)
+            elif self.show_axis:
+                self._add_shared_circle_range_label(group, baseline_radius, track_width, f"{group_id}_axis", record_transform)
         return group
+
+    def _add_shared_circle_range_label(
+        self, group: Group, baseline_radius: float, track_width: float, axis_group_id: str,
+        record_transform: RecordDisplayTransform,
+    ) -> None:
+        """The range label of the circle's axis, drawn by a record other than the axis's when its arc holds it."""
+
+        _, range_label = self._percent_axis_ticks(baseline_radius, track_width, record_transform)
+        if range_label is None:
+            return
+        label_group = Group(id=axis_group_id)
+        for element in circular_range_label_elements(
+            range_label, axis_group_id, stroke=self.axis_stroke,
+            font_size=self._tick_font_size(track_width), font_family=self.font_family,
+        ):
+            label_group.add(element)
+        group.add(label_group)
 
 
 __all__ = ["GcContentDrawer"]

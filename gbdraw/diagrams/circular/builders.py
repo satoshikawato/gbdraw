@@ -47,7 +47,7 @@ from ...render.group_content import (
 )
 from ...render_stages import render_stage
 from ...svg.ids import stable_svg_id
-from ...render.groups.circular.definition import DefinitionNameLines, definition_record_facts
+from ...render.groups.circular.definition import DefinitionNameLines, DefinitionRecordFacts
 from .positioning import (
     center_group_on_canvas,
     place_definition_group_on_canvas,
@@ -340,7 +340,7 @@ def add_gc_content_group_on_canvas(
 
 def add_record_definition_group_on_canvas(
     canvas: Drawing,
-    gb_record: SeqRecord,
+    facts: DefinitionRecordFacts,
     canvas_config: CircularCanvasConfigurator,
     species: str | None,
     strain: str | None,
@@ -359,7 +359,7 @@ def add_record_definition_group_on_canvas(
 
     Parameters:
     canvas (Drawing): The SVG drawing canvas.
-    gb_record (SeqRecord): The GenBank record.
+    facts (DefinitionRecordFacts): What the definition says of its record or of the records of one circle.
     canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
     species (str): Species name.
     strain (str): Strain name.
@@ -368,7 +368,6 @@ def add_record_definition_group_on_canvas(
     """
     # The stage is keyed by the record's facts and the name lines the profile draws, not the typed text it
     # leaves out (OV-2109).
-    facts = definition_record_facts(gb_record)
     style = CircularDefinitionStyle.of(canvas_config.profile.config, definition_profile)
     content = render_stage(
         "circular_definition_content",
@@ -443,8 +442,10 @@ def add_axis_group_on_canvas(
     canvas_config: CircularCanvasConfigurator,
     *,
     group_key: GroupKey,
+    unit_arc: tuple[float, float] | None = None,
 ) -> Drawing:
-    """Adds the axis circle at the canvas radius."""
+    """Adds the axis circle at the canvas radius; with ``unit_arc`` (start and span in degrees), the arc of a
+    record that shares its circle with other records."""
     content = render_stage(
         "axis_content",
         build_group_content,
@@ -452,6 +453,7 @@ def add_axis_group_on_canvas(
         canvas_config.radius,
         canvas_config.geometry(),
         cfg=canvas_config.profile.config,
+        unit_arc=unit_arc,
     )
     return _add_track_content(canvas, content, canvas_config, group_key, slot_id=None, slot_renderer=None)
 
@@ -528,6 +530,7 @@ def add_labels_group_on_canvas(
     profile: CircularRenderProfile,
     precalculated_labels: Sequence[CircularLabel],
     phase: Literal["leaders", "text"],
+    display_length: int | None = None,
 ) -> Drawing:
     """Add the leader lines or the text of the placed external labels.
 
@@ -540,7 +543,7 @@ def add_labels_group_on_canvas(
         "label_leaders_content" if phase == "leaders" else "label_text_content",
         build_group_content,
         LabelsGroup,
-        len(gb_record.seq),
+        len(gb_record.seq) if display_length is None else display_length,
         canvas_config.geometry(),
         profile,
         precalculated_labels=(

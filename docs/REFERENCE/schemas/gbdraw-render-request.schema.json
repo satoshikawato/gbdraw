@@ -543,6 +543,28 @@
             }
           ],
           "default": null
+        },
+        "recordLayout": {
+          "enum": [
+            "grid",
+            "one_circle"
+          ],
+          "default": "grid"
+        },
+        "oneCircleGapDegrees": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 360,
+          "default": 1.0
+        },
+        "oneCircleMinLength": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1000
+        },
+        "oneCircleRecordBand": {
+          "type": "boolean",
+          "default": true
         }
       },
       "required": [

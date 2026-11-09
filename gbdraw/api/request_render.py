@@ -143,6 +143,7 @@ from gbdraw.labels.fit import WARN_SEARCH_SECONDS, LabelFitReport
 from gbdraw.layout.linear_multi_record import drawn_unit_rows, grid_display_pairs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import detected_topology
+from gbdraw.layout.record_units import left_off_circle, record_units
 from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
 from gbdraw.mode_profiles import ComparisonThresholds
 from gbdraw.io.record_sequences import detached_records
@@ -2068,7 +2069,9 @@ def plan_circular_request(
         )
         if ring_options is not materialized_request.options:
             materialized_request = replace(materialized_request, options=ring_options)
-        _warn_circular_topologies(records)
+        # Records on one circle are drawn as arcs of it: a linear record is what that layout is for.
+        if materialized_request.layout is None or materialized_request.layout.record_layout != "one_circle":
+            _warn_circular_topologies(records)
     return CircularRequestPlan(
         request=materialized_request,
         records=records,
@@ -3522,7 +3525,21 @@ def _plan_input_summary(
         comparisons=comparisons,
         draws_features=slots_draw_features(slots),
         annotation_sets_left_out=left_out,
+        left_off_circle=_plan_records_left_off_circle(plan),
     )
+
+
+def _plan_records_left_off_circle(plan: CircularRequestPlan | LinearRequestPlan) -> dict[int, int]:
+    """The records one circle leaves out (by index), each with the shortest record it draws."""
+
+    if not isinstance(plan, CircularRequestPlan) or plan.layout is None or plan.layout.record_layout != "one_circle":
+        return {}
+    shortest = plan.layout.one_circle_min_length
+    return {
+        unit.record_index: shortest
+        for unit in record_units(plan.records, plan.transforms or None)
+        if left_off_circle(unit, shortest)
+    }
 
 
 def _plan_track_slots(

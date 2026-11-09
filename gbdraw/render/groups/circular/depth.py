@@ -10,7 +10,7 @@ from ...drawers.circular.depth import DepthDrawer
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_transform import unset_record_transform
+from gbdraw.layout.record_transform import circular_display_length, unset_record_transform
 
 class DepthGroup:
     """Creates a depth coverage group for a circular canvas."""
@@ -33,7 +33,7 @@ class DepthGroup:
         self.radius = float(radius)
         self.depth_config = depth_config
         self.gb_record = gb_record
-        self.record_len = len(self.gb_record.seq)
+        self.record_len = circular_display_length(self.gb_record, self.record_transform)
         self.depth_df = depth_df
         self.track_width = float(track_width)
         self.axis_group_id = f"{group_id}_axis"

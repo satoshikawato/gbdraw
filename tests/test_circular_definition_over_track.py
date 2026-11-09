@@ -824,7 +824,7 @@ def test_the_count_over_stroked_track_paint_is_a_full_count(monkeypatch: pytest.
     # The count drawn at the stage boundary is the full count, once per captured call.
     assert len(drawn) == len(captured)
     for lines, count in drawn:
-        assert count == assemble_module._definition_lines_on_tracks(inks, list(lines)), (lines, count)
+        assert len(count) == assemble_module._definition_lines_on_tracks(inks, list(lines)), (lines, count)
     monkeypatch.setattr(assemble_module, "definition_lines_over_tracks", original)
     band_floor = min(float(slot.draw_band_px.inner_px) for slot in slots if slot.draw_band_px is not None)
     # The GC% border, half its 6 px stroke inside every band: the paint a band floor would have missed.
@@ -836,7 +836,7 @@ def test_the_count_over_stroked_track_paint_is_a_full_count(monkeypatch: pytest.
         radius = nearest.nearest_px + 0.25 * step
         box = _box_at(radius, turn, 0.75)
         full = assemble_module._definition_lines_on_tracks(inks, [box])
-        assert assemble_module.definition_lines_over_tracks((box,), axis, slots, sources, labels) == full, radius
+        assert len(assemble_module.definition_lines_over_tracks((box,), axis, slots, sources, labels)) == full, radius
         counts[radius] = (full, math.hypot(max(abs(box.min_x), abs(box.max_x)), max(abs(box.min_y), abs(box.max_y))))
     # A line whose farthest corner stays more than 1 px inside every band still meets the stroke.
     assert any(full == 1 and reach < band_floor - 1.0 for full, reach in counts.values()), counts

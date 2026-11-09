@@ -45,6 +45,11 @@ await Promise.all([
     join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'optional-positive-number.js'),
     join(tempRoot, 'js', 'utils', 'optional-positive-number.js')
   ),
+  // mode-profiles.js reads a stored GC content mode with the shared text choice reader.
+  cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'field-reading.js'),
+    join(tempRoot, 'js', 'utils', 'field-reading.js')
+  ),
   cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'i18n.js'),
     join(tempRoot, 'js', 'utils', 'i18n.js')

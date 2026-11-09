@@ -54,6 +54,7 @@ class CircularCanvasConfigurator:
         profile: CircularRenderProfile,
         legend: str,
         gb_record,
+        axis_length: int | None = None,
     ) -> None:
         """
         Initializes the circular canvas configurator with given settings.
@@ -83,7 +84,10 @@ class CircularCanvasConfigurator:
         self.radius: float = cfg.canvas.circular.radius
         self.track_ratio: float = cfg.canvas.circular.track_ratio
         self.length_threshold = cfg.labels.length_threshold.circular
-        self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
+        # ``axis_length``: the display length of a circle several records share (else the record's own).
+        self.length_param = determine_length_parameter(
+            len(gb_record.seq) if axis_length is None else axis_length, self.length_threshold
+        )
         # track_width (legacy) used to be config-driven; now derived from radius/track_ratio factors.
         self.track_ratio_factors = cfg.canvas.circular.track_ratio_factors[self.length_param]
         self.legend_position: str = legend

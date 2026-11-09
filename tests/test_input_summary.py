@@ -74,6 +74,25 @@ def test_cli_warns_about_a_record_with_no_feature_and_still_draws(tmp_path: Path
     assert (tmp_path / "out.svg").is_file()
 
 
+def test_one_circle_summary_says_a_record_left_off_the_circle_is_not_drawn(tmp_path: Path) -> None:
+    """A record shorter than the one-circle minimum is not drawn: its line says so, and it gets no
+    no-feature warning (OV-3160)."""
+    run = _gbdraw(
+        "circular", "--gbk", str(QUERY), str(ZERO_FEATURES), "--one_circle", "--one_circle_min_length", "2000",
+        "-o", "out", "-f", "svg", cwd=tmp_path,
+    )
+
+    assert run.returncode == 0, run.stderr
+    lines = _lines(run)
+    assert (
+        "INFO: Record EMPTY001.1 (zero_features_record.gb), record 1 of 1, 1,000 bp: not drawn, "
+        "shorter than 2,000 bp, the shortest record drawn on one circle."
+    ) in lines
+    assert ZERO_FEATURES_WARNING not in lines
+    assert any(line.startswith("INFO: Record PROKKA01.1 (prokka_locus_tag_only.gb), record 1 of 1, 3,000 bp: drew ")
+               for line in lines)
+
+
 def test_cli_names_the_types_a_record_has_when_none_is_drawn(tmp_path: Path) -> None:
     run = _gbdraw("circular", "--gbk", str(QUERY), "-k", "misc_RNA", "-o", "out", "-f", "svg", cwd=tmp_path)
 

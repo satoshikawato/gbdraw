@@ -1589,6 +1589,11 @@ export const createCircularTrackSlotEditor = ({
     return setCircularSuppressControl(drawing, 'gc_skew', checked, event);
   };
 
+  /** A record layout's Hide GC Skew (one circle draws none), projected onto the rows as the checkbox does, marks included, without its question, so the marked rows come back when the layout is left (R10). @param {DrawingState} drawing @param {boolean} hidden */
+  const projectCircularSkewHidden = (drawing, hidden) => changeTrackVisibility(() => {
+    drawing.form.suppress_skew = hidden; normalizeSlots(drawing);
+  });
+
   /**
    * @param {CircularTrackSlot | null | undefined} slot @param {unknown} enabled
    * @param {(() => void) | Event} [turnOffReaching] Turns off the rows that start at or extend to it
@@ -1952,6 +1957,7 @@ export const createCircularTrackSlotEditor = ({
     }),
     setCircularGcSuppressed,
     setCircularSkewSuppressed,
+    projectCircularSkewHidden,
     setCircularDinucleotide,
     setCircularTrackSlotNt,
     canAddCircularTrackRenderer,

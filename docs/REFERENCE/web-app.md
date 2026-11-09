@@ -825,6 +825,23 @@ follow the same rules as a single-record Circular diagram, so a one-record
 canvas matches the single-record figure. Without depth input, no depth slot is
 reserved.
 
+Turn on **One circle** instead to draw the records one after another on one
+circle, each on its own arc with its own ticks and GC content, as
+`gbdraw circular --one_circle` does. **Multi-Record Canvas** and **One circle**
+are two layouts of the same records, so turning one on turns the other off;
+turning both off draws each record as its own figure. **Gap between records
+(degrees)** defaults to 1, **Shortest record drawn (bp)** to 1000 (shorter
+records are counted in the definition, not drawn), and **Record band**, on by
+default, draws a band outside the tracks that names each record: its
+chromosome, plasmid or organelle; where that does not fit its arc, "mt" for a
+mitochondrion or "cp" for a chloroplast (or a plastid of no named kind), else
+the record's number in the input; and no name only where even the number does
+not fit. Choosing
+**One circle** turns on **Hide GC Skew** and, unless you changed the GC content
+form first, draws GC content in percent, as the command does. Depth tracks,
+conservation rings and region tracks are not drawn on one circle; Generate
+says so. New pages and **Reset Settings** keep **Multi-Record Canvas**.
+
 ## Record selection and layout
 
 Each Linear input card holds its record selector, inclusive **Start** and

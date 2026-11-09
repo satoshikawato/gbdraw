@@ -1298,6 +1298,31 @@ const gridCanonical = buildCanonicalRenderRequest({ state, filesData });
 assert.equal(gridCanonical.renderRequest.grouping, 'grid');
 assert.equal(gridCanonical.renderRequest.output.prefix, 'dup');
 assert.equal(projectCanonicalSessionRequest(gridCanonical).config.form.multi_record_canvas, true);
+// The grid layout stores no one-circle field, as Python writes none; a one-circle draft stores its record layout
+// and its three settings, and Load reads them back into the draft (D-45 A).
+assert.equal('recordLayout' in gridCanonical.renderRequest.layout, false);
+assert.equal(projectCanonicalSessionRequest(gridCanonical).config.adv.circular_record_layout, 'grid');
+Object.assign(state.adv, {
+  circular_record_layout: 'one_circle', one_circle_gap_degrees: 2.5, one_circle_min_length: 0,
+  one_circle_record_band: false
+});
+const oneCircleCanonical = buildCanonicalRenderRequestRaw({ state, filesData });
+assert.deepEqual(
+  [oneCircleCanonical.renderRequest.layout.recordLayout, oneCircleCanonical.renderRequest.layout.oneCircleGapDegrees,
+    oneCircleCanonical.renderRequest.layout.oneCircleMinLength, oneCircleCanonical.renderRequest.layout.oneCircleRecordBand],
+  ['one_circle', 2.5, 0, false]
+);
+const oneCircleAdv = projectCanonicalSessionRequest(oneCircleCanonical).config.adv;
+assert.deepEqual(
+  [oneCircleAdv.circular_record_layout, oneCircleAdv.one_circle_gap_degrees, oneCircleAdv.one_circle_min_length,
+    oneCircleAdv.one_circle_record_band],
+  ['one_circle', 2.5, 0, false]
+);
+state.adv.one_circle_gap_degrees = '';
+assert.equal(buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.layout.oneCircleGapDegrees, 1);
+Object.assign(state.adv, {
+  circular_record_layout: 'grid', one_circle_gap_degrees: 1, one_circle_min_length: 1000, one_circle_record_band: true
+});
 state.form.circular_record_selector = 'dup_2';
 const gridWithRetainedSingleSelector = buildCanonicalRenderRequest({ state, filesData });
 assert.equal(gridWithRetainedSingleSelector.renderRequest.grouping, 'grid');

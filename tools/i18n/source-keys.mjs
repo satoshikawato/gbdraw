@@ -147,7 +147,12 @@ export const skipExpression = (source, start) => {
   let depth = 0;
   for (let at = start; at < source.length; at += 1) {
     const char = source[at];
-    if (char === '\'' || char === '"' || char === '`') {
+    // A comment is skipped whole: its apostrophes and quotes open no literal.
+    if (char === '/' && (source[at + 1] === '/' || source[at + 1] === '*')) {
+      const end = source[at + 1] === '/' ? source.indexOf('\n', at) : source.indexOf('*/', at + 2) + 1;
+      if (end <= 0) break;
+      at = end;
+    } else if (char === '\'' || char === '"' || char === '`') {
       const literal = readLiteral(source, at);
       if (!literal) {
         // A template literal with substitutions: skip to its closing backtick.

@@ -135,6 +135,10 @@ class DefinitionRecordFacts(NamedTuple):
     metadata: RecordSourceMetadata
     length: int
     gc_percent: float | None
+    # The line drawn in place of the accession: several records drawn on one circle say how many they are.
+    summary: str | None = None
+    # Only the summary line is drawn: a circle whose definition is hidden still counts the records it leaves out.
+    summary_only: bool = False
 
 
 def _record_gc_percent(record: SeqRecord) -> float:
@@ -226,7 +230,7 @@ class DefinitionGroup:
             else definition_record_facts(gb_record)
         )
         self.geometry = geometry
-        self.names = names
+        self.names = DefinitionNameLines("", "", "", "", None) if self.record_facts.summary_only else names
         self.definition_profile: CircularDefinitionProfile = style.profile
         self.record_index = int(record_index)
         self.record_count = int(record_count)
@@ -254,8 +258,8 @@ class DefinitionGroup:
             self.definition_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
         self.radius: float = geometry.radius
         self.calculate_coordinates()
-        self.species_parts: list[_TextPart] = parse_mixed_content_text(names.taxon)
-        self.strain_parts: list[_TextPart] = parse_mixed_content_text(names.strain)
+        self.species_parts: list[_TextPart] = parse_mixed_content_text(self.names.taxon)
+        self.strain_parts: list[_TextPart] = parse_mixed_content_text(self.names.strain)
         self.add_circular_definitions()
         # Painted text bounds in group-local coordinates: one box per text line, and their union.
         self.line_bounds = self._measure_line_bounds()
@@ -273,10 +277,10 @@ class DefinitionGroup:
 
     def add_circular_definitions(self) -> None:
         record_length: int = self.record_facts.length
-        accession: str = self.record_facts.record_id
+        accession: str = self.record_facts.summary or self.record_facts.record_id
         show_accession = True
-        show_length = True
-        show_gc = True
+        show_length = not self.record_facts.summary_only
+        show_gc = not self.record_facts.summary_only
 
         # Which lines draw is the names' (``DefinitionNameLines.of``); the plot title runs the two name lines
         # into one unless a typed title replaces them.

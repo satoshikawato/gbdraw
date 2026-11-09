@@ -837,6 +837,43 @@ def test_feature_density_tracks_round_trip_in_both_modes(tmp_path: Path) -> None
             decode_canonical_request(bad, resource_paths=resource_paths, output_directory=tmp_path)
 
 
+def test_a_one_circle_layout_is_stored_and_read_back(tmp_path: Path) -> None:
+    """A Circular request that draws its records on one circle stores the circle's settings and reads them back;
+    a grid stores none of them."""
+
+    layout = CircularMultiRecordOptions(
+        record_layout="one_circle", one_circle_gap_degrees=0.5, one_circle_min_length=2_000, one_circle_record_band=False
+    )
+    record = RecordInput(
+        source=GenBankInputSource(_source_file(tmp_path / "source.gbk")),
+        selector=parse_record_selector("record-a"),
+        presentation=RecordPresentation(grid_row=1, grid_column=1),
+    )
+    request = CircularDiagramRequest(records=(record,), layout=layout)
+    encoded = encode_canonical_request(request)
+    stored = encoded.payload["layout"]
+    assert {key: stored[key] for key in ("recordLayout", "oneCircleGapDegrees", "oneCircleMinLength",
+                                         "oneCircleRecordBand")} == {
+        "recordLayout": "one_circle", "oneCircleGapDegrees": 0.5, "oneCircleMinLength": 2_000,
+        "oneCircleRecordBand": False,
+    }
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "materialized"),
+        output_directory=tmp_path / "output",
+    )
+    assert isinstance(decoded, CircularDiagramRequest) and decoded.layout == layout
+    grid = encode_canonical_request(CircularDiagramRequest(records=(record,), layout=CircularMultiRecordOptions()))
+    assert "recordLayout" not in grid.payload["layout"]
+    # Before request schema 10 a layout had no circle settings, so a schema 9 request that names them is refused.
+    with pytest.raises(CanonicalRequestDecodingError, match="recordLayout"):
+        decode_canonical_request(
+            _payload_for_schema(encoded, 9),
+            resource_paths=_materialize_resources(encoded, tmp_path / "materialized-9"),
+            output_directory=tmp_path / "output",
+        )
+
+
 def test_circular_request_payload_round_trip_uses_stable_resources(tmp_path: Path) -> None:
     gbk = _source_file(tmp_path / "source-a.gbk")
     gff = _source_file(tmp_path / "source-b.gff3")

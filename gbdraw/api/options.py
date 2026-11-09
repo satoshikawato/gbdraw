@@ -582,17 +582,52 @@ class LinearOutputOptions:
             )
 
 
+# The degrees the gap between two records on one circle may take; the request contract and the CLI read them here.
+ONE_CIRCLE_GAP_DEGREES_RANGE: tuple[int, int] = (0, 360)
+
+
 @dataclass(frozen=True)
 class CircularMultiRecordOptions:
-    """Layout values used only by circular multi-record canvases."""
+    """Layout values used only by circular multi-record canvases.
+
+    ``record_layout`` is how the records are drawn: ``"grid"``, one circle per record on a grid (the
+    ``multi_record_*`` values place them), or ``"one_circle"``, every record one after another on one circle,
+    ``one_circle_gap_degrees`` apart, records shorter than ``one_circle_min_length`` bp left out and counted,
+    and, with ``one_circle_record_band``, a band outside the tracks that tells the records apart and names them.
+    """
 
     multi_record_size_mode: Literal["linear", "auto", "equal"] = "auto"
     multi_record_min_radius_ratio: float = 0.55
     multi_record_column_gap_ratio: float = 0.10
     multi_record_row_gap_ratio: float = 0.05
     multi_record_positions: Sequence[str] | None = None
+    record_layout: Literal["grid", "one_circle"] = "grid"
+    one_circle_gap_degrees: float = 1.0
+    one_circle_min_length: int = 1000
+    one_circle_record_band: bool = True
 
     def __post_init__(self) -> None:
+        if self.record_layout not in {"grid", "one_circle"}:
+            raise ValidationError(
+                "record_layout must be one of: grid, one_circle.", diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"}
+            )
+        gap = self.one_circle_gap_degrees
+        low, high = ONE_CIRCLE_GAP_DEGREES_RANGE
+        if isinstance(gap, bool) or not isinstance(gap, Real) or not math.isfinite(float(gap)) or not low <= float(gap) <= high:
+            raise ValidationError(
+                f"one_circle_gap_degrees must be a finite number of degrees in [{low:g}, {high:g}].",
+                diagnostic={"code": "INPUT_INVALID", "reason": "FINITE"},
+            )
+        object.__setattr__(self, "one_circle_gap_degrees", float(gap))
+        minimum = self.one_circle_min_length
+        if isinstance(minimum, bool) or not isinstance(minimum, int) or minimum < 0:
+            raise ValidationError(
+                "one_circle_min_length must be an integer number of bp >= 0.", diagnostic={"code": "INPUT_INVALID", "reason": "NONNEGATIVE_INTEGER"}
+            )
+        if not isinstance(self.one_circle_record_band, bool):
+            raise ValidationError(
+                "one_circle_record_band must be true or false.", diagnostic={"code": "INPUT_INVALID", "reason": "BOOLEAN"}
+            )
         if self.multi_record_size_mode not in {"linear", "auto", "equal"}:
             raise ValidationError(
                 "multi_record_size_mode must be one of: auto, linear, equal."
@@ -1672,6 +1707,7 @@ def _resolve_options_for_mode(
     options: CircularDiagramOptions | LinearDiagramOptions,
     *,
     mode: DiagramMode,
+    one_circle: bool = False,
 ) -> CircularDiagramOptions | LinearDiagramOptions:
     profile = get_mode_profile(mode)
     thresholds = ComparisonThresholds(
@@ -1695,7 +1731,7 @@ def _resolve_options_for_mode(
 
     config_overrides = options.config_overrides
     if options.config is None:
-        config_overrides = resolve_mode_profile_overrides(mode, config_overrides)
+        config_overrides = resolve_mode_profile_overrides(mode, config_overrides, one_circle=one_circle)
 
     return replace(
         options,
@@ -1714,14 +1750,17 @@ def _resolve_options_for_mode(
 
 def resolve_circular_diagram_options(
     options: CircularDiagramOptions,
+    *,
+    one_circle: bool = False,
 ) -> CircularDiagramOptions:
-    """Resolve omitted Circular request values through the Circular profile."""
+    """Resolve omitted Circular request values through the Circular profile (``one_circle``: for records drawn
+    one after another on one circle)."""
 
     if not isinstance(options, CircularDiagramOptions):
         raise ValidationError("options must be CircularDiagramOptions.")
     return cast(
         CircularDiagramOptions,
-        _resolve_options_for_mode(options, mode="circular"),
+        _resolve_options_for_mode(options, mode="circular", one_circle=one_circle),
     )
 
 

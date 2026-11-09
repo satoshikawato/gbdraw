@@ -89,7 +89,9 @@ def test_slice_containers_of_a_version_hold_the_rows_that_version_wrote() -> Non
     session_51_rows = {(row.domain, row.path) for row in MODE_SCOPED_SETTINGS if row.since == 51}
     assert session_51_rows == {
         ("config.form", "figure_width"), ("config.form", "figure_height"), ("config.form", "circular_windows"),
-        ("config.adv", "feature_density_tracks"),
+        ("config.adv", "feature_density_tracks"), ("config.adv", "circular_record_layout"),
+        ("config.adv", "one_circle_gap_degrees"), ("config.adv", "one_circle_min_length"),
+        ("config.adv", "one_circle_record_band"), ("config.adv", "one_circle_left"),
         ("config.form", "circular_record_ranges"), ("config.form", "circular_range_fields_record"),
     }
     assert {row.since for row in MODE_SCOPED_SETTINGS} == {46, 51}
@@ -108,7 +110,7 @@ def test_registry_rows_match_the_phase_e_registry_table() -> None:
     assert MODE_SCOPED_SETTINGS_REVISION == 5
     with (FIXTURES / "mode-scoped-settings-registry-v46.tsv").open(encoding="utf-8", newline="") as handle:
         table = list(csv.DictReader(handle, delimiter="\t"))
-    assert len(table) == 292
+    assert len(table) == 297
     rows = set()
     for row in table:
         if row["migrate"] == "-":

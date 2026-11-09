@@ -165,7 +165,9 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--depth_large_tick_interval DEPTH_LARGE_TICK_INTERVAL]
               [--depth_small_tick_interval DEPTH_SMALL_TICK_INTERVAL]
               [--depth_tick_font_size DEPTH_TICK_FONT_SIZE] [-l LEGEND]
-              [--multi_record_canvas]
+              [--multi_record_canvas] [--one_circle]
+              [--one_circle_gap_degrees ONE_CIRCLE_GAP_DEGREES]
+              [--one_circle_min_length BP] [--one_circle_no_record_band]
               [--multi_record_size_mode {auto,linear,equal}]
               [--multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO]
               [--multi_record_column_gap_ratio MULTI_RECORD_COLUMN_GAP_RATIO]
@@ -542,6 +544,20 @@ options:
   --multi_record_canvas
                         Place multiple records on one shared canvas using
                         automatic grid layout (default: False).
+  --one_circle          Draw all records one after another on one circle, each
+                        on its own arc with its own ticks and GC content
+                        (default: False). GC skew is off and GC content is
+                        drawn in percent unless set.
+  --one_circle_gap_degrees ONE_CIRCLE_GAP_DEGREES
+                        Gap between records on one circle, in degrees (0 to
+                        360; default: 1.0).
+  --one_circle_min_length BP
+                        Records shorter than this are left off the circle and
+                        counted in the centre text, also with
+                        --hide_definition (default: 1000).
+  --one_circle_no_record_band
+                        Leave out the band that names each record on one
+                        circle.
   --multi_record_size_mode {auto,linear,equal}
                         Size mode for multi-record circular canvas ("auto",
                         "linear", "equal"; default: "auto").

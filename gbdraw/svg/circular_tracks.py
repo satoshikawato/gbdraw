@@ -5,13 +5,13 @@ import math
 from typing import NamedTuple
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 from pandas import DataFrame
 from gbdraw.svg.elements import Circle
 from gbdraw.analysis.skew import deviation_scale
 
 
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_coordinates import CirclePlace, RecordDisplayTransform
 from ..layout.scalar_axis import held_to_end, project_scalar_line
 from .circular_arcs import circle_arc, circle_arc_to, circle_point, position_angle
 from .path_data import path_point
@@ -85,6 +85,78 @@ def circular_drawn_line(
     )
 
 
+def circle_unit_arc(record_transform: RecordDisplayTransform) -> tuple[float, float] | None:
+    """Where a record that shares its circle with other records lies on it: its start angle and its span in
+    degrees, clockwise. ``None`` when the record has the circle to itself."""
+
+    place = record_transform.circle
+    if place is None:
+        return None
+    return position_angle(place.offset, place.length), 360.0 * record_transform.drawn_length / place.length
+
+
+def circle_unit_turns(record_transform: RecordDisplayTransform) -> tuple[float, float]:
+    """The arc a record paints, in turns clockwise from 12 o'clock: its own arc on a circle it shares with other
+    records, else the whole circle."""
+
+    arc = circle_unit_arc(record_transform)
+    if arc is None:
+        return 0.0, 1.0
+    start = (arc[0] + 90.0) / 360.0
+    return start, start + arc[1] / 360.0
+
+
+def circle_record_turns(place: CirclePlace) -> tuple[tuple[float, float], ...]:
+    """The arcs of every record drawn on the circle of ``place``, in turns clockwise from 12 o'clock and in drawing
+    order, so a record's own arc is at its ``position``."""
+
+    return tuple((offset / place.length, (offset + length) / place.length) for offset, length in place.record_spans)
+
+
+def within_record_arc(first_turn: float, last_turn: float, record_transform: RecordDisplayTransform | None) -> bool:
+    """Whether text painted from ``first_turn`` to ``last_turn`` (turns clockwise from 12 o'clock) lies within its
+    record's arc, so that it does not run over the gap onto a neighbour (OV-3113). A record alone holds any."""
+
+    if record_transform is None or record_transform.circle is None:
+        return True
+    start, end = circle_unit_turns(record_transform)
+    return start <= first_turn and last_turn <= end
+
+
+def _circle_unit_samples(
+    positions: ArrayLike, values: ArrayLike, record_transform: RecordDisplayTransform
+) -> tuple[NDArray[np.float64], NDArray[np.float64], tuple[int, ...]]:
+    """A track's samples of a record that shares a circle, at their places on it: held on to the record's end
+    there, as a Linear track holds to the end of its axis, since nothing joins one record's end to its start."""
+
+    projected = project_scalar_line(positions, values, record_transform)
+    if record_transform.start_coordinate is not None:
+        return projected.positions, projected.values, projected.segment_starts
+    place = record_transform.circle
+    assert place is not None
+    held_positions, held_values = held_to_end(
+        projected.positions, projected.values, float(place.offset + record_transform.drawn_length)
+    )
+    return held_positions, held_values, projected.segment_starts
+
+
+def _unit_line_desc(line: CircularTrackLine, total_len: float, base_radius: float) -> str:
+    """The area between a deviation line of a record that shares a circle and its baseline: from the baseline at
+    the record's first sample along the line to its last, back down to the baseline and along it to the start."""
+
+    positions, radii, segment_starts = line
+    drawn = circular_drawn_line(positions, radii, total_len, segment_starts)
+    first = position_angle(positions[0], total_len)
+    last = position_angle(positions[-1], total_len)
+    return (
+        f"M {path_point(*circle_point(base_radius, first))}"
+        + track_line_to(*drawn)
+        + f"L {path_point(*circle_point(base_radius, last))} "
+        + circle_arc_to(base_radius, last, first - last)
+        + "z"
+    )
+
+
 def generate_circle_path_desc(radius: float, norm_factor: float) -> str:
     """The closed circle of ``radius * norm_factor`` from 12 o'clock, clockwise (two arcs)."""
     return circle_arc(radius * norm_factor, -90.0, 360.0) + "z"
@@ -119,6 +191,8 @@ def circular_gc_content_line(
         radius_of_coordinate = (norm_radius + (0.5 * track_width * (diff / scale.max_diff))).to_numpy(dtype=float)
 
     positions = gc_df.index.to_numpy(dtype=float)
+    if record_transform.circle is not None:
+        return CircularTrackLine(*_circle_unit_samples(positions, radius_of_coordinate, record_transform))
     if record_transform.start_coordinate is not None:
         return CircularTrackLine(*project_scalar_line(positions, radius_of_coordinate, record_transform))
     if not _closes_round_its_origin(record_transform, record_len):
@@ -146,6 +220,8 @@ def generate_circular_gc_content_path_desc(
     )
     if line is None:
         return ""
+    if record_transform.circle is not None:
+        return _unit_line_desc(line, float(record_len), radius * norm_factor)
     return _closed_line_desc(line, float(record_len)) + generate_circle_path_desc(radius, norm_factor)
 
 
@@ -207,6 +283,8 @@ def circular_gc_skew_line(
         radius_of_coordinate = norm_radius + (0.5 * track_width * (diff / scale.max_diff))
 
     positions = df.index
+    if record_transform.circle is not None:
+        return CircularTrackLine(*_circle_unit_samples(positions, radius_of_coordinate, record_transform))
     if record_transform.start_coordinate is not None:
         return CircularTrackLine(*project_scalar_line(positions, radius_of_coordinate, record_transform))
     if not _closes_round_its_origin(record_transform, total_len):
@@ -227,6 +305,8 @@ def generate_circular_gc_skew_path_desc(
     line = circular_gc_skew_line(radius, df, total_len, track_width, norm_factor, dinucleotide, record_transform)
     if line is None:
         return ""
+    if record_transform.circle is not None:
+        return _unit_line_desc(line, float(total_len), radius * norm_factor)
     return _closed_line_desc(line, float(total_len)) + generate_circle_path_desc(radius, norm_factor)
 
 
@@ -253,7 +333,9 @@ def circular_scalar_area_line(
     values = np.clip(values, 0.0, 1.0)
     positions = scalar_df[position_column].to_numpy(dtype=float)
     segment_starts: tuple[int, ...] = ()
-    if record_transform.start_coordinate is not None:
+    if record_transform.circle is not None:
+        positions, values, segment_starts = _circle_unit_samples(positions, values, record_transform)
+    elif record_transform.start_coordinate is not None:
         positions, values, segment_starts = project_scalar_line(positions, values, record_transform)
     elif not _closes_round_its_origin(record_transform, record_len):
         positions, values = held_to_end(positions, values, float(record_len))
@@ -342,12 +424,16 @@ def draw_circle_path(radius: float, stroke_color: str, stroke_width: float) -> C
 
 
 __all__ = [
+    "circle_unit_arc",
+    "circle_unit_turns",
     "draw_circle_path",
     "generate_circular_depth_path_desc",
     "generate_circular_scalar_area_path_desc",
     "generate_circle_path_desc",
     "generate_circular_gc_content_path_desc",
     "generate_circular_gc_skew_path_desc",
+    "circle_record_turns",
+    "within_record_arc",
 ]
 
 

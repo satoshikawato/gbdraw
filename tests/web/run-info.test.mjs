@@ -807,6 +807,19 @@ test('circular source recipe gives a ring of several genome files one --conserva
   assert.ok(recordsTable);
   assert.match(recordsTable.data, /two-records\.gbk\tALPHA\t\talpha\t\t0\t1\t1\t/);
   assert.match(recordsTable.data, /two-records\.gbk\tBETA\t\tbeta\t\t0\t2\t2\t/);
+
+  // One circle: the recipe asks for one circle with the stored settings, not for the grid (D-45 A).
+  multiRecord.renderRequest.layout = {
+    multiRecordSizeMode: 'equal', recordLayout: 'one_circle', oneCircleGapDegrees: 2.5, oneCircleMinLength: 0,
+    oneCircleRecordBand: false
+  };
+  const oneCircleRecipe = await buildSourceRecipe(multiRecord);
+  assert.equal(oneCircleRecipe.available, true, oneCircleRecipe.unavailableReason);
+  await assertCliParserAccepts(oneCircleRecipe);
+  assert.equal(oneCircleRecipe.args.includes('--multi_record_canvas'), false);
+  const oneCircleArgs = oneCircleRecipe.args.slice(oneCircleRecipe.args.indexOf('--one_circle'));
+  assert.deepEqual(oneCircleArgs.slice(0, 6), ['--one_circle', '--one_circle_gap_degrees', '2.5',
+    '--one_circle_min_length', '0', '--one_circle_no_record_band']);
 }
 
 const linearCanonical = canonical({

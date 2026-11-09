@@ -208,6 +208,32 @@ test('a Circular live apply writes the plot title font override and the grid lay
   drawing.adv.multi_record_positions = [];
 });
 
+test('one circle\'s settings apply live to a one-circle Result only, and the grid\'s to a grid Result only', () => {
+  const drawing = modeDrawing(state, 'circular');
+  drawing.circularRecordList.value = ['LIVE1', 'LIVE2'].map((id, index) => ({
+    uid: 'record-1', k: index + 1, identity: `record-1:${index + 1}`, selector: `#${index + 1}`, record_id: id
+  }));
+  drawing.form.multi_record_canvas = true;
+  const grid = generate('circular');
+  Object.assign(drawing.adv, { circular_record_layout: 'one_circle', one_circle_gap_degrees: 3 });
+  const oneCircle = generate('circular');
+  assert.equal(oneCircle.renderRequest.layout.recordLayout, 'one_circle');
+  // A pending switch from the grid to one circle applies on Generate: the grid Result's layout stays.
+  assert.deepEqual(liveCandidate(grid, drawing).renderRequest.layout, grid.renderRequest.layout);
+  Object.assign(drawing.adv, { one_circle_gap_degrees: 5, one_circle_record_band: false });
+  const candidate = liveCandidate(oneCircle, drawing).renderRequest;
+  assert.deepEqual(candidate.layout, generate('circular').renderRequest.layout);
+  assert.deepEqual([candidate.layout.oneCircleGapDegrees, candidate.layout.oneCircleRecordBand], [5, false]);
+  // A grid setting changed on a one-circle Result writes nothing.
+  drawing.adv.multi_record_size_mode = 'equal';
+  assert.deepEqual(liveCandidate(oneCircle, drawing).renderRequest.layout.multiRecordSizeMode,
+    oneCircle.renderRequest.layout.multiRecordSizeMode);
+  Object.assign(drawing.adv, {
+    circular_record_layout: 'grid', one_circle_gap_degrees: 1, one_circle_record_band: true, multi_record_size_mode: 'auto'
+  });
+  drawing.form.multi_record_canvas = false;
+});
+
 test('Lock Definition Column OFF on a CLI-shaped request that locks yields the request a Generate builds', () => {
   const drawing = modeDrawing(state, 'linear');
   const initialLock = drawing.form.keep_definition_left_aligned;
@@ -396,9 +422,10 @@ test('a live setting row the shown Result cannot draw says Applies on Generate',
   const generateNote = { application: 'generate', text: 'Applies on Generate', display: 'clock' };
   // A single-canvas Result: the layout fields apply on Generate (PD-OI-103).
   const single = { mode: 'circular', grouping: 'single' };
-  const draft = (multiRecordCanvas) => ({ form: { multi_record_canvas: multiRecordCanvas } });
-  const note = (id, committed, multiRecordCanvas) => owner.settingApplicationNote(
-    id, (path) => request.liveSettingApplies(committed, path, draft(multiRecordCanvas))
+  const draft = (multiRecordCanvas, layout = 'grid') => ({ form: { multi_record_canvas: multiRecordCanvas }, adv: { circular_record_layout: layout } });
+  const note = (id, committed, multiRecordCanvas, layout = 'grid') => owner.settingApplicationNote(
+    id, (path) => request.liveSettingApplies(committed, path, draft(multiRecordCanvas, layout)),
+    request.canvasChangeIsOneCircle(committed, draft(multiRecordCanvas, layout))
   );
   assert.equal(request.liveSettingApplies(single, 'layout.multiRecordColumnGapRatio', draft(true)), false);
   assert.equal(request.liveSettingApplies({ mode: 'circular', grouping: 'grid' }, 'layout.multiRecordColumnGapRatio', draft(true)), true);
@@ -414,6 +441,13 @@ test('a live setting row the shown Result cannot draw says Applies on Generate',
   assert.deepEqual(note('plot-title', single, true), partial);
   assert.deepEqual(note('plot-title', { mode: 'circular', grouping: 'grid' }, false), partial);
   assert.equal(note('legend', { mode: 'linear', grouping: 'single' }, false).display, 'none');
+  // OV-3168: a change that enters or leaves One circle names One circle, with its own key.
+  const oneCirclePartial = { ...partial, text: 'Live edit; the position applies on Generate after the One circle change.' };
+  const oneCircle = { mode: 'circular', grouping: 'grid', layout: { recordLayout: 'one_circle' } };
+  assert.deepEqual(note('legend', single, true, 'one_circle'), oneCirclePartial);
+  assert.deepEqual(note('plot-title', oneCircle, false), oneCirclePartial);
+  assert.equal(note('legend', oneCircle, true, 'one_circle').display, 'none');
+  assert.equal(note('legend', oneCircle, true).display, 'none', 'one circle to the grid keeps the canvas');
   // A row without request paths keeps its own note.
   assert.equal(owner.settingApplicationNote('depth-sources', () => false).text, owner.SETTING_APPLICATION.find((row) => row.id === 'depth-sources').note);
 });

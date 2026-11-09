@@ -127,3 +127,23 @@ def test_none_stroke_remains_invisible_with_positive_width(drawer, args) -> None
     paths = _main_paths(group, stroke_color="none")
     assert paths
     assert {path.attribs["stroke-width"] for path in paths} == {3.0}
+
+
+def test_a_record_on_a_shared_circle_inks_its_deviation_baseline_along_its_own_arc() -> None:
+    # The ink model of GC content (deviation) and GC skew matches the drawn baseline, which closes along the
+    # record's arc on a circle several records share, not round the whole circle.
+    from gbdraw.layout.circular_ink import CircularInkRing
+    from gbdraw.layout.record_coordinates import CirclePlace
+
+    frame = _gc_frame()
+    shared = RecordDisplayTransform(120, 1, 1, None, False).with_circle(CirclePlace(offset=30, length=300, scale_length=120))
+    alone = RecordDisplayTransform(120, 1, 1, None, True)
+    for drawer in (
+        CircularGcContentDrawer(_gc_content_config(stroke_color="black", stroke_width=1.0)),
+        CircularSkewDrawer(_gc_skew_config(stroke_color="black", stroke_width=1.0)),
+    ):
+        for transform, turns in ((shared, (0.1, 0.5)), (alone, (0.0, 1.0))):
+            rings = [ink for ink in drawer.ink(100.0, frame, transform.length if transform.circle is None else 300,
+                                              20.0, 0.8, "GC", transform) if isinstance(ink, CircularInkRing)]
+            assert len(rings) == 1
+            assert (rings[0].start_turn, rings[0].end_turn) == pytest.approx(turns)

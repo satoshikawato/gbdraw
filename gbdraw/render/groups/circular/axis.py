@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from gbdraw.svg.elements import Circle, Group
+from gbdraw.svg.elements import Circle, Group, Path
 
 from ....canvas import CircularCanvasGeometry
 from ....config.models import GbdrawConfig
+from ....svg.circular_arcs import circle_arc
 from ....svg.circular_tracks import draw_circle_path
 
 
@@ -19,8 +20,11 @@ class AxisGroup:
         geometry: CircularCanvasGeometry,
         *,
         cfg: GbdrawConfig,
+        unit_arc: tuple[float, float] | None = None,
     ) -> None:
         self.radius: float = radius
+        # The arc (start and span in degrees) of a record that shares its circle with other records.
+        self.unit_arc = unit_arc
         self.axis_group = Group(id="Axis")
         self.length_param = geometry.length_param
         self.stroke_color = cfg.objects.axis.circular.stroke_color
@@ -28,7 +32,16 @@ class AxisGroup:
         self.add_elements_to_group()
 
     def draw_circular_axis(self) -> None:
-        self.circular_axis: Circle = draw_circle_path(self.radius, self.stroke_color, self.stroke_width)
+        self.circular_axis: Circle | Path = (
+            draw_circle_path(self.radius, self.stroke_color, self.stroke_width)
+            if self.unit_arc is None
+            else Path(
+                d=circle_arc(self.radius, *self.unit_arc),
+                stroke=self.stroke_color,
+                stroke_width=self.stroke_width,
+                fill="none",
+            )
+        )
 
     def add_elements_to_group(self) -> None:
         self.draw_circular_axis()

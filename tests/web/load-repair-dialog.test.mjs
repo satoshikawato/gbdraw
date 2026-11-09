@@ -1270,9 +1270,12 @@ test('an arrow ratio stored as its text loads as its number with no row', async 
 // fields are read from the template's bindings.
 const TEMPLATE = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
 // Save refuses a cleared Feature overlap tolerance, so no file holds it (OV-826).
+// The fixture below is a Session 46: a setting a later Session version added has no place in it.
+const NEWER_THAN_46 = new Set(MODE_ROWS.filter((row) => row.since > 46)
+  .map((row) => `${row.domain.replace(/^config\./, '')}.${row.path}`));
 const CLEARED_NUMBER_FIELDS = [...new Set([...TEMPLATE.matchAll(/<input\b[^>]*>/g)].map(([tag]) => (
   /\btype="number"/.test(tag) ? tag.match(/\bv-model\.number="((?:form|adv|losat\.blastp|circularConservation)\.\w+)"/)?.[1] : undefined
-)).filter((at) => at && at !== 'adv.feature_overlap_tolerance_bp'))];
+)).filter((at) => at && at !== 'adv.feature_overlap_tolerance_bp' && !NEWER_THAN_46.has(at)))];
 const WRITTEN_VALUES = [...new Map([
   ...CLEARED_NUMBER_FIELDS.map((at) => [at, '']),
   ['adv.evalue', 1], ['adv.min_bitscore', '50'], ['adv.identity', '70.5'], ['adv.alignment_length', '']

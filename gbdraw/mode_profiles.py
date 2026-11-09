@@ -193,14 +193,26 @@ def get_mode_profile(mode: DiagramMode | str) -> ModeProfile:
         raise ValidationError(f"Unsupported drawing mode: {mode!r}.") from exc
 
 
+# The values several Circular records drawn one after another on one circle take where a request leaves them
+# unset (D-08): GC content in percent, without GC skew.
+ONE_CIRCLE_CONFIG_OVERRIDES: Mapping[str, object] = MappingProxyType(
+    {"canvas.show_skew": False, "objects.gc_content.mode": "percent"}
+)
+
+
 def resolve_mode_profile_overrides(
     mode: DiagramMode | str,
     explicit_overrides: Mapping[str, object] | None = None,
+    *,
+    one_circle: bool = False,
 ) -> dict[str, object]:
-    """Merge fresh-request profile values with explicit canonical config overrides."""
+    """Merge fresh-request profile values with explicit canonical config overrides (``one_circle``: a Circular
+    request that draws its records on one circle, ``ONE_CIRCLE_CONFIG_OVERRIDES``)."""
 
     profile = get_mode_profile(mode)
     resolved = profile.config_overrides
+    if one_circle:
+        resolved.update(ONE_CIRCLE_CONFIG_OVERRIDES)
     explicit = dict(explicit_overrides or {})
     if (
         profile.mode == "linear"
@@ -280,6 +292,7 @@ __all__ = [
     "MODE_PROFILE_VERSION",
     "MODE_PROFILES",
     "ModeProfile",
+    "ONE_CIRCLE_CONFIG_OVERRIDES",
     "effective_linear_track_leaves",
     "get_mode_profile",
     "linear_wrap_default_overrides",

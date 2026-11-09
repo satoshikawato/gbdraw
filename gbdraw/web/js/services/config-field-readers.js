@@ -1,6 +1,6 @@
 // @ts-check
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
-import { LABEL_STYLE_CHOICES, labelStyleForMode } from '../mode-profiles.js';
+import { LABEL_STYLE_CHOICES, labelStyleForMode, readGcContentMode } from '../mode-profiles.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
 import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
@@ -21,6 +21,9 @@ import {
 import { readDefinitionLineStyles } from './definition-line-style-state.js';
 import { readDepthTracks } from './depth-track-state.js';
 import { readFeatureDensityTracks } from './feature-density-tracks.js';
+import {
+  CIRCULAR_RECORD_LAYOUTS, ONE_CIRCLE_ADV_DEFAULTS, oneCircleGapInRange, oneCircleMinLengthInRange, readOneCircleLeft
+} from './one-circle-layout.js';
 import { IMPORTED_COMPARISON_ACTIONS } from './imported-comparison-intent.js';
 import { readCircularPlotTitlePosition } from './layout-preferences.js';
 import { isPlainObject } from './losat-cache.js';
@@ -620,6 +623,11 @@ const advRows = (mode) => Object.freeze([
   row('multi_record_column_gap_ratio', numberOr(isNonNegative, 0.10)),
   row('multi_record_row_gap_ratio', numberOr(isNonNegative, 0.05)),
   row('multi_record_positions', readMultiRecordPositions),
+  row('circular_record_layout', textChoice(CIRCULAR_RECORD_LAYOUTS, ONE_CIRCLE_ADV_DEFAULTS.circular_record_layout)),
+  row('one_circle_gap_degrees', numberOr(oneCircleGapInRange, ONE_CIRCLE_ADV_DEFAULTS.one_circle_gap_degrees)),
+  row('one_circle_min_length', numberOr(oneCircleMinLengthInRange, ONE_CIRCLE_ADV_DEFAULTS.one_circle_min_length)),
+  row('one_circle_record_band', trueUnlessFalse),
+  row('one_circle_left', readOneCircleLeft),
   row('feature_overlap_tolerance_bp', numberOr((numeric) => Number.isSafeInteger(numeric) && numeric >= 0, DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP)),
   row('plot_title_font_size', positiveNumberOrNull),
   row('scale_font_size', positiveNumberOrNull),
@@ -643,7 +651,7 @@ const advRows = (mode) => Object.freeze([
   row('depth_tick_font_size', positiveNumberOrNull),
   { field: 'depth_tracks', read: (value, adv) => readDepthTracks(value, adv), inPlace: true },
   row('feature_density_tracks', readFeatureDensityTracks),
-  row('gc_content_mode', textChoice(['percent', 'deviation'], 'deviation')),
+  row('gc_content_mode', readGcContentMode),
   row('gc_content_show_axis', trueUnlessFalse),
   row('gc_content_show_ticks', trueUnlessFalse),
   row('gc_content_axis_labels', readScalarAxisLabels),

@@ -2816,9 +2816,9 @@
                                         :value="option.value"
                                     >{{ option.label }}</option>
                                 </select>
-                                <p v-if="!form.multi_record_canvas && circularRecordPresentationError" class="mt-1 text-[9px] text-red-600">{{ circularRecordPresentationError }}</p>
-                                <button v-if="form.multi_record_canvas" type="button" data-history-ignore @click="showCircularCanvasSetting" class="mt-1 text-xs text-blue-600">{{ t('Show Multi-Record Canvas setting') }}</button>
-                                <p v-if="!form.multi_record_canvas && circularRecordDiscoveryState.status === 'ready' && !circularSingleRecordPresentationEnabled" class="ui-hint mt-1">{{ t('Select one record to edit crop, orientation, and title lines.') }}</p>
+                                <p v-if="circularRecordLayout === 'separate' && circularRecordPresentationError" class="mt-1 text-[9px] text-red-600">{{ circularRecordPresentationError }}</p>
+                                <button v-if="circularRecordLayout !== 'separate'" type="button" data-history-ignore @click="showCircularCanvasSetting" class="mt-1 text-xs text-blue-600">{{ circularRecordLayout === 'one_circle' ? t('Show One circle setting') : t('Show Multi-Record Canvas setting') }}</button>
+                                <p v-if="circularRecordLayout === 'separate' && circularRecordDiscoveryState.status === 'ready' && !circularSingleRecordPresentationEnabled" class="ui-hint mt-1">{{ t('Select one record to edit crop, orientation, and title lines.') }}</p>
                             </div>
                         </section>
                         <section v-if="recordDisplayControls.rows.value.length" :aria-label="t('Record rotation')" class="space-y-2">
@@ -2831,7 +2831,7 @@
                                 {{ t('Single-record crop, orientation and titles') }}
                             </summary>
                             <div class="pt-2 space-y-2">
-                                <p v-if="!circularSingleRecordPresentationEnabled" id="circular-record-presentation-reason" class="ui-hint">{{ form.multi_record_canvas ? t('Available when Multi-Record Canvas is off and one record is selected.') : t('Available when one record is selected.') }}</p>
+                                <p v-if="!circularSingleRecordPresentationEnabled" id="circular-record-presentation-reason" class="ui-hint">{{ circularRecordLayout === 'one_circle' ? t('Available when One circle is off and one record is selected.') : circularRecordLayout === 'grid' ? t('Available when Multi-Record Canvas is off and one record is selected.') : t('Available when one record is selected.') }}</p>
                                 <div class="grid grid-cols-1 gap-2">
                                     <div data-setting="record-names" class="grid grid-cols-1 gap-2">
                                     <div>
@@ -5122,8 +5122,12 @@
                                     </label>
 
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :title="t('Place multiple records on one shared circular canvas.')">
-                                        <input type="checkbox" v-model="form.multi_record_canvas" @change="changeCircularMultiRecordCanvas()" data-circular-canvas-setting class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                        <input type="checkbox" :checked="circularRecordLayout === 'grid'" @change="chooseCircularRecordLayout($event.target.checked ? 'grid' : 'separate')" data-circular-canvas-setting class="form-checkbox" :disabled="!semanticMutationAvailable">
                                         <span>{{ t('Multi-Record Canvas') }}</span>
+                                    </label>
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :title="t('Draw all records one after another on one circle.')">
+                                        <input type="checkbox" :checked="circularRecordLayout === 'one_circle'" @change="chooseCircularRecordLayout($event.target.checked ? 'one_circle' : 'left')" data-circular-one-circle-setting class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                        <span>{{ t('One circle') }}</span>
                                     </label>
                                     <div data-setting="track-visibility" class="grid grid-cols-1 gap-y-1">
                                         <div class="flex items-center gap-2">
@@ -5515,7 +5519,22 @@
                                     </div>
                                 </div>
 
-                                <div v-if="form.multi_record_canvas" data-capture="multi-record-canvas-controls" data-setting="multi-record-layout" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
+                                <div v-if="circularRecordLayout === 'one_circle'" data-capture="one-circle-controls" data-setting="multi-record-layout" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
+                                    <div>
+                                        <span class="input-label text-[10px] mb-1">{{ t('Gap between records (degrees)') }} <setting-note id="one-circle-gap-timing" setting="multi-record-layout"></setting-note></span>
+                                        <input type="number" :min="ONE_CIRCLE_LIMITS.gapDegrees.minimum" :max="ONE_CIRCLE_LIMITS.gapDegrees.maximum" step="0.1" v-model.number="adv.one_circle_gap_degrees" class="form-input py-1 text-xs" :aria-label="t('Gap between records (degrees)')" aria-describedby="one-circle-gap-timing" :disabled="!semanticMutationAvailable">
+                                    </div>
+                                    <div>
+                                        <span class="input-label text-[10px] mb-1">{{ t('Shortest record drawn (bp)') }} <help-tip id="help-one-circle-min-length" :text="t('Shorter records are counted in the figure, not drawn.')"></help-tip></span>
+                                        <input type="number" :min="ONE_CIRCLE_LIMITS.minLength.minimum" step="1" v-model.number="adv.one_circle_min_length" class="form-input py-1 text-xs" :aria-label="t('Shortest record drawn (bp)')" aria-describedby="help-one-circle-min-length" :disabled="!semanticMutationAvailable">
+                                    </div>
+                                    <label class="col-span-2 flex items-center gap-2 text-xs select-none">
+                                        <input type="checkbox" v-model="adv.one_circle_record_band" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                        <span>{{ t('Record band') }}</span>
+                                        <help-tip id="help-one-circle-record-band" :text="t('A band outside the tracks names each record.')"></help-tip>
+                                    </label>
+                                </div>
+                                <div v-if="circularRecordLayout === 'grid'" data-capture="multi-record-canvas-controls" data-setting="multi-record-layout" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
                                     <div>
                                         <span class="input-label text-[10px] mb-1">{{ t('Record Size Mode') }} <setting-note id="circular-record-size-mode-timing" setting="multi-record-layout"></setting-note> <help-tip id="help-circular-record-size-mode" :text="t('Scale circles by record length on multi-record canvas.')"></help-tip></span>
                                         <select v-model="adv.multi_record_size_mode" class="form-input py-1 text-xs" :aria-label="t('Record Size Mode')" aria-describedby="help-circular-record-size-mode circular-record-size-mode-timing" :disabled="!semanticMutationAvailable">

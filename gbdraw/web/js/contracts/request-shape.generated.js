@@ -268,16 +268,24 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
             Object.freeze({kind: "array", items: Object.freeze({kind: "string"})}),
             Object.freeze({kind: "null"})
           ])
-        })
+        }),
+        recordLayout: Object.freeze({kind: "literal", values: Object.freeze(["grid", "one_circle"])}),
+        oneCircleGapDegrees: Object.freeze({kind: "number", minimum: 0, maximum: 360}),
+        oneCircleMinLength: Object.freeze({kind: "integer", minimum: 0}),
+        oneCircleRecordBand: Object.freeze({kind: "boolean"})
       }),
-      optional: Object.freeze([]),
+      optional: Object.freeze(["oneCircleGapDegrees", "oneCircleMinLength", "oneCircleRecordBand", "recordLayout"]),
       open: false,
       defaults: Object.freeze({
         multiRecordColumnGapRatio: 0.1,
         multiRecordMinRadiusRatio: 0.55,
         multiRecordPositions: null,
         multiRecordRowGapRatio: 0.05,
-        multiRecordSizeMode: "auto"
+        multiRecordSizeMode: "auto",
+        oneCircleGapDegrees: 1.0,
+        oneCircleMinLength: 1000,
+        oneCircleRecordBand: true,
+        recordLayout: "grid"
       })
     }),
     CanonicalLinearLayout: Object.freeze({

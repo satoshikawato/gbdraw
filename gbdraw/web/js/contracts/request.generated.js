@@ -113,6 +113,10 @@
  * @property {number} multiRecordColumnGapRatio
  * @property {number} multiRecordRowGapRatio
  * @property {string[] | null} multiRecordPositions
+ * @property {'grid' | 'one_circle'} [recordLayout]
+ * @property {number} [oneCircleGapDegrees]
+ * @property {number} [oneCircleMinLength]
+ * @property {boolean} [oneCircleRecordBand]
  */
 /**
  * @typedef {object} CanonicalLinearLayout

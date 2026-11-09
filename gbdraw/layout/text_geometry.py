@@ -54,6 +54,15 @@ def anchor_x_bounds(width_px: float, text_anchor: object) -> tuple[float, float]
     return -0.5 * width, 0.5 * width
 
 
+def reads_upside_down(angle_deg: float) -> bool:
+    """Whether text written clockwise along a circle with its middle at ``angle_deg`` (the SVG frame: 0 at 3
+    o'clock, positive clockwise) reads upside down: its middle lies on the lower half, between 3 and 9 o'clock.
+    There the record band names turn a half turn and the scalar axes' range labels run anticlockwise, so both
+    read upright."""
+
+    return 0.0 < angle_deg % 360.0 < 180.0
+
+
 def rotate_point(point: Point, rotation_deg: float) -> Point:
     """Rotate a point around the origin in SVG's clockwise-positive coordinates."""
     radians = math.radians(float(rotation_deg))
@@ -653,6 +662,7 @@ __all__ = [
     "oriented_boxes_intersect",
     "oriented_text_box",
     "point_in_convex_polygon",
+    "reads_upside_down",
     "rotate_point",
     "segment_intersects_polygon",
     "segments_intersect",

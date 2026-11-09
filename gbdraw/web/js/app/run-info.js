@@ -844,7 +844,8 @@ const validateCurrentSemanticCoverage = (request) => {
     ? ['recordGapPx', 'multiRecordPositions', 'recordTranslations', 'similarityAlignment']
     : [
         'multiRecordSizeMode', 'multiRecordMinRadiusRatio', 'multiRecordColumnGapRatio',
-        'multiRecordRowGapRatio', 'multiRecordPositions'
+        'multiRecordRowGapRatio', 'multiRecordPositions', 'recordLayout', 'oneCircleGapDegrees',
+        'oneCircleMinLength', 'oneCircleRecordBand'
       ];
   coverObject(coverage, request.layout || {}, 'layout', layoutFields);
   if (request.mode === 'linear') {
@@ -2181,6 +2182,14 @@ const appendLayoutOptions = (args, request, recordsTableUsed = false) => {
     return;
   }
   if (Object.keys(layout).length === 0) return;
+  if (layout.recordLayout === 'one_circle') {
+    // The command's own option for the layout; the grid's settings do not apply to it.
+    args.push('--one_circle');
+    appendOption(args, '--one_circle_gap_degrees', layout.oneCircleGapDegrees);
+    appendOption(args, '--one_circle_min_length', layout.oneCircleMinLength);
+    if (layout.oneCircleRecordBand === false) args.push('--one_circle_no_record_band');
+    return;
+  }
   args.push('--multi_record_canvas');
   appendOption(args, '--multi_record_size_mode', layout.multiRecordSizeMode);
   appendOption(args, '--multi_record_min_radius_ratio', layout.multiRecordMinRadiusRatio);

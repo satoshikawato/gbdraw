@@ -424,27 +424,42 @@ def _add_retired_option_args(
         )
 
 
+class _TypedToggleAction(argparse.Action):
+    """A track toggle that also notes it was typed (``<dest>_typed``), so a layout with defaults of its own (one
+    circle) still yields to what the user typed."""
+
+    def __init__(self, option_strings, dest, *, const: bool, help: str | None = None) -> None:
+        super().__init__(option_strings, dest, nargs=0, const=const, default=not const, help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
+        setattr(namespace, self.dest, self.const)
+        setattr(namespace, f"{self.dest}_typed", True)
+
+
 def _add_gc_skew_toggle_args(
     parser: argparse.ArgumentParser,
     *,
     show_gc_default: bool,
     show_skew_default: bool,
+    typed_dests: frozenset[str] = frozenset(),
 ) -> None:
+    """``--gc``/``--no-gc`` and ``--skew``/``--no-skew``; a toggle whose dest is in ``typed_dests`` also notes
+    whether it was typed (``_TypedToggleAction``)."""
+
     for option_name, destination, label in _TRACK_VISIBILITY_FLAG_SPECS:
         group = parser.add_mutually_exclusive_group()
-        group.add_argument(
-            f'--{option_name}',
-            dest=destination,
-            help=f'Show the {label} track.',
-            action='store_true')
-        group.add_argument(
-            f'--no-{option_name}',
-            dest=destination,
-            help=f'Hide the {label} track.',
-            action='store_false')
+        typed = destination in typed_dests
+        for option, shown, verb in ((f'--{option_name}', True, 'Show'), (f'--no-{option_name}', False, 'Hide')):
+            group.add_argument(
+                option,
+                dest=destination,
+                help=f'{verb} the {label} track.',
+                **({'action': _TypedToggleAction, 'const': shown} if typed else {'action': 'store_true' if shown else 'store_false'}),
+            )
     parser.set_defaults(
         show_gc=bool(show_gc_default),
         show_skew=bool(show_skew_default),
+        **{f"{dest}_typed": False for dest in sorted(typed_dests)},
     )
 
 

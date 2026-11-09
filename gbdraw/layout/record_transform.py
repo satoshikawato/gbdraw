@@ -17,7 +17,7 @@ from typing import Literal
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.record_metadata import _read_coord_map, _source_period
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_coordinates import CirclePlace, RecordDisplayTransform
 
 DetectedTopology = Literal["circular", "linear", "unknown"]
 
@@ -74,3 +74,11 @@ def spans_may_cross_origin(record: SeqRecord, transform: RecordDisplayTransform)
     and no region was applied to it (a crop has no origin, even one that keeps every base)."""
 
     return transform.is_circular and not bool(record.annotations.get("gbdraw_region_applied"))
+
+
+def circular_display_length(record: SeqRecord, place: RecordDisplayTransform | CirclePlace | None) -> int:
+    """The length a Circular drawing reads as the record's: the display length of the circle the record shares
+    with other records (``place``, or the transform's ``circle``), else the record's own."""
+
+    circle = place.circle if isinstance(place, RecordDisplayTransform) else place
+    return len(record.seq) if circle is None else circle.length

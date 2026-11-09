@@ -158,7 +158,8 @@ class RecordAxisInput:
 
         transform = self.transform
         return {
-            "anchorBase": transform.display_index_to_source_base(0),
+            # The first drawn base (on a circle several records share, at the record's offset on it).
+            "anchorBase": transform.display_index_to_source_base(0 if transform.circle is None else transform.circle.offset),
             "recordBase": transform.source_base,
             "step": transform.source_step,
             "sourceLength": int(transform.length),
@@ -178,13 +179,19 @@ def circular_axis_geometry(
     source = drawn.source()
     drawn_length = source["drawnLength"]
     start_angle = position_angle(0, drawn_length)
+    degrees_per_bp = position_angle(1, drawn_length) - start_angle
+    place = drawn.transform.circle
+    if place is not None:
+        # A record that shares its circle starts at its offset on it, at the circle's scale.
+        start_angle = position_angle(place.offset, place.length)
+        degrees_per_bp = position_angle(1, place.length) - position_angle(0, place.length)
     return {
         "kind": "circular",
         "radiusPx": float(radius_px),
         "bandInnerPx": min((band["innerPx"] for band in feature_bands), default=float(radius_px)),
         "bandOuterPx": max((band["outerPx"] for band in feature_bands), default=float(radius_px)),
         "startAngleDeg": start_angle,
-        "degreesPerBp": position_angle(1, drawn_length) - start_angle,
+        "degreesPerBp": degrees_per_bp,
         "source": source,
     }
 

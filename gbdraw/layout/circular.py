@@ -3,10 +3,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence, TypeAlias
 
 from ._immutable import freeze_layout_mapping
+from .record_coordinates import CirclePlace
 
 if TYPE_CHECKING:
     from ..config.models import CircularRenderProfile
@@ -305,22 +306,31 @@ class CircularFeatureRenderContext:
     """What a record's feature group reads of its render context (the ``circular_record_content`` key).
 
     The feature group places features and embedded labels by the feature lanes
-    alone: the other slots and the definition band do not reach it.
+    alone: the other slots and the definition band do not reach it. ``circle`` is the record's place on a circle
+    it shares with other records (its angles read the circle's length), ``None`` when it has the circle to itself.
     """
 
     profile: CircularRenderProfile
     track_preset: str
     feature_layout: CircularFeatureLayout | None
+    circle: CirclePlace | None = None
 
 
 @dataclass(frozen=True)
 class CircularRecordRenderContext:
-    """Resolved layout state required to render one Circular record."""
+    """Resolved layout state required to render one Circular record; ``circle`` as in
+    ``CircularFeatureRenderContext`` (``on_circle`` gives each record of a shared circle its own)."""
 
     profile: CircularRenderProfile
     track_preset: str
     feature_lane_direction: CircularFeatureLaneDirection
     radial_layout: CircularRadialLayout
+    circle: CirclePlace | None = None
+
+    def on_circle(self, circle: CirclePlace | None) -> CircularRecordRenderContext:
+        """This context for the record drawn at ``circle``."""
+
+        return self if circle == self.circle else replace(self, circle=circle)
 
     @property
     def feature_layout(self) -> CircularFeatureLayout | None:
@@ -328,7 +338,7 @@ class CircularRecordRenderContext:
 
     @property
     def feature_context(self) -> CircularFeatureRenderContext:
-        return CircularFeatureRenderContext(self.profile, self.track_preset, self.feature_layout)
+        return CircularFeatureRenderContext(self.profile, self.track_preset, self.feature_layout, self.circle)
 
 
 def band_union(bands: Sequence[RadialBand]) -> RadialBand | None:

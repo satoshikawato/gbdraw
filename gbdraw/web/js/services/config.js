@@ -101,6 +101,7 @@ import {
   featureEditsOverProjection,
   linearDefinitionVisibilityOf,
   liveSettingNoteApplies,
+  canvasChangeIsOneCircle,
   liveTrackHideDrawing,
   applyLiveResourceWrites,
   applyLiveWebFileWrites,
@@ -4783,6 +4784,18 @@ export const committedSettingNotePredicate = (item = null) => {
   const resources = committedCanonicalSession?.resources;
   const undoneHides = state.undoneTrackHides.value.get(drawing.id);
   return (requestPath) => liveSettingNoteApplies(request, requestPath, drawing, inputs, resources, item, undoneHides);
+};
+
+/**
+ * Whether the canvas change that waits for Generate in the drawing whose
+ * artifact is displayed enters or leaves One circle (`canvasChangeIsOneCircle`);
+ * false without a committed request. The app setup gives it to `SettingNote`
+ * (`SETTING_NOTE_ONE_CIRCLE_CHANGE`).
+ * @returns {boolean}
+ */
+export const committedOneCircleChange = () => {
+  const request = getCommittedCanonicalRenderRequest();
+  return request !== null && canvasChangeIsOneCircle(request, state.drawingOf(state.generatedDrawingId.value));
 };
 
 /**

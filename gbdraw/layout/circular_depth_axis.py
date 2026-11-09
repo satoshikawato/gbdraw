@@ -21,6 +21,7 @@ from gbdraw.tracks.parsing import depth_slot_track_index
 from .circular import RadialBand
 from .circular_ink import CircularInk, CircularInkPolygon, CircularInkRing
 from .spatial import Aabb
+from .text_geometry import reads_upside_down
 
 
 DEPTH_AXIS_STROKE_WIDTH_PX = 0.8
@@ -212,15 +213,27 @@ RANGE_LABEL_TOP_INSET_LINES = 0.2
 RANGE_LABEL_BOTTOM_INSET_LINES = 1.2
 
 
+class RangeLabelPath(NamedTuple):
+    """The circle arc a range label's text follows from the arc's start: its radius and its start and span in
+    degrees (the SVG frame, positive clockwise; negative, anticlockwise)."""
+
+    radius_px: float
+    start_deg: float
+    span_deg: float
+
+
 class CircularRangeLabel(NamedTuple):
     """Where a Circular scalar axis draws its range label: ``text`` in ``font_size`` along the circle of
-    ``baseline_px`` from ``start_rad`` clockwise of the axis at 12 o'clock, on a path that ends at 3 o'clock."""
+    ``baseline_px`` from ``start_rad`` clockwise of the axis at 12 o'clock, on a path that ends at ``path_end_rad``:
+    3 o'clock for an axis of a record alone, the end of the record that holds it on a shared circle
+    (``on_shared_circle``)."""
 
     text: str
     font_size: float
     baseline_px: float
     outer_px: float
     start_rad: float
+    path_end_rad: float = 0.5 * math.pi
 
     @property
     def start_deg(self) -> float:
@@ -228,16 +241,67 @@ class CircularRangeLabel(NamedTuple):
 
     @property
     def path_span_deg(self) -> float:
-        return 90.0 - self.start_deg
+        return math.degrees(self.path_end_rad) - self.start_deg
 
-    def bounds(self, font_family: str) -> Aabb:
-        """The box the label paints in ``font_family``, cut at 3 o'clock where its path ends."""
+    def text_end_rad(self, font_family: str) -> float:
+        """Where the label's text would end in ``font_family``, clockwise of 12 o'clock, on a path long enough."""
 
         width, _ = calculate_svg_bbox_dimensions(self.text, font_family, self.font_size)
-        end = min(self.start_rad + float(width) / self.baseline_px, 0.5 * math.pi)
+        return self.start_rad + float(width) / self.baseline_px
+
+    def end_rad(self, font_family: str) -> float:
+        """Where the label's text ends in ``font_family``, clockwise of 12 o'clock, cut where its path ends."""
+
+        return min(self.text_end_rad(font_family), self.path_end_rad)
+
+    def on_shared_circle(self, record_turns: Sequence[tuple[float, float]], font_family: str) -> CircularRangeLabel | None:
+        """The label on a circle several records share, whose arcs are ``record_turns`` (turns clockwise from 12
+        o'clock, in drawing order): on the first record whose arc holds the whole text, past the axis's ticks or a
+        label gap past the record's start, and never over a gap between records; none when no record holds it."""
+
+        width = self.text_end_rad(font_family) - self.start_rad
+        inset = SCALAR_AXIS_LABEL_GAP_PX / self.baseline_px
+        for start_turn, end_turn in record_turns:
+            start = max(self.start_rad, start_turn * 2.0 * math.pi + inset)
+            end = end_turn * 2.0 * math.pi
+            if start + width <= end:
+                return self._replace(start_rad=start, path_end_rad=end)
+        return None
+
+    def _letters_band(self) -> tuple[float, float]:
+        """The radii the label's letters lie between: from 1.2 to 0.2 lines inside the band's outer edge."""
+
         top = self.outer_px - RANGE_LABEL_TOP_INSET_LINES * self.font_size
-        bottom = max(0.0, self.outer_px - RANGE_LABEL_BOTTOM_INSET_LINES * self.font_size)
-        return Aabb(bottom * math.sin(self.start_rad), -top, top * math.sin(end), -bottom * math.cos(end))
+        return max(0.0, self.outer_px - RANGE_LABEL_BOTTOM_INSET_LINES * self.font_size), top
+
+    def text_path(self, font_family: str) -> RangeLabelPath:
+        """The arc the label's text follows so that it reads upright (``reads_upside_down`` at the text's
+        middle): clockwise from its start to its path's end; or, on the lower half, anticlockwise from where its
+        text ends back to 12 o'clock, so that the text ends at its start, on the baseline mirrored in its letters'
+        band so the letters stay where ``ink`` has them. The arc runs on past the text either way, so a renderer
+        that measures the text a little wider still draws every letter."""
+
+        middle_deg = -90.0 + math.degrees(0.5 * (self.start_rad + self.end_rad(font_family)))
+        if not reads_upside_down(middle_deg):
+            return RangeLabelPath(self.baseline_px, -90.0 + self.start_deg, self.path_span_deg)
+        bottom, top = self._letters_band()
+        radius = bottom + top - self.baseline_px
+        width, _ = calculate_svg_bbox_dimensions(self.text, font_family, self.font_size)
+        text_end_deg = math.degrees(self.start_rad + float(width) / radius)
+        return RangeLabelPath(radius, -90.0 + text_end_deg, -text_end_deg)
+
+    def ink(self, font_family: str) -> CircularInk:
+        """What the label paints in ``font_family``: its box while it lies between 12 and 3 o'clock, else the
+        band of the circle it spans."""
+
+        end = self.end_rad(font_family)
+        bottom, top = self._letters_band()
+        if end <= 0.5 * math.pi:
+            return CircularInkPolygon.box(
+                Aabb(bottom * math.sin(self.start_rad), -top, top * math.sin(end), -bottom * math.cos(end))
+            )
+        turn = 2.0 * math.pi
+        return CircularInkRing(RadialBand(bottom, top), self.start_rad / turn, end / turn)
 
 
 def circular_range_label(text: str | None, outer_px: float, *, font_size: float) -> CircularRangeLabel | None:
@@ -261,14 +325,15 @@ def scalar_axis_ink(
     font_size: float,
     font_family: str,
     range_label: CircularRangeLabel | None = None,
+    baseline_circle: bool = True,
 ) -> tuple[CircularInk, ...]:
-    """What a Circular scalar axis paints: the baseline circle, the axis line up at the top of the circle from
+    """What a Circular scalar axis paints: the baseline circle (unless ``baseline_circle`` is false), the axis line up at the top of the circle from
     the baseline to ``outer_px``, its ticks, and their labels (``text-anchor`` start, ``dominant-baseline``
     central, in the family they inherit)."""
 
     half = 0.5 * DEPTH_AXIS_STROKE_WIDTH_PX
     inks: list[CircularInk] = [
-        CircularInkRing(RadialBand(baseline_px - half, baseline_px + half)),
+        *([CircularInkRing(RadialBand(baseline_px - half, baseline_px + half))] if baseline_circle else []),
         CircularInkPolygon.segment((0.0, -baseline_px), (0.0, -outer_px), half),
     ]
     for tick in ticks:
@@ -282,12 +347,13 @@ def scalar_axis_ink(
                 )
             )
     if range_label is not None:
-        inks.append(CircularInkPolygon.box(range_label.bounds(font_family)))
+        inks.append(range_label.ink(font_family))
     return tuple(inks)
 
 
 __all__ = [
     "CircularRangeLabel",
+    "RangeLabelPath",
     "CircularScalarAxes",
     "circular_range_label",
     "DepthSlotWidth",
