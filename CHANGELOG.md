@@ -213,12 +213,12 @@ write-up of a release.
   when loaded and generated in the Web app: for example
   `regions:annotations@set_id=regions,side=outside` (Circular) or `side=above`
   (Linear) after the features row was drawn inside or below it. Load now
-  places each row on the side the CLI drew it, and Generate draws the CLI's
-  figure. An Annotations row with no `side=` is read as outside (above), and a
-  Linear features row with no `side=` as below, as the CLI draws them.
-  An Overlay Annotations row keeps the order the CLI paints it in against
-  the rows of its `z` it covers and the overlays of its `z` it meets
-  (OV-3079, OV-3155).
+  places each row on the side the CLI drew it. An Annotations row with no
+  `side=` is read as outside (above), and a Linear features row with no
+  `side=` as below, as the CLI draws them. The Web lists the rows by side, so
+  where the CLI's order of writing differs, a Circular Legend can list its
+  track rows in another order, and rows of one `z` that overlap can paint in
+  another order (OV-3079, OV-3155).
 - Fixed (Web app): a Circular Session saved by the CLI with
   `--circular_track_axis_index` and a `features:features` slot with no
   `side=` or `lane_direction=` loaded with the lanes of the track type (split
