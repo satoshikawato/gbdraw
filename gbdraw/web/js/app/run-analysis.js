@@ -5135,13 +5135,13 @@ export const createRunAnalysis = ({
         slot: 'generatedFiles.canonical_render_session',
         kind: 'generated'
       }]]);
+      // The builder keeps the request's resources: an inline resource's base64
+      // text, and for an input file only its reader, whose bytes stay in the
+      // File that the History file store counts (OV-3010).
       recordDeferredGeneratedCliFile(canonicalReplayPath, buildCanonicalReplayText, {
         name: canonicalReplayName,
         slot: 'generatedFiles.canonical_render_session',
-        retainedBytes:
-          canonicalResourceDeclaredBytes
-          + canonicalResourceBase64Characters * 2
-          + 65_536
+        retainedBytes: canonicalResourceBase64Characters * 2 + 65_536
       });
       /** @type {Awaited<ReturnType<typeof buildSourceRecipe>> | null} */
       let sourceRecipe = null;

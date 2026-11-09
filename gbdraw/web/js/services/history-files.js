@@ -139,13 +139,18 @@ export const createInputFileStore = ({ sourceOf = () => null, onHold = () => {},
     });
   };
 
+  // The views of one stored resource share its bytes, so they count once, by
+  // their `sourceId` (OV-3018).
   /** @param {Iterable<string> | null | undefined} fileIds */
   const estimateBytes = (fileIds) => {
-    const uniqueIds = fileIds instanceof Set ? fileIds : new Set(fileIds || []);
+    /** @type {Map<string, number>} */
+    const bytesBySource = new Map();
+    for (const fileId of fileIds || []) {
+      const stored = files.get(fileId);
+      if (stored) bytesBySource.set(stored.ref.sourceId, stored.file.size || 0);
+    }
     let total = 0;
-    uniqueIds.forEach((fileId) => {
-      total += files.get(fileId)?.file?.size || 0;
-    });
+    bytesBySource.forEach((bytes) => { total += bytes; });
     return total;
   };
 

@@ -164,7 +164,7 @@ assert.equal(firstIdentity.metadataBytes, metadataBytes.byteLength + catalogByte
 assert.equal(
   firstIdentity.retainedBytes,
   encoder.encode(fullDocument).byteLength
-    + (metadataBytes.byteLength + catalogBytes.byteLength) * 2
+    + metadataBytes.byteLength + catalogBytes.byteLength
     + encoder.encode('out.svg').byteLength
 );
 

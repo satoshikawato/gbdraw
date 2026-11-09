@@ -90,6 +90,20 @@ test('the refs of two views of one stored resource share its source; other files
   assert.equal(other.sourceId, other.fileId);
 });
 
+// OV-3018: a Circular ring Generate binds its comparison FASTA as two views of
+// one stored resource (the ring sequence and its source); the History byte
+// budget counts their bytes once.
+test('the History file estimate counts the views of one stored resource once', () => {
+  const descriptor = {};
+  const store = createInputFileStore({ sourceOf: (file) => file.backing || null });
+  const first = store.registerFile({ name: 'ring.fna', size: 9, backing: descriptor });
+  const second = store.registerFile({ name: 'ring.fna', size: 9, backing: descriptor });
+  const other = store.registerFile({ name: 'other.gb', size: 5 });
+  assert.equal(store.estimateBytes([first.fileId, second.fileId]), 9);
+  assert.equal(store.estimateBytes(new Set([first.fileId, second.fileId, other.fileId])), 14);
+  assert.equal(store.estimateBytes([second.fileId, 'file-none']), 9);
+});
+
 test('a Load installs its Files as refs at install, and a rolled-back ref stays bound', () => {
   const store = createInputFileStore();
   const kept = store.registerFile(fileNamed('kept.gb'));

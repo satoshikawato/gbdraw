@@ -246,6 +246,12 @@ write-up of a release.
   settings; they now show that step's own. A figure fitted to its requested
   size after an Undo, or after Reset all drawings, is kept, so a later Undo or
   Redo back to it shows it at once instead of fitting it again.
+- Fixed (Web app): after a large figure, such as a bacterial genome with
+  comparison rings, every Generate discarded all older Undo steps. The Undo
+  history counted each such figure at almost twice the memory it keeps, and
+  counted an input file once for each place that names it. It now counts what
+  each step keeps, so the steps before the last Generate stay undoable until
+  the memory limit is reached.
 - Changed: the command line writes its progress messages, warnings, and errors
   to standard error, and standard output stays empty while it draws. A script
   that saved the messages with `> log.txt` now needs `2> log.txt`. Each log
