@@ -880,6 +880,26 @@
           "kind": "count-map"
         }
       ]
+    },
+    {
+      "id": "SEQUENCE-COPIES",
+      "heading": "Whole record sequence copies",
+      "rulesPath": "docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md",
+      "guards": [
+        {
+          "path": "tests/test_record_sequence_copies.py",
+          "rootCause": "new",
+          "job": "core-pr",
+          "retireWhen": "never"
+        }
+      ],
+      "allowlists": [
+        {
+          "path": "tests/test_record_sequence_copies.py",
+          "symbol": "SITES",
+          "kind": "py-count-map"
+        }
+      ]
     }
   ]
 }

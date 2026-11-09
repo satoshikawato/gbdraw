@@ -116,6 +116,7 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
 | [SVG11-VOCABULARY](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#svg-11-vocabulary) | `tests/test_reference_svg_vocabulary.py` | `core-pr` | `core` | never |
 | [SCENARIO-DECLARATION](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#scenario-declarations) | `tests/test_scenario_declarations.py` | `core-pr` | `core` | never |
 | [AXE-VIOLATIONS](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#axe-violations) | `tests/web/axe-accessibility.playwright.spec.js` | `playwright-functional` | `playwright-functional` | never |
+| [SEQUENCE-COPIES](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#whole-record-sequence-copies) | `tests/test_record_sequence_copies.py` | `core-pr` | `core` | never |
 
 ### Allowlists
 
@@ -152,6 +153,7 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
 | [SVG11-VOCABULARY](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#svg-11-vocabulary) | `tests/test_reference_svg_vocabulary.py` | `SVG11_EXTENSIONS` | py-set |
 | [SCENARIO-DECLARATION](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#scenario-declarations) | `tests/test_scenario_declarations.py` | `UNDECLARED_CLI_OPTIONS` | py-set |
 | [AXE-VIOLATIONS](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#axe-violations) | `tests/web/axe-accessibility.playwright.spec.js` | `AXE_VIOLATIONS` | count-map |
+| [SEQUENCE-COPIES](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#whole-record-sequence-copies) | `tests/test_record_sequence_copies.py` | `SITES` | py-count-map |
 
 ## Product Contract records and the tests that cite them
 
