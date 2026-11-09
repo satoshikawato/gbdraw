@@ -203,7 +203,7 @@ const fileNameStem = (name) => (name.includes('.') ? name.slice(0, name.lastInde
  * with a FASTA of its file-name stem (`a.gff3` and `a.fasta`); a card stands
  * where its first file stood, and a file with no partner is a card with the
  * other slot empty, as a Linear card shows it (circular-multi-file D-07).
- * @template {{ name?: string }} F
+ * @template {{ name?: string } | null | undefined} F A chosen file (`InputFileCandidate`) or its ref; a file with no name is a FASTA.
  * @param {unknown} inputType
  * @param {readonly F[]} files
  * @returns {PickedCardFiles<F>[]}
@@ -215,7 +215,7 @@ export const pickedFileCards = (inputType, files) => {
   /** @type {{ stem: string, slots: PickedCardFiles<F> }[]} */
   const cards = [];
   for (const file of files) {
-    const name = String(file.name || '').replace(COMPRESSED_NAME, '');
+    const name = String(file?.name || '').replace(COMPRESSED_NAME, '');
     const slot = GFF3_NAME.test(name) ? spec.primary : paired;
     const stem = fileNameStem(name);
     const partner = cards.find((card) => card.stem === stem && !card.slots[slot]);

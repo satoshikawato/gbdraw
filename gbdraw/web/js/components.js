@@ -891,6 +891,37 @@ export const refuseStrayFileDrop = (event) => {
   event.dataTransfer.dropEffect = 'none';
 };
 
+/**
+ * The drop of a FileUploader that takes drops (`drop`): a file dragged over the
+ * zone shows it as a press would, and the dropped files are one selection of
+ * them; a drop elsewhere opens nothing (`refuseStrayFileDrop`).
+ * @param {FileUploaderProps} props
+ * @param {{ readonly value: boolean }} uploadAvailable
+ * @param {(files: File[], pickTop: null) => void} select
+ */
+const useFileDrop = (props, uploadAvailable, select) => {
+  const dragging = ref(false);
+  /** @param {DragEvent} event */
+  const dragOver = (event) => {
+    if (!props.drop || !uploadAvailable.value || !event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    dragging.value = true;
+  };
+  /** @param {DragEvent} event */
+  const dropFiles = (event) => {
+    dragging.value = false;
+    if (!props.drop || !uploadAvailable.value) return undefined;
+    event.preventDefault();
+    const busy = state.sessionOperationAvailability();
+    if (busy) return busy;
+    const dropped = Array.from(event.dataTransfer?.files || []);
+    if (dropped.length) select(dropped, null);
+    return undefined;
+  };
+  return { dragging, dragOver, dropFiles };
+};
+
 // `inspectionFailed` is the slot's existing inspection status, passed by the
 // parent that shows its message (for example "No records were found"): a
 // selected file whose inspection failed is not shown as ready (UI-08).
@@ -1006,27 +1037,7 @@ export const FileUploader = {
       select(Array.from(e.target.files || []), pickTopNow());
       e.target.value = '';
     };
-    // A zone that takes drops (`drop`) shows a file dragged over it as a press would, and
-    // takes the dropped files as one selection; a drop elsewhere opens nothing (`refuseStrayFileDrop`).
-    const dragging = ref(false);
-    /** @param {DragEvent} event */
-    const dragOver = (event) => {
-      if (!props.drop || !uploadAvailable.value || !event.dataTransfer?.types.includes('Files')) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'copy';
-      dragging.value = true;
-    };
-    /** @param {DragEvent} event */
-    const dropFiles = (event) => {
-      dragging.value = false;
-      if (!props.drop || !uploadAvailable.value) return undefined;
-      event.preventDefault();
-      const busy = state.sessionOperationAvailability();
-      if (busy) return busy;
-      const dropped = Array.from(event.dataTransfer?.files || []);
-      if (dropped.length) select(dropped, null);
-      return undefined;
-    };
+    const { dragging, dragOver, dropFiles } = useFileDrop(props, uploadAvailable, select);
     const chooseSessionFile = (/** @type {{ target: HTMLSelectElement }} */ e) => {
       const chosen = sessionFiles.value.find((/** @type {InputFileRef} */ ref) => ref.fileId === e.target.value);
       e.target.value = '';

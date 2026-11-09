@@ -114,8 +114,8 @@ test('Add files: a drop of several files is one card each and one undo; GFF3 + F
 
   // A FASTA picked as GenBank fails its own card; the other cards still list and the error names the file.
   await addZone(page).locator('input[type=file]').setInputFiles('tests/test_inputs/NC_013668.fasta');
-  await expect(cards(page).nth(3).locator('.file-card-chip.failed')).toHaveText('NC_013668.fasta');
   await expect(page.locator('[data-circular-discovery-status]')).toContainText('NC_013668.fasta: No records were found.', { timeout: 180_000 });
+  await expect(cards(page).nth(3).locator('.file-card-chip.failed')).toHaveText('NC_013668.fasta');
   await expect(cards(page).locator('.file-card-chip:not(.failed)')).toHaveCount(3);
 
   // GFF3 + FASTA: one pick pairs by stem; the unpaired GFF3 shows open with its empty FASTA slot.
@@ -128,8 +128,10 @@ test('Add files: a drop of several files is one card each and one undo; GFF3 + F
   const gffZone = addZone(page).getByRole('button', { name: 'Choose GFF3 and FASTA files' });
   await gffZone.focus();
   const gff = await readFile('tests/test_inputs/NC_013668.gff3');
+  const fasta = await readFile('tests/test_inputs/NC_013668.fasta');
   await addZone(page).locator('input[type=file]').setInputFiles([
-    'tests/test_inputs/NC_013668.fasta', 'tests/test_inputs/NC_013668.gff3',
+    { name: 'NC_013668.fasta', mimeType: 'text/plain', buffer: fasta },
+    { name: 'NC_013668.gff3', mimeType: 'text/plain', buffer: gff },
     { name: 'NC_013668-reannotated.gff3', mimeType: 'text/plain', buffer: gff }
   ]);
   await expect.poll(() => cardNames(page)).toEqual([

@@ -158,6 +158,8 @@ test('the Add files zone names, accepts and offers the files of the input type',
   assert.deepEqual(zoneOf('gb'), ['GenBank/DDBJ files', 'genbank', '.gb .gbk .gbff .genbank .ddbj .embl .emb .txt .gz']);
   assert.deepEqual(zoneOf('gff'), ['GFF3 and FASTA files', 'gff', '.gff .gff3 .fa .fas .fasta .fna .ffn .faa .txt .gz']);
   assert.deepEqual(zoneOf('fasta'), ['FASTA files', 'fasta', '.fa .fas .fasta .fna .ffn .txt .gz']);
+  // Once a card shows, the zone offers no Session file: the cards' own uploaders do.
+  assert.equal(makeCards({ sources: SAKAI() }).cards.addZone.value.fileKind, undefined);
 });
 
 test('Remove asks first: the dialog names the card and its records, Cancel removes nothing, Remove file removes that card', async () => {

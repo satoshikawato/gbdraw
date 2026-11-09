@@ -10,7 +10,7 @@
 import { circularSourceInputs } from '../services/input-types.js';
 import { formatRecordLength } from '../services/record-options.js';
 import { errorText } from '../utils/error-text.js';
-import { msg, t, tn } from '../utils/i18n.js';
+import { t, tn } from '../utils/i18n.js';
 import { fileCardLine } from './file-card.js';
 /** @import { DiagramMode, DrawingState, SessionBusy } from '../state.js' */
 /** @import { CircularSource } from '../services/drawing/inputs.js' */
@@ -51,15 +51,17 @@ const { computed, reactive } = window.Vue;
  * What the Add files zone names, takes and offers from this Session.
  * @typedef {object} CircularAddZone
  * @property {string} label
- * @property {InputFileKind} fileKind The Session files it offers: those of the input type's first slot.
+ * @property {InputFileKind | undefined} fileKind The Session files it offers while the list is empty: those of the
+ *   input type's first slot (a file chosen there is the first card, as the empty list's uploader offered them); none
+ *   once a card shows, whose own uploaders offer them, so the zone lists no file already in the list.
  * @property {string} accept
  */
 const COMMON_ACCEPT = '.txt,text/plain,text/*,.gz,application/gzip';
-/** @type {Readonly<Record<InputType, { label: string, fileKind: InputFileKind, accept: string }>>} */
+/** @type {Readonly<Record<InputType, { label: () => string, fileKind: InputFileKind, accept: string }>>} */
 const ADD_ZONES = Object.freeze({
-  gb: { label: msg('GenBank/DDBJ files'), fileKind: 'genbank', accept: `.gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,${COMMON_ACCEPT}` },
-  gff: { label: msg('GFF3 and FASTA files'), fileKind: 'gff', accept: `.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,${COMMON_ACCEPT}` },
-  fasta: { label: msg('FASTA files'), fileKind: 'fasta', accept: `.fa,.fas,.fasta,.fna,.ffn,${COMMON_ACCEPT}` }
+  gb: { label: () => t('GenBank/DDBJ files'), fileKind: 'genbank', accept: `.gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,${COMMON_ACCEPT}` },
+  gff: { label: () => t('GFF3 and FASTA files'), fileKind: 'gff', accept: `.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,${COMMON_ACCEPT}` },
+  fasta: { label: () => t('FASTA files'), fileKind: 'fasta', accept: `.fa,.fas,.fasta,.fna,.ffn,${COMMON_ACCEPT}` }
 });
 
 /** @param {readonly CircularListRecord[]} records */
@@ -82,7 +84,7 @@ export const createCircularFileCards = ({
   const addZone = computed(() => {
     const drawing = shownDrawingOfMode('circular');
     const zone = ADD_ZONES[drawing ? drawing.inputType.value : 'gb'];
-    return { ...zone, label: t(zone.label) };
+    return { ...zone, label: zone.label(), fileKind: drawing && drawing.circularSources.length ? undefined : zone.fileKind };
   });
   /** @type {{ readonly value: CircularFileCardView[] }} */
   const cards = computed(() => {

@@ -2704,7 +2704,7 @@
                             <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'fasta'" @change="setCircularInputType('fasta')" value="fasta" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> FASTA</label>
                         </div>
                         <!-- Add files: a pick or a drop of several files at once; each file (or GFF3 + FASTA pair by file-name stem) becomes a File card. -->
-                        <file-uploader data-circular-file-add :label="circularFileCards.addZone.value.label" :model-value="[]" multiple drop parent-step
+                        <file-uploader data-circular-file-add :label="circularFileCards.addZone.value.label" :model-value="[]" :multiple="true" :drop="true" :parent-step="true"
                                        :file-kind="circularFileCards.addZone.value.fileKind" :accept="circularFileCards.addZone.value.accept"
                                        @update:model-value="circularFileCards.addFiles($event)"></file-uploader>
                         <p v-if="inputType === 'fasta'" class="ui-hint">{{ t('Records are drawn without features.') }}</p>
