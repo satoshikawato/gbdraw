@@ -3337,6 +3337,8 @@ export const createRunAnalysis = ({
         const sourceMode = String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload'
           ? 'upload'
           : 'losat';
+        // A Circular Generate replaces only its own drawing's cache-info rows (OV-3201).
+        workingLosatCacheInfo = workingLosatCacheInfo.filter((/** @type {LosatCacheInfoEntry} */ row) => row.drawingId !== drawing.id);
         const circularConservationSourceFiles = sourceMode === 'upload'
           ? normalizeFileList(drawing.files.c_conservation_blasts)
           : ringGenomeFileLists(drawing.files.c_conservation_fastas).filter((files) => files.length > 0);
@@ -3499,7 +3501,7 @@ export const createRunAnalysis = ({
                 text: blastText
               });
             }
-            pendingLosatCacheCommit = { cacheInfo, cacheMap, derivedCacheMap: null };
+            pendingLosatCacheCommit = { cacheInfo: [...workingLosatCacheInfo, ...cacheInfo], cacheMap, derivedCacheMap: null };
             return resolved;
           };
 
@@ -3512,7 +3514,6 @@ export const createRunAnalysis = ({
             drawing.circularConservation.reference = ['query', 'subject'].includes(rawReference)
               ? rawReference
               : 'auto';
-            workingLosatCacheInfo = [];
           } else {
             const comparisonFiles = circularConservationSourceFiles;
             if (comparisonFiles.length === 0) {
@@ -3529,8 +3530,6 @@ export const createRunAnalysis = ({
             drawing.circularConservation.reference = 'subject';
             searchedRingTables = conservationResults.map((result) => ({ name: result.name || getPayloadName(result.path), text: result.text }));
           }
-        } else {
-          workingLosatCacheInfo = [];
         }
       } else {
         requireCurrentLinearTrackLayout(drawing.form.linear_track_layout);
@@ -5210,7 +5209,7 @@ export const createRunAnalysis = ({
           startedAtIso: manualRunStartedAtIso,
           losatComparisons: mode.value === 'linear' && requestComparisonPlan?.hasLosatIntent === true,
           losatRuntimes: summarizeLosatRuntimes(
-            pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
+            (pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo).filter((/** @type {LosatCacheInfoEntry} */ row) => row.drawingId === drawing.id),
             pendingLosatCacheCommit?.cacheMap || losatCache.value
           ),
           featureIdentityNotices: generationMetadata.featureIdentityNotices

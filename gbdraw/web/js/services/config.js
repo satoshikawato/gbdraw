@@ -4043,10 +4043,36 @@ const savedLosatCacheEntryKind = (entry) => {
 };
 
 /**
+ * A saved current entry's cache value: the entry less its row fields; Load adopts a current Session's entry as it is
+ * (`adoptCurrent`) and remembers the manifest it was validated with.
+ * @param {Record<string, unknown>} entry @param {boolean} adoptCurrent @param {unknown} validatedManifest
+ * @returns {Record<string, unknown>}
+ */
+const restoredLosatCacheValue = (entry, adoptCurrent, validatedManifest) => {
+  const excludedFields = new Set(['key', 'filename', 'display', ...LOSAT_CACHE_INFO_STRING_FIELDS, ...LOSAT_CACHE_INFO_INTEGER_FIELDS]);
+  if (!adoptCurrent) {
+    const restored = cloneJsonData(entry);
+    excludedFields.forEach((field) => delete restored[field]);
+    return restored;
+  }
+  const restored = Object.fromEntries(Object.entries(entry).filter(([field]) => !excludedFields.has(field)));
+  adoptedLosatCacheValues.set(restored, toRaw(validatedManifest));
+  return restored;
+};
+
+/**
  * The project's raw LOSAT cache, from each drawing's saved entries (DESIGN
  * §4.1: a Session 51 drawing's entries merge into the one cache, keyed by
- * their content; a Session 27-50's one list is its Linear drawing's).
- * @param {readonly { drawing: DrawingState, entries: unknown, places?: ReadonlyMap<string, LinearUnitPlace> }[]} sources
+ * their content; a Session 27-50's one list is its Linear drawing's). Its
+ * cache-info rows name the drawing whose entries they are (`drawingId`), so a
+ * ring edit clears only its drawing's rows (OV-3201): an entry of a drawing's
+ * own kind (a ring entry of a Circular drawing, any other of a Linear one) is
+ * that drawing's, one row for each drawing that holds it; a Session 27-50's
+ * ring entries are its Circular part's (`ringDrawingId`); an entry that no
+ * drawing of its kind holds keeps one row, its first holder's.
+ * @param {readonly {
+ *   drawing: DrawingState, entries: unknown, places?: ReadonlyMap<string, LinearUnitPlace>, ringDrawingId?: DrawingId | null
+ * }[]} sources
  *   Each drawing's saved entries, with the units of the Result it shows (`catalogUnitPlaces`; none when not shown).
  * @param {unknown} [legacyEnvelope]
  * @param {{ adoptCurrent?: boolean, validatedManifest?: unknown }} [options]
@@ -4058,47 +4084,40 @@ const applyLosatCache = (
 ) => {
   const map = new Map();
   /** @type {Record<string, unknown>[]} */
-  const info = [];
-  /** @type {Record<string, unknown>[]} */
   const legacyEntries = [];
 
-  sources.forEach(({ drawing, entries, places = new Map() }) => {
+  /** @type {{ row: LosatCacheInfoEntry, owned: boolean }[]} */
+  const rows = [];
+  sources.forEach(({ drawing, entries, places = new Map(), ringDrawingId = null }) => {
     if (!Array.isArray(entries)) return;
     // An entry an earlier drawing holds (the same key, the same content) is read once.
     const earlier = new Set(map.keys());
     entries.forEach((entry, idx) => {
       const kind = savedLosatCacheEntryKind(entry);
       if (kind === 'legacy') legacyEntries.push(entry);
-      if (kind !== 'current' || earlier.has(entry.key)) return;
-      const excludedFields = new Set([
-        'key',
-        'filename',
-        'display',
-        ...LOSAT_CACHE_INFO_STRING_FIELDS,
-        ...LOSAT_CACHE_INFO_INTEGER_FIELDS
-      ]);
-      const restored = adoptCurrent
-        ? Object.fromEntries(
-            Object.entries(entry).filter(([field]) => !excludedFields.has(field))
-          )
-        : cloneJsonData(entry);
-      if (!adoptCurrent) {
-        excludedFields.forEach((field) => delete restored[field]);
-      } else {
-        adoptedLosatCacheValues.set(restored, toRaw(validatedManifest));
-      }
-      map.set(entry.key, restored);
+      if (kind !== 'current') return;
+      if (!earlier.has(entry.key)) map.set(entry.key, restoredLosatCacheValue(entry, adoptCurrent, validatedManifest));
       if (entry.display === false) return;
-      info.push({
+      const ring = entry.flow === CIRCULAR_CONSERVATION_FLOW;
+      const owner = (drawing.mode === 'circular') === ring ? drawing.id : ring ? ringDrawingId : null;
+      rows.push({ owned: owner !== null, row: {
         key: entry.key,
         // A saved name that is no text is read as none (OV-981).
         filename: typeof entry.filename === 'string' && entry.filename ? entry.filename : `losat_pair_${idx + 1}.tsv`,
         display: true,
-        drawingId: drawing.id,
+        drawingId: owner ?? drawing.id,
         ...restoredLosatCacheInfoIdentity(drawing, entry, places)
-      });
+      } });
     });
   });
+  const ownedKeys = new Set(rows.filter(({ owned }) => owned).map(({ row }) => row.key));
+  const written = new Set();
+  const info = rows.filter(({ row, owned }) => {
+    const id = owned ? JSON.stringify([row.key, row.drawingId]) : JSON.stringify([row.key]);
+    if (written.has(id) || (!owned && ownedKeys.has(row.key))) return false;
+    written.add(id);
+    return true;
+  }).map(({ row }) => row);
 
   state.losatCache.value = map;
   state.losatCacheInfo.value = info;
@@ -7765,9 +7784,9 @@ const importSessionDocument = async (e, options = {}) => {
      * The saved entries of a LOSAT cache field the file wrote into each
      * drawing, by drawing ID (unvalidated): a Session 51's own, the projected
      * drawing's from its view; a Session 27-50's one list, `partDrawingId`'s
-     * (none when the file has no drawing of that part).
+     * (none when the file has no drawing of that part; its Circular part's ring entries).
      * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field @param {DrawingId | null} partDrawingId
-     * @returns {{ id: DrawingId, entries: unknown }[]}
+     * @returns {{ id: DrawingId, entries: unknown, ringDrawingId?: DrawingId | null }[]}
      */
     const fileLosatEntriesOf = (projectedEntries, field, partDrawingId) => (projectedDrawingId !== null && upgraded
       ? [{ id: projectedDrawingId, entries: projectedEntries },
@@ -7775,7 +7794,7 @@ const importSessionDocument = async (e, options = {}) => {
             id: /** @type {DrawingId} */ (entry.id),
             entries: /** @type {UnvalidatedFields<'entries'>} */ (/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (entry))[field])?.entries
           }))]
-      : partDrawingId === null ? [] : [{ id: partDrawingId, entries: projectedEntries }]);
+      : partDrawingId === null ? [] : [{ id: partDrawingId, entries: projectedEntries, ringDrawingId: fileDrawingIdOf('circular') }]);
     // The conservation hash pairs each loaded request names (D-15-124): those
     // of the conservation entries the file wrote into its drawing (a Session
     // 27-50's one list is its one Circular part's). A drawing without a
@@ -8498,7 +8517,7 @@ const importSessionDocument = async (e, options = {}) => {
      * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field
      */
     const losatSourcesOf = (projectedEntries, field) => fileLosatEntriesOf(projectedEntries, field, losatPartDrawingId)
-      .map(({ id, entries }) => (shownDrawing.id === id ? { drawing: shownDrawing, entries, places: catalogUnitPlaces(admittedFeatureCatalog(artifactEditorState.featureCatalog)) } : { drawing: state.drawingOf(id), entries }));
+      .map(({ id, ...source }) => (shownDrawing.id === id ? { ...source, drawing: shownDrawing, places: catalogUnitPlaces(admittedFeatureCatalog(artifactEditorState.featureCatalog)) } : { ...source, drawing: state.drawingOf(id) }));
     if (canonicalSession) {
       applyLosatCache(
         losatSourcesOf(projectionResult.artifactState.losatCache?.entries, 'losatCache'),
@@ -8520,7 +8539,7 @@ const importSessionDocument = async (e, options = {}) => {
     } else {
       const legacyArtifacts = /** @type {UnvalidatedFields<'proteinRawCandidates' | 'proteinDerivedEvidence'>} */ (data.legacyArtifacts);
       applyLosatCache(
-        [{ drawing: state.drawingOf(losatPartDrawingId), entries: /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries }],
+        [{ drawing: state.drawingOf(losatPartDrawingId), entries: /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries, ringDrawingId: fileDrawingIdOf('circular') }],
         legacyArtifacts?.proteinRawCandidates
       );
       applyLosatDerivedCache(

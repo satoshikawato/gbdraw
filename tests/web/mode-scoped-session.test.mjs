@@ -1509,6 +1509,37 @@ test('Save writes a Circular conservation LOSAT entry into no drawing whose requ
     { circular: [], linear: [] });
 });
 
+// OV-3201 (#1777 review 8): a cache-info row names the drawing whose entry it is, so a ring edit clears only its
+// drawing's rows. A ring entry is each Circular drawing's that holds it, one row each, never a Linear drawing's; a
+// Session 27-50's one list gives its ring entries to its Circular part.
+const ringCacheEntry = () => ({
+  schema: 2, kind: 'raw-losat', identityKind: 'nucleotide', program: 'blastn', flow: 'circular-conservation',
+  outfmt: '6', args: ['--task', 'megablast'], queryCanonicalHash: 'a'.repeat(64), subjectCanonicalHash: 'b'.repeat(64),
+  text: 'q\ts\t100.000\t10\t0\t0\t1\t10\t1\t10\t0.0\t20\n', key: 'c'.repeat(64), filename: 'ring.circular_conservation.losatn.tsv', display: true
+});
+const cacheRowDrawings = () => state.losatCacheInfo.value.map((row) => [row.key.slice(0, 4), row.drawingId]);
+test('a Load gives a ring entry one cache-info row for each Circular drawing that holds it, none for a Linear one (OV-3201)', async () => {
+  for (const [name, holders, rows] of /** @type {const} */ ([
+    ['drawings-per-drawing-cards', ['circular', 'circular-2'], [['cccc', 'circular'], ['cccc', 'circular-2']]],
+    ['drawings-circular-linear', ['circular', 'linear'], [['cccc', 'circular']]]
+  ])) {
+    const session = v49Session(name);
+    session.drawings.filter((candidate) => holders.includes(candidate.id)).forEach((candidate) => { candidate.losatCache.entries = [ringCacheEntry()]; });
+    resetDrawings();
+    const { loaded } = await loadKeepingSlots(session);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual(cacheRowDrawings(), rows, name);
+  }
+  const legacy = fixtureSession('two-mode-linear-shown.v48');
+  legacy.losatCache.entries.push(ringCacheEntry());
+  resetDrawings();
+  const { loaded } = await loadKeepingSlots(legacy);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(cacheRowDrawings().filter(([key]) => key === 'cccc'), [['cccc', modeDrawing(state, 'circular').id]],
+    'a Session 27-50\'s ring entry names its Circular part');
+  state.losatCacheInfo.value = [];
+});
+
 // K-3: a ring's query hash is the SHA-256 of the FASTA the Python ring reader
 // (the Worker's) returns; node has no Worker, so the fixture's other ring is
 // hashed here through Python.

@@ -1861,12 +1861,17 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal((await readComparisonSequence({ files: [comparisonViews[0]] })).fasta, comparisonTexts[0]);
     workerHelperResponses.push(ringTablesUnchanged);
     workerResponses.push(response(circularResult, validCatalog(circularResult.name)));
+    // A Circular Generate replaces only its own drawing's cache-info rows (#1777 review 8, OV-3201).
+    const linearRow = { key: 'linear-pair', filename: 'pair.tsv', display: true, edgeKey: 'a->b', drawingId: modeDrawing(state, 'linear').id };
+    state.losatCacheInfo.value = [linearRow, { key: 'stale-ring', filename: 'old.tsv', display: true, drawingId: state.activeDrawing().id }];
     assert.deepEqual(
       await runner.runAnalysis(),
       { status: 'ok' },
       JSON.stringify(state.errorLog.value)
     );
     assert.equal(losatCalls, 0, 'verified circular cache entries must prevent LOSAT execution');
+    assert.deepEqual(state.losatCacheInfo.value.map((row) => [row.key === 'linear-pair' || row.key === 'stale-ring' ? row.key : 'ring', row.drawingId]),
+      [['linear-pair', 'linear'], ...cacheEntries.map(() => ['ring', state.activeDrawing().id])]);
     // Every ring file goes through the one Python reader (no JavaScript reader), once; Python then puts the
     // ring rows in the search frame.
     assert.deepEqual(
