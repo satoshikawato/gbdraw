@@ -10273,7 +10273,6 @@
                 <i class="ph ph-upload-simple" aria-hidden="true"></i>
                 <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">{{ drop ? t('Add {name}', { name: label }) : t('Choose {name}', { name: label }) }}</span>
             </div>
-            <span v-if="drop" :id="dropHintId" class="text-[10px] text-slate-500">{{ t('Choose several or drop them here.') }}</span>
             <div v-else-if="inspectionFailed" class="upload-zone-failed-label font-bold truncate w-full px-2 flex items-center justify-center gap-1.5" :class="small ? 'text-[10px]' : 'text-xs'">
                 <i class="ph ph-warning-circle" aria-hidden="true"></i>
                 <span class="min-w-0 truncate" :title="selectedLabel">{{ selectedLabel }}</span>
@@ -10282,6 +10281,8 @@
                 <i class="ph ph-check-circle" aria-hidden="true"></i>
                 <span class="min-w-0 truncate" :title="selectedLabel">{{ selectedLabel }}</span>
             </div>
+            <!-- After the selection chain above, so it does not break the v-if/v-else-if/v-else of the zone's text. -->
+            <span v-if="drop" :id="dropHintId" class="text-[10px] text-slate-500">{{ t('Choose several or drop them here.') }}</span>
         </div>
         <help-tip v-if="help" :id="helpId" :text="help" :label="t('Help: {name}', { name: $attrs['data-input-aria-label'] || label })"></help-tip>
         </div>

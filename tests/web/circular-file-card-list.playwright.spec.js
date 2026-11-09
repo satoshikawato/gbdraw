@@ -141,6 +141,10 @@ test('Add files: a drop of several files is one card each and one undo; GFF3 + F
   ]);
   await expect(cards(page).nth(1).locator('[data-circular-source-fold]')).toHaveAttribute('open', '');
   await expect(cards(page).nth(1).getByRole('button', { name: 'Choose FASTA File', exact: true })).toBeVisible();
+  // The empty slot shows only its prompt: no ready check and no drop hint (only the Add files zone has those).
+  const emptyFasta = cards(page).nth(1).getByRole('button', { name: 'Choose FASTA File', exact: true });
+  await expect(emptyFasta).toHaveText('Choose FASTA File');
+  await expect(emptyFasta.locator('.ph-check-circle')).toHaveCount(0);
   await expect(gffZone).toBeFocused();
 });
 
