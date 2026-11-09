@@ -187,6 +187,11 @@ hides genome-coordinate ticks and labels but keeps the record axes. Quantitative
 axes remain independent, and `--hide_length` separately controls Linear
 definition text.
 
+`--scale_interval`, or the Auto interval, places a tick mark at every interval.
+Where the circle or the ruler is too small for a label at every tick, only
+every second tick (then every fifth, tenth, and so on) keeps its label, so the
+labels stay a quarter of their font size apart.
+
 ### Wrap one record over several rows
 
 `--wrap_length` draws each record longer than the given length over several

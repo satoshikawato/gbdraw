@@ -9,7 +9,7 @@ from ....auto_sizes import SizeClass, linear_tick_interval
 from ....core.numeric import scaled_tick_text
 from ....core.text import drawn_text_box
 from ....config.models.objects import ObjectsScaleConfig
-from ....labels.label_style import ROW_LABEL_GAP_EM
+from ....labels.label_style import ROW_LABEL_GAP_EM, scale_label_stride
 from ....layout.spatial import Aabb
 
 RULER_TICK_LENGTH = 10.0 * (2.0 / 3.0)
@@ -48,6 +48,14 @@ def format_linear_tick_label(
 def _label_bounds(x_pos: float, bbox_width: float) -> tuple[float, float]:
     half_width = 0.5 * float(bbox_width)
     return float(x_pos) - half_width, float(x_pos) + half_width
+
+
+def _closest_bounds_gap_px(bounds: list[tuple[float, float]]) -> float | None:
+    """The smallest gap between neighbouring label bounds, left to right; None for fewer than two."""
+
+    if len(bounds) < 2:
+        return None
+    return min(right[0] - left[1] for left, right in zip(bounds, bounds[1:]))
 
 
 def _label_bounds_overlap(
@@ -95,6 +103,8 @@ class LengthBarGroup:
         self.style = scale_config.style
         self.manual_interval = scale_config.interval
         self.scale_group_width: float = 0
+        # Every label_stride-th ruler tick keeps its label (OV-3020); the bar style has one label.
+        self.label_stride: int = 1
         self.scale_group_height: float = 0
         self.local_bounds = Aabb(0.0, 0.0, 0.0, 0.0)
         # --- 2. Set other properties ---
@@ -173,17 +183,8 @@ class LengthBarGroup:
         terminal_tick_is_extra = bool(
             len(tick_positions) > 1 and tick_positions[-1] % int(tick_interval) != 0
         )
-        label_bounds: list[tuple[float, float]] = []
-        first_tick_bbox_width = 0.0
-        last_tick_bbox_width = 0.0
-        max_tick_bbox_height = 0.0
-        for index, position in enumerate(tick_positions):
-            x_pos = min(
-                self.ruler_width,
-                (position / self.longest_genome) * self.longest_record_width,
-            )
-
-            # Draw label
+        labels: list[tuple[float, str, float, float]] = []
+        for position in tick_positions:
             label_text = format_linear_tick_label(
                 position,
                 context_length=ruler_length_bp,
@@ -192,6 +193,21 @@ class LengthBarGroup:
             bbox_width, bbox_height = drawn_text_box(
                 label_text, self.font_family, self.ruler_label_font_size, self.font_weight
             )
+            x_pos = min(self.ruler_width, (position / self.longest_genome) * self.longest_record_width)
+            labels.append((x_pos, label_text, bbox_width, bbox_height))
+        # The interval's ticks label every stride-th from 0 (OV-3020); the end tick off the interval is apart.
+        interval_bounds = [
+            _label_bounds(x_pos, bbox_width)
+            for x_pos, _text, bbox_width, _height in labels[: len(labels) - int(terminal_tick_is_extra)]
+        ]
+        self.label_stride = stride = scale_label_stride(
+            lambda every: _closest_bounds_gap_px(interval_bounds[::every]), self.ruler_label_font_size
+        )
+        label_bounds: list[tuple[float, float]] = []
+        first_tick_bbox_width = 0.0
+        last_tick_bbox_width = 0.0
+        max_tick_bbox_height = 0.0
+        for index, (x_pos, label_text, bbox_width, bbox_height) in enumerate(labels):
             current_bounds = _label_bounds(x_pos, bbox_width)
             is_terminal_extra_tick = terminal_tick_is_extra and index == len(tick_positions) - 1
             if is_terminal_extra_tick and label_bounds and _label_bounds_overlap(
@@ -206,6 +222,8 @@ class LengthBarGroup:
                 stroke_width=self.stroke_width,
             )
             self.scale_group.add(tick_line)
+            if not is_terminal_extra_tick and index % stride:
+                continue
 
             text_element = Text(
                 label_text,

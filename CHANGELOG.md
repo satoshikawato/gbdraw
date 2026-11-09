@@ -577,6 +577,16 @@ write-up of a release.
   come closer than a quarter of its font size to its neighbour; before, it was
   left out only within 2 px, so a 4,606,000 bp ruler ended "4.5 Mbp4.6 Mbp".
   The Auto hint of the scale interval in the Web app shows the same interval.
+- Fixed: scale labels no longer print into each other where the circle or the
+  ruler is too small for a label at every tick, in the CLI, the Python API, and
+  the Web app. With ten similarity rings, the 5.5 Mbp E. coli O157:H7 Sakai
+  chromosome drew its ticks on a small inner circle and read "4.5 Mbp5.0 Mbp"
+  (OV-3020); lambda with `--scale_style ruler --scale_interval 1kb` read
+  "1 kbp2 kbp3 kbp" (OV-3051). Every tick still has its mark at the interval,
+  Auto or typed, and only every second tick (then every fifth, tenth, ...)
+  keeps its label, the first step at which the labels stay a quarter of their
+  font size apart: 1.0, 2.0, ... Mbp on that E. coli figure, 0, 2, 4, ... kbp
+  on that ruler. Figures whose labels already stay apart do not change.
 - Security (hosted web app): Vue, DOMPurify, jsPDF, svg2pdf.js and
   browser_wasi_shim are pinned by SHA-256 in `tools/immutable-web-assets.json`
   like the other vendored files, so the hosted site also caches them for a year.

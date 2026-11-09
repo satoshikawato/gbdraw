@@ -26,7 +26,7 @@ not settings (Owner, LP-D100 Q-B). Leaders and underlines are drawn
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Final, Literal, TypeAlias, cast, get_args
 
@@ -64,7 +64,9 @@ GAP_STOP_EM = 0.20
 # Neighbouring Linear feature labels in one label row keep at least this many font sizes between them
 # (each label half of it on each side, of its own font size), so two names never read as one word (LP-D104).
 # Scale tick labels keep it too: the ruler drops its end label closer than this, and the Auto tick tiers
-# above 10 Mbp (Circular) and 5 Mbp (Linear) end where their labels would come closer (OV-2748).
+# above 10 Mbp (Circular) and 5 Mbp (Linear) end where their labels would come closer (OV-2748). Where the labels
+# of every tick would still come closer (a small circle, a narrow ruler, a typed interval), only every
+# ``scale_label_stride``-th tick keeps its label (OV-3020).
 ROW_LABEL_GAP_EM = 0.25
 # Feature labels are laid out in the box their text is drawn in (``core.text.drawn_text_box``: the drawn
 # width, the face's line box) plus these margins, in font sizes (OV-165).
@@ -115,6 +117,22 @@ def leader_width_px(font_size: float) -> float:
     """The width of a leader and of its underline for a label of ``font_size`` px."""
 
     return max(LEADER_MIN_PX, LEADER_EM * float(font_size))
+
+
+def scale_label_stride(closest_gap_px: Callable[[int], float | None], font_size: float) -> int:
+    """Which scale ticks keep their label, in both modes (OV-3020): every n-th, n the first of 1, 2, 5, 10, 20, 50,
+    ... whose labels keep ``ROW_LABEL_GAP_EM`` of ``font_size`` apart, so the labelled ticks step as round numbers.
+    Every tick keeps its mark. ``closest_gap_px(n)`` is the smallest gap, in px, between neighbouring labels when
+    every n-th tick keeps its label, or None when fewer than two labels remain."""
+
+    min_gap_px = ROW_LABEL_GAP_EM * float(font_size)
+    scale = 1
+    while True:
+        for stride in (scale, 2 * scale, 5 * scale):
+            gap_px = closest_gap_px(stride)
+            if gap_px is None or gap_px >= min_gap_px:
+                return stride
+        scale *= 10
 
 
 def label_leader_width_px(label: Mapping[str, object]) -> float:
@@ -173,4 +191,5 @@ __all__ = [
     "leader_width_px",
     "normalize_label_line",
     "normalize_label_protection",
+    "scale_label_stride",
 ]

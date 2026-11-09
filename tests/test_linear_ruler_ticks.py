@@ -72,7 +72,8 @@ def test_a_tier_above_5_mbp_ends_where_its_ruler_labels_come_closer_than_a_quart
     quarter em, so only figures whose labels would read as one take a coarser interval. The axis ruler spaces its
     labels over one base less and keeps the gap a few bases longer, so the ruler scale sets the bound."""
 
-    assert _label_gap_shortfall_px(_ruler(below, interval)) < 0.0
+    assert _ruler(below - 1, interval).label_stride == 1
+    assert _ruler(below, interval).label_stride > 1
 
 
 def test_the_ruler_above_the_last_tier_fits_records_of_10_gbp() -> None:
@@ -87,3 +88,30 @@ def test_the_ruler_drops_an_end_label_closer_than_a_quarter_em() -> None:
 
     assert [element.text for element in ruler.scale_group.elements if element.elementname == "text"][-1] == "4.5 Mbp"
     assert _label_gap_shortfall_px(ruler) >= 0.0
+
+
+def _texts(ruler: LengthBarGroup) -> list[str]:
+    return [element.text for element in ruler.scale_group.elements if element.elementname == "text"]
+
+
+def _tick_lines(ruler: LengthBarGroup) -> int:
+    return sum(1 for element in ruler.scale_group.elements if element.elementname == "line") - 1  # less the axis
+
+
+def test_a_typed_interval_whose_labels_would_print_into_each_other_labels_every_second_tick() -> None:
+    """OV-3051: lambda (48,502 bp) at a typed 1 kbp interval printed "1 kbp2 kbp3 kbp" along the ruler; every tick
+    keeps its mark, and the labels step 0, 2, 4, ... kbp so they keep a quarter em apart (as Circular, OV-3020)."""
+
+    ruler = _ruler(48_502, 1_000)
+
+    assert ruler.label_stride == 2
+    assert _tick_lines(ruler) == 49  # 0 to 48 kbp; the 48,502 bp end tick is too close to 48 kbp to draw
+    assert _texts(ruler)[:4] == ["0", "2 kbp", "4 kbp", "6 kbp"]
+    assert _label_gap_shortfall_px(ruler) >= 0.0
+
+
+def test_ruler_labels_that_keep_apart_are_all_drawn() -> None:
+    ruler = _ruler(48_502)
+
+    assert ruler.label_stride == 1
+    assert _texts(ruler)[:10] == ["0", *(f"{kbp} kbp" for kbp in range(5, 50, 5))]
