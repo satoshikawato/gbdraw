@@ -197,6 +197,11 @@ LettersInLane = Callable[[ResolvedRegionAnnotation, float, int], "LabelExtent | 
 # its parameters and the extent its lanes and rooms take where the drawer draws them (``_LaneBand.drawn_extent_px``).
 LanesMeeting = Callable[["ResolvedAnnotationTrack", AnnotationTrackParams, float], frozenset[tuple[int, int, int]]]
 
+# The labels (record index, annotation id) of an inside Circular track whose letters the drawer draws over the centre of
+# the circle onto a mark, from the track, its parameters and the extent its lanes and rooms take where the drawer
+# draws them (``_LaneBand.drawn_extent_px``).
+LabelsAcrossCentre = Callable[["ResolvedAnnotationTrack", AnnotationTrackParams, float], frozenset[tuple[int, str]]]
+
 
 @dataclass(frozen=True)
 class LabelSizing:
@@ -209,6 +214,8 @@ class LabelSizing:
     toward lane - 1 (Linear labels above their marks); else they stand toward lane + 1 (Linear labels below, and
     Circular, away from the axis on either side). ``meet`` is the drawer's own placement of a track's labels
     (``LanesMeeting``) where a label's letters depend on where its lane is drawn (Circular); None where they do not.
+    ``across_centre`` is the drawer's own measure of the labels whose letters it draws over the centre of the circle
+    onto a mark (``LabelsAcrossCentre``, an inside Circular slot where it is drawn); None where letters cannot pass it.
     """
 
     font_size: float
@@ -217,6 +224,7 @@ class LabelSizing:
     bp_per_px: Mapping[int, float] = field(default_factory=dict)
     labels_above: bool = False
     meet: LanesMeeting | None = None
+    across_centre: LabelsAcrossCentre | None = None
 
 
 @dataclass(frozen=True)
@@ -798,6 +806,25 @@ def _cut_by_clip(
     return replace(track, without_room=tuple(sorted({*track.without_room, *cut}))) if cut else track
 
 
+def _across_centre(
+    track: ResolvedAnnotationTrack, band: _LaneBand, labels: LabelSizing, params: AnnotationTrackParams, *, labelled: bool
+) -> ResolvedAnnotationTrack:
+    """``track``, leaving out (``ResolvedAnnotationTrack.without_room``) the labels whose letters the drawer draws over
+    the centre of the circle onto a mark (``LabelSizing.across_centre``; OV-2991): no room keeps such letters clear of
+    the marks they meet there, so they are left out as a label whose room would carry its lanes past the centre is
+    (LBL-ROOM-STOP-AT-CENTRE-OMIT; in a clipped slot of set size, LBL-ROOM-CLIP-FIT-OMIT), and counted where the
+    track's rooms stop (``rooms_stop``). Unchanged where the slot draws no labels of its own (not ``labelled``), its
+    letters cannot pass the centre, or its rooms have no stop (``band.limit_px``: a set size with overflow error or
+    compress, which the Contract does not name for such a label; OV-2991-B)."""
+
+    if not labelled or labels.across_centre is None or band.limit_px is None:
+        return track
+    met = labels.across_centre(track, params, band.drawn_extent_px(lane_count_of(track.placements), track.lane_room_px))
+    if not met:
+        return track
+    return replace(track, without_room=tuple(sorted({*track.without_room, *met})), rooms_stop=band.stop)
+
+
 class _LanePlace(NamedTuple):
     """Where the drawer puts one lane of a record's row: the width of the record's lanes (``_LaneBand.width_px``
     with the track's label room) and the rooms of the gaps before the lane (``ResolvedAnnotationTrack.room_before``)."""
@@ -967,17 +994,17 @@ class _SetSizeFit(NamedTuple):
     draws: bool
 
 
-def _set_size_fit(
-    params: AnnotationTrackParams, band: _LaneBand, available_px: float | None, lane_count: int, room_px: float
-) -> _SetSizeFit:
-    """How ``lane_count`` lanes and the label room ``room_px`` take a slot's set size (``available_px``): a slot whose
-    overflow is error is not drawn where they pass it, and one whose overflow is compress narrows the gaps between the
-    lanes to fit it and is not drawn where they pass it with no gap. A span over other slots (``to_slot``) takes its
-    extent from them, not from the slot's own size."""
+def _set_size_fit(params: AnnotationTrackParams, band: _LaneBand, lane_count: int, room_px: float) -> _SetSizeFit:
+    """How ``lane_count`` lanes and the label room ``room_px`` take the extent the drawer gives a slot of set size
+    (``_LaneBand.set_px``: an inside Circular slot's set size stops at the centre, OV-2990): a slot whose overflow is
+    error is not drawn where they pass it, and one whose overflow is compress narrows the gaps between the lanes to fit
+    it and is not drawn where they pass it with no gap. A slot without a set size, or a span over other slots
+    (``to_slot``), which takes its extent from them, is drawn."""
 
     lane_gap = float(params.lane_gap_px)
     required = band.bare_px(lane_count) + room_px
-    if params.to_slot is not None or available_px is None or not required > available_px:
+    available_px = band.set_px
+    if available_px is None or not required > available_px:
         return _SetSizeFit(required, lane_gap, True)
     if params.overflow == "error":
         return _SetSizeFit(required, lane_gap, False)
@@ -1003,8 +1030,6 @@ class _SlotPacking(NamedTuple):
     labels: LabelSizing
     join_origin: bool
     band: _LaneBand
-    # The slot's set size (``layout_annotation_track``'s ``available_extent_px``), or None.
-    available_px: float | None
     room_bounds: RoomBounds
     # Whether the slot draws labels of its own and gives them room (not a span over other slots).
     labelled: bool
@@ -1084,7 +1109,7 @@ class _SlotPacking(NamedTuple):
         while (
             self.band.set_px is not None
             and (room := _largest_room(lane_rooms.rooms)) > max(drawn_rooms, default=-1.0)
-            and _set_size_fit(self.params, self.band, self.available_px, lane_count, room).draws
+            and _set_size_fit(self.params, self.band, lane_count, room).draws
         ):
             drawn_rooms.append(room)
             lane_rooms = rooms((*self.room_bounds.at_least, *lane_rooms.rooms), drawn_rooms)
@@ -1208,6 +1233,7 @@ def layout_annotation_track(
     labels: LabelSizing,
     join_origin: bool,
     room_bounds: RoomBounds = RoomBounds(),
+    checks_set_size: bool = True,
 ) -> ResolvedAnnotationTrack:
     """Pack one set and calculate its radial/vertical required extent.
 
@@ -1221,7 +1247,12 @@ def layout_annotation_track(
     that size (``_lane_band``); whether it clips is decided by its lanes alone, before the rooms, so the packer
     measures its lanes where the drawer draws them, and it leaves out the labels its edge would cut
     (``_cut_by_clip``). A span over other slots (``to_slot``, ``cover_anchor``) gets no room: where it covers a slot
-    its labels stand outside the slots it covers, and whether it covers one is known only after the lanes are packed."""
+    its labels stand outside the slots it covers, and whether it covers one is known only after the lanes are packed.
+
+    A slot whose lanes and rooms do not fit the extent the drawer gives its set size raises (``_set_size_fit``),
+    naming the extent they need, unless not ``checks_set_size``: a packing made where the slot is not drawn (the
+    Circular planner's at the axis circle, packed again where the slot is drawn) does not raise, so the size named is
+    measured where the slot is drawn (OV-3024)."""
 
     track_params = params or AnnotationTrackParams(set_id=set_id)
     if track_params.set_id != set_id:
@@ -1243,7 +1274,6 @@ def layout_annotation_track(
         labels,
         join_origin,
         band,
-        None if available_extent_px is None else float(available_extent_px),
         room_bounds,
         track_params.show_labels and not (track_params.to_slot is not None or track_params.cover_anchor),
         {},
@@ -1252,26 +1282,30 @@ def layout_annotation_track(
     placements = track.placements
     room = track.lane_room_px
     lane_count = lane_count_of(placements)
-    available = packing.available_px
-    fit = _set_size_fit(track_params, band, available, lane_count, room)
-    if not fit.draws and available is not None:
+    fit = _set_size_fit(track_params, band, lane_count, room)
+    if not fit.draws and checks_set_size and band.set_px is not None:
+        # Lanes that need more than the room before the centre of an inside Circular slot fit no set size: that room
+        # bounds them, whatever the size. Otherwise the size named (rounded up, so it holds the lanes) draws.
+        centre = room_bounds.limit_px
+        past_centre = centre is not None and fit.required_px > centre
+        bound = f"{centre:.2f}px lies before the centre of the circle" if past_centre else f"{band.set_px:.2f}px is available"
         if track_params.overflow == "error":
             raise ValidationError(
-                # Rounded up, so the size printed holds the lanes.
-                f"Annotation slot {slot_id!r} requires {math.ceil(fit.required_px * 100.0) / 100.0:.2f}px but only "
-                f"{available:.2f}px is available."
+                f"Annotation slot {slot_id!r} requires {math.ceil(fit.required_px * 100.0) / 100.0:.2f}px but only {bound}."
             )
-        raise ValidationError(f"Annotation slot {slot_id!r} cannot fit {lane_count} lanes in {available:.2f}px.")
+        where = f"the {centre:.2f}px before the centre of the circle" if past_centre else f"{band.set_px:.2f}px"
+        raise ValidationError(f"Annotation slot {slot_id!r} cannot fit {lane_count} lanes in {where}.")
     # Its rooms fit within the set size (``_lane_rooms``), so only lanes that pass it alone are clipped.
     clipped = (
         track_params.overflow == "clip"
         and track_params.to_slot is None
-        and available is not None
-        and band.bare_px(lane_count) + room > available
+        and available_extent_px is not None
+        and band.bare_px(lane_count) + room > available_extent_px
         and band.passes(lane_count)
     )
     track = replace(track, required_extent_px=float(fit.required_px), clipped=clipped, lane_gap_px=fit.lane_gap_px)
     track = _cut_by_clip(track, band, labelled=packing.labelled, measures=measures)
+    track = _across_centre(track, band, labels, track_params, labelled=packing.labelled)
     return replace(track, without_room_font_sizes=measures.left_out_font_sizes(track))
 
 
@@ -1280,6 +1314,7 @@ __all__ = [
     "LabelExtent",
     "LabelMeasure",
     "LabelSizing",
+    "LabelsAcrossCentre",
     "LaneRoom",
     "LettersInLane",
     "MarkReachMeasure",

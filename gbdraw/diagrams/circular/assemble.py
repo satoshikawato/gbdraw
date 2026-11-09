@@ -175,6 +175,7 @@ from ...render.drawers.circular.annotations import (
     circular_annotation_lanes_meeting,
     circular_annotation_mark_past_lane,
     circular_annotation_labels,
+    circular_annotation_labels_across_centre,
     circular_annotation_track_content,
     circular_annotation_track_ink,
 )
@@ -356,7 +357,7 @@ def _prepare_circular_annotation_tracks(
         ) from exc
     layouts = _layout_circular_annotation_tracks(
         _CircularAnnotationPacking.of(gb_record, slots, bundle, canvas_config, record_index),
-        inside_slot_ids=frozenset(slot.id for slot in normalized if slot.side == "inside"),
+        sides={slot.id: slot.side for slot in normalized},
     )
     return CircularPlannedTracks(slots, bundle, layouts, tracks.circular_track_axis_index, record_index)
 
@@ -466,6 +467,7 @@ class _CircularAnnotationPacking:
         lanes_from_px: float,
         rooms_at_least: Sequence[LaneRoom] = (),
         drawn: bool = True,
+        checks_set_size: bool = True,
     ) -> ResolvedAnnotationTrack:
         """Pack one annotation slot, its labels measured beside their marks on the slot's side
         (``circular_annotation_label_extent``), the lanes stacking from ``lanes_from_px``: the slot's edge nearest
@@ -474,19 +476,30 @@ class _CircularAnnotationPacking:
         room it has, whatever its set width (``_lane_band`` takes the nearer of the two for a clipped slot). Where the
         layout ``drawn`` the slot's lanes from ``lanes_from_px``, each lane keeps its labels' letters where the drawer
         draws it (``circular_annotation_lanes_meeting``, OV-2849); the planner's packing at the axis circle, made
-        before the radial layout places the slot, is not drawn there. A packing with the same inputs is kept
-        (``CircularAnnotationMeasures``)."""
+        before the radial layout places the slot, is not drawn there. A slot whose lanes and rooms do not fit its set
+        size raises unless not ``checks_set_size`` (``layout_annotation_track``). A packing with the same inputs is
+        kept (``CircularAnnotationMeasures``)."""
 
         room_bounds = RoomBounds(tuple(rooms_at_least), float(lanes_from_px) if inside else None)
         return _kept_measure(
             lambda measures: measures.tracks,
-            (slot.id, inside, lanes_from_px, room_bounds, drawn),
+            (slot.id, inside, lanes_from_px, room_bounds, drawn, checks_set_size),
             (self, slot),
-            partial(self._track, slot, inside=inside, lanes_from_px=lanes_from_px, room_bounds=room_bounds, drawn=drawn),
+            partial(
+                self._track, slot, inside=inside, lanes_from_px=lanes_from_px, room_bounds=room_bounds, drawn=drawn,
+                checks_set_size=checks_set_size,
+            ),
         )
 
     def _track(
-        self, slot: CircularTrackSlot, *, inside: bool, lanes_from_px: float, room_bounds: RoomBounds, drawn: bool
+        self,
+        slot: CircularTrackSlot,
+        *,
+        inside: bool,
+        lanes_from_px: float,
+        room_bounds: RoomBounds,
+        drawn: bool,
+        checks_set_size: bool,
     ) -> ResolvedAnnotationTrack:
         params = annotation_track_params_from_mapping(slot.params)
         return layout_annotation_track(
@@ -517,9 +530,19 @@ class _CircularAnnotationPacking:
                 )
                 if drawn
                 else None,
+                across_centre=partial(
+                    circular_annotation_labels_across_centre,
+                    font_family=self.font_family,
+                    record_length=self.record_length,
+                    lanes_from_px=lanes_from_px,
+                    clearance_px=self.label_clearance_px,
+                )
+                if drawn and inside
+                else None,
             ),
             join_origin=True,
             room_bounds=room_bounds,
+            checks_set_size=checks_set_size,
         )
 
 
@@ -550,15 +573,17 @@ class _AnnotationTracks:
 
 
 def _layout_circular_annotation_tracks(
-    packing: _CircularAnnotationPacking, *, inside_slot_ids: frozenset[str]
+    packing: _CircularAnnotationPacking, *, sides: Mapping[str, str]
 ) -> dict[str, ResolvedAnnotationTrack]:
-    """Resolve the lanes of each annotation slot, its labels measured on the slot's side (``inside_slot_ids``)
-    beside marks at the axis circle: no slot has its radii before the radial layout, which then packs each again
-    where it draws it (``_place_annotation_tracks_where_drawn``)."""
+    """Resolve the lanes of each annotation slot, its labels measured on the slot's side (``sides``, by slot id)
+    beside marks at the axis circle: no slot has its radii before the radial layout, which then packs each slot
+    beside the axis (inside or outside) again where it draws it (``_annotation_tracks_packed_where_drawn``). Only
+    that packing checks such a slot's set size (OV-3024); a slot not packed again is checked here."""
 
     return {
         slot.id: packing.track(
-            slot, inside=slot.id in inside_slot_ids, lanes_from_px=packing.axis_radius_px, drawn=False
+            slot, inside=sides.get(slot.id) == "inside", lanes_from_px=packing.axis_radius_px, drawn=False,
+            checks_set_size=sides.get(slot.id) not in {"inside", "outside"},
         )
         for slot in packing.requested
         if str(slot.renderer).strip().lower() == "annotations"
@@ -703,7 +728,7 @@ def _add_circular_feature_underlays(
     # The underlay draws no labels.
     underlay_layouts = _layout_circular_annotation_tracks(
         _CircularAnnotationPacking.of(gb_record, [underlay_slot], merged, canvas_config, record_index),
-        inside_slot_ids=frozenset(),
+        sides={},
     )
     return [underlay_slot, *slots], merged, {**underlay_layouts, **layouts}
 
