@@ -10,12 +10,14 @@ from typing import Mapping
 from ..core.text import drawn_text_box
 from ..core.numeric import compensated_sum
 from .metrics import (
+    GRADIENT_TEXT_GAP,
     GradientScaleLayout,
     gradient_scale_texts,
     legend_caption_box,
     legend_line_height,
     legend_text_x_offset,
     single_gradient_block_x,
+    single_gradient_row_ys,
     stack_compact_gradient_rows,
 )
 from .table import DrawnLegendName, LegendRowKey, as_legend_table
@@ -316,7 +318,7 @@ def _build_ring_layout(
     if per_ring_ramps:
         bar_x = names_width + rect
         band_y = None
-        scale_label_y = rows[-1].y + (rect / 2) + 2
+        scale_label_y = rows[-1].y + (rect / 2) + GRADIENT_TEXT_GAP
         width = bar_x + bar_width
         height = max(scale_label_y + float(label_height), inner_caption_y + (rect / 2) if show_captions else 0.0)
     else:
@@ -325,7 +327,7 @@ def _build_ring_layout(
         if centred:
             names_x, bar_x = (width - names_width) / 2, (width - bar_width) / 2
         band_y = inner_caption_y + (RING_BAND_LINE_GAP * line)
-        scale_label_y = band_y + (rect / 2) + 2
+        scale_label_y = band_y + (rect / 2) + GRADIENT_TEXT_GAP
         height = scale_label_y + float(label_height)
     min_label_text, max_label_text = gradient_scale_texts(ring_entries[0].properties)
     return CircularRingLegendLayout(
@@ -424,22 +426,20 @@ def _build_gradient_layout(
 
     entry = gradient_entries[0]
     title_width, title_height = legend_caption_box(entry.text, font_family, font_size)
-    bar_y = float(title_height) + (color_rect_size / 2)
-    scale_label_y = bar_y + (color_rect_size / 2) + 2
-    height = scale_label_y + float(label_height)
+    ys = single_gradient_row_ys(float(title_height), color_rect_size, float(label_height))
     width, bar_x = single_gradient_block_x(bar_width, float(title_width))
     min_label_text, max_label_text = gradient_scale_texts(entry.properties)
     return CircularGradientLegendLayout(
         compact=False,
         width=width,
-        height=max(0.0, height),
+        height=ys.height,
         bar_width=bar_width,
         bar_x=bar_x,
         min_label_text=min_label_text,
         max_label_text=max_label_text,
         min_label_x=bar_x,
         max_label_x=bar_x + bar_width,
-        scale_label_y=top + scale_label_y,
+        scale_label_y=top + ys.scale_label_y,
         compact_entries=(),
         single_entries=(
             CircularSingleGradientEntryLayout(
@@ -448,7 +448,7 @@ def _build_gradient_layout(
                 title_x=width / 2.0,
                 title_y=top,
                 bar_x=bar_x,
-                bar_y=top + bar_y,
+                bar_y=top + ys.bar_y,
             ),
         ),
     )

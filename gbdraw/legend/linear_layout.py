@@ -11,6 +11,7 @@ from .metrics import (
     legend_line_height,
     legend_text_x_offset,
     single_gradient_block_x,
+    single_gradient_row_ys,
     stack_compact_gradient_rows,
 )
 from .table import LegendRowKey, as_legend_table
@@ -199,27 +200,26 @@ def _build_gradient_layout(
     title_width, title_height = legend_caption_box(drawn_names[key].drawn, font_family, font_size)
     min_label_text, max_label_text = gradient_scale_texts(properties)
     width, bar_x = single_gradient_block_x(bar_width, title_width)
-    bar_y = title_height + (color_rect_size / 2.0)
-    scale_label_y = bar_y + (color_rect_size / 2.0) + 2.0
+    ys = single_gradient_row_ys(title_height, color_rect_size, scale_label_height)
     entry = LinearGradientEntryLayout(
         key=key,
         properties=properties,
         title_x=width / 2.0,
         title_y=0.0,
         bar_x=bar_x,
-        bar_y=bar_y,
+        bar_y=ys.bar_y,
     )
     return LinearGradientLegendLayout(
         compact=False,
         entries=(entry,),
         width=width,
-        height=scale_label_y + scale_label_height,
+        height=ys.height,
         bar_width=bar_width,
         min_label_text=min_label_text,
         max_label_text=max_label_text,
         min_label_x=bar_x,
         max_label_x=bar_x + bar_width,
-        scale_label_y=scale_label_y,
+        scale_label_y=ys.scale_label_y,
     )
 
 

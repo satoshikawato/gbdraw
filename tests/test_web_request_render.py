@@ -736,7 +736,8 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # Updated again when each axis source took `isCircular` (Select region, a
     # drag may cross the origin only of a circular record): with that key
     # removed, the reply has the earlier digest.
-    "similarity_groups": "2d341082e3a5f3e9cd6823ae444e54a0c8d6ab4d27313ce52fc22b5185334749",
+    # Updated again when a one-gradient Legend block left a gap between its title and bar (OV-2982): only that block, the Legend bounds and the canvas height moved.
+    "similarity_groups": "a0f0eb2d6adc94833265efc21047d9b96cbfdd59f3edde524ec3ff559f9f4de3",
     "collinear": "62084ef5b16d27a9fc2f46e6544e6117d62b915d8a839c01c8c4775ee2477d85",
 }
 

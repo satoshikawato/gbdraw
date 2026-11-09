@@ -17,7 +17,11 @@ const fitButton = (page) => page.getByRole('button', { name: 'Fit to preview', e
 // -1045.2734375 px reads -1045.27) while the state and the layout keep the
 // double, so each value is compared within half a unit of its own sixth
 // significant digit: 0.005 px for a pan of 1000 to 9999 px, 5e-7 for a zoom
-// below 1. A transition frame or a stale pan is off by far more.
+// below 1. A value on a rounding tie reads exactly half a unit off, and the
+// subtraction adds float noise (1.0000000000331966 for the BGC Gallery pan,
+// OV-2983), so the bound keeps a 1e-6 margin. A transition frame or a stale
+// pan is off by far more.
+const SERIALIZED_TIE_MARGIN = 1 + 1e-6;
 const settle = async (page) => {
   await expect.poll(() => page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -25,7 +29,7 @@ const settle = async (page) => {
     const serializedPrecision = (value) => 0.5 * 10 ** (Math.floor(Math.log10(Math.abs(value) || 1)) - 5);
     return Math.max(...[[transform.a, app.zoom], [transform.e, app.canvasPan.x], [transform.f, app.canvasPan.y]]
       .map(([computed, state]) => Math.abs(computed - state) / serializedPrecision(state)));
-  })).toBeLessThanOrEqual(1);
+  })).toBeLessThanOrEqual(SERIALIZED_TIE_MARGIN);
   await expect.poll(() => page.evaluate(() => new Promise((resolve) => {
     const sample = () => {
       const box = window.__GBDRAW_APP__.svgContainer.querySelector('svg').getBoundingClientRect();
