@@ -85,6 +85,55 @@ export const ruleFeaturePayload = (feature, label = '') => {
   if (label === '') payloads.set(source, payload);
   return payload;
 };
+/**
+ * The qualifier keys `rules` read, trimmed and lowercased: each rule's `field`
+ * (`qual` for a color rule, `qualifier` for a visibility or label rule).
+ * @param {readonly object[]} rules
+ * @param {'qual' | 'qualifier'} field
+ * @returns {ReadonlySet<string>}
+ */
+export const qualifiersRead = (rules, field) => new Set(rules.map((rule) => (
+  String(/** @type {Record<string, unknown>} */ (rule)[field] ?? '').trim().toLowerCase()
+)));
+/**
+ * The payload of `feature` for rules that read the qualifiers `read`
+ * (`qualifiersRead`): only those keep their names and values (D5-16), so a
+ * long `/translation` goes to Python only for a rule that reads it. Generate
+ * ranks a color rule by its key's place among the feature's keys, so every
+ * other key keeps its place under a short name of its own with no values:
+ * `-0`, `-1`, ... (not an array index, which an object would move first),
+ * skipping a name in `read`. Such a name equals its trimmed lowercase, so no
+ * rule reads it and it never stands before a key a rule reads; Python matches
+ * and ranks as on the whole payload. Keys compare trimmed and lowercased:
+ * Python reads a visibility or label rule's key in any case and a color
+ * rule's as written, and both are covered.
+ * @param {RuleMatchedFeature} feature
+ * @param {ReadonlySet<string>} read
+ * @param {string} [label]
+ * @returns {RuleFeaturePayload}
+ */
+export const ruleFeaturePayloadReading = (feature, read, label = '') => {
+  const payload = ruleFeaturePayload(feature, label);
+  const entries = Object.entries(payload.qualifiers);
+  const reads = (/** @type {string} */ key) => read.has(key.trim().toLowerCase());
+  if (entries.every(([key]) => reads(key))) return payload;
+  let unread = 0;
+  const placeholder = () => {
+    while (read.has(`-${unread}`)) unread += 1;
+    return `-${unread++}`;
+  };
+  return { ...payload, qualifiers: Object.fromEntries(entries.map(([key, values]) => (reads(key) ? [key, values] : [placeholder(), []]))) };
+};
+/**
+ * The payloads of `features` for `rules`, which read the key `field` names.
+ * @param {readonly RuleMatchedFeature[]} features
+ * @param {readonly object[]} rules
+ * @param {'qual' | 'qualifier'} field
+ */
+const payloadsReading = (features, rules, field) => {
+  const read = qualifiersRead(rules, field);
+  return features.map((feature) => ruleFeaturePayloadReading(feature, read));
+};
 /** @param {unknown} value @returns {string | null} A catalog identity field, null where the feature has none. */
 const identityText = (value) => (typeof value === 'string' && value ? value : null);
 /**
@@ -416,7 +465,7 @@ export const createRulePreparation = ({
     const sent = draft.filter((rule) => pendingKeys.has(ruleKey(rule)) || !validated.has(ruleKey(rule)));
     const before = snapshot();
     const release = track(view);
-    return evaluate({ features: targets.map((feature) => ruleFeaturePayload(feature)), rules: sent, kind: 'color' }, options)
+    return evaluate({ features: payloadsReading(targets, sent, 'qual'), rules: sent, kind: 'color' }, options)
       .then((result) => {
         if (!isCurrent(before) || blocked()) return false;
         const keys = sent.map(ruleKey);
@@ -443,9 +492,7 @@ export const createRulePreparation = ({
     if (targets.length === 0) return true;
     const release = track(view);
     return Promise.resolve()
-      .then(() => evaluate({
-        features: targets.map((feature) => ruleFeaturePayload(feature)), rules: draft, kind: 'visibility'
-      }))
+      .then(() => evaluate({ features: payloadsReading(targets, draft, 'qualifier'), rules: draft, kind: 'visibility' }))
       .then((result) => {
         targets.forEach((feature, index) => {
           const matches = new Set(result.matches[index]);

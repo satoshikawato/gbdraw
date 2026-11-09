@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
-import { createRulePreparation, ruleFeaturePayload } from '../../gbdraw/web/js/app/rule-matching.js';
+import { createRulePreparation, qualifiersRead, ruleFeaturePayload, ruleFeaturePayloadReading } from '../../gbdraw/web/js/app/rule-matching.js';
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
@@ -1655,4 +1655,43 @@ test('a row edit that gives a rule without a qualifier one is applied (OV-2435)'
   s.state.manualSpecificRules.push({feat:'CDS',qual:'',val:'a',color:'#112233',cap:''});
   assert.equal(await s.actions.setSpecificRuleField(0,'qual','gene'),true);
   assert.deepEqual([s.state.manualSpecificRules[0].qual,s.transactions],['gene',['Edit specific color rule']]);
+});
+
+// D5-16: the payload carries the names and values of the qualifiers the rules read only, so a long `/translation`
+// goes to Python only for a rule that reads it; every other key keeps its place under a short name no rule reads,
+// since Generate ranks a color rule by its key's place among the feature's keys. The matches and their ranks are
+// those of the whole payload.
+test('rule evaluation sends only the qualifier values the rules read and matches as the whole payload does', async () => {
+  const sent = [];
+  const capture = async (payload, options) => { sent.push(payload); return evaluatePythonRules(payload, options); };
+  const s = setup(capture);
+  const translated = {
+    type: 'CDS', svg_id: 't', record_key: 'record-1', biological_feature_id: 't',
+    qualifiers: { locus_tag: ['T_1'], translation: ['MKVLAAGIVAL'], product: ['kinase'] }
+  };
+  s.state.extractedFeatures.value = [translated];
+  const rules = [
+    { feat: 'CDS', qual: 'product', val: 'kinase' },
+    { feat: 'CDS', qual: 'translation', val: '^MKV' },
+    { feat: 'CDS', qual: 'locus_tag', val: 'T_' }
+  ];
+  assert.equal(await s.preparation.prepare([rules[0]]), true);
+  assert.deepEqual(Object.entries(sent.at(-1).features[0].qualifiers), [['-0', []], ['-1', []], ['product', ['kinase']]]);
+  assert.equal(await s.preparation.prepare(rules), true);
+  assert.deepEqual(Object.entries(sent.at(-1).features[0].qualifiers),
+    [['locus_tag', ['T_1']], ['translation', ['MKVLAAGIVAL']], ['-0', []]]);
+  // The rank of each rule a feature matches, by its qualifier.
+  const ranks = ({ matches, priorities }, asked) => Object.fromEntries(
+    matches[0].map((index, position) => [asked[index].qual, priorities[0][position]]));
+  const asked = rules.slice(1);
+  const whole = await evaluatePythonRules({ kind: 'color', features: [ruleFeaturePayload(translated)], rules: asked });
+  const read = await evaluatePythonRules({ kind: 'color', features: sent.at(-1).features, rules: asked });
+  assert.deepEqual(ranks(read, asked), ranks(whole, asked));
+  assert.deepEqual(Object.keys(ranks(whole, asked)).sort(), ['locus_tag', 'translation']);
+  // A placeholder skips a name a rule reads.
+  assert.deepEqual(Object.keys(ruleFeaturePayloadReading(translated, qualifiersRead([{ qual: '-0' }, { qual: 'product' }], 'qual'))
+    .qualifiers), ['-1', '-2', 'product']);
+  // A visibility or label rule reads its key in any case.
+  assert.deepEqual(ruleFeaturePayloadReading(translated, qualifiersRead([{ qualifier: ' Translation ' }], 'qualifier'))
+    .qualifiers.translation, ['MKVLAAGIVAL']);
 });
