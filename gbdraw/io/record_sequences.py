@@ -6,7 +6,7 @@ that are not sequence to Biopython or BCBio-GFF, which build the record headers 
 features as before, and records, for each record, where its sequence lies in the
 file (``_SequenceTable``) instead of building it. A record's ``seq`` is then a
 ``Seq`` over a :class:`RecordSequence`, which reads bases on demand from the file
-through the file's one block cache (``_SequenceFile``). Its bytes equal the ``Seq``
+through one block cache (``_BlockCache``). Its bytes equal the ``Seq``
 Biopython builds from the same lines: a flat file's sequence in upper case, without
 the coordinate column and the spaces; a FASTA sequence as written, without
 whitespace.
@@ -21,7 +21,7 @@ The sequence lines are checked in runs of lines of one length. A run laid out as
 writers lay out sequence lines (coordinates, then letters and spaces) is read
 with one ``bytes.translate``; any other line is read with the rule Biopython
 applies to each line, so both give Biopython's bytes. A cache budget decides how
-many decoded blocks stay in memory, never what a read returns.
+many decoded bases stay in memory, never what a read returns.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ SequenceFormat = Literal["genbank", "embl", "fasta"]
 
 _BLOCK_BYTES = 8 << 20  # sequential reads of the parse pass
 _CHUNK_BYTES = 64 << 10  # most raw bytes of one indexed chunk (whole lines)
-_CACHE_BYTES = 32 << 20  # decoded bases kept per input file
+_CACHE_BYTES = 256 << 20  # decoded bases the block cache keeps, all input files together
 _BYTE_ORDER_MARK = "﻿"
 _DIGITS = b"0123456789"
 _LETTERS = bytes(range(ord("A"), ord("Z") + 1)) + bytes(range(ord("a"), ord("z") + 1)) + b"*-."
@@ -76,11 +76,57 @@ _EMBL_SEQUENCE_HEADERS = ("SQ", "CO")
 _Read = TypeVar("_Read")
 
 
+class _BlockCache:
+    """The decoded bases read so far, least recently used dropped first past ``_CACHE_BYTES``.
+
+    One cache serves every input file, so the budget bounds the memory of all of
+    them. A block is a whole record sequence that fits the budget, else one chunk.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._blocks: OrderedDict[tuple[int, int, int], bytes] = OrderedDict()
+        self._bytes = 0
+
+    def get(self, key: tuple[int, int, int], build: Callable[[], bytes]) -> bytes:
+        with self._lock:
+            hit = self._blocks.get(key)
+            if hit is not None:
+                self._blocks.move_to_end(key)
+                return hit
+        value = build()
+        with self._lock:
+            if key not in self._blocks:
+                self._blocks[key] = value
+                self._bytes += len(value)
+                while self._bytes > _CACHE_BYTES and len(self._blocks) > 1:
+                    _, dropped = self._blocks.popitem(last=False)
+                    self._bytes -= len(dropped)
+        return value
+
+    def drop_file(self, file_key: int) -> None:
+        """Forget the blocks of a file no record sequence reads any more."""
+
+        with self._lock:
+            for key in [key for key in self._blocks if key[0] == file_key]:
+                self._bytes -= len(self._blocks.pop(key))
+
+
+_CACHE = _BlockCache()
+_FILE_KEYS = iter(range(1, 1 << 62))
+
+
+def _release(handle: IO[bytes], file_key: int) -> None:
+    handle.close()
+    _CACHE.drop_file(file_key)
+
+
 class _SequenceFile:
-    """One input file's bytes, read at offsets, and the block cache of its decoded bases.
+    """One input file's bytes, read at offsets.
 
     ``read_at`` is the one read of the file below a record sequence. The file stays
-    open while a record sequence refers to it and is closed when the last one goes.
+    open while a record sequence refers to it and is closed, and its cached blocks
+    dropped, when the last one goes.
     """
 
     def __init__(self, path: str | PathLike[str]) -> None:
@@ -95,14 +141,13 @@ class _SequenceFile:
                 shutil.copyfileobj(expanded, self._file, _BLOCK_BYTES)
         else:
             self._file = open(self.path, "rb", buffering=0)
-        self._finalizer = weakref.finalize(self, self._file.close)
+        self.key = next(_FILE_KEYS)
+        self._finalizer = weakref.finalize(self, _release, self._file, self.key)
         self._lock = threading.Lock()
-        self._cache: OrderedDict[tuple[int, int], bytes] = OrderedDict()
-        self._cached_bytes = 0
         self._tables = 0
 
     def table_key(self) -> int:
-        """A key no other sequence table of this file has (its chunks' cache keys start with it)."""
+        """A key no other sequence table of this file has (its blocks' cache keys hold it)."""
 
         self._tables += 1
         return self._tables
@@ -124,24 +169,6 @@ class _SequenceFile:
         with self._lock:
             self._file.seek(offset)
             return self._file.read(size)
-
-    def cached(self, key: tuple[int, int], build: Callable[[], bytes]) -> bytes:
-        """The decoded bases of one chunk, built once while they stay within the budget."""
-
-        with self._lock:
-            hit = self._cache.get(key)
-            if hit is not None:
-                self._cache.move_to_end(key)
-                return hit
-        value = build()
-        with self._lock:
-            if key not in self._cache:
-                self._cache[key] = value
-                self._cached_bytes += len(value)
-                while self._cached_bytes > _CACHE_BYTES and len(self._cache) > 1:
-                    _, dropped = self._cache.popitem(last=False)
-                    self._cached_bytes -= len(dropped)
-        return value
 
 
 @dataclass(eq=False)
@@ -173,8 +200,12 @@ class _SequenceTable:
         self.kinds.append(kind)
         self.length += bases
 
-    def chunk(self, index: int) -> bytes:
-        return self.source.cached((self.key, index), lambda: self._decode(index, index + 1))
+    def _block(self, index: int) -> bytes:
+        """Chunk ``index``'s bases (``-1``: the whole sequence), through the block cache."""
+
+        if index < 0:
+            return _CACHE.get((self.source.key, self.key, -1), lambda: self._bulk(0, self.length))
+        return _CACHE.get((self.source.key, self.key, index), lambda: self._decode(index, index + 1))
 
     def _decode(self, first: int, stop: int) -> bytes:
         """The bases of chunks ``first``..``stop - 1``, which are of one kind and adjacent in the file."""
@@ -184,26 +215,47 @@ class _SequenceTable:
         return _decode_chunk(self.kinds[first], raw, self.source.encoding, warn=False)
 
     def read(self, start: int, stop: int) -> bytes:
-        """Bases ``start``..``stop - 1`` (``0 <= start <= stop <= length``)."""
+        """Bases ``start``..``stop - 1`` (``0 <= start <= stop <= length``).
+
+        A sequence that fits the cache budget is one block: read whole once, then
+        every read is a slice of it (the whole read the block itself). A longer one
+        is read a chunk at a time through the cache, or past half the budget in
+        bulk, around the cache.
+        """
 
         if start >= stop:
             return b""
+        if self.length <= _CACHE_BYTES:
+            whole = self._block(-1)
+            return whole if stop - start == self.length else whole[start:stop]
+        if stop - start > _CACHE_BYTES // 2:
+            return self._bulk(start, stop)
         index = bisect.bisect_right(self.starts, start) - 1
         pieces: list[bytes] = []
         position = start
-        bulk = stop - start > _CACHE_BYTES // 2
         while position < stop:
-            last = index + 1
-            if bulk:  # a long read decodes adjacent chunks together and leaves the cache as it is
-                while (last < len(self.starts) and self.starts[last] < stop and self.kinds[last] == self.kinds[index]
-                       and self.offsets[last] == self.offsets[last - 1] + self.sizes[last - 1]
-                       and self.offsets[last] + self.sizes[last] - self.offsets[index] <= _BLOCK_BYTES):
-                    last += 1
-                bases = self._decode(index, last)
-            else:
-                bases = self.chunk(index)
+            bases = self._block(index)
             begin = self.starts[index]
             pieces.append(bases[position - begin: stop - begin])
+            position = begin + len(bases)
+            index += 1
+        return pieces[0] if len(pieces) == 1 else b"".join(pieces)
+
+    def _bulk(self, start: int, stop: int) -> bytes:
+        """Bases ``start``..``stop - 1``, adjacent chunks of one kind decoded together, around the cache."""
+
+        index = bisect.bisect_right(self.starts, start) - 1
+        pieces: list[bytes] = []
+        position = start
+        while position < stop:
+            last = index + 1
+            while (last < len(self.starts) and self.starts[last] < stop and self.kinds[last] == self.kinds[index]
+                   and self.offsets[last] == self.offsets[last - 1] + self.sizes[last - 1]
+                   and self.offsets[last] + self.sizes[last] - self.offsets[index] <= _BLOCK_BYTES):
+                last += 1
+            bases = self._decode(index, last)
+            begin = self.starts[index]
+            pieces.append(bases[position - begin: stop - begin] if position > begin or stop - begin < len(bases) else bases)
             position = begin + len(bases)
             index = last
         return pieces[0] if len(pieces) == 1 else b"".join(pieces)

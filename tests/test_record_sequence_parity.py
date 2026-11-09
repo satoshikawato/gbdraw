@@ -32,6 +32,7 @@ from gbdraw.io.input_text import (
     gff3_stream,
     read_sequence_text,
 )
+from gbdraw.io import record_sequences
 from gbdraw.io.record_sequences import RecordSequence
 
 TESTS = Path(__file__).parent
@@ -240,7 +241,12 @@ def test_embl_sequence_reads_as_biopython_reads_it() -> None:
     _assert_same(_biopython_flat(path), read_flat_file_records(str(path)))
 
 
-def test_record_sequence_reads_slices_and_copies_without_the_whole_sequence(tmp_path: Path) -> None:
+@pytest.mark.parametrize("budget", [None, 1 << 16], ids=["one block", "chunks"])
+def test_record_sequence_reads_slices_and_copies(budget: int | None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A record within the cache budget is read as one block, a longer one a chunk at a time (or in bulk)."""
+
+    if budget is not None:
+        monkeypatch.setattr(record_sequences, "_CACHE_BYTES", budget)
     lines = _SEQUENCE_CASES["many lines"]
     path = tmp_path / "long.gb"
     path.write_text(_genbank(lines, 3000 * 60), encoding="utf-8")
@@ -249,7 +255,8 @@ def test_record_sequence_reads_slices_and_copies_without_the_whole_sequence(tmp_
     data = record.seq._data
     assert isinstance(data, RecordSequence)
     whole = bytes(want.seq)
-    for key in (slice(5, 70000), slice(None, None, -1), slice(179990, 10, -7), slice(3, 100, 3), slice(-5, None)):
+    for key in (slice(5, 70000), slice(None, None, -1), slice(179990, 10, -7), slice(3, 100, 3), slice(-5, None),
+                slice(1000, 41000), slice(0, 0), slice(0, None)):
         assert data[key] == whole[key]
     assert record.seq[-1] == want.seq[-1] and record.seq[0] == want.seq[0]
     assert str(record.seq.reverse_complement()) == str(want.seq.reverse_complement())
