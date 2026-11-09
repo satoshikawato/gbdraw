@@ -1,0 +1,387 @@
+{
+  "description": "A stored request record of schema <= 9 (one `region`) and the `windows` schema 10 reads it as. Python: stored_record_windows; Web: promoteCanonicalRenderRequestToCurrent (storedRegionWindows). `promotedSelector` is the selector the Web promotion leaves on the record (Python's decode reads the region selector into the region itself). OV-2957. Left out until decided (OV-2957): a region with no keys (Web writes absent fields, Python null) and non-integer numbers (Python reads only integers as reversed; the Web any number).",
+  "cases": [
+    {
+      "name": "forward span",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": 50,
+          "end": 300,
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": 50,
+          "end": 300,
+          "reverseComplement": false,
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    },
+    {
+      "name": "start equals end",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": 7,
+          "end": 7,
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": 7,
+          "end": 7,
+          "reverseComplement": false,
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    },
+    {
+      "name": "reversed span, larger number first",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": 300,
+          "end": 50,
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": 50,
+          "end": 300,
+          "reverseComplement": true,
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    },
+    {
+      "name": "reversed span overrides a false reverseComplement",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": 300,
+          "end": 50,
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": 50,
+          "end": 300,
+          "reverseComplement": true,
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    },
+    {
+      "name": "reversed span with reverseComplement true",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": 300,
+          "end": 50,
+          "reverseComplement": true
+        }
+      },
+      "windows": [
+        {
+          "start": 50,
+          "end": 300,
+          "reverseComplement": true,
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    },
+    {
+      "name": "forward span with reverseComplement",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": 50,
+          "end": 300,
+          "reverseComplement": true
+        }
+      },
+      "windows": [
+        {
+          "start": 50,
+          "end": 300,
+          "reverseComplement": true,
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    },
+    {
+      "name": "region selector moves to a record without one",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": {
+            "kind": "recordId",
+            "value": "NC_1"
+          },
+          "start": 50,
+          "end": 300,
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": 50,
+          "end": 300,
+          "reverseComplement": false,
+          "column": null
+        }
+      ],
+      "promotedSelector": {
+        "kind": "recordId",
+        "value": "NC_1"
+      }
+    },
+    {
+      "name": "record selector wins over the region selector",
+      "record": {
+        "selector": {
+          "kind": "recordIndex",
+          "index": 2
+        },
+        "region": {
+          "selector": {
+            "kind": "recordId",
+            "value": "NC_1"
+          },
+          "start": 50,
+          "end": 300,
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": 50,
+          "end": 300,
+          "reverseComplement": false,
+          "column": null
+        }
+      ],
+      "promotedSelector": {
+        "kind": "recordIndex",
+        "index": 2
+      }
+    },
+    {
+      "name": "region selector with no record selector key",
+      "record": {
+        "region": {
+          "selector": {
+            "kind": "recordId",
+            "value": "NC_1"
+          },
+          "start": 1,
+          "end": 5,
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": 1,
+          "end": 5,
+          "reverseComplement": false,
+          "column": null
+        }
+      ],
+      "promotedSelector": {
+        "kind": "recordId",
+        "value": "NC_1"
+      }
+    },
+    {
+      "name": "null region",
+      "record": {
+        "selector": null,
+        "region": null
+      },
+      "windows": [],
+      "promotedSelector": null
+    },
+    {
+      "name": "absent region",
+      "record": {
+        "selector": null
+      },
+      "windows": [],
+      "promotedSelector": null
+    },
+    {
+      "name": "region is a string",
+      "record": {
+        "selector": null,
+        "region": "50-300"
+      },
+      "windows": [],
+      "promotedSelector": null
+    },
+    {
+      "name": "region is a number",
+      "record": {
+        "selector": null,
+        "region": 5
+      },
+      "windows": [],
+      "promotedSelector": null
+    },
+    {
+      "name": "region is an array",
+      "record": {
+        "selector": null,
+        "region": [
+          1,
+          2
+        ]
+      },
+      "windows": [],
+      "promotedSelector": null
+    },
+    {
+      "name": "string numbers are not reversed",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": "300",
+          "end": "50",
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": "300",
+          "end": "50",
+          "reverseComplement": false,
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    },
+    {
+      "name": "bool start is not a number",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": true,
+          "end": 0,
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": true,
+          "end": 0,
+          "reverseComplement": false,
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    },
+    {
+      "name": "null start and end",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": null,
+          "end": null,
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": null,
+          "end": null,
+          "reverseComplement": false,
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    },
+    {
+      "name": "negative numbers, larger first",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": -5,
+          "end": -10,
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": -10,
+          "end": -5,
+          "reverseComplement": true,
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    },
+    {
+      "name": "zero and negative",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": 0,
+          "end": -1,
+          "reverseComplement": false
+        }
+      },
+      "windows": [
+        {
+          "start": -1,
+          "end": 0,
+          "reverseComplement": true,
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    },
+    {
+      "name": "non-boolean reverseComplement is kept as stored",
+      "record": {
+        "selector": null,
+        "region": {
+          "selector": null,
+          "start": 1,
+          "end": 9,
+          "reverseComplement": "yes"
+        }
+      },
+      "windows": [
+        {
+          "start": 1,
+          "end": 9,
+          "reverseComplement": "yes",
+          "column": null
+        }
+      ],
+      "promotedSelector": null
+    }
+  ]
+}

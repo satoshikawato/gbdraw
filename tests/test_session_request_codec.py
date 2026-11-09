@@ -88,6 +88,7 @@ from gbdraw.session_request_codec import (
     CanonicalRequestDecodingError,
     CanonicalRequestEncodingError,
     EncodedCanonicalRequest,
+    _decode_region,
     _read_typed_json_resource,
     decode_canonical_request,
     encode_canonical_request,
@@ -3777,3 +3778,27 @@ def test_a_schema9_region_whose_start_is_greater_than_its_end_is_the_reversed_sp
     assert stored_record_windows(windowed["records"][0]) == [
         {"start": 300, "end": 50, "reverseComplement": False, "column": None}
     ]
+
+
+_REGION_WINDOW_VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "record-region-windows-vectors.json").read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize("case", _REGION_WINDOW_VECTORS, ids=lambda case: case["name"])
+def test_a_stored_region_reads_as_the_windows_the_web_promotion_writes(case: dict[str, Any]) -> None:
+    """The stored-region twin (tools/twins.json): tests/web/session-request.test.mjs reads the same vectors (OV-2957)."""
+    assert stored_record_windows(case["record"]) == case["windows"]
+    region = case["record"].get("region")
+    if (
+        isinstance(region, dict)
+        and type(region.get("start")) is int
+        and type(region.get("end")) is int
+        and isinstance(region.get("reverseComplement"), bool)
+    ):
+        decoded = _decode_region(region, path="region")
+        assert decoded is not None
+        window = case["windows"][0]
+        assert (decoded.start, decoded.end, decoded.reverse_complement) == (
+            window["start"], window["end"], window["reverseComplement"]
+        )
