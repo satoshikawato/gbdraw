@@ -5,7 +5,10 @@
 // it back in that form, so the card never holds a window in both. An End typed before the Start without "Across the
 // origin" is stored in order with Reverse complement ticked (OV-2884): the figure stays the reversed span it was.
 import { cardCropWindow } from './drawing/inputs.js';
+import { cropFormReverseComplement, linearCardCropForm, orientedCropForm } from './record-display-model.js';
+import { cloneJsonData } from './json-clone.js';
 /** @import { LinearSeq, LinearSeqWindow } from './drawing/inputs.js' */
+/** @import { LinearCardOrientation } from './record-display-model.js' */
 
 /** The crop fields of a card that this module reads and writes. @typedef {Pick<LinearSeq, 'region_start' | 'region_end' | 'region_reverse' | 'windows'>} CardCrop */
 /** The fields of a window an edit may set. @typedef {Partial<Pick<LinearSeqWindow, 'start' | 'end' | 'reverseComplement' | 'acrossOrigin'>>} CardWindowEdit */
@@ -114,17 +117,33 @@ export const removeCardWindow = (card, index) => {
 };
 
 /**
- * The bases a window across the origin of a record of `recordLength` draws (Start through the origin to End), or
- * null when it does not cross or the length is unknown.
- * @param {LinearSeqWindow} window
- * @param {number | null} recordLength
+ * Puts back the orientation fields `captureLinearCardOrientation` (services/record-display-model.js) kept, as they
+ * were.
+ * @template {{ reverseComplement: boolean }} W
+ * @param {LinearCardOrientation<W>} card
+ * @param {LinearCardOrientation<W>} saved
  */
-export const originWindowLength = (window, recordLength) => (
-  window.acrossOrigin && window.start !== null && window.end !== null && window.start > window.end
-    && recordLength !== null && window.start <= recordLength
-    ? recordLength - window.start + 1 + window.end
-    : null
-);
+export const restoreLinearCardOrientation = (card, saved) => {
+  card.windows = cloneJsonData(saved.windows);
+  card.region_reverse = saved.region_reverse;
+};
+
+/**
+ * Draws a Linear File card's record in the absolute direction `reverseComplement` where the card holds its
+ * orientation (`orientedCropForm`): on the windows it lists, else on its Reverse complement (Record options Reverse,
+ * Align's flip, the record popup's Reverse complement). A card drawn so already is left as it is; false then.
+ * @template {{ reverseComplement: boolean }} W
+ * @param {LinearCardOrientation<W>} card
+ * @param {boolean} reverseComplement
+ */
+export const orientLinearCard = (card, reverseComplement) => {
+  const form = linearCardCropForm(card);
+  if (cropFormReverseComplement(form) === reverseComplement) return false;
+  const oriented = orientedCropForm(form, reverseComplement);
+  card.windows = oriented.windows;
+  card.region_reverse = oriented.reverse;
+  return true;
+};
 
 /**
  * A listed window as Generate draws it: with Start and End both empty it spans the whole record, 1 to `recordLength`,

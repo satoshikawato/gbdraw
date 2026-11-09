@@ -5,7 +5,8 @@
 // `planCardWindows` reads the records as the request writes them, with the drawing's row order and captions); until
 // it answers, the card shows neither. The shown-drawing readers pass the state, the shown drawing of a mode, the
 // record a card draws, the helper and the record display rows as ports; the edits are services/linear-card-windows.js.
-import { cardWindowList, originWindowLength, sequenceCardRecord } from '../services/linear-card-windows.js';
+import { cardWindowList, sequenceCardRecord } from '../services/linear-card-windows.js';
+import { windowBases } from '../services/record-options.js';
 import { linearLayoutCells } from '../services/linear-record-layout.js';
 import { t } from '../utils/i18n.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, WebState } from '../state.js' */
@@ -109,7 +110,9 @@ export const createLinearCardWindowReaders = ({
     return {
       circular,
       windows: windows.map((window, index) => {
-        const length = originWindowLength(window, recordLength);
+        // A window across the origin: its length runs from its Start through the origin to its End.
+        const length = window.acrossOrigin && window.start !== null && window.end !== null && window.start > window.end
+          && recordLength !== null && window.start <= recordLength ? windowBases(window.start, window.end, recordLength) : null;
         const number = numberOf(plan, seq.uid, index);
         const gap = plan?.gaps.find((entry) => entry.recordKey === seq.uid && entry.leftWindow === index);
         const second = gap ? numberOf(plan, seq.uid, gap.rightWindow) : null;

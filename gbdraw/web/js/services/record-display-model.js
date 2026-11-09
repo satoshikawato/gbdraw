@@ -413,33 +413,6 @@ export const captureLinearCardOrientation = (card) => ({
 });
 
 /**
- * Puts back the orientation fields `captureLinearCardOrientation` kept, as they were.
- * @template {{ reverseComplement: boolean }} W
- * @param {LinearCardOrientation<W>} card
- * @param {LinearCardOrientation<W>} saved
- */
-export const restoreLinearCardOrientation = (card, saved) => {
-  card.windows = cloneJsonData(saved.windows);
-  card.region_reverse = saved.region_reverse;
-};
-
-/**
- * Draws a Linear File card's record in the absolute direction `reverseComplement` where the card holds its
- * orientation (`orientedCropForm`): on the windows it lists, else on its Reverse complement. A card drawn so already
- * is left as it is.
- * @template {{ reverseComplement: boolean }} W
- * @param {LinearCardOrientation<W>} card
- * @param {boolean} reverseComplement
- */
-export const orientLinearCard = (card, reverseComplement) => {
-  const form = linearCardCropForm(card);
-  if (cropFormReverseComplement(form) === reverseComplement) return;
-  const oriented = orientedCropForm(form, reverseComplement);
-  card.windows = oriented.windows;
-  card.region_reverse = oriented.reverse;
-};
-
-/**
  * @param {RecordDisplayRowView} row
  * @param {RecordDisplayRequested} [draft]
  * @param {RecordDisplayContext} [context]

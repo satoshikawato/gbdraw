@@ -21,8 +21,9 @@ import {
 import { regionSelectionHeading } from '../services/region-axis.js';
 import { readLinearSeqWindows } from '../services/drawing/inputs.js';
 import {
-  canonicalRecordReverseComplement, cropFormReverseComplement, orientedCropForm
+  canonicalRecordReverseComplement, cropFormReverseComplement, linearCardCropForm, orientedCropForm
 } from '../services/record-display-model.js';
+import { orientLinearCard } from '../services/linear-card-windows.js';
 import { appliedFeatureColorOf, colorSwatchView } from '../utils/color-utils.js';
 import { msg, t, tn, tm, tx } from '../utils/i18n.js';
 
@@ -317,12 +318,16 @@ export const RECORD_POPUP_FIELDS = Object.freeze({
 const recordTextWrite = (target, key, next) => (target[key] === next ? null : () => { target[key] = next; });
 /**
  * The write that draws a record popup's record in the direction `next` where its crop form holds the orientation:
- * its listed windows, else its Reverse complement (`orientedCropForm`, as Generate reads them); null when it is drawn
- * so already.
+ * its listed windows, else its Reverse complement (`orientedCropForm`, as Generate reads them); a Linear card's
+ * through its windows' owner (`orientLinearCard`). Null when it is drawn so already.
  * @param {Record<string, unknown>} target @param {RecordPopupReverseField} field @param {boolean} next
  * @returns {(() => void) | null}
  */
 const recordReverseWrite = (target, field, next) => {
+  if (field === RECORD_POPUP_FIELDS.linear.reverse) {
+    const card = /** @type {LinearSeq} */ (/** @type {unknown} */ (target));
+    return cropFormReverseComplement(linearCardCropForm(card)) === next ? null : () => { orientLinearCard(card, next); };
+  }
   const form = { windows: readLinearSeqWindows(target[field.windows]), reverse: Boolean(target[field.key]) };
   if (cropFormReverseComplement(form) === next) return null;
   return () => {

@@ -10,15 +10,14 @@ import {
   captureLinearCardOrientation,
   cropFormReverseComplement,
   linearCardCropForm,
-  orientLinearCard,
   parseRecordDisplayStart,
   recordDisplayKey,
   recordDisplaySurface,
   requestedRecordTransform,
   requireReverseComplementOverride,
-  restoreLinearCardOrientation,
   validateAnchorIntent
 } from '../services/record-display-model.js';
+import { orientLinearCard, restoreLinearCardOrientation } from '../services/linear-card-windows.js';
 import { matchesSessionResourceDescriptor } from '../services/session-resource-backing.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import { featureIdentityKey, requestFeaturePlacements } from '../services/feature-placement.js';

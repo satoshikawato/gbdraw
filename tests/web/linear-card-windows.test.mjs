@@ -18,7 +18,7 @@ globalThis.window = {
 
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
-  addCardWindow, cardWindowList, editCardWindow, originWindowLength,
+  addCardWindow, cardWindowList, editCardWindow, orientLinearCard,
   removeCardWindow, UNKNOWN_CARD_RECORD, catalogCardRecord
 } = await import('../../gbdraw/web/js/services/linear-card-windows.js');
 const {
@@ -28,6 +28,8 @@ const {
   layoutCellKey, linearLayoutCells, linearLayoutPlaces, moveLinearLayoutCell, placeNewLayoutWindow, placeRecordAtRowEnd, setLinearRecordRow
 } = await import('../../gbdraw/web/js/services/linear-record-layout.js');
 const { createLinearRecordEdits } = await import('../../gbdraw/web/js/app/linear-source-edits.js');
+const { windowBases } = await import('../../gbdraw/web/js/services/record-options.js');
+const { RECORD_SETTINGS_DEFAULTS, linearCardHasSettings } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
 const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
 const { pythonCardWindowPlan, pythonLinearUnitPlan } = await import('./helpers/linear-unit-plan.mjs');
 const { createLinearCardWindowReaders } = await import('../../gbdraw/web/js/app/linear-card-window-readers.js');
@@ -55,8 +57,8 @@ test('with "Across the origin" ticked a Start after the End stays a window acros
   editCardWindow(card, 0, { end: 100 });
   assert.deepEqual(crop(card), [null, null, false, 1]);
   assert.deepEqual(card.windows, [{ start: 16000, end: 100, reverseComplement: false, column: null, acrossOrigin: true }]);
-  assert.equal(originWindowLength(card.windows[0], 16569), 670);
-  assert.equal(originWindowLength(card.windows[0], null), null);
+  assert.equal(windowBases(16000, 100, 16569), 670);
+  assert.equal(windowBases(16000, 100, null), null);
   // A window across the origin that New drawing from region or Find in other files writes arrives with the box ticked.
   const made = createLinearSeq({ uid: 'm', windows: [{ start: 16000, end: 100, reverseComplement: false, column: null }] });
   assert.equal(made.windows[0].acrossOrigin, true);
@@ -320,6 +322,19 @@ test('Add window and Remove are one History step each through the record rows\' 
   edits.setLinearCardWindow(drawing.linearSeqs[0], 0, 'start', 5);
   assert.equal(applied.length, 2);
   assert.equal(drawing.linearSeqs[0].region_start, 5);
+});
+
+test('the card owns every write of its windows: orientation, Reset Settings and Delete settings values', () => {
+  const card = createLinearSeq({ uid: 'a', windows: [span(1, 100), span(301, 400)] });
+  assert.equal(orientLinearCard(card, true), true);
+  assert.deepEqual(card.windows.map(({ reverseComplement }) => reverseComplement), [true, true]);
+  assert.equal(orientLinearCard(card, true), false);
+  // Delete settings resets the window fields to the whole record, and a card without a window has no settings
+  // (OV-2993: `[] !== []` made every card report settings).
+  const cleared = createLinearSeq({ ...card, ...RECORD_SETTINGS_DEFAULTS });
+  assert.deepEqual(crop(cleared), [null, null, false, 0]);
+  assert.equal(linearCardHasSettings(createLinearSeq({ uid: 'b' })), false);
+  assert.equal(linearCardHasSettings(card), true);
 });
 
 test('Up and Down change only the places, so the unit indexes stored comparisons hold stay (F7)', () => {

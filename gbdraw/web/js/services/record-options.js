@@ -251,11 +251,12 @@ export const regionWithinRecord = (start, end, recordLength) => {
 /**
  * The bases a window draws, both ends included. A window whose start is after its end crosses the origin of a
  * circular record (D-34): its bases need the record's length, and are null until the record is read (Python's
- * `region_slice`). The one reader of a window's length for the window lists and the Circular crop.
+ * `region_slice`). The one reader of a window's length for the window lists, a Linear card's window across the
+ * origin, and the Circular crop.
  * @param {number} start @param {number} end
  * @param {number | null} recordLength the length of the record the window draws, once read
  */
-const windowBases = (start, end, recordLength) => (
+export const windowBases = (start, end, recordLength) => (
   start <= end ? end - start + 1 : recordLength === null ? null : recordLength - start + 1 + end
 );
 
@@ -265,7 +266,8 @@ const windowBases = (start, end, recordLength) => (
  * @typedef {{ number: number, span: string, length: string, reverseComplement: boolean }} LinearRecordWindowRow
  */
 /**
- * The rows of a record card's window list, in column order (D-08; windows without a column keep the request's
+ * The rows of the read-only window list of the Circular Region block (a Linear card edits its windows,
+ * app/linear-card-window-readers.js), in column order (D-08; windows without a column keep the request's
  * order after those with one, as the layout places them). A window whose start is after its end crosses the origin
  * of a circular record (D-34): its length needs the record's, and is empty until the record is read.
  * @param {readonly { start: number | null, end: number | null, reverseComplement: boolean, column: number | null }[]} windows
