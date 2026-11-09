@@ -31,6 +31,20 @@ def _conservation_drawer(cfg: GbdrawConfig, track_color: str | None, min_identit
     )
 
 
+def _background_shows(cfg: GbdrawConfig) -> bool:
+    conservation_cfg = cfg.objects.conservation
+    return bool(conservation_cfg.show_background) and paint_shows(
+        conservation_cfg.background_color, conservation_cfg.background_opacity
+    )
+
+
+def conservation_ring_paints_band_edges(track: ConservationTrack, cfg: GbdrawConfig) -> bool:
+    """Whether ``ConservationGroup`` paints its band's edges: its background ring spans the band, and so does each
+    hit's sector. The tick labels next to the ring keep their margin from it (OV-3149)."""
+
+    return _background_shows(cfg) or not track.hits.empty
+
+
 def conservation_ring_ink(
     track: ConservationTrack,
     *,
@@ -44,10 +58,7 @@ def conservation_ring_ink(
     """What ``ConservationGroup`` paints with the same arguments: the background ring when it shows (on, with a
     color and an opacity), else the hits."""
 
-    conservation_cfg = cfg.objects.conservation
-    if bool(conservation_cfg.show_background) and paint_shows(
-        conservation_cfg.background_color, conservation_cfg.background_opacity
-    ):
+    if _background_shows(cfg):
         return (CircularInkRing(RadialBand(float(inner_radius_px), float(outer_radius_px))),)
     drawer = _conservation_drawer(cfg, str(track.track_color) if track.track_color else None, float(min_identity))
     return drawer.ink(
@@ -133,4 +144,4 @@ class ConservationGroup:
         return self.group
 
 
-__all__ = ["ConservationGroup", "conservation_ring_ink"]
+__all__ = ["ConservationGroup", "conservation_ring_ink", "conservation_ring_paints_band_edges"]

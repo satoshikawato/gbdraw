@@ -105,9 +105,9 @@ class DepthSlotWidth(NamedTuple):
 @dataclass(frozen=True)
 class CircularScalarAxes:
     """The axes of a Circular record's scalar tracks that the radial layout keeps room for: the depth tracks', and
-    the Percent GC content track's while it draws numbered labels (``of``); and whether the GC content band paints
-    its edges (``gc_content_paints_edges``: the Percent background or border shows), which the tick labels next to
-    it keep their margin from (OV-3116).
+    the Percent GC content track's while it draws numbered labels (``of``); and the slots whose tracks paint their
+    band's edges (``edge_painting_slot_ids``, each as its drawer paints it), which the tick labels next to them keep
+    their margin from (OV-3116, OV-3149).
 
     ``depth_tracks`` holds the axis of each logical depth track by its index, each with that track's own settings
     (its tick font among them); ``depth`` is the axis of every depth slot of a record whose tracks are not indexed.
@@ -116,7 +116,7 @@ class CircularScalarAxes:
     depth: ScalarAxisStyle | None = None
     gc_content: ScalarAxisStyle | None = None
     depth_tracks: tuple[tuple[int, ScalarAxisStyle], ...] | None = None
-    gc_content_paints_edges: bool = False
+    edge_painting_slot_ids: tuple[str, ...] = ()
 
     @classmethod
     def of(
@@ -125,7 +125,7 @@ class CircularScalarAxes:
         gc_content: ScalarAxisSource | None,
         depth_tracks: Mapping[int, ScalarAxisSource] | None = None,
         *,
-        gc_content_paints_edges: bool = False,
+        edge_painting_slot_ids: Iterable[str] = (),
     ) -> CircularScalarAxes:
         """The axes of a drawn depth track (``depth``; each of ``depth_tracks`` by index when the record has
         them) and a Percent GC content track. A GC axis without numbered labels keeps no room past its band, so
@@ -146,7 +146,7 @@ class CircularScalarAxes:
                 if indexed and depth_tracks is not None
                 else None
             ),
-            gc_content_paints_edges=bool(gc_content_paints_edges),
+            edge_painting_slot_ids=tuple(sorted({str(slot_id) for slot_id in edge_painting_slot_ids})),
         )
 
     def depth_axis(self, track_index: int) -> ScalarAxisStyle | None:
@@ -172,11 +172,10 @@ class CircularScalarAxes:
         size = None if gc is None else self.gc_tick_font_size(gc, depth_slots)
         return self if gc is None or size is None else replace(self, gc_content=replace(gc, tick_font_size=size))
 
-    def paints_edges(self, renderer: str) -> bool:
-        """Whether a ``renderer`` track paints its band's edges: the GC content band while its Percent background
-        or border shows."""
+    def paints_edges(self, slot_id: str) -> bool:
+        """Whether the track of slot ``slot_id`` paints its band's edges."""
 
-        return renderer == "dinucleotide_content" and self.gc_content_paints_edges
+        return slot_id in self.edge_painting_slot_ids
 
     def footprint(
         self, renderer: str, track_width_px: float, *, slot_id: str, params: Mapping[str, object]

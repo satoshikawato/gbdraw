@@ -2595,7 +2595,7 @@ def _with_painted_edge_neighbours(
     }
 
     def painted(stack: Sequence[_RadialSlotIntent], pos: int) -> bool:
-        return 0 <= pos < len(stack) and scalar_axes.paints_edges(stack[pos].renderer)
+        return 0 <= pos < len(stack) and scalar_axes.paints_edges(stack[pos].slot_id)
 
     neighbours = {
         intent.slot_index: (painted(stack, pos + 1), painted(stack, pos - 1))
