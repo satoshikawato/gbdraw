@@ -1094,6 +1094,22 @@ def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[t
     return files
 
 
+def _log_render_notices(rendered_items: Sequence[RequestRenderResult]) -> None:
+    """Log each Result's annotation warnings, feature notices and input summary.
+
+    A warning the Results of a batch share (one comparison file every Result reads) is logged once.
+    """
+
+    warned: set[str] = set()
+    for rendered_item in rendered_items:
+        for warning in rendered_item.annotation_warnings:
+            logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
+                warning.set_id, warning.annotation_id, warning.record_index + 1,
+                warning.record_id, warning.message)
+        log_feature_identity_notices(rendered_item.feature_identity_notices)
+        log_input_summary(rendered_item.input_summary, warned=warned)
+
+
 def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     """Run circular rendering from an already parsed argparse namespace."""
 
@@ -1614,13 +1630,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     session_feature_metadata: list[Mapping[str, Any]] = []
     session_biological_feature_metadata: list[Mapping[str, Any]] = []
     session_interactive_contexts = []
+    _log_render_notices(rendered_items)
     for result_index, rendered_item in enumerate(rendered_items):
-        for warning in rendered_item.annotation_warnings:
-            logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
-                warning.set_id, warning.annotation_id, warning.record_index + 1,
-                warning.record_id, warning.message)
-        log_feature_identity_notices(rendered_item.feature_identity_notices)
-        log_input_summary(rendered_item.input_summary)
         if not rendered_item.output_paths:
             raise ValidationError("Circular request renderer did not produce an SVG output.")
         svg_path = Path(rendered_item.output_paths[0])

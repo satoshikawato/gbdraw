@@ -164,6 +164,28 @@ def test_a_comparison_file_that_repeats_a_record_id_draws_as_before_and_warns(
     assert not [record for record in caplog.records if "repeated.fna" in record.getMessage()]
 
 
+def test_a_circular_batch_warns_once_of_a_comparison_file_that_repeats_a_record_id(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """#1777 review 2, LOW 2: one comparison file, read once for every output of a batch, is named once."""
+
+    repeated = tmp_path / "repeated.fna"
+    repeated.write_bytes(DANIO_FASTA.read_bytes() * 2)
+    two_records = tmp_path / "two.gb"
+    two_records.write_bytes(HUMAN.read_bytes() + DANIO.read_bytes())
+    prefix = tmp_path / "out" / "ring"
+    with caplog.at_level("WARNING"):
+        circular_main([
+            "--gbk", str(two_records), "--conservation_blast", str(DANIO_TSV), "--conservation_reference", "subject",
+            "--conservation_sequence", str(repeated), "-o", str(prefix), "-f", "interactive_svg",
+        ])
+    assert sorted(path.name for path in prefix.parent.glob("*.svg")) == [
+        "ring_1.interactive.svg", "ring_1.svg", "ring_2.interactive.svg", "ring_2.svg",
+    ]
+    warned = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    assert len([message for message in warned if message.startswith("Comparison sequence file repeated.fna:")]) == 1
+
+
 def test_an_empty_file_in_a_genome_of_several_files_is_refused(tmp_path: Path) -> None:
     """Review 1 of #1777, item 4: an empty file is not dropped from a genome silently."""
 

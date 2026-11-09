@@ -425,19 +425,28 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
     return tuple(warnings)
 
 
-def log_input_warnings(summary: InputSummary) -> None:
-    """Write the summary's warnings as WARNING lines (the Python API's ``draw_circular`` and ``draw_linear``)."""
+def log_input_warnings(summary: InputSummary, *, warned: set[str] | None = None) -> None:
+    """Write the summary's warnings as WARNING lines (the Python API's ``draw_circular`` and ``draw_linear``).
+
+    ``warned`` holds the warnings the earlier Results of a batch wrote: a warning
+    they share (one comparison file every Result reads) is written once, and the
+    new ones join it.
+    """
 
     for warning in input_warnings(summary):
+        if warned is not None:
+            if warning.message in warned:
+                continue
+            warned.add(warning.message)
         logger.warning("%s", warning.message)
 
 
-def log_input_summary(summary: InputSummary) -> None:
-    """Write the summary as CLI INFO lines and its warnings as WARNING lines."""
+def log_input_summary(summary: InputSummary, *, warned: set[str] | None = None) -> None:
+    """Write the summary as CLI INFO lines and its warnings as WARNING lines, each of a batch once (``warned``)."""
 
     for line in input_summary_lines(summary):
         logger.info("%s", line)
-    log_input_warnings(summary)
+    log_input_warnings(summary, warned=warned)
 
 
 def with_source_names(summary: InputSummary, names: Mapping[str, str]) -> InputSummary:
