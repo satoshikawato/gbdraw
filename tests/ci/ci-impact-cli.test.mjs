@@ -454,6 +454,7 @@ test('evidence verifier failures fall back to the full profile', async () => {
     'core-pr',
     'recipes-standard',
     'gallery',
+    'examples',
     'lint',
     'web-contracts-pr',
     'web-pr-smoke'
@@ -806,8 +807,8 @@ test('a failed fast job cancels the rest of its pull request run, never a dev ru
   assert.equal(workflow.match(/gh run cancel/g).length, failFastFor.length);
   assert.match(workflow.split('\njobs:\n')[0], /\npermissions:\n  contents: read\n  actions: read\n/);
   assert.deepEqual(gateNeeds(), [
-    'ci-impact', 'web-change-budget', 'core-pr', 'core', 'recipes-standard', 'gallery', 'lint',
-    'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance'
+    'ci-impact', 'web-change-budget', 'core-pr', 'core', 'recipes-standard', 'gallery', 'examples',
+    'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance'
   ]);
 });
 
@@ -999,6 +1000,7 @@ test('every job that installs gbdraw from the checkout installs the managed LOSA
     'test.yml:core-pr',
     'test.yml:recipes-standard',
     'test.yml:gallery',
+    'test.yml:examples',
     'test.yml:browser',
     'test.yml:web-contracts-pr',
     'test.yml:web-pr-smoke',

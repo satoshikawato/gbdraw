@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from io import BytesIO
 from functools import cache
 import re
 import subprocess
@@ -10,9 +11,19 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 import pytest
+from PIL import Image
 
-from tools.reproduce_examples import PROJECT_ROOT, Reproducer
+from tools.reproduce_examples import (
+    PNG_SOURCE_KEY,
+    PROJECT_ROOT,
+    Reproducer,
+    check_outputs,
+    png_source_digest,
+    png_with_source_digest,
+    render_figures,
+)
 from tools.reproduce_examples_manifest import (
+    FIGURES_WITHOUT_INPUTS,
     MANUALLY_MANAGED_FIGURES,
     UNREFERENCED_FIGURE_RETENTION,
     CliRecipe,
@@ -340,7 +351,9 @@ def test_alias_resolution_and_support_asset_materialization(tmp_path: Path) -> N
             dry_run=False,
         )
         assert label_override is not None
-        assert label_override.parent == tmp_path / "out" / "_support_assets"
+        # Intermediate inputs never land in the output root, which may be the repository.
+        assert label_override.parent == reproducer.support_dir
+        assert not (tmp_path / "out" / "_support_assets").exists()
         assert "LC738868.1\tCDS\tlabel" in label_override.read_text()
 
         payload = reproducer.report_payload()
@@ -484,20 +497,6 @@ def reproduced_arrow_geometry_variants(
         reproducer.close()
 
 
-def test_gallery_session_arrow_geometry_variants_reproduce_tracked_svgs(
-    reproduced_arrow_geometry_variants: dict[str, Path],
-) -> None:
-    for figure_id in (
-        "tutorial_9_arrow_geometry_circular",
-        "tutorial_9_arrow_geometry_linear",
-    ):
-        generated = reproduced_arrow_geometry_variants[figure_id]
-        tracked = PROJECT_ROOT / _figure_specs()[figure_id].output_path
-        assert generated.read_text(encoding="utf-8") == tracked.read_text(
-            encoding="utf-8"
-        )
-
-
 def test_gallery_session_arrow_geometry_variants_only_change_feature_paths(
     reproduced_arrow_geometry_variants: dict[str, Path],
 ) -> None:
@@ -546,3 +545,136 @@ def test_gallery_session_arrow_geometry_variants_only_change_feature_paths(
                 changed_paths += 1
 
         assert changed_paths == expected_changed_paths
+
+
+def _check_run(
+    figures: dict[str, FigureSpec], figure_ids: list[str], output_root: Path, *, jobs: int = 1
+) -> tuple[bool, Reproducer]:
+    runs = render_figures(figures, figure_ids, output_root, jobs=jobs)
+    reproducer = Reproducer(project_root=PROJECT_ROOT, output_root=output_root, figures=figures)
+    for run in runs:
+        reproducer.merge_report(run.report)
+    errors = {run.figure_id: run.error for run in runs if run.error}
+    return check_outputs(figures, figure_ids, output_root, reproducer, errors), reproducer
+
+
+def test_check_passes_for_fresh_figures_and_names_the_refresh_command_for_stale_ones(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    figures = _figure_specs()
+    figure_ids = ["tutorial_3_label_override", "window_step_comparison"]
+    ok, reproducer = _check_run(figures, figure_ids, tmp_path, jobs=2)
+    reproducer.close()
+    assert ok, capsys.readouterr().out
+    assert "2 match, 0 differ" in capsys.readouterr().out
+
+    # An SVG differs by one byte; a PNG was rasterized from something else (another digest).
+    svg = tmp_path / figures["tutorial_3_label_override"].output_path
+    svg.write_bytes(svg.read_bytes() + b"\n")
+    png = tmp_path / figures["window_step_comparison"].output_path
+    png.write_bytes(png_with_source_digest(png.read_bytes(), "0" * 64))
+    reproducer = Reproducer(project_root=PROJECT_ROOT, output_root=tmp_path, figures=figures)
+    reproducer.generated.extend(figure_ids)
+    try:
+        assert check_outputs(figures, figure_ids, tmp_path, reproducer, {}) is False
+    finally:
+        reproducer.close()
+    out = capsys.readouterr().out
+    assert "0 match, 2 differ" in out
+    assert "  examples/tutorial-3-label-override.svg\n" in out
+    assert "  examples/window_step_comparison.png\n" in out
+    assert (
+        "python tools/reproduce_examples.py --output-root . "
+        "--figure tutorial_3_label_override --figure window_step_comparison" in out
+    )
+
+
+def test_png_figures_carry_the_digest_of_their_sources_and_a_tracked_png_without_one_is_stale(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    figures = _figure_specs()
+    figure_ids = ["python_api_linear", "window_step_comparison"]
+    runs = render_figures(figures, figure_ids, tmp_path / "out", jobs=2)
+    assert [run.error for run in runs] == [None, None]
+    for figure_id in figure_ids:
+        rendered = (tmp_path / "out" / figures[figure_id].output_path).read_bytes()
+        digest = png_source_digest(rendered)
+        assert digest is not None and len(digest) == 64
+        # The chunk is an ordinary tEXt chunk before the image data.
+        assert Image.open(BytesIO(rendered)).text[PNG_SOURCE_KEY] == digest
+        assert digest == png_source_digest((PROJECT_ROOT / figures[figure_id].output_path).read_bytes())
+    # The CLI's SVG beside a PNG stays in the temporary root.
+    assert sorted(path.name for path in (tmp_path / "out" / "examples").iterdir()) == [
+        "python-api-linear.png",
+        "window_step_comparison.png",
+    ]
+
+    tracked_root = tmp_path / "tracked"
+    for figure_id in figure_ids:
+        source = PROJECT_ROOT / figures[figure_id].output_path
+        target = tracked_root / figures[figure_id].output_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(source.read_bytes())
+    plain = Image.open(tracked_root / figures["python_api_linear"].output_path)
+    buffer = BytesIO()
+    plain.save(buffer, format="PNG")
+    (tracked_root / figures["python_api_linear"].output_path).write_bytes(buffer.getvalue())
+    reproducer = Reproducer(project_root=PROJECT_ROOT, output_root=tmp_path / "out", figures=figures)
+    reproducer.generated.extend(figure_ids)
+    try:
+        assert not check_outputs(
+            figures, figure_ids, tmp_path / "out", reproducer, {}, tracked_root=tracked_root
+        )
+    finally:
+        reproducer.close()
+    out = capsys.readouterr().out
+    assert "1 match, 1 differ" in out
+    assert "  examples/python-api-linear.png\n" in out
+
+
+def test_check_names_figures_without_inputs_and_fails_on_any_other_missing_input(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    figures = dict(_figure_specs())
+    figures["missing_figure"] = FigureSpec(
+        figure_id="missing_figure",
+        output_path="examples/missing_figure.svg",
+        groups=("docs",),
+        required_inputs=("definitely_missing.gb",),
+        recipe=CliRecipe(subcommand="linear", gbk_files=("definitely_missing.gb",)),
+    )
+    declared = next(iter(FIGURES_WITHOUT_INPUTS))
+
+    ok, reproducer = _check_run(figures, [declared], tmp_path)
+    reproducer.close()
+    out = capsys.readouterr().out
+    assert ok, out
+    assert f"  {declared}: {FIGURES_WITHOUT_INPUTS[declared]}" in out
+
+    ok, reproducer = _check_run(figures, [declared, "missing_figure"], tmp_path)
+    reproducer.close()
+    out = capsys.readouterr().out
+    assert not ok
+    assert "  missing_figure: not rendered; missing inputs: definitely_missing.gb" in out
+
+
+def test_figures_without_inputs_lack_only_inputs_outside_the_repository() -> None:
+    figures = _figure_specs()
+    assert set(FIGURES_WITHOUT_INPUTS) <= set(figures)
+    assert all(reason.strip() for reason in FIGURES_WITHOUT_INPUTS.values())
+    reproducer = Reproducer(
+        project_root=PROJECT_ROOT, output_root=PROJECT_ROOT / "_reproduced", figures=figures
+    )
+    try:
+        for figure_id in FIGURES_WITHOUT_INPUTS:
+            assert reproducer.inspect_figure(figure_id) is False, figure_id
+    finally:
+        reproducer.close()
+
+
+def test_a_second_render_into_the_same_root_replaces_the_outputs(tmp_path: Path) -> None:
+    figures = _figure_specs()
+    for _ in range(2):
+        runs = render_figures(figures, ["tutorial_3_label_override"], tmp_path, jobs=1)
+        assert [run.error for run in runs] == [None]
+        assert runs[0].report["generated"] == ["tutorial_3_label_override"]

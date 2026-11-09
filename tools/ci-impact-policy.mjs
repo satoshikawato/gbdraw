@@ -26,9 +26,10 @@ const PARENT_EVIDENCE_BASES = freeze([
 ]);
 
 // The full PR tier. Functional Playwright, with the performance smoke, joins it only through
-// the capabilities below.
+// the capabilities below. `examples` (SELECTIVE_CI.md "Examples freshness") runs on pull
+// requests only, for every capability that can change what tools/reproduce_examples.py renders.
 const PR_FULL_TIER_JOBS = freeze([
-  'web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint',
+  'web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'examples', 'lint',
   'web-contracts-pr', 'web-pr-smoke'
 ]);
 const PR_PLAYWRIGHT_JOBS = freeze(['playwright-functional', 'playwright-performance']);
@@ -36,7 +37,7 @@ const PR_JOBS = freeze([...PR_FULL_TIER_JOBS, ...PR_PLAYWRIGHT_JOBS]);
 // `core`, the dev-tier Core on Python 3.10 to 3.14, joins a pull request only through the
 // `python-versions` capability.
 const PR_KNOWN_JOBS = freeze([
-  'web-change-budget', 'core-pr', 'core', 'recipes-standard', 'gallery', 'lint',
+  'web-change-budget', 'core-pr', 'core', 'recipes-standard', 'gallery', 'examples', 'lint',
   'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS
 ]);
 const DEV_JOBS = freeze([
@@ -57,12 +58,12 @@ const PR_CAPABILITY_JOBS = freeze({
   'policy-documentation': freeze(['web-change-budget']),
   'tests-only': PR_JOBS,
   'python-versions': freeze(['core']),
-  'python-core': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
-  renderer: freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
+  'python-core': freeze(['web-change-budget', 'core-pr', 'gallery', 'examples', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
+  renderer: freeze(['web-change-budget', 'core-pr', 'gallery', 'examples', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
   'web-runtime': freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS]),
-  'session-persistence': freeze(['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS]),
-  gallery: freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS]),
-  'losat-integration': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS]),
+  'session-persistence': freeze(['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'examples', 'lint', 'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS]),
+  gallery: freeze(['web-change-budget', 'gallery', 'examples', 'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS]),
+  'losat-integration': freeze(['web-change-budget', 'core-pr', 'gallery', 'examples', 'lint', 'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS]),
   packaging: PR_FULL_TIER_JOBS,
   'ci-only': PR_FULL_TIER_JOBS,
   full: PR_JOBS

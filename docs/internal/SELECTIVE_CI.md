@@ -9,7 +9,7 @@ classification rules.
 
 | Tier | Trigger | Required coverage |
 | --- | --- | --- |
-| PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; all functional Playwright in eight shards, plus the performance smoke, for Web runtime, session, Gallery, LOSAT, shared-test, and unknown changes; Core on Python 3.10, and on 3.10–3.14 for [version-dependent changes](#python-version-coverage); other jobs on 3.11 |
+| PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; [examples freshness](#examples-freshness) for changes that can alter rendering; all functional Playwright in eight shards, plus the performance smoke, for Web runtime, session, Gallery, LOSAT, shared-test, and unknown changes; Core on Python 3.10, and on 3.10–3.14 for [version-dependent changes](#python-version-coverage); other jobs on 3.11 |
 | Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10–3.14, with line coverage on 3.14; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in eight shards, performance smoke on 3.11 |
 | Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, Vibrio full generation (`vibrio-generate-release`), exact-candidate Gallery readiness, complete Web UI translations (`node tools/i18n/sync.mjs status --require-complete`); outside `Release / gate`, the promotion audit jobs (every recipe check, report-only `tools/audit/` sweeps, the user journeys, the random walk, and their summary) |
 
@@ -106,12 +106,12 @@ registry unions their contributions, then emits unique jobs in registry order.
 | `metadata` | Existing development-tool allowlist, `.gitignore`, citation/licenses | No test job |
 | `documentation` | Root Markdown and `docs/`, excluding the five exact policy documents below | Recipes |
 | `policy-documentation` | Architecture, Web, Product Impact, Option Integrity, and selective CI policy documents | Web change budget |
-| `python-core` | Known Python core/API/config/I/O owners and data | Architecture, core, lint, Web contracts, browser smoke |
-| `renderer` | Render/SVG/diagram/canvas/features/labels/layout owners | Architecture, core, lint, Web contracts, browser smoke |
+| `python-core` | Known Python core/API/config/I/O owners and data | Architecture, core, examples, lint, Web contracts, browser smoke |
+| `renderer` | Render/SVG/diagram/canvas/features/labels/layout owners | Architecture, core, examples, lint, Web contracts, browser smoke |
 | `web-runtime` | `gbdraw/web/index.html`, first-party JS | Architecture, Web contracts, browser smoke, functional Playwright |
-| `session-persistence` | Python session codecs; JS session/config/history owners | Architecture, core, recipes, lint, Web contracts, browser smoke, functional Playwright |
-| `gallery` | Gallery inputs and their generator owners | Architecture, Gallery, Web contracts, browser smoke, functional Playwright |
-| `losat-integration` | Comparison owners, LOSAT JS/workers/Wasm | Architecture, core, lint, Web contracts, browser smoke, functional Playwright |
+| `session-persistence` | Python session codecs; JS session/config/history owners | Architecture, core, recipes, examples, lint, Web contracts, browser smoke, functional Playwright |
+| `gallery` | Gallery inputs and their generator owners | Architecture, Gallery, examples, Web contracts, browser smoke, functional Playwright |
+| `losat-integration` | Comparison owners, LOSAT JS/workers/Wasm | Architecture, core, examples, lint, Web contracts, browser smoke, functional Playwright |
 | `tests-only` | Shared fixtures/harness and unclassified tests | Full PR tier, functional Playwright |
 | `python-versions` | `pyproject.toml` and the version-dependent package modules, beside their own capability; any path with the `all-python-versions` label | `core` ([Python-version coverage](#python-version-coverage)) |
 | `packaging` | Dependencies, manifests, vendored runtime, packaging tools | Full PR tier |
@@ -125,8 +125,8 @@ and `docs/internal/WEB_CHANGE_POLICY.md`. Other `docs/` paths remain ordinary
 documentation, including working templates and acceptance reports.
 
 The full PR tier job IDs are `web-change-budget`, `core-pr`, `recipes-standard`,
-`gallery`, `lint`, `web-contracts-pr`, and `web-pr-smoke`. `playwright-functional`
-is the eighth PR job. `core` joins a pull request only through the
+`gallery`, `examples`, `lint`, `web-contracts-pr`, and `web-pr-smoke`.
+`playwright-functional` is the ninth PR job. `core` joins a pull request only through the
 `python-versions` capability. The `web-runtime`, `session-persistence`, `gallery`,
 `losat-integration`, `tests-only`, and `full` capabilities add it under both the
 selective and the full decision, so an evidence fallback or the
@@ -149,6 +149,31 @@ sharing one 15-minute serialized budget. Both jobs keep independent working
 directories, dependency installs, wheels, and browser state. The contracts job
 also runs when the trusted plan requires `web-pr-smoke`, so the pre-redesign base
 planner still requires all three original suites during rollout.
+
+### Examples freshness
+
+The `examples` job (`Examples (Python 3.11)`) runs on pull requests into `dev`
+only, for every capability that can change what `tools/reproduce_examples.py`
+renders: `python-core`, `renderer`, `session-persistence` (Session variant
+figures), `gallery` (figures drawn from Gallery Sessions), `losat-integration`
+(LOSATP comparison figures), and the full PR tier (`packaging`, `ci-only`,
+`tests-only`, `full`; `examples/` and `tools/` paths classify as `full`). It
+runs `python tools/reproduce_examples.py --check --jobs "$(nproc)"`, which
+renders every figure of `tools/reproduce_examples_manifest.py` into a
+temporary root, compares each output with the tracked file under `examples/`,
+lists every figure that differs, and prints the command that refreshes them (`python tools/reproduce_examples.py --output-root . --figure
+<id> ...`). An SVG is compared byte for byte. A PNG's pixels depend on the
+machine's FreeType and fonts, so each PNG the tool writes carries, in its
+`gbdraw-example-source` text chunk, the sha256 of what it was rasterized from:
+the SVG bytes gbdraw hands to CairoSVG (`prepare_svg_for_cairosvg`) for each
+panel, the export parameters and recipe, and, for a composite, the code that
+builds it. The check compares that digest, and a tracked PNG without one is
+stale, so a refresh on any machine passes. A failed run uploads what it
+rendered as the `examples-<run>` artifact. The figures in `FIGURES_WITHOUT_INPUTS`, whose source records are in
+neither the repository nor the test-data Release, are named as not checked;
+the check fails when any other figure cannot render, and when a listed figure
+renders. `dev` pushes do not run the job: the pull request that changes a
+drawing refreshes its own figures.
 
 The 16 `@comparison-contract` Playwright cases run once per CI run. Their pytest
 wrapper, `tests/test_linear_comparison_browser_contracts.py`, runs in

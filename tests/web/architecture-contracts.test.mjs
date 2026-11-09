@@ -1584,6 +1584,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     'core',
     'recipes-standard',
     'gallery',
+    'examples',
     'lint',
     'web-contracts-pr',
     'web-pr-smoke',
@@ -1622,6 +1623,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     'core-pr',
     'recipes-standard',
     'gallery',
+    'examples',
     'lint',
     'web-contracts-pr',
     'web-pr-smoke'
