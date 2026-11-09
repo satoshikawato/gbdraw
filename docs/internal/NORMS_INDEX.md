@@ -234,6 +234,7 @@ under "Cited ids without a record".
 
 - [PD-OI-022](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-022-reuse-completed-losat-searches-after-cancellation): Reuse completed LOSAT searches after cancellation. ACCEPTED, concern `diagram-generation.completed-losat-search-retry`, scenario revision 1.
   - `tests/web/run-analysis-derived-cache.test.mjs`
+  - `tests/web/run-analysis-simple-path.test.mjs`
 
 - [PD-OI-023](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-023-lossless-protein-paths-during-normal-generation-and-saving): Lossless protein paths during normal generation and saving. ACCEPTED, concern `protein-comparison.path-representation`, scenario revision 1.
 
