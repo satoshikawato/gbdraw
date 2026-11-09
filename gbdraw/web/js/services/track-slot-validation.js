@@ -1750,10 +1750,9 @@ const collectCustomTrackIssues = ({
       parts: sentence(msg('Only one enabled Features row is allowed.'))
     }));
   }
-  // A stack without a Features row draws no feature, underlays included.
-  // Whether two Circular Features rows leave an underlay without one row to
-  // lie under depends on the record's features, which only Python reads; it
-  // reports TRACK_INVALID UNDERLAY_FEATURE_SLOTS, as the CLI does (TK-13).
+  // Whether two Circular Features rows refuse an underlay depends on the
+  // record's features, which only Python reads; it reports TRACK_INVALID
+  // UNDERLAY_FEATURE_SLOTS, as the CLI does (TK-13).
 
   overlayReferenceIssues(normalizedEnabled, mode, (slot) => rowIndexByNormalizedSlot.get(slot) ?? 0)
     .forEach(({ issue }) => pushRowIssue(rowIssues, issue));
