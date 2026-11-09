@@ -12,6 +12,7 @@ const {
   normalizeConservationSeriesColor,
   orderedConservationSources,
   reconcileConservationSeries,
+  ringsOfDrawing,
   withoutConservationSeries
 } = await import('../../gbdraw/web/js/services/conservation-series.js');
 const { ringGenomeFileLists } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
@@ -24,7 +25,7 @@ const rowsFor = (sourceFiles) => reconcileConservationSeries({
   sourceFiles,
   previousSeries: [],
   legacyLabels: []
-});
+}).series;
 
 test('a GenBank or DDBJ row without a typed label takes the record label', () => {
   const genbank = file('comparison-c.gbk');
@@ -175,7 +176,7 @@ test('a ring whose files are missing does not take a later ring of the same file
   assert.deepEqual(orderedConservationSources(drawing.files.c_conservation_fastas, drawing.circularConservation)
     .map((source) => [source.label, source.color, source.placeIndex, source.files]), [['Genome B', entryB.color, 1, [b]]],
   'Generate draws Genome B on its own genome');
-  assert.deepEqual(reconcileConservationSeries({ sourceFiles: [[b]], previousSeries: [entryA, entryB], legacyLabels: [] })
+  assert.deepEqual(reconcileConservationSeries({ sourceFiles: [[b]], previousSeries: [entryA, entryB], legacyLabels: [] }).series
     .map((entry) => [entry.label, entry.color]), [['Genome B', entryB.color]], 'the reconcile keeps Genome B, not A on B\'s file');
 });
 
@@ -185,7 +186,7 @@ test('a ring whose files are missing does not take a later ring of the same file
 test('a re-picked set of tables does not keep the old rows\' labels by place', () => {
   const first = rowsFor([file('a.tsv', 5), file('b.tsv', 6)]);
   first[0].label = 'Alpha';
-  const next = reconcileConservationSeries({ sourceFiles: [file('c.tsv', 7), file('d.tsv', 8)], previousSeries: first, legacyLabels: [] });
+  const next = reconcileConservationSeries({ sourceFiles: [file('c.tsv', 7), file('d.tsv', 8)], previousSeries: first, legacyLabels: [] }).series;
   assert.deepEqual(next.map((entry) => [entry.fileName, entry.label]), [['c.tsv', 'c'], ['d.tsv', 'd']]);
 });
 
@@ -217,7 +218,7 @@ test('two LOSAT rings whose first files share a name keep their own genomes when
   const series = rowsFor(genomes).map((entry, index) => ({ ...entry, sourceKey: `stale-${index}`, label: `Genome ${'ABC'[index]}` }));
   const moved = [series[1], series[0], series[2]];
   assert.deepEqual(orderedConservationSourcesOf(genomes, moved), [['Genome B', 16], ['Genome A', 8], ['Genome C', 24]]);
-  assert.deepEqual(reconcileConservationSeries({ sourceFiles: genomes, previousSeries: moved, legacyLabels: [] })
+  assert.deepEqual(reconcileConservationSeries({ sourceFiles: genomes, previousSeries: moved, legacyLabels: [] }).series
     .map((entry) => [entry.label, entry.color, entry.sourceIndex]), moved.map((entry) => [entry.label, entry.color, entry.sourceIndex]),
   'the reconcile keeps each row on the place of its own name');
 });
@@ -239,8 +240,28 @@ test('rings whose files share name, size and date keep their own genomes when on
   assert.deepEqual(drawn(genomes.slice(1), removedFirst), [['Genome B', 1], ['Genome C', 2]]);
   // A Load that lost Genome A's file keeps its place empty: B and C keep theirs, and the reconcile keeps their places.
   assert.deepEqual(drawn([[], genomes[1], genomes[2]], series), [['Genome B', 1], ['Genome C', 2]]);
-  assert.deepEqual(reconcileConservationSeries({ sourceFiles: [[], genomes[1], genomes[2]], previousSeries: series, legacyLabels: [] })
+  assert.deepEqual(reconcileConservationSeries({ sourceFiles: [[], genomes[1], genomes[2]], previousSeries: series, legacyLabels: [] }).series
     .map((entry) => [entry.label, entry.sourceIndex]), [['Genome B', 1], ['Genome C', 2]]);
   // One source left of two entries of the same files: the entry whose file went takes none.
   assert.deepEqual(drawn([[], genomes[1]], series.slice(0, 2)), [['Genome B', 1]]);
+});
+
+// #1777 review 5: a Generate tells whether the draft's rings are still those its searches read by the rings' files, not
+// by their keys alone: after the first of three rings of `sequence.fasta` files of one size and date goes and a new
+// one comes, the two left and the new one carry the keys the three had.
+test('the rings of a drawing differ when rings of files of one name, size and date change, though their keys do not', () => {
+  const genome = (fileId) => ({ fileId, sourceId: fileId, name: 'sequence.fasta', type: 'text/plain', size: 8, lastModified: 0 });
+  const drawingOf = (fileIds) => {
+    const lists = fileIds.map((fileId) => [genome(fileId)]);
+    const series = reconcileConservationSeries({ sourceFiles: lists, previousSeries: [], legacyLabels: [] }).series;
+    return {
+      files: { c_conservation_blasts: [], c_conservation_blasts_source: null, c_conservation_fastas: lists, c_conservation_sequence_sources: [] },
+      circularConservation: { source: 'losat', series }
+    };
+  };
+  const searched = drawingOf(['a', 'b', 'c']);
+  const changed = drawingOf(['b', 'c', 'd']);
+  assert.deepEqual(changed.circularConservation.series.map((entry) => entry.sourceKey), searched.circularConservation.series.map((entry) => entry.sourceKey));
+  assert.notEqual(ringsOfDrawing(changed), ringsOfDrawing(searched));
+  assert.equal(ringsOfDrawing(drawingOf(['a', 'b', 'c'])), ringsOfDrawing(searched));
 });

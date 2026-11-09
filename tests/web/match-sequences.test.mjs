@@ -607,7 +607,7 @@ test('gives a ring its own records when an earlier ring of the same file name is
   const { reconcileConservationSeries } = await import('../../gbdraw/web/js/services/conservation-series.js');
   const genomeA = namedTextFile('sequence.fasta', '>comparison_a\nAAAA\n');
   const genomeB = namedTextFile('sequence.fasta', '>comparison_b\nGGGGTTTTCC\n');
-  const series = reconcileConservationSeries({ sourceFiles: [[genomeA], [genomeB]], previousSeries: [], legacyLabels: [] });
+  const series = reconcileConservationSeries({ sourceFiles: [[genomeA], [genomeB]], previousSeries: [], legacyLabels: [] }).series;
   const sources = await buildRestoredMatchSequenceSources({
     mode: 'circular',
     cInputType: 'gb',

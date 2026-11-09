@@ -88,7 +88,7 @@ import {
 /** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import { placeCircularStackForGenerate } from '../services/circular-track-slot-model.js';
-import { normalizeFileList } from '../services/conservation-series.js';
+import { normalizeFileList, ringsOfDrawing } from '../services/conservation-series.js';
 import {
   placeLinearStackForGenerate
 } from '../services/linear-track-slot-model.js';
@@ -260,7 +260,6 @@ import {
  */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
-/** @import { RawConservationSeriesEntry } from '../services/conservation-series.js' */
 /** @import { FeatureFill, LegendRow } from '../services/drawing/paint.js' */
 /** @import { LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 /** @import { RequestCanonicalComparison } from '../services/session-request.js' */
@@ -1357,12 +1356,6 @@ const losatSeqEntryFromRecord = (record, regionSpec) => {
 export const extractLosatFastaFast = async ({ text, fmt, regionSpec, recordSelector }) => (
   losatSeqEntryFromRecord(selectParsedRecord(parseSequenceRecordsFast(text, fmt), recordSelector), regionSpec)
 );
-/**
- * The rings of a series as one string: equal only for the same keys in the same order. It reads the keys the series
- * holds, so both sides of a comparison read one channel whichever files the keys came from.
- * @param {readonly RawConservationSeriesEntry[]} series
- */
-const ringKeysOfSeries = (series) => JSON.stringify(series.map((entry) => String(entry.sourceKey)));
 /** @param {unknown} value */
 const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -2749,9 +2742,9 @@ export const createRunAnalysis = ({
     let generatedLabelProjection = null;
     // The Feature visibility the request draws, kept with the input summaries.
     let drawnVisibility = '';
-    // The rings this run's ring searches read (`ringKeysOfSeries`); null when it runs none.
+    // The rings this run's ring searches read (`ringsOfDrawing`); null when it runs none.
     /** @type {string | null} */
-    let requestRingKeys = null;
+    let requestRings = null;
     // The record key moves of this run (OV-1949), and the record lists its identities are read from.
     /** @type {ReadonlyMap<string, string>} */
     let recordMoves = new Map();
@@ -3527,7 +3520,7 @@ export const createRunAnalysis = ({
             }
             // The ring keys, in ring order (the one builder, D-15-123); their
             // pairs go with the request it installs, for Save (D-15-124).
-            requestRingKeys = ringKeysOfSeries(drawing.circularConservation.series);
+            requestRings = ringsOfDrawing(drawing);
             const conservationKeys = await circularConservationKeys(drawing, inputFiles.fileOf, throwIfGenerationCanceled);
             conservationPairs = conservationHashPairs(conservationKeys);
             // Each ring's source with its label and color, as the ring keys matched it (`orderedConservationSources`).
@@ -5446,7 +5439,7 @@ export const createRunAnalysis = ({
           conservationPairs,
           // The ring controls are disabled during a Generate (index.html), but a change from outside them may still have
           // changed the draft's rings since the searches.
-          builtFromDraft: requestRingKeys !== null && requestRingKeys === ringKeysOfSeries(drawing.circularConservation.series)
+          builtFromDraft: requestRings !== null && requestRings === ringsOfDrawing(drawing)
         });
       }
       // The identities of this request's records stay with it (DESIGN A1); History restores them with it.

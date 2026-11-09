@@ -253,12 +253,56 @@ const mergeSeriesEntry = (descriptor, previousEntry, orderIndex, legacyLabel = n
 };
 
 /**
+ * How a change of the rings moves their source keys, by which the track stack's managed ring rows name their rings
+ * (`series_key`): the key a ring's row carries before the change to the key of that ring's source after it, `''` for a
+ * ring that goes. A source key names files, and its count of earlier sources of the same files shifts when one of them
+ * goes, so a row follows the matcher's result (`conservationSourcesOfSeries`), never the key it carried; a key not in
+ * the map stays.
+ * @typedef {ReadonlyMap<string, string>} RingKeyChanges
+ */
+/** @type {RingKeyChanges} */
+export const NO_RING_KEY_CHANGES = new Map();
+/**
+ * The key a ring row carries after a change (`RingKeyChanges`).
+ * @param {RingKeyChanges} keyChanges @param {string} key
+ */
+export const ringKeyAfter = (keyChanges, key) => (keyChanges.has(key) ? String(keyChanges.get(key)) : key);
+/**
+ * The key changes of two changes made in turn: a row's key goes through `first`, then through `second`.
+ * @param {RingKeyChanges} first @param {RingKeyChanges} second
+ * @returns {RingKeyChanges}
+ */
+export const thenRingKeyChanges = (first, second) => new Map([
+  ...second,
+  ...[...first].map(([before, between]) => /** @type {[string, string]} */ ([before, ringKeyAfter(second, between)]))
+]);
+/**
+ * The key changes of a change that keeps the series entries in their order, less the one at `removed`: the key of each
+ * entry's source before to the key of the source of the entry it becomes, `''` for the removed entry and for one left
+ * without a source.
+ * @param {readonly ({ sourceKey?: unknown } | null | undefined)[]} before each entry's source before (or the entry, whose
+ *   key names it)
+ * @param {readonly ({ sourceKey?: unknown } | null | undefined)[]} after each entry's source after, the removed one left out
+ * @param {number} [removed] the entry the change removes; none by default
+ * @returns {RingKeyChanges}
+ */
+export const ringKeyChangesOf = (before, after, removed = -1) => new Map(before.flatMap((source, index) => {
+  const key = String(source?.sourceKey || '').trim();
+  if (!key) return [];
+  const next = index === removed ? null : after[removed >= 0 && index > removed ? index - 1 : index];
+  return [/** @type {[string, string]} */ ([key, String(next?.sourceKey || '').trim()])];
+}));
+
+/**
+ * The series a change of the ring files leaves, and how the change moves the rings' keys: each previous entry's key
+ * (the key its row carries, which the last reconcile wrote from the same match the rows read) to the key of the source
+ * the matcher gives it, `''` when it has none.
  * @param {{
  *   sourceFiles: ConservationSourcePlace<ConservationFile> | readonly ConservationSourcePlace<ConservationFile>[],
  *   previousSeries: RawConservationSeriesEntry[] | null | undefined,
  *   legacyLabels: string[] | null | undefined
  * }} options
- * @returns {ConservationSeriesEntry[]}
+ * @returns {{ series: ConservationSeriesEntry[], keyChanges: RingKeyChanges }}
  */
 export const reconcileConservationSeries = ({
   sourceFiles,
@@ -278,7 +322,7 @@ export const reconcileConservationSeries = ({
   unclaimed.forEach((descriptor) => {
     nextSeries.push(mergeSeriesEntry(descriptor, null, nextSeries.length, fallbackLabels[descriptor.sourceIndex]));
   });
-  return nextSeries;
+  return { series: nextSeries, keyChanges: ringKeyChangesOf(previous, matched) };
 };
 
 // D12: a row added from a GenBank or DDBJ file takes the label the file names
@@ -296,10 +340,11 @@ export const reconcileConservationSeries = ({
 export const applyComparisonSequenceRecordLabel = ({ series, sourceFiles, file, recordLabel }) => {
   const label = String(recordLabel ?? '').trim();
   if (!label || !file || !Array.isArray(series)) return false;
-  const descriptor = conservationSourceDescriptors(sourceFiles).find((candidate) => candidate.file === file);
-  const entry = descriptor
-    ? series.find((candidate) => candidate?.sourceKey === descriptor.sourceKey)
-    : null;
+  // The row of the file's source as Generate matches it (`conservationSourcesOfSeries`), not by an equal key.
+  const { matched } = conservationSourcesOfSeries(sourceFiles, { series });
+  const seriesIndex = matched.findIndex((candidate) => candidate?.file === file);
+  const entry = seriesIndex >= 0 ? series[seriesIndex] : null;
+  const descriptor = seriesIndex >= 0 ? matched[seriesIndex] : null;
   if (!entry || !descriptor || String(entry.label ?? '').trim() !== descriptor.defaultLabel) return false;
   entry.label = label;
   return true;
@@ -502,6 +547,19 @@ export const ringGenomeFilesInRingOrder = (drawing) => {
   }
   return [...places, ...unplaced].map((place) => (place === null ? [] : [...(lists[place] || [])]));
 };
+
+/**
+ * The rings of a drawing as one string, equal only for the same rings in the same order: each by the key its series
+ * entry holds and by the ids of its genome files at the place Generate matches it to (`ringGenomeFilesInRingOrder`).
+ * A Generate reads it to tell whether the draft's rings are still those its searches read. The keys alone do not tell
+ * rings apart: a key names files by name, size and date, so after one of three rings of such files goes, the two left
+ * and a new one carry the keys the three had.
+ * @param {RingGenomeDrawing} drawing
+ */
+export const ringsOfDrawing = (drawing) => JSON.stringify([
+  (Array.isArray(drawing.circularConservation.series) ? drawing.circularConservation.series : []).map((entry) => String(entry.sourceKey)),
+  ringGenomeFilesInRingOrder(drawing).map((files) => files.map((file) => file.fileId))
+]);
 
 /**
  * @template T

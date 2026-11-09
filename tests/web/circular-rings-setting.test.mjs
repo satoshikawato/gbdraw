@@ -40,6 +40,7 @@ const sources = createCircularConservationSources({
   state,
   writeLosatCacheInfo: () => {},
   syncCircularConservationSlots: () => {},
+  rekeyCircularConservationRows: () => {},
   circularConservationRowsLeaving: () => new Set(),
   askingStackPorts
 });
@@ -346,5 +347,146 @@ test('LOSAT rings of files of one name, size and date keep their genomes through
     comparisonFiles.removeCircularConservationSource(0);
     assert.deepEqual(generated(), [kept[1], ['sequence', 'TTTT']], `Remove series after Load without genome ${lost}`);
     clear();
+  }
+});
+
+// #1777 review 5: with the track stack on, each managed ring row stays with its ring when the source keys shift (three
+// rings of NCBI `sequence.fasta` files of one size and date): through Remove series, whose reach dialog takes out the
+// removed ring's row, through a Session 51 Load that lost one ring's file, whose row is the one that goes, and through
+// a ring row's file edit. The stack's ring rows read the stack editor itself here.
+const { createCircularTrackSlotEditor } = await import('../../gbdraw/web/js/app/circular-track-slots.js');
+const stackEditor = createCircularTrackSlotEditor({ state });
+/** @type {string[][]} */
+const leavingAsked = [];
+const stackSources = createCircularConservationSources({
+  state,
+  writeLosatCacheInfo: () => {},
+  syncCircularConservationSlots: (drawing) => stackEditor.syncCircularConservationSlots(drawing),
+  rekeyCircularConservationRows: (drawing, keyChanges) => stackEditor.rekeyCircularConservationRows(drawing, keyChanges),
+  circularConservationRowsLeaving: (drawing, entries, keyChanges) => {
+    const leaving = stackEditor.circularConservationRowsLeaving(drawing, entries, keyChanges);
+    leavingAsked.push([...leaving]);
+    return leaving;
+  },
+  askingStackPorts
+});
+const stackFiles = createCircularConservationComparisonFiles({
+  state, shownAction, writeLosatCacheInfo: () => {},
+  runUndoable: async () => undefined,
+  clearDerivedCircularConservationBlasts: stackSources.clearDerivedCircularConservationBlasts,
+  setCircularConservationSourceFiles: stackSources.setCircularConservationSourceFiles,
+  reconcileCircularConservation: stackSources.reconcileCircularConservation,
+  refreshCircularConservationSlots: stackSources.refreshCircularConservationSlots,
+  askRingSourceRemoval: stackSources.askRingSourceRemoval
+});
+const stackRingRows = () => circular().adv.circular_track_slots.filter((slot) => slot.renderer === 'sequence_conservation')
+  .map((slot) => [slot.id, slot.width, slot.params.label]);
+const stackGenerated = () => {
+  const drawing = circular();
+  return orderedConservationSources(circularRingSources(drawing), drawing.circularConservation)
+    .map((source) => [source.label, atob(state.inputFiles.fileOf(source.file).data).split('\n')[1]]);
+};
+const withStack = async (run) => {
+  const drawing = circular();
+  const before = { enabled: drawing.adv.circular_track_slots_enabled, slots: [...drawing.adv.circular_track_slots], shown: drawing.circularConservation.enabled };
+  drawing.adv.circular_track_slots_enabled = true;
+  drawing.circularConservation.enabled = true;
+  try {
+    await run(drawing);
+  } finally {
+    while (drawing.circularConservation.series.length > 0) stackFiles.removeCircularConservationSource(0);
+    bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', []);
+    drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...before.slots);
+    drawing.adv.circular_track_slots_enabled = before.enabled;
+    drawing.circularConservation.enabled = before.shown;
+    leavingAsked.splice(0);
+  }
+};
+const sequenceFastaOf = (bases) => textFile('sequence.fasta', `>r\n${bases}\n`);
+/** Each ring row's own edit: its width. */
+const widenRingRows = () => circular().adv.circular_track_slots.filter((slot) => slot.renderer === 'sequence_conservation')
+  .forEach((slot, index) => { slot.width = `${10 + index}px`; });
+
+test('the stack keeps each ring row with its ring through Remove series of rings of one file name, size and date', async () => {
+  for (const removed of [0, 1, 2]) {
+    await withStack(async (drawing) => {
+      for (const bases of ['ACGT', 'TTTT', 'GGGG']) {
+        await stackFiles.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [sequenceFastaOf(bases)], value: 'x' } }));
+      }
+      drawing.circularConservation.series.forEach((entry, index) => Object.assign(entry, { label: `G${'ABC'[index]}` }));
+      stackSources.refreshCircularConservationSlots(drawing);
+      widenRingRows();
+      const rows = stackRingRows();
+      assert.deepEqual(rows.map(([, width, label]) => [width, label]), [['10px', 'GA'], ['11px', 'GB'], ['12px', 'GC']]);
+      leavingAsked.splice(0);
+      stackFiles.removeCircularConservationSource(removed);
+      assert.deepEqual(leavingAsked, [[rows[removed][0]]], `the reach dialog of Remove series ${removed} takes out the removed ring's row`);
+      assert.deepEqual(stackRingRows(), rows.filter((_, index) => index !== removed), `rows after Remove series ${removed}`);
+      assert.deepEqual(stackGenerated(), [['GA', 'ACGT'], ['GB', 'TTTT'], ['GC', 'GGGG']].filter((_, index) => index !== removed));
+    });
+  }
+});
+
+test('the stack keeps each ring row with its ring through a Session 51 Load that lost one ring file of one name, size and date', async () => {
+  for (const lost of [0, 1, 2]) {
+    await withStack(async (drawing) => {
+      const files = ['AAAA', 'CCCC', 'GGGG'].map((bases) => sequenceFastaOf(bases));
+      bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', files.map((file) => [file]));
+      drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...['A', 'C', 'G'].map((name, index) => ({
+        sourceKey: `sequence.fasta|8|0|${index}`, fileName: 'sequence.fasta', sourceIndex: index, label: `ring ${name}`, color: `#22222${index}`, losat_gencode: 1
+      })));
+      stackSources.refreshCircularConservationSlots(drawing);
+      widenRingRows();
+      const rows = stackRingRows();
+      // What Load leaves of that Session without genome `lost`: its place empty, the series and rows as saved; then `afterImport`.
+      bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', files.map((file, index) => (index === lost ? [] : [file])));
+      stackSources.reconcileLoadedCircularConservation(drawing, true);
+      assert.deepEqual(stackRingRows(), rows.filter((_, index) => index !== lost), `rows after Load without genome ${lost}`);
+      assert.deepEqual(stackGenerated(), [['ring A', 'AAAA'], ['ring C', 'CCCC'], ['ring G', 'GGGG']].filter((_, index) => index !== lost));
+      await stackFiles.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [sequenceFastaOf('TTTT')], value: 'x' } }));
+      assert.deepEqual(stackRingRows().slice(0, 2), rows.filter((_, index) => index !== lost), `rows after Add Seq after Load without genome ${lost}`);
+    });
+  }
+});
+
+test('the stack keeps each ring row with its ring when a ring row of one file name, size and date gets another file', async () => {
+  await withStack(async (drawing) => {
+    for (const bases of ['ACGT', 'TTTT', 'GGGG']) {
+      await stackFiles.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [sequenceFastaOf(bases)], value: 'x' } }));
+    }
+    drawing.circularConservation.series.forEach((entry, index) => Object.assign(entry, { label: `G${'ABC'[index]}` }));
+    stackSources.refreshCircularConservationSlots(drawing);
+    widenRingRows();
+    const rows = stackRingRows();
+    stackFiles.addRingRowFiles(0, /** @type {any} */ ({ target: { files: [textFile('plasmid.fasta')], value: 'x' } }));
+    assert.deepEqual(stackRingRows(), rows, 'Add file on the first ring row');
+    stackFiles.removeRingRowFile(0, 1);
+    assert.deepEqual(stackRingRows(), rows, 'its remove button');
+  });
+});
+
+test('the stack keeps each ring row with its ring through Remove series of replayed rings whose tables share name, size and date', async () => {
+  for (const removed of [0, 1]) {
+    await withStack(async (drawing) => {
+      const shared = 'sequence.circular_conservation.losatn.tsv';
+      const tables = ['b', 'c', 'd'].map((letter) => textFile(shared, letter.repeat(60)));
+      bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', ['b', 'c', 'd'].map((name) => [textFile(`${name}.fasta`)]));
+      bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', tables);
+      setConservationBlastsSource(drawing.slices.inputs, 'losat-cache');
+      drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...['b', 'c', 'd'].map((name, index) => ({
+        sourceKey: `${name}.fasta|10|0|0`, fileName: shared, sourceIndex: index, label: `Genome ${name}`, color: `#00000${index}`, losat_gencode: 1
+      })));
+      stackSources.refreshCircularConservationSlots(drawing);
+      widenRingRows();
+      const rows = stackRingRows();
+      assert.deepEqual(rows.map(([, width, label]) => [width, label]), [['10px', 'Genome b'], ['11px', 'Genome c'], ['12px', 'Genome d']]);
+      leavingAsked.splice(0);
+      stackFiles.removeCircularConservationSource(removed);
+      assert.deepEqual(leavingAsked, [[rows[removed][0]]], `the reach dialog of Remove series ${removed} takes out the removed ring's row`);
+      assert.deepEqual(stackRingRows(), rows.filter((_, index) => index !== removed), `rows after Remove series ${removed}`);
+      const drawn = orderedConservationSources(drawing.files.c_conservation_blasts, drawing.circularConservation)
+        .map((source) => [source.label, atob(state.inputFiles.fileOf(source.file).data)[0]]);
+      assert.deepEqual(drawn, [['Genome b', 'b'], ['Genome c', 'c'], ['Genome d', 'd']].filter((_, index) => index !== removed));
+    });
   }
 });

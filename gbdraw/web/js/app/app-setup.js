@@ -1639,10 +1639,10 @@ export const createAppSetup = () => {
     askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
     refreshCircularConservationSlots
   } = createCircularConservationSources({
-    state, writeLosatCacheInfo,
+    state, writeLosatCacheInfo, askingStackPorts,
     syncCircularConservationSlots: circularTrackSlotEditor.syncCircularConservationSlots,
-    circularConservationRowsLeaving: circularTrackSlotEditor.circularConservationRowsLeaving,
-    askingStackPorts
+    rekeyCircularConservationRows: circularTrackSlotEditor.rekeyCircularConservationRows,
+    circularConservationRowsLeaving: circularTrackSlotEditor.circularConservationRowsLeaving
   });
   const {
     setCircularConservationUploadFiles, circularConservationSeriesRows, canMoveCircularConservationSeries,

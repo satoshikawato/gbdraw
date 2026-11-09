@@ -16,12 +16,15 @@ import {
   conservationSourceDescriptors,
   conservationSourcesOfSeries,
   defaultConservationSeriesLabel,
+  NO_RING_KEY_CHANGES,
   ringGenomePlaces,
+  ringKeyChangesOf,
   moveConservationSeriesEntry,
   normalizeFileList,
   orderedConservationSources,
   parseConservationLabelText,
   reconcileConservationSeries,
+  thenRingKeyChanges,
   withoutConservationSeries
 } from '../services/conservation-series.js';
 import { shownAfterSourceChange } from '../services/depth-track-state.js';
@@ -32,7 +35,10 @@ import { askTrackSourceRemoval } from './track-slot-edits.js';
 /** @import { ConservationSlotEntry } from './circular-track-slots.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { InputFileRef } from '../services/history-files.js' */
-/** @import { ConservationFile, ConservationSourcePlace, RawConservationSeriesEntry } from '../services/conservation-series.js' */
+/**
+ * @import { ConservationFile, ConservationSeriesEntry, ConservationSourcePlace, RawConservationSeriesEntry, RingKeyChanges }
+ *   from '../services/conservation-series.js'
+ */
 /** @import { LosatCacheInfoEntry } from '../services/config.js' */
 /** @import { DepthSourceChange } from '../services/depth-track-state.js' */
 
@@ -47,18 +53,27 @@ const { computed } = window.Vue;
 /** @typedef {(next: LosatCacheInfoEntry[]) => void} WriteLosatCacheInfo The write of the project's LOSAT cache-info rows. */
 /** @typedef {(drawing: DrawingState) => void} DrawingRingStep A ring transition of one drawing. */
 /**
+ * The series a change of the comparison sources leaves and how it moves the rings' keys (`RingKeyChanges`).
+ * @typedef {{ series: readonly RawConservationSeriesEntry[], keyChanges: RingKeyChanges }} RingSeriesChange
+ */
+/**
  * The ask before a change of the comparison sources takes out managed ring rows other rows reach.
  * @typedef {(
  *   drawing: DrawingState, sourceFiles: readonly ConservationSourcePlace<ConservationFile>[],
- *   series: readonly RawConservationSeriesEntry[], label: string,
+ *   change: RingSeriesChange, label: string,
  *   apply: (turnOffReaching: () => void) => unknown
  * ) => unknown} AskRingSourceRemoval
  */
 /**
  * The ring source files of a drawing, set by a change of the kind `change` names: the BLAST tables of uploaded
- * rings, else each ring's genome files (`circularRingSources`).
+ * rings, else each ring's genome files (`circularRingSources`); `keyChanges` are the key changes the transition made
+ * before it (`reconcileCircularConservation`).
  * @typedef {(drawing: DrawingState, nextFiles: readonly (InputFileRef | null | readonly InputFileRef[])[],
- *   change: DepthSourceChange) => void} SetRingSourceFiles
+ *   change: DepthSourceChange, keyChanges?: RingKeyChanges) => void} SetRingSourceFiles
+ */
+/**
+ * A ring transition of one drawing that ends in the rings' reconcile, with the key changes it made before it.
+ * @typedef {(drawing: DrawingState, keyChanges?: RingKeyChanges) => void} ReconcileRings
  */
 
 /** @param {DrawingState} drawing */
@@ -125,23 +140,31 @@ const changeRingSourceFiles = (state, drawing, change, write) => {
 };
 
 /**
- * The series a change of the ring files leaves (`reconcileCircularConservation`).
+ * The series a change of the ring files leaves and how the change moves the rings' keys, from the key changes the
+ * transition made before (`reconcileCircularConservation`).
  * @param {DrawingState} drawing @param {readonly ConservationSourcePlace<ConservationFile>[]} sourceFiles
  * @param {RawConservationSeriesEntry[]} [series] The series the change starts from: the drawing's, or without a removed row.
+ * @param {RingKeyChanges} [earlier]
+ * @returns {{ series: ConservationSeriesEntry[], keyChanges: RingKeyChanges }}
  */
-const seriesOfRingFiles = (drawing, sourceFiles, series = drawing.circularConservation.series) => reconcileConservationSeries({
-  sourceFiles,
-  previousSeries: series,
-  legacyLabels: parseConservationLabelText(drawing.circularConservation.labels)
-});
+const seriesOfRingFiles = (drawing, sourceFiles, series = drawing.circularConservation.series, earlier = NO_RING_KEY_CHANGES) => {
+  const reconciled = reconcileConservationSeries({
+    sourceFiles,
+    previousSeries: series,
+    legacyLabels: parseConservationLabelText(drawing.circularConservation.labels)
+  });
+  return { series: reconciled.series, keyChanges: thenRingKeyChanges(earlier, reconciled.keyChanges) };
+};
 
 /**
  * @typedef {object} CircularConservationSourcesPorts
  * @property {WebState} state
  * @property {WriteLosatCacheInfo} writeLosatCacheInfo
  * @property {DrawingRingStep} syncCircularConservationSlots The stack editor's managed ring rows follow the series.
- * @property {(drawing: DrawingState, entries: readonly ConservationSlotEntry[]) => Set<string>} circularConservationRowsLeaving
- *   The slot ids of the managed ring rows a change of the sources takes out of the stack.
+ * @property {(drawing: DrawingState, keyChanges: RingKeyChanges) => void} rekeyCircularConservationRows
+ *   The stack editor's managed ring rows move to their rings' new keys.
+ * @property {(drawing: DrawingState, entries: readonly ConservationSlotEntry[], keyChanges: RingKeyChanges) => Set<string>}
+ *   circularConservationRowsLeaving The slot ids of the managed ring rows a change of the sources takes out of the stack.
  * @property {(slotsKey: 'circular_track_slots') => AskingStackPorts<SwitchedTrackRow>} askingStackPorts
  */
 
@@ -150,7 +173,8 @@ const seriesOfRingFiles = (drawing, sourceFiles, series = drawing.circularConser
  * @param {CircularConservationSourcesPorts} ports
  */
 export const createCircularConservationSources = ({
-  state, writeLosatCacheInfo, syncCircularConservationSlots, circularConservationRowsLeaving, askingStackPorts
+  state, writeLosatCacheInfo, syncCircularConservationSlots, rekeyCircularConservationRows, circularConservationRowsLeaving,
+  askingStackPorts
 }) => {
   /** @param {DrawingState} drawing */
   const clearDerivedCircularConservationBlasts = (drawing) => {
@@ -159,7 +183,7 @@ export const createCircularConservationSources = ({
     setConservationBlastsSource(drawing.slices.inputs, null);
   };
   /** @type {SetRingSourceFiles} */
-  const setCircularConservationSourceFiles = (drawing, nextFiles, change) => {
+  const setCircularConservationSourceFiles = (drawing, nextFiles, change, keyChanges = NO_RING_KEY_CHANGES) => {
     changeRingSourceFiles(state, drawing, change, () => {
       if (isCircularConservationUploadSource(drawing)) {
         bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts',
@@ -171,7 +195,7 @@ export const createCircularConservationSources = ({
       }
     });
     writeLosatCacheInfo([]);
-    reconcileCircularConservation(drawing);
+    reconcileCircularConservation(drawing, keyChanges);
   };
   /**
    * A Circular drawing's similarity-ring BLAST files, the files kept in their
@@ -193,14 +217,14 @@ export const createCircularConservationSources = ({
    * A change of the comparison sources asks when a managed ring row another row
    * reaches leaves with its source (`askTrackSourceRemoval`).
    * @param {DrawingState} drawing @param {readonly ConservationSourcePlace<ConservationFile>[]} sourceFiles The ring files it leaves.
-   * @param {readonly RawConservationSeriesEntry[]} series The series it leaves. @param {string} label
+   * @param {RingSeriesChange} change The series it leaves and how it moves the rings' keys. @param {string} label
    * @param {(turnOffReaching: () => void) => unknown} apply
    */
-  const askRingSourceRemoval = (drawing, sourceFiles, series, label, apply) => askTrackSourceRemoval(askingStackPorts('circular_track_slots'), {
+  const askRingSourceRemoval = (drawing, sourceFiles, { series, keyChanges }, label, apply) => askTrackSourceRemoval(askingStackPorts('circular_track_slots'), {
     kind: 'comparison',
     loss: {
       leaving: circularConservationRowsLeaving(
-        drawing, orderedConservationSources(sourceFiles, { ...drawing.circularConservation, series })
+        drawing, orderedConservationSources(sourceFiles, { ...drawing.circularConservation, series: [...series] }), keyChanges
       ),
       stayingOn: new Set(),
       emptySeries: () => []
@@ -216,20 +240,20 @@ export const createCircularConservationSources = ({
   // Session Load (`afterImport`). It leaves Show Comparison Rings as it is: a
   // change of the files sets it first (`changeRingSourceFiles`). A History
   // restore and the Load rollback install what they captured.
-  /** @param {DrawingState} drawing */
-  const reconcileCircularConservation = (drawing) => {
-    const sourceFiles = circularRingSources(drawing);
+  // The managed ring rows move to their rings' new keys here, once per
+  // transition (`rekeyCircularConservationRows`): `keyChanges` are those the
+  // transition made before (a removed ring's row, a ring row's file edit),
+  // followed by those of the series the one matcher leaves.
+  /** @type {ReconcileRings} */
+  const reconcileCircularConservation = (drawing, keyChanges = NO_RING_KEY_CHANGES) => {
     if (isDerivedCircularConservationReplay(drawing)) {
+      rekeyCircularConservationRows(drawing, keyChanges);
       refreshCircularConservationSlots(drawing);
       return;
     }
-    const legacyLabels = parseConservationLabelText(drawing.circularConservation.labels);
-    const nextSeries = reconcileConservationSeries({
-      sourceFiles,
-      previousSeries: drawing.circularConservation.series,
-      legacyLabels
-    });
-    drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...nextSeries);
+    const reconciled = seriesOfRingFiles(drawing, circularRingSources(drawing), drawing.circularConservation.series, keyChanges);
+    drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...reconciled.series);
+    rekeyCircularConservationRows(drawing, reconciled.keyChanges);
     refreshCircularConservationSlots(drawing);
   };
   // Reset Settings: the kept comparison files keep a ring row each, with the
@@ -381,7 +405,7 @@ export const createCircularConservationSeriesPanel = ({
  * @property {(label: string, fn: () => unknown) => Promise<unknown>} runUndoable History's undoable step.
  * @property {DrawingRingStep} clearDerivedCircularConservationBlasts
  * @property {SetRingSourceFiles} setCircularConservationSourceFiles
- * @property {DrawingRingStep} reconcileCircularConservation
+ * @property {ReconcileRings} reconcileCircularConservation
  * @property {DrawingRingStep} refreshCircularConservationSlots
  * @property {AskRingSourceRemoval} askRingSourceRemoval
  */
@@ -419,15 +443,17 @@ const createRingRowFileEdits = ({
       clearDerivedCircularConservationBlasts(drawing);
       bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, key, lists);
     });
-    // Each row keeps its place; its entry takes the identity of the files there now.
+    // Each row keeps its place; its entry takes the identity of the files there now, and its stack row that key.
     const descriptors = conservationSourceDescriptors(lists);
-    drawing.circularConservation.series.forEach((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => {
+    const series = drawing.circularConservation.series;
+    const before = series.map((/** @type {RawConservationSeriesEntry} */ entry) => ({ sourceKey: entry.sourceKey }));
+    series.forEach((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => {
       const source = descriptors.find((descriptor) => descriptor.placeIndex === places[index]);
       if (!source) return;
       Object.assign(entry, { sourceKey: source.sourceKey, fileName: source.fileName, sourceIndex: source.placeIndex });
     });
     writeLosatCacheInfo([]);
-    reconcileCircularConservation(drawing);
+    reconcileCircularConservation(drawing, ringKeyChangesOf(before, series));
   };
   /**
    * Add file on a ring row: the picked files join the end of the row's genome.
@@ -514,6 +540,7 @@ export const createCircularConservationComparisonFiles = ({
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.circularConservation.series.length) return;
     if (isDerivedCircularConservationReplay(drawing)) {
+      const replayed = conservationSourcesOfSeries(drawing.files.c_conservation_blasts, drawing.circularConservation);
       const orderedBlasts = orderedConservationSources(
         drawing.files.c_conservation_blasts,
         drawing.circularConservation
@@ -533,6 +560,11 @@ export const createCircularConservationComparisonFiles = ({
         sequenceSources: orderedSequenceSources,
         series: drawing.circularConservation.series
       }, idx);
+      // Each kept ring's row moves to its table's key among the kept tables; the removed ring's row goes.
+      const keptChange = {
+        series: kept.series,
+        keyChanges: ringKeyChangesOf(replayed.matched, conservationSourcesOfSeries(normalizeFileList(kept.blasts), kept).matched, idx)
+      };
       /** @param {() => void} [turnOffReaching] */
       const applyKept = (turnOffReaching) => {
         drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...kept.series);
@@ -546,10 +578,10 @@ export const createCircularConservationComparisonFiles = ({
           setConservationBlastsSource(drawing.slices.inputs, kept.blasts.length > 0 ? 'losat-cache' : null);
         });
         writeLosatCacheInfo([]);
-        refreshCircularConservationSlots(drawing);
+        reconcileCircularConservation(drawing, keptChange.keyChanges);
         turnOffReaching?.();
       };
-      return askRingSourceRemoval(drawing, normalizeFileList(kept.blasts), kept.series, msg('Remove series'), applyKept) ?? applyKept();
+      return askRingSourceRemoval(drawing, normalizeFileList(kept.blasts), keptChange, msg('Remove series'), applyKept) ?? applyKept();
     }
     const sourceFiles = circularRingSources(drawing);
     // The row's source as Generate matches it (`conservationSourcesOfSeries`).
@@ -564,6 +596,8 @@ export const createCircularConservationComparisonFiles = ({
     ).map((/** @type {RawConservationSeriesEntry} */ entry) => (
       Number(entry.sourceIndex) > placeIndex ? { ...entry, sourceIndex: Number(entry.sourceIndex) - 1 } : entry
     ));
+    // The removed ring's stack row carries its source's key, which a kept ring may take: it goes first.
+    const removedRow = new Map([[source.sourceKey, '']]);
     /** @param {() => void} [turnOffReaching] */
     const apply = (turnOffReaching) => {
       drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...keptSeries);
@@ -571,10 +605,12 @@ export const createCircularConservationComparisonFiles = ({
         bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources',
           drawing.files.c_conservation_sequence_sources.filter((_, fileIndex) => fileIndex !== placeIndex));
       }
-      setCircularConservationSourceFiles(drawing, keptFiles, RING_FILE_REMOVED);
+      setCircularConservationSourceFiles(drawing, keptFiles, RING_FILE_REMOVED, removedRow);
       turnOffReaching?.();
     };
-    return askRingSourceRemoval(drawing, keptFiles, seriesOfRingFiles(drawing, keptFiles, keptSeries), msg('Remove series'), apply) ?? apply();
+    return askRingSourceRemoval(
+      drawing, keptFiles, seriesOfRingFiles(drawing, keptFiles, keptSeries, removedRow), msg('Remove series'), apply
+    ) ?? apply();
   });
   return {
     settleComparisonRecordLabels, addCircularConservationComparisonFile, removeCircularConservationSource,
