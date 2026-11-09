@@ -615,21 +615,70 @@ def test_a_fixed_slot_with_overflow_error_rejects_the_room() -> None:
         _packed(available=_BASE + 1.0)
 
 
-def test_a_slot_that_raises_names_the_smallest_size_that_draws_its_lanes() -> None:
-    # Six nested bands labelled above in a Linear slot 40 px high: the lanes and their rooms do not fit, so the slot
-    # raises without drawing. Its rooms are measured where the lanes keep their extent, as at the size it names, not
-    # where a narrower size would squeeze them: the slot draws at that size and not 0.01 px below it.
-    regions = tuple(_region(f"r{index}", 1501 + 120 * index, 3500 - 120 * index, f"Region {index + 1} label text") for index in range(6))
-    slot = "regions:annotations@side=above,set_id=regions,h={}px,overflow=error"
+def _nested_regions(count: int, step: int, size: float, orientation: str) -> tuple[RegionAnnotation, ...]:
+    """``count`` nested bands from 1501-3500 inward by ``step`` bp, labelled at ``size`` pt in ``orientation``."""
+
+    return tuple(
+        RegionAnnotation(
+            f"r{index}",
+            CoordinateSpan(None, 1501 + step * index, 3500 - step * index),
+            label=f"Region {index + 1} label text",
+            mark="band",
+            style=RegionAnnotationStyle(fill="#ffcc00", label_orientation=orientation, label_font_size=size),
+        )
+        for index in range(count)
+    )
+
+
+@pytest.mark.parametrize(
+    ("mode", "regions", "slot"),
+    (
+        (
+            "linear",
+            tuple(_region(f"r{index}", 1501 + 120 * index, 3500 - 120 * index, f"Region {index + 1} label text") for index in range(6)),
+            "regions:annotations@side=above,set_id=regions,h={}px,overflow=error",
+        ),
+        # OV-3024: an inside slot whose curved labels are deeper nearer the centre. The planner's packing at the axis
+        # circle, further from the centre than where the slot is drawn, named a size 0.12 px too small.
+        ("circular", _nested_regions(7, 100, 24, "arc"), "regions:annotations@side=inside,set_id=regions,w={}px,overflow=error"),
+    ),
+)
+def test_a_slot_that_raises_names_the_smallest_size_that_draws_its_lanes(
+    mode: str, regions: tuple[RegionAnnotation, ...], slot: str
+) -> None:
+    # Nested bands in a slot 10 px wide: the lanes and their rooms do not fit, so the slot raises without drawing. Its
+    # rooms are measured where the lanes keep their extent, as at the size it names, not where a narrower size would
+    # squeeze them, and where the slot is drawn: the slot draws at that size and not 0.01 px below it.
     with pytest.raises(ValidationError, match="requires") as raised:
-        _svg("linear", regions, slot.format(40))
+        _svg(mode, regions, slot.format(10))
     match = re.search(r"requires ([0-9.]+)px", str(raised.value))
     assert match is not None
     named = float(match.group(1))
 
-    _svg("linear", regions, slot.format(f"{named:.2f}"))
+    _svg(mode, regions, slot.format(f"{named:.2f}"))
     with pytest.raises(ValidationError, match="requires"):
-        _svg("linear", regions, slot.format(f"{named - 0.01:.2f}"))
+        _svg(mode, regions, slot.format(f"{named - 0.01:.2f}"))
+
+
+@pytest.mark.parametrize(
+    ("overflow", "refusal"),
+    (
+        ("error", r"requires [0-9.]+px but only ([0-9.]+)px is available before the centre of the circle"),
+        ("compress", r"cannot fit 7 lanes in ([0-9.]+)px before the centre of the circle"),
+    ),
+)
+def test_an_inside_slot_whose_set_width_passes_the_centre_is_checked_against_the_room_before_it(
+    overflow: str, refusal: str
+) -> None:
+    # OV-2990: seven nested bands labelled at 12 pt in an inside slot 640 px wide, past the centre. The drawer gives
+    # the slot only the room before the centre; its lanes and their rooms take more, so the slot's overflow refuses
+    # it there, naming that room, rather than drawing the bands 0 px wide with their labels stacked at the centre.
+    slot = f"regions:annotations@side=inside,set_id=regions,w=640px,overflow={overflow}"
+    with pytest.raises(ValidationError) as raised:
+        _svg("circular", _nested_regions(7, 100, 12, "horizontal"), slot)
+    match = re.search(refusal, str(raised.value))
+    assert match is not None, str(raised.value)
+    assert float(match.group(1)) < 640.0
 
 
 def test_a_fixed_slot_with_overflow_compress_narrows_the_lane_gap() -> None:
@@ -1286,18 +1335,19 @@ def test_labels_that_share_a_lane_stay_apart_where_the_rooms_carry_that_lane(
 
 
 def test_a_label_drawn_where_a_set_width_squeezes_the_lanes_gets_its_room() -> None:
-    # OV-2989: ten nested bands at 24 pt along their circles in an inside slot whose set width reaches past the centre
-    # (``w=600px,overflow=error``). The lanes and their rooms take more than the centre leaves, so the drawer shares
-    # the band up to the centre less the rooms among the lanes, narrower than the extent they take. r6's label keeps
-    # no letter beside its mark where the lanes stand at that extent, but keeps letters where the drawer draws its
-    # lane: it gets its room there, as every label drawn does, and no drawn label's letters come within its label
-    # offset of another lane's painted mark.
+    # OV-2989: nine nested bands at 24 pt along their circles, 10 px apart, in an inside slot whose set width reaches
+    # past the centre (``w=600px,overflow=compress,lane_gap_px=10``). The lanes and their rooms take more than the
+    # centre leaves, so the drawer narrows the gaps and shares the band up to the centre less the rooms among the
+    # lanes, narrower than the extent they take. (The figure first reported, ten bands with ``overflow=error``, is
+    # refused there now, OV-2990.) r5's label claims no room where the lanes stand at that extent, but is drawn where
+    # the drawer draws its lane: it gets its room there, as every label drawn does, and no drawn label's letters come
+    # within its label offset of another lane's painted mark (measured only at the extent, r5's came within it of r6's).
     regions = tuple(
-        (f"r{index}", 1501 + 90 * index, 3500 - 90 * index, f"Region {index + 1} label text") for index in range(10)
+        (f"r{index}", 1501 + 90 * index, 3500 - 90 * index, f"Region {index + 1} label text") for index in range(9)
     )
-    drawn = _bands_and_left_out(regions, ",w=600px,overflow=error", "arc", size=24)
+    drawn = _bands_and_left_out(regions, ",w=600px,overflow=compress,lane_gap_px=10", "arc", size=24)
 
-    assert "r6" in {label.annotation_id for label in drawn.drawn}, drawn.messages
+    assert "r5" in {label.annotation_id for label in drawn.drawn}, drawn.messages
     met = [
         (label.annotation_id, identity, label.ink_radii, band)
         for label in drawn.drawn
@@ -1310,21 +1360,21 @@ def test_a_label_drawn_where_a_set_width_squeezes_the_lanes_gets_its_room() -> N
     assert not met, met
 
 
-@pytest.mark.parametrize("size", [96, 150])
-def test_a_label_two_lanes_from_the_mark_it_crosses_gets_its_room_where_a_set_width_squeezes_the_lanes(
-    size: float,
-) -> None:
-    # The set width squeezes the lanes as above, so each lane between a label and the mark it crosses gives it less
-    # than the extent the lanes take. c's large label stands in lane 0 beside its mark and crosses the marks of b (lane
-    # 1) and a (lane 2): its room counts the lanes between where the drawer draws them, and its letters stay a label
-    # offset clear of a's painted mark.
+def test_a_label_two_lanes_from_the_mark_it_crosses_gets_its_room_where_a_set_width_squeezes_the_lanes() -> None:
+    # The set width squeezes the lanes as above (seven nested bands 20 px apart, ``overflow=compress``), so each lane
+    # between a label and the mark it crosses gives it less than the extent the lanes take. c's 150 pt label stands in
+    # lane 0 beside its mark and crosses the marks of b (lane 1) and a (lane 2): its room counts the lanes between
+    # where the drawer draws them, and its letters stay a label offset clear of a's painted mark (counted at the
+    # extent, they came 7.5 px into it).
     regions = (
-        *((f"r{index}", 1501 + 90 * index, 3500 - 90 * index, f"Region {index + 1} label text") for index in range(10)),
+        *((f"r{index}", 1501 + 90 * index, 3500 - 90 * index, f"Region {index + 1} label text") for index in range(7)),
         ("c", 5801, 7200, "G"),
         ("b", 5900, 6100, ""),
         ("a", 6050, 7600, ""),
     )
-    drawn = _bands_and_left_out(regions, ",w=600px,overflow=error", "arc", frozenset({"a", "b"}), 24, {"c": size})
+    drawn = _bands_and_left_out(
+        regions, ",w=600px,overflow=compress,lane_gap_px=20", "arc", frozenset({"a", "b"}), 24, {"c": 150}
+    )
 
     (label,) = [label for label in drawn.drawn if label.annotation_id == "c"]
     # The band radii are written to 0.001 px.
