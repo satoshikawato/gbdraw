@@ -590,21 +590,21 @@ const legendInitialTransform = typedRef({ x: 0, y: 0 }); // Store SVG's original
 const legendCurrentOffset = typedReactive({ x: 0, y: 0 });
 
 // Main Diagram Drag state (tick, labels, axis, definition, records as one group)
-const diagramDragging = ref(false);
-const diagramDragStart = reactive({ x: 0, y: 0 });
+const diagramDragging = typedRef(false);
+const diagramDragStart = typedReactive({ x: 0, y: 0 });
 const diagramOffset = typedReactive({ x: 0, y: 0 }); // Cumulative drag offset
-const diagramElementIds = ref([]); // IDs of elements that move together
+const diagramElementIds = typedRef(/** @type {string[]} */ ([])); // IDs of elements that move together
 // The automatic translation of each bound primary group, by group.
 const diagramElementOriginalTransforms = typedRef(
   /** @type {Map<SVGGraphicsElement, { x: number, y: number }>} */ (new Map())
 );
 const diagramElements = typedRef(/** @type {SVGGraphicsElement[]} */ ([]));
-const lengthBarElement = ref(null);
-const lengthBarOriginalTransform = ref({ x: 0, y: 0 });
-const lengthBarUserOffset = reactive({ x: 0, y: 0 });
-const plotTitleElement = ref(null);
-const plotTitleDragging = ref(false);
-const plotTitleDragStart = reactive({ x: 0, y: 0 });
+const lengthBarElement = typedRef(/** @type {SVGGraphicsElement | null} */ (null));
+const lengthBarOriginalTransform = typedRef({ x: 0, y: 0 });
+const lengthBarUserOffset = typedReactive({ x: 0, y: 0 });
+const plotTitleElement = typedRef(/** @type {SVGGraphicsElement | null} */ (null));
+const plotTitleDragging = typedRef(false);
+const plotTitleDragStart = typedReactive({ x: 0, y: 0 });
 const plotTitleAutoTransform = typedRef({ x: 0, y: 0 });
 const plotTitleUserOffset = typedReactive({ x: 0, y: 0 });
 
