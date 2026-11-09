@@ -392,12 +392,24 @@ def _outlines_overlap(first: _PlacedGlyph, second: _PlacedGlyph) -> bool:
     return _holds(second, first.firsts) or _holds(first, second.firsts)
 
 
-@functools.lru_cache(maxsize=256)
-def _glyph_pairs(count: int) -> tuple[NDArray[np.intp], NDArray[np.intp]]:
-    """Every pair of ``count`` glyphs, each once, the earlier glyph first (``GlyphsAlongCircle.meet``)."""
+class _GlyphPairs:
+    """Every pair of a text's glyphs, each once (``GlyphsAlongCircle.meet``): the pairs of the most glyphs any text has
+    had so far, ordered by the later glyph, so the pairs of ``count`` glyphs are their start. One array pair, as large
+    as the pairs of the longest text measured, which ``meet`` would otherwise build at every call."""
 
-    earlier, later = np.triu_indices(count, 1)
-    return earlier, later
+    def __init__(self) -> None:
+        self._later, self._earlier = np.tril_indices(0, -1)
+
+    def of(self, count: int) -> tuple[NDArray[np.intp], NDArray[np.intp]]:
+        """The earlier and the later glyph of each pair of ``count`` glyphs."""
+
+        pairs = count * (count - 1) // 2
+        if pairs > len(self._later):
+            self._later, self._earlier = np.tril_indices(count, -1)
+        return self._earlier[:pairs], self._later[:pairs]
+
+
+_GLYPH_PAIRS = _GlyphPairs()
 
 
 @dataclass(frozen=True, eq=False)
@@ -431,7 +443,7 @@ class GlyphsAlongCircle:
         least, most = float(low.min()), float(high.max())
         whole = 2 * math.pi
         shifts = [shift for shift, wraps in ((-whole, least < most - whole), (whole, least + whole < most)) if wraps]
-        earlier, later = _glyph_pairs(len(low))
+        earlier, later = _GLYPH_PAIRS.of(len(low))
         low_earlier, high_earlier, low_later, high_later = low[earlier], high[earlier], low[later], high[later]
         turns_meet = (low_earlier < high_later) & (low_later < high_earlier)
         for shift in shifts:
