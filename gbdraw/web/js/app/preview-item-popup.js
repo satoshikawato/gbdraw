@@ -118,6 +118,8 @@ const positive = (value) => {
   const number = Number(value);
   return value != null && Number.isFinite(number) && number > 0 ? number : null;
 };
+/** A Legend row's key, trimmed: the identity the popup finds the row by. @param {LegendRow} entry @returns {string} */
+const rowKey = (entry) => text(legendEntryKey(entry));
 
 /**
  * OV-1466: a rule without a feature type is a whole sentence of its own, so a
@@ -165,7 +167,7 @@ export const defaultColorScopeLine = (type, replacedColor) => (
 const buildLegendEntryView = ({
   entry, name, index, color, rules, featureCount, featureTypes, trackKind, defaultColorType, replacedDefaultColor, pickerFallback
 }) => {
-  const key = text(legendEntryKey(entry));
+  const key = rowKey(entry);
   const ruleLines = trackKind ? [] : rules.map(colorRuleText);
   const defaultColorLine = trackKind || ruleLines.length ? null : defaultColorScopeLine(defaultColorType, replacedDefaultColor);
   // OV-1336: the OIC-029 line, once shown, says where the color comes from by itself; the caption gives way.
@@ -348,107 +350,170 @@ const CIRCULAR_EDIT_HINTS = {
 };
 /** @typedef {keyof typeof CIRCULAR_EDIT_HINTS} CircularOwnRecordBlock */
 
+/**
+ * What a Legend row's popup says about its color and features.
+ * @typedef {{ trackKind: DrawnTrack['kind'] | null, rules: readonly ColorRuleLike[], featureCount: number | null,
+ *   defaultColorType: string | null, replacedDefaultColor: string | null }} LegendRowFacts
+ */
+
+/**
+ * The rules, feature count and default color behind a Legend row; a track row has none to read.
+ * @param {Pick<PreviewItemPopupOptions, 'readLegendTrackKind' | 'readLegendRowRules' | 'countLegendCaptionFeatures'
+ *   | 'readLegendRowDefaultColorType' | 'readUserDefaultColor'>} ports
+ * @param {LegendRow} entry @param {boolean} matchesReady
+ * @returns {LegendRowFacts}
+ */
+const legendRowFacts = (ports, entry, matchesReady) => {
+  const trackKind = ports.readLegendTrackKind(entry);
+  /** @type {LegendRowFacts} */
+  const facts = { trackKind, rules: [], featureCount: null, defaultColorType: null, replacedDefaultColor: null };
+  if (trackKind) return facts;
+  try {
+    facts.rules = ports.readLegendRowRules(entry);
+    if (matchesReady) [facts.featureCount, facts.defaultColorType] = [ports.countLegendCaptionFeatures(rowKey(entry)), ports.readLegendRowDefaultColorType(entry)];
+    if (facts.defaultColorType) facts.replacedDefaultColor = ports.readUserDefaultColor(facts.defaultColorType);
+  } catch {
+    // The rule matches are still preparing: the popup shows the color alone.
+  }
+  return facts;
+};
+
+/** The settings a Linear record popup edits, from the record's File card. @param {LinearSeq | null} sequence @returns {RecordDraft | null} */
+const linearRecordDraft = (sequence) => sequence && {
+  name: text(resolveLinearRecordEffectiveDefinition(sequence)),
+  subtitle: text(resolveLinearRecordEffectiveSubtitle(sequence)),
+  reverse: cropFormReverseComplement({ windows: sequence.windows, reverse: sequence.region_reverse }),
+  reverseAvailable: true,
+  nameLabel: t('Organism / strain'),
+  subtitleLabel: t('Subtitle'),
+  sequenceUid: sequence.uid,
+  fields: RECORD_POPUP_FIELDS.linear,
+  // The record's own name fields, on its File card or in its Record options.
+  settingsSelector: `[data-linear-record-names=${JSON.stringify(sequence.uid)}] input[type="text"]`
+};
+
+/**
+ * The Circular settings a record popup reads: the name and subtitle fields its draft names, and the crop form.
+ * @typedef {Readonly<Record<string, unknown>> & {
+ *   readonly circular_windows: readonly { reverseComplement: boolean }[], readonly circular_reverse: boolean
+ * }} CircularRecordForm
+ */
+
+/**
+ * The settings a Circular record popup edits: the record's own fields, else the drawing's Species and Strain.
+ * @param {CircularRecordForm} form the shown drawing's settings @param {boolean} ownRecord
+ * @returns {RecordDraft | null}
+ */
+const circularRecordDraft = (form, ownRecord) => {
+  const target = ownRecord ? CIRCULAR_RECORD : CIRCULAR_DRAWING;
+  // A Record label drawn while its sidebar fields are unavailable (for
+  // example, a loaded Session's records are not inspected yet) overrides
+  // Species and Strain: the popup offers neither (OV-432).
+  if (!ownRecord && (text(form.circular_record_label) || text(form.circular_record_subtitle))) return null;
+  return {
+    ...target,
+    nameLabel: tm(target.nameLabel),
+    subtitleLabel: tm(target.subtitleLabel),
+    name: text(form[target.fields.name.key]),
+    subtitle: text(form[target.fields.subtitle.key]),
+    reverse: cropFormReverseComplement({ windows: form.circular_windows, reverse: form.circular_reverse }),
+    reverseAvailable: ownRecord,
+    sequenceUid: ''
+  };
+};
+
+/**
+ * The request record a drawn record definition shows, and the File card (by its uid) that draws it, or null.
+ * @param {RecordScope} scope @param {{ recordIndex: number, recordId: string }} item
+ * @param {readonly RequestRecordLike[]} records the request records of the displayed Result
+ * @param {PreviewItemPopupOptions['readCommittedRecordRows']} readCommittedRecordRows
+ * @returns {{ record: RequestRecordLike | null, sourceUid: string | null }}
+ */
+const drawnRequestRecord = (scope, { recordIndex, recordId }, records, readCommittedRecordRows) => {
+  // A Linear file may draw several records (one request record, or one
+  // `<uid>:<n>` record each), so the drawn record's id, not its index, names
+  // its request record and File card; an ambiguous id names neither. A file's
+  // record list is read on demand (a loaded Session has none yet): without
+  // rows the index names the record only when every request record draws
+  // exactly one, and that record's key is its File card's.
+  const rows = scope === 'linear'
+    ? readCommittedRecordRows().filter((row) => row.scope === 'linear' && text(row.recordId) === recordId)
+    : [];
+  const row = rows.length === 1 ? rows[0] : null;
+  const byIndex = scope !== 'linear'
+    || (!rows.length && records.every((entry) => entry.cardinality === 'exactly_one'));
+  const record = (row
+    ? records.find((entry) => entry.recordKey === row.canonicalRecordKey)
+    : byIndex && records[recordIndex]) || null;
+  return { record, sourceUid: record ? text(row ? row.sourceUid : record.recordKey) : null };
+};
+
+/**
+ * The Region popup's heading; its body is the Select region owner's (`app/region-select.js`).
+ * @param {RegionSelection} item
+ * @returns {{ kind: 'region', identity: string, dialogLabel: string } & ReturnType<typeof regionSelectionHeading>}
+ */
+const regionView = (item) => ({
+  kind: /** @type {const} */ ('region'),
+  identity: `region:${item.resultIndex}:${item.recordKey}:${item.span.start}:${item.span.length}`,
+  dialogLabel: t('Region'),
+  ...regionSelectionHeading(item)
+});
+
+/**
+ * The key an open Legend popup follows after a rename: the renamed row's when it kept it, else the one key the rename
+ * added (a rule row's rename), else the key of the row that has the typed name (Merge); null when none is drawn.
+ * @param {readonly LegendRow[]} entries the rows after the rename @param {string} renamedKey
+ * @param {ReadonlySet<string>} known the keys before the rename @param {string} caption the typed name
+ * @returns {string | null}
+ */
+const keyFollowedAfterRename = (entries, renamedKey, known, caption) => {
+  const added = entries.filter((entry) => !known.has(rowKey(entry)));
+  const entry = entries.find((row) => rowKey(row) === renamedKey)
+    || (added.length === 1 ? added[0] : null)
+    || entries.find((row) => text(row.caption) === text(caption));
+  return entry ? rowKey(entry) : null;
+};
+
+// Enter in a popup text field commits it as leaving the field does and keeps
+// focus in the field, so a choice the commit asks returns focus there.
+/** @param {Event} event @returns {void} */
+const commitField = (event) => { event.target?.dispatchEvent(new Event('change')); };
+
 /** @param {PreviewItemPopupOptions} options */
-export const createPreviewItemPopup = ({
-  state, computed, revealSetting, readLegendEntryColor, readShownLegendName = (caption) => caption, readLegendRowRules, countLegendCaptionFeatures,
-  readLegendTrackKind, readLegendRowDefaultColorType, readUserDefaultColor, getCommittedRequest, readCommittedRecordRows, readAlignmentInspector, readCircularOwnRecordBlock, runUndoable, sessionBusy, renameLegendRow,
-  legendRenameSettled
-}) => {
+export const createPreviewItemPopup = (options) => {
+  const {
+    state, computed, revealSetting, readLegendEntryColor, readShownLegendName = (caption) => caption, getCommittedRequest,
+    readCommittedRecordRows, readAlignmentInspector, readCircularOwnRecordBlock, runUndoable, sessionBusy, renameLegendRow,
+    legendRenameSettled
+  } = options;
   /** @returns {readonly LegendRow[]} */
   const legendEntries = () => state.activeDrawing().legendEntries.value || [];
 
   /** @param {string} key @param {boolean} matchesReady */
   const legendView = (key, matchesReady) => {
     const entries = legendEntries();
-    const index = entries.findIndex((entry) => text(legendEntryKey(entry)) === key);
+    const index = entries.findIndex((entry) => rowKey(entry) === key);
     const entry = entries[index];
     if (!entry) return null;
-    const trackKind = readLegendTrackKind(entry);
-    /** @type {readonly ColorRuleLike[]} */
-    let rules = [];
-    /** @type {number | null} */
-    let featureCount = null;
-    /** @type {string | null} */
-    let defaultColorType = null;
-    /** @type {string | null} */
-    let replacedDefaultColor = null;
-    // A track row has no rules and no features to read.
-    if (!trackKind) {
-      try {
-        rules = readLegendRowRules(entry);
-        if (matchesReady) [featureCount, defaultColorType] = [countLegendCaptionFeatures(text(legendEntryKey(entry))), readLegendRowDefaultColorType(entry)];
-        if (defaultColorType) replacedDefaultColor = readUserDefaultColor(defaultColorType);
-      } catch {
-        // The rule matches are still preparing: the popup shows the color alone.
-      }
-    }
+    const facts = legendRowFacts(options, entry, matchesReady);
     const featureTypes = new Set(state.extractedFeatures.value.map((feature) => text(feature?.type)));
     return buildLegendEntryView({
-      entry, name: readShownLegendName(text(legendEntryKey(entry))), index, color: readLegendEntryColor(entry), rules, featureCount, featureTypes,
-      trackKind, defaultColorType, replacedDefaultColor,
+      entry, name: readShownLegendName(rowKey(entry)), index, color: readLegendEntryColor(entry), ...facts, featureTypes,
       // OV-1386: a row of color none opens the Color input at its type's palette color, as the Palette pane does.
       pickerFallback: appliedFeatureColorOf(
-        { paletteDefinitions: state.paletteDefinitions, appliedPaletteName: state.appliedPaletteName }, defaultColorType ?? undefined
+        { paletteDefinitions: state.paletteDefinitions, appliedPaletteName: state.appliedPaletteName }, facts.defaultColorType ?? undefined
       ) || '#cccccc'
     });
-  };
-
-  /** @param {LinearSeq | null} sequence @returns {RecordDraft | null} */
-  const linearDraft = (sequence) => sequence && {
-    name: text(resolveLinearRecordEffectiveDefinition(sequence)),
-    subtitle: text(resolveLinearRecordEffectiveSubtitle(sequence)),
-    reverse: cropFormReverseComplement({ windows: sequence.windows, reverse: sequence.region_reverse }),
-    reverseAvailable: true,
-    nameLabel: t('Organism / strain'),
-    subtitleLabel: t('Subtitle'),
-    sequenceUid: sequence.uid,
-    fields: RECORD_POPUP_FIELDS.linear,
-    // The record's own name fields, on its File card or in its Record options.
-    settingsSelector: `[data-linear-record-names=${JSON.stringify(sequence.uid)}] input[type="text"]`
-  };
-
-  /** @param {boolean} ownRecord @returns {RecordDraft | null} */
-  const circularDraft = (ownRecord) => {
-    const form = state.activeDrawing().form;
-    const target = ownRecord ? CIRCULAR_RECORD : CIRCULAR_DRAWING;
-    // A Record label drawn while its sidebar fields are unavailable (for
-    // example, a loaded Session's records are not inspected yet) overrides
-    // Species and Strain: the popup offers neither (OV-432).
-    if (!ownRecord && (text(form.circular_record_label) || text(form.circular_record_subtitle))) return null;
-    return {
-      ...target,
-      nameLabel: tm(target.nameLabel),
-      subtitleLabel: tm(target.subtitleLabel),
-      name: text(form[target.fields.name.key]),
-      subtitle: text(form[target.fields.subtitle.key]),
-      reverse: cropFormReverseComplement({ windows: form.circular_windows, reverse: form.circular_reverse }),
-      reverseAvailable: ownRecord,
-      sequenceUid: ''
-    };
   };
 
   /** @param {{ recordIndex: number, recordId: string }} item */
   const recordView = ({ recordIndex, recordId }) => {
     /** @type {RecordScope} */
     const scope = state.mode.value === 'circular' ? 'circular' : 'linear';
-    const records = getCommittedRequest()?.records || [];
-    // A Linear file may draw several records (one request record, or one
-    // `<uid>:<n>` record each), so the drawn record's id, not its index, names
-    // its request record and File card; an ambiguous id names neither. A file's
-    // record list is read on demand (a loaded Session has none yet): without
-    // rows the index names the record only when every request record draws
-    // exactly one, and that record's key is its File card's.
-    const rows = scope === 'linear'
-      ? readCommittedRecordRows().filter((row) => row.scope === 'linear' && text(row.recordId) === recordId)
-      : [];
-    const row = rows.length === 1 ? rows[0] : null;
-    const byIndex = scope !== 'linear'
-      || (!rows.length && records.every((entry) => entry.cardinality === 'exactly_one'));
-    const record = (row
-      ? records.find((entry) => entry.recordKey === row.canonicalRecordKey)
-      : byIndex && records[recordIndex]) || null;
-    const sequence = record
-      ? state.activeDrawing().linearSeqs.find((entry) => entry.uid === text(row ? row.sourceUid : record.recordKey)) || null
+    const { record, sourceUid } = drawnRequestRecord(scope, { recordIndex, recordId }, getCommittedRequest()?.records || [], readCommittedRecordRows);
+    const sequence = sourceUid !== null
+      ? state.activeDrawing().linearSeqs.find((entry) => entry.uid === sourceUid) || null
       : null;
     const group = state.svgContainer.value?.querySelector(
       `[data-gbdraw-role^="record-definition"][data-gbdraw-record-index="${recordIndex}"]`
@@ -460,7 +525,7 @@ export const createPreviewItemPopup = ({
       recordId,
       drawn: readDrawnDefinitionLines(group, recordId),
       record,
-      draft: scope === 'linear' ? linearDraft(sequence) : circularDraft(!circularBlock),
+      draft: scope === 'linear' ? linearRecordDraft(sequence) : circularRecordDraft(state.activeDrawing().form, !circularBlock),
       editHint: scope === 'linear' ? tm(LINEAR_EDIT_HINT) : (circularBlock && tm(CIRCULAR_EDIT_HINTS[circularBlock])),
       alignment: scope === 'linear'
         ? readAlignmentInspector()?.records?.find((decision) => decision.recordKey === record?.recordKey) || null
@@ -468,14 +533,6 @@ export const createPreviewItemPopup = ({
       alignmentShown: scope === 'linear'
     });
   };
-
-  /** The Region popup's heading; its body is the Select region owner's (`app/region-select.js`). @param {RegionSelection} item */
-  const regionView = (item) => ({
-    kind: /** @type {const} */ ('region'),
-    identity: `region:${item.resultIndex}:${item.recordKey}:${item.span.start}:${item.span.length}`,
-    dialogLabel: t('Region'),
-    ...regionSelectionHeading(item)
-  });
 
   const view = computed(() => {
     const opened = previewItemPopupOf(state.clickedPairwiseMatch.value);
@@ -539,24 +596,16 @@ export const createPreviewItemPopup = ({
   const renameLegendEntry = async (index, caption) => {
     const opened = previewItemPopupOf(state.clickedPairwiseMatch.value);
     const before = legendEntries();
-    const renamedKey = before[index] ? text(legendEntryKey(before[index])) : '';
-    const known = new Set(before.map((entry) => text(legendEntryKey(entry))));
+    const renamedKey = before[index] ? rowKey(before[index]) : '';
+    const known = new Set(before.map(rowKey));
     const result = await renameLegendRow(index, caption);
     await legendRenameSettled();
     if (!opened || state.clickedPairwiseMatch.value !== opened || opened.previewItem.kind !== 'legend-entry') return result;
     const entries = legendEntries();
-    const added = entries.filter((entry) => !known.has(text(legendEntryKey(entry))));
-    const entry = entries.find((row) => text(legendEntryKey(row)) === renamedKey)
-      || (added.length === 1 ? added[0] : null)
-      || entries.find((row) => text(row.caption) === text(caption));
-    if (entry) opened.previewItem = { kind: 'legend-entry', key: text(legendEntryKey(entry)) };
+    const key = keyFollowedAfterRename(entries, renamedKey, known, caption);
+    if (key !== null) opened.previewItem = { kind: 'legend-entry', key };
     return result;
   };
-
-  // Enter in a popup text field commits it as leaving the field does and keeps
-  // focus in the field, so a choice the commit asks returns focus there.
-  /** @param {Event} event */
-  const commitField = (event) => { event.target?.dispatchEvent(new Event('change')); };
 
   return { view, setRecordField, showRecordSettings, showRecordTextSettings, renameLegendRow: renameLegendEntry, commitField };
 };

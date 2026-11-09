@@ -84,7 +84,7 @@ const createPopup = ({
   rules = [], featureTypes = ['tRNA'], featureCount = 22, definitionGroup = null, alignment = null, trackKinds = {},
   countLegendCaptionFeatures = () => featureCount, defaultColorTypes = {}, userDefaultColors = {},
   readLegendTrackKind = (entry) => trackKinds[entry.originalCaption || entry.caption] ?? null,
-  palettes = {}, appliedPalette = 'default', circularWindows = [], sequenceWindows = []
+  palettes = {}, appliedPalette = 'default', circularWindows = [], sequenceWindows = [], revealSetting = () => {}
 } = {}) => {
   const steps = [];
   const form = {
@@ -104,6 +104,7 @@ const createPopup = ({
   const popup = createPreviewItemPopup({
     state,
     computed: (getter) => ({ get value() { return getter(); } }),
+    revealSetting,
     readLegendEntryColor: (entry) => entry.color,
     readShownLegendName,
     readLegendRowRules: () => rules,
@@ -195,6 +196,22 @@ test('the legend popup follows its row when a rename changes the row key', async
   assert.equal(popup.view.value.title, 'Transfer RNA');
 });
 
+// A rename that keeps the row's key stays on it, even when another key appears in the same step.
+test('the legend popup stays on a row that kept its key when the rename adds another row', async () => {
+  const entries = [{ caption: 'tRNA', originalCaption: 'tRNA', color: '#ff0000' }];
+  const { popup, state } = createPopup({
+    entries,
+    renameLegendRow: async (index, caption) => {
+      Object.assign(entries[index], { caption });
+      entries.push({ caption: 'Added', originalCaption: 'Added', color: '#00ff00' });
+      return true;
+    }
+  });
+  state.clickedPairwiseMatch.value = { previewItem: { kind: 'legend-entry', key: 'tRNA' }, matchesReady: true };
+  await popup.renameLegendRow(0, 'Transfer RNA');
+  assert.deepEqual(state.clickedPairwiseMatch.value.previewItem, { kind: 'legend-entry', key: 'tRNA' });
+});
+
 // A rename onto another row's name asks Merge, Keep both, or Cancel; the
 // rename returns once the dialog is open. The popup keeps its row until the
 // choice is answered, then follows it.
@@ -273,11 +290,13 @@ test('a Circular record popup without its own fields names the cause', () => {
 test('a Linear record popup finds its request record and File card by record id', () => {
   const requestRecords = [
     { recordKey: 'uid-1', cardinality: 'all', presentation: { label: 'Old name', reverseComplement: false }, windows: [] },
-    { recordKey: 'uid-2', cardinality: 'exactly_one', presentation: { label: 'Other', reverseComplement: true }, windows: [] }
+    { recordKey: 'uid-2', cardinality: 'exactly_one', presentation: { label: 'Other', reverseComplement: true }, windows: [] },
+    { recordKey: 'uid-1:1', cardinality: 'exactly_one', presentation: { label: 'Second', reverseComplement: false }, windows: [] }
   ];
   const recordRows = [
     { scope: 'linear', sourceUid: 'uid-1', recordId: 'R1', canonicalRecordKey: 'uid-1' },
-    { scope: 'linear', sourceUid: 'uid-1', recordId: 'R2', canonicalRecordKey: 'uid-1' },
+    // A `<uid>:<n>` request record: its File card is the row's source, not the request key.
+    { scope: 'linear', sourceUid: 'uid-1', recordId: 'R2', canonicalRecordKey: 'uid-1:1' },
     { scope: 'linear', sourceUid: 'uid-2', recordId: 'R3', canonicalRecordKey: 'uid-2' }
   ];
   const { popup, state } = createPopup({ requestRecords, recordRows });
@@ -288,6 +307,10 @@ test('a Linear record popup finds its request record and File card by record id'
   assert.equal(view.facts.find((fact) => fact.label === 'Reverse complement').value, 'No');
   state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 1, recordId: 'unknown' } };
   assert.equal(popup.view.value.draft, null);
+  // An id that two drawn records share names neither record nor File card.
+  const shared = createPopup({ requestRecords, recordRows: [...recordRows, { ...recordRows[1], canonicalRecordKey: 'uid-2' }] });
+  shared.state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 1, recordId: 'R2' } };
+  assert.equal(shared.popup.view.value.draft, null);
 });
 
 // A loaded Session has read no record list yet: the drawn index names the
@@ -354,6 +377,17 @@ test('the legend-entry view names the rule behind the color and the feature coun
 
 // OV-1466: a rule for any feature is one sentence, so a locale can write the
 // words for "any feature" where and how its sentence needs them.
+// While the rule matches are still preparing, the popup keeps the rules it read and shows no count.
+test('the legend-entry view keeps its rules when the feature count is not ready', () => {
+  const view = openView(createPopup({
+    entries: [{ caption: 'Core biosynthetic genes', color: '#d62728' }], featureTypes: ['CDS'],
+    rules: [{ feat: 'CDS', qual: 'gene_kind', val: 'biosynthetic$' }],
+    countLegendCaptionFeatures: () => { throw new Error('matches preparing'); }
+  }), { kind: 'legend-entry', key: 'Core biosynthetic genes' });
+  assert.deepEqual(view.ruleLines, ['CDS where gene_kind matches “biosynthetic$”']);
+  assert.equal(view.subtitle, 'Counting features…');
+});
+
 test('a color rule for any feature is one whole sentence in every locale (OV-1466)', async () => {
   const lines = () => openView(createPopup({
     entries: [{ caption: 'Ruled', color: '#d62728' }],
@@ -578,4 +612,43 @@ test('a Circular definition without line kinds reads its name, accession, and le
   assert.equal(view.title, 'Homo sapiens');
   assert.equal(view.subtitle, 'mitochondrion · NC_012920.1');
   assert.equal(view.facts.find((fact) => fact.label === 'Length').value, '16,569 bp');
+});
+
+// The Region popup's heading is the selection's; its body is the Select region owner's.
+test('a Region popup is named by its selection', () => {
+  const { popup, state } = createPopup();
+  const region = {
+    kind: 'region', resultIndex: 1, recordIndex: 2, recordKey: 'uid-1', windowIndex: null, recordId: 'R1',
+    span: { start: 10, length: 20 }, source: { start: 11, end: 30, length: 20 }
+  };
+  state.clickedPairwiseMatch.value = { previewItem: region };
+  assert.deepEqual(popup.view.value, {
+    kind: 'region', identity: 'region:1:uid-1:10:20', dialogLabel: 'Region', title: 'Region', subtitle: 'R1', span: '11-30 (20 bp)'
+  });
+});
+
+// The label fit dialog's "Edit Species / Strain…" shows the settings a click on the drawn definition of that index
+// would show, and closes the popup; Enter in a popup text field commits it as leaving the field does.
+test('the record settings of a drawn index are revealed, and Enter commits a popup field', () => {
+  const revealed = [];
+  const definitionGroup = new FakeElement({ 'data-gbdraw-record-id': 'R1' });
+  const { popup, state } = createPopup({ definitionGroup, revealSetting: (field) => { revealed.push(field); } });
+  const previous = globalThis.document;
+  const selectors = [];
+  const field = { id: 'record-name' };
+  globalThis.document = { querySelector: (selector) => { selectors.push(selector); return field; } };
+  try {
+    assert.equal(popup.showRecordTextSettings(-1), false);
+    state.clickedPairwiseMatch.value = { previewItem: { kind: 'record-definition', recordIndex: 0, recordId: 'R1' } };
+    assert.equal(popup.showRecordTextSettings(0), true);
+  } finally {
+    globalThis.document = previous;
+  }
+  assert.deepEqual(selectors, ['[data-linear-record-names="uid-1"] input[type="text"]']);
+  assert.deepEqual(revealed, [field]);
+  assert.equal(state.clickedPairwiseMatch.value, null);
+
+  const events = [];
+  popup.commitField({ target: { dispatchEvent: (event) => { events.push(event.type); } } });
+  assert.deepEqual(events, ['change']);
 });
