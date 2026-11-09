@@ -347,10 +347,19 @@ def solve_linear_horizontal_layout(
         raise ValidationError(
             "normalize_length=True cannot be combined with multiple records in one Linear row."
         )
+    # Two records keep at least the room their facing insets ask for (the marks of a windowed row) apart.
+    row_gaps = [
+        [
+            max(gap, row_items[index].right_inset + row_items[index + 1].left_inset)
+            for index in range(len(row_items) - 1)
+        ]
+        for row_items in grouped
+    ]
     row_px: list[float] = []
     row_bp: list[int] = []
-    for row_items in grouped:
-        gap_width = gap * max(0, len(row_items) - 1)
+    for row_items, effective_gaps in zip(grouped, row_gaps):
+        # The room insets add beyond the gap: zero, and the gap width unchanged, for records without insets.
+        gap_width = gap * max(0, len(row_items) - 1) + compensated_sum(value - gap for value in effective_gaps)
         if width <= gap_width:
             raise ValidationError(
                 "Linear row cannot fit a positive bp scale: "
@@ -371,10 +380,7 @@ def solve_linear_horizontal_layout(
     content_left = 0.0
     content_right = 0.0
     for row_index, row_items in enumerate(grouped):
-        effective_gaps = [
-            max(gap, row_items[index].right_inset + row_items[index + 1].left_inset)
-            for index in range(len(row_items) - 1)
-        ]
+        effective_gaps = row_gaps[row_index]
         if normalize_length:
             sequence_widths = [width]
             cursor = 0.0

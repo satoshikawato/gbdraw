@@ -183,14 +183,16 @@ def test_comparison_ribbons_keep_four_pixel_clearance_from_painted_occupancy() -
         - comparison_bottom
         == pytest.approx(4.0)
     )
+    # The lower record's text stands above its tracks in the shared row; the ribbon ends 4 px above
+    # the text, not over it (OV-2712, PD-OI-122).
+    bottom_header = next(
+        band for band in geometry[2]["collisionBands"] if band["kind"] == "definition"
+    )
+    assert bottom_header["absoluteTopPx"] - comparison_bottom == pytest.approx(4.0)
     bottom_features = next(
         slot for slot in geometry[2]["slots"] if slot["renderer"] == "features"
     )
-    assert (
-        bottom_features["paintBand"]["absoluteTopPx"]
-        - comparison_bottom
-        == pytest.approx(4.0)
-    )
+    assert bottom_features["paintBand"]["absoluteTopPx"] > bottom_header["absoluteBottomPx"]
 
 
 @pytest.mark.parametrize("multi_record", [False, True])

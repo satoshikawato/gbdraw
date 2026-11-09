@@ -534,6 +534,46 @@ def add_explicit_comparisons_on_linear_canvas(
     return canvas
 
 
+def add_row_window_heading_group(
+    canvas: Drawing,
+    content: GroupContent,
+    canvas_config: LinearCanvasConfigurator,
+    placement: LinearRecordPlacement,
+    *,
+    row_definition_width: float,
+    center_y: float,
+    definition_column_left: float,
+    record_key: str,
+) -> Drawing:
+    """Adds a windowed row's heading (``RowWindowHeadingGroup``) in the definition column, its name line on
+    ``center_y``, where a row heading of records stands (``place_linear_definition``)."""
+
+    measurement = _measurement(content)
+    position = place_linear_definition(
+        width=measurement.width,
+        column_width=max(0.0, float(row_definition_width)),
+        record_x=placement.x,
+        gap=max(0.0, float(canvas_config.definition_column_gap)),
+        keep_left=bool(getattr(canvas_config, "keep_definition_left_aligned", False)),
+        column_left=definition_column_left,
+    )
+    group = place_content(canvas, content, GroupKey(record_key, GroupKind.DEFINITION, "row"))
+    group.translate(canvas_config.horizontal_offset + position.x, center_y)
+    canvas.add(group)
+    return canvas
+
+
+def add_row_window_marks_group(
+    canvas: Drawing, content: GroupContent, canvas_config: LinearCanvasConfigurator, *, record_key: str
+) -> Drawing:
+    """Adds a windowed row's marks (``RowWindowMarksGroup``), drawn in canvas coordinates, above the records."""
+
+    group = place_content(canvas, content, GroupKey(record_key, GroupKind.DEFINITION, "marks"))
+    group.translate(canvas_config.horizontal_offset, 0.0)
+    canvas.add(group)
+    return canvas
+
+
 def add_length_bar_on_linear_canvas(
     canvas: Drawing,
     canvas_config: LinearCanvasConfigurator,
@@ -557,4 +597,6 @@ __all__ = [
     "add_record_definition_group",
     "add_explicit_comparisons_on_linear_canvas",
     "add_length_bar_on_linear_canvas",
+    "add_row_window_heading_group",
+    "add_row_window_marks_group",
 ]

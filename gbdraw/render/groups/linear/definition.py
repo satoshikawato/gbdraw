@@ -53,7 +53,7 @@ class LinearDefinitionStyle:
 
 
 @dataclass
-class _DefinitionLine:
+class DefinitionLine:
     kind: str
     text: str
     width: float
@@ -126,13 +126,13 @@ class DefinitionGroup:
         self.linear_text_anchor: str = text_anchor if text_anchor is not None else def_cfg.text_anchor
         self.linear_dominant_baseline: str = def_cfg.dominant_baseline
         self.get_definition_details()
-        self.definition_lines = self._build_definition_lines()
+        self.definition_lines = self.build_definition_lines()
         if self._line_kinds is not None:
             self.definition_lines = [
                 line for line in self.definition_lines if line.kind in self._line_kinds
             ]
         self.calculate_start_coordinates()
-        self.local_bounds = self._calculate_local_bounds()
+        self.local_bounds = self.calculate_local_bounds()
         self.definition_group = Group(id=self.definition_group_id)
         self.definition_group.attribs["data-gbdraw-role"] = (
             "record-definition"
@@ -172,7 +172,7 @@ class DefinitionGroup:
             line.y = current_top + (line.height / 2.0)
             current_top += line.height + self.interval
 
-    def _calculate_local_bounds(self) -> Aabb:
+    def calculate_local_bounds(self) -> Aabb:
         """Return the exact measured text box in definition-local coordinates."""
 
         bounds: list[Aabb] = []
@@ -293,8 +293,8 @@ class DefinitionGroup:
             font_family=self.linear_definition_font_family,
         )
 
-    def _build_definition_lines(self) -> list[_DefinitionLine]:
-        lines: list[_DefinitionLine] = []
+    def build_definition_lines(self) -> list[DefinitionLine]:
+        lines: list[DefinitionLine] = []
 
         if self.record_name_plain:
             width, height = self._measure_mixed_line(
@@ -303,7 +303,7 @@ class DefinitionGroup:
                 self.record_name_plain,
             )
             lines.append(
-                _DefinitionLine(
+                DefinitionLine(
                     kind="name",
                     text=self.record_name_plain,
                     width=width,
@@ -319,7 +319,7 @@ class DefinitionGroup:
                 self.record_subtitle_plain,
             )
             lines.append(
-                _DefinitionLine(
+                DefinitionLine(
                     kind="subtitle",
                     text=self.record_subtitle_plain,
                     width=width,
@@ -331,7 +331,7 @@ class DefinitionGroup:
         if self.show_replicon and self.replicon_label:
             width, height = self._measure_line("replicon", self.replicon_label)
             lines.append(
-                _DefinitionLine(
+                DefinitionLine(
                     kind="replicon",
                     text=self.replicon_label,
                     width=width,
@@ -342,7 +342,7 @@ class DefinitionGroup:
         if self.show_accession and self.accession_label.strip():
             width, height = self._measure_line("accession", self.accession_label)
             lines.append(
-                _DefinitionLine(
+                DefinitionLine(
                     kind="accession",
                     text=self.accession_label,
                     width=width,
@@ -353,7 +353,7 @@ class DefinitionGroup:
         if self.show_length and self.length_label.strip():
             width, height = self._measure_line("length", self.length_label)
             lines.append(
-                _DefinitionLine(
+                DefinitionLine(
                     kind="length",
                     text=self.length_label,
                     width=width,
@@ -380,7 +380,7 @@ class DefinitionGroup:
         """Add all visible definition lines to the SVG group."""
         for line in self.definition_lines:
             if line.parts is not None:
-                self.definition_group.add(self._create_name_text(line, line.y))
+                self.definition_group.add(self.create_name_text(line, line.y))
             else:
                 style = self._style_for_line(line.kind)
                 self.definition_group.add(
@@ -399,7 +399,7 @@ class DefinitionGroup:
                     )
                 )
 
-    def _create_name_text(self, line: _DefinitionLine, y_pos: float) -> Text:
+    def create_name_text(self, line: DefinitionLine, y_pos: float) -> Text:
         style = self._style_for_line(line.kind)
         text_el = Text(
             "",
@@ -427,4 +427,4 @@ class DefinitionGroup:
         return self.definition_group
 
 
-__all__ = ["DefinitionGroup", "LinearDefinitionStyle"]
+__all__ = ["DefinitionGroup", "DefinitionLine", "LinearDefinitionStyle"]

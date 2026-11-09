@@ -127,6 +127,23 @@ write-up of a release.
   Circular, and (Python API) a `RecordCollectionOptions` region on a record
   that already has windows or a region are refused; no command line, Web, or
   Session request writes both.
+- Added: a Linear row of windows names itself once and marks its cuts. A row
+  with two or more units, at least one a window, shows one name at its left
+  (the first record label in the row) and under it a list with one line per
+  window: a circled number, the record ID, and the span, with "(−)" for a
+  reverse-complemented window; a record whose label differs shows it in its
+  line. Each window carries its number at its upper left. A bar crosses the
+  axis at the first or last base of a linear record, and the axis continues
+  dashed where a window cuts a record. Between adjacent windows of one record
+  that run the same way, "//" stands in the gap with the length left out
+  (for example "1.54 Mb"); for windows that overlap, touch, run backwards, or
+  are not next to each other it has no length. Rows without windows draw as
+  before.
+- Changed: in a Linear figure with several records in a row, the text above a
+  record that a comparison ribbon reaches is no longer drawn under the ribbon:
+  the ribbon ends above the text and the rows move apart by its height
+  (OV-2712). Such figures also draw the scale bar now, under the same
+  conditions as a figure with one record per row (OV-2714).
 - Added: a window of a circular record may run across its origin. In the
   Python API, a `RecordWindow` whose `start` is after its `end` draws the arc
   from `start` across the origin to `end` as one continuous unit: a feature

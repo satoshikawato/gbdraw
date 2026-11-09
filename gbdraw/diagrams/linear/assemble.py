@@ -20,6 +20,7 @@ from ...render.track_slot_metadata import (
 from ...layout.record_labels import coordinate_map_ticks, source_ruler_ticks
 
 import copy
+import math
 from dataclasses import dataclass, replace
 from functools import partial
 import logging
@@ -74,6 +75,8 @@ from ...render.groups.linear import (
     LengthBarGroup,
     linear_legend_content,
 )
+from ...render.groups.linear.definition import LinearDefinitionStyle
+from ...render.groups.linear.row_windows import RowWindowHeadingGroup, RowWindowMarksGroup, RowWindowPlace
 from ...render.groups.linear.length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
@@ -128,6 +131,13 @@ from ...layout.linear_multi_record import (
     solve_linear_layout,
     comparison_frame_px,
     stable_record_keys,
+)
+from ...layout.linear_row_windows import (
+    LinearRowWindows,
+    RowWindowStyle,
+    plan_row_windows,
+    row_window_insets,
+    row_window_unit,
 )
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.record_transform import bind_record_transforms
@@ -220,6 +230,8 @@ from .builders import (
     add_length_bar_on_linear_canvas,
     add_record_definition_group,
     add_record_group,
+    add_row_window_heading_group,
+    add_row_window_marks_group,
 )
 from .parts import (
     LinearAlignmentInputs,
@@ -1138,15 +1150,22 @@ def _definition_geometry_beside_features(
     row_width: float,
     multi_record_enabled: bool,
     split_row_definitions: bool,
+    row_top: float | None = None,
 ) -> _LinearRecordDefinitionGeometry:
     """The definition text drawn beside a record's features, centered on them: a record alone in its
     row has its own text there, and the leading record of a shared row the row's heading. Its place does
     not depend on the feature labels, so the labels can keep clear of it (OV-1395); the record-local
-    text of a shared row is a header above the record's canvas band, added by the vertical plan."""
+    text of a shared row is a header above the record's canvas band, added by the vertical plan. A
+    windowed row's heading (``row_top`` given) has its name line on the features' center and its list
+    below it."""
 
     local_band = None if multi_record_enabled else _centered_vertical_band(feature_center_y, local_height)
     row_band = (
-        _centered_vertical_band(feature_center_y, row_height)
+        (
+            _centered_vertical_band(feature_center_y, row_height)
+            if row_top is None
+            else VerticalBand(feature_center_y + row_top, feature_center_y + row_top + max(0.0, float(row_height)))
+        )
         if multi_record_enabled and split_row_definitions
         else None
     )
@@ -1287,10 +1306,7 @@ def _build_linear_record_vertical_plans(
     record_depth_by_index: list[dict[int, DepthTrackData]],
     representative_depth_configs: dict[int, DepthConfigurator],
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
-    definition_heights: list[float],
-    definition_widths: list[float],
-    row_definition_heights: list[float],
-    row_definition_widths: list[float],
+    definitions: _LinearDefinitionMetrics,
     multi_record_enabled: bool,
     split_row_definitions: bool,
     render_context: LinearRecordRenderContext,
@@ -1383,31 +1399,16 @@ def _build_linear_record_vertical_plans(
         feature_center_y += feature_origin_y
         canvas_band = plan.canvas_band
         # A wrapped record's name and definition stand beside its first row, once.
-        local_definition_height = (
-            float(definition_heights[record_index])
-            if record_index < len(definition_heights)
-            else 0.0
-        )
+        local_definition_height = float(definitions.definition_heights[record_index])
         beside = _definition_geometry_beside_features(
             feature_center_y,
             local_height=local_definition_height,
-            local_width=(
-                float(definition_widths[record_index])
-                if record_index < len(definition_widths)
-                else 0.0
-            ),
-            row_height=(
-                float(row_definition_heights[record_index])
-                if record_index < len(row_definition_heights)
-                else 0.0
-            ),
-            row_width=(
-                float(row_definition_widths[record_index])
-                if record_index < len(row_definition_widths)
-                else 0.0
-            ),
+            local_width=float(definitions.definition_widths[record_index]),
+            row_height=float(definitions.row_definition_heights[record_index]),
+            row_width=float(definitions.row_definition_widths[record_index]),
             multi_record_enabled=multi_record_enabled,
             split_row_definitions=split_row_definitions,
+            row_top=definitions.row_definition_tops[record_index],
         )
         if beside.row_band is not None:
             canvas_band = canvas_band.union(beside.row_band)
@@ -2226,6 +2227,46 @@ class _LinearRowFrame:
     horizontal_layout: LinearHorizontalLayout
     horizontal_placements: dict[int, LinearRecordPlacement]
     sequence_widths: list[float]
+    # The rows that hold record windows (PD-OI-122), their captions and marks, and the look of both.
+    row_windows: tuple[LinearRowWindows, ...]
+    row_window_style: RowWindowStyle
+
+    def row_windows_of(self, record_index: int) -> LinearRowWindows | None:
+        """The windowed row ``record_index`` is drawn in, or ``None`` when its row keeps each record's text."""
+
+        return next((row for row in self.row_windows if record_index in row.record_indices), None)
+
+
+def _plan_linear_row_windows(
+    record_inputs: LinearRecordInputs,
+    presentations: tuple[RecordPresentation | None, ...],
+    ordered_record_indices: tuple[int, ...],
+    rows_by_record: tuple[int, ...],
+    axis_lengths: list[int],
+) -> tuple[LinearRowWindows, ...]:
+    """Each windowed row's captions and marks, its units in drawing order (``plan_row_windows``)."""
+
+    records = record_inputs.records
+    transforms = bind_record_transforms(records, record_inputs.record_transforms)
+    units_by_row: dict[int, list[int]] = {}
+    for record_index in ordered_record_indices:
+        units_by_row.setdefault(rows_by_record[record_index], []).append(record_index)
+    plans = (
+        plan_row_windows(
+            [
+                row_window_unit(
+                    records[index],
+                    index,
+                    transforms[index],
+                    presentation.label if (presentation := presentations[index]) is not None else None,
+                    axis_lengths[index],
+                )
+                for index in indices
+            ]
+        )
+        for indices in units_by_row.values()
+    )
+    return tuple(plan for plan in plans if plan is not None)
 
 
 def _linear_row_frame(canvas_config: LinearCanvasConfigurator, record_inputs: LinearRecordInputs) -> _LinearRowFrame:
@@ -2254,12 +2295,23 @@ def _linear_row_frame(canvas_config: LinearCanvasConfigurator, record_inputs: Li
         seen_rows.add(row)
         row_leading_indices.add(record_index)
     axis_lengths = _drawn_axis_lengths(records, record_inputs.record_transforms)
+    row_windows = _plan_linear_row_windows(
+        record_inputs, presentations, ordered_record_indices, rows_by_record, axis_lengths
+    )
+    row_window_style = RowWindowStyle.of(
+        canvas_config.profile.config, str(canvas_config.length_param), float(canvas_config.default_cds_height)
+    )
+    insets: dict[int, tuple[float, float]] = {}
+    for windows in row_windows:
+        insets.update(row_window_insets(windows, row_window_style))
     horizontal_layout = solve_linear_horizontal_layout(
         [
             LinearRecordMeasurement(
                 record_index=index,
                 record_key=RecordKey(str(record_keys[index])),
                 sequence_length=axis_lengths[index],
+                left_inset=insets.get(index, (0.0, 0.0))[0],
+                right_inset=insets.get(index, (0.0, 0.0))[1],
             )
             for index, _record in enumerate(records)
         ],
@@ -2289,6 +2341,8 @@ def _linear_row_frame(canvas_config: LinearCanvasConfigurator, record_inputs: Li
         horizontal_layout=horizontal_layout,
         horizontal_placements=horizontal_placements,
         sequence_widths=[horizontal_placements[index].sequence_width for index in range(len(records))],
+        row_windows=row_windows,
+        row_window_style=row_window_style,
     )
 
 
@@ -2600,6 +2654,36 @@ class _LinearDefinitionMetrics:
     row_definition_width: float
     row_definition_widths: list[float]
     row_definition_heights: list[float]
+    # Where a row heading's box starts above the line it is placed on: ``None`` for a heading centred there, a
+    # windowed row's heading hangs its list below its name line (``RowWindowHeadingGroup``).
+    row_definition_tops: list[float | None]
+
+
+def _row_window_heading_content(
+    canvas_config: LinearCanvasConfigurator,
+    record: SeqRecord,
+    record_count: int,
+    frame: _LinearRowFrame,
+    windows: LinearRowWindows,
+) -> GroupContent:
+    """A windowed row's heading. It carries the identity (record index and ID) of the record whose label it shows,
+    so a click on the name finds that record; without a label in the row, the leading record's. ``record`` is the
+    record at ``windows.heading_record_index``."""
+
+    index = windows.heading_record_index
+    group_id = definition_group_svg_id(record.id, mode="linear", record_index=index, record_count=record_count)
+    return build_group_content(
+        RowWindowHeadingGroup,
+        record,
+        str(canvas_config.length_param),
+        style=LinearDefinitionStyle.of(canvas_config.profile.config),
+        windows=windows,
+        window_style=frame.row_window_style,
+        text_anchor="start" if bool(canvas_config.keep_definition_left_aligned) else "middle",
+        group_id=f"{group_id}_row",
+        record_index=index,
+        record_presentation=frame.presentations[index] if windows.name_record_index is not None else None,
+    )
 
 
 def _linear_definition_metrics(
@@ -2624,6 +2708,11 @@ def _linear_definition_metrics(
             rows_by_record=frame.rows_by_record,
             row_leading_indices=frame.row_leading_indices,
         )
+        # A windowed row draws no text above its windows and its heading from the row's windows (PD-OI-122).
+        for windows in frame.row_windows:
+            for index in windows.record_indices:
+                local_definition_line_kinds[index] = frozenset()
+                row_definition_line_kinds[index] = frozenset()
     max_def_width, definition_widths, definition_heights = _precalculate_definition_metrics(
         records,
         canvas_config,
@@ -2646,6 +2735,20 @@ def _linear_definition_metrics(
             line_kinds_by_record=list(row_definition_line_kinds),
             record_presentations=frame.presentations,
         )
+    row_definition_tops: list[float | None] = [None for _record in records]
+    for windows in frame.row_windows:
+        content = _row_window_heading_content(
+            canvas_config, records[windows.heading_record_index], len(records), frame, windows
+        )
+        index = windows.leading_record_index
+        measured = content.definition
+        bounds = content.local_bounds
+        if measured is None or bounds is None:  # pragma: no cover - the heading measures itself
+            raise RuntimeError("a windowed row heading has no measurement")
+        row_definition_widths[index] = float(measured.width)
+        row_definition_heights[index] = float(measured.height)
+        row_definition_tops[index] = float(bounds.min_y)
+        row_definition_width = max(row_definition_width, float(math.ceil(measured.width)))
     return _LinearDefinitionMetrics(
         local_definition_line_kinds=local_definition_line_kinds,
         row_definition_line_kinds=row_definition_line_kinds,
@@ -2655,6 +2758,7 @@ def _linear_definition_metrics(
         row_definition_width=row_definition_width,
         row_definition_widths=row_definition_widths,
         row_definition_heights=row_definition_heights,
+        row_definition_tops=row_definition_tops,
     )
 
 
@@ -2807,7 +2911,8 @@ def _linear_horizontal_frame(
             [str(record.id) for record in records],
         )
     record_xs = [placements[index].x + translations[index][0] for index in range(len(records))]
-    column_left = min(record_xs, default=0.0)
+    # The definition column keeps its gap from a window's marks too (its left inset).
+    column_left = min((x - placements[index].left_inset for index, x in enumerate(record_xs)), default=0.0)
     keep_clear = [
         _definition_label_boxes(
             _record_definition_bands(
@@ -2819,6 +2924,7 @@ def _linear_horizontal_frame(
                     row_width=definitions.row_definition_widths[index],
                     multi_record_enabled=frame.multi_record_enabled,
                     split_row_definitions=frame.multi_record_enabled,
+                    row_top=definitions.row_definition_tops[index],
                 ),
                 sequence_width=placements[index].sequence_width,
                 record_x=record_xs[index],
@@ -2884,6 +2990,34 @@ class _LinearVerticalPlans:
     labels_by_record: list[list[LinearLabel]]
     record_vertical_plans: list[LinearRecordVerticalPlan]
     record_definition_geometries: list[_LinearRecordDefinitionGeometry]
+    ribbon_clear_bands: dict[int, VerticalBand]
+
+
+def _ribbon_clear_bands(
+    frame: _LinearRowFrame,
+    comparisons: _LinearComparisons,
+    definition_geometries: Sequence[_LinearRecordDefinitionGeometry],
+    marks_bands: Mapping[int, VerticalBand],
+) -> dict[int, VerticalBand]:
+    """The row text of each record of a shared row that a comparison ribbon reaches, by record index: the text
+    above the record (OV-2712), and a window's number and "//" length (PD-OI-122: no row text is drawn over the
+    comparison ribbons)."""
+
+    if not frame.multi_record_enabled:
+        return {}
+    endpoints = {
+        int(index)
+        for comparison in comparisons.normalized
+        for index in (comparison.query_record_index, comparison.subject_record_index)
+    }
+    clear: dict[int, VerticalBand] = {}
+    for index in sorted(endpoints):
+        bands = [
+            band for band in (definition_geometries[index].local_band, marks_bands.get(index)) if band is not None
+        ]
+        if bands:
+            clear[index] = bands[0] if len(bands) == 1 else bands[0].union(bands[1])
+    return clear
 
 
 def _linear_vertical_plans(
@@ -2895,6 +3029,7 @@ def _linear_vertical_plans(
     definitions: _LinearDefinitionMetrics,
     depth: _LinearDepthData,
     feature_labels: list[list[LinearLabel]],
+    comparisons: _LinearComparisons,
 ) -> _LinearVerticalPlans:
     """Plan each record's slots, labels and definition vertically. Sets the canvas's vertical offset."""
 
@@ -2911,15 +3046,35 @@ def _linear_vertical_plans(
         record_depth_by_index=depth.record_depth_by_index,
         representative_depth_configs=depth.representative_depth_configs,
         annotation_track_layouts=tracks.annotation_track_layouts,
-        definition_heights=definitions.definition_heights,
-        definition_widths=definitions.definition_widths,
-        row_definition_heights=definitions.row_definition_heights,
-        row_definition_widths=definitions.row_definition_widths,
+        definitions=definitions,
         multi_record_enabled=frame.multi_record_enabled,
         split_row_definitions=frame.multi_record_enabled,
         render_context=tracks.render_context,
         record_transforms=record_inputs.record_transforms,
     )
+    # A window's marks, number and gap text belong to its record's body (PD-OI-122).
+    marks_bands = {
+        index: frame.row_window_style.marks_band(record_vertical_plans[index].feature_lanes_band.top_y)
+        for windows in frame.row_windows
+        for index in windows.record_indices
+    }
+    for index, marks in marks_bands.items():
+        plan = record_vertical_plans[index]
+        record_vertical_plans[index] = replace(
+            plan,
+            record_body_band=plan.record_body_band.union(marks),
+            canvas_band=plan.canvas_band.union(marks),
+        )
+    # The row text of a record that a ribbon reaches belongs to its body: the ribbons end above it, and the rows
+    # move apart by its height (OV-2712, PD-OI-122).
+    ribbon_clear_bands = _ribbon_clear_bands(frame, comparisons, record_definition_geometries, marks_bands)
+    for index, band in ribbon_clear_bands.items():
+        plan = record_vertical_plans[index]
+        record_vertical_plans[index] = replace(
+            plan,
+            record_body_band=plan.record_body_band.union(band),
+            comparison_exclusion_band=plan.comparison_exclusion_band.union(band),
+        )
     # Every later reader counts a wrapped record's labels in one frame, where rows do not overlap.
     feature_slot_id = next((slot.id for slot in tracks.linear_track_layout.slots if slot.renderer == "features"), None)
     all_labels = [
@@ -2936,6 +3091,7 @@ def _linear_vertical_plans(
         labels_by_record=all_labels,
         record_vertical_plans=record_vertical_plans,
         record_definition_geometries=record_definition_geometries,
+        ribbon_clear_bands=ribbon_clear_bands,
     )
 
 
@@ -3052,6 +3208,27 @@ class _LinearRowStacking:
     comparison_endpoint_gap_px: float
 
 
+def _row_window_mark_bands(
+    frame: _LinearRowFrame, plan: LinearRecordVerticalPlan, record_index: int, record_x: float
+) -> tuple[CollisionBand, ...]:
+    """A window's marks beside it, in its insets (PD-OI-122), as a body band: rows keep clear of them and the
+    figure bounds hold them."""
+
+    if frame.row_windows_of(record_index) is None:
+        return ()
+    placement = frame.horizontal_placements[record_index]
+    marks = frame.row_window_style.marks_band(plan.feature_lanes_band.top_y)
+    return (
+        CollisionBand(
+            "body",
+            record_x - placement.left_inset,
+            record_x + placement.sequence_width + placement.right_inset,
+            marks.top_y,
+            marks.bottom_y,
+        ),
+    )
+
+
 def _active_collision_bands(
     bands: tuple[CollisionBand, ...], index: int, active_records: frozenset[int]
 ) -> tuple[CollisionBand, ...]:
@@ -3108,6 +3285,7 @@ def _linear_row_stacking(
             definition_gap=float(canvas_config.definition_column_gap),
             definition_column_left=horizontal.definition_column_left,
         )
+        + _row_window_mark_bands(frame, plans[index], index, placements[index].x + horizontal.final_translations[index][0])
         for index in range(len(records))
     ]
     record_offsets: list[float] = [0.0 for _record in records]
@@ -3120,6 +3298,8 @@ def _linear_row_stacking(
                     record_index=index,
                     record_key=RecordKey(str(frame.record_keys[index])),
                     sequence_length=frame.axis_lengths[index],
+                    left_inset=placements[index].left_inset,
+                    right_inset=placements[index].right_inset,
                     top_extent=plans[index].canvas_top_extent,
                     bottom_extent=plans[index].canvas_bottom_extent,
                     comparison_top_extent=plans[index].comparison_top_extent,
@@ -3227,6 +3407,9 @@ def _attach_comparison_endpoints(
                 # A span's band comes from the slots it covers, counted here or as lanes.
                 non_feature_band = band if non_feature_band is None else non_feature_band.union(band)
             attachment_band = attachment_band.union(band)
+        clear_band = vertical.ribbon_clear_bands.get(record_index)
+        if clear_band is not None:
+            attachment_band = attachment_band.union(clear_band)
         record_placements[record_index] = replace(
             placement,
             comparison_top_y=(
@@ -3261,7 +3444,8 @@ def _attach_comparison_endpoints(
                 if non_feature_band is not None:
                     band = band.union(non_feature_band)
                 feature_attachments.setdefault(record_index, {})[dom_id] = LinearFeatureAttachment(
-                    comparison_frame_px(band.top_y - attachment_band.top_y),
+                    # A ribbon that meets a record below its text ends above the text (OV-2712).
+                    0.0 if clear_band is not None else comparison_frame_px(band.top_y - attachment_band.top_y),
                     comparison_frame_px(band.bottom_y - attachment_band.bottom_y),
                 )
     return feature_attachments
@@ -3284,9 +3468,10 @@ def _linear_vertical_placement(
     cfg = canvas_config.profile.config
     record_count = len(frame.axis_lengths)
     record_plans = vertical.record_vertical_plans
+    # Every record and window of the figure draws at one bp-per-pixel scale unless lengths are normalized
+    # (``solve_linear_horizontal_layout``), so several records in a row keep the scale (OV-2714).
     draw_length_bar = (
         cfg.objects.scale.show
-        and not frame.multi_record_enabled
         and not canvas_config.normalize_length
         and not tracks.render_context.axis_ruler_enabled
     )
@@ -3337,7 +3522,10 @@ def _linear_vertical_placement(
         painted_content_bottom + float(canvas_config.vertical_padding),
     )
     feature_attachments = _attach_comparison_endpoints(
-        record_placements, tracks, vertical, stacking.comparison_endpoint_gap_px
+        record_placements,
+        tracks,
+        vertical,
+        stacking.comparison_endpoint_gap_px,
     )
     return _LinearPlacements(
         record_placements=record_placements,
@@ -3357,7 +3545,9 @@ class _LinearLengthBar:
     offset_y: float
 
 
-def _linear_length_bar(canvas_config: LinearCanvasConfigurator, placements: _LinearPlacements) -> _LinearLengthBar:
+def _linear_length_bar(
+    canvas_config: LinearCanvasConfigurator, frame: _LinearRowFrame, placements: _LinearPlacements
+) -> _LinearLengthBar:
     """Build the scale (stage ``length_bar_content``) under the records when the figure draws one.
 
     Sets the canvas's total height to include it.
@@ -3374,17 +3564,20 @@ def _linear_length_bar(canvas_config: LinearCanvasConfigurator, placements: _Lin
         placement.x + placement.sequence_width
         for placement in record_placements.values()
     )
+    widest_record = max(placement.sequence_width for placement in record_placements.values())
     length_bar_group = render_stage(
         "length_bar_content",
         build_group_content,
         LengthBarGroup,
         # The longest record's drawn width: the bar maps bp to px as that record does.
-        max(placement.sequence_width for placement in record_placements.values()),
+        widest_record,
         canvas_config.longest_genome,
         canvas_config.length_param,
         scale=cfg.objects.scale,
         font_family=cfg.objects.text.font_family,
-        ruler_width=max_record_x - min_record_x,
+        # A ruler across a row of several records would number their bases on from one record to the next;
+        # it spans the longest record (PD-OI-122, OV-2714).
+        ruler_width=widest_record if frame.multi_record_enabled else max_record_x - min_record_x,
     )
     length_bar_bottom = placements.length_bar_offset_y + float(
         _content_bounds(length_bar_group).max_y
@@ -3576,6 +3769,8 @@ class _LinearRecordDrawing:
     orthogroup_label_top_member_ids: set[str | int] | None
     record_group_id: str
     axis_row_offsets: tuple[float, ...]
+    # The record whose identity the heading of this record's windowed row carries, when this record leads the row.
+    row_heading_record: SeqRecord | None
 
 
 def _linear_record_drawing(
@@ -3592,6 +3787,7 @@ def _linear_record_drawing(
     record = records[record_index]
     definitions = plan.definitions
     vertical_plan = plan.vertical.record_vertical_plans[record_index]
+    windows = plan.frame.row_windows_of(record_index)
     member_ids, top_member_ids = orthogroup_label_sets_for_record(
         plan.comparisons.orthogroup_label_eligibility if plan.comparisons.label_scope == "orthogroup_top" else None,
         record_index,
@@ -3635,6 +3831,11 @@ def _linear_record_drawing(
             record_count=len(records),
         ),
         axis_row_offsets=vertical_plan.row_offsets if vertical_plan.wrap_rows else (),
+        row_heading_record=(
+            records[windows.heading_record_index]
+            if windows is not None and windows.leading_record_index == record_index
+            else None
+        ),
     )
 
 
@@ -3971,6 +4172,56 @@ def _draw_linear_record_definition(canvas: Drawing, drawing: _LinearRecordDrawin
         definition_column_left=plan.horizontal.definition_column_left,
         record_key=drawing.record_key,
     )
+    windows = plan.frame.row_windows_of(record_index)
+    if (
+        windows is not None
+        and drawing.row_heading_record is not None
+        and geometry.row_center_y is not None
+    ):
+        add_row_window_heading_group(
+            canvas,
+            _row_window_heading_content(
+                drawing.canvas_config, drawing.row_heading_record, drawing.record_count, plan.frame, windows
+            ),
+            drawing.canvas_config,
+            drawing.placement,
+            row_definition_width=definitions.row_definition_width,
+            # The heading's name line stands on the features' center, where its band starts ``row_top`` above.
+            center_y=offset_y + geometry.row_band.top_y - float(definitions.row_definition_tops[record_index] or 0.0)
+            if geometry.row_band is not None
+            else offset_y,
+            definition_column_left=plan.horizontal.definition_column_left,
+            record_key=drawing.record_key,
+        )
+
+
+def _draw_linear_row_window_marks(canvas: Drawing, canvas_config: LinearCanvasConfigurator, plan: _LinearPlan) -> None:
+    """Draw each windowed row's marks above its records (PD-OI-122)."""
+
+    for windows in plan.frame.row_windows:
+        places = tuple(
+            RowWindowPlace(
+                record_index=index,
+                x=float(plan.placements.record_placements[index].x),
+                width=float(plan.placements.record_placements[index].sequence_width),
+                axis_y=float(plan.placements.record_placements[index].axis_y),
+                feature_top_y=float(plan.vertical.record_vertical_plans[index].feature_lanes_band.top_y),
+            )
+            for index in windows.record_indices
+        )
+        leading = windows.leading_record_index
+        add_row_window_marks_group(
+            canvas,
+            build_group_content(
+                RowWindowMarksGroup,
+                windows,
+                places,
+                plan.frame.row_window_style,
+                f"linear_row_window_marks_{plan.frame.rows_by_record[leading] + 1}",
+            ),
+            canvas_config,
+            record_key=str(plan.frame.record_keys[leading]),
+        )
 
 
 def _draw_linear_record(canvas: Drawing, drawing: _LinearRecordDrawing) -> Drawing:
@@ -4191,7 +4442,7 @@ def assemble_linear_diagram(
         canvas_config, configurators, record_inputs, frame, comparisons, tracks, horizontal, feature_label_rows
     )
     vertical = _linear_vertical_plans(
-        canvas_config, configurators, record_inputs, frame, tracks, definitions, depth, feature_labels
+        canvas_config, configurators, record_inputs, frame, tracks, definitions, depth, feature_labels, comparisons
     )
     gc_frames = _linear_gc_frames(configurators, record_inputs, tracks)
     legend = _linear_legend_table(
@@ -4212,7 +4463,7 @@ def assemble_linear_diagram(
         legend=legend,
         stacking=stacking,
         placements=placements,
-        length_bar=_linear_length_bar(canvas_config, placements),
+        length_bar=_linear_length_bar(canvas_config, frame, placements),
     )
 
     canvas, primary_target_start = _linear_canvas(canvas_config, blast_config, record_inputs, plan)
@@ -4222,6 +4473,7 @@ def assemble_linear_diagram(
         canvas = _draw_linear_record(
             canvas, _linear_record_drawing(canvas_config, configurators, record_inputs, plan, labels, record_index)
         )
+    _draw_linear_row_window_marks(canvas, canvas_config, plan)
     primary = _linear_primary_bounds(
         canvas, primary_target_start, canvas_config, configurators, blast_config, record_inputs, plan, labels
     )
