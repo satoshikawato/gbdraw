@@ -88,7 +88,7 @@ const ringRowFiles = (drawing) => {
  */
 const seriesSourceIndex = (entry, index) => (Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry?.sourceIndex) : index);
 /** @param {DrawingState} drawing */
-const hasRingSourceFiles = (drawing) => circularRingSources(drawing).length > 0;
+const hasRingSourceFiles = (drawing) => conservationSourceDescriptors(circularRingSources(drawing)).length > 0;
 /** A ring file added as a new series (Add Seq, an upload). @type {DepthSourceChange} */
 const RING_FILE_ADDED = Object.freeze({ setsFile: true, series: 'added' });
 /** A series removed with its ring file. @type {DepthSourceChange} */
@@ -424,7 +424,7 @@ const createRingRowFileEdits = ({
     drawing.circularConservation.series.forEach((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => {
       const source = descriptors.find((descriptor) => descriptor.placeIndex === places[index]);
       if (!source) return;
-      Object.assign(entry, { sourceKey: source.sourceKey, fileName: source.fileName, sourceIndex: source.sourceIndex });
+      Object.assign(entry, { sourceKey: source.sourceKey, fileName: source.fileName, sourceIndex: source.placeIndex });
     });
     writeLosatCacheInfo([]);
     reconcileCircularConservation(drawing);
@@ -499,9 +499,10 @@ export const createCircularConservationComparisonFiles = ({
     const step = runUndoable(msg('Change uploaded file'), settleComparisonRecordLabels);
     changeRingSourceFiles(state, drawing, RING_FILE_ADDED, () => {
       clearDerivedCircularConservationBlasts(drawing);
-      // A new ring of the picked file; Add file on its row adds the genome's other files.
+      // A new ring of the picked file, after the others at their places (an empty one kept, `circularRingSources`);
+      // Add file on its row adds the genome's other files.
       bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas',
-        [...ringGenomeFileLists(drawing.files.c_conservation_fastas).filter((files) => files.length > 0), [selectedRef]]);
+        [...ringGenomeFileLists(drawing.files.c_conservation_fastas), [selectedRef]]);
     });
     writeLosatCacheInfo([]);
     reconcileCircularConservation(drawing);
@@ -554,21 +555,21 @@ export const createCircularConservationComparisonFiles = ({
     // The row's source as Generate matches it (`conservationSourcesOfSeries`).
     const source = conservationSourcesOfSeries(sourceFiles, drawing.circularConservation).matched[idx];
     if (!source) return;
-    const { sourceIndex } = source;
-    const keptFiles = sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex);
+    const { placeIndex } = source;
+    const keptFiles = sourceFiles.filter((_, fileIndex) => fileIndex !== placeIndex);
     // The removed row's entry leaves before the reconcile, so it takes no other ring's files; the rings after its
     // place move up one place with their files, so their stored places still name them.
     const keptSeries = drawing.circularConservation.series.filter(
       (/** @type {RawConservationSeriesEntry} */ _, /** @type {number} */ entryIndex) => entryIndex !== idx
     ).map((/** @type {RawConservationSeriesEntry} */ entry) => (
-      Number(entry.sourceIndex) > sourceIndex ? { ...entry, sourceIndex: Number(entry.sourceIndex) - 1 } : entry
+      Number(entry.sourceIndex) > placeIndex ? { ...entry, sourceIndex: Number(entry.sourceIndex) - 1 } : entry
     ));
     /** @param {() => void} [turnOffReaching] */
     const apply = (turnOffReaching) => {
       drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...keptSeries);
       if (isCircularConservationUploadSource(drawing)) {
         bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources',
-          drawing.files.c_conservation_sequence_sources.filter((_, fileIndex) => fileIndex !== sourceIndex));
+          drawing.files.c_conservation_sequence_sources.filter((_, fileIndex) => fileIndex !== placeIndex));
       }
       setCircularConservationSourceFiles(drawing, keptFiles, RING_FILE_REMOVED);
       turnOffReaching?.();

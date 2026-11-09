@@ -132,8 +132,8 @@ test('a ring place is its genome\'s files; the one-file form of an older Session
   const [oneList] = rowsFor([[a]]);
   assert.equal(oneList.sourceKey, oneFlat.sourceKey, 'a one-file ring keeps its key');
   const series = rowsFor([[b, c], [], [a]]);
-  assert.deepEqual(series.map(({ fileName, sourceIndex }) => [fileName, sourceIndex]), [['b.fasta', 0], ['a.fasta', 1]],
-    'an empty place is no ring; a ring is named by its first file');
+  assert.deepEqual(series.map(({ fileName, sourceIndex }) => [fileName, sourceIndex]), [['b.fasta', 0], ['a.fasta', 2]],
+    'an empty place is no ring; a ring is named by its first file and keeps its place');
   assert.notEqual(series[0].sourceKey, rowsFor([[c, b]])[0].sourceKey, 'the order of a genome\'s files is part of its key');
 });
 
@@ -220,4 +220,27 @@ test('two LOSAT rings whose first files share a name keep their own genomes when
   assert.deepEqual(reconcileConservationSeries({ sourceFiles: genomes, previousSeries: moved, legacyLabels: [] })
     .map((entry) => [entry.label, entry.color, entry.sourceIndex]), moved.map((entry) => [entry.label, entry.color, entry.sourceIndex]),
   'the reconcile keeps each row on the place of its own name');
+});
+
+// #1777 review 4: a source key ends with the count of earlier sources of the same files, which shifts when one of them
+// goes. Rings whose files share name, size and date (three NCBI `sequence.fasta` downloads of one size) are therefore
+// told apart by their stored places, as rings of one name are: the key pass claims a key only when one source and one
+// entry carry its files, so Remove series and a Load that lost one ring's file leave each other ring its own genome.
+test('rings whose files share name, size and date keep their own genomes when one of them goes', () => {
+  const genomes = [[file('sequence.fasta', 8)], [file('sequence.fasta', 8)], [file('sequence.fasta', 8)]];
+  const series = rowsFor(genomes).map((entry, index) => ({ ...entry, label: `Genome ${'ABC'[index]}` }));
+  assert.deepEqual(series.map((entry) => [entry.sourceKey, entry.sourceIndex]),
+    [['sequence.fasta|8|0|0', 0], ['sequence.fasta|8|0|1', 1], ['sequence.fasta|8|0|2', 2]]);
+  /** Which genome each drawn ring takes. */
+  const drawn = (places, entries) => orderedConservationSources(places, { series: entries })
+    .map((source) => [source.label, genomes.findIndex(([member]) => member === source.file)]);
+  // Remove series of Genome A: the places after it move up one, and so do their entries' stored places.
+  const removedFirst = [series[1], series[2]].map((entry) => ({ ...entry, sourceIndex: entry.sourceIndex - 1 }));
+  assert.deepEqual(drawn(genomes.slice(1), removedFirst), [['Genome B', 1], ['Genome C', 2]]);
+  // A Load that lost Genome A's file keeps its place empty: B and C keep theirs, and the reconcile keeps their places.
+  assert.deepEqual(drawn([[], genomes[1], genomes[2]], series), [['Genome B', 1], ['Genome C', 2]]);
+  assert.deepEqual(reconcileConservationSeries({ sourceFiles: [[], genomes[1], genomes[2]], previousSeries: series, legacyLabels: [] })
+    .map((entry) => [entry.label, entry.sourceIndex]), [['Genome B', 1], ['Genome C', 2]]);
+  // One source left of two entries of the same files: the entry whose file went takes none.
+  assert.deepEqual(drawn([[], genomes[1]], series.slice(0, 2)), [['Genome B', 1]]);
 });

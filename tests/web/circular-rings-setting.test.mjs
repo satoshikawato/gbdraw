@@ -302,3 +302,49 @@ test('an uploaded table ring row takes the files of its comparison genome, and m
   panel.setCircularConservationUploadFiles([]);
   panel.changeCircularConservationSource('losat');
 });
+
+// #1777 review 4: three LOSAT rings whose files share name, size and date (NCBI's `sequence.fasta`, 8 B, no date) keep
+// their own genomes through Remove series of the first or the middle one, and through a Session 51 Load that lost one
+// of their files (its place stays empty, R1-B1): the ring that lost its file is the one that goes, every other ring
+// keeps its genome, and a later Remove series or Add Seq keeps them so.
+test('LOSAT rings of files of one name, size and date keep their genomes through Remove series and a Load that lost one', async () => {
+  const drawing = circular();
+  const bytesOf = (ref) => atob(state.inputFiles.fileOf(ref).data).split('\n')[1];
+  const generated = () => orderedConservationSources(circularRingSources(drawing), drawing.circularConservation)
+    .map((source) => [source.label, bytesOf(source.file)]);
+  const shown = () => panel.circularConservationSeriesRows.value.map((row) => [drawing.circularConservation.series[row.index].label, row.files]);
+  const sequenceFasta = (bases) => textFile('sequence.fasta', `>r\n${bases}\n`);
+  const add = (bases) => comparisonFiles.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [sequenceFasta(bases)], value: 'x' } }));
+  const clear = () => {
+    while (drawing.circularConservation.series.length > 0) comparisonFiles.removeCircularConservationSource(0);
+    bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', []);
+    assert.deepEqual(ringNames(), []);
+  };
+  for (const removed of [0, 1]) {
+    for (const bases of ['ACGT', 'TTTT', 'GGGG']) await add(bases);
+    drawing.circularConservation.series.forEach((entry, index) => Object.assign(entry, { label: `Genome ${'ABC'[index]}` }));
+    comparisonFiles.removeCircularConservationSource(removed);
+    assert.deepEqual(generated(), [['Genome A', 'ACGT'], ['Genome B', 'TTTT'], ['Genome C', 'GGGG']].filter((_, index) => index !== removed),
+      `Remove series of ring ${removed}`);
+    clear();
+  }
+  for (const lost of [0, 1]) {
+    // What Load leaves of a Session 51 whose genome binding `lost` it could not read, then its reconcile (`afterImport`).
+    const files = ['AAAA', 'CCCC', 'GGGG'].map((bases) => sequenceFasta(bases));
+    bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', files.map((file, index) => (index === lost ? [] : [file])));
+    drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...['A', 'C', 'G'].map((name, index) => ({
+      sourceKey: `sequence.fasta|8|0|${index}`, fileName: 'sequence.fasta', sourceIndex: index, label: `ring ${name}`, color: `#22222${index}`, losat_gencode: 1
+    })));
+    sources.reconcileLoadedCircularConservation(drawing, true);
+    const kept = [['ring A', 'AAAA'], ['ring C', 'CCCC'], ['ring G', 'GGGG']].filter((_, index) => index !== lost);
+    assert.deepEqual(generated(), kept, `Load without genome ${lost}`);
+    assert.deepEqual(shown(), kept.map(([label]) => [label, ['sequence.fasta']]), `rows after Load without genome ${lost}`);
+    sources.reconcileCircularConservation(drawing);
+    assert.deepEqual(generated(), kept, `a later reconcile after Load without genome ${lost}`);
+    await add('TTTT');
+    assert.deepEqual(generated(), [...kept, ['sequence', 'TTTT']], `Add Seq after Load without genome ${lost}`);
+    comparisonFiles.removeCircularConservationSource(0);
+    assert.deepEqual(generated(), [kept[1], ['sequence', 'TTTT']], `Remove series after Load without genome ${lost}`);
+    clear();
+  }
+});

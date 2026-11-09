@@ -80,13 +80,16 @@ const ringsFollowTables = (drawing) => isUploadedRingDrawing(drawing) || (
 /**
  * The sources of a Circular drawing's rings, the one reading of which files
  * its ring series follow: the BLAST tables of uploaded rings and of a
- * LOSAT-cache replay, else each LOSAT ring's comparison genome files.
+ * LOSAT-cache replay, else each LOSAT ring's comparison genome files at its
+ * place, an empty place included (a Session loaded without a ring's files
+ * keeps its place, as Generate and Save read it), so a series entry's stored
+ * place names the same ring for every reader.
  * @param {RingSourceDrawing} drawing
  * @returns {readonly (InputFileRef | readonly InputFileRef[])[]}
  */
 export const circularRingSources = (drawing) => {
   if (ringsFollowTables(drawing)) return normalizeFileList([...drawing.files.c_conservation_blasts]);
-  return ringGenomeFileLists(drawing.files.c_conservation_fastas).filter((files) => files.length > 0);
+  return ringGenomeFileLists(drawing.files.c_conservation_fastas);
 };
 
 /**
@@ -190,7 +193,8 @@ const fileSignature = (file, index) => {
  * The sources of a source list, in order; a place without a file is left out,
  * so `sourceIndex` counts the sources and `placeIndex` names the place. A source's key is its files'
  * signatures (one file's is that file's, as before a ring took several), with
- * the count of earlier sources of the same files.
+ * the count of earlier sources of the same files, which shifts when one of them
+ * goes (`filesOfSourceKey`).
  * @template {ConservationFile} F
  * @param {ConservationSourcePlace<F> | readonly ConservationSourcePlace<F>[]} sourceFiles
  * @returns {ConservationSourceDescriptor<F>[]}
@@ -223,6 +227,12 @@ export const conservationSourceDescriptors = (sourceFiles) => {
 };
 
 /**
+ * A source key's files: the key less its count of earlier sources of the same files.
+ * @param {string} sourceKey
+ */
+const filesOfSourceKey = (sourceKey) => sourceKey.replace(/\|\d+$/, '');
+
+/**
  * @param {ConservationSourceDescriptor} descriptor
  * @param {RawConservationSeriesEntry | null} previousEntry
  * @param {number} orderIndex
@@ -234,7 +244,8 @@ const mergeSeriesEntry = (descriptor, previousEntry, orderIndex, legacyLabel = n
   return {
     sourceKey: descriptor.sourceKey,
     fileName: descriptor.fileName,
-    sourceIndex: descriptor.sourceIndex,
+    // The entry's stored place (`conservationSourcesOfSeries` reads it), which an empty place before it keeps.
+    sourceIndex: descriptor.placeIndex,
     label: String(rawLabel || descriptor.defaultLabel).trim() || descriptor.defaultLabel,
     color: normalizeConservationSeriesColor(previousEntry?.color, orderIndex),
     losat_gencode: normalizePositiveInteger(previousEntry?.losat_gencode, 1)
@@ -315,8 +326,11 @@ export const applyComparisonSequenceRecordLabel = ({ series, sourceFiles, file, 
  * Save, the span export catalog, the series reconcile and Load's repair of
  * unread tables read. It works in passes over every entry, so that no entry
  * takes a source a later entry names more closely: each entry first takes the
- * source of its source key; then an entry left takes the source of its file
- * name when that name is unambiguous, carried by one source no entry claimed
+ * source of its source key when that key is unambiguous, its files carried by
+ * one source and one entry (three rings of NCBI `sequence.fasta` files of one
+ * size and date are not: their keys differ only in a count of earlier ones,
+ * which Remove series or a file Load could not read shifts); then an entry
+ * left takes the source of its file name when that name is unambiguous, carried by one source no entry claimed
  * and by one entry left (two rings whose first files are both NCBI's
  * `sequence.fasta`, or whose replayed tables are named after them, are not);
  * then the source at the place its source index names, which a move keeps
@@ -362,9 +376,15 @@ export const conservationSourcesOfSeries = (sourceFiles, circularConservation, {
   });
   /** @param {string[]} names @returns {Map<string, number>} */
   const tally = (names) => names.reduce((counts, name) => counts.set(name, (counts.get(name) || 0) + 1), new Map());
+  /** @param {RawConservationSeriesEntry} entry */
+  const keyOf = (entry) => String(entry.sourceKey || '').trim();
+  const sourcesOfFiles = tally(descriptors.map((source) => filesOfSourceKey(source.sourceKey)));
+  const entriesOfFiles = tally(series.filter(isEntry).map(keyOf).filter(Boolean).map(filesOfSourceKey));
   claim((entry) => {
-    const sourceKey = String(entry.sourceKey || '').trim();
-    return (source) => sourceKey !== '' && source.sourceKey === sourceKey;
+    const sourceKey = keyOf(entry);
+    const files = filesOfSourceKey(sourceKey);
+    const unambiguous = sourceKey !== '' && sourcesOfFiles.get(files) === 1 && entriesOfFiles.get(files) === 1;
+    return (source) => unambiguous && source.sourceKey === sourceKey;
   });
   const sourcesOfName = tally(descriptors.filter((source) => !claimed.has(source.sourceKey)).map((source) => source.fileName));
   const entriesOfName = tally(series.filter((entry, seriesIndex) => !matched[seriesIndex] && isEntry(entry)).map(nameOf));
