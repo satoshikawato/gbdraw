@@ -191,6 +191,9 @@ export const createCircularSourceEdits = ({
     if (retirePresentation && ranges.length !== drawing.form.circular_record_ranges.length) {
       drawing.form.circular_record_ranges = ranges;
     }
+    if (retirePresentation && cardHoldsRecordKey(uid, drawing.form.circular_range_fields_record)) {
+      drawing.form.circular_range_fields_record = '';
+    }
     if (!cardHoldsRecordKey(uid, String(drawing.form.circular_record_selector || '').trim())) return;
     if (retirePresentation) retireCircularRecordPresentation(drawing);
     else retireCircularRecordSelector(drawing);
@@ -316,13 +319,14 @@ export const createCircularRecordDisplay = ({
   /**
    * A record chosen alone in Record select takes the crop its drawing keeps for it in a grid or batch into the
    * single-record crop fields, where it can be changed (PD-OI-044 scenario revision 5): its one window in Start/End
-   * (or the list, across the origin), and none for a record without one. A drawing that keeps no such crop keeps
-   * its fields.
+   * (or the list, across the origin), and none for a record without one. The fields keep a change while they hold
+   * that record's crop (`circular_range_fields_record`), through All records too, so the changed crop draws when the
+   * record is chosen alone again; another record refills them. A drawing that keeps no such crop keeps its fields.
    * @param {DrawingState} drawing @param {string} identity
    */
   const fillRecordRange = (drawing, identity) => {
     const { form } = drawing;
-    if (!form.circular_record_ranges.length) return;
+    if (!form.circular_record_ranges.length || identity === form.circular_range_fields_record) return;
     const entries = circularRecordEntries(drawing.circularRecordList.value);
     const entry = entries.find((candidate) => candidate.value === identity);
     const windows = (entry ? circularRecordRange(form.circular_record_ranges, entries, entry)?.windows : null) ?? [];
@@ -331,6 +335,7 @@ export const createCircularRecordDisplay = ({
     form.circular_region_end = only ? only.end : null;
     form.circular_reverse = only ? only.reverseComplement : false;
     form.circular_windows = only ? [] : windows.map((window) => ({ ...window }));
+    form.circular_range_fields_record = identity;
   };
   const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
     && mode.value === 'circular'
@@ -343,7 +348,7 @@ export const createCircularRecordDisplay = ({
     if (!drawing) return { status: 'unavailable' };
     if (!circularRecordSelectionEnabled.value) return { status: 'unavailable' };
     const normalized = String(value || '').trim();
-    if (normalized && normalized !== drawing.form.circular_record_selector) fillRecordRange(drawing, normalized);
+    if (normalized) fillRecordRange(drawing, normalized);
     drawing.form.circular_record_selector = normalized;
     drawing.adv.circular_grouping_intent = normalized ? 'single' : 'auto';
     rebindAnnotationRecords();

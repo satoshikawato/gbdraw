@@ -369,6 +369,99 @@ def test_a_session_redraws_an_edited_crop_from_its_source_with_the_edits(spec: s
     assert replay == live
 
 
+def _flanked_source() -> SeqRecord:
+    """A circular 60 kb record with a CDS across base 20,000, a CDS joined across the origin, and one inside 20-40 kb."""
+
+    record = _record("src", "circular")
+    record.features = [
+        SeqFeature(FeatureLocation(0, 60_000, 1), type="source", qualifiers={"organism": ["test"]}),
+        SeqFeature(FeatureLocation(19_000, 21_000, 1), type="CDS", qualifiers={"locus_tag": ["S1"], "product": ["s"]}),
+        SeqFeature(FeatureLocation(59_000, 60_000, 1) + FeatureLocation(0, 500, 1), type="CDS",
+                   qualifiers={"locus_tag": ["ORI"], "product": ["o"]}),
+        SeqFeature(FeatureLocation(25_000, 26_000, 1), type="CDS", qualifiers={"locus_tag": ["I1"], "product": ["i"]}),
+    ]
+    return record
+
+
+def _saved_source(tmp_path: Path) -> SeqRecord:
+    import base64
+    import io
+
+    document = json.loads((tmp_path / "saved.gbdraw-session.json").read_text())
+    [saved] = document["drawings"][0]["renderRequest"]["records"]
+    data = base64.b64decode(document["resources"][saved["source"]["resourceId"]]["data"])
+    return SeqIO.read(io.StringIO(data.decode("utf-8")), "genbank")
+
+
+def _locus(feature: SeqFeature) -> str:
+    return feature.qualifiers.get("locus_tag", [feature.type])[0]
+
+
+_CROP_EDITS = {
+    # Only a qualifier of a CDS inside the crop changes.
+    "product": lambda crop: next(f for f in crop.features if _locus(f) == "I1").qualifiers.update(product=["edited"]),
+    # Only the crop's name changes.
+    "rename": lambda crop: setattr(crop, "id", "renamed"),
+    # A CDS inside the crop is taken out.
+    "remove": lambda crop: setattr(crop, "features", [f for f in crop.features if _locus(f) != "I1"]),
+}
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+@pytest.mark.parametrize("spec", ["src:20001-40000", "src:20001-40000:rc"], ids=["forward", "reversed"])
+@pytest.mark.parametrize("edit", sorted(_CROP_EDITS))
+def test_an_edited_crop_is_saved_with_only_its_edits_on_its_source(
+    mode: str, spec: str, edit: str, tmp_path: Path
+) -> None:
+    """The source of an edited crop keeps the features the crop cut at its ends whole, and the features outside the
+    crop (one joined across the origin too); only what the edit changed is written to it, so the replay draws the
+    live figure (OV-3034)."""
+
+    import copy
+
+    crop = apply_region_specs([_flanked_source()], parse_region_specs([spec]))[0]
+    _CROP_EDITS[edit](crop)
+    record = RecordInput(source=InMemoryRecordSource(crop), record_key="r")
+    request = (
+        LinearDiagramRequest(records=(record,), options=LinearDiagramOptions(config_overrides=_TRACKS),
+                             output=_output(tmp_path))
+        if mode == "linear"
+        else CircularDiagramRequest(records=(record,), options=CircularDiagramOptions(config_overrides=_TRACKS),
+                                    output=_output(tmp_path))
+    )
+    live, replay = _replayed(request, tmp_path)
+    assert replay == live
+    [saved] = _saved_records(tmp_path)
+    assert [(window["start"], window["end"]) for window in saved["windows"]] == [(20001, 40000)]
+    source = _saved_source(tmp_path)
+    original = copy.deepcopy(_flanked_source())
+    expected = {_locus(feature): (str(feature.location), feature.qualifiers.get("product")) for feature in original.features}
+    if edit == "product":
+        expected["I1"] = (expected["I1"][0], ["edited"])
+    if edit == "remove":
+        del expected["I1"]
+    assert {_locus(feature): (str(feature.location), feature.qualifiers.get("product")) for feature in source.features} \
+        == expected
+    assert source.id == ("renamed" if edit == "rename" else "src")
+
+
+def test_a_session_saves_a_crop_that_moved_a_feature_cut_at_its_end_as_itself(tmp_path: Path) -> None:
+    """A feature the crop cut at an end has no place on the source once moved; the crop is saved as its own bytes."""
+
+    crop = apply_region_specs([_flanked_source()], parse_region_specs(["src:20001-40000"]))[0]
+    cut = next(feature for feature in crop.features if _locus(feature) == "S1")
+    cut.location = FeatureLocation(100, 900, 1)
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(crop), record_key="r"),),
+        options=LinearDiagramOptions(config_overrides=_TRACKS), output=_output(tmp_path),
+    )
+    _replayed(request, tmp_path)
+    [saved] = _saved_records(tmp_path)
+    assert not saved.get("windows")
+    assert [str(feature.location) for feature in _saved_source(tmp_path).features if _locus(feature) == "S1"] \
+        == ["[100:900](+)"]
+
+
 def test_a_session_saves_a_crop_whose_bases_were_edited_as_itself(tmp_path: Path) -> None:
     """A crop whose bases were edited is no longer a span of its source; it is saved as its own bytes."""
 

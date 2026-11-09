@@ -46,8 +46,9 @@ after its end, such as a Session the Python API saved with `RecordWindow(16000, 
 Session without the key reads as no such window.
 A Session 51 Circular grid or batch drawing keeps the crop of each record that a command line records table or the
 Python API gave it in `config.form.circular_record_ranges`; the Web app draws those records cropped, and Generate and
-Save keep the crops. A Session without the key reads as no such crops.
-These four form fields are Session 51's: a Session 46-50 that holds one in a drawing's slice is refused by the
+Save keep the crops, and `config.form.circular_range_fields_record` names the record whose crop the one-record crop
+fields hold. A Session without these keys reads as no such crops.
+These five form fields are Session 51's: a Session 46-50 that holds one in a drawing's slice is refused by the
 command line and the Python API, and the Web app loads it without that field, listed in the Load dialog.
 Each record of a Session 51 drawing's saved track-slot geometry
 (`runMetadata.trackSlotGeometry.records[]`) also carries its `recordKey` and its

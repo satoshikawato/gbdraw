@@ -506,7 +506,7 @@ export const circularRequestDiagrams = (records, drawing) => {
   const single = isSingleCircularJourney(recordSet);
   const drawn = recordSet.records.length > 0 ? recordSet.records : recordSet.recordSelectors;
   // A discovered record keeps its fields through the record set.
-  /** @param {(typeof drawn)[number]} record */
+  /** @param {{ record_length?: unknown, identity?: unknown, uid?: unknown, value: string, selector: string, recordId: string }} record */
   const drawnLength = (record) => {
     const crop = circularCropRegion(single, drawing.form, record);
     if (crop !== null) return crop.bases ?? 0;

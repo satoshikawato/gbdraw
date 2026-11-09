@@ -36,6 +36,7 @@ from typing import (
 )
 
 from Bio import SeqIO
+from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame, read_csv
 
@@ -98,14 +99,16 @@ from gbdraw.features.placement import (
 )
 from gbdraw.io.colors import color_table_path
 from gbdraw.io.record_select import RecordSelector, parse_record_selector, reverse_records
-from gbdraw.io.regions import RecordWindow, RegionSpec, region_text
+from gbdraw.io.regions import RecordWindow, RegionSpec, crop_record_to_region, region_text
 from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 from gbdraw.core.record_metadata import (
     RecordOrigin,
     held_record_origin,
     _drawn_source_span,
+    _feature_source_index_map,
     _read_coord_map,
+    _source_feature_index,
     _source_period,
 )
 from gbdraw.linear_comparison import (
@@ -1134,10 +1137,14 @@ def _crop_in_source(record: SeqRecord) -> tuple[SeqRecord, RecordWindow] | None:
 def _with_crop_edits(source: SeqRecord, crop: SeqRecord, window: RecordWindow) -> SeqRecord | None:
     """``source`` with the edits of ``crop``, its crop through ``window`` edited since the cut (OV-3034, D-84).
 
-    The crop's features (reversed back for a reverse-complemented crop) replace the source's features that reach
-    into the window, and the crop's names and annotations the source's, so cutting the result through the window
-    again draws the edited crop with its flanks. A crop across the origin, or one whose bases are no longer the
-    source's bases in the window, gives ``None``: it is written as its own bytes.
+    The crop is compared with the source cut through ``window`` again, feature by feature by the source feature
+    each was cut from, and only what differs is written to the source: a changed qualifier of a feature (on the
+    whole source feature, so one the crop cut at an end keeps its full location), a feature the crop left out, a
+    feature added to the crop (mapped back into the window, reversed back for a reverse-complemented crop), and a
+    changed name or annotation. A feature that lies outside the window, across the origin too, stays as it is, so
+    cutting the result through the window again draws the edited crop with its flanks. ``None`` (the crop is
+    written as its own bytes) for a crop across the origin, one whose bases are no longer the source's bases in the
+    window, one that holds a cut feature twice, or one where a feature that runs past the window's ends was moved.
     """
 
     if window.start > window.end:
@@ -1146,20 +1153,68 @@ def _with_crop_edits(source: SeqRecord, crop: SeqRecord, window: RecordWindow) -
     bases = source.seq[start_0:end_0]
     if bytes(crop.seq) != bytes(bases.reverse_complement() if window.reverse_complement else bases):
         return None
-    forward = reverse_records((crop,), True)[0] if window.reverse_complement else crop
-    edited = SeqRecord(
-        source.seq,
-        id=crop.id,
-        name=crop.name,
-        description=crop.description,
-        dbxrefs=list(crop.dbxrefs),
-        annotations={key: value for key, value in crop.annotations.items() if not str(key).startswith("gbdraw_")},
+    spec = RegionSpec(
+        raw=region_text(window.start, window.end, window.reverse_complement), file_selector=None, record_id=None,
+        record_index=None, start=window.start, end=window.end, reverse_complement=window.reverse_complement,
     )
-    edited.features = [
-        feature for feature in source.features
-        if not (feature.location.start < end_0 and feature.location.end > start_0)
-    ] + [feature._shift(start_0) for feature in forward.features]
-    return edited
+    recut = crop_record_to_region(source, spec)
+    cut = {_source_feature_index(feature): feature for feature in recut.features}
+    kept: dict[int, SeqFeature] = {}
+    added: list[SeqFeature] = []
+    for feature in crop.features:
+        index = _source_feature_index(feature)
+        if index is None or index not in cut:
+            added.append(feature)
+        elif index in kept:
+            return None
+        else:
+            kept[index] = feature
+
+    def in_source(feature: SeqFeature) -> SeqFeature:
+        if not window.reverse_complement:
+            return feature._shift(start_0)
+        return reverse_records((SeqRecord(crop.seq, features=[feature]),), True)[0].features[0]._shift(start_0)
+
+    positions = _feature_source_index_map(source.features)
+    features = []
+    for feature in source.features:
+        index = _source_feature_index(feature)
+        index = positions[id(feature)] if index is None else index
+        if index not in cut:
+            features.append(feature)
+            continue
+        if index not in kept:
+            continue
+        edited, original = kept[index], cut[index]
+        if (edited.type, str(edited.location)) != (original.type, str(original.location)):
+            if not (start_0 <= feature.location.start and feature.location.end <= end_0):
+                return None
+            features.append(in_source(edited))
+        elif edited.qualifiers != original.qualifiers or edited.id != original.id:
+            features.append(SeqFeature(feature.location, type=feature.type, id=edited.id,
+                                       qualifiers=deepcopy(edited.qualifiers)))
+        else:
+            features.append(feature)
+    names = {name: getattr(crop, name) for name in ("id", "name", "description")
+             if getattr(crop, name) != getattr(recut, name)}
+    annotations = {key: value for key, value in source.annotations.items() if not str(key).startswith("gbdraw_")}
+    for key in {*crop.annotations, *recut.annotations}:
+        if str(key).startswith("gbdraw_") or crop.annotations.get(key) == recut.annotations.get(key):
+            continue
+        if key in crop.annotations:
+            annotations[key] = crop.annotations[key]
+        else:
+            annotations.pop(key, None)
+    edited_source = SeqRecord(
+        source.seq,
+        id=names.get("id", source.id),
+        name=names.get("name", source.name),
+        description=names.get("description", source.description),
+        dbxrefs=list(crop.dbxrefs if crop.dbxrefs != recut.dbxrefs else source.dbxrefs),
+        annotations=annotations,
+    )
+    edited_source.features = features + [in_source(feature) for feature in added]
+    return edited_source
 
 
 def _source_file_transforms(

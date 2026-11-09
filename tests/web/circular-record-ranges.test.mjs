@@ -1,6 +1,6 @@
 // PD-OI-044 scenario revision 5: the crop a CLI or Python Session gave a record of a Circular grid or batch is held
-// per record, by its card and its name there; it draws while the record is drawn in a grid or batch, and Delete
-// settings clears it.
+// per record, by its card and its name there; it draws while the record is drawn in a grid or batch (the
+// app transitions are in drawing-list.test.mjs).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -8,7 +8,6 @@ const {
   circularDrawingCroppedRecords, circularRecordEntries, circularRecordRange
 } = await import('../../gbdraw/web/js/services/record-options.js');
 const { readCircularRecordRanges } = await import('../../gbdraw/web/js/services/config-field-readers.js');
-const { recordsWithEdits, removeRecordEdits } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
 
 const window = { start: 11, end: 90, reverseComplement: true, column: null, acrossOrigin: false };
 const list = [
@@ -52,24 +51,4 @@ test('a grid or batch draws its ranged records cropped; a record offered alone d
   const alone = drawing(ranges, { circular_record_selector: 'two:2' });
   alone.adv.circular_grouping_intent = 'single';
   assert.deepEqual([...circularDrawingCroppedRecords(list, alone)], []);
-});
-
-test('Delete settings clears the range of the record it deletes', () => {
-  const form = { circular_record_ranges: readCircularRecordRanges([
-    { source: 'two', record: 'A', windows: [window] }, { source: 'two', record: 'B', windows: [window] }
-  ]) };
-  const rangeEdits = () => entries.flatMap((entry) => {
-    const range = circularRecordRange(form.circular_record_ranges, entries, entry);
-    return range === null ? [] : [{ recordKey: entry.value, remove: () => {
-      form.circular_record_ranges = form.circular_record_ranges.filter((row) => row !== range);
-    } }];
-  });
-  const owners = entries.map((entry) => ({
-    key: entry.value, requestKeys: [entry.value], ownsExpansions: false, bindingKeys: [],
-    displaySource: entry.uid, displaySelector: entry.selector
-  }));
-  const data = () => ({ recordRangeEdits: rangeEdits(), annotationBindingField: 'record' });
-  assert.deepEqual([...recordsWithEdits(owners, data())], ['two:1', 'two:2']);
-  assert.equal(removeRecordEdits(owners.filter((owner) => owner.key === 'two:1'), data()), 1);
-  assert.deepEqual(form.circular_record_ranges.map(({ record }) => record), ['B']);
 });

@@ -228,6 +228,7 @@
 /**
  * @typedef {object} SessionModeSliceConfigForm
  * @property {unknown} [align_center]
+ * @property {unknown} [circular_range_fields_record]
  * @property {unknown} [circular_record_label]
  * @property {unknown} [circular_record_ranges]
  * @property {unknown} [circular_record_selector]

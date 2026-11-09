@@ -6524,22 +6524,22 @@ export const projectCanonicalSessionRequest = ({
     // (OV-2878; the Circular counterpart of the Linear cards below). The uids
     // are the one card uid rule's (`cardUids`, D-12, OV-2904), over each file
     // its records read.
-    /** @type {Map<string, { ids: Record<InputSlot, string | undefined>, record: (typeof records)[number] }>} */
+    /** @type {Map<string, { ids: Record<InputSlot, string | undefined>, record: (typeof records)[number], index: number }>} */
     const sourceFiles = new Map();
+    // The card each record reads, by the place of its file among the cards.
+    /** @type {Map<unknown, number>} */
+    const cardIndexOfRecord = new Map();
     records.forEach((record) => {
       if (!record.recordKey) return;
       const ids = recordSourceSlotIds(record.source || {});
       const file = JSON.stringify([ids.gb ?? null, ids.gff ?? null, ids.fasta ?? null]);
-      const held = sourceFiles.get(file) || { ids, record };
+      const held = sourceFiles.get(file) || { ids, record, index: sourceFiles.size };
       sourceFiles.set(file, held);
+      cardIndexOfRecord.set(record, held.index);
     });
     const groups = [...sourceFiles.values()];
     const uids = cardUids(groups.map(({ record }) => ({ resourceId: requestRecordFile(record) })), records);
-    records.forEach((record) => {
-      const ids = recordSourceSlotIds(record.source || {});
-      const index = groups.findIndex((group) => sourceFiles.get(JSON.stringify([ids.gb ?? null, ids.gff ?? null, ids.fasta ?? null])) === group);
-      if (record.recordKey && index >= 0) circularCardOfRecord.set(record, uids[index]);
-    });
+    cardIndexOfRecord.forEach((index, record) => circularCardOfRecord.set(record, uids[index]));
     files.circularSources = groups.map(({ ids }, index) => {
       const slotFile = (/** @type {InputSlot} */ slot) => {
         const id = ids[slot];

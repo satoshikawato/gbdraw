@@ -185,11 +185,14 @@ card's file as the request did (its record ID, `#k`, or empty for the record of 
 are the request's windows of that record. Load fills it from the request's grid or batch records; the next Generate
 and Save write each record's windows from it while the record is drawn in a grid or batch. A row that names no card,
 no record or no window with both ends is dropped with its Load repair row; a stored config without the key reads as
-an empty list. The version does not change (Session 51 has not reached `main`).
+an empty list. `config.form.circular_range_fields_record` names the record (its identity) whose crop the one-record
+crop fields were filled from, or is empty, so a change made there stays through All records and draws when that
+record is chosen alone again; a stored config without the key reads as empty. The version does not change
+(Session 51 has not reached `main`).
 
 The mode-scoped registry names the first Session version of each row (`since`, 46 unless a later Session added the
-row). `config.form.figure_width`, `config.form.figure_height`, `config.form.circular_windows` and
-`config.form.circular_record_ranges` are `since` 51: no
+row). `config.form.figure_width`, `config.form.figure_height`, `config.form.circular_windows`,
+`config.form.circular_record_ranges` and `config.form.circular_range_fields_record` are `since` 51: no
 Session 46-50 writer wrote them, so a Session 46-50 slice that holds one is refused by Python
 (`slice_containers(version)` in `_validate_mode_slices`, and the band-46 admission shape) and dropped by Web Load with
 a `setting-replaced` row. Python's step of a Session 27-44 through the Session 50 layout writes none of them

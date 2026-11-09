@@ -157,7 +157,8 @@ export const createRecordSettingsSources = ({
     }));
   };
   /**
-   * The crop a Circular grid or batch keeps for each read record (PD-OI-044 scenario revision 5), by identity.
+   * The crop a Circular grid or batch keeps for each read record (PD-OI-044 scenario revision 5), by identity,
+   * with the one-record crop fields while they hold it.
    * @param {DrawingState} drawing
    */
   const circularRangeEdits = (drawing) => {
@@ -170,6 +171,13 @@ export const createRecordSettingsSources = ({
         recordKey: entry.value,
         remove: () => {
           form.circular_record_ranges = form.circular_record_ranges.filter((/** @type {unknown} */ row) => row !== range);
+          // The crop fields filled from this crop go with it, so the record draws whole when chosen alone too.
+          if (form.circular_range_fields_record !== entry.value) return;
+          form.circular_region_start = null;
+          form.circular_region_end = null;
+          form.circular_reverse = false;
+          form.circular_windows = [];
+          form.circular_range_fields_record = '';
         }
       }];
     });

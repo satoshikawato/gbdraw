@@ -125,6 +125,8 @@ _FORM_ROWS = _rows(
     ("circular_windows", "circular", "own", 51),
     # The crop of each record of a Circular grid or batch that a CLI or Python Session gave it (PD-OI-044 rev 5).
     ("circular_record_ranges", "circular", "own", 51),
+    # The record whose crop the one-record crop fields were filled from, so a change there outlives All records.
+    ("circular_range_fields_record", "circular", "own", 51),
     ("circular_record_label", "circular", "own"),
     ("circular_record_subtitle", "circular", "own"),
     ("separate_strands", "both", "copy"),

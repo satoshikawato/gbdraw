@@ -717,6 +717,23 @@ test('a Circular row is cropped, and loses Display start, where Generate crops i
   assert.deepEqual(cropped(), [false], 'emptied fields name no region');
 });
 
+// PD-OI-044 scenario revision 5: a record that a grid or batch draws from its loaded crop is cropped, so it takes no
+// Display start, on one canvas or one figure per record; the other record keeps its Display start.
+test('a Circular grid or batch row drawn from a loaded crop loses Display start', () => {
+  const model = circularControls();
+  const circularRows = () => model.controls.rows.value.filter((row) => row.scope === 'circular');
+  const { form } = model.state.activeDrawing();
+  form.circular_record_ranges = [{ source: 'record-2', record: '',
+    windows: [{ start: 11, end: 60, reverseComplement: false, column: null, acrossOrigin: false }] }];
+  for (const canvas of [false, true]) {
+    form.multi_record_canvas = canvas;
+    assert.deepEqual(circularRows().map((row) => row.cropped), [false, true]);
+    assert.deepEqual(circularRows().map((row) => model.controls.surfaceFor(row).startEnabled), [true, false]);
+  }
+  form.circular_record_ranges = [];
+  assert.deepEqual(circularRows().map((row) => model.controls.surfaceFor(row).startEnabled), [true, true]);
+});
+
 // A2 W5 (R10): the drafts of a replaced source go in the transition that
 // replaced it (`changeRecordSources`), not in a watcher of the sources.
 const sourceControls = () => {
