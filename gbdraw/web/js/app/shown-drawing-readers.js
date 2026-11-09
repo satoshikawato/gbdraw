@@ -40,6 +40,13 @@ const { computed } = window.Vue;
  */
 
 /**
+ * The record ID a shown Result names a record by, and whether its committed
+ * request selects the record by that ID (the Web writes the record's `#k`
+ * instead when the ID repeats in its file or is unsafe).
+ * @typedef {{ recordId: string, selectedById: boolean }} ShownRecordName
+ */
+
+/**
  * The record ID a Result names each of its records by, by record key (OV-2959):
  * the one Python drew the record with, as the Result's run metadata keeps it
  * (its track-slot geometry, which a Session keeps), else, for a Result saved
@@ -48,17 +55,19 @@ const { computed } = window.Vue;
  * @param {CanonicalRenderRequest | null} request The committed request of the Result.
  * @param {unknown} trackSlotGeometry The run metadata `trackSlotGeometry` of the Result.
  * @param {number} resultCount
- * @returns {ReadonlyMap<string, string>}
+ * @returns {ReadonlyMap<string, ShownRecordName>}
  */
 const recordIdsOfResult = (request, trackSlotGeometry, resultCount) => {
   /** @type {Map<string, string>} */
-  const ids = new Map();
+  const selected = new Map();
   for (const { recordKey, selector } of request?.records ?? []) {
-    if (selector?.kind === 'recordId' && selector.value.trim()) ids.set(recordKey, selector.value.trim());
+    if (selector?.kind === 'recordId' && selector.value.trim()) selected.set(recordKey, selector.value.trim());
   }
+  /** @type {Map<string, ShownRecordName>} */
+  const ids = new Map([...selected].map(([recordKey, recordId]) => [recordKey, { recordId, selectedById: true }]));
   for (let index = 0; index < resultCount; index += 1) {
     for (const { recordKey, recordId } of readRegionAxisRecords(trackSlotGeometry, index)) {
-      if (recordId) ids.set(recordKey, recordId);
+      if (recordId) ids.set(recordKey, { recordId, selectedById: selected.get(recordKey) === recordId });
     }
   }
   return ids;
@@ -176,7 +185,7 @@ export const createShownDrawingReaders = ({
   const shownCommittedRequest = (drawing) => (showsOwnResult(drawing) ? getCommittedCanonicalRenderRequest() : null);
   // The record ID the Result a drawing shows names each of its records by (`recordIdsOfResult`); empty while it shows
   // no Result of its own.
-  /** @param {{ id: string }} drawing @returns {ReadonlyMap<string, string>} */
+  /** @param {{ id: string }} drawing @returns {ReadonlyMap<string, ShownRecordName>} */
   const shownRecordIds = (drawing) => (showsOwnResult(drawing) ? recordIdsOfResult(
     getCommittedCanonicalRenderRequest(), state.trackSlotResolvedGeometry.value, results.value.length
   ) : new Map());

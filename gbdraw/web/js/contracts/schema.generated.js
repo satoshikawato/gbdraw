@@ -218,6 +218,17 @@ export const LINEAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({
   features: Object.freeze(['color', 'fileName', 'label', 'legend_label'])
 });
 
+// gbdraw/session_io.py: WRITTEN_RESOURCE_MEDIA_TYPES
+/** @type {Readonly<Record<'canonical-tsv' | 'collinearity-result' | 'orthogroup-result', string>>} */
+export const WRITTEN_RESOURCE_MEDIA_TYPES = Object.freeze({
+  "canonical-tsv": 'text/tab-separated-values',
+  "collinearity-result": 'application/json',
+  "orthogroup-result": 'application/json'
+});
+
+// gbdraw/session_io.py: INPUT_FILE_MEDIA_TYPE
+export const INPUT_FILE_MEDIA_TYPE = 'application/octet-stream';
+
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,

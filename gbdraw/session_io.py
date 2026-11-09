@@ -5489,10 +5489,10 @@ class WrittenFileMetadata(TypedDict):
     lastModified: int
 
 
-# The media type of each resource kind gbdraw makes itself, as the Web writers
-# write it: canonical TSV tables (``tableResource`` in
-# services/session-request.js) and analysis results (app/run-analysis.js).
-_WRITTEN_RESOURCE_MEDIA_TYPES: Mapping[str, str] = {
+# The media type of each resource kind gbdraw makes itself: canonical TSV
+# tables and analysis results. The Web writers read both constants from the
+# generated contracts (tools/generate_web_contracts.py).
+WRITTEN_RESOURCE_MEDIA_TYPES: Mapping[str, str] = {
     "canonical-tsv": "text/tab-separated-values",
     "collinearity-result": "application/json",
     "orthogroup-result": "application/json",
@@ -5511,7 +5511,7 @@ def written_file_metadata(kind: str | None = None) -> WrittenFileMetadata:
     keeps the browser's metadata; its writer is the Web's.
     """
 
-    return {"type": _WRITTEN_RESOURCE_MEDIA_TYPES.get(kind or "", INPUT_FILE_MEDIA_TYPE), "lastModified": 0}
+    return {"type": WRITTEN_RESOURCE_MEDIA_TYPES.get(kind or "", INPUT_FILE_MEDIA_TYPE), "lastModified": 0}
 
 
 def is_session_resource_descriptor(value: Mapping[str, object]) -> TypeGuard[SessionResourceDescriptor]:

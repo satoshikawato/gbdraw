@@ -4,6 +4,7 @@ import dataclasses
 import functools
 import importlib
 import importlib.util
+import json
 import re
 import subprocess
 import sys
@@ -673,9 +674,7 @@ _RECORD_SELECTOR_TEXTS = (
 
 def test_the_web_reads_a_record_selector_number_with_the_renderer_s_pattern(monkeypatch: pytest.MonkeyPatch) -> None:
     # OV-2960: the Web's `#N` reader matches the pattern Python's renderer reads a record selector with, spelled
-    # for ECMA-262 (Python's `\s` is not JavaScript's); the generated pattern matches what Python's matches.
-    import re
-
+    # for ECMA-262 (Python's `\s` is not JavaScript's); the generator writes the Python owner's pattern.
     from gbdraw.io import record_select
 
     for text, record, number in _RECORD_SELECTOR_TEXTS:
@@ -684,15 +683,39 @@ def test_the_web_reads_a_record_selector_number_with_the_renderer_s_pattern(monk
         parsed = record_select.parse_record_selector(text) if record is not None else None
         assert parsed is None or parsed.record_index == record - 1
     generator = _generator()
-    module = generator.render_web_contracts_module()
-    spelled = re.search(r"export const RECORD_INDEX_SELECTOR_PATTERN = '(.*)';\n", module)
-    assert spelled is not None
-    portable = re.compile(spelled.group(1).replace("\\\\", "\\"))
-    own = re.compile(record_select.RECORD_INDEX_SELECTOR_PATTERN)
-    for code in range(0x10000):
-        text = f"{chr(code)}#{chr(code)}1{chr(code)}"
-        assert bool(portable.fullmatch(text)) == bool(own.fullmatch(text)), hex(code)
-
     monkeypatch.setattr(record_select, "RECORD_INDEX_SELECTOR_PATTERN", r"#([0-9]+)")
 
     assert "export const RECORD_INDEX_SELECTOR_PATTERN = '#([0-9]+)';\n" in generator.render_web_contracts_module()
+
+
+# Each BMP character around and inside a `#N` (a space before, between and after; a digit), read by the Web owner.
+_RECORD_INDEX_TEXTS_SCRIPT = """
+const { recordIndexNumber } = await import('./gbdraw/web/js/services/record-draw-selection.js');
+const read = [];
+for (let code = 0; code < 0x10000; code += 1) {
+  const c = String.fromCharCode(code);
+  read.push(recordIndexNumber(`${c}#${c}1${c}`), recordIndexNumber(`#1${c}`));
+}
+process.stdout.write(JSON.stringify(read));
+"""
+
+
+@pytest.mark.browser
+def test_the_web_owner_reads_every_bmp_character_in_a_record_selector_as_python_does() -> None:
+    # Review 1 of #1778: `recordIndexNumber` (services/record-draw-selection.js), run by Node over the BMP, gives
+    # the number Python's `record_index_number` gives for each text, so the generated pattern holds in JavaScript.
+    from gbdraw.io import record_select
+
+    completed = subprocess.run(
+        ["node", "--input-type=module", "-e", _RECORD_INDEX_TEXTS_SCRIPT],
+        cwd=REPO_ROOT, check=True, capture_output=True, text=True,
+    )
+    web = json.loads(completed.stdout)
+    texts = [text for code in range(0x10000) for text in (f"{chr(code)}#{chr(code)}1{chr(code)}", f"#1{chr(code)}")]
+    python = [record_select.record_index_number(text) for text in texts]
+    assert len(web) == len(python)
+    differing = [(text, web_number, number) for text, web_number, number in zip(texts, web, python) if web_number != number]
+    assert differing == []
+    # The texts reach both branches: the spaces Python's `\s` holds (ASCII and others) and the ten ASCII digits.
+    assert [python[2 * ord(digit) + 1] for digit in "0123456789"] == list(range(10, 20))
+    assert sum(number == 1 for number in python[0::2]) > 20

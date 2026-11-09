@@ -12,8 +12,8 @@ import { msg, t, tm, tn } from '../utils/i18n.js';
 import { RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
 import { buildDefaultMultiRecordPositions } from './run-analysis.js';
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
-/** @import { CircularListRecord } from '../services/record-discovery.js' */
 /** @import { MultiRecordPosition } from '../services/config.js' */
+/** @import { ShownRecordName } from './shown-drawing-readers.js' */
 
 const { computed } = window.Vue;
 
@@ -32,10 +32,43 @@ const { computed } = window.Vue;
  * @property {() => SessionBusy | null} sessionOperationAvailability
  * @property {ShownDrawingOfMode} shownDrawingOfMode
  * @property {() => unknown} refreshCircularRecordOrder The record read of the shown drawing, with its Record Order.
- * @property {(drawing: { id: string }) => ReadonlyMap<string, string>} shownRecordIds The record ID the Result a
- *   drawing shows names each of its records by, by record key; empty while it shows no Result of its own
+ * @property {(drawing: { id: string }) => ReadonlyMap<string, ShownRecordName>} shownRecordIds The record ID the
+ *   Result a drawing shows names each of its records by, by record key; empty while it shows no Result of its own
  *   (app/shown-drawing-readers.js).
  */
+
+// The file name a record's label begins with: its card's file when the drawing has several source cards.
+/** @param {DrawingState} drawing @returns {(uid: string) => string} */
+const cardFileNames = (drawing) => {
+  const cards = circularSourceInputs(drawing.inputType.value, drawing.circularSources);
+  const names = new Map(cards.length > 1 ? cards.map((card) => [card.uid, String(card.primaryFile?.name || '')]) : []);
+  return (uid) => names.get(uid) || '';
+};
+
+// A record's name, read or not (D-98, D-100): its card's file name when the drawing
+// has several cards (`cardFileNames`), its record ID, and its `#k` when that ID
+// repeats in its file or is unsafe (`usesIndex`); the Record select writes the
+// record's length between the ID and the `#k`.
+/** @param {string} fileName @param {string} recordId */
+const recordName = (fileName, recordId) => `${fileName ? `${fileName}: ` : ''}${recordId}`;
+/** @param {{ usesIndex: boolean, selector: string }} entry */
+const recordIndexSuffix = (entry) => (entry.usesIndex ? ` [${entry.selector}]` : '');
+
+/**
+ * The name of a value no entry names (`recordEntryOf`): a record identity by its
+ * card's file name, with `#k` for the k-th record of a file; any other value (a
+ * kept `#N`, a record ID) as it is.
+ * @param {DrawingState} drawing
+ * @param {string} value
+ */
+const unnamedRecordName = (drawing, value) => {
+  const card = drawing.circularSources.find((source) => cardHoldsRecordKey(source.uid, value));
+  if (!card) return value;
+  const [input] = circularSourceInputs(drawing.inputType.value, [card]);
+  const fileName = String(input.primaryFile?.name || '') || card.uid;
+  const k = recordKeyExpansion(value, card.uid);
+  return k === null ? fileName : `${fileName} #${k}`;
+};
 
 /**
  * The record select, its inspection, and the single-record fields of the shown Circular drawing.
@@ -45,60 +78,50 @@ export const createCircularRecordPresentation = ({
   state, mode, semanticMutationAvailable, sessionOperationAvailability, shownDrawingOfMode, refreshCircularRecordOrder,
   shownRecordIds
 }) => {
-  // The file name a record's label begins with: its card's file when the drawing has several source cards.
-  /** @param {DrawingState} drawing @returns {(uid: string) => string} */
-  const cardFileNames = (drawing) => {
-    const cards = circularSourceInputs(drawing.inputType.value, drawing.circularSources);
-    const names = new Map(cards.length > 1 ? cards.map((card) => [card.uid, String(card.primaryFile?.name || '')]) : []);
-    return (uid) => names.get(uid) || '';
-  };
-  // A record's name, read or not (D-98): its card's file name when the drawing has
-  // several cards (`cardFileNames`), its record ID, and its `#k` when that ID
-  // repeats in its file or is unsafe (`circularRecordEntries`); the Record select
-  // writes the record's length between the ID and the `#k`.
-  /** @param {string} fileName @param {string} recordId */
-  const recordName = (fileName, recordId) => `${fileName ? `${fileName}: ` : ''}${recordId}`;
-  /** @param {{ usesIndex: boolean, selector: string }} entry */
-  const recordIndexSuffix = (entry) => (entry.usesIndex ? ` [${entry.selector}]` : '');
   /**
-   * The name shown for a Record select or Record Order value whose record is not
-   * in the read list (OV-2949, OV-2959, D-98): a record identity (`<uid>`,
-   * `<uid>:<k>`) that the Result this drawing shows names (`shownRecordIds`) is
-   * named as a read record is (`recordName`, with the `#k` that the records the
-   * Result names of its card call for); one the Result does not name by its
-   * card's file name, with `#k` for the k-th record of a file; any other value
-   * (a kept `#N`, a record ID) as it is. The one owner of an unread record's
-   * name in the panel.
+   * The named entry of a record identity (`<uid>`, `<uid>:<k>`), read or not; the
+   * one owner of the parts a Record select or Record Order label names a record
+   * by. A read record's entry is its `circularRecordEntries` entry. An unread one
+   * (OV-2949, OV-2959) is named from the records the shown Result names
+   * (`shownRecordIds`) the same way; as the Result names only the records it drew,
+   * the k-th record of a file keeps its `#k` unless the committed request selected
+   * it by its record ID, which the Web writes only for an ID that is unique and
+   * safe in its file (review 1 of #1778). Null for a record the Result does not
+   * name and for a value that is no identity.
    * @param {DrawingState} drawing
    * @param {string} value
    */
-  const unreadRecordName = (drawing, value) => {
+  const recordEntryOf = (drawing, value) => {
+    const read = circularRecordEntries(drawing.circularRecordList.value).find((record) => record.value === value);
+    if (read) return read;
     const card = drawing.circularSources.find((source) => cardHoldsRecordKey(source.uid, value));
-    if (!card) return value;
-    const named = [...shownRecordIds(drawing)].filter(([key]) => cardHoldsRecordKey(card.uid, key)).map(([identity, recordId]) => {
-      const k = recordKeyExpansion(identity, card.uid) ?? 1;
-      return { uid: card.uid, identity, k, selector: `#${k}`, record_id: recordId };
-    });
+    if (!card) return null;
+    const named = [...shownRecordIds(drawing)].filter(([key]) => cardHoldsRecordKey(card.uid, key))
+      .map(([identity, { recordId, selectedById }]) => {
+        const k = recordKeyExpansion(identity, card.uid);
+        return { uid: card.uid, identity, k: k ?? 1, selector: `#${k ?? 1}`, record_id: recordId, provenUnique: k === null || selectedById };
+      });
     const entry = circularRecordEntries(named).find((record) => record.value === value);
-    if (entry) return `${recordName(cardFileNames(drawing)(card.uid), entry.recordId)}${recordIndexSuffix(entry)}`;
-    const [input] = circularSourceInputs(drawing.inputType.value, [card]);
-    const fileName = String(input.primaryFile?.name || '') || card.uid;
-    const k = recordKeyExpansion(value, card.uid);
-    return k === null ? fileName : `${fileName} #${k}`;
+    return entry ? { ...entry, usesIndex: entry.usesIndex || !entry.provenUnique } : null;
   };
-  // A Record Order row names its record by identity; its label is the record's ID, after its file's name.
+  // The Record select's name of a value whose record it does not list (its synthetic option and its error).
+  /** @param {DrawingState} drawing @param {string} value */
+  const selectedRecordName = (drawing, value) => {
+    const entry = recordEntryOf(drawing, value);
+    return entry ? `${recordName(cardFileNames(drawing)(String(entry.uid)), entry.recordId)}${recordIndexSuffix(entry)}`
+      : unnamedRecordName(drawing, value);
+  };
+  // A Record Order row names its record by identity, read or not, from its entry: with
+  // several cards as the Record select does, with one card as `#k (<record ID>)`.
   /** @param {unknown} identity */
   const getCircularRecordOrderLabel = (identity) => {
     const normalized = String(identity || '').trim();
     if (!normalized) return '';
     const drawing = state.activeDrawing();
-    /** @type {CircularListRecord[]} */
-    const records = drawing.circularRecordList.value;
-    const matched = records.find((entry) => entry.identity === normalized);
-    if (!matched) return unreadRecordName(drawing, normalized);
-    const recordId = matched.record_id.trim() || t('Unknown');
-    const fileName = cardFileNames(drawing)(matched.uid);
-    return fileName ? recordName(fileName, recordId) : `${matched.selector} (${recordId})`;
+    const entry = recordEntryOf(drawing, normalized);
+    if (!entry) return unnamedRecordName(drawing, normalized);
+    const fileName = cardFileNames(drawing)(String(entry.uid));
+    return fileName ? `${recordName(fileName, entry.recordId)}${recordIndexSuffix(entry)}` : `${entry.selector} (${entry.recordId})`;
   };
 
   const circularRecordDiscoveryState = computed(() => circularDiscoveryForInput(state.activeDrawing()));
@@ -122,7 +145,7 @@ export const createCircularRecordPresentation = ({
     const fileNameOf = cardFileNames(drawing);
     const current = String(drawing.form.circular_record_selector || '').trim();
     const selection = circularRecordSelection(entries, current);
-    const shown = unreadRecordName(drawing, current);
+    const shown = selectedRecordName(drawing, current);
     // Without an inspected catalog the saved selector is unverified, not missing.
     const inspected = circularRecordDiscoveryState.value.status === 'ready';
     const drawnCount = circularDrawnRecordCount.value;
@@ -160,10 +183,10 @@ export const createCircularRecordPresentation = ({
     if (!current || circularRecordDiscoveryState.value.status !== 'ready') return '';
     const selection = circularRecordSelection(circularRecordPresentationEntries(), current);
     if (selection.status === 'ambiguous') {
-      return t('Record selector \'{selector}\' is ambiguous in the current input.', { selector: unreadRecordName(drawing, current) });
+      return t('Record selector \'{selector}\' is ambiguous in the current input.', { selector: selectedRecordName(drawing, current) });
     }
     if (selection.status === 'missing') {
-      return t('No record in the current input matches the record selector \'{selector}\'.', { selector: unreadRecordName(drawing, current) });
+      return t('No record in the current input matches the record selector \'{selector}\'.', { selector: selectedRecordName(drawing, current) });
     }
     return '';
   });

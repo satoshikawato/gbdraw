@@ -197,7 +197,8 @@ import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
   ORTHOGROUP_INFERENCE_VERSION,
-  PROTEIN_LOSAT_CACHE_SCHEMA
+  PROTEIN_LOSAT_CACHE_SCHEMA,
+  WRITTEN_RESOURCE_MEDIA_TYPES
 } from '../contracts/schema.generated.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
@@ -4779,8 +4780,8 @@ export const createRunAnalysis = ({
                 }
                 convertedPayload[resourceKey] = JSON.parse(bytesToText(canonical.bytes));
                 bindCanonicalTypedResource(convertedPayload[resourceKey], {
-                  kind: canonical.kind, type: "application/json", size: canonical.size,
-                  lastModified: 0, encoding: "base64", data: bytesToBase64(canonical.bytes)
+                  type: WRITTEN_RESOURCE_MEDIA_TYPES[blastpMode === "collinear" ? "collinearity-result" : "orthogroup-result"],
+                  kind: canonical.kind, size: canonical.size, lastModified: 0, encoding: "base64", data: bytesToBase64(canonical.bytes)
                 });
                 delete convertedPayload.canonicalResource;
               }

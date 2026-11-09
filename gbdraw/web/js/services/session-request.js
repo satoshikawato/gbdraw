@@ -151,9 +151,11 @@ import {
   CONFIG_UNSET_NUMBER_PATHS,
   CONFIG_UNSET_NUMBER_SPELLINGS,
   EXPANDED_RECORD_KEY_SEPARATOR,
+  INPUT_FILE_MEDIA_TYPE,
   SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
   STORED_REGION_FIELDS,
-  SUPPORTED_CANONICAL_REQUEST_SCHEMAS
+  SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
+  WRITTEN_RESOURCE_MEDIA_TYPES
 } from '../contracts/schema.generated.js';
 import {
   arrowHeadLengthRatioForState,
@@ -1221,7 +1223,7 @@ export const bindCanonicalTypedResource = (value, descriptor) => {
   const expectedKind = value?.kind === "result" ? "collinearity-result" : "orthogroup-result";
   if (!value || value.schema !== 3 || !(/** @type {readonly unknown[]} */ (["result", "orthogroupResult"])).includes(value.kind)
     || descriptor?.kind !== expectedKind || descriptor.encoding !== "base64"
-    || descriptor.type !== "application/json" || typeof descriptor.data !== "string"
+    || descriptor.type !== WRITTEN_RESOURCE_MEDIA_TYPES[expectedKind] || typeof descriptor.data !== "string"
     // `isSafeInteger` holds, so `size` is a number.
     || !Number.isSafeInteger(descriptor.size) || /** @type {number} */ (descriptor.size) < 0) {
     throw new Error("Analysis canonical resource backing is invalid.");
@@ -1259,7 +1261,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     const fields = {
       kind: effectiveKind,
       name: normalizeResourceName(resourceId, entry.name),
-      type: String(entry.type || 'application/octet-stream'),
+      type: String(entry.type || INPUT_FILE_MEDIA_TYPE),
       size: Number(entry.size) || 0,
       lastModified: Number(entry.lastModified) || 0
     };
@@ -1296,7 +1298,8 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     resources[resourceId] = {
       kind,
       name: normalizeResourceName(resourceId, name),
-      type: 'text/tab-separated-values',
+      // A table the Web writes as text is a TSV, as a canonical TSV table is.
+      type: WRITTEN_RESOURCE_MEDIA_TYPES['canonical-tsv'],
       size: bytes.byteLength,
       lastModified: 0,
       encoding: 'base64',

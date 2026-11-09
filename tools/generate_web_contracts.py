@@ -118,6 +118,9 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     # The params keys each track renderer takes without reading them; the Source recipe leaves them out.
     ("CIRCULAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.circular", "CIRCULAR_SLOT_UNREAD_PARAM_KEYS"),
     ("LINEAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.linear", "LINEAR_SLOT_UNREAD_PARAM_KEYS"),
+    # The media type a Session writer stores for a resource kind gbdraw makes, and for an input file (OV-2964).
+    ("WRITTEN_RESOURCE_MEDIA_TYPES", "gbdraw.session_io", "WRITTEN_RESOURCE_MEDIA_TYPES"),
+    ("INPUT_FILE_MEDIA_TYPE", "gbdraw.session_io", "INPUT_FILE_MEDIA_TYPE"),
 )
 # (Web name, Python module, function): values a Python function derives from
 # its owner, written in this order after the constants.
