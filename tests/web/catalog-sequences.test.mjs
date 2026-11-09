@@ -28,12 +28,18 @@ const featureReply = ({ recordKey, biologicalFeatureId }) => ({
 // one whole-record source (its index the record's place) and a comparison source comes last.
 const EMBED_SOURCES = [{ key: 'linear:record:0', recordIndex: 0 }, { key: 'linear:record:1', recordIndex: 1 },
   { key: 'homology:comparison:0:C', sourceIndex: 0 }];
-const embedPartReply = ({ item, part }) => ({
+// What the encoder makes of a part, and the reply that carries it as the text the file embeds.
+const embedPartObjects = ({ item, part }) => ({
   biologicalFeatures: item.biologicalFeatures.map((row) => ({ ...row, nucleotide_sequence: `N${row.biologicalFeatureId}` })),
   sequenceSources: EMBED_SOURCES.map((source, index) => ({ index, source })).filter(({ source }) => (
     source.recordIndex === undefined ? part.comparisonSources : part.sourcesOf.includes(item.recordKeys[source.recordIndex]))),
   sourceCount: EMBED_SOURCES.length
 });
+const embedPartReply = (payload) => {
+  const { biologicalFeatures, sequenceSources, sourceCount } = embedPartObjects(payload);
+  return { biologicalFeatures: biologicalFeatures.map((row) => JSON.stringify(row)).join(','), rowCount: biologicalFeatures.length,
+    sequenceSources: sequenceSources.map(({ index, source }) => ({ index, source: JSON.stringify(source) })), sourceCount };
+};
 
 const doorWith = (initialCommitted) => {
   let committed = initialCommitted;
@@ -232,7 +238,7 @@ test('the parts written as they arrive are the item Python encodes whole, byte f
   });
   const sequences = await door.readEmbedJson(exportItem);
   assert.equal(sent.length, 3);
-  const whole = embedPartReply({ item: exportItem, part: { sourcesOf: ['rec-a', 'rec-b'], comparisonSources: true } });
+  const whole = embedPartObjects({ item: exportItem, part: { sourcesOf: ['rec-a', 'rec-b'], comparisonSources: true } });
   assert.equal(embeddedCatalogItemJson(exportItem, sequences), JSON.stringify({
     ...exportItem, biologicalFeatures: whole.biologicalFeatures, sequenceSources: whole.sequenceSources.map(({ source }) => source)
   }));
@@ -247,7 +253,9 @@ test('an export read the shown Result outlived gives null; a source missing or g
   assert.equal(await outlived.readEmbedJson(exportItem), null);
   for (const reply of [
     (payload) => ({ ...embedPartReply(payload), sequenceSources: [] }),
+    (payload) => ({ ...embedPartReply(payload), sequenceSources: [{ index: 0, source: '{"key":"x"}' }] }),
     (payload) => ({ ...embedPartReply(payload), sequenceSources: [{ index: 0, source: { key: 'x' } }] }),
+    (payload) => ({ ...embedPartReply(payload), rowCount: 0 }),
     (payload) => ({ ...embedPartReply(payload), biologicalFeatures: [] })
   ]) {
     const fixed = committedOf();

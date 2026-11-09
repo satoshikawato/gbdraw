@@ -26,6 +26,7 @@ from gbdraw.session import build_session_document, load_session_document, materi
 from gbdraw.web_support.catalog_sequences import (
     read_embed_catalog_item,
     read_embed_catalog_part,
+    read_embed_sequences_json,
     read_feature_sequences,
     read_match_sequences,
 )
@@ -187,6 +188,35 @@ def test_an_embed_part_names_the_records_whose_sources_it_returns(tmp_path: Path
     assert [entry["index"] for entry in reply["sequenceSources"]] == [1]
     assert reply["sequenceSources"][0]["source"]["key"] == "linear:record:1"
     assert reply["sourceCount"] == 5
+
+
+def test_the_worker_reply_of_an_embed_part_is_the_text_the_file_embeds(tmp_path: Path) -> None:
+    """The Worker and the page pass a part on as text: the reply holds each row and source as the encoder writes it,
+    so the page parses none of them."""
+
+    path = SESSIONS / "BGC0000708-BGC0000713.v40-schema5.json"
+    catalog = json.loads(path.read_text(encoding="utf-8"))["editorState"]["featureCatalog"]
+    [bare] = promote_legacy_feature_catalog(catalog)["items"]
+    key = bare["recordKeys"][1]
+    item = {"recordKeys": bare["recordKeys"], "comparisonMatches": bare["comparisonMatches"],
+            "biologicalFeatures": [row for row in bare["biologicalFeatures"] if row["recordKey"] == key]}
+    part = {"sourcesOf": [key], "comparisonSources": True}
+
+    with _committed(path, tmp_path) as (request, paths, output):
+        objects = read_embed_catalog_part(request, paths, output, item, part)
+        reply = json.loads(read_embed_sequences_json(
+            json.dumps(request), json.dumps(paths), output, json.dumps(item), json.dumps(part)
+        ))
+
+    assert objects["biologicalFeatures"] and objects["sequenceSources"]
+    assert reply == {
+        "biologicalFeatures": ",".join(_compact(row) for row in objects["biologicalFeatures"]),
+        "rowCount": len(objects["biologicalFeatures"]),
+        "sequenceSources": [
+            {"index": entry["index"], "source": _compact(entry["source"])} for entry in objects["sequenceSources"]
+        ],
+        "sourceCount": 5,
+    }
 
 
 def test_whole_record_sources_equal_stored_sequence_sources(tmp_path: Path) -> None:

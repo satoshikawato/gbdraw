@@ -2401,6 +2401,13 @@ def _row_with_sequences(row: Mapping[str, object], sequences: FeatureSequences |
     return embedded
 
 
+def embed_json_text(value: object) -> str:
+    """The text of the export encoding (D5-02): compact JSON with characters as they are. The CLI export writes its
+    metadata with it, and the Web export writes the parts Python returns as this text."""
+
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
 class EmbeddedSequenceSource(TypedDict):
     """One whole-record source of the export, with its place in the item's ``sequenceSources``."""
 
@@ -3203,6 +3210,7 @@ __all__ = [
     "EmbeddedSequenceSource",
     "embed_catalog_item",
     "embed_catalog_part",
+    "embed_json_text",
     "match_sequence_sources",
     "promote_legacy_feature_catalog",
     "read_match_span",

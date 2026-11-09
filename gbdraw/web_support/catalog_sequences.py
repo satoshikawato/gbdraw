@@ -11,7 +11,8 @@ Copy FASTA of Select region (``record_spans.py``). Python resolves the records a
   key) or of a comparison FASTA record (named by its source and record ID): the Copy and FASTA of a match popup.
 - ``read_embed_catalog_item``: a stored catalog item with every sequence an exported Interactive SVG embeds, in the
   export encoding (``embed_catalog_item``); ``read_embed_catalog_part`` reads one part of it (the rows of some records
-  and the whole-record sources they own, ``embed_catalog_part``), which the Web export reads record by record.
+  and the whole-record sources they own, ``embed_catalog_part``), which the Web export reads record by record, as
+  the export's text (``read_embed_sequences_json``).
 
 Nothing is found by caption, label or display text.
 """
@@ -33,6 +34,7 @@ from gbdraw.web_support.feature_catalog import (
     EmbedCatalogPart,
     embed_catalog_item,
     embed_catalog_part,
+    embed_json_text,
     match_sequence_sources,
     read_match_span,
 )
@@ -311,6 +313,26 @@ class EmbedPartInput(TypedDict):
     comparisonSources: bool
 
 
+@final
+class EmbeddedSourceText(TypedDict):
+    """A whole-record source of an export part as the export's text, with its place among the item's sources."""
+
+    index: int
+    source: str
+
+
+@final
+class EmbedPartText(TypedDict):
+    """The reply of one export part (``read_embed_sequences_json``): its rows and sources as the text the file
+    embeds (``embed_json_text``), so neither the Worker nor the page parses them; ``biologicalFeatures`` is the rows'
+    text joined by commas, ``rowCount`` their number."""
+
+    biologicalFeatures: str
+    rowCount: int
+    sequenceSources: list[EmbeddedSourceText]
+    sourceCount: int
+
+
 def _embed_part_input(value: object) -> EmbedPartInput:
     if not (
         isinstance(value, Mapping)
@@ -372,17 +394,28 @@ def read_match_sequences_json(request_json: str, resource_paths_json: str, outpu
 def read_embed_sequences_json(
     request_json: str, resource_paths_json: str, output_directory: str, item_json: str, part_json: str
 ) -> str:
-    """JSON boundary of the diagram Worker: one part of the export encoding."""
+    """JSON boundary of the diagram Worker: one part of the export encoding, as its text (``EmbedPartText``)."""
 
-    return json.dumps(read_embed_catalog_part(
+    part = read_embed_catalog_part(
         json.loads(str(request_json)), json.loads(str(resource_paths_json)), str(output_directory),
         json.loads(str(item_json)), json.loads(str(part_json)),
-    ), ensure_ascii=False, separators=(",", ":"))
+    )
+    reply: EmbedPartText = {
+        "biologicalFeatures": ",".join(embed_json_text(row) for row in part["biologicalFeatures"]),
+        "rowCount": len(part["biologicalFeatures"]),
+        "sequenceSources": [
+            {"index": entry["index"], "source": embed_json_text(entry["source"])} for entry in part["sequenceSources"]
+        ],
+        "sourceCount": part["sourceCount"],
+    }
+    return embed_json_text(reply)
 
 
 __all__ = [
     "ComparisonMatchSpan",
     "EmbedPartInput",
+    "EmbedPartText",
+    "EmbeddedSourceText",
     "FeatureSequenceInput",
     "FeatureSequencesOf",
     "FeatureSequencesReply",

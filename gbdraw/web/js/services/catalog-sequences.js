@@ -8,7 +8,7 @@
 // so a second read waits for nothing. The replies live only here: never in the catalog, a History step, or a Session.
 // A reply that arrives after the shown Result changed (Generate, Undo, Redo, a drawing switch, a Load) is discarded:
 // the read resolves to `null` and its caller shows nothing of it.
-/** @import { FeatureSequenceInput, FeatureSequencesOf, FeatureSequencesPayload, MatchSpanInput, MatchSpanSequence, MatchSequencesPayload, EmbedSequencesPayload, EmbedCatalogPart, EmbedItemPart, EmbedPartInput } from './diagram-worker-protocol.js' */
+/** @import { FeatureSequenceInput, FeatureSequencesOf, FeatureSequencesPayload, MatchSpanInput, MatchSpanSequence, MatchSequencesPayload, EmbedSequencesPayload, EmbedPartText, EmbedItemPart, EmbedPartInput } from './diagram-worker-protocol.js' */
 /** @import { CommittedCanonicalSession } from './session-request.js' */
 /** @import { FeatureLike } from './feature-utils.js' */
 /** @import { FeatureCatalogItem } from './feature-catalog.js' */
@@ -69,26 +69,27 @@ export const readMatchSequencesReply = (result, spans) => {
   return read;
 };
 
+/** @param {unknown} value @param {number} below @returns {value is number} */
+const isIndexBelow = (value, below) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+  && value < below;
+
 /**
- * The `readEmbedSequences` reply, checked against the part sent: its rows in the order sent (same identities), and
- * sources placed among the item's `sourceCount` sources.
+ * The `readEmbedSequences` reply, checked against the part sent: as many rows as sent, as text, and sources as text
+ * placed among the item's `sourceCount` sources.
  * @param {unknown} result
  * @param {readonly Readonly<Record<string, unknown>>[]} rows
- * @returns {EmbedCatalogPart}
+ * @returns {EmbedPartText}
  */
 export const readEmbedSequencesReply = (result, rows) => {
   const read = isRecord(result) ? result : null;
   const count = read?.sourceCount;
-  if (!read || typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0
-    || !Array.isArray(read.biologicalFeatures) || read.biologicalFeatures.length !== rows.length
-    || !read.biologicalFeatures.every((row, index) => isRecord(row) && row.recordKey === rows[index].recordKey
-      && row.biologicalFeatureId === rows[index].biologicalFeatureId)
+  if (!read || !isIndexBelow(count, Number.MAX_SAFE_INTEGER) || read.rowCount !== rows.length
+    || typeof read.biologicalFeatures !== 'string' || (read.biologicalFeatures === '') !== (rows.length === 0)
     || !Array.isArray(read.sequenceSources) || !read.sequenceSources.every((entry) => isRecord(entry)
-      && typeof entry.index === 'number' && Number.isSafeInteger(entry.index) && entry.index >= 0
-      && entry.index < count && isRecord(entry.source))) {
+      && isIndexBelow(entry.index, count) && typeof entry.source === 'string' && entry.source !== '')) {
     throw diagnosticError('RESULT_INVALID', {}, failure('readEmbedSequences'));
   }
-  return /** @type {EmbedCatalogPart} */ (read);
+  return /** @type {EmbedPartText} */ (read);
 };
 
 /**
@@ -416,8 +417,8 @@ export const createCatalogSequences = ({
   const readEmbedJson = async (item) => {
     const { owner, request } = committedOf('readEmbedSequences');
     const invalid = () => diagnosticError('RESULT_INVALID', {}, failure('readEmbedSequences'));
-    // One part at a time, each written as text as it arrives: no reply, and no copy in the page, holds the whole
-    // item with its sequences.
+    // One part at a time, each kept as the text Python wrote (no parse in the Worker or the page): no reply, and no
+    // copy in the page, holds the whole item with its sequences as objects.
     /** @type {string[]} */
     const rows = [];
     /** @type {(string | undefined)[] | null} */
@@ -428,10 +429,10 @@ export const createCatalogSequences = ({
       if (getCommittedSession() !== owner.committed) return null;
       sources ??= new Array(reply.sourceCount).fill(undefined);
       if (sources.length !== reply.sourceCount) throw invalid();
-      if (reply.biologicalFeatures.length) rows.push(reply.biologicalFeatures.map((row) => JSON.stringify(row)).join(','));
+      if (reply.rowCount) rows.push(reply.biologicalFeatures);
       for (const { index, source } of reply.sequenceSources) {
         if (sources[index] !== undefined) throw invalid();
-        sources[index] = JSON.stringify(source);
+        sources[index] = source;
       }
     }
     if (!sources || sources.some((source) => source === undefined)) throw invalid();

@@ -1705,6 +1705,7 @@ def enrich_svg(
         _remove_class_token(element, "gbdraw-interactive-feature--active-match")
     from gbdraw.web_support.feature_catalog import (
         build_feature_catalog_item,
+        embed_json_text,
         interactive_embed_catalog,
         select_feature_catalog_item,
     )
@@ -1829,11 +1830,7 @@ def enrich_svg(
             _add_class_token(element, "gbdraw-interactive-pairwise-match")
 
     try:
-        metadata_payload = json.dumps(
-            catalog,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        metadata_payload = embed_json_text(catalog)
     except (TypeError, ValueError) as exc:
         raise GbdrawError("Interactive SVG metadata payload could not be serialized.") from exc
 

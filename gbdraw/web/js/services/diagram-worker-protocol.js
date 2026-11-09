@@ -369,8 +369,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
 
 /**
  * The payload of `readEmbedSequences`: the committed request, its resources, and one part of the stored catalog
- * item of the Result to export; the reply is that part in the export encoding (`EmbedCatalogPart`,
- * `embed_catalog_part`).
+ * item of the Result to export; the reply is that part in the export encoding as its text (`EmbedPartText`,
+ * `read_embed_sequences_json`).
  * @typedef {object} EmbedSequencesPayload
  * @property {CanonicalRenderRequest} canonicalRequest
  * @property {CommittedCanonicalSession['resources']} resources
@@ -379,11 +379,13 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
- * The `readEmbedSequences` reply (`EmbedCatalogPart`): the part's rows in the order sent, with their sequences, and
- * the whole-record sources the part owns, each with its place among the item's `sourceCount` sources.
- * @typedef {object} EmbedCatalogPart
- * @property {readonly Readonly<Record<string, unknown>>[]} biologicalFeatures
- * @property {readonly { index: number, source: Readonly<Record<string, unknown>> }[]} sequenceSources
+ * The `readEmbedSequences` reply (`EmbedPartText`): the part's rows in the order sent, with their sequences, and the
+ * whole-record sources the part owns, each with its place among the item's `sourceCount` sources, all as the text the
+ * file embeds (`embed_json_text`), so neither the Worker nor the page parses them.
+ * @typedef {object} EmbedPartText
+ * @property {string} biologicalFeatures The rows' text joined by commas ('' for none).
+ * @property {number} rowCount
+ * @property {readonly { index: number, source: string }[]} sequenceSources
  * @property {number} sourceCount
  */
 
