@@ -168,6 +168,7 @@ from ...render.drawers.circular.annotations import (
     CircularAnnotationLabels,
     CircularLabelObstacles,
     CircularLabelRoom,
+    CircularObstacleLabel,
     LeaderSegment,
     circular_annotation_label_extent,
     circular_annotation_label_room,
@@ -1357,11 +1358,15 @@ def _feature_label_obstacles(
         if (shape := circular_label_shape(label, total_length)).parts
     ]
     return CircularLabelObstacles(
-        shapes=tuple((*shape.parts, *drawn) for _label, shape, drawn in shapes),
-        segments=tuple(
-            LeaderSegment(start, end, 0.5 * label_leader_width_px(label))
-            for label, shape, _drawn in shapes
-            for start, end in zip(shape.leader, shape.leader[1:])
+        labels=tuple(
+            CircularObstacleLabel(
+                (*shape.parts, *drawn),
+                tuple(
+                    LeaderSegment(start, end, 0.5 * label_leader_width_px(label))
+                    for start, end in zip(shape.leader, shape.leader[1:])
+                ),
+            )
+            for label, shape, drawn in shapes
         ),
         clearance=float(canvas_config.profile.config.labels.spacing.circular),
     )

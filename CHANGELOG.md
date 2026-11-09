@@ -433,8 +433,9 @@ write-up of a release.
 - Fixed: a Circular region label drawn over another label or a leader line,
   for example labels that explicit lanes with `overflow=compress` keep in one
   lane inside the axis, now warns as in Linear (`N region label overlaps`; the
-  Web app shows "Region labels overlap other labels or lines (N)."). The
-  figure is drawn as before.
+  Web app shows "Region labels overlap other labels or lines (N)."). A
+  feature label counts once, whether the region label meets its letters, its
+  leader line, or both. The figure is drawn as before.
 - Fixed: a Circular region label drawn along its circle was placed by the
   height of its letters along the ray through its middle, but each letter
   stands upright on the circle, so its corners reach farther from the centre.

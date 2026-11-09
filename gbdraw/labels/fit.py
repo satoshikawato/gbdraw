@@ -154,8 +154,9 @@ class LabelShape:
 @dataclass(frozen=True)
 class LabelFit:
     """Overlapping label pairs, crossing leader pairs, labels over the definition text,
-    Linear region labels over other labels or lines (``region_overlaps``: pairs of a
-    region label and what it covers, LP-D68), Circular region labels cut to fit
+    region labels over other labels or lines (``region_overlaps``: pairs of a
+    region label and what it covers, a feature label with its leader line
+    counting once, LP-D68, OV-3015, OV-3016), Circular region labels cut to fit
     their circle (``region_cuts``, LP-D87), Circular region labels left out because
     that cut would keep no letter (``region_cuts_left_out``, RGN-CUT-EMPTY-OMIT),
     Circular region labels whose letters

@@ -1478,7 +1478,7 @@ def test_circular_annotation_labels_keep_off_what_the_feature_label_style_draws(
     expected = ({"box"} if protection == "box" else set()) | ({"underline"} if line == "under" else set())
     assert {kind for kind, _feature, _polygon in drawn} == expected
     (obstacles,) = seen
-    parts = [part for shape in obstacles.shapes for part in shape]
+    parts = [part for label in obstacles.labels for part in label.parts]
     for kind, feature, polygon in drawn:
         assert any(
             len(part) == 4 and all(math.dist(a, b) < 1e-6 for a, b in zip(sorted(part), sorted(polygon))) for part in parts
@@ -1489,7 +1489,7 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
     from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
     from gbdraw.layout.text_geometry import convex_polygons_intersect
     from gbdraw.layout.text_geometry import grown_convex_polygon
-    from gbdraw.render.drawers.circular.annotations import CircularLabelObstacles, circular_annotation_labels
+    from gbdraw.render.drawers.circular.annotations import CircularLabelObstacles, CircularObstacleLabel, circular_annotation_labels
 
     record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
     region = RegionAnnotation("r0", CoordinateSpan(None, 2000, 3000), label="Region", mark="bracket")
@@ -1510,7 +1510,9 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
             side="outside",
             font_family="Liberation Sans",
             params=params,
-            obstacles=CircularLabelObstacles(shapes=tuple((polygon,) for polygon in polygons), clearance=3.0) if polygons else None,
+            obstacles=CircularLabelObstacles(labels=tuple(CircularObstacleLabel((polygon,)) for polygon in polygons), clearance=3.0)
+            if polygons
+            else None,
         ).drawn
 
     (default,) = labels()
@@ -1528,6 +1530,55 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
     # The nearest such place, sampled every pixel of arc: the letters keep the clearance and less than a pixel more.
     assert not any(convex_polygons_intersect(grown_convex_polygon(part, 3.0), on_midpoint) for part in moved.parts)
     assert any(convex_polygons_intersect(grown_convex_polygon(part, 4.0), on_midpoint) for part in moved.parts)
+
+
+
+def test_circular_region_label_over_a_feature_label_and_its_leader_counts_one_overlap() -> None:
+    """OV-3016: a feature label and its leader line are one obstacle, as in Linear (one owner per label): a region
+    label whose letters meet both counts one overlap, and two labels met count two."""
+
+    from gbdraw.annotations import LabelExtent, LabelSizing, annotation_track_params_from_mapping, layout_annotation_track, resolve_annotations
+    from gbdraw.render.drawers.circular.annotations import (
+        CircularLabelObstacles,
+        CircularObstacleLabel,
+        LeaderSegment,
+        circular_annotation_labels,
+    )
+
+    record = SeqRecord(Seq("ACGT" * 2500), id="r1", name="r1")
+    region = RegionAnnotation("r0", CoordinateSpan(None, 2000, 3000), label="Region", mark="bracket")
+    bundle = resolve_annotations((AnnotationSet("s", (region,)),), [record], mode="circular")
+    params = annotation_track_params_from_mapping({"set_id": "s"})
+    track = layout_annotation_track(
+        "s", "s", bundle.annotations, record_lengths={0: 10000}, params=params,
+        labels=LabelSizing(reach=_half_stroke_reach, font_size=10.0, extent=lambda *_: LabelExtent(0.0, 0.0, 10.0, drawn=True)), join_origin=True,
+    )
+    # A label and a leader over the whole circle (a line every 2 px): no place along the region is clear of either.
+    everywhere = ((-1000.0, -1000.0), (1000.0, -1000.0), (1000.0, 1000.0), (-1000.0, 1000.0))
+    leader = tuple(LeaderSegment((-1000.0, float(y)), (1000.0, float(y)), 0.5) for y in range(-400, 401, 2))
+
+    def overlaps(*labels: CircularObstacleLabel) -> int:
+        return circular_annotation_labels(
+            track, record_index=0, record_length=10000, inner_radius_px=300.0, outer_radius_px=320.0,
+            side="outside", font_family="Liberation Sans", params=params,
+            obstacles=CircularLabelObstacles(labels=labels, clearance=3.0),
+        ).overlaps
+
+    assert overlaps(CircularObstacleLabel((everywhere,), leader)) == 1
+    assert overlaps(CircularObstacleLabel((everywhere,)), CircularObstacleLabel((), leader)) == 2
+
+    # The placer's cost still weighs a place over a label's letters and its leader above one over its leader alone,
+    # so a region label keeps off feature label letters where it can (figures unchanged).
+    from types import SimpleNamespace
+
+    from gbdraw.render.drawers.circular.annotations import _ObstacleIndex
+
+    feature = CircularObstacleLabel((((5.0, 5.0), (20.0, 5.0), (20.0, 8.0), (5.0, 8.0)),), (LeaderSegment((12.0, 8.0), (12.0, 30.0), 0.5),))
+    index = _ObstacleIndex(CircularLabelObstacles(labels=(feature,), clearance=0.0))
+    over_both = SimpleNamespace(parts=(((8.0, 0.0), (15.0, 0.0), (15.0, 20.0), (8.0, 20.0)),))
+    over_leader = SimpleNamespace(parts=(((8.0, 15.0), (15.0, 15.0), (15.0, 20.0), (8.0, 20.0)),))
+    assert (index.conflicts(over_both), index.overlaps(over_both)) == (2, 1)
+    assert (index.conflicts(over_leader), index.overlaps(over_leader)) == (1, 1)
 
 
 def _draw_span_regions(

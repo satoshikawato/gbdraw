@@ -129,13 +129,18 @@ def test_each_leader_keeps_its_own_width_clear_in_a_figure_with_two_label_sizes(
     assert leaders == {0: pytest.approx(1.68), 1: pytest.approx(1.0)}
 
     # A label 3.6 px from a 1.68 px leader and from a 1 px leader, keeping 3 px: it meets only the wide one.
-    from gbdraw.render.drawers.circular.annotations import CircularLabelObstacles, LeaderSegment, _ObstacleIndex
+    from gbdraw.render.drawers.circular.annotations import (
+        CircularLabelObstacles,
+        CircularObstacleLabel,
+        LeaderSegment,
+        _ObstacleIndex,
+    )
 
     square = ((0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0))
     obstacles = CircularLabelObstacles(
-        segments=(
-            LeaderSegment((13.6, -5.0), (13.6, 15.0), 0.5 * leader_width_px(24.0)),
-            LeaderSegment((-3.6, -5.0), (-3.6, 15.0), 0.5 * leader_width_px(5.0)),
+        labels=(
+            CircularObstacleLabel((), (LeaderSegment((13.6, -5.0), (13.6, 15.0), 0.5 * leader_width_px(24.0)),)),
+            CircularObstacleLabel((), (LeaderSegment((-3.6, -5.0), (-3.6, 15.0), 0.5 * leader_width_px(5.0)),)),
         ),
         clearance=3.0,
     )

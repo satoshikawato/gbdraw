@@ -340,88 +340,127 @@ class LeaderSegment(NamedTuple):
     half_width: float
 
 
+class CircularObstacleLabel(NamedTuple):
+    """One label that annotation labels keep clear of: its convex ``parts`` and its ``leader`` line's segments."""
+
+    parts: tuple[Polygon, ...]
+    leader: tuple[LeaderSegment, ...] = ()
+
+
 @dataclass(frozen=True)
 class CircularLabelObstacles:
     """What Circular annotation labels keep clear of, around the circle centre (OV-1173).
 
-    ``shapes`` are labels, each as its convex parts (the feature labels as
-    the fit count sees them, and annotation labels placed before); a label
-    met counts once, whichever of its parts the letters meet. ``segments`` are
-    leader lines. Letters keep ``clearance`` from a shape, and ``clearance``
-    plus the segment's half width from a segment.
+    ``labels`` are the feature labels as the fit count sees them, each with
+    its leader, and annotation labels placed before. A label met counts once,
+    whichever of its parts or leader segments the letters meet, as in Linear
+    (OV-3016). Letters keep ``clearance`` from a part, and ``clearance`` plus
+    the segment's half width from a leader segment.
     """
 
-    shapes: tuple[tuple[Polygon, ...], ...] = ()
-    segments: tuple[LeaderSegment, ...] = ()
+    labels: tuple[CircularObstacleLabel, ...] = ()
     clearance: float = 0.0
 
     def with_labels(self, labels: Sequence[CircularAnnotationLabel]) -> CircularLabelObstacles:
-        return replace(self, shapes=(*self.shapes, *(label.parts for label in labels)))
+        return replace(self, labels=(*self.labels, *(CircularObstacleLabel(label.parts) for label in labels)))
 
 
 def _box(points: Sequence[Point]) -> Aabb:
     return Aabb(min(x for x, _ in points), min(y for _, y in points), max(x for x, _ in points), max(y for _, y in points))
 
 
+class _IndexedLabel(NamedTuple):
+    """An obstacle label with its boxes: the box around its parts (``None`` without parts), each part with its box,
+    and each leader segment with its box and half width."""
+
+    box: Aabb | None
+    parts: list[tuple[Aabb, Polygon]]
+    segments: list[tuple[Aabb, tuple[Point, Point], float]]
+
+
 class _ObstacleIndex:
-    """Counts what a label's letters meet: the polygons within ``clearance``, the segments within theirs; an obstacle
-    met by several parts of a curved label counts once. ``add`` takes a label placed since, so a track's labels are
-    boxed once each, not once per later label (OV-2664). ``conflicts(label, clearance=0.0)`` counts what the letters
-    overlap, with no clearance kept (OV-3015)."""
+    """What a label's letters meet: an obstacle label's parts within ``clearance``, or one of its leader segments
+    within its own; parts met by several parts of a curved label count once. ``conflicts`` is the placer's cost:
+    the labels whose parts the letters meet plus the leader segments they meet, so a place over a label's letters
+    and its leader costs more than one over a leader alone. ``overlaps`` counts the labels the letters overlap, with
+    no clearance kept, each once, whether its parts, its leader or both are met (OV-3015, OV-3016; one per label,
+    as in Linear). ``add`` takes a label placed since, so a track's labels are boxed once each, not once per later
+    label (OV-2664)."""
 
     def __init__(self, obstacles: CircularLabelObstacles) -> None:
         self._obstacles = obstacles
-        self._shapes: list[tuple[Aabb, list[tuple[Aabb, Polygon]]]] = []
-        for shape in obstacles.shapes:
-            self._add_shape(shape)
-        self._segments = [
-            (_box((segment.start, segment.end)), (segment.start, segment.end), segment.half_width)
-            for segment in obstacles.segments
-        ]
+        self._labels: list[_IndexedLabel] = []
+        for label in obstacles.labels:
+            self._add(label)
+        self._half_widths = {segment.half_width for label in obstacles.labels for segment in label.leader}
 
-    def _add_shape(self, shape: Sequence[Polygon]) -> None:
-        self._shapes.append((_box([point for part in shape for point in part]), [(_box(part), part) for part in shape]))
+    def _add(self, label: CircularObstacleLabel) -> None:
+        points = [point for part in label.parts for point in part]
+        self._labels.append(
+            _IndexedLabel(
+                _box(points) if points else None,
+                [(_box(part), part) for part in label.parts],
+                [
+                    (_box((segment.start, segment.end)), (segment.start, segment.end), segment.half_width)
+                    for segment in label.leader
+                ],
+            )
+        )
 
     def add(self, label: CircularAnnotationLabel) -> None:
         """Count ``label`` as an obstacle from now on, as ``CircularLabelObstacles.with_labels`` would."""
 
-        self._add_shape(label.parts)
+        self._add(CircularObstacleLabel(label.parts))
 
-    def conflicts(self, label: CircularAnnotationLabel, clearance: float | None = None) -> int:
+    def conflicts(self, label: CircularAnnotationLabel) -> int:
+        return sum(int(parts) + segments for parts, segments in self._hits(label, self._obstacles.clearance))
+
+    def overlaps(self, label: CircularAnnotationLabel) -> int:
+        return sum(1 for parts, segments in self._hits(label, 0.0) if parts or segments)
+
+    def _hits(self, label: CircularAnnotationLabel, kept: float) -> list[tuple[bool, int]]:
+        """For each obstacle label, whether the letters grown by ``kept`` meet its parts, and how many of its leader
+        segments they meet within ``kept`` plus the segment's half width."""
+
         # An obstacle whose box misses the box around all the grown letters misses each part's box: it is skipped
         # before the parts are paired with it.
-        kept = self._obstacles.clearance if clearance is None else clearance
         near = [(_box(part), part) for part in (grown_convex_polygon(part, kept) for part in label.parts)]
         reach = union_aabbs(box for box, _ in near)
         if reach is None:
-            return 0
-        count = sum(
-            1
-            for box, parts in self._shapes
-            if reach.intersects(box)
-            and any(
-                part_box.intersects(box) and obstacle_box.intersects(part_box) and convex_polygons_intersect(part, obstacle)
-                for part_box, part in near
-                for obstacle_box, obstacle in parts
-            )
-        )
+            return []
         # The letters grown by each distinct segment clearance (one per leader width), made once per call.
         line_near = {
             distance: [(_box(part), part) for part in (grown_convex_polygon(part, distance) for part in label.parts)]
-            for distance in {kept + item[2] for item in self._segments}
+            for distance in {kept + half_width for half_width in self._half_widths}
         }
         line_reach = {distance: union_aabbs(box for box, _ in parts) for distance, parts in line_near.items()}
-        return count + sum(
-            1
-            for box, segment, half_width in self._segments
-            if (reach_at := line_reach[kept + half_width]) is not None
-            and reach_at.intersects(box)
-            and any(
-                part_box.intersects(box) and segment_intersects_polygon(segment, part, touching=False)
-                for part_box, part in line_near[kept + half_width]
-            )
-        )
 
+        def meets_parts(obstacle: _IndexedLabel) -> bool:
+            return (
+                obstacle.box is not None
+                and reach.intersects(obstacle.box)
+                and any(
+                    part_box.intersects(obstacle.box)
+                    and obstacle_box.intersects(part_box)
+                    and convex_polygons_intersect(part, polygon)
+                    for part_box, part in near
+                    for obstacle_box, polygon in obstacle.parts
+                )
+            )
+
+        def segments_met(obstacle: _IndexedLabel) -> int:
+            return sum(
+                1
+                for box, segment, half_width in obstacle.segments
+                if (reach_at := line_reach[kept + half_width]) is not None
+                and reach_at.intersects(box)
+                and any(
+                    part_box.intersects(box) and segment_intersects_polygon(segment, part, touching=False)
+                    for part_box, part in line_near[kept + half_width]
+                )
+            )
+
+        return [(meets_parts(obstacle), segments_met(obstacle)) for obstacle in self._labels]
 
 def _reach(label: CircularAnnotationLabel, inner_radius_px: float, outer_radius_px: float, outward: bool) -> float:
     """How far a label's letters, ``label_offset`` beyond them included, reach past its slot's band on its side."""
@@ -575,7 +614,7 @@ def circular_annotation_labels(
             join_origin=track.join_origin,
         )
         # What the placed letters still overlap, without the clearance the places keep (OV-3015).
-        overlaps += index.conflicts(label, clearance=0.0)
+        overlaps += index.overlaps(label)
         placed.append(label)
         index.add(label)
     return CircularAnnotationLabels(tuple(placed), without_letters, overlaps)
@@ -1268,6 +1307,7 @@ __all__ = [
     "CircularAnnotationLabels",
     "CircularLabelArc",
     "CircularLabelObstacles",
+    "CircularObstacleLabel",
     "CircularLabelRoom",
     "LeaderSegment",
     "circular_annotation_label_extent",
