@@ -503,6 +503,40 @@ await test('a request without an Axis index loads each slot on the side Python d
     { axis: 1, slots: [['c', 'outside'], ['features', 'overlay'], ['s', 'inside']] });
 });
 
+// OV-3155: the Linear stack of a CLI Session without an Axis index loads the same way: each row on the side the CLI
+// drew it (a features row without a side below, as Python reads it), the rows above the Axis first.
+await test('a Linear CLI stack without an Axis index loads each slot on the side the CLI drew it (OV-3155)', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-axis-'));
+  try {
+    const output = path.join(directory, 'stack');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', lambda, '--linear_track_slot', 'features:features',
+      '--linear_track_slot', 'c:content@side=above', '--linear_track_slot', 's:skew', '-f', 'svg', '-o', output,
+      '--session_output', `${output}.gbdraw-session.json.gz`], {
+      cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+    });
+    const bytes = gunzipSync(await readFile(`${output}.gbdraw-session.json.gz`));
+    const view = savedDrawingView(JSON.parse(bytes), JSON.parse(bytes).ui.activeDrawingId);
+    assert.equal(view.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, null);
+    const result = await load(bytes);
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    const drawing = modeDrawing(state, 'linear');
+    assert.deepEqual({
+      axis: drawing.adv.linear_track_slots_axis_index, slots: drawing.adv.linear_track_slots.map(({ id, side }) => [id, side])
+    }, { axis: 1, slots: [['c', 'above'], ['features', 'below'], ['s', 'below']] });
+    const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
+    const comparisonPlanSnapshot = resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
+      losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
+    });
+    const { tracks } = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot })
+      .renderRequest.diagramOptions;
+    assert.deepEqual({ axis: tracks.linearTrackAxisIndex, slots: tracks.linearTrackSlots.map(({ id, side }) => [id, side]) },
+      { axis: 1, slots: [['c', 'above'], ['features', 'below'], ['s', 'below']] });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 // Before the Font setting, a Web Session kept the diagram font as a preserved
 // override (PD-OI-009) in its draft and its request. Load moves it into the
 // setting, so no preserved override names a path the GUI manages. The

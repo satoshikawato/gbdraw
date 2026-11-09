@@ -391,6 +391,24 @@ const missingAnnotationTrackSlots = (rows, sets, mode, slotFields = {}) => {
 };
 
 /**
+ * The Web stack of a request that names no Axis index (the CLI's and the Python API's). Python draws each row of
+ * such a request on its own side, in the stack's order on each side; the Web stack holds a side as a place before or
+ * after the Axis. So the rows on the outer side (outside, above) come first, then the row on the Axis, then the
+ * others, each in its order, and the Axis index is the place of the row on the Axis (OV-3079, OV-3155).
+ * @template {{ readonly renderer?: unknown }} T
+ * @param {readonly T[]} rows
+ * @param {(row: T) => string} placementOf The mode's reading of the side a row draws on.
+ * @param {'outside' | 'above'} outerSide
+ * @returns {{ slots: T[], axisIndex: number }}
+ */
+export const stackTrackSlotsBySide = (rows, placementOf, outerSide) => {
+  const outer = rows.filter((row) => placementOf(row) === outerSide);
+  const onAxis = rows.filter((row) => row.renderer !== 'annotations' && placementOf(row) === 'overlay').slice(0, 1);
+  const rest = rows.filter((row) => !outer.includes(row) && !onAxis.includes(row));
+  return { slots: [...outer, ...onAxis, ...rest], axisIndex: outer.length };
+};
+
+/**
  * Puts the automatic rows of the sets no row of `rows` names at the top of
  * `rows`, where Python places a set without a stack, and returns the Axis index
  * that keeps the Axis on its row.

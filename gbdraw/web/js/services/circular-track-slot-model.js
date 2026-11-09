@@ -512,23 +512,6 @@ export const inferLegacyAxisIndexFromFeature = (slots, preset = 'tuckin') => {
 };
 
 /**
- * The Web stack of a Circular request that names no Axis index (the CLI's and the Python API's). Python draws each
- * row of such a request on its own side, in the stack's order on each side; the Web stack holds a side as a place
- * before or after the Axis. So the rows outside the Axis come first, then the row on the Axis, then the others, each
- * in its order, and the Axis index is the place of the row on the Axis (OV-3079).
- * @template {SlotPlacementSource} T
- * @param {readonly T[]} slots
- * @param {unknown} [preset]
- * @returns {{ slots: T[], axisIndex: number }}
- */
-export const stackCircularSlotsBySide = (slots, preset = 'tuckin') => {
-  const outside = slots.filter((slot) => effectiveSlotPlacement(slot, preset) === 'outside');
-  const onAxis = slots.filter((slot) => slot.renderer !== 'annotations' && effectiveSlotPlacement(slot, preset) === 'overlay').slice(0, 1);
-  const rest = slots.filter((slot) => !outside.includes(slot) && !onAxis.includes(slot));
-  return { slots: [...outside, ...onAxis, ...rest], axisIndex: outside.length };
-};
-
-/**
  * @param {unknown} value
  * @param {unknown} slotCount
  * @param {FieldLeaf[] | null} [losses] Where a value it replaces is recorded (OV-758; `at` '').

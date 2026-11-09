@@ -465,17 +465,22 @@ test('Session CLI feature density tracks survive Web Generate', async ({ browser
   }
 });
 
-// OV-3079: a CLI stack that names no Axis index draws each slot on its own side. The Session it saves, loaded and
-// generated in the Web, draws the CLI's figure: the region set stays outside the Axis.
-test('Session CLI stack without an Axis index draws its region set where the CLI drew it', async ({ browser }, testInfo) => {
+// OV-3079, OV-3155: a CLI stack that names no Axis index draws each slot on its own side (a Linear features slot
+// without a side below). The Session it saves, loaded and generated in the Web, draws the CLI's figure: the region set
+// stays outside (above) the Axis.
+for (const [mode, side, stack] of [
+  ['circular', 'outside', [['regions', 'outside'], ['features', 'inside']]],
+  ['linear', 'above', [['regions', 'above'], ['features', 'below']]]
+]) test(`Session CLI ${mode} stack without an Axis index draws its region set where the CLI drew it`, async ({ browser }, testInfo) => {
   test.setTimeout(900_000);
   await fs.writeFile(testInfo.outputPath('regions.tsv'), [
     'set_id\tid\tmark\tstart\tend\tlabel', 'regions\thead\tline\t1\t9500\tHead genes', 'regions\ttail\tline\t9600\t19000\tTail genes'
   ].join('\n') + '\n');
-  const file = await cli('circular', ['--gbk', lambda, '--annotation_table', 'regions.tsv', '--circular_track_slot', 'features:features',
-    '--circular_track_slot', 'regions:annotations@set_id=regions,side=outside', '-f', 'svg'], testInfo, 'no-axis');
+  const file = await cli(mode, ['--gbk', lambda, '--annotation_table', 'regions.tsv', `--${mode}_track_slot`, 'features:features',
+    `--${mode}_track_slot`, `regions:annotations@set_id=regions,side=${side}`, '-f', 'svg'], testInfo, 'no-axis');
   const stored = shownSavedDrawing(await readSession(file));
-  expect(stored.renderRequest.diagramOptions.tracks.circularTrackAxisIndex).toBe(null);
+  const [slotsKey, axisKey] = [`${mode}TrackSlots`, `${mode}TrackAxisIndex`];
+  expect(stored.renderRequest.diagramOptions.tracks[axisKey]).toBe(null);
   const run = await load(browser, file, { width: 1600, height: 1000 });
   try {
     // The figure's size and each slot group's place and paths, by slot id (4 decimals, as `svgSemantics`).
@@ -490,7 +495,7 @@ test('Session CLI stack without an Axis index draws its region set where the CLI
         ]).sort((a, b) => a[0].localeCompare(b[0]))
       };
     }, svg);
-    // The Web stack lists the rows outside the Axis first, so its slot groups (and their texts) come in that order.
+    // The Web stack lists the rows outside (above) the Axis first, so its slot groups and their texts come in that order.
     const semantics = async (svg) => {
       const read = await run.page.evaluate(svgSemantics, svg);
       return { ...read, text: [...read.text].sort() };
@@ -502,9 +507,9 @@ test('Session CLI stack without an Axis index draws its region set where the CLI
     const after = await snapshot(run.page);
     expect(await slotGroups(after.selected)).toEqual(drawn);
     expect(await semantics(after.selected)).toEqual(await semantics(before.selected));
-    const { circularTrackSlots, circularTrackAxisIndex } = after.request.diagramOptions.tracks;
-    expect({ axis: circularTrackAxisIndex, slots: circularTrackSlots.map(({ id, side }) => [id, side]) })
-      .toEqual({ axis: 1, slots: [['regions', 'outside'], ['features', 'inside']] });
+    const tracks = after.request.diagramOptions.tracks;
+    expect({ axis: tracks[axisKey], slots: tracks[slotsKey].map(({ id, side: drawnSide }) => [id, drawnSide]) })
+      .toEqual({ axis: 1, slots: stack });
     expect(run.errors).toEqual([]);
   } finally {
     await run.context.close();

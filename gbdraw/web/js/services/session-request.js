@@ -60,7 +60,7 @@ import {
   hasCircularGeometryShortcuts,
   inferLegacyAxisIndexFromFeature,
   parseCircularTrackSlotSpecs,
-  stackCircularSlotsBySide
+  effectiveSlotPlacement
 } from './circular-track-slot-model.js';
 import { countGenBankRecords } from './genbank-header.js';
 import { LEGEND_EDIT_CONFIG_PATHS, legendEditConfigLeaves, pythonLegendRowKeys } from './legend-draft-rows.js';
@@ -72,6 +72,7 @@ import {
   linearTrackSlotHeightPayload,
   LINEAR_TRACK_RENDERERS,
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,
+  effectiveLinearSlotPlacement,
   migrateLinearTrackSlotsToCurrentSchema,
   parseLinearTrackSlotSpecs,
   placeLinearStackForGenerate
@@ -123,6 +124,7 @@ import {
   automaticAnnotationTrackSlots,
   emittedCustomTrackAxisIndex,
   overlayReferenceIssues,
+  stackTrackSlotsBySide,
   trackSlotRowEnabled,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
@@ -7078,10 +7080,6 @@ export const projectCanonicalSessionRequest = ({
           ))
         : [])
     : [];
-  // A request without an Axis index draws each slot on its own side; the Web stack holds the sides as places (OV-3079).
-  const circularStack = Array.isArray(tracks.circularTrackSlots) && (tracks.circularTrackAxisIndex ?? null) === null
-    ? stackCircularSlotsBySide(projectedCircularTrackSlots, overrides.track_type || 'tuckin')
-    : { slots: projectedCircularTrackSlots, axisIndex: tracks.circularTrackAxisIndex ?? null };
   const projectedLinearTrackSlots = renderRequest.mode === 'linear'
     // An array of rows migrates to an array of rows.
     ? /** @type {LinearTrackSlot[]} */ (migrateLinearTrackSlotsToCurrentSchema(
@@ -7089,6 +7087,15 @@ export const projectCanonicalSessionRequest = ({
         linearTrackSlotSchemaVersion
       ))
     : [];
+  // A request without an Axis index draws each slot on its own side; the Web stack holds the sides as places
+  // (`stackTrackSlotsBySide`; OV-3079, OV-3155).
+  const circularPreset = overrides.track_type || 'tuckin';
+  const circularStack = Array.isArray(tracks.circularTrackSlots) && (tracks.circularTrackAxisIndex ?? null) === null
+    ? stackTrackSlotsBySide(projectedCircularTrackSlots, (slot) => effectiveSlotPlacement(slot, circularPreset), 'outside')
+    : { slots: projectedCircularTrackSlots, axisIndex: tracks.circularTrackAxisIndex ?? null };
+  const linearStack = Array.isArray(tracks.linearTrackSlots) && (tracks.linearTrackAxisIndex ?? null) === null
+    ? stackTrackSlotsBySide(projectedLinearTrackSlots, effectiveLinearSlotPlacement, 'above')
+    : { slots: projectedLinearTrackSlots, axisIndex: tracks.linearTrackAxisIndex ?? null };
   const depthMetadataFields = [
     options.depthTrackLabels,
     options.depthTrackColors,
@@ -7336,10 +7343,8 @@ export const projectCanonicalSessionRequest = ({
     circular_track_slots: circularStack.slots,
     linear_track_slots_enabled: renderRequest.mode === 'linear' && Array.isArray(tracks.linearTrackSlots),
     linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-    linear_track_slots_axis_index: renderRequest.mode === 'linear'
-      ? (tracks.linearTrackAxisIndex ?? null)
-      : null,
-    linear_track_slots: projectedLinearTrackSlots,
+    linear_track_slots_axis_index: renderRequest.mode === 'linear' ? linearStack.axisIndex : null,
+    linear_track_slots: linearStack.slots,
     multi_record_positions: (renderRequest.layout?.multiRecordPositions || []).map((/** @type {unknown} */ token) => {
       const split = String(token).lastIndexOf('@');
       return { selector: positionRecordIdentity(sourceRecords, String(token).slice(0, split)), row: Number(String(token).slice(split + 1)) };
