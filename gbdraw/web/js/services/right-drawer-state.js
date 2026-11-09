@@ -1,5 +1,11 @@
 // @ts-check
 import { uniqueOrthogroupEntries } from './feature-identity.js';
+/** @import { WebState } from '../state.js' */
+
+/** @typedef {Pick<WebState, 'showRightDrawer' | 'rightDrawerTab'>} RightDrawerMembers Whether the drawer is open, and its tab. */
+/** @typedef {Pick<WebState, 'orthogroups' | 'similarityAlignmentPlan'>} OrthogroupTabContent What the Orthogroups tab shows. */
+/** @typedef {RightDrawerMembers & OrthogroupTabContent} RightDrawerState */
+/** @typedef {'legend' | 'features' | 'orthogroups'} RightDrawerTab */
 
 const DEFAULT_RIGHT_DRAWER_TAB = 'features';
 export const ALWAYS_AVAILABLE_TABS = new Set(['legend', DEFAULT_RIGHT_DRAWER_TAB]);
@@ -14,18 +20,18 @@ const normalizedOrthogroupCount = (value) => {
 };
 
 /**
- * @param {Record<string, any>} state Shape owned by `state.js`.
+ * @param {OrthogroupTabContent} state
  * @returns {number}
  */
 export const orthogroupTabContentCountFromState = (state) => (
-  uniqueOrthogroupEntries(state.orthogroups?.value).length
-  + Number(Boolean(state.similarityAlignmentPlan?.value))
+  uniqueOrthogroupEntries(state.orthogroups.value).length
+  + Number(Boolean(state.similarityAlignmentPlan.value))
 );
 
 /**
  * @param {string} tab
  * @param {number} [orthogroupCount]
- * @returns {boolean}
+ * @returns {tab is RightDrawerTab}
  */
 export const isRightDrawerTabAvailable = (tab, orthogroupCount = 0) => {
   if (ALWAYS_AVAILABLE_TABS.has(tab)) return true;
@@ -35,7 +41,7 @@ export const isRightDrawerTabAvailable = (tab, orthogroupCount = 0) => {
 /**
  * @param {string} tab
  * @param {number} [orthogroupCount]
- * @returns {string}
+ * @returns {RightDrawerTab}
  */
 const resolveRightDrawerTab = (tab, orthogroupCount = 0) => (
   isRightDrawerTabAvailable(tab, orthogroupCount)
@@ -43,16 +49,14 @@ const resolveRightDrawerTab = (tab, orthogroupCount = 0) => (
     : DEFAULT_RIGHT_DRAWER_TAB
 );
 
-/**
- * @param {Record<string, any>} state Shape owned by `state.js`.
- */
+/** @param {RightDrawerMembers} state */
 export const captureRightDrawerState = (state) => ({
-  showRightDrawer: Boolean(state.showRightDrawer.value),
+  showRightDrawer: state.showRightDrawer.value,
   rightDrawerTab: state.rightDrawerTab.value
 });
 
 /**
- * @param {Record<string, any>} state Shape owned by `state.js`.
+ * @param {RightDrawerState} state
  * @param {number} [orthogroupCount]
  * @returns {string}
  */
@@ -71,7 +75,7 @@ export const reconcileRightDrawerState = (
 };
 
 /**
- * @param {Record<string, any>} state Shape owned by `state.js`.
+ * @param {RightDrawerState} state
  * @param {string} [tab]
  * @param {number} [orthogroupCount]
  * @returns {string}
@@ -87,24 +91,20 @@ export const openRightDrawerState = (
   return resolvedTab;
 };
 
-/**
- * @param {Record<string, any>} state Shape owned by `state.js`.
- */
+/** @param {RightDrawerMembers} state */
 export const closeRightDrawerState = (state) => {
   state.showRightDrawer.value = false;
 };
 
-/**
- * @param {Record<string, any>} state Shape owned by `state.js`.
- */
+/** @param {RightDrawerMembers} state */
 export const resetRightDrawerState = (state) => {
   state.showRightDrawer.value = false;
   state.rightDrawerTab.value = DEFAULT_RIGHT_DRAWER_TAB;
 };
 
 /**
- * @param {Record<string, any>} state Shape owned by `state.js`.
- * @param {Record<string, any> | null | undefined} snapshot From `captureRightDrawerState`.
+ * @param {RightDrawerState} state
+ * @param {ReturnType<typeof captureRightDrawerState>} snapshot
  * @param {number} [orthogroupCount]
  */
 export const restoreRightDrawerState = (
@@ -113,8 +113,8 @@ export const restoreRightDrawerState = (
   orthogroupCount = orthogroupTabContentCountFromState(state)
 ) => {
   state.rightDrawerTab.value = resolveRightDrawerTab(
-    snapshot?.rightDrawerTab,
+    snapshot.rightDrawerTab,
     orthogroupCount
   );
-  state.showRightDrawer.value = Boolean(snapshot?.showRightDrawer);
+  state.showRightDrawer.value = snapshot.showRightDrawer;
 };

@@ -8,6 +8,7 @@ import {
   reconcileRightDrawerState,
   resetRightDrawerState
 } from '../services/right-drawer-state.js';
+/** @import { RightDrawerState } from '../services/right-drawer-state.js' */
 
 /**
  * @typedef {Object} RightDrawerFocusReturn
@@ -17,8 +18,8 @@ import {
 
 /**
  * @typedef {Object} RightDrawerControllerOptions
- * @property {Record<string, any>} state Shape owned by state.js.
- * @property {(source: () => unknown, callback: () => void, options?: Record<string, any>) => unknown} watch
+ * @property {RightDrawerState} state
+ * @property {(source: () => unknown, callback: () => void, options?: { flush?: 'sync', immediate?: boolean }) => unknown} watch
  * @property {<T>(getter: () => T) => { readonly value: T }} computed
  * @property {() => string} [getOpenDisabledReason]
  * @property {() => void} [onClose]
@@ -49,6 +50,7 @@ export const createRightDrawerController = ({
     state,
     currentOrthogroupCount()
   );
+  /** @param {string} [tab] The page's tab name; an unknown or unavailable one opens Features. */
   const openRightDrawerTab = (tab = state.rightDrawerTab.value) => {
     if (getOpenDisabledReason()) return false;
     const opened = openRightDrawerState(state, tab, currentOrthogroupCount());

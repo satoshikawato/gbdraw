@@ -234,8 +234,9 @@ const linearRecordTranslations = ref([]);
 const selectedOrthogroupId = ref('');
 const orthogroupSearch = ref('');
 const orthogroupSortMode = ref('id');
-const showRightDrawer = ref(false);
-const rightDrawerTab = ref('features'); // 'legend' | 'features' | 'orthogroups'
+const showRightDrawer = typedRef(false);
+/** @import { RightDrawerTab } from './services/right-drawer-state.js' */
+const rightDrawerTab = typedRef(/** @type {RightDrawerTab} */ ('features'));
 const linearReorderNotice = ref('');
 // The Linear File cards folded to their header line, by source uid: app-level
 // view state. Its transitions are in services/linear-sources.js.
