@@ -62,7 +62,6 @@ from ...configurators import (
 from ...configurators.bundle import DiagramConfigurators
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
-from ...core.record_metadata import WINDOW_OF_ANNOTATION, record_identity_key
 from ...core.text import calculate_svg_bbox_dimensions, drawn_text_box
 from ...render.group_content import (
     GroupContent,
@@ -137,10 +136,10 @@ from ...layout.linear_row_windows import (
     RowWindowStyle,
     plan_row_windows,
     row_window_insets,
-    row_window_unit,
 )
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.record_transform import bind_record_transforms
+from ...layout.record_units import RecordUnit, record_units
 from ...layout.record_placement import FeatureAnchorPlacement, resolve_record_row_positions
 from ...layout.similarity_alignment import (
     AlignmentDecisionStatus,
@@ -590,6 +589,7 @@ def _sync_legend_table_for_linear_slots(
 def _serialize_linear_track_slot_geometry(
     *,
     record_axes: Sequence[RecordAxisInput],
+    units: Sequence[RecordUnit],
     layout: LinearTrackLayout,
     record_plans: list[LinearRecordVerticalPlan],
     record_offsets: list[float],
@@ -626,9 +626,7 @@ def _serialize_linear_track_slot_geometry(
 
     base_by_id = {slot.id: slot for slot in layout.slots}
     records_payload: list[dict[str, Any]] = []
-    # The windows of a record drawn so far: a window's entry names its record and its place among the record's windows.
-    window_counts: dict[str, int] = {}
-    for record_index, drawn in enumerate(record_axes):
+    for record_index, (drawn, unit) in enumerate(zip(record_axes, units, strict=True)):
         axis_y = float(record_offsets[record_index]) if record_index < len(record_offsets) else 0.0
         placement = record_placements[record_index]
         plan = record_plans[record_index]
@@ -654,18 +652,15 @@ def _serialize_linear_track_slot_geometry(
             )
         record_id = str(getattr(drawn.record, "id", "") or "")
         row_bands = [(row.axis_offset_y, row.plan.feature_lanes_band.translate(row.axis_offset_y)) for row in plan.rows]
-        window_of = (getattr(drawn.record, "annotations", None) or {}).get(WINDOW_OF_ANNOTATION)
-        window_entry: dict[str, int] = {}
-        if window_of is not None:
-            window_entry = {"windowIndex": window_counts.get(str(window_of), 0)}
-            window_counts[str(window_of)] = window_entry["windowIndex"] + 1
+        # A window of a record with several names its place among the record's windows.
+        window_entry: dict[str, int] = {} if unit.window_index is None else {"windowIndex": unit.window_index}
         records_payload.append(
             {
                 "recordIndex": int(record_index),
                 "recordId": record_id,
                 "recordLabel": record_id,
-                # A window of a record with several names its record and its window (D-01); any other names itself.
-                "recordKey": drawn.record_key if window_of is None else str(window_of),
+                # A window of a record names its record (D-01); any other names itself.
+                "recordKey": unit.record_key,
                 **window_entry,
                 "axis": linear_axis_geometry(
                     drawn,
@@ -2228,6 +2223,8 @@ class _LinearRowFrame:
 
     presentations: tuple[RecordPresentation | None, ...]
     record_keys: tuple[RecordKey, ...]
+    # The drawn unit of each record: the record, or the window of it, it shows (``record_units``).
+    units: tuple[RecordUnit, ...]
     ordered_record_indices: tuple[int, ...]
     rows_by_record: tuple[int, ...]
     multi_record_enabled: bool
@@ -2248,31 +2245,23 @@ class _LinearRowFrame:
 
 
 def _plan_linear_row_windows(
-    record_inputs: LinearRecordInputs,
+    units: tuple[RecordUnit, ...],
     presentations: tuple[RecordPresentation | None, ...],
     ordered_record_indices: tuple[int, ...],
     rows_by_record: tuple[int, ...],
-    axis_lengths: list[int],
 ) -> tuple[LinearRowWindows, ...]:
     """Each windowed row's captions and marks, its units in drawing order (``plan_row_windows``)."""
 
-    records = record_inputs.records
-    transforms = bind_record_transforms(records, record_inputs.record_transforms)
     units_by_row: dict[int, list[int]] = {}
     for record_index in ordered_record_indices:
         units_by_row.setdefault(rows_by_record[record_index], []).append(record_index)
     plans = (
         plan_row_windows(
+            [units[index] for index in indices],
             [
-                row_window_unit(
-                    records[index],
-                    index,
-                    transforms[index],
-                    presentation.label if (presentation := presentations[index]) is not None else None,
-                    axis_lengths[index],
-                )
+                (presentation.label or "") if (presentation := presentations[index]) is not None else ""
                 for index in indices
-            ]
+            ],
         )
         for indices in units_by_row.values()
     )
@@ -2288,6 +2277,7 @@ def _linear_row_frame(canvas_config: LinearCanvasConfigurator, record_inputs: Li
         tuple(record_inputs.record_presentations) if record_inputs.record_presentations is not None else (None,) * len(records)
     )
     record_keys = stable_record_keys(records)
+    units = record_units(records, record_inputs.record_transforms)
     ordered_record_indices, rows_by_record = resolve_record_row_positions(
         records,
         linear_layout.multi_record_positions if linear_layout is not None else None,
@@ -2305,9 +2295,7 @@ def _linear_row_frame(canvas_config: LinearCanvasConfigurator, record_inputs: Li
         seen_rows.add(row)
         row_leading_indices.add(record_index)
     axis_lengths = _drawn_axis_lengths(records, record_inputs.record_transforms)
-    row_windows = _plan_linear_row_windows(
-        record_inputs, presentations, ordered_record_indices, rows_by_record, axis_lengths
-    )
+    row_windows = _plan_linear_row_windows(units, presentations, ordered_record_indices, rows_by_record)
     row_window_style = RowWindowStyle.of(
         canvas_config.profile.config, str(canvas_config.length_param), float(canvas_config.default_cds_height)
     )
@@ -2338,6 +2326,7 @@ def _linear_row_frame(canvas_config: LinearCanvasConfigurator, record_inputs: Li
     return _LinearRowFrame(
         presentations=presentations,
         record_keys=record_keys,
+        units=units,
         ordered_record_indices=ordered_record_indices,
         rows_by_record=rows_by_record,
         multi_record_enabled=multi_record_enabled,
@@ -2907,7 +2896,7 @@ def _linear_horizontal_frame(
     placements = frame.horizontal_placements
     translations = _final_record_translations(
         # The record each unit draws: the windows of a record move as one (D-50).
-        record_keys=[record_identity_key(record) or str(key) for record, key in zip(records, frame.record_keys)],
+        record_keys=[unit.record_key for unit in frame.units],
         placements=placements,
         layout=record_inputs.linear_layout,
         similarity_alignment=alignment.similarity_alignment,
@@ -4377,6 +4366,7 @@ def _attach_linear_facts(
             record_inputs.records, plan.frame.record_keys,
             bind_record_transforms(record_inputs.records, record_inputs.record_transforms),
         ),
+        units=plan.frame.units,
         layout=plan.tracks.linear_track_layout,
         record_plans=plan.vertical.record_vertical_plans,
         record_offsets=[

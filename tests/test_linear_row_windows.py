@@ -19,6 +19,7 @@ from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.api.options import LinearMultiRecordOptions
+from gbdraw.api.record_planning import resolve_record_inputs
 from gbdraw.api.requests import (
     GenBankInputSource,
     InMemoryRecordSource,
@@ -29,11 +30,12 @@ from gbdraw.api.requests import (
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.regions import RecordWindow
 from gbdraw.layout.linear_row_windows import (
-    RowWindowUnit,
+    LinearRowWindows,
     omitted_length_text,
     plan_row_windows,
     window_span_text,
 )
+from gbdraw.layout.record_units import RecordUnit, record_units
 from gbdraw.linear_comparison import LinearComparison
 
 REPO = Path(__file__).resolve().parents[1]
@@ -42,20 +44,26 @@ SVG = "{http://www.w3.org/2000/svg}"
 
 
 def _unit(index: int, span: tuple[int, int], *, key: str = "a", reverse: bool = False, label: str = "",
-          circular: bool = False, length: int = 10_000, region: bool = True, record_id: str = "R1") -> RowWindowUnit:
-    return RowWindowUnit(index, key, record_id, label, span, reverse, length, circular, region)
+          circular: bool = False, length: int = 10_000, region: bool = True,
+          record_id: str = "R1") -> tuple[RecordUnit, str]:
+    return RecordUnit(index, key, record_id, span, reverse, length, circular, region, None), label
+
+
+def _plan(units: list[tuple[RecordUnit, str]]) -> LinearRowWindows | None:
+    """The row's plan from its units and their record labels."""
+    return plan_row_windows([unit for unit, _ in units], [label for _, label in units])
 
 
 # --- the owner: which rows are windowed, the name, the list, the marks ---------------------------------------
 
 
 def test_a_row_of_whole_records_or_of_one_window_is_not_a_windowed_row() -> None:
-    assert plan_row_windows([_unit(0, (1, 10_000), region=False), _unit(1, (1, 10_000), key="b", region=False)]) is None
-    assert plan_row_windows([_unit(0, (100, 900))]) is None
+    assert _plan([_unit(0, (1, 10_000), region=False), _unit(1, (1, 10_000), key="b", region=False)]) is None
+    assert _plan([_unit(0, (100, 900))]) is None
 
 
 def test_the_row_name_is_the_first_label_and_a_different_label_goes_to_its_line() -> None:
-    plan = plan_row_windows(
+    plan = _plan(
         [
             _unit(0, (1, 500), key="c17", record_id="C17", reverse=True),
             _unit(1, (10, 900), key="c34", record_id="C34", label="<i>B. vel</i> SK19"),
@@ -76,7 +84,7 @@ def test_the_row_name_is_the_first_label_and_a_different_label_goes_to_its_line(
 
 
 def test_edges_are_bars_at_the_ends_of_a_linear_record_and_dashes_elsewhere() -> None:
-    plan = plan_row_windows(
+    plan = _plan(
         [
             _unit(0, (1, 2_000)),
             _unit(1, (5_001, 10_000)),
@@ -100,7 +108,7 @@ def test_edges_are_bars_at_the_ends_of_a_linear_record_and_dashes_elsewhere() ->
     ],
 )
 def test_the_gap_between_two_windows_of_one_record(first, second, reverse, omitted) -> None:
-    plan = plan_row_windows(
+    plan = _plan(
         [_unit(0, first, reverse=reverse, length=4_000_000), _unit(1, second, reverse=reverse, length=4_000_000)]
     )
     assert plan is not None
@@ -109,15 +117,15 @@ def test_the_gap_between_two_windows_of_one_record(first, second, reverse, omitt
 
 
 def test_windows_in_opposite_directions_or_not_next_to_each_other_have_no_length() -> None:
-    opposite = plan_row_windows([_unit(0, (1, 100)), _unit(1, (500, 900), reverse=True)])
+    opposite = _plan([_unit(0, (1, 100)), _unit(1, (500, 900), reverse=True)])
     assert opposite is not None and [gap.omitted_bp for gap in opposite.gaps] == [None]
     # The third window of the record lies in the interval between the first two.
-    apart = plan_row_windows([_unit(0, (1, 100)), _unit(1, (900, 1_000)), _unit(2, (400, 500))])
+    apart = _plan([_unit(0, (1, 100)), _unit(1, (900, 1_000)), _unit(2, (400, 500))])
     assert apart is not None and [gap.omitted_bp for gap in apart.gaps] == [None, None]
 
 
 def test_a_gap_across_the_origin_of_a_circular_record_counts_round_it() -> None:
-    plan = plan_row_windows(
+    plan = _plan(
         [_unit(0, (9_000, 9_500), circular=True), _unit(1, (9_900, 200), circular=True)]
     )
     assert plan is not None and [gap.omitted_bp for gap in plan.gaps] == [399]
@@ -144,15 +152,51 @@ def test_the_unit_of_an_omitted_length_is_chosen_after_rounding() -> None:
     ],
 )
 def test_on_a_circular_record_the_interval_runs_forward_through_the_origin(first, second, text) -> None:
-    plan = plan_row_windows(
+    plan = _plan(
         [_unit(0, first, circular=True, length=16_569), _unit(1, second, circular=True, length=16_569)]
     )
     assert plan is not None and [gap.text for gap in plan.gaps] == [text]
 
 
 def test_on_a_linear_record_windows_that_run_backwards_have_no_length() -> None:
-    plan = plan_row_windows([_unit(0, (15_000, 16_000), length=16_569), _unit(1, (1_000, 2_000), length=16_569)])
+    plan = _plan([_unit(0, (15_000, 16_000), length=16_569), _unit(1, (1_000, 2_000), length=16_569)])
     assert plan is not None and [gap.text for gap in plan.gaps] == [""]
+
+
+# --- the unit list: what each drawn record shows, read from the record planner's output ------------------------
+
+
+def test_the_unit_list_reads_each_drawn_record_as_its_record_and_window() -> None:
+    """One unit per drawn record: the record it draws (shared by its windows), the window span or the whole record,
+    the orientation, the record's length and topology, and the window's place among its record's windows."""
+
+    resolved = resolve_record_inputs(
+        (
+            RecordInput(
+                InMemoryRecordSource(_linear_record()),
+                windows=(RecordWindow(1, 2_000), RecordWindow(5_001, 8_000, True)),
+                record_key="lin",
+            ),
+            RecordInput(GenBankInputSource(MITO), windows=(RecordWindow(16_000, 500),), record_key="mito"),
+            RecordInput(InMemoryRecordSource(_linear_record()), record_key="whole"),
+        ),
+        gff_candidate_features=None,
+        gff_keep_all_features=True,
+    )
+    units = record_units(resolved.records, None)
+    assert [
+        (u.record_index, u.record_key, u.record_id, u.span, u.reverse, u.source_length, u.circular, u.is_window,
+         u.window_index)
+        for u in units
+    ] == [
+        (0, "lin", "LIN", (1, 2_000), False, 10_000, False, True, 0),
+        (1, "lin", "LIN", (5_001, 8_000), True, 10_000, False, True, 1),
+        (2, "mito", "NC_012920.1", (16_000, 500), False, 16_569, True, True, None),
+        (3, "whole", "LIN", (1, 10_000), False, 10_000, False, False, None),
+    ]
+    assert [unit.length for unit in units] == [2_000, 3_000, 1_070, 10_000]
+    # A reverse unit draws its last base first.
+    assert units[1].edge_bases() == (8_000, 5_001)
 
 
 # --- the drawing ------------------------------------------------------------------------------------------------
