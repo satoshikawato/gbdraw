@@ -63,8 +63,8 @@ const {
   COMPOSITION_METADATA_ATTRIBUTE,
   COMPOSITION_SCHEMA_ATTRIBUTE
 } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
-const { createLegendCanvasActions } = await import(
-  '../../gbdraw/web/js/app/legend-layout/canvas-actions.js'
+const { createLegendRepositionActions } = await import(
+  '../../gbdraw/web/js/app/legend-layout/reposition-actions.js'
 );
 const { createSessionImportRollbackState, transformLegacyResultSvg } = await import(
   '../../gbdraw/web/js/app/app-setup.js'
@@ -1332,7 +1332,7 @@ const malformedCompositionSvg = {
 const malformedCompositionContainer = {
   querySelector: (selector) => selector === 'svg' ? malformedCompositionSvg : null
 };
-const legendCanvasActions = createLegendCanvasActions({ state });
+const legendRepositionActions = createLegendRepositionActions({ state, layOutLegend: () => null });
 // The failing Session sets the other popup preference; the rollback restores it.
 const failingSession = { ...divergentSession, ui: { ...divergentSession.ui, richFeaturePopup: true } };
 alerts.length = 0;
@@ -1368,7 +1368,7 @@ try {
         const originalSvgContainer = state.svgContainer.value;
         state.svgContainer.value = malformedCompositionContainer;
         try {
-          legendCanvasActions.captureBaseConfig();
+          legendRepositionActions.captureBaseConfig();
         } finally {
           state.svgContainer.value = originalSvgContainer;
         }
@@ -1424,7 +1424,7 @@ try {
         const originalSvgContainer = state.svgContainer.value;
         state.svgContainer.value = malformedCompositionContainer;
         try {
-          legendCanvasActions.captureBaseConfig();
+          legendRepositionActions.captureBaseConfig();
         } finally {
           state.svgContainer.value = originalSvgContainer;
         }

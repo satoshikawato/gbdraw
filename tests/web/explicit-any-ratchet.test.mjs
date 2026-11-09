@@ -50,7 +50,6 @@ const EXPLICIT_ANY_BASELINE = {
   'app/legend-layout.js': 6,
   'app/legend-layout/decoration-continuity.js': 8,
   'app/legend-layout/diagram-drag.js': 6,
-  'app/legend-layout/reposition-actions.js': 1,
   'app/legend.js': 6,
   'app/legend/drag-actions.js': 6,
   'app/legend/entry-actions.js': 1,
