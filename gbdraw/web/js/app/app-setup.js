@@ -76,6 +76,8 @@ import { createFindInOtherFiles } from './find-in-other-files.js';
 import { createRegionSelect } from './region-select.js';
 import { readRegionAxisRecords, shownAxisRecords as shownAxisRecordsOf } from '../services/region-axis.js';
 import { requestRecordSpanSequences } from '../services/record-span-sequences.js';
+import { readFeatureSequencesReply } from '../services/catalog-sequences.js';
+void readFeatureSequencesReply;
 import {
   adoptCanonicalRenderArtifacts,
   applyCapturedConfigData,

@@ -12,7 +12,7 @@ const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction'
   'addRegionAnnotation', 'convertLosatpPairsToGenomicPayload', 'decideAutoOrientation', 'deriveRegionDrawing', 'extractCdsProteinFasta', 'extractFirstFasta', 'findInOtherFiles',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'planCardWindows', 'planGenomeScales', 'planLinearUnits',
   'planRecordPlaces', 'planRingScales',
-  'promoteLegacyLosatpCache', 'readAllSequenceRecords', 'readComparisonSequence', 'readFeatureOverrideTable', 'readRecordSpanSequences', 'readSearchQueries', 'registerFonts', 'resolveFeatureAnchor', 'resolveLegacyProteinReferences',
+  'promoteLegacyLosatpCache', 'readAllSequenceRecords', 'readComparisonSequence', 'readEmbedSequences', 'readFeatureOverrideTable', 'readFeatureSequences', 'readMatchSequences', 'readRecordSpanSequences', 'readSearchQueries', 'registerFonts', 'resolveFeatureAnchor', 'resolveLegacyProteinReferences',
   'resolveSimilarityAlignment', 'searchHitAnnotationSet', 'synthesizeColorRules', 'upgradeLegacySession', 'validateConfigOverrides', 'session-save', 'session-load']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
   'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'write', 'parse', 'drawing-list']);

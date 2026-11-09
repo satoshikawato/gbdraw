@@ -29,6 +29,11 @@ from gbdraw.web_support.feature_override_table import read_feature_override_tabl
 from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 from gbdraw.web_support.locate import locate_web_json
 from gbdraw.web_support.record_spans import read_record_span_sequences_json
+from gbdraw.web_support.catalog_sequences import (
+    read_embed_sequences_json,
+    read_feature_sequences_json,
+    read_match_sequences_json,
+)
 from gbdraw.web_support.linear_units import (
     plan_card_windows_json, plan_genome_scales_json, plan_linear_units_json, plan_record_places_json,
 )
@@ -1827,6 +1832,17 @@ _WEB_JSON_HELPERS = {
     # the render (PD-OI-018 revision 6).
     "plan_genome_scales_json": (
         _with_prepared_input_lookup(plan_genome_scales_json, 1, publish_inputs=True), "planGenomeScales"
+    ),
+    # The sequences the catalog no longer stores (D5): the first read after a Session Load publishes the parsed
+    # inputs, so the next read and the next Generate parse nothing again.
+    "read_feature_sequences_json": (
+        _with_prepared_input_lookup(read_feature_sequences_json, 1, publish_inputs=True), "readFeatureSequences"
+    ),
+    "read_match_sequences_json": (
+        _with_prepared_input_lookup(read_match_sequences_json, 1, publish_inputs=True), "readMatchSequences"
+    ),
+    "read_embed_sequences_json": (
+        _with_prepared_input_lookup(read_embed_sequences_json, 1, publish_inputs=True), "readEmbedSequences"
     ),
     # Generate's comparison searches run over the drawn units Python plans (D-01, D-37).
     "plan_linear_units_json": (plan_linear_units_json, "planLinearUnits"),

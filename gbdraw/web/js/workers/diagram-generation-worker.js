@@ -1309,6 +1309,21 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // The sequences of features by identity (the Sequence tab, member Copy, sequence-field search), read by Python
+  // from the request the shown Result was made from (D5).
+  [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_SEQUENCES]: {
+    keys: ['canonicalRequest', 'features'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'read_feature_sequences_json', [
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(payload.features, []),
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
   // A Circular Generate's ring searches pass the search space Python plans for the reference and each ring
   // (PD-OI-018 revision 6): the reference's record sources are staged under the ids the next Generate's request names
   // them by, so Python reads the parse that Generate renders; each ring comes as the ring reader's file lengths.
@@ -1323,6 +1338,36 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         // The file names a per-file warning names, as the input summary names them.
         jsonArgument(Object.fromEntries(payload.resourceManifest.map(({ resourceId, name }) => [resourceId, name])), {}),
         jsonArgument(payload.rings, []),
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
+  // The bases of match spans of drawn or comparison records (the match popup's Copy and FASTA), on the displayed
+  // strand, read by Python from the shown Result's request (D5).
+  [DIAGRAM_HELPER_OPERATIONS.READ_MATCH_SEQUENCES]: {
+    keys: ['canonicalRequest', 'spans'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'read_match_sequences_json', [
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(payload.spans, []),
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
+  // The sequence fields an exported Interactive SVG embeds, in the export encoding, for records of the shown
+  // Result's request (D5).
+  [DIAGRAM_HELPER_OPERATIONS.READ_EMBED_SEQUENCES]: {
+    keys: ['canonicalRequest', 'recordKeys'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'read_embed_sequences_json', [
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(payload.recordKeys, []),
         jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]
     )
