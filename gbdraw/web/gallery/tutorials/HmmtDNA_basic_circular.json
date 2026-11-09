@@ -70,18 +70,18 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.c_gb; if (!file) throw new Error('HmmtDNA GenBank file was not restored.'); app.files.c_gb = new File([file], 'HmmtDNA.gbk', { type: file.type, lastModified: file.lastModified }); app.form.prefix = 'HmmtDNA_basic_circular'; app.form.species = '<i>Homo sapiens</i>'; app.form.track_type = 'middle'; app.form.separate_strands = true; app.form.suppress_gc = false; app.form.suppress_skew = false; app.form.labels_mode = 'out'; app.adv.circular_track_slots_enabled = false; const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.trim() === 'GenBank/DDBJ File'); const uploader = label?.parentElement?.parentElement; if (!uploader) throw new Error('Circular GenBank uploader was not found.'); uploader.dataset.capture = 'hmmt-genbank-upload'; uploader.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.form.prefix = 'HmmtDNA_basic_circular'; app.form.species = '<i>Homo sapiens</i>'; app.form.track_type = 'middle'; app.form.separate_strands = true; app.form.suppress_gc = false; app.form.suppress_skew = false; app.form.labels_mode = 'out'; app.adv.circular_track_slots_enabled = false;"
               },
               {
                 "type": "waitForFunction",
-                "script": "() => window.__GBDRAW_APP__?.files?.c_gb?.name === 'HmmtDNA.gbk'"
+                "script": "() => (document.querySelector(\"[data-setting='inputs']\")?.textContent || '').includes('HmmtDNA.gbk')"
               }
             ],
-            "selector": "[data-capture='hmmt-genbank-upload']",
+            "cardTitle": "Input Genomes",
             "cropPadding": 14,
             "assertAppState": {
               "mode": "circular",
-              "files.c_gb.name": "HmmtDNA.gbk"
+              "circularFileCards.cards.value.0.source.gb.name": "HmmtDNA.gbk"
             },
             "visibleText": [
               "HmmtDNA.gbk"
@@ -105,7 +105,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.c_gb; if (!file) throw new Error('HmmtDNA GenBank file was not restored.'); app.files.c_gb = new File([file], 'HmmtDNA.gbk', { type: file.type, lastModified: file.lastModified }); app.form.prefix = 'HmmtDNA_basic_circular'; app.form.species = '<i>Homo sapiens</i>'; app.form.track_type = 'middle'; app.form.separate_strands = true; app.form.suppress_gc = false; app.form.suppress_skew = false; app.form.labels_mode = 'out'; app.adv.circular_track_slots_enabled = false;"
+                "script": "const app = window.__GBDRAW_APP__; app.form.prefix = 'HmmtDNA_basic_circular'; app.form.species = '<i>Homo sapiens</i>'; app.form.track_type = 'middle'; app.form.separate_strands = true; app.form.suppress_gc = false; app.form.suppress_skew = false; app.form.labels_mode = 'out'; app.adv.circular_track_slots_enabled = false;"
               }
             ],
             "cardTitle": "Basic",
