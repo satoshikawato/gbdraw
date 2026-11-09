@@ -3,7 +3,7 @@
 // normalization and schema migration, axis placement, and the request payload,
 // as the request, Session and Gallery services read them. The Linear
 // track-slot editor (app/linear-track-slots.js) edits it.
-import { parseDepthTrackIndexIdentity, syncDepthSlotLabels } from './depth-track-state.js';
+import { normalizeTrackIndex, parseDepthTrackIndexIdentity, syncDepthSlotLabels } from './depth-track-state.js';
 /** @import { RawDepthTrackConfig } from './depth-track-state.js' */
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
@@ -153,13 +153,7 @@ export const normalizeNt = (value, fallback = 'GC') => {
   return text || fallback;
 };
 
-/** @param {unknown} value */
-export const normalizeTrackIndex = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  if (!Number.isInteger(numeric) || numeric < 0) return null;
-  return numeric;
-};
+export { normalizeTrackIndex };
 
 /** @param {unknown} value @param {string} field */
 const normalizePxText = (value, field) => {

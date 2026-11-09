@@ -14,6 +14,7 @@ import {
   DEPTH_FILES_CHANGE,
   isDefaultManagedDepthSlot,
   depthSourceLoss,
+  nextDepthSlotTrackIndex,
   reconcileManagedDepthSlots,
   representativeDepthFiles,
   shownAfterSourceChange
@@ -378,6 +379,8 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
     if (trackIndex !== null && trackIndex !== 0) {
       options.push(`track_index=${trackIndex}`);
     }
+  } else if (normalized.renderer === 'feature_density') {
+    appendOption(options, 'track', params.track);
   } else if (normalized.renderer === 'sequence_conservation') {
     appendOption(options, 'track_index', params.track_index);
     appendOption(options, 'source_index', params.source_index);
@@ -1154,8 +1157,8 @@ export const createCircularTrackSlotEditor = ({
     if (!Array.isArray(drawing.adv.circular_track_slots) || drawing.adv.circular_track_slots.length === 0) {
       resetSlotsToPreset(drawing, drawing.form.track_type);
     } else {
-      // The stack it turns on holds the managed comparison ring rows, the rows of the feature density tracks when
-      // it draws none (OV-3174), and the rows of the Region Annotation sets it does not name (D-35).
+      // The stack it turns on holds the managed comparison ring rows, feature density rows when it draws none
+      // (OV-3174), and the rows of the Region Annotation sets it does not name (D-35).
       syncConservationSlots(drawing);
       const rows = drawing.adv.circular_track_slots;
       drawing.adv.circular_track_slots_axis_index = insertFeatureDensitySlots(rows, axisIndexForCurrentSlots(drawing, rows),
@@ -1180,16 +1183,7 @@ export const createCircularTrackSlotEditor = ({
     if (slot.renderer === 'annotations') {
       slot.params.set_id = setId ?? annotationSetForNewRow(drawing.adv.circular_track_slots, drawing.annotationSets) ?? '';
     } else if (slot.renderer === 'depth') {
-      const available = circularAvailableDepthTrackCount(drawing);
-      const claimed = new Set(
-        drawing.adv.circular_track_slots
-          .filter((/** @type {CircularTrackSlot} */ candidate) => candidate?.enabled !== false && candidate?.renderer === 'depth')
-          .map((/** @type {CircularTrackSlot} */ candidate) => normalizeTrackIndex(candidate?.params?.track_index))
-          .filter((/** @type {number | null} */ trackIndex) => trackIndex !== null)
-      );
-      let trackIndex = 0;
-      while (trackIndex < available && claimed.has(trackIndex)) trackIndex += 1;
-      slot.params.track_index = trackIndex < available ? trackIndex : 0;
+      slot.params.track_index = nextDepthSlotTrackIndex(drawing.adv.circular_track_slots, circularAvailableDepthTrackCount(drawing));
     } else if (slot.renderer === 'feature_density') {
       slot.params.track = nextFeatureDensitySlotTrack(drawing.adv.feature_density_tracks, drawing.adv.circular_track_slots);
     }

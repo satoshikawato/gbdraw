@@ -8,6 +8,7 @@ import {
   depthTrackEditDefaults,
   depthSourceLoss,
   depthTrackMatrixWidth,
+  nextDepthSlotTrackIndex,
   reconcileManagedDepthSlots,
   shownAfterSourceChange
 } from '../services/depth-track-state.js';
@@ -156,6 +157,9 @@ export const buildLinearTrackSlotSpec = (slot, { includeEnabled = false, include
   if (normalized.renderer === 'depth') {
     const trackIndex = normalizeTrackIndex(params.track_index);
     parts.push(`track_index=${trackIndex === null ? 0 : trackIndex}`);
+  }
+  if (normalized.renderer === 'feature_density' && normalizeOptionalText(params.track)) {
+    parts.push(`track=${String(params.track).trim()}`);
   }
   if (normalized.renderer === 'dinucleotide_content' || normalized.renderer === 'dinucleotide_skew') {
     parts.push(`nt=${normalizeNt(params.nt)}`);
@@ -554,16 +558,7 @@ export const createLinearTrackSlotEditor = ({
         : {}
     });
     if (normalizedRenderer === 'depth') {
-      const available = linearAvailableDepthTrackCountForDrawing(drawing);
-      const claimed = new Set(
-        drawing.adv.linear_track_slots
-          .filter((/** @type {OptionalLinearSlot} */ candidate) => candidate?.enabled !== false && normalizeRenderer(candidate?.renderer) === 'depth')
-          .map((/** @type {OptionalLinearSlot} */ candidate) => normalizeTrackIndex(candidate?.params?.track_index))
-          .filter((/** @type {number | null} */ trackIndex) => trackIndex !== null)
-      );
-      let trackIndex = 0;
-      while (trackIndex < available && claimed.has(trackIndex)) trackIndex += 1;
-      slot.params.track_index = trackIndex < available ? trackIndex : 0;
+      slot.params.track_index = nextDepthSlotTrackIndex(drawing.adv.linear_track_slots, linearAvailableDepthTrackCountForDrawing(drawing));
     } else if (normalizedRenderer === 'feature_density') {
       slot.params.track = nextFeatureDensitySlotTrack(drawing.adv.feature_density_tracks, drawing.adv.linear_track_slots);
     }

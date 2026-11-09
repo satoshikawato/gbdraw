@@ -2361,6 +2361,21 @@ test('feature density tracks have their CLI words in the Source recipe of either
     assert.equal(groups[1].includes('caption=LTR, % of 50 kb'), true, JSON.stringify(groups[1]));
     await assertCliParserAccepts(recipe);
 
+    // A custom stack's rows name their track (E4 recipe probe: the rows lost track=, and the CLI refused the recipe).
+    const stacked = structuredClone(request);
+    const row = (id, renderer, params = {}) => (mode === 'circular'
+      ? { kind: 'circularTrackSlot', id, renderer, enabled: true, side: null, radius: null, width: null, z: 0, params, innerGapPx: null, outerGapPx: null }
+      : { kind: 'linearTrackSlot', id, renderer, enabled: true, side: renderer === 'features' ? 'overlay' : 'below', height: null, spacing: null, z: 0, params });
+    stacked.renderRequest.diagramOptions.tracks[`${mode}TrackSlots`] = [
+      row('features', 'features'), row('density_genes', 'feature_density', { track: 'genes' }), row('ltr_cover', 'feature_density', { track: 'ltr' })
+    ];
+    stacked.renderRequest.diagramOptions.tracks[`${mode}TrackAxisIndex`] = 0;
+    const stackedRecipe = await buildSourceRecipe(stacked);
+    assert.equal(stackedRecipe.available, true, `${mode}: ${stackedRecipe.unavailableReason}`);
+    const rows = stackedRecipe.args.filter((_, index) => stackedRecipe.args[index - 1] === `--${mode}_track_slot`);
+    assert.deepEqual(rows.filter((token) => token.includes(':feature_density')).map((token) => token.match(/[@,]track=([^,]*)/)?.[1]),
+      ['genes', 'ltr'], `${mode}: ${rows.join(' | ')}`);
+
     const blank = structuredClone(request);
     blank.renderRequest.diagramOptions.featureDensityTracks[1].caption = ' padded ';
     const unavailable = await buildSourceRecipe(blank);

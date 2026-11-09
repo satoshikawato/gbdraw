@@ -3,7 +3,7 @@
 // normalization and legacy migration, axis and feature placement, and the
 // request payload, as the request, Session and Gallery services read them. The
 // Circular track-slot editor (app/circular-track-slots.js) edits it.
-import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
+import { normalizeTrackIndex, parseDepthTrackIndexIdentity } from './depth-track-state.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptionalCircularScalar, parseOptionalPixel } from './track-slot-validation.js';
@@ -222,16 +222,7 @@ export const normalizeOptionalPlacement = (value) => {
   return normalizePlacement(value);
 };
 
-/**
- * @param {unknown} value
- * @returns {number | null}
- */
-export const normalizeTrackIndex = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  if (!Number.isInteger(numeric) || numeric < 0) return null;
-  return numeric;
-};
+export { normalizeTrackIndex };
 
 /**
  * @param {unknown} value
