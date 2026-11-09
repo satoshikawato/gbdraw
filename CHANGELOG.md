@@ -465,7 +465,7 @@ into the `[Unreleased]` list below.
 - Fixed (Web app): **Save Raw LOSAT TSV** of a drawing also saved the LOSAT
   results of the project's other drawings, and **Clear N LOSAT results** and
   **Save Raw LOSAT TSV** counted and saved twice a table that two similarity
-  rings or two drawings share. **Save Raw LOSAT TSV** now saves the shown
+  rings of one genome share. **Save Raw LOSAT TSV** now saves the shown
   drawing's own results, each table once. **Clear N LOSAT results** counts
   each of the project's searches once and, as before, clears the results of
   every drawing (OV-3203, OV-3204).
