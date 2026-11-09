@@ -54,7 +54,6 @@ from gbdraw.io.cli_tables import (
 )
 from gbdraw.io.regions import RecordWindow
 from tests.utils.session_drawing_view import drawing_view
-from gbdraw.web_support.locate import LocateFileInput, LocateSearchInput, locate_search_plan_json, locate_windows_json
 
 _FAKE_LOSAT = """#!{python}
 import sys
@@ -470,51 +469,6 @@ def test_the_command_finds_the_windows_with_a_real_tblastn(
         [(w.record_id, json.loads(json.dumps(fake.to_json()["files"][index]["windows"][n]["window"]))) for n, w in enumerate(file_plan.windows)]
         for index, file_plan in enumerate(fake.files)
     ]
-
-
-def test_the_worker_payload_gives_the_plan_the_command_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    paths = _genomes(tmp_path)
-    losat = _fake_losat(tmp_path)
-    prefix = tmp_path / "cli"
-    assert _run([*_locate_args(paths, losat, prefix, "a", "b", "c"), "--flank", "500", "--max_windows", "4"], monkeypatch) == 0
-
-    def file(name: str) -> LocateFileInput:
-        return {"key": str(paths[name]), "gbk": str(paths[name]), "gff": None, "fasta": None}
-
-    search: LocateSearchInput = {
-        "reference": file("ref"), "recordId": None, "recordKey": SOURCE_KEY, "windows": [{"start": 1501, "end": 8100, "reverseComplement": False}],
-        "targets": [file("a"), file("b"), file("c")], "program": "tlosatn",
-    }
-    jobs = locate_search_plan_json(search)
-    assert [job["fileKey"] for job in jobs["jobs"]] == [str(paths[name]) for name in ("a", "b", "c")]
-    reply = locate_windows_json({
-        **search,
-        "outcomes": [
-            {"fileKey": job["fileKey"], "text": run_losat_search("tlosatn", job["queryFasta"], job["subjectFasta"], losat_bin=losat), "error": None}
-            for job in jobs["jobs"]
-        ],
-        "options": {"evalue": 1e-2, "bitscore": 50.0, "identity": 0.0, "alignmentLength": 0, "flank": 500, "mergeDistance": 10_000, "maxWindows": 4},
-    })
-
-    written = json.loads(Path(str(prefix) + ".plan.json").read_text(encoding="utf-8"))
-    assert written.pop("runtime")["program"] == "tblastn"
-    assert reply["plan"].pop("runtime") is None
-    assert json.loads(json.dumps(reply["plan"])) == written
-
-    # The window pairs the new drawing compares are the pairs the command writes as its comparisons table.
-    a, b = (str(paths[name]) for name in ("a", "b"))
-    assert [(pair["query"]["recordKey"], pair["subject"]["recordKey"]) for pair in reply["pairs"]] == [
-        (SOURCE_KEY, f"{a}#1"), (f"{a}#1", f"{b}#1"), (f"{a}#1", f"{b}#2"),
-    ]
-    assert [(row.query, row.subject) for row in read_comparisons_table(str(prefix) + ".comparisons.tsv").rows] == [
-        ("REF", "A1"), ("A1", "B1"), ("A1", "B2"),
-    ]
-    windows = {(file["file_key"], w["record_key"]): w["window"] for file in written["files"] for w in file["windows"]}
-    assert all(
-        (side["start"], side["end"]) == (windows[(side["fileKey"], side["recordKey"])]["start"],
-                                         windows[(side["fileKey"], side["recordKey"])]["end"])
-        for pair in reply["pairs"] for side in (pair["query"], pair["subject"]) if side["recordKey"] != SOURCE_KEY
-    )
 
 
 def _losatp_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

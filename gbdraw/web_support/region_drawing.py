@@ -16,6 +16,7 @@ from typing import Literal, TypedDict
 
 from gbdraw.api.region_drawing import (
     FeatureRegionSelection,
+    NotCarried,
     NotCarriedKind,
     RegionChoice,
     RegionSelection,
@@ -23,7 +24,8 @@ from gbdraw.api.region_drawing import (
     StartAfterEndRegion,
     derive_region_request,
 )
-from gbdraw.auto_sizes import AutoValue
+from gbdraw.api.requests import DiagramRequest
+from gbdraw.auto_sizes import AutoValue, SettingAdaptation
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_drawings import DrawingMode
 from gbdraw.session_request_codec import decode_canonical_request, encode_canonical_request
@@ -138,12 +140,27 @@ def derive_web_region_drawing(
             "status": "refused", "reason": refusal.reason,
             "recordKey": refusal.record_key, "start": refusal.start, "end": refusal.end,
         }
+    return derived_drawing_reply(
+        derived.request, derived.mode, derived.adaptation, derived.not_carried, resource_paths
+    )
+
+
+def derived_drawing_reply(
+    request: DiagramRequest,
+    mode: DrawingMode,
+    adaptation: SettingAdaptation,
+    not_carried: Sequence[NotCarried],
+    resource_paths: Mapping[str, str],
+) -> DerivedRegionDrawing:
+    """A drawing derived from a source drawing (New drawing from a region, Find in other files), encoded with the
+    source's resources: the request names the source's resource of each file it reads."""
+
     # The source's staged files, held under their own IDs: the encoder takes
     # a held resource with equal bytes, so the derived request names them.
     table = SessionResourceTable()
     for resource_id, path in resource_paths.items():
         table.request().add_path(resource_id, kind="web-file", value=path)
-    encoded = encode_canonical_request(derived.request, table=table)
+    encoded = encode_canonical_request(request, table=table)
     # Only the resources the derived request names: a held one reads itself,
     # an added one (a second input of one file) the held one of its path.
     source_of_path = {str(path): resource_id for resource_id, path in resource_paths.items()}
@@ -152,19 +169,19 @@ def derive_web_region_drawing(
     for resource_id in canonical_resource_ids(encoded.payload):
         source_id = resource_id if resource_id in resource_paths else source_of_path.get(added.get(resource_id, ""))
         if source_id is None:
-            raise _protocol_error("The region drawing names a resource its source drawing does not have.")
+            raise _protocol_error("The derived drawing names a resource its source drawing does not have.")
         resource_sources[resource_id] = source_id
     return {
         "status": "derived",
-        "mode": derived.mode,
+        "mode": mode,
         "renderRequest": encoded.payload,
         "resourceSources": resource_sources,
         "returnedToAuto": [
             {"setting": reset.setting, "explicit": reset.explicit, "auto": reset.target_auto}
-            for reset in derived.adaptation.reset
+            for reset in adaptation.reset
         ],
         "notCarried": [
-            {"kind": item.kind, "count": item.count, "items": list(item.items)} for item in derived.not_carried
+            {"kind": item.kind, "count": item.count, "items": list(item.items)} for item in not_carried
         ],
     }
 
@@ -195,4 +212,5 @@ __all__ = [
     "RegionDrawingReply",
     "derive_web_region_drawing",
     "derive_web_region_drawing_json",
+    "derived_drawing_reply",
 ]
