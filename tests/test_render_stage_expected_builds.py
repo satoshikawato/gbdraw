@@ -562,6 +562,45 @@ def test_a_track_move_beside_an_unchanged_definition_rebuilds_the_definition_ove
     assert outcome.stages.builds.get("definition_track_overlaps") == 1, outcome.stages.builds
 
 
+# An explicit stack per mode, and a row added in front of it (a spacer moves the other rows without drawing).
+_STACKS: Mapping[str, tuple[str, tuple[str, ...], str]] = {
+    "L1": (
+        "--linear_track_slot",
+        ("features:features", "gc_content:dinucleotide_content@side=below", "gc_skew:dinucleotide_skew@side=below"),
+        "pad:spacer@side=above,h=12px",
+    ),
+    "C1": (
+        "--circular_track_slot",
+        ("features:features", "gc_content:dinucleotide_content", "gc_skew:dinucleotide_skew"),
+        "pad:spacer@side=outside,w=12px",
+    ),
+}
+
+
+@pytest.mark.parametrize("case_id", ["L1", "C1"])
+def test_a_row_added_to_an_explicit_stack_keeps_the_other_slots_stages(
+    case_id: str, tables: Path, tmp_path: Path
+) -> None:
+    """OV-3083: a slot group's id names the slot, not its place in the stack, so a row added in front keeps the
+    GC rows' stages (and, in Linear, the record content, which a row only moves). The warm render equals a cold
+    one (no stale hit)."""
+
+    case = CASES[case_id]
+    flag, slots, added = _STACKS[case_id]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / case_id)
+    base = placeholders.expand(case, case.base)
+
+    def stack(rows: tuple[str, ...]) -> list[str]:
+        return [*base, *(part for row in rows for part in (flag, row))]
+
+    assert harness.warm(stack(slots)).error is None
+    warm, _cold = harness.step(stack((added, *slots)), f"{case_id} row added")
+    assert warm.error is None
+    kept = {"gc_content_content", "gc_skew_content"} | ({"record_content"} if case.mode == "linear" else set())
+    assert not kept & set(warm.stages.builds), sorted(warm.stages.builds)
+
+
 @pytest.mark.parametrize("case_id", ["L2", "L3"])
 def test_a_gc_toggle_that_moves_rows_rebuilds_no_comparison_ribbon(case_id: str, tables: Path, tmp_path: Path) -> None:
     """OV-2089: a GC toggle moves the rows but not the ribbons' shape; each comparison draws in its own frame.

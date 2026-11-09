@@ -2408,7 +2408,7 @@ def _tick_group_options(
         "radius_override": float(anchor_radius_px),
         "slot_id": str(resolved_slot.id),
         "group_id": (
-            track_slot_svg_id(resolved_slot.id, renderer="ticks", slot_index=int(resolved_slot.slot_index))
+            track_slot_svg_id(resolved_slot.id, renderer="ticks")
             if use_slot_group_id
             else None
         ),
@@ -2683,11 +2683,7 @@ def _draw_resolved_circular_slot(
             params=params,
             labels=annotation_labels.get(resolved_slot.id, ()),
             dom_group_id=(
-                track_slot_svg_id(
-                    resolved_slot.id,
-                    renderer=renderer,
-                    slot_index=int(resolved_slot.slot_index),
-                )
+                track_slot_svg_id(resolved_slot.id, renderer=renderer)
                 if use_slot_group_id
                 else None
             ),
@@ -2728,11 +2724,7 @@ def _draw_resolved_circular_slot(
         if annotation_record_index:
             feature_kwargs["record_index"] = annotation_record_index
         if use_slot_group_id:
-            feature_kwargs["group_id"] = track_slot_svg_id(
-                resolved_slot.id,
-                renderer=renderer,
-                slot_index=int(resolved_slot.slot_index),
-            )
+            feature_kwargs["group_id"] = track_slot_svg_id(resolved_slot.id, renderer=renderer)
             feature_kwargs["slot_id"] = str(resolved_slot.id)
             feature_kwargs["feature_dom_namespace"] = (
                 f"{int(resolved_slot.slot_index) + 1}_{resolved_slot.id}"
@@ -2787,11 +2779,7 @@ def _draw_resolved_circular_slot(
         if use_slot_group_id:
             depth_kwargs.update(
                 group_id=depth_group_id,
-                slot_group_id=track_slot_svg_id(
-                    resolved_slot.id,
-                    renderer=renderer,
-                    slot_index=int(resolved_slot.slot_index),
-                ),
+                slot_group_id=track_slot_svg_id(resolved_slot.id, renderer=renderer),
                 slot_id=str(resolved_slot.id),
                 slot_renderer=renderer,
             )
@@ -2824,11 +2812,7 @@ def _draw_resolved_circular_slot(
             "group_key": GroupKey(record_key, GroupKind.CONSERVATION, str(resolved_slot.id)),
         }
         if use_slot_group_id:
-            conservation_kwargs["group_id"] = track_slot_svg_id(
-                resolved_slot.id,
-                renderer=renderer,
-                slot_index=int(resolved_slot.slot_index),
-            )
+            conservation_kwargs["group_id"] = track_slot_svg_id(resolved_slot.id, renderer=renderer)
             conservation_kwargs["slot_id"] = str(resolved_slot.id)
         return add_conservation_group_on_canvas(
             canvas,
@@ -2867,11 +2851,7 @@ def _draw_resolved_circular_slot(
         }
         if use_slot_group_id:
             gc_kwargs["group_id"] = str(resolved_slot.id)
-            gc_kwargs["slot_group_id"] = track_slot_svg_id(
-                resolved_slot.id,
-                renderer=renderer,
-                slot_index=int(resolved_slot.slot_index),
-            )
+            gc_kwargs["slot_group_id"] = track_slot_svg_id(resolved_slot.id, renderer=renderer)
         return add_gc_content_group_on_canvas(
             canvas,
             gb_record,
@@ -2906,11 +2886,7 @@ def _draw_resolved_circular_slot(
         }
         if use_slot_group_id:
             skew_kwargs["group_id"] = str(resolved_slot.id)
-            skew_kwargs["slot_group_id"] = track_slot_svg_id(
-                resolved_slot.id,
-                renderer=renderer,
-                slot_index=int(resolved_slot.slot_index),
-            )
+            skew_kwargs["slot_group_id"] = track_slot_svg_id(resolved_slot.id, renderer=renderer)
         return add_gc_skew_group_on_canvas(
             canvas,
             gb_record,

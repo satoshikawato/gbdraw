@@ -308,29 +308,6 @@ def _linear_feature_placement_slot(side: str, separate_strands: bool) -> Feature
     )
 
 
-def _linear_track_slot_dom_id(
-    *,
-    slot_id: str,
-    renderer: str,
-    slot_index: int,
-    record_index: int,
-    record_count: int,
-) -> str:
-    """Return the deterministic DOM ID for one rendered Linear user slot."""
-
-    group_id = track_slot_svg_id(
-        slot_id,
-        renderer=renderer,
-        slot_index=slot_index,
-    )
-    if int(record_count) <= 1:
-        return group_id
-    return instance_svg_id(
-        group_id,
-        ("linear-record", int(record_index), int(record_count)),
-    )
-
-
 def _drawn_axis_lengths(
     records: Sequence[SeqRecord], record_transforms: Sequence[RecordDisplayTransform] | None
 ) -> list[int]:
@@ -3880,15 +3857,13 @@ class _LinearSlotDrawing(NamedTuple):
 def _linear_slot_group_id(drawing: _LinearRecordDrawing, slot: LinearResolvedTrack) -> str:
     """The DOM id of one record's slot group, the same whether the request listed the slots or took the
     default ones, so a figure drawn without a stack and the same stack written out carry the same ids
-    (OV-3012)."""
+    (OV-3012). It is the Circular slot id (``track_slot_svg_id``), namespaced by record when the figure has
+    more than one."""
 
-    return _linear_track_slot_dom_id(
-        slot_id=str(slot.id),
-        renderer=str(slot.renderer),
-        slot_index=int(slot.slot_index),
-        record_index=drawing.record_index,
-        record_count=drawing.record_count,
-    )
+    group_id = track_slot_svg_id(str(slot.id), renderer=str(slot.renderer))
+    if int(drawing.record_count) <= 1:
+        return group_id
+    return instance_svg_id(group_id, ("linear-record", int(drawing.record_index), int(drawing.record_count)))
 
 
 def _draw_linear_feature_slot(canvas: Drawing, drawing: _LinearRecordDrawing, slot: _LinearSlotDrawing) -> Drawing:
