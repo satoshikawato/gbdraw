@@ -210,9 +210,9 @@ class _RadialSlotIntent:
     narrowing_floor_px: float = 0.0
     # An explicit center_reserved_radius narrows a typed width on a preset lane, as before rule L (DF-D38).
     typed_lane_width_narrows: bool = False
-    # Whether the rows next to this one in the stack, inward and outward, paint the edge that faces it
-    # (``_with_painted_edge_neighbours``): tick labels keep their margin from a painted edge (OV-3116).
-    painted_neighbours: tuple[bool, bool] = (False, False)
+    # The room a tick row keeps past its labels, inward and outward, toward a row that paints the edge facing them
+    # (``CircularScalarAxes.tick_label_clearance_px``, OV-3116, OV-3150).
+    label_clearance_px: tuple[float, float] = (0.0, 0.0)
 
 
 def cannot_fit_diagnostic(
@@ -535,12 +535,11 @@ def _tick_layout_from_params(
     anchor_radius_px: float,
     width_px: float,
     explicit_width: bool,
-    painted_neighbours: tuple[bool, bool] = (False, False),
+    label_clearance_px: tuple[float, float] = (0.0, 0.0),
 ) -> CircularTickLayout:
-    """The scale's tick and label bands. Where the labels form the reserved band's edge and the row next to that
-    edge paints it (``painted_neighbours``, inward and outward), the band keeps the labels' margin from it, so the
-    letters do not stand on the painted line (OV-3116); next to a row that paints no edge the labels' band is the
-    reserved band's edge, as the packing lets reserved bands touch."""
+    """The scale's tick and label bands. Where the labels form the reserved band's edge, the band reaches
+    ``label_clearance_px`` (inward, outward) past them: the room the packing does not already keep between the labels
+    and a row that paints the edge facing them (``_tick_label_clearances``)."""
 
     base_radius = float(geometry.radius)
     tick_preset = normalize_circular_track_preset(str(params.get("preset", params.get("track_preset", "tuckin"))))
@@ -587,14 +586,11 @@ def _tick_layout_from_params(
     if label_bounds is not None:
         label_band = RadialBand(*label_bounds)
     reserved = band_union([band for band in (tick_band, label_band) if band is not None]) or tick_band
-    painted_inward, painted_outward = painted_neighbours
-    if label_band is not None and (painted_inward or painted_outward):
-        margin_px = circular_tick_label_margin_px(
-            float(cfg.objects.ticks.tick_labels.font_size), float(cfg.objects.ticks.tick_width)
-        )
+    clearance_inward, clearance_outward = label_clearance_px
+    if label_band is not None:
         reserved = RadialBand(
-            reserved.inner_px - (margin_px if painted_inward and label_band.inner_px < tick_band.inner_px else 0.0),
-            reserved.outer_px + (margin_px if painted_outward and label_band.outer_px > tick_band.outer_px else 0.0),
+            reserved.inner_px - (clearance_inward if label_band.inner_px < tick_band.inner_px else 0.0),
+            reserved.outer_px + (clearance_outward if label_band.outer_px > tick_band.outer_px else 0.0),
         )
     return CircularTickLayout(
         anchor_radius_px=float(anchor_radius_px),
@@ -926,7 +922,7 @@ def _measure_radial_slot(
             anchor_radius_px=anchor_radius_px,
             width_px=resolved_width,
             explicit_width=bool(intent.explicit_width),
-            painted_neighbours=intent.painted_neighbours,
+            label_clearance_px=intent.label_clearance_px,
         )
         return _with_span_label_room(intent, CircularResolvedSlot(
             slot_index=int(intent.slot_index),
@@ -2473,6 +2469,22 @@ def _resolve_around_definition(definition_reserved_radius_px: float, layout_inpu
 def _resolve_in_pass(
     definition_reserved_radius_px: float | None, layout_inputs: _RadialLayoutInputs, definition_pass: _DefinitionPass
 ) -> CircularRadialLayout:
+    """The layout of a definition pass, placed again when a tick row's labels lack their margin from a row that paints
+    the edge facing them (``_tick_label_clearances``): their band then reaches past them by what they lack."""
+
+    layout = _resolve_once_in_pass(definition_reserved_radius_px, layout_inputs, definition_pass)
+    scalar_axes = layout_inputs["scalar_axes"]
+    clearances = _tick_label_clearances(layout, scalar_axes, layout_inputs["cfg"])
+    if scalar_axes is None or not clearances:
+        return layout
+    layout_inputs = layout_inputs.copy()
+    layout_inputs["scalar_axes"] = replace(scalar_axes, tick_label_clearances_px=clearances)
+    return _resolve_once_in_pass(definition_reserved_radius_px, layout_inputs, definition_pass)
+
+
+def _resolve_once_in_pass(
+    definition_reserved_radius_px: float | None, layout_inputs: _RadialLayoutInputs, definition_pass: _DefinitionPass
+) -> CircularRadialLayout:
     # Each pass starts from the caller's inputs: the retry below turns the preset lanes off in its own copy.
     layout_inputs = layout_inputs.copy()
     layout_inputs["definition_pass"] = definition_pass
@@ -2580,32 +2592,60 @@ def _anchored_annotation_overlay(
     )
 
 
-def _with_painted_edge_neighbours(
-    intents: Sequence[_RadialSlotIntent], scalar_axes: CircularScalarAxes | None
-) -> list[_RadialSlotIntent]:
-    """``intents`` with each tick row told whether the rows next to it on its side of the axis, inward and outward,
-    paint their band's edges (``CircularScalarAxes.paints_edges``). On both sides the slot order runs from the
+def _tick_label_clearances(
+    layout: CircularRadialLayout, scalar_axes: CircularScalarAxes | None, cfg: GbdrawConfig
+) -> tuple[tuple[str, float, float], ...]:
+    """The room each tick row of ``layout`` lacks between its labels and a row next to them, inward and outward,
+    that paints the edge facing them (``CircularScalarAxes.paints_edges``): the labels' margin less the room the
+    packing keeps there. A row packed against the labels' band keeps none; one the labels are packed under keeps the
+    slot gap, so the labels keep the larger of the gap and the margin. On both sides the slot order runs from the
     outermost row inward; overlays take no place in the stack."""
 
-    if scalar_axes is None:
+    if scalar_axes is None or not scalar_axes.edge_painting_slot_ids:
+        return ()
+    margin_px = circular_tick_label_margin_px(
+        float(cfg.objects.ticks.tick_labels.font_size), float(cfg.objects.ticks.tick_width)
+    )
+    clearances: list[tuple[str, float, float]] = []
+    for side in ("inside", "outside"):
+        stack = sorted((slot for slot in layout.slots if slot.side == side), key=lambda slot: slot.slot_index)
+        for pos, slot in enumerate(stack):
+            ticks = slot.payload
+            if not isinstance(ticks, CircularTickLayout) or ticks.label_band_px is None:
+                continue
+            labels = ticks.label_band_px
+
+            def shortfall(neighbour_pos: int, room: Callable[[RadialBand], float]) -> float:
+                if not 0 <= neighbour_pos < len(stack) or not scalar_axes.paints_edges(stack[neighbour_pos].id):
+                    return 0.0
+                band = stack[neighbour_pos].reserved_band_px
+                return 0.0 if band is None else max(0.0, margin_px - room(band))
+
+            inward = (
+                shortfall(pos + 1, lambda band: labels.inner_px - band.outer_px)
+                if labels.inner_px < ticks.tick_band_px.inner_px
+                else 0.0
+            )
+            outward = (
+                shortfall(pos - 1, lambda band: band.inner_px - labels.outer_px)
+                if labels.outer_px > ticks.tick_band_px.outer_px
+                else 0.0
+            )
+            if inward > LAYOUT_EPSILON or outward > LAYOUT_EPSILON:
+                clearances.append((slot.id, inward, outward))
+    return tuple(clearances)
+
+
+def _with_tick_label_clearances(
+    intents: Sequence[_RadialSlotIntent], scalar_axes: CircularScalarAxes | None
+) -> list[_RadialSlotIntent]:
+    """``intents`` with each tick row given the room it keeps past its labels (``_tick_label_clearances``)."""
+
+    if scalar_axes is None or not scalar_axes.tick_label_clearances_px:
         return list(intents)
-    stacks = {
-        side: sorted((intent for intent in intents if intent.side == side), key=lambda intent: intent.slot_index)
-        for side in ("inside", "outside")
-    }
-
-    def painted(stack: Sequence[_RadialSlotIntent], pos: int) -> bool:
-        return 0 <= pos < len(stack) and scalar_axes.paints_edges(stack[pos].slot_id)
-
-    neighbours = {
-        intent.slot_index: (painted(stack, pos + 1), painted(stack, pos - 1))
-        for stack in stacks.values()
-        for pos, intent in enumerate(stack)
-        if intent.renderer == "ticks"
-    }
     return [
-        replace(intent, painted_neighbours=neighbours[intent.slot_index])
-        if neighbours.get(intent.slot_index, (False, False)) != (False, False)
+        replace(intent, label_clearance_px=scalar_axes.tick_label_clearance_px(intent.slot_id))
+        if intent.renderer == "ticks"
         else intent
         for intent in intents
     ]
@@ -2668,7 +2708,7 @@ def _resolve_circular_radial_layout(
     if scalar_axes is not None:
         # The GC axis keeps its room in the font it is drawn in (``_gc_content_axis_font_size`` in the assembly).
         scalar_axes = scalar_axes.with_gc_font_of_depth(_depth_slot_widths(intents))
-    intents = _with_painted_edge_neighbours(intents, scalar_axes)
+    intents = _with_tick_label_clearances(intents, scalar_axes)
     if definition_pass == "move":
         circular = cfg.canvas.circular
         floor_px = float(circular.track_narrowing_min_px) if circular.track_narrowing else math.inf

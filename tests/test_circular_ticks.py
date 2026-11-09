@@ -526,9 +526,10 @@ def _tick_label_inner_edge_px(svg: str) -> float:
     return min(_slot_arc_radii(svg, "ticks", "circular_tick_label_path_"))
 
 
-def _ring_below_the_ticks(ring: str, background: bool) -> str:
+def _ring_below_the_ticks(ring: str, background: bool, slots: tuple[str, ...] | None = None) -> str:
     """A 600 kbp record drawn with ``ring`` (a conservation ring with or without its background, or a feature
-    density heatmap or histogram) in the row just inside the scale, whose labels face it."""
+    density heatmap or histogram) in the row just inside the scale, whose labels face it; or in the ``slots`` given,
+    where ``RING`` stands for the ring's slot (followed by more of its parameters)."""
 
     from gbdraw.analysis.feature_density import FeatureDensityTrack
     from gbdraw.api.assembly_inputs import CircularAssemblyInputs
@@ -565,7 +566,10 @@ def _ring_below_the_ticks(ring: str, background: bool) -> str:
                 FeatureDensityTrack("cds", FeatureQuery("CDS")),
                 FeatureDensityTrack("cds_bars", FeatureQuery("CDS"), style="histogram"),
             ),
-            circular_track_slots=["features:features", "ticks:ticks", slot, "gc_content:dinucleotide_content"],
+            circular_track_slots=[
+                slot + entry[len("RING"):] if entry.startswith("RING") else entry
+                for entry in (slots or ("features:features", "ticks:ticks", "RING", "gc_content:dinucleotide_content"))
+            ],
         ),
     ).tostring()
 
@@ -596,3 +600,40 @@ def test_the_tick_labels_keep_the_band_edge_of_a_density_histogram() -> None:
     svg = _ring_below_the_ticks("histogram", True)
 
     assert _tick_label_inner_edge_px(svg) - _slot_outer_edge_px(svg, "ring") == pytest.approx(0.0, abs=0.05)
+
+
+def _tick_label_outer_edge_px(svg: str) -> float:
+    """Where the scale's tick labels end outward when they stand outside the ticks: their paths plus a line box."""
+
+    from gbdraw.core.text import drawn_text_box
+
+    cfg = apply_config_overrides(None, None)
+    _width, height = drawn_text_box("0 kbp", str(cfg.objects.text.font_family), float(cfg.objects.ticks.tick_labels.font_size))
+    return max(_slot_arc_radii(svg, "ticks", "circular_tick_label_path_")) + float(height)
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("gap", [None, 1.0, 6.0], ids=["default-gap", "gap-below-margin", "gap-above-margin"])
+def test_outward_tick_labels_keep_the_larger_of_the_slot_gap_and_their_margin_from_a_ring(gap) -> None:
+    """OV-3150: below a ring that paints its edge, labels standing outside their ticks kept the slot gap plus their
+    margin (7.0 px by default); the packing keeps the gap there, so the margin counts only where the gap is less."""
+
+    cfg = apply_config_overrides(None, None)
+    margin = circular_tick_label_margin_px(float(cfg.objects.ticks.tick_labels.font_size), float(cfg.objects.ticks.tick_width))
+    ring_gap = "" if gap is None else f",inner_gap_px={gap}"
+    tick_gap = "" if gap is None else f",outer_gap_px={gap}"
+    svg = _ring_below_the_ticks(
+        "conservation",
+        True,
+        (
+            "features:features",
+            f"RING{ring_gap}",
+            f"ticks:ticks@tick_label_layout=label_out_tick_in{tick_gap}",
+            "gc_content:dinucleotide_content",
+        ),
+    )
+    clearance = min(_slot_arc_radii(svg, "ring")) - _tick_label_outer_edge_px(svg)
+    # The default slot gap at this radius: what dev draws there.
+    default_gap = 3.9
+    expected = max(default_gap if gap is None else gap, margin)
+    assert clearance == pytest.approx(expected, abs=0.01)

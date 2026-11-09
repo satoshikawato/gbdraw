@@ -117,6 +117,9 @@ class CircularScalarAxes:
     gc_content: ScalarAxisStyle | None = None
     depth_tracks: tuple[tuple[int, ScalarAxisStyle], ...] | None = None
     edge_painting_slot_ids: tuple[str, ...] = ()
+    # The room each tick row keeps past its labels toward such a slot, inward and outward, by slot id: what the
+    # packing alone leaves short of the labels' margin (set by the radial layout, OV-3150).
+    tick_label_clearances_px: tuple[tuple[str, float, float], ...] = ()
 
     @classmethod
     def of(
@@ -176,6 +179,14 @@ class CircularScalarAxes:
         """Whether the track of slot ``slot_id`` paints its band's edges."""
 
         return slot_id in self.edge_painting_slot_ids
+
+    def tick_label_clearance_px(self, slot_id: str) -> tuple[float, float]:
+        """The room tick row ``slot_id`` keeps past its labels, inward and outward (``tick_label_clearances_px``)."""
+
+        return next(
+            ((inward, outward) for row_id, inward, outward in self.tick_label_clearances_px if row_id == slot_id),
+            (0.0, 0.0),
+        )
 
     def footprint(
         self, renderer: str, track_width_px: float, *, slot_id: str, params: Mapping[str, object]
