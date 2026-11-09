@@ -87,14 +87,22 @@ const ringRowColor = (entry) => {
 };
 
 /**
- * Whether a similarity-ring block shows a color swatch on a ring row: the form
- * Python drew before PD-OI-110 scenario revision 2, which its layout no longer
- * gives. The Web leaves such a Legend where Python drew it.
+ * Whether a similarity-ring block is drawn in a form Python's layout no longer
+ * gives: a color swatch on a ring row (before PD-OI-110 scenario revision 2),
+ * or `identity` beside the one band instead of centred on its scale line (the
+ * first text of the identity scale, anchored at its start). The Web leaves
+ * such a Legend where Python drew it.
  * @param {Element | null} group
  */
-const ringRowsShowSwatches = (group) => entryGroupsOf(group).some((entry) => entry.hasAttribute('data-track-index')
-  && Array.from(entry.children).some((child) => child.localName === 'path'
-    && !String(child.getAttribute('fill') || '').startsWith('url(')));
+const ringBlockOfOlderForm = (group) => {
+  const scale = Array.from(group?.children || [])
+    .find((child) => child.getAttribute('data-gbdraw-role') === 'conservation-identity-band');
+  const label = textChildren(scale)[0];
+  if (label && label.getAttribute('text-anchor') !== 'middle') return true;
+  return entryGroupsOf(group).some((entry) => entry.hasAttribute('data-track-index')
+    && Array.from(entry.children).some((child) => child.localName === 'path'
+      && !String(child.getAttribute('fill') || '').startsWith('url(')));
+};
 
 /**
  * The rows of a comparison or conservation Legend block and the lowest
@@ -248,18 +256,18 @@ const placeRings = (group, rings) => {
   const scale = children.find((child) => child.getAttribute('data-gbdraw-role') === 'conservation-identity-band') || null;
   const [outer, inner] = children.slice(0, scale ? children.indexOf(scale) : children.length)
     .filter((child) => child.localName === 'text');
-  setTranslate(outer || null, 0, rings.outerCaptionY);
-  setTranslate(inner || null, 0, rings.innerCaptionY);
+  setTranslate(outer || null, rings.namesX, rings.outerCaptionY);
+  setTranslate(inner || null, rings.namesX, rings.innerCaptionY);
   const byKey = new Map(rings.rows.map((row) => [row.key, row]));
   entryGroupsOf(group).forEach((entry) => {
     const layout = byKey.get(pythonLegendKey(entry));
     if (!layout) return;
     const parts = Array.from(entry.children);
     setTranslate(parts.find((child) => child.localName === 'path') || null, rings.barX, layout.y);
-    setTranslate(parts.find((child) => child.localName === 'text') || null, 0, layout.y);
+    setTranslate(parts.find((child) => child.localName === 'text') || null, rings.namesX, layout.y);
   });
   const scaleParts = Array.from(scale?.children || []);
-  if (rings.bandY !== null) setTranslate(scaleParts.find((child) => child.localName === 'path') || null, 0, rings.bandY);
+  if (rings.bandY !== null) setTranslate(scaleParts.find((child) => child.localName === 'path') || null, rings.barX, rings.bandY);
   const [label, minLabel, maxLabel] = scaleParts.filter((child) => child.localName === 'text');
   setTranslate(label || null, rings.identityLabelX, rings.identityLabelY);
   setTranslate(minLabel || null, rings.minLabelX, rings.scaleLabelY);
@@ -333,7 +341,7 @@ export const createLegendLayoutActions = ({ readRegisteredFontFaces }) => {
     const gradientGroup = linear
       ? getComparisonLegendGroup(horizontal)
       : childById(legendGroup, 'conservation_identity_legend');
-    if (!linear && ringRowsShowSwatches(gradientGroup)) return null;
+    if (!linear && ringBlockOfOlderForm(gradientGroup)) return null;
     const rows = [...solid.rows, ...readGradientRows(gradientGroup)];
     // D-36: a Legend whose rows are all hidden takes no room, as Python draws it (an empty item, which the
     // composition planners skip); a Legend group without rows stays unknown.

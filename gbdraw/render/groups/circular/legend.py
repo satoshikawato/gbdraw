@@ -105,12 +105,12 @@ class LegendGroup:
         """The similarity-ring block (PD-OI-110, scenario revision 2): ``outer`` (when the layout shows the
         captions), one row per drawn ring (``data-source-index``, ``data-track-index``) with its name and, when the
         rings differ in colour, its own identity ramp, ``inner``, then the identity scale
-        (``conservation-identity-band``): the one band with its ``identity`` label and scale labels, or the one
-        scale line under the last ramp. The captions and the scale are not Legend rows."""
+        (``conservation-identity-band``): the one band (one colour), and the scale line under the bars (the
+        minimum, ``identity`` and 100%). The captions and the scale are not Legend rows."""
 
         muted = {"fill": RING_LEGEND_MUTED_TEXT_COLOR}
         if layout.show_captions:
-            group.add(self._text(RING_OUTER_CAPTION, 0, layout.outer_caption_y, **muted))
+            group.add(self._text(RING_OUTER_CAPTION, layout.names_x, layout.outer_caption_y, **muted))
         bar = self._bar_path(layout.bar_width)
         for row in layout.rows:
             row_group = Group()
@@ -126,10 +126,10 @@ class LegendGroup:
                     row.properties["max_color"],
                 )
                 self._gradient_bar(row_group, ramp_id, row.properties, bar).translate(layout.bar_x, row.y)
-            row_group.add(self._text(drawn_name, 0.0, row.y))
+            row_group.add(self._text(drawn_name, layout.names_x, row.y))
             group.add(row_group)
         if layout.show_captions:
-            group.add(self._text(RING_INNER_CAPTION, 0, layout.inner_caption_y, **muted))
+            group.add(self._text(RING_INNER_CAPTION, layout.names_x, layout.inner_caption_y, **muted))
 
         scale = Group()
         scale.attribs["data-gbdraw-role"] = "conservation-identity-band"
@@ -142,21 +142,9 @@ class LegendGroup:
                 properties["min_color"],
                 properties["max_color"],
             )
-            # The band starts at the block's left edge; an int keeps the drawn translate(0,y).
-            self._gradient_bar(scale, band_id, properties, bar).translate(0, layout.band_y)
-            scale.add(self._text(RING_BAND_LABEL, layout.identity_label_x, layout.identity_label_y, **muted))
-        else:
-            scale.add(
-                self._text(
-                    RING_BAND_LABEL,
-                    layout.identity_label_x,
-                    layout.identity_label_y,
-                    baseline="hanging",
-                    anchor="middle",
-                    **muted,
-                )
-            )
+            self._gradient_bar(scale, band_id, properties, bar).translate(layout.bar_x, layout.band_y)
         labels = {"baseline": "hanging", **muted}
+        scale.add(self._text(RING_BAND_LABEL, layout.identity_label_x, layout.identity_label_y, anchor="middle", **labels))
         scale.add(self._text(layout.min_label_text, layout.min_label_x, layout.scale_label_y, **labels))
         scale.add(self._text(layout.max_label_text, layout.max_label_x, layout.scale_label_y, anchor="end", **labels))
         group.add(scale)

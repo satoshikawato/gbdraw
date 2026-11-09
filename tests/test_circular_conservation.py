@@ -27,6 +27,7 @@ from gbdraw.core.text import drawn_text_box, measurement_font_file
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.legend.circular_layout import build_circular_legend_layout
+from gbdraw.legend.metrics import legend_caption_box
 from gbdraw.render.groups.circular.legend import LegendGroup as CircularLegendGroup
 from gbdraw.tracks import CircularTrackSlot, normalize_circular_track_slots
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs
@@ -621,17 +622,11 @@ def test_circular_ring_legend_lists_ring_names_and_one_scale(fills: list[str] | 
     )
     legend_table = _ring_rows(["barcode07.draft", "barcode15.draft"], fills)
 
+    measurement = _circular_legend_measurement(canvas_config, legend_config, legend_table)
+    ring = measurement.circular_layout.gradient  # type: ignore[union-attr]
+    assert ring is not None
     drawing = Drawing(debug=False)
-    drawing.add(
-        CircularLegendGroup(
-            _circular_legend_measurement(
-                canvas_config,
-                legend_config,
-                legend_table,
-            ),
-            legend_table,
-        ).get_group()
-    )
+    drawing.add(CircularLegendGroup(measurement, legend_table).get_group())
     root = ET.fromstring(drawing.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
     legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
@@ -642,12 +637,12 @@ def test_circular_ring_legend_lists_ring_names_and_one_scale(fills: list[str] | 
         "barcode15.draft",
     ]
 
-    # Names start at the block's left edge. One colour: one band below the names; colours that differ: each
+    # Names start at the names block's x. One colour: one band below the names; colours that differ: each
     # name's own ramp to its right, and no band.
     first_label = entries[0].find("svg:text", ns)
     assert first_label is not None
     label_x, _ = _translate_xy(first_label.get("transform"))
-    assert label_x == pytest.approx(0.0)
+    assert label_x == pytest.approx(ring.names_x)
     ramps = [entry.find("svg:path", ns) for entry in entries]
     band = legend.find("svg:g[@data-gbdraw-role='conservation-identity-band']", ns)
     assert band is not None
@@ -662,65 +657,118 @@ def test_circular_ring_legend_lists_ring_names_and_one_scale(fills: list[str] | 
     assert legend_texts.count("100%") == 1
 
 
+_LEGEND_FONT = "'Liberation Sans', 'Arial', sans-serif"
+_FEATURE_ROWS: dict[str, dict[str, object]] = {
+    "CDS": {"type": "solid", "fill": "#54bcf8", "stroke": "none", "width": 0},
+    "tRNA": {"type": "solid", "fill": "#e9ba42", "stroke": "none", "width": 0},
+}
+_GRADIENT_ROW: dict[str, object] = {
+    "type": "gradient", "min_color": "#dbeafe", "max_color": "#1e3a8a", "stroke": "none", "width": 0,
+    "min_label": "start", "max_label": "end",
+}
+
+
+def _vertical_layout(side: str, table: dict[str, dict[str, object]]):
+    return build_circular_legend_layout(
+        table, legend_position=side, canvas_width=1000.0, font_family=_LEGEND_FONT, font_size=10.0,
+        color_rect_size=12.0,
+    )
+
+
+def _ring_names_width(ring, table: dict[str, dict[str, object]]) -> float:
+    """The width of the ring names block: the names and, when shown, the ``outer`` and ``inner`` captions."""
+
+    widths = [legend_caption_box(str(row.key), _LEGEND_FONT, 10.0)[0] for row in ring.rows]
+    if ring.show_captions:
+        widths += [drawn_text_box(text, _LEGEND_FONT, 10.0)[0] for text in ("outer", "inner")]
+    return float(max(widths))
+
+
 @pytest.mark.parametrize("side", ["left", "right"])
 @pytest.mark.parametrize("fills", [None, ["#4e79a7", "#f28e2b"]], ids=["one-colour", "colours-differ"])
-def test_circular_vertical_legend_blocks_share_the_left_edge(side: str, fills: list[str] | None) -> None:
-    """OV-2835: a vertical Circular legend starts the feature rows and the similarity-ring block at the same left
-    edge, whichever block is wider."""
+@pytest.mark.parametrize("gradient_rows", [False, True], ids=["rings", "rings-and-gradient-rows"])
+@pytest.mark.parametrize("names", [["barcode07.draft", "barcode15.draft"], ["a", "b"]], ids=["long", "short"])
+def test_circular_vertical_legend_blocks_share_one_centre(
+    side: str, fills: list[str] | None, gradient_rows: bool, names: list[str]
+) -> None:
+    """A vertical Circular legend centres every block on the legend's vertical axis (Owner 2026-11-09): the
+    feature rows, the ring names block and the band (one colour) or the ring rows as one block (colours that
+    differ), and the annotation-gradient rows."""
 
-    canvas_config = SimpleNamespace(legend_position=side, dpi=96)
+    table = {**_FEATURE_ROWS, **_ring_rows(names, fills)}
+    if gradient_rows:
+        table["Query position"] = dict(_GRADIENT_ROW)
+    layout = _vertical_layout(side, table)
+    ring = layout.gradient
+    assert ring is not None
+    axis = layout.width / 2
+    gx = layout.gradient_x
+    feature_rect_x = {entry.rect_x for entry in layout.solid_entries}
+    assert len(feature_rect_x) == 1
+    centres = {"features": feature_rect_x.pop() + layout.feature_width / 2}
+    names_width = _ring_names_width(ring, table)
+    if ring.per_ring_ramps:
+        # The ring rows are one block; its inside keeps the names, then the ramps one swatch to their right.
+        assert ring.bar_x - ring.names_x == pytest.approx(names_width + 12.0)
+        centres["ring rows"] = gx + ring.names_x + ring.width / 2
+    else:
+        centres["ring names"] = gx + ring.names_x + names_width / 2
+        centres["band"] = gx + ring.bar_x + ring.bar_width / 2
+    if gradient_rows:
+        rows = layout.gradient_rows
+        assert rows is not None and not rows.compact
+        centres["gradient rows"] = gx + rows.single_entries[0].title_x
+    assert centres == {name: pytest.approx(axis) for name in centres}
+
+
+def test_circular_vertical_legend_draws_ring_names_at_the_names_block() -> None:
+    """The renderer draws the captions and the ring names where the layout puts the names block."""
+
+    canvas_config = SimpleNamespace(legend_position="left", dpi=96)
     legend_config = SimpleNamespace(
-        font_family="'Liberation Sans', 'Arial', sans-serif",
-        font_size=10.0,
-        color_rect_size=12.0,
-        legend_width=180.0,
-        legend_height=150.0,
-        pairwise_legend_width=160.0,
+        font_family=_LEGEND_FONT, font_size=10.0, color_rect_size=12.0, legend_width=180.0, legend_height=150.0,
+        pairwise_legend_width=0.0,
     )
-    legend_table = {
-        "CDS": {"type": "solid", "fill": "#54bcf8", "stroke": "none", "width": 0},
-        "tRNA": {"type": "solid", "fill": "#e9ba42", "stroke": "none", "width": 0},
-        **_ring_rows(["barcode07.draft", "barcode15.draft"], fills),
-    }
-
+    legend_table = {**_FEATURE_ROWS, **_ring_rows(["a", "b"])}
+    measurement = _circular_legend_measurement(canvas_config, legend_config, legend_table)
+    ring = measurement.circular_layout.gradient  # type: ignore[union-attr]
+    assert ring is not None and ring.names_x > 0
     drawing = Drawing(debug=False)
-    drawing.add(
-        CircularLegendGroup(
-            _circular_legend_measurement(
-                canvas_config,
-                legend_config,
-                legend_table,
-            ),
-            legend_table,
-        ).get_group()
-    )
+    drawing.add(CircularLegendGroup(measurement, legend_table).get_group())
     root = ET.fromstring(drawing.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
+    block = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
+    assert block is not None
+    texts = block.findall("svg:text", ns) + block.findall("svg:g[@data-legend-key]/svg:text", ns)
+    assert len(texts) == 4
+    assert [_translate_xy(text.get("transform"))[0] for text in texts] == [pytest.approx(ring.names_x)] * 4
 
-    feature_entries = [
-        entry
-        for entry in root.findall(".//svg:g[@data-legend-key]", ns)
-        if entry.get("data-legend-key") in {"CDS", "tRNA"}
-    ]
-    assert len(feature_entries) == 2
-    first_feature_text = feature_entries[0].find("./svg:text", ns)
-    first_feature_rect = feature_entries[0].find("./svg:path", ns)
-    assert first_feature_text is not None
-    assert first_feature_rect is not None
-    text_x, _ = _translate_xy(first_feature_text.get("transform"))
-    rect_x, _ = _translate_xy(first_feature_rect.get("transform"))
-    assert text_x - rect_x == pytest.approx((22 / 14) * legend_config.color_rect_size)
 
-    feature_legend = root.find(".//svg:g[@id='feature_legend']", ns)
-    ring_legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
-    assert feature_legend is not None and ring_legend is not None
-    feature_x = _translate_xy_or_zero(feature_legend.get("transform"))[0]
-    ring_x = _translate_xy_or_zero(ring_legend.get("transform"))[0]
-    first_ring_label = ring_legend.find(".//svg:g[@data-legend-key]/svg:text", ns)
-    assert first_ring_label is not None
-    label_x, _ = _translate_xy(first_ring_label.get("transform"))
-    assert feature_x + rect_x == pytest.approx(0.0)
-    assert ring_x + label_x == pytest.approx(0.0)
+@pytest.mark.parametrize("side", ["left", "right", "top", "bottom"])
+def test_one_colour_band_scale_line_takes_the_ramps_form(side: str) -> None:
+    """The one-colour band's scale line is the ramps' form in every legend position: the minimum at the band's
+    left end, ``identity`` centred on the band, 100% at its right end, all on one line under the band; the block
+    is no wider than its names and its band."""
+
+    table = {**_FEATURE_ROWS, **_ring_rows(["barcode07.draft", "barcode15.draft"])}
+    ring = _vertical_layout(side, table).gradient
+    assert ring is not None and ring.band_y is not None
+    assert (ring.identity_label_x, ring.identity_label_y) == (
+        pytest.approx(ring.bar_x + ring.bar_width / 2), pytest.approx(ring.scale_label_y)
+    )
+    assert (ring.min_label_x, ring.max_label_x) == (pytest.approx(ring.bar_x), pytest.approx(ring.bar_x + ring.bar_width))
+    assert ring.scale_label_y > ring.band_y
+    assert ring.width == pytest.approx(max(_ring_names_width(ring, table), ring.bar_width))
+    if side in {"top", "bottom"}:
+        # A horizontal legend keeps the names left-aligned with the band.
+        assert (ring.names_x, ring.bar_x) == (0.0, 0.0)
+
+
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_circular_vertical_legend_without_side_block_keeps_feature_rows_at_the_left_edge(side: str) -> None:
+    layout = _vertical_layout(side, dict(_FEATURE_ROWS))
+    assert layout.gradient is None and layout.gradient_rows is None
+    assert [(entry.rect_x, entry.text_x) for entry in layout.solid_entries] == [(0.0, layout.x_margin)] * 2
 
 
 def test_circular_bottom_conservation_legend_centers_feature_and_ring_blocks_vertically() -> None:

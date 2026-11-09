@@ -26,7 +26,6 @@ const GRADIENT_LABEL_GAP_RATIO = 0.2;
 // The similarity-ring block (gbdraw/legend/circular_layout.py, PD-OI-110).
 const RING_OUTER_CAPTION = 'outer';
 const RING_INNER_CAPTION = 'inner';
-const RING_BAND_LABEL = 'identity';
 const RING_BAND_LINE_GAP = 1.5;
 const GLYPH_FIELDS = 5;
 const KERNING_KEY_BASE = 65536;
@@ -806,7 +805,7 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
  */
 
 /**
- * One drawn ring's row of the ring block: its name at the block's left edge and, when the rings differ in color,
+ * One drawn ring's row of the ring block: its name at the block's `namesX` and, when the rings differ in color,
  * its own identity ramp at the block's `barX`, both centred on `y`.
  * @typedef {object} CircularRingRowLayout
  * @property {string} key
@@ -816,10 +815,11 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
 
 /**
  * The similarity-ring block (Python's `CircularRingLegendLayout`, PD-OI-110 scenario revision 2). One color:
- * caption `outer`, the drawn rings outermost first, caption `inner`, and the identity band at `bandY` labelled
- * `identity` with its scale labels below it. Colors that differ (`bandY` null): each row's name and its own ramp at
- * `barX`, one scale line (the minimum, `identity` centred, 100%) under the last ramp, and the captions only when two
- * or more drawn rings share a color (`showCaptions`).
+ * caption `outer`, the drawn rings outermost first, caption `inner` (the names block, at `namesX`), and the identity
+ * band at `bandY` (at `barX`); a vertical Legend centres the two on the block's width. Colors that differ (`bandY`
+ * null): each row's name at `namesX` and its own ramp at `barX`, as one block, and the captions only when two or
+ * more drawn rings share a color (`showCaptions`). Either form has one scale line under its bars: the minimum at
+ * their left end, `identity` centred, 100% at their right end.
  * @typedef {object} CircularRingLayout
  * @property {number} width
  * @property {number} height
@@ -827,6 +827,7 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
  * @property {number} outerCaptionY
  * @property {number} innerCaptionY
  * @property {CircularRingRowLayout[]} rows
+ * @property {number} namesX
  * @property {number} barX
  * @property {number} barWidth
  * @property {number | null} bandY
@@ -861,17 +862,32 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
 /** @typedef {{ row: LegendLayoutRow, key: string, textWidth: number, entryWidth: number }} MeasuredCircularEntry */
 
 /**
+ * The ring block with its names at `namesX` and its bars at `barX`, and the scale line under the bars (Python's
+ * `CircularRingLegendLayout` properties and `shifted`).
+ * @param {Omit<CircularRingLayout, 'namesX' | 'barX' | 'identityLabelX' | 'identityLabelY' | 'minLabelX' | 'maxLabelX'>} block
+ * @param {number} namesX
+ * @param {number} barX
+ * @returns {CircularRingLayout}
+ */
+const ringBlockAt = (block, namesX, barX) => ({
+  ...block, namesX, barX,
+  identityLabelX: barX + (block.barWidth / 2), identityLabelY: block.scaleLabelY,
+  minLabelX: barX, maxLabelX: barX + block.barWidth
+});
+
+/**
  * Python's `_build_ring_layout`: rows with a color draw their own ramps, and rows that share a color (one color
- * included) keep the captions.
+ * included) keep the captions. `centred` (a vertical Legend) centres the one-color names block and band on the
+ * block's width.
  * @param {readonly MeasuredCircularEntry[]} rings
  * @param {(caption: string) => { width: number, height: number }} measure
  * @param {number} rect
+ * @param {boolean} centred
  * @returns {CircularRingLayout | null}
  */
-const circularRingLayout = (rings, measure, rect) => {
+const circularRingLayout = (rings, measure, rect, centred) => {
   if (rings.length === 0) return null;
   const line = LEGEND_LINE_HEIGHT_RATIO * rect;
-  const xMargin = LEGEND_TEXT_OFFSET_RATIO * rect;
   const colors = rings.map((entry) => entry.row.color ?? null);
   const perRingRamps = colors.some(Boolean);
   const showCaptions = !perRingRamps || new Set(colors).size < colors.length;
@@ -891,25 +907,37 @@ const circularRingLayout = (rings, measure, rect) => {
   if (perRingRamps) {
     const barX = namesWidth + rect;
     const scaleLabelY = lastRowY + (rect / 2) + 2;
-    return {
+    return ringBlockAt({
       width: barX + barWidth,
       height: Math.max(scaleLabelY + labelHeight, showCaptions ? innerCaptionY + (rect / 2) : 0.0),
-      showCaptions, outerCaptionY, innerCaptionY, rows, barX, barWidth, bandY: null,
-      identityLabelX: barX + (barWidth / 2), identityLabelY: scaleLabelY,
-      minLabelText, minLabelX: barX, maxLabelX: barX + barWidth, scaleLabelY
-    };
+      showCaptions, outerCaptionY, innerCaptionY, rows, barWidth, bandY: null, minLabelText, scaleLabelY
+    }, 0.0, barX);
   }
+  const width = Math.max(namesWidth, barWidth);
   const bandY = innerCaptionY + (RING_BAND_LINE_GAP * line);
   const scaleLabelY = bandY + (rect / 2) + 2;
-  const identityLabelX = barWidth + (xMargin - rect);
-  return {
-    width: Math.max(namesWidth, identityLabelX + measure(RING_BAND_LABEL).width),
-    height: scaleLabelY + labelHeight,
-    showCaptions, outerCaptionY, innerCaptionY, rows, barX: 0.0, barWidth, bandY,
-    identityLabelX, identityLabelY: bandY,
-    minLabelText, minLabelX: 0.0, maxLabelX: barWidth, scaleLabelY
+  const block = {
+    width, height: scaleLabelY + labelHeight, showCaptions, outerCaptionY, innerCaptionY, rows, barWidth, bandY,
+    minLabelText, scaleLabelY
   };
+  return centred ? ringBlockAt(block, (width - namesWidth) / 2, (width - barWidth) / 2) : ringBlockAt(block, 0.0, 0.0);
 };
+
+/**
+ * Python's `CircularGradientLegendLayout.shifted`: the same rows `dx` to the right in the side block.
+ * @param {CircularGradientLayout} rows
+ * @param {number} dx
+ * @returns {CircularGradientLayout}
+ */
+const shiftedGradientRows = (rows, dx) => (dx === 0 ? rows : {
+  ...rows,
+  barX: rows.barX + dx,
+  minLabelX: rows.minLabelX + dx,
+  maxLabelX: rows.maxLabelX + dx,
+  moreScales: rows.moreScales.map((scale) => ({ ...scale, minLabelX: scale.minLabelX + dx, maxLabelX: scale.maxLabelX + dx })),
+  compactEntries: rows.compactEntries.map((entry) => ({ ...entry, labelX: entry.labelX + dx })),
+  singleEntries: rows.singleEntries.map((entry) => ({ ...entry, titleX: entry.titleX + dx, barX: entry.barX + dx }))
+});
 
 /**
  * The lines of the ring block in a vertical Legend (Python's `CircularRingLegendLayout.lines`): the captions, the
@@ -979,19 +1007,26 @@ const circularGradientLayout = (gradients, measure, rect, top) => {
 
 /**
  * Python's `_build_side_block`: the ring block, then the gradient rows half a legend line below it; its size, the
- * width it reserves (`pairwiseLegendWidth`), and its lines in a vertical Legend. Null without either.
+ * width it reserves (`pairwiseLegendWidth`), and its lines in a vertical Legend. Null without either. `centred` (a
+ * vertical Legend) centres the ring block and the gradient rows on the side block's width.
  * @param {readonly MeasuredCircularEntry[]} ringEntries
  * @param {readonly MeasuredCircularEntry[]} gradients
  * @param {(caption: string) => { width: number, height: number }} measure
  * @param {number} rect
+ * @param {boolean} centred
  */
-const circularSideBlock = (ringEntries, gradients, measure, rect) => {
+const circularSideBlock = (ringEntries, gradients, measure, rect, centred) => {
   const lineMargin = LEGEND_LINE_HEIGHT_RATIO * rect;
   const xMargin = LEGEND_TEXT_OFFSET_RATIO * rect;
-  const rings = circularRingLayout(ringEntries, measure, rect);
-  const rowsTop = rings ? rings.height + (lineMargin / 2.0) : 0.0;
-  const rows = circularGradientLayout(gradients, measure, rect, rowsTop);
-  if (!rings && !rows) return null;
+  const builtRings = circularRingLayout(ringEntries, measure, rect, centred);
+  const rowsTop = builtRings ? builtRings.height + (lineMargin / 2.0) : 0.0;
+  const builtRows = circularGradientLayout(gradients, measure, rect, rowsTop);
+  if (!builtRings && !builtRows) return null;
+  const width = Math.max(builtRings ? builtRings.width : 0.0, builtRows ? builtRows.width : 0.0);
+  const rings = builtRings && centred
+    ? ringBlockAt(builtRings, builtRings.namesX + ((width - builtRings.width) / 2), builtRings.barX + ((width - builtRings.width) / 2))
+    : builtRings;
+  const rows = builtRows && centred ? shiftedGradientRows(builtRows, (width - builtRows.width) / 2) : builtRows;
   const barWidth = GRADIENT_BAR_WIDTH_RATIO * rect;
   // One gradient reserves its block, title included (OV-1611).
   const gradientReserved = gradients.length === 0 ? 0.0 : gradients.length > 1
@@ -1003,7 +1038,7 @@ const circularSideBlock = (ringEntries, gradients, measure, rect) => {
   return {
     rings,
     rows,
-    width: Math.max(rings ? rings.width : 0.0, rows ? rows.width : 0.0),
+    width,
     height: rows ? rowsTop + rows.height : /** @type {CircularRingLayout} */ (rings).height,
     reservedWidth: Math.max(rings ? rings.width : 0.0, gradientReserved),
     lines
@@ -1036,7 +1071,7 @@ export const buildCircularLegendLayout = (rows, options, metrics) => {
     ({ solid: solids, gradient: gradients, ring: ringEntries })[row.type].push(measured);
   });
   // The block beside or below the solid rows: the ring block, then the gradient rows below it.
-  const gradient = circularSideBlock(ringEntries, gradients, measure, rect);
+  const gradient = circularSideBlock(ringEntries, gradients, measure, rect, !HORIZONTAL_SIDES.has(options.side));
   const pairwiseLegendWidth = gradient ? gradient.reservedWidth : 0.0;
   const base = {
     pairwiseLegendWidth, lineMargin, xMargin, gradient: gradient ? gradient.rows : null,
@@ -1117,16 +1152,20 @@ export const buildCircularLegendLayout = (rows, options, metrics) => {
 
   const featureBlockWidth = solids.length ? Math.max(...solids.map((entry) => xMargin + entry.textWidth)) : 0.0;
   const width = Math.max(featureBlockWidth, pairwiseLegendWidth, gradient ? gradient.width : 0.0);
-  // Every block of a vertical Legend starts at its left edge (OV-2835).
+  // With a side block, every block of a vertical Legend is centred on one axis (OV-2835): the feature rows here, the
+  // side block's blocks on its own width, and the side block on the Legend's.
+  const alignmentWidth = Math.max(width, featureBlockWidth, gradient ? gradient.width : 0.0);
+  const featureX = gradient && solids.length ? (alignmentWidth - featureBlockWidth) / 2.0 : 0.0;
   const entries = solids.map((entry, index) => ({
     key: entry.key, row: entry.row,
-    rectX: 0.0, rectY: index * lineMargin, textX: xMargin, textY: index * lineMargin
+    rectX: featureX, rectY: index * lineMargin, textX: featureX + xMargin, textY: index * lineMargin
   }));
   const featureHeight = solids.length ? rect + ((solids.length - 1) * lineMargin) : 0.0;
-  const gradientX = 0.0;
+  let gradientX = 0.0;
   let gradientY = 0.0;
   let height = featureHeight;
   if (gradient) {
+    gradientX = (alignmentWidth - gradient.width) / 2.0;
     gradientY = solids.length * lineMargin + (solids.length ? lineMargin * 0.5 : 0.0);
     height = Math.max(featureHeight, gradientY + gradient.height) + (rect / 2.0);
   }

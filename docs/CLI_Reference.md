@@ -1063,8 +1063,8 @@ color to the color; a ring without one (`same`) draws the default gradient
 `objects.conservation.color_scheme`.
 
 When every drawn ring has one color, the legend lists the rings by name from
-`outer` to `inner`, then one `identity` band, the outermost ring's gradient,
-with the minimum identity and `100%`. When the drawn rings are not all one
+`outer` to `inner`, then one band, the outermost ring's gradient, with one
+scale line under it (the minimum identity, `identity`, and `100%`). When the drawn rings are not all one
 color, each name has its ring's own identity ramp beside it, and one scale line
 (the minimum identity, `identity`, and `100%`) stands under the last ramp;
 `outer` and `inner` stand above and below the names only when two or more

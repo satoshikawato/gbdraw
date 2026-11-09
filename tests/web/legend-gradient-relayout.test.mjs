@@ -171,8 +171,9 @@ test('OV-1741: a Circular compact gradient block laid out again takes Python\'s 
 // from wrong positions, takes the positions Python's layout gives (tests/fixtures/legend_layout_vectors.json).
 // `captions`: whether Python drew `outer` and `inner`; a ring row with a color draws its own ramp (gradient, bar,
 // name), a row with `swatch` the solid swatch of scenario revision 1, and the identity scale draws the one band only
-// when no row has a color.
-const ringBlockSvg = (options, rows, minLabel, tail = '', captions = true) => {
+// when no row has a color. `identityAnchor`: `middle`, `identity` centred on the scale line, or `start`, beside the
+// band as Python drew it before.
+const ringBlockSvg = (options, rows, minLabel, tail = '', captions = true, identityAnchor = 'middle') => {
   const svg = circularGradientSvg(options, [], minLabel);
   const text = (content, anchor = 'start') => `<text font-family="${options.fontFamily}" font-size="${options.fontSize}" `
     + `text-anchor="${anchor}" transform="translate(3,4)">${content}</text>`;
@@ -189,7 +190,7 @@ const ringBlockSvg = (options, rows, minLabel, tail = '', captions = true) => {
     + `${row.color ? ramp(index, row.color) : ''}${row.swatch ? swatch(row.swatch) : ''}${text(row.name)}</g>`).join('');
   const band = ringRows.some((row) => row.color) ? '' : '<linearGradient id="band"><stop offset="0%" stop-color="#fff" />'
     + '</linearGradient><path d="M 0,0 z" fill="url(#band)" stroke="none" stroke-width="0" transform="translate(3,4)" />';
-  const scale = `<g data-gbdraw-role="conservation-identity-band">${band}${text('identity')}${text(minLabel)}${text('100%', 'end')}</g>`;
+  const scale = `<g data-gbdraw-role="conservation-identity-band">${band}${text('identity', identityAnchor)}${text(minLabel)}${text('100%', 'end')}</g>`;
   const content = '<svg xmlns="http://www.w3.org/2000/svg"><g id="legend"><path d="M 0,0 z" fill="none" stroke="none" stroke-width="0" />'
     + `${solids ? `<g id="feature_legend">${solids}</g>` : ''}`
     + '<g id="conservation_identity_legend" data-gbdraw-role="comparison-legend" data-gbdraw-orientation="circular">'
@@ -218,7 +219,9 @@ for (const edit of [
     assert.deepEqual(translateOf(block), [source.expected.gradientX, source.expected.gradientY]);
     const captions = block.children.filter((child) => child.localName === 'text');
     if (rings.showCaptions) {
-      assert.deepEqual(captions.map((caption) => translateOf(caption)), [[0, rings.outerCaptionY], [0, rings.innerCaptionY]]);
+      assert.deepEqual(
+        captions.map((caption) => translateOf(caption)), [[rings.namesX, rings.outerCaptionY], [rings.namesX, rings.innerCaptionY]]
+      );
     } else {
       assert.deepEqual(captions, []);
     }
@@ -226,7 +229,7 @@ for (const edit of [
     assert.equal(rows.length, rings.rows.length);
     rings.rows.forEach((expected, index) => {
       assert.equal(rows[index].getAttribute('data-legend-key'), expected.key);
-      assert.deepEqual(translateOf(rows[index].querySelector('text')), [0, expected.y], `${expected.key} name`);
+      assert.deepEqual(translateOf(rows[index].querySelector('text')), [rings.namesX, expected.y], `${expected.key} name`);
       const ramp = rows[index].querySelector('path');
       assert.equal(Boolean(ramp), rings.bandY === null, `${expected.key} ramp`);
       if (ramp) assert.deepEqual(translateOf(ramp), [rings.barX, expected.y], `${expected.key} ramp`);
@@ -234,7 +237,7 @@ for (const edit of [
     const scale = block.querySelector('[data-gbdraw-role="conservation-identity-band"]');
     const band = scale.querySelector('path');
     assert.equal(Boolean(band), rings.bandY !== null);
-    if (band) assert.deepEqual(translateOf(band), [0, rings.bandY]);
+    if (band) assert.deepEqual(translateOf(band), [rings.barX, rings.bandY]);
     const [label, minLabel, maxLabel] = scale.children.filter((child) => child.localName === 'text');
     assert.deepEqual(translateOf(label), [rings.identityLabelX, rings.identityLabelY]);
     assert.deepEqual(translateOf(minLabel), [rings.minLabelX, rings.scaleLabelY]);
@@ -248,6 +251,18 @@ test('PD-OI-110: a ring block drawn with swatches (scenario revision 1) is left 
   const source = vector('synthetic circular', 'solid rows and rings of several colors, left');
   const rows = source.rows.map((row) => ({ ...row, name: row.key, color: null, swatch: row.color }));
   const svg = ringBlockSvg(source.options, rows, '90%');
+  const ring = svg.querySelector('#conservation_identity_legend g[data-track-index]');
+  const actions = layOut();
+  await actions.prepareLegendLayout();
+  assert.equal(actions.layOutLegend(svg), null);
+  assert.deepEqual(translateOf(ring.querySelector('text')), [3, 4]);
+});
+
+// A one-color ring block drawn before the band took the ramps' scale line has `identity` beside the band; Python's
+// layout no longer gives that form, so the Web leaves the Legend where Python drew it.
+test('PD-OI-110: a one-color ring block with identity beside its band is left where Python drew it', async () => {
+  const source = vector('synthetic circular', 'solid rows and one-color rings, left');
+  const svg = ringBlockSvg(source.options, source.rows.map((row) => ({ ...row, name: row.key })), '70%', '', true, 'start');
   const ring = svg.querySelector('#conservation_identity_legend g[data-track-index]');
   const actions = layOut();
   await actions.prepareLegendLayout();
@@ -289,8 +304,8 @@ test('the gradient rows below a ring block, of two scales, take Python\'s positi
     assert.deepEqual(translateOf(labels[(2 * index) + 1]), [scale.maxLabelX, scale.scaleLabelY]);
   });
   const [outer, inner] = block.children.filter((child) => child.localName === 'text');
-  assert.deepEqual(translateOf(outer), [0, rings.outerCaptionY]);
-  assert.deepEqual(translateOf(inner), [0, rings.innerCaptionY]);
+  assert.deepEqual(translateOf(outer), [rings.namesX, rings.outerCaptionY]);
+  assert.deepEqual(translateOf(inner), [rings.namesX, rings.innerCaptionY]);
 });
 
 // The fake DOM's textContent, which the cases above read and write, keeps

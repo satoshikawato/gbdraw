@@ -4948,8 +4948,9 @@ Status: active Product authority
   the color swatch of each row and the neutral gray band go. The captions
   `outer` and `inner` stand above and below the names only when two or more
   drawn rings share a color, all rings of one color included. The legend of
-  rings of one color is unchanged: `outer`, the names, `inner`, and one band
-  labelled `identity`. It comes from the Product Decision Owner
+  rings of one color shows `outer`, the names, `inner`, and one band; its
+  scale line (the minimum, `identity`, and `100%`) stands under the band as
+  under the ramps. It comes from the Product Decision Owner
   `satoshikawato`'s reply 「Q1=承認」 of `2026-11-08` in the Claude Code session
   `bce320` of the campaign `ring-legend-20261108` (`DECISIONS.md` `D-01`). The
   receipt names no ID of its own and is recorded byte for byte.
