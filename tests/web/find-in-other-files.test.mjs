@@ -8,7 +8,7 @@ import test from 'node:test';
 
 const { createFindInOtherFiles } = await import('../../gbdraw/web/js/app/find-in-other-files.js');
 const { referenceWindowOf, locateLosatJobs } = await import('../../gbdraw/web/js/services/find-in-other-files.js');
-const { proposalView } = await import('../../gbdraw/web/js/app/find-in-other-files/proposal.js');
+const { proposalView, windowDrafts } = await import('../../gbdraw/web/js/app/find-in-other-files/proposal.js');
 
 const record = (recordKey, recordId, length, circular = false) => ({ recordKey, recordId, length, circular });
 const FILES = [
@@ -409,6 +409,12 @@ test('the window numbers, the genes found and the alignments removed are the one
   const view = proposalView({ plan, pairs: [], geneNames: NAMES },
     { plan, counts: [{ fileKey: 'a', windowNumbers: [], genesFound: 0, genesTotal: 3, alignmentsRemoved: 9 }] }, [], { a: 'a.gb' });
   assert.equal(view[0].empty, 'No window found. The thresholds removed 9 alignments.');
+
+  // A kept window without its number in the reply is not the reply of this plan: refused, never shown unnumbered.
+  const kept = searchPlan();
+  const missing = countsOf(kept).map((item) => (item.fileKey === 'b' ? { ...item, windowNumbers: item.windowNumbers.slice(1) } : item));
+  assert.throws(() => proposalView({ plan: kept, pairs: [], geneNames: NAMES }, { plan: kept, counts: missing }, windowDrafts(kept), {}),
+    (error) => error.code === 'RESULT_INVALID' && error.operation === 'findInOtherFiles');
 });
 
 test('each search setting starts from its own Pairwise Comparisons value; an invalid one takes its default alone', async () => {

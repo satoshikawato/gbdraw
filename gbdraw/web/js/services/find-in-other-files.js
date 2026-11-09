@@ -156,8 +156,9 @@ export const windowGeneSpan = (genes, names) => {
 };
 
 /**
- * The name of each File of a drawing's request, by its File key (the record key of its card): the name of the Web
- * file its source reads (the GenBank file, else the GFF3 file, else the FASTA file).
+ * The name of the Web file each record of a drawing's request reads (the GenBank file, else the GFF3 file, else the
+ * FASTA file), by its record key. A File's key is the record key of the first request record of its source
+ * (`d:1` for a card the request writes as one record per record), so every File key is named.
  * @param {readonly CanonicalRecord[]} records The request's records.
  * @param {ReadonlyMap<string, { name: string }>} filesByResource The Web file of each resource.
  * @returns {Record<string, string>}

@@ -154,6 +154,18 @@ const byFileKey = (items, fileKey) => {
 };
 
 /**
+ * The number in the drawing of a kept window, by its column in the plan; a reply without it is not the reply of
+ * this plan.
+ * @param {ReadonlyMap<number, number>} numbers @param {number} column
+ * @returns {number}
+ */
+const numberOf = (numbers, column) => {
+  const number = numbers.get(column);
+  if (number === undefined) throw diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: LOCATE_OPERATION });
+  return number;
+};
+
+/**
  * The proposal: each File in the drawing's order, with the windows of the search and their state now. Python gives
  * every number: the window numbers of the drawing, the genes found and the alignments removed (`counts`).
  * @param {LocatePlanReply} search The search's plan, its gene names.
@@ -176,7 +188,7 @@ export const proposalView = (search, chosen, drafts, fileNames) => {
       const key = windowKey(file.file_key, item.window.column);
       const keptItem = keptByKey.get(key);
       return windowView(item, keptItem, /** @type {WindowDraft} */ (draftOf.get(key)),
-        keptItem ? numbers.get(item.window.column ?? 0) ?? 0 : 0, names, search.plan.options.max_windows);
+        keptItem ? numberOf(numbers, item.window.column ?? 0) : 0, names, search.plan.options.max_windows);
     };
     const { complete, partial, absent } = kept.coverage;
     return {
