@@ -378,6 +378,19 @@ assert.equal(timers.size, 0);
 assert.equal(wrapper.listeners.get('transitionend').size, 0);
 completeCase('explicit canonical cancel empties every active source and resource');
 
+panZoom.resetPreviewViewport();
+panZoom.startPan({ button: 0, shiftKey: false, clientX: 130, clientY: 150, target: backgroundTarget });
+panZoom.doPan({ clientX: 160, clientY: 190 });
+assert.equal(frames.size, 1);
+assert.equal(canvas.style.cursor, 'grabbing');
+panZoom.cancelPreviewTransformInteraction({ reconcile: false });
+assert.equal(frames.size, 0, 'the cancel stops the pending pan frame');
+assert.equal(canvas.style.cursor, 'grab');
+assert.equal(uiState.isPanning.value, false);
+panZoom.endPan({ type: 'pointercancel', clientX: 0, clientY: 0 });
+assert.equal(`${uiState.canvasPan.x},${uiState.canvasPan.y}`, '0,0', 'a cancelled pan moves the figure no more');
+completeCase('a cancel during a pan stops its frame and resets the cursor');
+
 panZoom.handleWheel(wheelEvent);
 panZoom.resetPreviewViewport();
 assert.equal(panZoom.previewTransformInteraction.isActive(), false);

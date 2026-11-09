@@ -148,19 +148,23 @@ export const projectPreviewSurface = (element, view) => {
 };
 
 /**
- * The pan and zoom owner. It writes the view state only; `projectPreviewSurface` shows it.
- * @param {Pick<WebState, 'zoom' | 'layoutRepositionMode' | 'isPanning' | 'panStart' | 'canvasPan' | 'canvasContainerRef'
- *   | 'svgContainer' | 'previewHiddenUntilShown' | 'previewTransitionHeld'>} state
+ * What the preview transform interaction shows its readers: whether a wheel zoom or a pan is active, and its
+ * start and end.
+ * @typedef {Readonly<{ isActive: () => boolean,
+ *   subscribe: (listener: PreviewTransformInteractionListener) => () => void }>} PreviewTransformInteraction
  */
-export const createPanZoom = (state) => {
-  const {
-    zoom, layoutRepositionMode, isPanning, panStart, canvasPan, canvasContainerRef, svgContainer, previewHiddenUntilShown,
-    previewTransitionHeld
-  } = state;
-  /** @type {number | null} */
-  let panFrameId = null;
-  /** @type {{ x: number, y: number } | null} */
-  let pendingPanPointer = null;
+
+/**
+ * The preview transform interaction: the wheel zoom and the pan that hold it, as sources, and its readers. A
+ * wheel zoom ends once its burst is quiet and the surface's transform transition has ended, or past that
+ * transition when a clamped zoom runs none. It writes no view state; a pan the caller stops itself.
+ * @param {WebState['svgContainer']} svgContainer The Preview surface, whose transform transition ends a wheel zoom.
+ * @returns {{ previewTransformInteraction: PreviewTransformInteraction,
+ *   beginPreviewTransformInteraction: (kind: string, event: Event) => boolean,
+ *   endPreviewTransformInteraction: (kind: string) => boolean, beginWheelInteraction: (event: WheelEvent) => void,
+ *   endEveryInteraction: (reconcile: boolean) => boolean, clearInteractionListeners: () => void }}
+ */
+const createPreviewTransformInteraction = (svgContainer) => {
   /** @type {Set<string>} */
   const previewTransformInteractionSources = new Set();
   /** @type {number | null} */
@@ -174,6 +178,7 @@ export const createPanZoom = (state) => {
   /** @type {Set<PreviewTransformInteractionListener>} */
   const previewTransformInteractionListeners = new Set();
 
+  /** @type {PreviewTransformInteraction} */
   const previewTransformInteraction = Object.freeze({
     isActive: () => previewTransformInteractionSources.size > 0,
     /** @param {PreviewTransformInteractionListener} listener */
@@ -209,15 +214,12 @@ export const createPanZoom = (state) => {
     return true;
   };
 
-  /**
-   * @param {string} kind
-   * @param {{ reconcile?: boolean }} [options]
-   */
-  const endPreviewTransformInteraction = (kind, { reconcile = true } = {}) => {
+  /** @param {string} kind The source that ends; the interaction ends, reconciled, with the last one. */
+  const endPreviewTransformInteraction = (kind) => {
     if (!previewTransformInteractionSources.delete(kind)) return false;
     if (previewTransformInteractionSources.size > 0) return false;
     recordStructuralMetric('previewTransformInteractionEndCount', 1, { kind });
-    notifyPreviewTransformInteraction(false, kind, null, reconcile);
+    notifyPreviewTransformInteraction(false, kind, null, true);
     return true;
   };
 
@@ -232,18 +234,19 @@ export const createPanZoom = (state) => {
     }
   };
 
-  const detachWheelTransitionListener = () => {
+  // A wheel zoom's timers, transition listener, and end flags, dropped when it ends or is cancelled.
+  const dropWheelEnd = () => {
+    clearWheelTimers();
     wheelTransitionTarget?.removeEventListener?.('transitionend', handleWheelTransitionEnd);
     wheelTransitionTarget = null;
-  };
-
-  const finishWheelInteraction = ({ reconcile = true } = {}) => {
-    if (!previewTransformInteractionSources.has('wheel')) return false;
-    clearWheelTimers();
-    detachWheelTransitionListener();
     wheelBurstComplete = false;
     wheelTransitionComplete = false;
-    return endPreviewTransformInteraction('wheel', { reconcile });
+  };
+
+  const finishWheelInteraction = () => {
+    if (!previewTransformInteractionSources.has('wheel')) return false;
+    dropWheelEnd();
+    return endPreviewTransformInteraction('wheel');
   };
 
   /** @param {TransitionEvent} event */
@@ -285,16 +288,10 @@ export const createPanZoom = (state) => {
     scheduleWheelInteractionEnd();
   };
 
-  const cancelPreviewTransformInteraction = ({ reconcile = false } = {}) => {
+  /** Ends every source at once, as one `cancel` end. @param {boolean} reconcile */
+  const endEveryInteraction = (reconcile) => {
     const wasActive = previewTransformInteractionSources.size > 0;
-    cancelPanFrame();
-    pendingPanPointer = null;
-    isPanning.value = false;
-    if (canvasContainerRef.value) canvasContainerRef.value.style.cursor = 'grab';
-    clearWheelTimers();
-    detachWheelTransitionListener();
-    wheelBurstComplete = false;
-    wheelTransitionComplete = false;
+    dropWheelEnd();
     previewTransformInteractionSources.clear();
     if (!wasActive) return false;
     recordStructuralMetric('previewTransformInteractionEndCount', 1, { kind: 'cancel' });
@@ -302,7 +299,28 @@ export const createPanZoom = (state) => {
     return true;
   };
 
-  const isLayoutRepositionModeEnabled = () => layoutRepositionMode.value;
+  return {
+    previewTransformInteraction, beginPreviewTransformInteraction, endPreviewTransformInteraction,
+    beginWheelInteraction, endEveryInteraction, clearInteractionListeners: () => previewTransformInteractionListeners.clear()
+  };
+};
+
+/**
+ * The pan gesture: a press on the canvas that no control or figure editing owns starts it, the pointer moves
+ * the view once a frame, and its release or cancel ends it. It writes the pan and the canvas cursor.
+ * @param {Pick<WebState, 'layoutRepositionMode' | 'isPanning' | 'panStart' | 'canvasPan' | 'canvasContainerRef'
+ *   | 'svgContainer'>} state
+ * @param {{ beginInteraction: (kind: string, event: Event) => boolean, endInteraction: (kind: string) => boolean }}
+ *   interaction The transform interaction's start and end of the `pan` source.
+ * @returns {{ startPan: (event: MouseEvent & { target: Element }) => void, doPan: (event: MouseEvent) => void,
+ *   endPan: (event: MouseEvent) => void, stopPan: () => void }}
+ */
+const createPanGesture = (state, { beginInteraction, endInteraction }) => {
+  const { layoutRepositionMode, isPanning, panStart, canvasPan, canvasContainerRef, svgContainer } = state;
+  /** @type {number | null} */
+  let panFrameId = null;
+  /** @type {{ x: number, y: number } | null} */
+  let pendingPanPointer = null;
 
   const cancelPanFrame = () => {
     if (panFrameId !== null) {
@@ -330,31 +348,92 @@ export const createPanZoom = (state) => {
     canvasPan.y = nextPan.y;
   };
 
-  /**
-   * Replace the whole preview viewport; Reset and Fit both end here.
-   * @param {{ x: number, y: number }} pan
-   * @param {number} zoomLevel
-   */
-  const setPreviewViewport = (pan, zoomLevel) => {
-    cancelPreviewTransformInteraction({ reconcile: false });
-    Object.assign(panStart, { x: 0, y: 0, panX: 0, panY: 0 });
-    canvasPan.x = pan.x;
-    canvasPan.y = pan.y;
-    zoom.value = zoomLevel;
+  // The pan stops: no frame, no pointer, and the canvas cursor shows it can pan again.
+  const stopPan = () => {
+    cancelPanFrame();
+    pendingPanPointer = null;
+    isPanning.value = false;
+    if (canvasContainerRef.value) canvasContainerRef.value.style.cursor = 'grab';
   };
 
-  /** @param {{ resetZoom?: boolean, pan?: { x?: number, y?: number } | null }} [options] */
-  const resetPreviewViewport = ({ resetZoom = false, pan = null } = {}) => setPreviewViewport(
-    { x: Number(pan?.x) || 0, y: Number(pan?.y) || 0 },
-    resetZoom ? 1.0 : zoom.value
-  );
+  /** @param {MouseEvent & { target: Element }} event A press on the canvas; its target is an element. */
+  const startPan = (event) => {
+    if (event.button !== 0) return;
+    if (event.shiftKey && svgContainer.value?.querySelector?.('svg')) return;
+    const container = canvasContainerRef.value;
+    if (!container) return;
 
+    const target = event.target;
+    if (isFormControlTarget(target) || isSvgEditingTarget(target)) return;
+
+    const closestGroup = target.closest?.('g[id]');
+    if (closestGroup) {
+      const groupId = closestGroup.id;
+      if (groupId.startsWith('f') && !target.closest('.gbdraw-preview-layout-target')) {
+        return;
+      }
+      if (layoutRepositionMode.value && target.closest('svg')) return;
+    }
+    if (layoutRepositionMode.value && target.tagName === 'path' && target.closest('svg')) {
+      return;
+    }
+
+    // Own the accepted pan instead of starting native SVG text selection/drag.
+    event.preventDefault?.();
+    cancelPanFrame();
+    pendingPanPointer = null;
+    beginInteraction('pan', event);
+    isPanning.value = true;
+    panStart.x = event.clientX;
+    panStart.y = event.clientY;
+    panStart.panX = canvasPan.x;
+    panStart.panY = canvasPan.y;
+    container.style.cursor = 'grabbing';
+  };
+
+  /** @param {MouseEvent} event */
+  const doPan = (event) => {
+    if (!isPanning.value) return;
+    pendingPanPointer = { x: event.clientX, y: event.clientY };
+    if (panFrameId !== null) return;
+    panFrameId = requestAnimationFrame(() => {
+      panFrameId = null;
+      if (!isPanning.value || !pendingPanPointer) return;
+      flushPanUpdate(pendingPanPointer.x, pendingPanPointer.y);
+    });
+  };
+
+  /** @param {MouseEvent} event A mouse event or a pointer cancel / capture loss. */
+  const endPan = (event) => {
+    const wasPanning = isPanning.value;
+    // Cancellation and capture loss may carry (0, 0), not a pointer position.
+    const finalPointer =
+      event?.type !== 'pointercancel' && event?.type !== 'lostpointercapture'
+      && Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)
+        ? { x: event.clientX, y: event.clientY }
+        : pendingPanPointer;
+    if (wasPanning && finalPointer) flushPanUpdate(finalPointer.x, finalPointer.y);
+    stopPan();
+    if (wasPanning) endInteraction('pan');
+  };
+
+  return { startPan, doPan, endPan, stopPan };
+};
+
+/**
+ * Fit (UI-11): the largest whole-percent zoom that shows the whole diagram in the visible preview frame (the
+ * canvas left of an open Editor drawer), and the pan that centres it under the top-center origin. It keeps
+ * the room it measured, which the held view reads.
+ * @param {Pick<WebState, 'zoom' | 'canvasPan' | 'canvasContainerRef' | 'svgContainer' | 'previewTransitionHeld'>
+ *   & { setPreviewViewport: (pan: { x: number, y: number }, zoomLevel: number) => void }} owner The view, the
+ *   canvas and surface, and the whole-view setter.
+ * @returns {{ fitPreviewToViewport: () => void, inFittedRoom: (container: HTMLElement) => boolean,
+ *   forgetFittedRoom: () => void }}
+ */
+const createPreviewFit = ({ zoom, canvasPan, canvasContainerRef, svgContainer, previewTransitionHeld, setPreviewViewport }) => {
   // The room the last Fit measured.
   let fittedRoom = '';
 
-  // Fit (UI-11): the largest whole-percent zoom that shows the whole diagram in
-  // the visible preview frame (the canvas left of an open Editor drawer), and
-  // the pan that centres it under the top-center origin.
   const fitPreviewToViewport = () => {
     const container = canvasContainerRef.value;
     const surface = svgContainer.value;
@@ -393,102 +472,46 @@ export const createPanZoom = (state) => {
     previewTransitionHeld.value = false;
   };
 
-  /** @param {WheelEvent} event */
-  const handleWheel = (event) => {
-    beginWheelInteraction(event);
-    zoom.value = clampZoom(zoom.value + (event.deltaY > 0 ? -0.1 : 0.1));
+  return {
+    fitPreviewToViewport,
+    inFittedRoom: (container) => previewRoom(container) === fittedRoom,
+    forgetFittedRoom: () => { fittedRoom = ''; }
   };
+};
 
-  /** @param {MouseEvent & { target: Element }} event A press on the canvas; its target is an element. */
-  const startPan = (event) => {
-    if (event.button !== 0) return;
-    if (event.shiftKey && svgContainer.value?.querySelector?.('svg')) return;
-    const container = canvasContainerRef.value;
-    if (!container) return;
-
-    const target = event.target;
-    if (isFormControlTarget(target) || isSvgEditingTarget(target)) return;
-
-    const closestGroup = target.closest?.('g[id]');
-    if (closestGroup) {
-      const groupId = closestGroup.id;
-      if (groupId.startsWith('f') && !target.closest('.gbdraw-preview-layout-target')) {
-        return;
-      }
-      if (isLayoutRepositionModeEnabled() && target.closest('svg')) return;
-    }
-    if (isLayoutRepositionModeEnabled() && target.tagName === 'path' && target.closest('svg')) {
-      return;
-    }
-
-    // Own the accepted pan instead of starting native SVG text selection/drag.
-    event.preventDefault?.();
-    cancelPanFrame();
-    pendingPanPointer = null;
-    beginPreviewTransformInteraction('pan', event);
-    isPanning.value = true;
-    panStart.x = event.clientX;
-    panStart.y = event.clientY;
-    panStart.panX = canvasPan.x;
-    panStart.panY = canvasPan.y;
-    container.style.cursor = 'grabbing';
-  };
-
-  /** @param {MouseEvent} event */
-  const doPan = (event) => {
-    if (!isPanning.value) return;
-    pendingPanPointer = { x: event.clientX, y: event.clientY };
-    if (panFrameId !== null) return;
-    panFrameId = requestAnimationFrame(() => {
-      panFrameId = null;
-      if (!isPanning.value || !pendingPanPointer) return;
-      flushPanUpdate(pendingPanPointer.x, pendingPanPointer.y);
-    });
-  };
-
-  /** @param {MouseEvent} event A mouse event or a pointer cancel / capture loss. */
-  const endPan = (event) => {
-    const wasPanning = isPanning.value;
-    // Cancellation and capture loss may carry (0, 0), not a pointer position.
-    const finalPointer =
-      event?.type !== 'pointercancel' && event?.type !== 'lostpointercapture'
-      && Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)
-        ? { x: event.clientX, y: event.clientY }
-        : pendingPanPointer;
-    cancelPanFrame();
-
-    if (isPanning.value && finalPointer) flushPanUpdate(finalPointer.x, finalPointer.y);
-
-    pendingPanPointer = null;
-    isPanning.value = false;
-    if (canvasContainerRef.value) canvasContainerRef.value.style.cursor = 'grab';
-    if (wasPanning) endPreviewTransformInteraction('pan');
-  };
-
-  // A view shown only for a while (the fitted figure of Review alignment) is not what a Session
-  // or an artifact checkpoint keeps. The view from before it is held here, and the Session
-  // writer and the UI capture read it through `heldPreviewViewport`.
+/**
+ * A view shown only for a while (the fitted figure of Review alignment) is not what a Session or an artifact
+ * checkpoint keeps. The view from before it is held here, and the Session writer and the UI capture read it
+ * through `heldPreviewViewport`. While a view is held and the figure fitted in its place is shown, that figure
+ * follows its room: it is fitted again each time the canvas changes size, whatever changed it (the window, the
+ * settings pane, the docked panel changing sides). A zoom or a pan made in between lasts until the next such
+ * change. A hidden canvas (the Run info tab) has no room, and the room of the last Fit is no change. Another
+ * figure shown under the hold is not fitted.
+ * @param {Pick<WebState, 'zoom' | 'canvasPan' | 'canvasContainerRef'> & { fit: () => void,
+ *   inFittedRoom: (container: HTMLElement) => boolean, forgetFittedRoom: () => void,
+ *   setPreviewViewport: (pan: { x: number, y: number }, zoomLevel: number) => void }} owner The view, the
+ *   canvas, the Fit and the room it measured, and the whole-view setter.
+ * @returns {{ holdPreviewViewport: (figureShown: () => boolean) => void,
+ *   releasePreviewViewport: (options: { restore: boolean }) => void,
+ *   heldPreviewViewport: () => PersistedPreviewViewport | null, disposeHeldPreviewView: () => void }}
+ */
+const createHeldPreviewView = ({ zoom, canvasPan, canvasContainerRef, fit, inFittedRoom, forgetFittedRoom, setPreviewViewport }) => {
   /** @type {PersistedPreviewViewport | null} */
   let held = null;
   /** @type {() => boolean} */
   let heldFigureShown = () => false;
-  // While a view is held and the figure fitted in its place is shown, that figure follows its
-  // room: it is fitted again each time the canvas changes size, whatever changed it (the window,
-  // the settings pane, the docked panel changing sides). A zoom or a pan made in between lasts
-  // until the next such change. A hidden canvas (the Run info tab) has no room, and the room of
-  // the last Fit is no change. Another figure shown under the hold is not fitted.
   const heldRoomObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
     const container = canvasContainerRef.value;
-    if (!container?.offsetWidth || !container.offsetHeight || previewRoom(container) === fittedRoom
+    if (!container?.offsetWidth || !container.offsetHeight || inFittedRoom(container)
       || !heldFigureShown()) return;
-    fitPreviewToViewport();
+    fit();
   }) : null;
   /** @param {() => boolean} figureShown Whether the figure fitted in place of the held view is shown. */
   const holdPreviewViewport = (figureShown) => {
     if (held) return;
     held = { zoom: zoom.value, canvasPan: { x: canvasPan.x, y: canvasPan.y } };
     heldFigureShown = figureShown;
-    fittedRoom = '';
+    forgetFittedRoom();
     if (canvasContainerRef.value) heldRoomObserver?.observe(canvasContainerRef.value);
   };
   /** @param {{ restore: boolean }} options `restore` shows the held view again; without it the hold is dropped. */
@@ -498,7 +521,66 @@ export const createPanZoom = (state) => {
     held = null;
     if (view && restore) setPreviewViewport(view.canvasPan, view.zoom);
   };
-  const heldPreviewViewport = () => held;
+  return {
+    holdPreviewViewport, releasePreviewViewport, heldPreviewViewport: () => held,
+    disposeHeldPreviewView: () => heldRoomObserver?.disconnect()
+  };
+};
+
+/**
+ * The pan and zoom owner. It writes the view state only; `projectPreviewSurface` shows it. Its steps (the
+ * transform interaction, the pan gesture, the Fit, and the held view) each own their state; this owner joins
+ * them and owns the whole-view setter.
+ * @param {Pick<WebState, 'zoom' | 'layoutRepositionMode' | 'isPanning' | 'panStart' | 'canvasPan' | 'canvasContainerRef'
+ *   | 'svgContainer' | 'previewHiddenUntilShown' | 'previewTransitionHeld'>} state
+ */
+export const createPanZoom = (state) => {
+  const { zoom, panStart, canvasPan, canvasContainerRef, svgContainer, previewHiddenUntilShown, previewTransitionHeld } = state;
+  const {
+    previewTransformInteraction, beginPreviewTransformInteraction, endPreviewTransformInteraction, beginWheelInteraction,
+    endEveryInteraction, clearInteractionListeners
+  } = createPreviewTransformInteraction(svgContainer);
+  const { startPan, doPan, endPan, stopPan } = createPanGesture(state, {
+    beginInteraction: beginPreviewTransformInteraction, endInteraction: endPreviewTransformInteraction
+  });
+
+  // A cancel stops a pan, then ends every source of the interaction.
+  const cancelPreviewTransformInteraction = ({ reconcile = false } = {}) => {
+    stopPan();
+    return endEveryInteraction(reconcile);
+  };
+
+  /**
+   * Replace the whole preview viewport; Reset and Fit both end here.
+   * @param {{ x: number, y: number }} pan
+   * @param {number} zoomLevel
+   */
+  const setPreviewViewport = (pan, zoomLevel) => {
+    cancelPreviewTransformInteraction({ reconcile: false });
+    Object.assign(panStart, { x: 0, y: 0, panX: 0, panY: 0 });
+    canvasPan.x = pan.x;
+    canvasPan.y = pan.y;
+    zoom.value = zoomLevel;
+  };
+
+  /** @param {{ resetZoom?: boolean, pan?: { x?: number, y?: number } | null }} [options] */
+  const resetPreviewViewport = ({ resetZoom = false, pan = null } = {}) => setPreviewViewport(
+    { x: Number(pan?.x) || 0, y: Number(pan?.y) || 0 },
+    resetZoom ? 1.0 : zoom.value
+  );
+
+  /** @param {WheelEvent} event */
+  const handleWheel = (event) => {
+    beginWheelInteraction(event);
+    zoom.value = clampZoom(zoom.value + (event.deltaY > 0 ? -0.1 : 0.1));
+  };
+
+  const { fitPreviewToViewport, inFittedRoom, forgetFittedRoom } = createPreviewFit({
+    zoom, canvasPan, canvasContainerRef, svgContainer, previewTransitionHeld, setPreviewViewport
+  });
+  const { holdPreviewViewport, releasePreviewViewport, heldPreviewViewport, disposeHeldPreviewView } = createHeldPreviewView({
+    zoom, canvasPan, canvasContainerRef, fit: fitPreviewToViewport, inFittedRoom, forgetFittedRoom, setPreviewViewport
+  });
 
   // The Fit shown at once: no transition runs to the fitted view, and the browser takes that view
   // as shown before the transition comes back.
@@ -513,12 +595,11 @@ export const createPanZoom = (state) => {
     hidden: previewHiddenUntilShown, canvas: canvasContainerRef, fitAtOnce, setPreviewViewport
   });
 
-
   const disposePanZoom = () => {
-    heldRoomObserver?.disconnect();
+    disposeHeldPreviewView();
     disposeHiddenPreview();
     cancelPreviewTransformInteraction({ reconcile: false });
-    previewTransformInteractionListeners.clear();
+    clearInteractionListeners();
   };
 
   return {
