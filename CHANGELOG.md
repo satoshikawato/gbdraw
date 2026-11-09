@@ -77,6 +77,12 @@ write-up of a release.
   are unchanged, and a window or step you set is kept. The Auto Depth window and
   step follow from these as before, and the Web app's Auto hints show the same
   values (OV-2864).
+- Changed: records of 100 Mbp or longer get an Auto GC content and GC skew
+  window of 1 Mb and step of 100 kb (before: 100 kb and 10 kb), so a human
+  chromosome draws about 2,500 samples per track instead of about 25,000.
+  Records shorter than 100 Mbp are unchanged, and a window or step you set is
+  kept. The Auto Depth window and step follow (100 kb and 10 kb at 100 Mbp and
+  longer), and the Web app's Auto hints show the same values.
 - Fixed: a Circular figure with one Depth series and no custom track stack
   listed the Depth row last in the Legend, after GC skew, although its ring is
   drawn between the features and GC content. Setting a Depth width (in the Web

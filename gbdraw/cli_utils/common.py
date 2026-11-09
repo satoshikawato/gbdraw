@@ -145,7 +145,7 @@ def _add_window_step_args(parser: argparse.ArgumentParser) -> None:
         '-w',
         '--window',
         help=(
-            'window size (optional; default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes >=10Mb, '
+            'window size (optional; default: 1kb for genomes < 1Mb, 10kb for genomes <10Mb, 100kb for genomes <100Mb, 1Mb for genomes >=100Mb, '
             'and at most a tenth of the drawn length)'
         ),
         type=argparse_integer)
@@ -153,7 +153,7 @@ def _add_window_step_args(parser: argparse.ArgumentParser) -> None:
         '-s',
         '--step',
         help=(
-            'step size (optional; default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes >=10Mb, '
+            'step size (optional; default: 100 bp for genomes < 1Mb, 1kb for genomes <10Mb, 10kb for genomes <100Mb, 100kb for genomes >=100Mb, '
             'and at most a tenth of the Auto window)'
         ),
         type=argparse_integer)

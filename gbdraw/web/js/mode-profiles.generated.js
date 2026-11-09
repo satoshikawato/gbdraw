@@ -295,8 +295,8 @@ export const MODE_PROFILE_DATA = deepFreeze({
     },
     "slidingWindow": {
       "above": [
-        100000,
-        10000
+        1000000,
+        100000
       ],
       "divisor": 10,
       "tiers": [
@@ -309,6 +309,11 @@ export const MODE_PROFILE_DATA = deepFreeze({
           10000000,
           10000,
           1000
+        ],
+        [
+          100000000,
+          100000,
+          10000
         ]
       ]
     }
