@@ -240,7 +240,7 @@ console.log('History restores nullable config values and preserves key guards.')
         anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' },
         qualifiers: { note: [marker] }
       }],
-      orthogroups: [], annotations: [], comparisonMatches: [], sequenceSources: []
+      orthogroups: [], annotations: [], comparisonMatches: []
     }]
   }, [{ name: 'diagram.svg', content: '<svg />' }], { adopt: true, mode: 'circular' }).catalog;
   installShownDrawing('circular');

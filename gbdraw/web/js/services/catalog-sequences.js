@@ -15,6 +15,7 @@
 /** @import { MatchSequenceRecords } from './pairwise-match-popup.js' */
 import { diagnosticError } from '../utils/error-normalization.js';
 import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
+import { featureIdentityKey } from './feature-placement.js';
 
 /** @typedef {'readFeatureSequences' | 'readMatchSequences' | 'readEmbedSequences'} CatalogSequenceOperation */
 
@@ -87,12 +88,18 @@ export const FEATURE_READ_BASES = 8_000_000;
 /** The characters the page keeps of replies for the shown Result; past it the oldest are dropped. */
 export const KEPT_SEQUENCE_CHARACTERS = 64 * 1024 * 1024;
 
-/** @param {FeatureSequenceInput} feature */
-const featureKey = ({ recordKey, biologicalFeatureId }) => JSON.stringify([recordKey, biologicalFeatureId]);
+/** A feature's reply is kept and found by its identity key (the draft owner's). @param {FeatureSequenceInput} feature */
+const featureKey = ({ recordKey, biologicalFeatureId }) => featureIdentityKey(recordKey, biologicalFeatureId);
+/**
+ * The span a read sends: its range and record fields only, as a plain object (an asker's span may be popup state, a
+ * reactive proxy the Worker message cannot clone).
+ * @param {MatchSpanInput} span @returns {MatchSpanInput}
+ */
+const spanInput = (span) => (span.kind === 'record'
+  ? { kind: 'record', recordKey: span.recordKey, start: span.start, end: span.end }
+  : { kind: 'comparison', sourceIndex: span.sourceIndex, recordId: span.recordId, start: span.start, end: span.end });
 /** @param {MatchSpanInput} span */
-const spanKey = (span) => JSON.stringify(span.kind === 'record'
-  ? [span.kind, span.recordKey, span.start, span.end]
-  : [span.kind, span.sourceIndex, span.recordId, span.start, span.end]);
+const spanKey = (span) => JSON.stringify(Object.values(spanInput(span)));
 
 /**
  * The features of one read in chunks of at most `limit` bases each (a feature longer than the limit is a chunk of
@@ -191,9 +198,8 @@ export const featureSequenceReads = (features) => {
  * @returns {Promise<string | null>}
  */
 export const readRowsFasta = async (rows, kind, readFeatures) => {
-  const asked = rows.flatMap(({ read }) => (read ? [read] : []));
-  if (!asked.length) return '';
-  const sequences = await readFeatures(asked);
+  // Rows without an identity still ask the door, which says when the shown Result has no request to read.
+  const sequences = await readFeatures(rows.flatMap(({ read }) => (read ? [read] : [])));
   if (sequences === null) return null;
   return rows.map(({ read, feature }) => {
     const replied = read ? sequences.get(featureKey(read)) : undefined;
@@ -329,7 +335,7 @@ export const createCatalogSequences = ({
   const readSpans = async (spans) => {
     const { owner, request } = committedOf('readMatchSequences');
     const missing = [...new Map(spans.filter((span) => !owner.spans.has(spanKey(span)))
-      .map((span) => [spanKey(span), span])).values()];
+      .map((span) => [spanKey(span), spanInput(span)])).values()];
     if (missing.length) {
       const reply = helpers.readMatchSequences({ ...request, spans: missing })
         .then((result) => readMatchSequencesReply(result?.result, missing));

@@ -328,7 +328,7 @@ const DEFINITIONS = Object.freeze({
   RESULT_INVALID: ['The generated result could not be accepted. Retry the operation.', ['retry', 'save-session']],
   // A shown Result without the request it was made from (a Result-only Session 27-39): Python reads its sequences
   // from the request the next Generate commits (D5).
-  SEQUENCE_REQUIRES_GENERATE: ['This Result was saved without the settings it was drawn with, so its sequences are read after the next Generate.', ['generate']],
+  SEQUENCE_REQUIRES_GENERATE: ['This Result was saved by an older gbdraw, so its sequences are read after the next Generate.', ['generate']],
   EXPORT_INPUT: ['The current diagram could not be prepared for export. Generate a diagram and retry.', ['generate', 'retry']],
   EXPORT_DIMENSIONS: ['The diagram has no usable export dimensions. Generate again or use SVG.', ['generate', 'use-svg']],
   PNG_DPI: ['The PNG DPI is invalid. Use a positive finite DPI and retry.', ['edit-dpi', 'retry']],

@@ -54,7 +54,6 @@ SITES: dict[str, int] = {
     "gbdraw/io/genome.py::record_sequence_text::str()": 1,
     "gbdraw/io/record_select.py::reverse_records::reverse_complement()": 1,
     "gbdraw/io/regions.py::_origin_crossing_view::+": 1,
-    "gbdraw/render/interactive_context.py::interactive_svg_context::str()": 2,
     "gbdraw/session_request_codec.py::_genbank_bytes::SeqIO.write": 1,
     "gbdraw/session_request_codec.py::_with_crop_edits::bytes()": 1,
     "gbdraw/session_request_codec.py::_with_crop_edits::reverse_complement()": 1,

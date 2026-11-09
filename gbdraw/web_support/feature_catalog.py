@@ -2302,6 +2302,7 @@ def match_sequence_sources(records: CatalogSequenceRecords) -> list[dict[str, ob
     it, and an exported Interactive SVG embeds the sources its matches read."""
 
     from gbdraw.api.prepared import cancel_checkpoint
+    from gbdraw.io.genome import record_sequence_text
 
     sources: list[dict[str, object]] = []
     for record_index, record in enumerate(records.records):
@@ -2316,7 +2317,7 @@ def match_sequence_sources(records: CatalogSequenceRecords) -> list[dict[str, ob
             "key": f"{records.mode}:record:{record_index}",
             "recordId": str(record.id),
             "aliases": sorted(value for value in aliases if value),
-            "sequence": str(record.seq).upper(),
+            "sequence": record_sequence_text(record) or "",
             "origin": "linear-record" if records.mode == "linear" else "circular-reference",
             "recordIndex": record_index,
         })
@@ -2326,7 +2327,7 @@ def match_sequence_sources(records: CatalogSequenceRecords) -> list[dict[str, ob
                 "key": f"homology:comparison:{source_index}:{record.id}",
                 "recordId": str(record.id),
                 "aliases": [str(record.id), str(record.name)],
-                "sequence": str(record.seq).upper(),
+                "sequence": record_sequence_text(record) or "",
                 "origin": "homology-comparison",
                 "sourceIndex": source_index,
             })
@@ -2745,6 +2746,25 @@ def _keyed_sequence_sources(value: object) -> Sequence[object]:
     return sequence_sources
 
 
+def _require_catalog_sequence_fields(item: Mapping[str, Any], catalog_schema: object) -> None:
+    """The item's sequence fields as its schema allows them: ``sequenceSources`` is an array where there is one, and
+    the stored schema holds no sequence at all (Python reads them on demand)."""
+
+    sources = item.get("sequenceSources")
+    if "sequenceSources" in item and (not isinstance(sources, Sequence) or isinstance(sources, (str, bytes))):
+        raise GbdrawError("Feature catalog sequenceSources must be an array.")
+    if catalog_schema == FEATURE_CATALOG_SCHEMA and (
+        "sequenceSources" in item
+        or any(
+            isinstance(feature, Mapping) and not STORED_SEQUENCE_KEYS.isdisjoint(feature)
+            for feature in item["biologicalFeatures"]
+        )
+    ):
+        raise GbdrawError(
+            f"Feature catalog schema {FEATURE_CATALOG_SCHEMA} stores no sequences: Python reads them on demand."
+        )
+
+
 def select_feature_catalog_item(
     catalog: Mapping[str, object],
     *,
@@ -2808,24 +2828,7 @@ def select_feature_catalog_item(
         for key in required_arrays
     ):
         raise GbdrawError("Feature catalog item is missing required arrays.")
-    if (
-        "sequenceSources" in item
-        and (
-            not isinstance(item.get("sequenceSources"), Sequence)
-            or isinstance(item.get("sequenceSources"), (str, bytes))
-        )
-    ):
-        raise GbdrawError("Feature catalog sequenceSources must be an array.")
-    if catalog_schema == FEATURE_CATALOG_SCHEMA and (
-        "sequenceSources" in item
-        or any(
-            isinstance(feature, Mapping) and not STORED_SEQUENCE_KEYS.isdisjoint(feature)
-            for feature in item["biologicalFeatures"]
-        )
-    ):
-        raise GbdrawError(
-            f"Feature catalog schema {FEATURE_CATALOG_SCHEMA} stores no sequences: Python reads them on demand."
-        )
+    _require_catalog_sequence_fields(item, catalog_schema)
 
     record_keys = [_text(value) for value in item["recordKeys"]]
     if any(not key for key in record_keys) or len(set(record_keys)) != len(

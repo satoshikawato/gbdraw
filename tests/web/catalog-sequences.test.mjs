@@ -89,6 +89,33 @@ test('a reply that arrives after the shown Result changed is discarded', async (
   assert.equal(await pendingSpans, null);
 });
 
+test('the Worker receives plain spans and features even when the popup state holds them as reactive proxies', async () => {
+  // The match popup's entries live in Vue state; postMessage cannot clone a Proxy (DataCloneError), so the door
+  // sends copies holding only the identity and range fields.
+  const sent = [];
+  const door = createCatalogSequences({
+    getCommittedSession: () => committed,
+    helpers: {
+      readFeatureSequences: async (payload) => { sent.push(structuredClone(payload)); return { result: { features: payload.features.map(featureReply) } }; },
+      readMatchSequences: async (payload) => {
+        sent.push(structuredClone(payload));
+        return { result: { spans: payload.spans.map(() => ({ status: 'ok', reason: null, recordId: 'REC', orientation: '+', length: 4, sequence: 'ACGT' })) } };
+      },
+      readEmbedSequences: async (payload) => ({ result: payload.item })
+    }
+  });
+  const committed = committedOf();
+  const proxied = (value) => new Proxy(value, {});
+  const record = proxied({ kind: 'record', recordKey: 'rec-1', start: 1, end: 4, label: 'Query', available: true });
+  const comparison = proxied({ kind: 'comparison', sourceIndex: 0, recordId: 'REC', start: 4, end: 1, label: 'Subject' });
+  await door.readSpans([record, comparison]);
+  await door.readFeatures([proxied({ ...kinase, label: 'kinase' })]);
+  assert.deepEqual(sent.map((payload) => payload.spans ?? payload.features), [
+    [{ kind: 'record', recordKey: 'rec-1', start: 1, end: 4 }, { kind: 'comparison', sourceIndex: 0, recordId: 'REC', start: 4, end: 1 }],
+    [{ recordKey: 'rec-1', biologicalFeatureId: 'kinase' }]
+  ]);
+});
+
 test('a failed read is forgotten, so Retry reads again', async () => {
   const harness = doorWith(committedOf());
   harness.failNextWith(Object.assign(new Error('boom'), { code: 'RESOURCE_INVALID', stage: 'helper' }));

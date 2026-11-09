@@ -12,7 +12,7 @@
 import { featureSequenceKey, featureSequenceReads, readRowsFasta } from '../services/catalog-sequences.js';
 import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';
 import { matchSpanFasta, matchSpanUnavailableReason } from '../services/pairwise-match-popup.js';
-import { normalizeCaughtError } from '../utils/error-normalization.js';
+import { diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
 
 /**
  * @typedef {object} SequenceReadPorts
@@ -49,8 +49,11 @@ export const createSequenceReads = ({ readFeatures, readSpans, copyPending, down
     try {
       /** @type {ReadonlyMap<string, FeatureSequencesOf> | null} */
       let sequences = null;
-      while (read && sequences === null) sequences = await readFeatures([read]);
-      const replied = read ? sequences?.get(featureSequenceKey(read)) : undefined;
+      // A feature without a catalog identity is one an older Session drew (from its SVG metadata): Python finds
+      // features by identity, so its sequences are read after the next Generate.
+      if (!read) throw diagnosticError('SEQUENCE_REQUIRES_GENERATE', {}, { operation: 'readFeatureSequences', stage: 'helper' });
+      while (sequences === null) sequences = await readFeatures([read]);
+      const replied = sequences.get(featureSequenceKey(read));
       const { nucleotideFasta, aminoAcidFasta } = buildFeatureSequenceFastas(popup.feat, {
         nucleotideSequence: replied?.nucleotideSequence ?? '', aminoAcidSequence: replied?.aminoAcidSequence ?? ''
       });

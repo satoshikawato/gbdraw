@@ -298,7 +298,7 @@ FUNCTION_STATEMENTS: dict[str, int] = {
     "gbdraw/tracks/circular.py::parse_circular_track_slot": 80,
     "gbdraw/web_support/feature_catalog.py::_normalized_biological_features": 74,
     "gbdraw/web_support/feature_catalog.py::_normalized_matches": 63,
-    "gbdraw/web_support/feature_catalog.py::select_feature_catalog_item": 135,
+    "gbdraw/web_support/feature_catalog.py::select_feature_catalog_item": 134,
     "gbdraw/web_support/feature_metadata.py::extract_features_from_records_payload": 66,
     "gbdraw/web_support/orthogroup_metadata.py::enrich_features_with_orthogroups": 60,
     "gbdraw/web_support/rule_matching.py::_colored_table": 77,

@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createSequenceReads } from '../../gbdraw/web/js/app/sequence-reads.js';
-import { featureSequenceKey } from '../../gbdraw/web/js/services/catalog-sequences.js';
+import { createCatalogSequences, featureSequenceKey } from '../../gbdraw/web/js/services/catalog-sequences.js';
 import { buildFeaturePopup } from '../../gbdraw/web/js/services/feature-popup.js';
 
 const feat = {
@@ -152,4 +152,35 @@ test('member FASTA reads the members when pressed and copies the kind asked', as
   await reads.memberAction(state, rows, 'nt', 'download', 'g_nt.fna');
   assert.equal(downloaded[0].filename, 'g_nt.fna');
   assert.match(downloaded[0].text, /\nATGAAA\n$/);
+});
+
+test('a row without an identity in an older Session shows the reason to Generate, not "No sequence"', async () => {
+  // A Session 27-39 that kept only its Results has no request to read from; its rows may lack the identity a read
+  // names. The door, not the row, says why nothing can be read.
+  const door = createCatalogSequences({ getCommittedSession: () => null, helpers: /** @type {never} */ ({}) });
+  const { reads, copied } = harness({ readFeatures: door.readFeatures, readSpans: door.readSpans });
+  const popup = buildFeaturePopup({ ...feat, biologicalFeatureId: undefined }, {
+    svgId: 'svg-kinase', legendName: 'CDS', color: '#000000', strokeColor: '#000000', strokeWidth: 0.5,
+    featureVisibility: 'auto', identityEditable: true
+  });
+  await reads.showFeatureSequence(popup);
+  assert.equal(popup.sequence.status, 'failed');
+  assert.equal(popup.sequence.error.code, 'SEQUENCE_REQUIRES_GENERATE');
+  // A Session 27-39 that kept its request draws Results from SVG metadata without catalog identities: the
+  // Sequence tab gives the same reason, not "No sequence available".
+  let asked = 0;
+  const withRequest = harness({ readFeatures: async (features) => { asked += features.length; return new Map(); } });
+  const legacy = buildFeaturePopup({ ...feat, recordKey: undefined, biologicalFeatureId: undefined }, {
+    svgId: 'svg-kinase', legendName: 'CDS', color: '#000000', strokeColor: '#000000', strokeWidth: 0.5,
+    featureVisibility: 'auto', identityEditable: true
+  });
+  await withRequest.reads.showFeatureSequence(legacy);
+  assert.equal(legacy.sequence.status, 'failed');
+  assert.equal(legacy.sequence.error.code, 'SEQUENCE_REQUIRES_GENERATE');
+  assert.equal(asked, 0, 'Python is not asked for a feature it cannot find');
+  const state = { status: '', error: null, retry: null };
+  await reads.memberAction(state, [{ read: null, fastaFeature: feat }], 'nt', 'copy', 'members.fasta');
+  assert.equal(state.status, 'failed');
+  assert.equal(state.error.code, 'SEQUENCE_REQUIRES_GENERATE');
+  assert.deepEqual(copied, []);
 });

@@ -50,7 +50,7 @@ const newCatalog = () => {
   const catalog = { schema: FEATURE_CATALOG_SCHEMA, items: [{
     resultIndex: 0, resultName: 'diagram.svg', recordKeys: ['a', 'b'],
     features: [], biologicalFeatures: [row('a', 'x', 1, 0), row('a', 'z', 3, 0), row('b', 'y', 2, 1)],
-    orthogroups: [], annotations: [], comparisonMatches: [], sequenceSources: []
+    orthogroups: [], annotations: [], comparisonMatches: []
   }] };
   catalog.items.forEach((item) => {
     const rows = item.biologicalFeatures;

@@ -293,6 +293,7 @@ const {
   createSessionResourceFileView
 } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const {
+  FEATURE_CATALOG_SCHEMA,
   featureStateFromCatalog
 } = await import('../../gbdraw/web/js/services/feature-catalog.js');
 const { createDrawingState, state } = await import('../../gbdraw/web/js/state.js');
@@ -443,7 +444,7 @@ const result = (name, marker) => ({
 });
 
 const validCatalog = (name) => ({
-  schema: 5,
+  schema: FEATURE_CATALOG_SCHEMA,
   items: [{
     resultIndex: 0,
     resultName: name,

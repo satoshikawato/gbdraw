@@ -2065,7 +2065,7 @@ const safeFilePart = (value, fallback = 'sequence') => {
 const matchSpanRead = (span, matchKind, records, start, end) => {
   if (!span.identityValid) return { read: null, reason: t('The sequence identifier metadata for this match is invalid.') };
   // A Result without its request (a Result-only Session 27-39): the reason the read would give (SEQUENCE_REQUIRES_GENERATE).
-  if (!records) return { read: null, reason: t('This Result was saved without the settings it was drawn with, so its sequences are read after the next Generate.') };
+  if (!records) return { read: null, reason: t('This Result was saved by an older gbdraw, so its sequences are read after the next Generate.') };
   if (matchKind === 'homology' && span.role !== span.referenceSide) {
     if (span.sourceIndex === null) return { read: null, reason: t('The match does not identify a sequence record.') };
     if (!records.comparisonSupplied(span.sourceIndex)) {

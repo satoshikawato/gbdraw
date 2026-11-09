@@ -56,11 +56,17 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     for specifier, copy in (
         ("'../utils/error-normalization.js'", "'./error-normalization.mjs'"),
         ("'./feature-sequence-fasta.js'", "'./feature-sequence-fasta.mjs'"),
+        ("'./feature-placement.js'", "'./feature-placement.mjs'"),
     ):
         assert specifier in catalog_sequences_source, specifier
         catalog_sequences_source = catalog_sequences_source.replace(specifier, copy)
     catalog_sequences_path = tmp_path / "catalog-sequences.mjs"
     catalog_sequences_path.write_text(catalog_sequences_source, encoding="utf-8")
+    # catalog-sequences.js keys a reply by the draft owner's identity key; the owner's other edits are not under test.
+    (tmp_path / "feature-placement.mjs").write_text(
+        "export const featureIdentityKey = (recordKey, biologicalFeatureId) => JSON.stringify([recordKey, biologicalFeatureId]);\n",
+        encoding="utf-8",
+    )
     (tmp_path / "record-source-coordinates.mjs").write_text(
         (WEB_ROOT / "js" / "services" / "record-source-coordinates.js").read_text(encoding="utf-8"),
         encoding="utf-8",

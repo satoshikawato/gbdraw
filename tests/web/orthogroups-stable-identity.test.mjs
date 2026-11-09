@@ -42,6 +42,8 @@ await copyModule('gbdraw/web/js/services/record-source-coordinates.js', 'service
 await copyModule('gbdraw/web/js/app/feature-search/search-core.js', 'app/feature-search/search-core.js');
 // search-core.js finds a feature's sequences by the catalog-sequence door's key.
 await copyModule('gbdraw/web/js/services/catalog-sequences.js', 'services/catalog-sequences.js');
+// catalog-sequences.js keys a feature's reply by the draft owner's identity key.
+await copyModule('gbdraw/web/js/services/feature-placement.js', 'services/feature-placement.js');
 await copyModule(
   'gbdraw/web/js/services/standalone-interactivity-assets.js',
   'services/standalone-interactivity-assets.js'
