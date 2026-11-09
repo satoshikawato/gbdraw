@@ -405,10 +405,9 @@ for (const [name, { mode, rows, groups, setup, edit }] of Object.entries(SLOT_ED
 
 // OV-3007 option A (Owner D-35, 2026-11-09): turning Use custom stack on gives each Region Annotation set the rows
 // Python's automatic placement draws it in, so the live Result and the next Generate draw the set as before.
-// The drawn figure: the Result SVG without the group IDs and slot tags that only name its groups (OV-3012).
-const figure = (page) => page.evaluate(() => window.__GBDRAW_APP__.svgContainer.querySelector('svg').outerHTML
-  .replace(/ data-gbdraw-slot-(?:id|renderer)="[^"]*"/g, '')
-  .replace(/ id="(?:track_slot_|gbdraw-annotation-track-|record_group_)[^"]*"/g, ''));
+// The drawn figure: the whole Result SVG. Both modes name and tag every slot group from its slot, with or without a
+// written stack (OV-3012, OV-3084), so the figure compares with its group ids and slot tags.
+const figure = (page) => page.evaluate(() => window.__GBDRAW_APP__.svgContainer.querySelector('svg').outerHTML);
 for (const mode of ['circular', 'linear']) {
   test(`Use custom stack turned on draws the Region Annotation sets where Generate drew them (${mode})`, async ({ page }) => {
     test.setTimeout(240_000);
@@ -434,10 +433,7 @@ for (const mode of ['circular', 'linear']) {
     expect(rows).toEqual(['annotations_1', 'annotations_1_highlight']);
     await settleLive(page);
     expect(await figure(page), 'live, stack on').toBe(drawn);
-    // OV-3012: a Linear Generate tags its slot groups only with a stack, so the live Result keeps the untagged groups
-    // until Generate; `figure` leaves those tags out, and the live check runs where the tags agree.
-    if (mode === 'circular') await expectLiveEqualsGenerate(page, { label: `${mode}: stack on` });
-    else await generate(page);
+    await expectLiveEqualsGenerate(page, { label: `${mode}: stack on` });
     expect(await figure(page), 'Generate, stack on').toBe(drawn);
   });
 }
