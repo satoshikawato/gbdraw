@@ -34,12 +34,12 @@ import {
 /**
  * The refs the runtime reads and writes (state.js owns them).
  * @typedef {object} PreviewRuntimeState
- * @property {{ value: any }} [svgContainer] The element that holds the mounted SVG.
+ * @property {{ value: any }} svgContainer The element that holds the mounted SVG.
  * @property {{ value: SvgResultEntry[] }} results
  * @property {{ value: number }} selectedResultIndex
- * @property {{ value: any }} [featureCatalog]
- * @property {{ value: boolean }} [skipCaptureBaseConfig]
- * @property {() => any} [sessionOperationAvailability]
+ * @property {{ value: any }} featureCatalog
+ * @property {{ value: boolean }} skipCaptureBaseConfig
+ * @property {() => any} sessionOperationAvailability
  */
 
 /**
@@ -250,14 +250,14 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
   /** @type {{ root: SVGSVGElement, resultIdentity: string } | null} */
   let released = null;
   const selectedResultIdentity = () => resultRuntimeIdentity(
-    state.results.value[Number(state.selectedResultIndex?.value || 0)]
+    state.results.value[Number(state.selectedResultIndex.value)]
   );
   /** @type {WeakMap<object, string>} */
   const fallbackResultIdentities = new WeakMap();
   const invalidatedReceipts = new WeakSet();
 
   /** @returns {SVGSVGElement | null} */
-  const getMountedSvg = () => state.svgContainer?.value?.querySelector?.('svg') || null;
+  const getMountedSvg = () => state.svgContainer.value?.querySelector('svg') || null;
 
   /**
    * @param {SvgResultEntry | null | undefined} result
@@ -411,7 +411,7 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
     markCommittedSvgResultUnmounted(activeRuntime.result);
   };
 
-  const mountResultSvg = (resultIndex = state.selectedResultIndex?.value || 0, svg = getMountedSvg()) => {
+  const mountResultSvg = (resultIndex = state.selectedResultIndex.value, svg = getMountedSvg()) => {
     if (!svg) {
       releaseActiveResult();
       activeRuntime = null;
@@ -468,11 +468,11 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
       released = null;
       // The Results selected again may be a copy taken before the root's last
       // edit (a Load's rollback): the root is written on the next read (R1).
-      const rebound = mountResultSvg(Number(state.selectedResultIndex?.value || 0), svg);
+      const rebound = mountResultSvg(Number(state.selectedResultIndex.value), svg);
       if (rebound) rebound.dirty = true;
       return rebound;
     }
-    const resultIndex = Number(state.selectedResultIndex?.value || 0);
+    const resultIndex = Number(state.selectedResultIndex.value);
     if (!activeRuntime || activeRuntime.svg !== svg || activeRuntime.resultIndex !== resultIndex) {
       return mountResultSvg(resultIndex, svg);
     }
@@ -493,9 +493,9 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
    */
   const createMountedResultContext = ({
     root,
-    result = state.results.value[state.selectedResultIndex?.value || 0],
-    resultIndex = state.selectedResultIndex?.value || 0,
-    catalogState = state.featureCatalog?.value || null,
+    result = state.results.value[state.selectedResultIndex.value],
+    resultIndex = state.selectedResultIndex.value,
+    catalogState = state.featureCatalog.value,
     bindingOptions = {}
   } = /** @type {MountedResultContextOptions} */ ({})) => {
     if (!root) throw new Error('Mounted preview observation requires an SVG root.');
@@ -548,7 +548,7 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
         bindingOptions,
         isCurrent: () => (
           resultRuntimeIdentity(state.results.value[normalizedIndex]) === resultIdentity
-          && Number(state.selectedResultIndex?.value || 0) === normalizedIndex
+          && Number(state.selectedResultIndex.value) === normalizedIndex
         )
       });
     }
@@ -683,7 +683,7 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
     }
     if (
       resultRuntimeIdentity(state.results.value[context.resultIndex]) !== context.resultIdentity
-      || Number(state.selectedResultIndex?.value || 0) !== context.resultIndex
+      || Number(state.selectedResultIndex.value) !== context.resultIndex
       || getMountedSvg() !== context.root
       || context.root?.isConnected === false
     ) {
@@ -910,7 +910,7 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
           bindingOptions: { trustedRestore: true, isIncrementalEdit: true },
           isCurrent: () => (
             resultRuntimeIdentity(state.results.value[resultIndex]) === resultRuntimeIdentity(result)
-            && Number(state.selectedResultIndex?.value || 0) === resultIndex
+            && Number(state.selectedResultIndex.value) === resultIndex
           )
         })
       : null;
@@ -938,7 +938,7 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
       && expectation.isCurrent()
     ) {
       if (activeRuntime.readyReceipt) invalidateReadyReceipt(activeRuntime.readyReceipt);
-      if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = false;
+      state.skipCaptureBaseConfig.value = false;
       void bindMountedResult(createMountedResultContext({
         root,
         result,
@@ -962,7 +962,7 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
 
   const isActiveResultReady = () => {
     if (!activeRuntime?.readyReceipt) return false;
-    const resultIndex = Number(state.selectedResultIndex?.value || 0);
+    const resultIndex = Number(state.selectedResultIndex.value);
     return (
       activeRuntime.resultIndex === resultIndex
       && activeRuntime.resultIdentity === resultRuntimeIdentity(state.results.value[resultIndex])
@@ -1044,7 +1044,7 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
       resultIndex,
       artifactIdentity: activeRuntime?.artifactIdentity || `selection:${resultRuntimeIdentity(result)}`,
       generationToken: `result-selection:${nextBindSequence}`,
-      catalogState: state.featureCatalog?.value || null,
+      catalogState: state.featureCatalog.value,
       phase: 'result-selection',
       bindingOptions,
       // Editor intent projected while binding replaces the Result content,
@@ -1060,7 +1060,7 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
 
   /** @param {unknown} index */
   const selectResult = (index) => {
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     const count = Array.isArray(state.results.value) ? state.results.value.length : 0;
     const numeric = Number(index);

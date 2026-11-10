@@ -27,7 +27,7 @@ const describeKeys = (keys) => {
  * @property {{ value: Record<string, string> }} appliedPaletteColors
  * @property {() => ResultsManagerDrawing} activeDrawing The shown mode's drawing.
  * @property {() => readonly ResultsManagerDrawing[]} drawingList Every drawing, in creation order.
- * @property {() => any} [sessionOperationAvailability] The busy outcome of a Session operation, if any.
+ * @property {() => any} sessionOperationAvailability The busy outcome of a Session operation, if any.
  * @property {PaletteColorsDialog} paletteColorsDialog
  */
 
@@ -181,7 +181,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
    */
   const selectPalette = (name, choice = '') => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const paletteName = String(name || '').trim() || 'default';
     const rows = userDefaultColorRows(drawing);
@@ -225,7 +225,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
   // D-15: Default colors Reset asks before it discards user default colors.
   const requestResetColors = () => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const rows = userDefaultColorRows(drawing);
     if (rows.length > 0) {
@@ -241,7 +241,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
   /** @param {string} choice */
   const handlePaletteColorsChoice = (choice) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (paletteColorsDialog.kind === 'reset') {
       if (choice === 'reset') resetColors(drawing);

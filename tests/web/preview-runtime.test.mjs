@@ -122,6 +122,8 @@ const state = {
   results: resultsRef,
   selectedResultIndex: ref(0),
   skipCaptureBaseConfig: ref(false),
+  featureCatalog: ref(null),
+  sessionOperationAvailability: () => null,
   svgContainer: ref({
     querySelector: (selector) => (selector === 'svg' ? svg : null)
   })
@@ -303,6 +305,9 @@ assert.equal(runtime.currentResults()[1].content, '<svg data-count="3" data-elem
   const ownState = {
     results: { get value() { return list; }, set value(next) { writes += 1; list = next; } },
     selectedResultIndex: ref(0),
+    skipCaptureBaseConfig: ref(false),
+    featureCatalog: ref(null),
+    sessionOperationAvailability: () => null,
     svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? root : null) })
   };
   const own = createPreviewRuntime({ state: ownState, serializeSvg: () => { serialized += 1; return content; } });
@@ -338,6 +343,8 @@ const readinessRoot = makeSvg([]);
 const readinessState = {
   results: ref([readinessResult]),
   selectedResultIndex: ref(0),
+  skipCaptureBaseConfig: ref(false),
+  sessionOperationAvailability: () => null,
   featureCatalog: ref({ schema: 4, items: [] }),
   svgContainer: ref({
     querySelector: (selector) => (selector === 'svg' ? readinessRoot : null)
@@ -586,6 +593,7 @@ const keptState = {
   selectedResultIndex: ref(0),
   skipCaptureBaseConfig: ref(false),
   featureCatalog: ref(null),
+  sessionOperationAvailability: () => null,
   svgContainer: ref({
     querySelector: (selector) => (selector === 'svg' ? keptRoot : null)
   })
