@@ -566,6 +566,8 @@ for (const mode of ['circular', 'linear']) {
   // Two journeys on one fixture: the choice writes only its own fields (other
   // pending values are set first), then Undo, Redo and Generate. Generate draws
   // the removal's own case: the other pending values go back first.
+  // Former cases: `rev 7: ${mode} removing the last Depth file asks, and its Undo restores the file and the row`
+  // and `rev 7: ${mode} Depth file removal writes only its own fields, with other pending values`.
   test(`rev 7: ${mode} removing the last Depth file asks, writes only its own fields with other pending values, and its Undo restores the file and the row`, async ({ browser }) => {
     test.setTimeout(420000);
     const page = await openReachFixture(browser, mode);
