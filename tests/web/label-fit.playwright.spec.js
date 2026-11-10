@@ -438,7 +438,7 @@ test('a Circular region label drawn in front of the leader lines selects its ann
     .setInputFiles({ name: 'regions.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(tsv) });
   await page.waitForFunction(() => window.__GBDRAW_APP__.annotationSets.length === 1);
   await generateAndWaitForResult(page);
-  await expect(page.getByTestId('label-fit-notice')).not.toContainText('Region labels');
+  await expect(page.getByTestId('label-fit-notice').filter({ hasText: 'Region labels' })).toHaveCount(0);
   const front = page.locator('.origin-top svg [data-gbdraw-region-label-for]');
   await expect(front).toHaveCount(2);
   expect(await front.evaluateAll((items) => items.map((item) => [
