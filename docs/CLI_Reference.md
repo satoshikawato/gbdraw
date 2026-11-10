@@ -779,6 +779,12 @@ may also carry `fileName`, which is ignored; slot text lowercases keys, so
 an error that names the slot and the parameter; `anchor_slot` and `to_slot`
 belong to annotation slots only.
 
+A `ticks` slot that names no `tick_label_layout` takes it from its place in
+the list: before the first `features` slot (outside the feature track) it
+draws `label_out_tick_in`, labels outside their ticks; after it,
+`label_in_tick_out`, as the default stacks do. The Web app orients a scale row
+the same way.
+
 The Legend lists the rows of the slots in four groups: the GC content, GC
 skew and Depth rows, then the similarity-ring rows (the outermost ring first),
 then the feature density rows, then the annotation rows. Within the GC, Depth,

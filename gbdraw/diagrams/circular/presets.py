@@ -20,6 +20,7 @@ from ...tracks.circular import (
     _internal_circular_track_slot,
     circular_track_slots_with_axis_side,
     tick_label_layout_from_sides,
+    tick_sides_for_tick_label_layout,
 )
 from ...tracks.scalars import ScalarSpec
 from ...svg.circular_ticks import (
@@ -109,11 +110,28 @@ _PRESET_BY_FEATURE_LANE_DIRECTION: dict[str, CircularTrackPreset] = {
 }
 
 
+class CircularTickLabelLayoutByFeaturePlace(TypedDict):
+    """The tick label layout of a ticks row that names none, by its place in the stack relative to the first
+    features row: ``before`` it (outside the features) the labels stand outside, next to their ticks and away from
+    the features; ``after`` it, the preset's own ticks row (labels inside, ticks outward)."""
+
+    before: str
+    after: str
+
+
+_TICK_LABEL_LAYOUT_BY_FEATURE_PLACE: CircularTickLabelLayoutByFeaturePlace = {
+    "before": "label_out_tick_in",
+    "after": "label_in_tick_out",
+}
+
+
 class CircularTrackPresetTable(TypedDict):
-    """The Circular track presets in menu order and the feature lane direction of each, for the Web."""
+    """The Circular track presets in menu order and the feature lane direction of each, and the tick label layout
+    by place (the Web orients its ticks rows by it), for the Web."""
 
     presets: list[CircularTrackPreset]
     featureLaneDirection: dict[CircularTrackPreset, CircularFeatureLaneDirection]
+    tickLabelLayoutByFeaturePlace: CircularTickLabelLayoutByFeaturePlace
 
 
 def circular_feature_lane_direction_for_preset(
@@ -137,6 +155,7 @@ def circular_track_preset_table() -> CircularTrackPresetTable:
         "featureLaneDirection": {
             preset: circular_feature_lane_direction_for_preset(preset) for preset in presets
         },
+        "tickLabelLayoutByFeaturePlace": {**_TICK_LABEL_LAYOUT_BY_FEATURE_PLACE},
     }
 
 
@@ -227,8 +246,8 @@ def _tick_slot_for_preset(
     tick_side = placement_side
     label_side = "outside"
     if context.show_features and placement_side == "inside":
-        tick_side = "outside"
-        label_side = "inside"
+        # The preset's ticks row stands after its features row.
+        label_side, tick_side = tick_sides_for_tick_label_layout(_TICK_LABEL_LAYOUT_BY_FEATURE_PLACE["after"])
     anchor_ratio = tick_outer_ratio if tick_side == "inside" else tick_inner_ratio
     tick_width_px = max(0.0, (tick_outer_ratio - tick_inner_ratio) * base_radius)
 
@@ -589,8 +608,12 @@ def circular_track_slots_from_preset_order(
     layout_slots: list[CircularTrackSlot] = []
     preferred_ids: set[str] = set()
     adds_inside_row = False
+    feature_index = next(
+        (index for index, slot in enumerate(slots) if slot.enabled and _normalized_renderer(slot.renderer) == "features"),
+        None,
+    )
 
-    for slot in slots:
+    for index, slot in enumerate(slots):
         renderer = _normalized_renderer(slot.renderer)
         geometry_slot: CircularTrackSlot | None = None
         params_slot: CircularTrackSlot | None = None
@@ -624,6 +647,11 @@ def circular_track_slots_from_preset_order(
             params_slot=params_slot,
             context=context,
         )
+        if renderer == "ticks" and feature_index is not None and "tick_label_layout" not in (slot.params or {}):
+            # A ticks row that names no layout takes the layout of its place by the features row (OV-3189).
+            by_place = _TICK_LABEL_LAYOUT_BY_FEATURE_PLACE
+            layout = by_place["before"] if index < feature_index else by_place["after"]
+            overlaid = replace(overlaid, params={**overlaid.params, "tick_label_layout": layout})
         layout_slots.append(overlaid)
         inside = str(overlaid.side or "inside").strip().lower() == "inside"
         if prefers_numeric_auto_group and inside:
@@ -647,6 +675,7 @@ def circular_track_slots_from_preset_order(
 
 __all__ = [
     "CircularAutoSlotSizes",
+    "CircularTickLabelLayoutByFeaturePlace",
     "CircularFeatureLaneDirection",
     "CircularFeatureSlotDefaults",
     "CircularPresetContext",

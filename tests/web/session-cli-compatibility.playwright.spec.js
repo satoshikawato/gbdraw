@@ -618,6 +618,58 @@ test('Session schema-1 Web binding control still loads', async ({ browser }, tes
   }
 });
 
+// OV-3189: a CLI stack that puts the scale above the feature track and names no tick label layout draws its labels
+// outside the ticks, as the Web orients such a row (both read the layout by place that Python owns). The Session it
+// saves, loaded and generated in the Web, draws the CLI's figure, and the labels stand next to their ticks, clear of
+// the feature track.
+test('Session CLI scale above the features without a tick label layout draws the CLI figure', async ({ browser }, testInfo) => {
+  test.setTimeout(600_000);
+  const hmmt = path.join(root, 'tests/test_inputs/HmmtDNA.gbk');
+  const file = await cli('circular', ['--gbk', hmmt, '-f', 'svg', '--circular_track_slot', 'ticks:ticks',
+    '--circular_track_slot', 'features:features', '--circular_track_slot', 'gc_content:dinucleotide_content'], testInfo, 'ticks-first');
+  const stored = shownSavedDrawing(await readSession(file));
+  expect(stored.renderRequest.diagramOptions.tracks.circularTrackSlots.find(({ id }) => id === 'ticks').params).toEqual({});
+  const run = await load(browser, file, { width: 1600, height: 1000 });
+  try {
+    // Each slot group's place and paths, by slot id (4 decimals, as `svgSemantics`).
+    const slotGroups = (svg) => run.page.evaluate((text) => {
+      const round = (value) => value && value.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, (number) => String(Math.round(Number(number) * 1e4) / 1e4));
+      return [...new DOMParser().parseFromString(text, 'image/svg+xml').querySelectorAll('[data-gbdraw-slot-id]')]
+        .map((group) => [group.getAttribute('data-gbdraw-slot-id'), round(group.getAttribute('transform')),
+          [...group.querySelectorAll('path')].map((item) => round(item.getAttribute('d'))).sort()])
+        .sort((a, b) => a[0].localeCompare(b[0]));
+    }, svg);
+    // Radii from the drawing: the tick marks' outer ends, the radius of the label paths (the labels stand outward
+    // of it), and the feature track's outer edge (its largest arc).
+    const radii = (svg) => run.page.evaluate((text) => {
+      const root = new DOMParser().parseFromString(text, 'image/svg+xml');
+      const numbers = (d) => (d.match(/-?\d*\.?\d+/g) || []).map(Number);
+      const ticks = root.querySelector('[data-gbdraw-slot-id="ticks"]');
+      const marks = [...ticks.querySelectorAll('path:not([id])')].map((item) => numbers(item.getAttribute('d')))
+        .map(([x1, y1, x2, y2]) => Math.max(Math.hypot(x1, y1), Math.hypot(x2, y2)));
+      const arcs = (items) => [...items].flatMap((item) => [...item.getAttribute('d').matchAll(/A\s*(-?[\d.]+)/g)].map((m) => Number(m[1])));
+      return {
+        tickOuter: Math.max(...marks),
+        labelPaths: [...new Set(arcs(ticks.querySelectorAll('path[id^="circular_tick_label_path"]')))],
+        featureOuter: Math.max(...arcs(root.querySelectorAll('[data-gbdraw-slot-id="features"] path')))
+      };
+    }, svg);
+    const drawn = await slotGroups(stored.results[0].content);
+    await generateAndWaitForResult(run.page);
+    const after = await snapshot(run.page);
+    expect(await slotGroups(after.selected)).toEqual(drawn);
+    const { tickOuter, labelPaths, featureOuter } = await radii(after.selected);
+    expect(tickOuter).toBeGreaterThan(featureOuter);
+    expect(labelPaths.length).toBe(1);
+    // The labels start within the label margin past their ticks, outside the feature track.
+    expect(labelPaths[0] - tickOuter).toBeGreaterThan(0);
+    expect(labelPaths[0] - tickOuter).toBeLessThan(5);
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
+
 // Issue #1427: a CLI Session whose request carries Legend row edits (renames, a hidden row, an edited order of the
 // others) and canvas padding, and no Web editor state for them, opens with the Legend editor and Canvas padding
 // showing them. An edit then keeps the rows Python drew, and a padding edit pads the canvas by its own change only.

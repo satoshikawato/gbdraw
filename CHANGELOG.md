@@ -261,9 +261,20 @@ into the `[Unreleased]` list below.
   facing outward keep the larger of the track gap and the margin, as before.
   Figures whose tick labels face no painted edge, such as GC content in the
   default deviation mode, are unchanged (OV-3116, OV-3149, OV-3150).
+- Fixed: a Circular custom track stack that puts the scale above the feature
+  track without naming a tick label layout (for example
+  `--circular_track_slot ticks:ticks --circular_track_slot features:features`)
+  drew the tick labels inside the ticks, on the feature track and far from
+  their ticks, while the Web app drew them outside. Such a scale now draws its
+  labels outside the ticks, next to them and away from the features, in the
+  CLI, the Python API, and the Web app, so a Session saved by the CLI draws
+  the same figure after Load and Generate. A scale below the feature track,
+  as in every default stack, and a scale that names its layout are unchanged
+  (OV-3189).
 - Fixed: in a Circular figure whose custom track stack puts the scale above
-  the feature track (for example `--circular_track_slot ticks:ticks
-  --circular_track_slot features:features`), the tick labels inside the ticks
+  the feature track with its labels inside the ticks (for example
+  `--circular_track_slot ticks:ticks@tick_label_layout=label_in_tick_out
+  --circular_track_slot features:features`), the tick labels
   stood on the outer edge of the feature track, so letters such as the "p" of
   "kbp" touched the CDS arrows. A feature track now counts as a track that
   paints the edge facing the labels: the labels keep their margin from it

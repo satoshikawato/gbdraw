@@ -2279,8 +2279,9 @@ def test_circular_region_labels_left_no_room_by_set_radii_warn() -> None:
         # A split features slot is an overlay but takes its band: the span's letters lie on its feature lanes.
         ("features:features@lane_direction=split", "gc:dinucleotide_content@side=inside,r=0.91,w=18px",
          "regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,cover_anchor=true,z=5"),
-        # A ticks slot takes its tick labels' band too: the letters lie on the scale numbers.
-        ("ticks:ticks@side=outside,r=1.14", "out:annotations@side=outside,set_id=regions,w=20px", "features:features"),
+        # A ticks slot takes its tick labels' band too: the letters lie on the scale numbers (labels inside the
+        # ticks, toward the region row; a scale above the features without a layout draws them outside, OV-3189).
+        ("ticks:ticks@side=outside,r=1.14,tick_label_layout=label_in_tick_out", "out:annotations@side=outside,set_id=regions,w=20px", "features:features"),
         # A span to an overlay plot inside it keeps its room past the skew ring, so the set radius takes it.
         ("features:features", "skew:dinucleotide_skew@side=inside,r=0.86,w=18px",
          "ov:dinucleotide_content@side=overlay,r=0.6,w=10px",
