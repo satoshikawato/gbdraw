@@ -229,6 +229,17 @@ write-up of a release.
   where the CLI's order of writing differs, the Legend can list its entries in
   another order: the track rows of a Circular Legend, and in both modes the
   entries of Annotations rows on different sides (OV-3079, OV-3155).
+- Fixed: in Linear, the labels of a region overlay anchored to the features
+  slot (`side=overlay,anchor_slot=features` without `cover_anchor` or
+  `to_slot`) could be drawn on the CDS arrows (`layer=foreground` with the
+  features below the axis, or with the default Middle layout) or hidden under
+  them (`layer=underlay` with the features above the axis, or with Middle),
+  with no warning. The labels now stand on the side of their marks away from
+  the features; where the marks lie on the features (Middle), below them for
+  `layer=foreground` and above them for `layer=underlay`. These figures grow
+  by the labels' height (lambda with 20 pt labels: 155 to 174 px tall with the
+  features below the axis, 136 to 156 px with Middle). Other figures are
+  unchanged (OV-3078, OV-3219).
 - Fixed: a foreground annotation overlay written before another slot of the
   same `z` that it covers (with `to_slot`, or with its own `w` or `h`) was
   painted under that slot, so a GC content or skew plot hid the highlight. An
