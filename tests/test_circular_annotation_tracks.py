@@ -1693,16 +1693,18 @@ def _region_label_overlaps(pass_: tuple) -> dict[str, frozenset[int]]:
 
 @pytest.mark.parametrize(
     ("labels", "font_size", "overlaps"),
-    [("out", 14, 7), pytest.param("both", 20, 4, marks=pytest.mark.slow)],
+    [("out", 14, 0), pytest.param("both", 20, 0, marks=pytest.mark.slow)],
 )
 def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, labels: str, font_size: int, overlaps: int
 ) -> None:
     """OV-3017, CIR-RGN-YIELD: on lambda with outside regions, "Integration" was drawn over "integrase" and
     "Replication" over other feature labels, with no letter-free place along their regions. The feature labels make
-    way (side and order kept): no drawn region label's letters meet a feature label's letters; the leader lines behind
-    region letters stay warned (lambda --labels out 10 -> 7, --labels both 8 -> 4), and no region label overlaps a
-    label it did not overlap before the feature labels made way. The receipt of CIR-RGN-YIELD quotes these figures."""
+    way (side and order kept): no drawn region label's letters meet a feature label's letters, and no region label
+    overlaps a label it did not overlap before the feature labels made way. OV-3156, CIR-RGN-FRONT: a region label with
+    only leader lines behind its letters is drawn in front of them on a backing, as in Linear, unless the backing would
+    cover a feature label's letters; a backed label is not warned (lambda --labels out 10 -> 0, --labels both 8 -> 0).
+    The receipt of CIR-RGN-FRONT quotes these figures."""
 
     from gbdraw.layout.text_geometry import convex_polygons_intersect
 
@@ -1720,14 +1722,100 @@ def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
     )
     assert covering == []
     assert not not_clear.over_feature_letters
+    # The region labels with only leader lines behind their letters are backed and drawn in front of them; a backing
+    # covers no feature label's letters.
+    assert {id_ for id_, label in drawn.items() if label.backed} == (
+        {"repl", "lysis"} if labels == "out" else {"head", "repl", "lysis"}
+    )
+    assert not any(convex_polygons_intersect(a, b) for label in slot_labels for a in label.backing for b in letters)
+    # A backed label is drawn once, in front of the leader lines on its backing, in a group that names its annotation's
+    # item group (as in Linear); its item group keeps the mark only.
+    svg = ElementTree.parse(tmp_path / "lambda.svg").getroot()
+    ns = "{http://www.w3.org/2000/svg}"
+    groups = {group.get("id"): group for group in svg.iter(f"{ns}g") if group.get("id")}
+    (front,) = (group for id_, group in groups.items() if id_.endswith("-front"))
+    fronted = {item.get("data-gbdraw-region-label-for"): item for item in front.findall(f"{ns}g")}
+    assert {groups[item_id].get("data-gbdraw-annotation-id") for item_id in fronted} == {
+        id_ for id_, label in drawn.items() if label.backed
+    }
+    for item_id, item in fronted.items():
+        assert [child.tag for child in item] == [f"{ns}path", f"{ns}text"]
+        assert item[0].get("fill-opacity") == "0.7"
+        assert groups[item_id].find(f"{ns}text") is None
     # Making way adds no label to what a region label overlaps, the region labels not drawn over feature letters
     # included. (With --labels out, "Replication" still meets the two labels whose letters left its letters, by
     # their leader lines.)
     first, drawn_counts = _region_label_overlaps(passes[0]), _region_label_overlaps(passes[-1])
     assert all(drawn_counts[id_] <= first[id_] for id_ in first), (first, drawn_counts)
-    assert any(f"({overlaps} region label overlaps)" in str(warning.message) for warning in caught), [
-        str(warning.message) for warning in caught
-    ]
+    messages = [str(warning.message) for warning in caught]
+    if overlaps:
+        assert any(f"({overlaps} region label overlap" in message for message in messages), messages
+    else:
+        assert not any("region label overlap" in message for message in messages), messages
+
+
+@pytest.mark.parametrize("gap", [4.0, 1.0])
+@pytest.mark.parametrize("outward", [True, False])
+@pytest.mark.parametrize("curved", [False, True])
+def test_circular_region_label_backing_pads_the_letters_and_stops_before_the_mark(
+    outward: bool, curved: bool, gap: float
+) -> None:
+    """CIR-RGN-FRONT (OV-3156): a backed Circular region label's backing covers its letters, padded 0.18 em beyond
+    them as Linear's, but never reaches past the gap the letters keep from their mark: a turned box for straight text,
+    an annular sector for curved text. With a gap of 1 px the far corners of a long straight box on an inside slot
+    would reach the mark with their padding along the circle; that padding gives way too."""
+
+    from gbdraw.layout.text_geometry import annular_sector_parts, convex_polygons_intersect
+    from gbdraw.render.drawers.circular.annotations import (
+        CircularAnnotationLabel,
+        CircularLabelArc,
+        _backed,
+        _origin_distance,
+    )
+
+    font_size, turn = 20.0, 1.1
+    middle = 308.0 if outward else 192.0
+    if curved:
+        near, far = middle - 8.0, middle + 8.0
+        parts = tuple(tuple(part) for part in annular_sector_parts(near, far, math.degrees(turn), 6.0))
+        arc = CircularLabelArc(middle, math.degrees(turn), 6.0, False)
+        rotation = 0.0
+    else:
+        # A box 160 px long and 16 px tall standing across the radius at ``turn``, turned with it; its radii are
+        # its nearest edge and farthest corner, as ``_ink_extent`` measures them.
+        rotation = math.degrees(turn) + 90.0
+        c, s_ = math.cos(math.radians(rotation)), math.sin(math.radians(rotation))
+        x0, y0 = middle * math.cos(turn), middle * math.sin(turn)
+        corners = ((-80, -8), (80, -8), (80, 8), (-80, 8))
+        parts = (tuple((x0 + dx * c - dy * s_, y0 + dx * s_ + dy * c) for dx, dy in corners),)
+        near, far = middle - 8.0, max(math.hypot(x, y) for x, y in parts[0])
+        arc = None
+    label = CircularAnnotationLabel(
+        "r", (), middle * math.cos(turn), middle * math.sin(turn), rotation, font_size, "#000000", parts, (near, far),
+        gap, far - near, arc,
+    )
+    backed = _backed(label, outward=outward)
+    assert backed.backed and backed.backing_path.startswith("M ") and backed.backing_path.endswith(" Z")
+    # How near the centre the drawn backing comes and how far from it: a straight box's nearest edge, or the radii of
+    # a sector's arcs (its parts' corners lie on them).
+    nearest = (
+        min(math.hypot(x, y) for part in backed.backing for x, y in part)
+        if curved
+        else _origin_distance(backed.backing[0])
+    )
+    farthest = max(math.hypot(x, y) for part in backed.backing for x, y in part)
+    pad = 0.18 * font_size
+    if outward:
+        assert nearest >= near - gap - 1e-6
+    else:
+        assert farthest <= far + gap + 1e-6
+    # Beyond the letters, on the side away from the mark, the full padding, as long as the mark lets the box keep it.
+    if gap == 4.0 or curved or outward:
+        assert (farthest >= far + pad - 1e-6) if outward else (nearest <= near - pad + 1e-6)
+    # The letters lie within the backing: each letter part meets it, and every corner lies within its turn.
+    assert all(any(convex_polygons_intersect(part, backing) for backing in backed.backing) for part in parts)
+    turns = [math.atan2(y, x) for part in backed.backing for x, y in part]
+    assert all(min(turns) - 1e-9 <= math.atan2(y, x) <= max(turns) + 1e-9 for part in parts for x, y in part)
 
 
 # Region labels on lambda (found by a seeded search) where clearing "cos" (r12) and "Head genes" (r10) of feature

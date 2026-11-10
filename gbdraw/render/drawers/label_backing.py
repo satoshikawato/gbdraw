@@ -5,7 +5,10 @@ rounded corners, ``BACKING_PADDING_EM`` font sizes beyond the letters on every
 side and as the corner radius, which may stop at an edge on one side (a region
 label's mark, a feature label's own leader end or underline) so it never
 covers what it belongs to. A region label is drawn on it at
-``BACKING_OPACITY`` (LP-D82 ``RGN-FRONT``); a feature label with
+``BACKING_OPACITY`` (LP-D82 ``RGN-FRONT``), in front of the leader lines
+(``region_label_front``, one builder for both modes; a Circular label's
+backing is a turned box or an annular sector, ``backing_path``); a feature
+label with
 ``protection = box`` at ``label_style.BOX_OPACITY``, bound to its label and
 taking no pointer events.
 
@@ -28,7 +31,9 @@ casings, so the casing never cuts its joint and no ink is drawn twice.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from gbdraw.labels.label_ink import FeatureLabelInk
 from gbdraw.labels.label_style import (
@@ -42,7 +47,7 @@ from gbdraw.labels.label_style import (
 from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import Point
 from gbdraw.render.label_binding import bind_label_part
-from gbdraw.svg.elements import Line, Rect, Text, Use
+from gbdraw.svg.elements import Group, Line, Path, Rect, Text, Use
 
 BACKING_PADDING_EM = 0.18
 BACKING_FILL = "#ffffff"
@@ -156,6 +161,38 @@ def backing_rect(box: Aabb, font_size: float, *, opacity: float = BACKING_OPACIT
     )
 
 
+def backing_path(d: str) -> Path:
+    """The drawn backing whose outline is the path data ``d`` (a Circular region label's, OV-3156)."""
+
+    return Path(d=d, fill=BACKING_FILL, fill_opacity=BACKING_OPACITY, stroke="none")
+
+
+class BackedRegionLabel(NamedTuple):
+    """One region label drawn in front of the leader lines (``RGN-FRONT``): the id of its annotation's item
+    group, which the Web selects, its drawn backing (``backing_rect`` or ``backing_path``) and its letters."""
+
+    item_id: str
+    backing: Rect | Path
+    text: Text
+
+
+def region_label_front(group_id: str, labels: Sequence[BackedRegionLabel]) -> Group | None:
+    """The group ``{group_id}-front`` that draws a track's backed region labels in front of the record's leader
+    lines, each on its backing in a group that names its annotation's item group
+    (``data-gbdraw-region-label-for``); ``None`` when there are none. Linear and Circular call it alike."""
+
+    if not labels:
+        return None
+    group = Group(id=f"{group_id}-front")
+    for label in labels:
+        item = Group()
+        item.attribs["data-gbdraw-region-label-for"] = label.item_id
+        item.add(label.backing)
+        item.add(label.text)
+        group.add(item)
+    return group
+
+
 def feature_label_backing(label: FeatureLabelInk) -> Aabb:
     """A feature label's box in the frame of its ``ink``: stopped short of its underline by the line's gap
     when it has one, else at the end of its drawn leader on the side the leader arrives from (where the label's
@@ -238,12 +275,15 @@ __all__ = [
     "BACKING_FILL",
     "BACKING_OPACITY",
     "BACKING_PADDING_EM",
+    "BackedRegionLabel",
     "backing_box",
+    "backing_path",
     "backing_rect",
     "feature_label_backing",
     "feature_label_box",
     "feature_label_drawn_parts",
     "label_halo",
+    "region_label_front",
     "underline_casing",
     "UnderlineCasing",
 ]

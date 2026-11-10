@@ -49,7 +49,7 @@ from gbdraw.render.drawers.annotation_marks import (
     mark_reach,
     past_span_edge,
 )
-from gbdraw.render.drawers.label_backing import backing_box, backing_rect
+from gbdraw.render.drawers.label_backing import BackedRegionLabel, backing_box, backing_rect, region_label_front
 from gbdraw.render.drawers.linear.wrap_rows import wrap_row_group
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
@@ -733,26 +733,27 @@ def linear_region_label_front_content(
     the track's slot-local frame; ``None`` when it has none.
 
     Each label is drawn on its ``backing``, a white box with rounded corners at
-    70 % opacity. Its group names the annotation's item group
-    (``data-gbdraw-region-label-for``), where the Web selects the annotation.
+    70 % opacity (``region_label_front``, as in Circular).
     """
 
-    backed = [label for label in labels if label.backed]
-    if not backed:
-        return None
-    group = Group(id=f"{group_id}-front")
-    for label in backed:
-        item = Group()
-        item.attribs["data-gbdraw-region-label-for"] = annotation_dom_id(
-            record_index=record_index,
-            slot_id=track.slot_id,
-            set_id=track.set_id,
-            annotation_id=label.annotation_id,
-        )
-        item.add(backing_rect(label.backing, label.font_size))
-        item.add(_label_text(label, font_family))
-        group.add(item)
-    return GroupContent.of(group)
+    group = region_label_front(
+        group_id,
+        [
+            BackedRegionLabel(
+                annotation_dom_id(
+                    record_index=record_index,
+                    slot_id=track.slot_id,
+                    set_id=track.set_id,
+                    annotation_id=label.annotation_id,
+                ),
+                backing_rect(label.backing, label.font_size),
+                _label_text(label, font_family),
+            )
+            for label in labels
+            if label.backed
+        ],
+    )
+    return None if group is None else GroupContent.of(group)
 
 
 __all__ = [

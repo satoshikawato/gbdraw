@@ -627,6 +627,20 @@ write-up of a release.
   another overlap or a leader crossing is not made, and a region label the
   feature labels cannot clear is drawn and warned as before. Figures whose
   region labels meet no feature label's letters are unchanged.
+- Fixed: a Circular region label with feature labels' leader lines running
+  behind its letters was drawn with the lines visible through the letters, and
+  warned (on lambda with `--labels out`, "Replication" and "Lysis"). Such a
+  label is now drawn in front of the leader lines on a white backing at 70 %
+  opacity, padded 0.18 em beyond its letters and stopped before its own mark,
+  as Linear region labels are, and the leader lines behind it no longer count
+  as overlaps: lambda `--labels out` warns of no region label overlap (was 7),
+  `--labels both` of none (was 4); there "Lysis" is drawn 5 px further along
+  its region, where it can be backed, as the feature labels no longer need to
+  make way for it. A label whose backing would cover another label's letters
+  or backing is drawn and warned as before. No figure changes
+  size, and figures without leader lines behind region letters are unchanged,
+  in the CLI, the Python API, and the Web app; a click on a backed label still
+  selects its annotation in the Web app (OV-3156).
 - Fixed: a Circular region label drawn along its circle was placed by the
   height of its letters along the ray through its middle, but each letter
   stands upright on the circle, so its corners reach farther from the centre.
