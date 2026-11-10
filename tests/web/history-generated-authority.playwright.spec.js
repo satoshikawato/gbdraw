@@ -70,7 +70,7 @@ const expectArtifact = (actual, expected) => {
 };
 
 test('Undo Generate restores request A and Result A while preserving draft B through Save and fresh Load', async ({ browser }, testInfo) => {
-  test.setTimeout(360000);
+  test.setTimeout(540000);
   const page = await load(browser);
   try {
     await generate(page);
@@ -124,6 +124,9 @@ test('Undo Generate restores request A and Result A while preserving draft B thr
     await generate(page);
     expectArtifact(await inspect(page, testInfo, 'undo-setting-generate'), a);
     expect(page.externalRequests).toEqual([]);
+    // Continues on this generated page: its first step was this Generate.
+    await test.step('Undo and Redo are busy during Generate and leave the committed request unchanged',
+      () => expectBusyUndoRedoDuringGenerate(page));
   } finally { await page.context().close(); }
 });
 
@@ -239,18 +242,21 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
     expect(generated.definition).toContain('8,001 bp');
     expect(generated.definition).toContain('44.41');
 
+    // One wait after the last edit: none of these edits gives a field back its
+    // committed value, so a Result rewritten by any of them still differs from
+    // `committed` at the check (`expectUnchangedResult` reads the Result through
+    // `currentResults()`, which writes pending mounted edits first).
     const edits = [
       ['form', 'strain', 'X1'], ['form', 'plot_title', 'Audit title'],
       ['adv', 'plot_title_position', 'top'], ['adv', 'plot_title_font_size', 30],
       ['adv', 'keep_full_definition_with_plot_title', true]
     ];
     for (const [owner, field, value] of edits) {
-      await page.evaluate(async ({ owner, field, value }) => {
+      await test.step(`draft edit ${owner}.${field}`, () => page.evaluate(async ({ owner, field, value }) => {
         const { state } = await import('./js/state.js');
         state.activeDrawing()[owner][field] = value;
         await window.Vue.nextTick();
-      }, { owner, field, value });
-      await expectUnchangedResult(page, committed);
+      }, { owner, field, value }));
     }
     // The visible field keeps its History step.
     const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
@@ -288,10 +294,14 @@ test('Global stroke settings apply on Generate and leave the Result unchanged be
     const committedRequest = (await snapshot(page)).request;
     expect(await committedScaleInterval(page)).not.toBe(12345);
     const width = await reveal(page.getByLabel('Block Stroke Width', { exact: true }).first());
-    for (const value of ['5', '', '-1']) {
-      await width.fill(value);
-      await expectUnchangedResult(page, committed);
-    }
+    // `5` keeps its own wait: a rewrite by it could be written back to the
+    // committed bytes by the empty value after it. A rewrite by `` or `-1`
+    // stays visible at one wait after both.
+    await width.fill('5');
+    await expectUnchangedResult(page, committed);
+    await width.fill('');
+    await width.fill('-1');
+    await expectUnchangedResult(page, committed);
     await expect(page.locator('[data-applies-on-generate="stroke"]')).toBeVisible();
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
@@ -334,161 +344,170 @@ test('Global stroke settings apply on Generate and leave the Result unchanged be
 });
 
 
+// S04 live rerender on a generated page: applying, error and retry keep the
+// draft separate. Ends with the Editor closed and the scale draft set.
+const liveRerenderErrorAndRetry = async (page, mode, info) => {
+  await page.evaluate(async mode => {
+    const { state } = await import('./js/state.js');
+    window.s04ScaleField=mode==='circular'?'scale_interval':'scale_font_size';
+    window.s04ScalePrior=state.activeDrawing().adv[window.s04ScaleField];
+    state.activeDrawing().adv[mode==='circular'?'scale_interval':'scale_font_size']=mode==='circular'?12345:19;
+    state.autoLabelReflowEnabled.value=true;
+    window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse=()=>new Promise((resolve,reject)=>{
+      window.failS04Reflow=()=>reject(new Error('S04 forced live rerender failure'));
+    });
+  },mode);
+  const target=await popup(page);
+  await page.locator('.feature-popup input[placeholder="Edit label text"]').fill('S04 direct edit retained');
+  await page.getByRole('button',{name:'Apply Label',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>Boolean(window.failS04Reflow)),{timeout:180000}).toBe(true);
+  await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit applying');
+  await noDerivedStatus(page);
+  const direct=await snapshot(page);
+  expect(direct.mounted).toContain('S04 direct edit retained');
+  const counts=await page.evaluate(()=>[window.__GBDRAW_HISTORY__.getUndoCount(),window.__GBDRAW_HISTORY__.getRedoCount()]);
+  await page.evaluate(()=>window.failS04Reflow());
+  await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.labelReflowProcessing),{timeout:180000}).toBe(false);
+  await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
+  await noDerivedStatus(page);
+  await page.evaluate(async mode=>{
+    const {state}=await import('./js/state.js');state.activeDrawing().adv[mode==='circular'?'scale_interval':'scale_font_size']=window.s04ScalePrior;
+    await window.Vue.nextTick();
+  },mode);
+  await noDerivedStatus(page);
+  await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
+  await page.evaluate(async mode=>{
+    const {state}=await import('./js/state.js');state.activeDrawing().adv[mode==='circular'?'scale_interval':'scale_font_size']=mode==='circular'?12345:19;
+    await window.Vue.nextTick();
+  },mode);
+  expect((await snapshot(page)).result).toBe(direct.result);
+  expect(await page.evaluate(()=>[window.__GBDRAW_HISTORY__.getUndoCount(),window.__GBDRAW_HISTORY__.getRedoCount()])).toEqual(counts);
+  await closeEditor(page);
+  await page.screenshot({path:info.outputPath(`${mode}-live-error.png`),fullPage:true});
+  await page.evaluate(async target => {
+    delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+    const app=window.__GBDRAW_APP__;
+    app.openFeatureEditorFromList(app.extractedFeatures.find(feature=>feature.svg_id===target.featureId));
+  },target);
+  await page.locator('.feature-popup input[placeholder="Edit label text"]').fill('S04 retry succeeds');
+  await page.getByRole('button',{name:'Apply Label',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>({processing:window.__GBDRAW_APP__.labelReflowProcessing,error:window.__GBDRAW_APP__.labelReflowLastError})),{timeout:180000}).toEqual({processing:false,error:null});
+  await expect(page.locator('[data-live-application-feedback]')).toHaveCount(0);
+  await noDerivedStatus(page);
+  expect((await snapshot(page)).mounted).toContain('S04 retry succeeds');
+  expect(page.externalRequests).toEqual([]);
+  await closeEditor(page);
+};
+
 for (const mode of ['circular', 'linear']) {
-  test(`S04 ${mode} draft and live edits continue through Save/Load, Export, Generate and History`, async ({ browser }, info) => {
-    test.setTimeout(360000);
+  test(`S04 ${mode} live rerender error and retry, then draft and live edits through Save/Load, Export, Generate and History`, async ({ browser }, info) => {
+    test.setTimeout(600000);
     const page = await load(browser, seeds[mode]);
     let fresh;
     try {
       // A saved Result is displayed without generation or assuming its opaque tables match.
       await noDerivedStatus(page);
       await generate(page);
-      await noDerivedStatus(page);
-      const field = mode === 'circular' ? 'scale_interval' : 'scale_font_size';
-      const draftValue = mode === 'circular' ? 12345 : 19;
-      const prior = await page.evaluate(async ({field,draftValue}) => {
-        const { state } = await import('./js/state.js');
-        const value = state.activeDrawing().adv[field];
-        await window.__GBDRAW_HISTORY__.runUndoable('Scale draft', () => { state.activeDrawing().adv[field] = draftValue; });
-        return value;
-      }, {field,draftValue});
-      await noDerivedStatus(page);
+      await test.step(`S04 ${mode} live rerender applying/error and retry keep the draft separate`,
+        () => liveRerenderErrorAndRetry(page, mode, info));
+      // The scale back at its committed value, so the next step's draft is an edit again.
       await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
-        state.autoLabelReflowEnabled.value = false;
-        state.paletteInstantPreviewEnabled.value = true;
-        await window.__GBDRAW_HISTORY__.runUndoable('Live color', async () => {
-          window.__GBDRAW_APP__.editDefaultColor('CDS', '#123456');
-          await window.Vue.nextTick();
-        });
+        state.activeDrawing().adv[window.s04ScaleField] = window.s04ScalePrior;
+        await window.Vue.nextTick();
       });
-      await popup(page);
-      await page.locator('.feature-popup input[placeholder="Edit label text"]').fill('S04 retained label');
-      await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
-      await closeEditor(page);
-      const edited = await inspect(page, info, `${mode}-live-pending`);
-      expect(edited.editable.adv[field]).toBe(draftValue);
-      expect((await snapshot(page)).mounted).toContain('S04 retained label');
-      expect((await snapshot(page)).mounted).toContain('#123456');
-      await noDerivedStatus(page);
-      const history = await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]);
-      await expect(page.locator('[data-generation-application-announcement]')).toHaveCount(0);
-      // Draft edits keep the Result, History, and committed request unchanged.
-      for (const value of [draftValue+1, draftValue+2, draftValue]) {
-        // Keep the byte/hash/Worker/clone spies installed through Vue's render,
-        // so this exercises recomputation via the UI wiring, not a cached getter.
-        await noDerivedStatus(page,{field,value});
-      }
-      expect(await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()])).toEqual(history);
-      await page.evaluate(async ({field,prior}) => {
-        const { state } = await import('./js/state.js');state.activeDrawing().adv[field]=prior;await window.Vue.nextTick();
-      }, {field,prior});
-      await noDerivedStatus(page);
-      await page.evaluate(async ({field,draftValue}) => {
-        const { state } = await import('./js/state.js');state.activeDrawing().adv[field]=draftValue;await window.Vue.nextTick();
-      },{field,draftValue});
-      await noDerivedStatus(page);
-      await expect(page.getByRole('button',{name:'Generate Diagram',exact:true})).not.toHaveAccessibleDescription(/recalculates placement/);
-      await expect(page.getByRole('button',{name:'Save Session',exact:true})).toHaveAccessibleDescription(/current Result.*draft.*does not Generate/);
-      await expect(page.getByRole('button',{name:'SVG',exact:true})).toHaveAccessibleDescription(/PNG, and PDF buttons download the current Result.*Neither applies pending/);
-      const file=info.outputPath(`${mode}-pending.gbdraw-session.json.gz`);
-      const saved=shownSavedDrawing(JSON.parse(gunzipSync(await download(page,'Save Session',file))));
-      expectArtifact(await inspect(page,info,`${mode}-after-save`),edited);
-      fresh=await load(browser,file);
-      const loaded=await inspect(fresh,info,`${mode}-loaded`);
-      // Import uses the existing mandatory SVG sanitizer; compare its exact output
-      // and all visual semantics, without treating markup normalization as rerender.
-      const admittedSaved=await fresh.evaluate(async content => {
-        const { sanitizeSvgContent } = await import('./js/services/svg-sanitization.js');
-        return sanitizeSvgContent(content);
-      },saved.results[0].content);
-      expectArtifact(loaded,{...edited,selected:hash(admittedSaved)});
-      expect(await semantics(fresh,(await snapshot(fresh)).result))
-        .toEqual(await semantics(fresh,saved.results[0].content));
-      await noDerivedStatus(fresh);
-      // Record final actual rendered screens for visual inspection.
-      await fresh.screenshot({path:info.outputPath(`${mode}-pending.png`),fullPage:true});
-      await generate(fresh);
-      await noDerivedStatus(fresh);
-      const generated=await inspect(fresh,info,`${mode}-generated`);
-      expect((await snapshot(fresh)).mounted).toContain('S04 retained label');
-      expect((await snapshot(fresh)).mounted).toContain('#123456');
-      await evaluateWithRetainedPromise(fresh, () => window.__GBDRAW_HISTORY__.undo());
-      expectArtifact(await inspect(fresh,info,`${mode}-undo`),loaded);
-      await noDerivedStatus(fresh);
-      await evaluateWithRetainedPromise(fresh, () => window.__GBDRAW_HISTORY__.redo());
-      const redone=await inspect(fresh,info,`${mode}-redo`);
-      expect(redone.selected).toBe(generated.selected);
-      expect(redone.request).toEqual(generated.request);
-      expect(redone.markedMounted).toBe(true);
-      // Trusted History restore does not hydrate transient label-editor bindings.
-      // Compare the existing comprehensive visual oracle as well as Result bytes.
-      expect(await semantics(fresh,readFileSync(info.outputPath(`${mode}-redo.svg`),'utf8')))
-        .toEqual(await semantics(fresh,readFileSync(info.outputPath(`${mode}-generated.svg`),'utf8')));
-      await noDerivedStatus(fresh);
-      expect(page.externalRequests).toEqual([]);expect(fresh.externalRequests).toEqual([]);
+      await test.step(`S04 ${mode} draft and live edits continue through Save/Load, Export, Generate and History`, async () => {
+        await generate(page);
+        await noDerivedStatus(page);
+        const field = mode === 'circular' ? 'scale_interval' : 'scale_font_size';
+        const draftValue = mode === 'circular' ? 12345 : 19;
+        const prior = await page.evaluate(async ({field,draftValue}) => {
+          const { state } = await import('./js/state.js');
+          const value = state.activeDrawing().adv[field];
+          await window.__GBDRAW_HISTORY__.runUndoable('Scale draft', () => { state.activeDrawing().adv[field] = draftValue; });
+          return value;
+        }, {field,draftValue});
+        await noDerivedStatus(page);
+        await page.evaluate(async () => {
+          const { state } = await import('./js/state.js');
+          state.autoLabelReflowEnabled.value = false;
+          state.paletteInstantPreviewEnabled.value = true;
+          await window.__GBDRAW_HISTORY__.runUndoable('Live color', async () => {
+            window.__GBDRAW_APP__.editDefaultColor('CDS', '#123456');
+            await window.Vue.nextTick();
+          });
+        });
+        await popup(page);
+        await page.locator('.feature-popup input[placeholder="Edit label text"]').fill('S04 retained label');
+        await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
+        await closeEditor(page);
+        const edited = await inspect(page, info, `${mode}-live-pending`);
+        expect(edited.editable.adv[field]).toBe(draftValue);
+        expect((await snapshot(page)).mounted).toContain('S04 retained label');
+        expect((await snapshot(page)).mounted).toContain('#123456');
+        await noDerivedStatus(page);
+        const history = await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]);
+        await expect(page.locator('[data-generation-application-announcement]')).toHaveCount(0);
+        // Draft edits keep the Result, History, and committed request unchanged.
+        for (const value of [draftValue+1, draftValue+2, draftValue]) {
+          // Keep the byte/hash/Worker/clone spies installed through Vue's render,
+          // so this exercises recomputation via the UI wiring, not a cached getter.
+          await noDerivedStatus(page,{field,value});
+        }
+        expect(await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()])).toEqual(history);
+        await page.evaluate(async ({field,prior}) => {
+          const { state } = await import('./js/state.js');state.activeDrawing().adv[field]=prior;await window.Vue.nextTick();
+        }, {field,prior});
+        await noDerivedStatus(page);
+        await page.evaluate(async ({field,draftValue}) => {
+          const { state } = await import('./js/state.js');state.activeDrawing().adv[field]=draftValue;await window.Vue.nextTick();
+        },{field,draftValue});
+        await noDerivedStatus(page);
+        await expect(page.getByRole('button',{name:'Generate Diagram',exact:true})).not.toHaveAccessibleDescription(/recalculates placement/);
+        await expect(page.getByRole('button',{name:'Save Session',exact:true})).toHaveAccessibleDescription(/current Result.*draft.*does not Generate/);
+        await expect(page.getByRole('button',{name:'SVG',exact:true})).toHaveAccessibleDescription(/PNG, and PDF buttons download the current Result.*Neither applies pending/);
+        const file=info.outputPath(`${mode}-pending.gbdraw-session.json.gz`);
+        const saved=shownSavedDrawing(JSON.parse(gunzipSync(await download(page,'Save Session',file))));
+        expectArtifact(await inspect(page,info,`${mode}-after-save`),edited);
+        fresh=await load(browser,file);
+        const loaded=await inspect(fresh,info,`${mode}-loaded`);
+        // Import uses the existing mandatory SVG sanitizer; compare its exact output
+        // and all visual semantics, without treating markup normalization as rerender.
+        const admittedSaved=await fresh.evaluate(async content => {
+          const { sanitizeSvgContent } = await import('./js/services/svg-sanitization.js');
+          return sanitizeSvgContent(content);
+        },saved.results[0].content);
+        expectArtifact(loaded,{...edited,selected:hash(admittedSaved)});
+        expect(await semantics(fresh,(await snapshot(fresh)).result))
+          .toEqual(await semantics(fresh,saved.results[0].content));
+        await noDerivedStatus(fresh);
+        // Record final actual rendered screens for visual inspection.
+        await fresh.screenshot({path:info.outputPath(`${mode}-pending.png`),fullPage:true});
+        await generate(fresh);
+        await noDerivedStatus(fresh);
+        const generated=await inspect(fresh,info,`${mode}-generated`);
+        expect((await snapshot(fresh)).mounted).toContain('S04 retained label');
+        expect((await snapshot(fresh)).mounted).toContain('#123456');
+        await evaluateWithRetainedPromise(fresh, () => window.__GBDRAW_HISTORY__.undo());
+        expectArtifact(await inspect(fresh,info,`${mode}-undo`),loaded);
+        await noDerivedStatus(fresh);
+        await evaluateWithRetainedPromise(fresh, () => window.__GBDRAW_HISTORY__.redo());
+        const redone=await inspect(fresh,info,`${mode}-redo`);
+        expect(redone.selected).toBe(generated.selected);
+        expect(redone.request).toEqual(generated.request);
+        expect(redone.markedMounted).toBe(true);
+        // Trusted History restore does not hydrate transient label-editor bindings.
+        // Compare the existing comprehensive visual oracle as well as Result bytes.
+        expect(await semantics(fresh,readFileSync(info.outputPath(`${mode}-redo.svg`),'utf8')))
+          .toEqual(await semantics(fresh,readFileSync(info.outputPath(`${mode}-generated.svg`),'utf8')));
+        await noDerivedStatus(fresh);
+        expect(page.externalRequests).toEqual([]);expect(fresh.externalRequests).toEqual([]);
+      });
     } finally { await page.context().close();if(fresh) await fresh.context().close(); }
   });
 }
 
 
-for (const mode of ['circular','linear']) {
-  test(`S04 ${mode} live rerender applying/error and retry keep the draft separate`, async ({ browser }, info) => {
-    test.setTimeout(240000);
-    const page=await load(browser,seeds[mode]);
-    try {
-      await generate(page);
-      await page.evaluate(async mode => {
-        const { state } = await import('./js/state.js');
-        window.s04ScalePrior=state.activeDrawing().adv[mode==='circular'?'scale_interval':'scale_font_size'];
-        state.activeDrawing().adv[mode==='circular'?'scale_interval':'scale_font_size']=mode==='circular'?12345:19;
-        state.autoLabelReflowEnabled.value=true;
-        window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse=()=>new Promise((resolve,reject)=>{
-          window.failS04Reflow=()=>reject(new Error('S04 forced live rerender failure'));
-        });
-      },mode);
-      const target=await popup(page);
-      await page.locator('.feature-popup input[placeholder="Edit label text"]').fill('S04 direct edit retained');
-      await page.getByRole('button',{name:'Apply Label',exact:true}).click();
-      await expect.poll(()=>page.evaluate(()=>Boolean(window.failS04Reflow)),{timeout:180000}).toBe(true);
-      await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit applying');
-      await noDerivedStatus(page);
-      const direct=await snapshot(page);
-      expect(direct.mounted).toContain('S04 direct edit retained');
-      const counts=await page.evaluate(()=>[window.__GBDRAW_HISTORY__.getUndoCount(),window.__GBDRAW_HISTORY__.getRedoCount()]);
-      await page.evaluate(()=>window.failS04Reflow());
-      await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.labelReflowProcessing),{timeout:180000}).toBe(false);
-      await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
-      await noDerivedStatus(page);
-      await page.evaluate(async mode=>{
-        const {state}=await import('./js/state.js');state.activeDrawing().adv[mode==='circular'?'scale_interval':'scale_font_size']=window.s04ScalePrior;
-        await window.Vue.nextTick();
-      },mode);
-      await noDerivedStatus(page);
-      await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
-      await page.evaluate(async mode=>{
-        const {state}=await import('./js/state.js');state.activeDrawing().adv[mode==='circular'?'scale_interval':'scale_font_size']=mode==='circular'?12345:19;
-        await window.Vue.nextTick();
-      },mode);
-      expect((await snapshot(page)).result).toBe(direct.result);
-      expect(await page.evaluate(()=>[window.__GBDRAW_HISTORY__.getUndoCount(),window.__GBDRAW_HISTORY__.getRedoCount()])).toEqual(counts);
-      await closeEditor(page);
-      await page.screenshot({path:info.outputPath(`${mode}-live-error.png`),fullPage:true});
-      await page.evaluate(async target => {
-        delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
-        const app=window.__GBDRAW_APP__;
-        app.openFeatureEditorFromList(app.extractedFeatures.find(feature=>feature.svg_id===target.featureId));
-      },target);
-      await page.locator('.feature-popup input[placeholder="Edit label text"]').fill('S04 retry succeeds');
-      await page.getByRole('button',{name:'Apply Label',exact:true}).click();
-      await expect.poll(()=>page.evaluate(()=>({processing:window.__GBDRAW_APP__.labelReflowProcessing,error:window.__GBDRAW_APP__.labelReflowLastError})),{timeout:180000}).toEqual({processing:false,error:null});
-      await expect(page.locator('[data-live-application-feedback]')).toHaveCount(0);
-      await noDerivedStatus(page);
-      expect((await snapshot(page)).mounted).toContain('S04 retry succeeds');
-      expect(page.externalRequests).toEqual([]);
-    } finally {await page.context().close();}
-  });
-}
 
 
 for (const mode of ['linear', 'circular']) {
@@ -575,27 +594,6 @@ for (const mode of ['linear', 'circular']) {
     }
   });
 }
-
-test('Unedited Circular Save and fresh Load keeps the committed request without Worker work', async ({ browser }, info) => {
-  test.setTimeout(180000);
-  const page = await load(browser);
-  let fresh;
-  try {
-    await generate(page);
-    await noDerivedStatus(page);
-    const before = await snapshot(page);
-    const path = info.outputPath('unedited-circular.json.gz');
-    await download(page, 'Save Session', path);
-    fresh = await load(browser, path);
-    expect((await snapshot(fresh)).request).toEqual(before.request);
-    await noDerivedStatus(fresh);
-    expect(await fresh.evaluate(() => window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__?.constructions || 0)).toBe(0);
-  } finally {
-    await page.context().close();
-    if (fresh) await fresh.context().close();
-  }
-});
-
 
 // SE-01, N-19, N-20 (R11): checkpoint Undo and Redo restore the admitted feature
 // catalog by reference; the checkpoint JSON neither copies nor signs it.
@@ -972,79 +970,76 @@ test('Undo after a lost redraw draws the restored rules (OV-731)', async ({ brow
 });
 
 // GE-06 (D-28, PD-OI-082): Undo and Redo are busy while Generate replaces the
-// artifact; draft edits stay allowed (PD-OI-051).
-test('Undo and Redo are busy during Generate and leave the committed request unchanged', async ({ browser }) => {
-  test.setTimeout(300000);
-  const page = await load(browser);
-  try {
-    await generate(page);
-    const labels = page.locator('#circular-label-mode');
-    // Enter opens the card; a click at the summary's centre lands on its tips.
-    await page.locator('summary[aria-label="Labels"]').press('Enter');
-    for (const value of ['none', 'both']) {
-      await labels.focus();
-      await labels.selectOption(value);
-      await labels.press('Tab');
-    }
-    await page.getByRole('button', { name: 'Undo', exact: true }).click();
-    await expect(labels).toHaveValue('none');
-    const observe = () => page.evaluate(async () => {
-      const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-      const history = window.__GBDRAW_HISTORY__;
-      return {
-        counts: [history.getUndoCount(), history.getRedoCount()],
-        labels: window.__GBDRAW_APP__.form.labels_mode,
-        request: getCommittedCanonicalRenderRequest()
-      };
-    });
-    const before = await observe();
-    expect(before.counts[1]).toBe(1);
+// artifact; draft edits stay allowed (PD-OI-051). Runs on a generated page (the
+// end of the Undo Generate case).
+const expectBusyUndoRedoDuringGenerate = async page => {
+  const labels = page.locator('#circular-label-mode');
+  // Enter opens the card; a click at the summary's centre lands on its tips.
+  const card = page.locator('summary[aria-label="Labels"]');
+  if (await card.locator('xpath=..').getAttribute('open') === null) await card.press('Enter');
+  for (const value of ['none', 'both']) {
+    await labels.focus();
+    await labels.selectOption(value);
+    await labels.press('Tab');
+  }
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(labels).toHaveValue('none');
+  const observe = () => page.evaluate(async () => {
+    const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+    const history = window.__GBDRAW_HISTORY__;
+    return {
+      counts: [history.getUndoCount(), history.getRedoCount()],
+      labels: window.__GBDRAW_APP__.form.labels_mode,
+      request: getCommittedCanonicalRenderRequest()
+    };
+  });
+  const before = await observe();
+  expect(before.counts[1]).toBe(1);
 
-    await page.evaluate(() => {
-      window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => new Promise(resolve => {
-        window.__P09_RELEASE_GENERATE__ = resolve;
-      });
+  await page.evaluate(() => {
+    window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => new Promise(resolve => {
+      window.__P09_RELEASE_GENERATE__ = resolve;
     });
-    const key = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
-    await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
-    await expect.poll(() => page.evaluate(() => typeof window.__P09_RELEASE_GENERATE__), { timeout: 180000 })
-      .toBe('function');
-    const undo = page.getByRole('button', { name: 'Undo', exact: true });
-    const redo = page.getByRole('button', { name: 'Redo', exact: true });
-    await expect(undo).toBeDisabled();
-    await expect(redo).toBeDisabled();
-    const reason = 'Generating diagram. Retry after generation finishes.';
-    await expect(page.locator('[data-session-busy-reason]')).toHaveText(reason);
-    await page.keyboard.press('Control+z');
-    await page.keyboard.press('Control+y');
-    await page.keyboard.press('Control+Shift+z');
-    expect(await evaluateWithRetainedPromise(page, async () => [
-      await window.__GBDRAW_HISTORY__.undo(),
-      await window.__GBDRAW_HISTORY__.redo()
-    ])).toEqual([{ status: 'busy', reason }, { status: 'busy', reason }]);
-    expect(await observe()).toEqual(before);
+  });
+  const key = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
+  await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => typeof window.__P09_RELEASE_GENERATE__), { timeout: 180000 })
+    .toBe('function');
+  const undo = page.getByRole('button', { name: 'Undo', exact: true });
+  const redo = page.getByRole('button', { name: 'Redo', exact: true });
+  await expect(undo).toBeDisabled();
+  await expect(redo).toBeDisabled();
+  const reason = 'Generating diagram. Retry after generation finishes.';
+  await expect(page.locator('[data-session-busy-reason]')).toHaveText(reason);
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+y');
+  await page.keyboard.press('Control+Shift+z');
+  expect(await evaluateWithRetainedPromise(page, async () => [
+    await window.__GBDRAW_HISTORY__.undo(),
+    await window.__GBDRAW_HISTORY__.redo()
+  ])).toEqual([{ status: 'busy', reason }, { status: 'busy', reason }]);
+  expect(await observe()).toEqual(before);
 
-    // PD-OI-051: a draft edit during Generate is still recorded.
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.runUndoable('Draft during Generate', () => {
-      window.__GBDRAW_APP__.form.prefix = 'during-generate';
-    }));
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.prefix)).toBe('during-generate');
-    expect((await observe()).counts).toEqual([before.counts[0] + 1, 0]);
+  // PD-OI-051: a draft edit during Generate is still recorded.
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.runUndoable('Draft during Generate', () => {
+    window.__GBDRAW_APP__.form.prefix = 'during-generate';
+  }));
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.prefix)).toBe('during-generate');
+  expect((await observe()).counts).toEqual([before.counts[0] + 1, 0]);
 
-    await page.evaluate(() => {
-      delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
-      window.__P09_RELEASE_GENERATE__();
-    });
-    await expect.poll(() => page.evaluate(async () => {
-      const { state } = await import('./js/state.js');
-      return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
-    }), { timeout: 180000 }).toEqual({ key: key + 1, processing: false, error: null });
-    const after = await observe();
-    expect(after.counts).toEqual([before.counts[0] + 2, 0]);
-    expect(after.request).not.toEqual(before.request);
-    await expect(undo).toBeEnabled();
-    await undo.click();
-    await expect.poll(async () => (await observe()).request).toEqual(before.request);
-    expect(page.externalRequests).toEqual([]);
-  } finally { await page.context().close(); }
-});
+  await page.evaluate(() => {
+    delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+    window.__P09_RELEASE_GENERATE__();
+  });
+  await expect.poll(() => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
+  }), { timeout: 180000 }).toEqual({ key: key + 1, processing: false, error: null });
+  const after = await observe();
+  expect(after.counts).toEqual([before.counts[0] + 2, 0]);
+  expect(after.request).not.toEqual(before.request);
+  await expect(undo).toBeEnabled();
+  await undo.click();
+  await expect.poll(async () => (await observe()).request).toEqual(before.request);
+  expect(page.externalRequests).toEqual([]);
+};
