@@ -1238,18 +1238,23 @@ const READ_ELSEWHERE = new Set([
  * returned as a loss unless a gbdraw writer wrote it and later retired or
  * moved it (`RETIRED_STORED_FIELDS`, E-OD03; TB19, TB32). An object merges
  * into an object, and `null` over an object merges nothing; a list replaces
- * a list; a value of `target`'s kind, or `null` on either side, is copied. An
- * empty text of another kind over a number (a cleared number input) is the
- * field's value in `defaults`, without a loss: a blank is the default (R7,
- * OV-827). Any other value of another kind (a list for an object included) is
- * not used; it is returned as a loss at `at`, and `target` keeps its value.
+ * a list; a value of `target`'s kind, or `null` on either side, is copied. A
+ * blank in `target` (a cleared number input writes '') holds no value of its
+ * own: a value of its default's kind, or any value where the default is
+ * `null`, is copied over it (OV-3351). An empty text of another kind over a
+ * number (a cleared number input) is the field's value in `defaults`, without
+ * a loss: a blank is the default (R7, OV-827); in `captured` settings it stays
+ * blank, as the app wrote it (R11). Any other value of another kind (a list
+ * for an object included) is not used; it is returned as a loss at `at`, and
+ * `target` keeps its value.
  * @param {Record<string, unknown>} target
  * @param {unknown} source
  * @param {string} at
  * @param {Record<string, unknown> | null} defaults The fresh settings of the same place (`defaultSettingsContainers`).
+ * @param {boolean} captured Settings the app wrote (History Undo and Redo, the Load rollback).
  * @returns {SettingLoss[]}
  */
-const mergeStoredSettings = (target, source, at, defaults) => {
+const mergeStoredSettings = (target, source, at, defaults, captured) => {
   if (!source || typeof source !== 'object') return [];
   const stored = /** @type {Record<string, unknown>} */ (source);
   return Object.keys(stored).flatMap((key) => {
@@ -1265,18 +1270,21 @@ const mergeStoredSettings = (target, source, at, defaults) => {
     const fresh = defaults && Object.hasOwn(defaults, key) ? defaults[key] : undefined;
     // A null over a settings group holds nothing and merges nothing (OV-822, E-OD06).
     if (isPlainObject(targetValue) && (isPlainObject(sourceValue) || sourceValue === null)) {
-      return mergeStoredSettings(targetValue, sourceValue, keyAt, isPlainObject(fresh) ? fresh : null);
+      return mergeStoredSettings(targetValue, sourceValue, keyAt, isPlainObject(fresh) ? fresh : null, captured);
     }
     if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
       targetValue.splice(0, targetValue.length, ...sourceValue);
       return [];
     }
-    if (kindOf(targetValue, keyAt) === kindOf(sourceValue, keyAt) || targetValue === null || sourceValue === null) {
+    const sourceKind = kindOf(sourceValue, keyAt);
+    const blankTarget = targetValue === '' && (fresh === null || (fresh !== undefined && kindOf(fresh, keyAt) === sourceKind));
+    if (kindOf(targetValue, keyAt) === sourceKind || targetValue === null || sourceValue === null || blankTarget) {
       target[key] = sourceValue;
       return [];
     }
     if (sourceValue === '' && typeof targetValue === 'number') {
-      if (fresh !== undefined) target[key] = copied(fresh);
+      if (captured) target[key] = sourceValue;
+      else if (fresh !== undefined) target[key] = copied(fresh);
       return [];
     }
     return [{ at: keyAt, stored: sourceValue, used: targetValue, kept: true }];
@@ -1334,7 +1342,7 @@ export const installStoredSettings = (targets, stored, mode, { captured = false 
    * @param {'form' | 'adv' | 'losat' | 'circularConservation'} at
    */
   const merged = (at) => (isPlainObject(config[at]) || isUnsetValue(config[at])
-    ? mergeStoredSettings(targets[at], config[at], at, defaults[at]) : [{ at, stored: config[at], used: targets[at], kept: true }]);
+    ? mergeStoredSettings(targets[at], config[at], at, defaults[at], captured) : [{ at, stored: config[at], used: targets[at], kept: true }]);
   const losses = [
     ...merged('form'),
     ...merged('adv'),
@@ -1770,7 +1778,7 @@ export const unreadFieldRepairs = (stored, path, mode, { slice = false } = {}) =
       const stored = config[at];
       if (!isPlainObject(stored)) return isUnsetValue(stored) ? [] : [{ at, stored, used: {} }];
       const target = /** @type {Record<string, unknown>} */ (targets[/** @type {keyof SettingsContainers} */ (at)]);
-      return mergeStoredSettings(target, stored, at, null).filter(({ used }) => used === undefined);
+      return mergeStoredSettings(target, stored, at, null, false).filter(({ used }) => used === undefined);
     }),
     ...unknownDomainLosses(config, slice ? SLICE_READ_DOMAINS : READ_DOMAINS),
     // A domain the reading replaces whole (one of another kind).

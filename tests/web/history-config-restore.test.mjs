@@ -44,6 +44,32 @@ for (const [domain, key, first, second] of [
   assert.equal(state.activeDrawing()[domain][key], first, `${domain}.${key}: Redo explicit value`);
 }
 
+// OV-3351: an emptied number field holds '' (v-model.number). Undo of the
+// emptying restores the number, and Redo empties the field again, whether the
+// field's default is Auto (null) or a number, in every settings container.
+for (const [domain, key, value] of [
+  ['adv', 'legend_font_size', 21],
+  ['adv', 'legend_box_size', 14],
+  ['adv', 'plot_title_font_size', 30],
+  ['adv', 'gc_content_tick_interval', 50],
+  ['form', 'circular_region_start', 1000],
+  ['circularConservation', 'ring_width', 12]
+]) {
+  const container = () => state.activeDrawing()[domain];
+  const original = container()[key];
+  await history.initializeIntentBaseline();
+  await history.runUndoable('Set value', () => { container()[key] = value; });
+  await history.runUndoable('Empty the field', () => { container()[key] = ''; });
+  await history.undo();
+  assert.equal(container()[key], value, `${domain}.${key}: Undo of the emptying`);
+  await history.redo();
+  // A field with a row reads its blank as Auto (null); both show an empty field.
+  assert.ok(['', null].includes(container()[key]), `${domain}.${key}: Redo of the emptying, ${JSON.stringify(container()[key])}`);
+  await history.undo();
+  await history.undo();
+  assert.equal(container()[key], original, `${domain}.${key}: Undo of the value`);
+}
+
 // R11, TK-12: a Width the row shows as invalid is a draft the app wrote, so
 // Undo and Redo install it as captured; only Load reads a file's stack.
 {

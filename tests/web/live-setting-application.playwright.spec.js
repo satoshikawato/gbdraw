@@ -1030,3 +1030,38 @@ test('tobacco: a visibility rule edit during a Legend font size apply equals a G
     await page.context().close();
   }
 });
+
+// OV-3351: an emptied Legend font size holds '' in the draft. Undo of the
+// emptying gives the earlier value back to the field and the Result; Redo
+// empties the field again and draws the Auto size.
+test('tobacco: Undo of an emptied Legend font size restores the earlier value and its Result (OV-3351)', async ({ browser }) => {
+  test.setTimeout(900_000);
+  const page = await load(browser, TOBACCO);
+  try {
+    await generateNow(page);
+    const original = await facts(page);
+    const size = nextLegendFont(original.legendFontSizes);
+    await commitValue(page, LEGEND_FONT, size);
+    await appliedLegendFont(page, size);
+    await commitValue(page, LEGEND_FONT, '');
+    await expect.poll(async () => (await facts(page)).legendFontSizes, { timeout: APPLY_TIMEOUT })
+      .toEqual(original.legendFontSizes);
+    await settleLive(page);
+
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+    await appliedLegendFont(page, size);
+    const undone = await facts(page);
+    expect(undone.draftLegendFont).toBe(size);
+    expect(undone.overrides[LEGEND_FONT_OVERRIDE]).toBe(size);
+    await expect(page.locator(LEGEND_FONT)).toHaveValue(String(size));
+
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+    await expect.poll(async () => (await facts(page)).legendFontSizes, { timeout: APPLY_TIMEOUT })
+      .toEqual(original.legendFontSizes);
+    await settleLive(page);
+    expect((await facts(page)).overrides?.[LEGEND_FONT_OVERRIDE]).toBeUndefined();
+    await expect(page.locator(LEGEND_FONT)).toHaveValue('');
+  } finally {
+    await page.context().close();
+  }
+});
