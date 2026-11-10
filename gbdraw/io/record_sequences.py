@@ -848,7 +848,7 @@ def same_bases(left: Seq | MutableSeq, right: Seq | MutableSeq) -> bool:
 def _sums_before(counts: NDArray[np.uint16], row: NDArray[np.int64]) -> NDArray[np.int64]:
     """Column ``k``: the counts of A, C, G and T in rows ``0..row[k] - 1``, summed between the rows asked for."""
 
-    marks = np.unique(np.concatenate(([0], row)))
+    marks = np.unique(np.concatenate(([0], row))).astype(np.intp)  # reduceat takes intp: int32 in Pyodide (OV-3356)
     sums = np.zeros((len(marks), 4), dtype=np.int64)
     if len(marks) > 1:
         np.cumsum(np.add.reduceat(counts[: marks[-1]], marks[:-1], axis=0, dtype=np.int64), axis=0, out=sums[1:])
