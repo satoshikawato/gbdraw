@@ -69,12 +69,15 @@ from ..core.base_counts import (
     NUCLEOTIDE,
     OTHER,
     PROTEIN,
-    ROW_BYTES,
+    ROW_BASES,
     SLICE_BYTES,
-    byte_histograms,
+    BASES_MATRIX,
+    CountedRows,
+    RowCounts,
+    byte_counts,
     count_matrix,
+    count_rows,
     known_prefix_counts,
-    row_counts,
 )
 from ..core.sequence_spans import sequence_spans
 from ..exceptions import InputFileError
@@ -111,10 +114,11 @@ _FASTA_RUN = 1  # ASCII FASTA lines: delete whitespace
 _GENBANK_LINES = 2  # Biopython's GenBank rule, line by line
 _EMBL_LINES = 3  # Biopython's EMBL rule, line by line
 _FASTA_LINES = 4  # FASTA lines that are not ASCII: Biopython's text rule
-# A chunk of a run kind is counted from its raw bytes, in rows of ``ROW_BYTES`` (any split of a run decodes alone);
-# a chunk read line by line is counted from its bases, as one row.
+# A run is counted from its raw bytes, a chunk of it per histogram call (any split of a run decodes alone); lines
+# read line by line are counted from their bases.
 _RUN_MATRICES = {_FLAT_RUN: count_matrix(_FLAT_DELETE), _FASTA_RUN: count_matrix(_FASTA_DELETE)}
-assert _CHUNK_BYTES % SLICE_BYTES == 0 and SLICE_BYTES % ROW_BYTES == 0
+_RUN_DELETE = {_FLAT_RUN: _FLAT_DELETE, _FASTA_RUN: _FASTA_DELETE}
+assert _CHUNK_BYTES == SLICE_BYTES and _CHUNK_BYTES <= 1 << 16  # a row's offset in its chunk is a ``uint16``
 _FLAT_KEPT = np.ones(256, dtype=bool)
 _FLAT_KEPT[list(_FLAT_DELETE)] = False
 _FLAT_NOT_LETTER = _FLAT_KEPT.copy()
@@ -123,18 +127,20 @@ _EDGE_BATCH = 1 << 20  # most bases of edge rows counted together
 
 
 class _Rows(NamedTuple):
-    """Count rows of a sequence's bases: ``starts`` (each row's first base, then the end), ``counts`` (rows x 4: A,
-    C, G and T, U as T, either case), and ``read``, which gives the bases of one row."""
+    """Count rows of a sequence's bases (``gbdraw.core.base_counts``): ``counts[j]`` (A, C, G and T, U as T,
+    either case) counts row ``first + j``, bases ``(first + j) * ROW_BASES`` up to the next row or ``end``;
+    ``read(row, size)`` gives the first ``size`` bases of a row."""
 
-    starts: NDArray[np.int64]
-    counts: NDArray[np.int32] | NDArray[np.int64]
-    read: Callable[[int], bytes]
+    counts: NDArray[np.uint16]
+    first: int
+    end: int
+    read: Callable[[int, int], bytes]
 
 
-def _alphabet(rows: NDArray[np.int64]) -> int:
-    """What the bases counted in ``rows`` hold (``gbdraw.core.base_counts``)."""
+def _alphabet(totals: NDArray[np.int64]) -> int:
+    """What the bases counted in ``totals`` (rows of 7 columns) hold (``gbdraw.core.base_counts``)."""
 
-    beyond = rows[:, (BEYOND_NUCLEOTIDE, BEYOND_PROTEIN)].any(axis=0)
+    beyond = totals[:, (BEYOND_NUCLEOTIDE, BEYOND_PROTEIN)].any(axis=0)
     return OTHER if beyond[1] else PROTEIN if beyond[0] else NUCLEOTIDE
 
 # Biopython's record start and sequence headers (Bio.GenBank.Scanner).
@@ -474,10 +480,9 @@ class _SequenceTable:
     ``alphabets[i]`` what its bases hold (``gbdraw.core.base_counts``).
 
     The parse pass counts the bases as it indexes them (the one producer of a
-    record's base counts): chunk ``i`` holds the count rows from ``first_rows[i]``,
-    each row the counts of A, C, G and T in at most ``ROW_BYTES`` raw bytes of a
-    run, or in a whole chunk read line by line. A count of any span is then whole
-    rows summed and its two edge rows counted (:func:`known_base_counts_at`).
+    record's base counts), in rows of ``ROW_BASES`` bases from the first, and keeps
+    where in its chunk each row's first base lies. A count of any span is then
+    whole rows summed and the bases of its edge rows read (:func:`known_base_counts_at`).
     """
 
     source: _SequenceFile
@@ -487,64 +492,76 @@ class _SequenceTable:
     starts: array[int] = field(default_factory=lambda: array("q"))
     kinds: bytearray = field(default_factory=bytearray)
     alphabets: bytearray = field(default_factory=bytearray)
-    first_rows: array[int] = field(default_factory=lambda: array("q"))
     length: int = 0
-    _row_starts: list[NDArray[np.int64]] = field(default_factory=list)
-    _row_counts: list[NDArray[np.int32]] = field(default_factory=list)
+    _counts: RowCounts = field(default_factory=RowCounts)
+    _row_offsets: list[NDArray[np.uint16]] = field(default_factory=list)
     _rows: _Rows | None = None
-    _row_total: int = 0
 
-    def add(self, offset: int, raw: bytes, kind: int, rows: NDArray[np.int64]) -> None:
-        """Add the raw bytes ``raw`` from file offset ``offset``, of one kind, with the counts of their rows.
+    def add(self, offset: int, raw: bytes, kind: int, counted: CountedRows) -> None:
+        """Add the raw bytes ``raw`` from file offset ``offset``, of one kind, with what was counted in them
+        (:func:`gbdraw.core.base_counts.count_rows`: in ``raw`` for a run, in its bases for lines read line by line).
 
-        A run is cut into chunks of ``_CHUNK_BYTES`` raw bytes, rows of ``ROW_BYTES``; lines read line by line
-        join the chunk before them up to the usual size, their counts its one row.
+        A run is cut into chunks of ``_CHUNK_BYTES`` raw bytes; lines read line by line join the chunk before them
+        up to the usual size.
         """
 
+        self._counts.add(counted.rows)
+        run = kind in _RUN_MATRICES
+        # Where each row's first base lies in its chunk; lines read line by line are decoded whole.
+        self._row_offsets.append(
+            (counted.starts % _CHUNK_BYTES).astype(np.uint16) if run else np.zeros(len(counted.starts), dtype=np.uint16))
+        totals = counted.histograms @ (_RUN_MATRICES[kind] if run else BASES_MATRIX)
         last = len(self.kinds) - 1
-        if (kind not in _RUN_MATRICES and last >= 0 and self.kinds[last] == kind
+        if (not run and last >= 0 and self.kinds[last] == kind
                 and self.offsets[last] + self.sizes[last] == offset and self.sizes[last] + len(raw) <= _CHUNK_BYTES):
             self.sizes[last] += len(raw)  # lines read line by line stay in chunks of the usual size
-            self.alphabets[last] = max(self.alphabets[last], _alphabet(rows))
-            self._row_counts[-1][-1] += rows[0, KNOWN].astype(np.int32)
-            self.length += int(rows[0, BASES])
+            self.alphabets[last] = max(self.alphabets[last], _alphabet(totals))
+            self.length += counted.bases
             return
-        per_chunk = _CHUNK_BYTES // ROW_BYTES if kind in _RUN_MATRICES else len(rows)
-        bases = rows[:, BASES]
-        row_starts = self.length + np.concatenate(([0], np.cumsum(bases)))
-        for first in range(0, len(rows), per_chunk):
-            start = first * ROW_BYTES
+        if not run:
+            totals = totals.sum(axis=0, keepdims=True)
+        chunk_starts = self.length + np.cumsum(totals[:, BASES]) - totals[:, BASES]
+        for index, start in enumerate(range(0, len(raw), _CHUNK_BYTES) if run else (0,)):
             self.offsets.append(offset + start)
-            self.sizes.append(len(raw) - start if first + per_chunk >= len(rows) else per_chunk * ROW_BYTES)
-            self.starts.append(int(row_starts[first]))
+            self.sizes.append(min(_CHUNK_BYTES, len(raw) - start) if run else len(raw))
+            self.starts.append(int(chunk_starts[index]))
             self.kinds.append(kind)
-            self.alphabets.append(_alphabet(rows[first:first + per_chunk]))
-            self.first_rows.append(self._row_total + first)
-        self._row_starts.append(row_starts[:-1])
-        self._row_counts.append(rows[:, KNOWN].astype(np.int32))
-        self._row_total += len(rows)
-        self.length = int(row_starts[-1])
+            self.alphabets.append(_alphabet(totals[index:index + 1]))
+        self.length += counted.bases
 
     def rows(self) -> _Rows:
         """The count rows of the whole sequence (joined once, when the parse pass has added them all)."""
 
         if self._rows is None:
-            starts = np.concatenate([*self._row_starts, [self.length]]).astype(np.int64)
-            counts = np.concatenate(self._row_counts) if self._row_counts else np.zeros((0, 4), dtype=np.int32)
-            self._rows = _Rows(starts, counts, self._row_bases)
-            self._row_starts, self._row_counts = [], []
+            self._row_offsets = [np.concatenate(self._row_offsets) if self._row_offsets else np.zeros(0, np.uint16)]
+            self._rows = _Rows(self._counts.joined(), 0, self.length, self._row_bases)
         return self._rows
 
-    def _row_bases(self, row: int) -> bytes:
-        """The bases of count row ``row``: read from the file and decoded alone."""
+    def _row_bases(self, row: int, size: int) -> bytes:
+        """The first ``size`` bases of count row ``row`` (fewer than a row), read from the file and decoded alone:
+        from the row's first base up to the next row's at most."""
 
-        index = bisect.bisect_right(self.first_rows, row) - 1
-        kind = self.kinds[index]
-        offset, size = self.offsets[index], self.sizes[index]
-        if kind in _RUN_MATRICES:
-            skip = (row - self.first_rows[index]) * ROW_BYTES
-            offset, size = offset + skip, min(ROW_BYTES, size - skip)
-        return _decode_chunk(kind, self.source.read_at(offset, size), self.source.encoding, warn=False)
+        (row_offsets,) = self._row_offsets
+        position = row * ROW_BASES
+        stop, following = min(position + size, self.length), position + ROW_BASES
+        index = bisect.bisect_right(self.starts, position) - 1
+        skip = int(row_offsets[row])
+        pieces: list[bytes] = []
+        while position < stop:
+            kind, begin, offset = self.kinds[index], self.starts[index], self.offsets[index]
+            end = offset + self.sizes[index]
+            if kind in _RUN_MATRICES:
+                if following < (self.starts[index + 1] if index + 1 < len(self.starts) else self.length):
+                    end = offset + int(row_offsets[row + 1])  # the next row begins in this chunk
+                raw = self.source.read_at(offset + skip, end - offset - skip)
+                bases = _decode_chunk(kind, raw, self.source.encoding, warn=False)[: stop - position]
+            else:
+                bases = _decode_chunk(kind, self.source.read_at(offset, end - offset), self.source.encoding,
+                                      warn=False)[position - begin: stop - begin]
+            pieces.append(bases)
+            position += len(bases)
+            index, skip = index + 1, 0
+        return pieces[0] if len(pieces) == 1 else b"".join(pieces)
 
     def _block(self, index: int) -> bytes:
         """Chunk ``index``'s bases, through the block cache."""
@@ -774,16 +791,25 @@ def same_bases(left: Seq | MutableSeq, right: Seq | MutableSeq) -> bool:
         a == b for a, b in zip(sequence_spans(left), sequence_spans(right), strict=True))
 
 
+def _sums_before(counts: NDArray[np.uint16], row: NDArray[np.int64]) -> NDArray[np.int64]:
+    """Column ``k``: the counts of A, C, G and T in rows ``0..row[k] - 1``, summed between the rows asked for."""
+
+    marks = np.unique(np.concatenate(([0], row)))
+    sums = np.zeros((len(marks), 4), dtype=np.int64)
+    if len(marks) > 1:
+        np.cumsum(np.add.reduceat(counts[: marks[-1]], marks[:-1], axis=0, dtype=np.int64), axis=0, out=sums[1:])
+    return sums[np.searchsorted(marks, row)].T
+
+
 def _counts_at(rows: _Rows, at: NDArray[np.int64]) -> NDArray[np.int64]:
     """Column ``k``: the counts of A, C, G and T in the rows' bases before ``at[k]`` (within them): the whole rows
     before it summed, and the bases of its own row before it counted, every edge row read once."""
 
-    cumulative = np.zeros((len(rows.counts) + 1, 4), dtype=np.int64)
-    np.cumsum(rows.counts, axis=0, out=cumulative[1:])
-    row = np.searchsorted(rows.starts, at, side="right") - 1
-    row = np.minimum(row, len(rows.counts))
-    result = cumulative[row].T.copy()
-    within = at - rows.starts[row]
+    grid = at // ROW_BASES
+    ended = at >= rows.end
+    row = np.where(ended, len(rows.counts), grid - rows.first)
+    within = np.where(ended, 0, at - grid * ROW_BASES)
+    result = _sums_before(rows.counts, row)
     need = np.flatnonzero(within > 0)
     if not len(need):
         return result
@@ -796,7 +822,8 @@ def _counts_at(rows: _Rows, at: NDArray[np.int64]) -> NDArray[np.int64]:
         while end < len(edge_rows) and size + lengths[end] <= _EDGE_BATCH:
             size += int(lengths[end])
             end += 1
-        bases = b"".join(rows.read(int(edge))[: int(length)] for edge, length in zip(edge_rows[group:end], lengths[group:end]))
+        bases = b"".join(rows.read(rows.first + int(edge), int(length))
+                         for edge, length in zip(edge_rows[group:end], lengths[group:end]))
         begins = np.concatenate(([0], np.cumsum(lengths[group:end])[:-1]))
         low, high = first[group], first[end] if end < len(first) else len(need)
         taken = need[low:high]
@@ -808,14 +835,15 @@ def _counts_at(rows: _Rows, at: NDArray[np.int64]) -> NDArray[np.int64]:
 
 
 def _sliced_rows(read: Callable[[int, int], bytes], start: int, stop: int) -> _Rows:
-    """The count rows of bases ``start``..``stop - 1`` that ``read`` gives (bases held in memory), counted now."""
+    """The count rows over bases ``start``..``stop - 1`` that ``read`` gives (bases held in memory), counted now on
+    the rows a record's parse pass counts, from the row ``start`` lies in."""
 
-    counts = [row_counts(read(low, min(stop, low + SLICE_BYTES)))[:, KNOWN] for low in range(start, stop, SLICE_BYTES)]
-    starts = np.append(np.arange(start, stop, ROW_BYTES, dtype=np.int64), stop)
-    return _Rows(
-        starts, np.concatenate(counts) if counts else np.zeros((0, 4), dtype=np.int64),
-        lambda row: read(int(starts[row]), int(starts[row + 1])),
-    )
+    first = start // ROW_BASES
+    counts = RowCounts()
+    for low in range(first * ROW_BASES, stop, SLICE_BYTES):
+        counts.add(count_rows(read(low, min(stop, low + SLICE_BYTES)), low).rows)
+    return _Rows(counts.joined(), first, stop,
+                 lambda row, size: read(row * ROW_BASES, min(stop, row * ROW_BASES + size)))
 
 
 @functools.lru_cache(maxsize=8)
@@ -841,7 +869,7 @@ def _counted_order(translate: bytes | None) -> tuple[int, ...] | None:
 def _count_class(byte: int) -> int:
     """The row (0-3: A, C, G, T) a byte is counted in, or 4 for an unknown base."""
 
-    counted = row_counts(bytes((byte,)))[0, KNOWN]
+    counted = BASES_MATRIX[byte, KNOWN]
     return int(np.argmax(counted)) if counted.any() else 4
 
 
@@ -870,15 +898,14 @@ def known_base_counts_at(seq: Seq | MutableSeq | bytes, positions: NDArray[np.in
     low = 0
     for (first, last), end in zip(data._pieces, data._ends):
         inside = first + np.clip(local - low, 0, last - first)
-        if table_rows is not None:
-            piece = _counts_at(table_rows, np.concatenate((inside, [first])))
-            counts += piece[:, :-1] - piece[:, -1:]
-        else:
+        rows = table_rows
+        if rows is None:
             assert isinstance(bases, bytes)
             rows = sliced.get((first, last))
             if rows is None:
                 rows = sliced[(first, last)] = _sliced_rows(lambda a, b: bases[a:b], first, last)
-            counts += _counts_at(rows, inside)
+        piece = _counts_at(rows, np.concatenate((inside, [first])))
+        counts += piece[:, :-1] - piece[:, -1:]
         low = end
     if data._reverse:
         counts = counts[:, -1:] - counts[:, :-1]
@@ -907,9 +934,8 @@ def first_base_beyond(seq: Seq | MutableSeq, alphabet: int) -> int | None:
         return int(table.starts[beyond[0]]) if len(beyond) else None
     column = BEYOND_NUCLEOTIDE if alphabet == NUCLEOTIDE else BEYOND_PROTEIN
     for start, span in zip(itertools.count(0, SLICE_BYTES), sequence_spans(seq, SLICE_BYTES)):
-        beyond = np.flatnonzero(row_counts(span)[:, column])
-        if len(beyond):
-            return start + int(beyond[0]) * ROW_BYTES
+        if byte_counts(span)[column]:
+            return start
     return None
 
 
@@ -1030,13 +1056,13 @@ def _decode_chunk(kind: int, raw: bytes, encoding: str, *, warn: bool) -> bytes:
 def _index_lines(table: _SequenceTable, offset: int, raw: bytes, fmt: SequenceFormat) -> None:
     """Add the sequence lines ``raw`` (whole lines from file offset ``offset``) to ``table``, counted as they are read."""
 
-    if fmt == "fasta" and raw.isascii():  # one run: chunks and rows from its start, counted in one go
-        table.add(offset, raw, _FASTA_RUN, row_counts(raw, _RUN_MATRICES[_FASTA_RUN]))
+    if fmt == "fasta" and raw.isascii():  # one run: chunks from its start, counted in one go
+        table.add(offset, raw, _FASTA_RUN, count_rows(raw, table.length, _FASTA_DELETE))
         return
     position = 0
     encoding = table.source.encoding
     while position < len(raw):
-        rows = None
+        counted = None
         if fmt == "embl":
             stop = _line_aligned(raw, position, position + _CHUNK_BYTES)
             kind = _EMBL_LINES
@@ -1047,18 +1073,18 @@ def _index_lines(table: _SequenceTable, offset: int, raw: bytes, fmt: SequenceFo
                 stop = _line_aligned(raw, position, stop)
                 kind = _FASTA_LINES
             else:
-                rows = row_counts(raw[position:stop], _RUN_MATRICES[kind])
+                counted = count_rows(raw[position:stop], table.length, _FASTA_DELETE)
         else:
             width, count, ending = _uniform_run(raw, position, len(raw))
             stop = position + width * count
-            histograms = byte_histograms(raw[position:stop])
-            kind = _GENBANK_LINES
-            if _flat_run_bases(raw[position:stop], width, count, ending, histograms.sum(axis=0)) is not None:
-                kind, rows = _FLAT_RUN, histograms @ _RUN_MATRICES[_FLAT_RUN]
+            counted = count_rows(raw[position:stop], table.length, _FLAT_DELETE)
+            kind = _FLAT_RUN
+            if _flat_run_bases(raw[position:stop], width, count, ending, counted.histograms.sum(axis=0)) is None:
+                kind, counted = _GENBANK_LINES, None
         piece = raw[position:stop]
-        if rows is None:
-            rows = row_counts(_decode_chunk(kind, piece, encoding, warn=True)).sum(axis=0, keepdims=True)
-        table.add(offset + position, piece, kind, rows)
+        if counted is None:
+            counted = count_rows(_decode_chunk(kind, piece, encoding, warn=True), table.length)
+        table.add(offset + position, piece, kind, counted)
         position = stop
 
 

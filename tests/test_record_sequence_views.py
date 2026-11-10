@@ -361,7 +361,7 @@ def test_gc_windows_of_a_record_past_the_cache_hold_no_copy_of_it(
     assert peak < 12 << 20, peak  # the copies took 2 bytes per base of each: 36 MB and more for the crop alone
 
 
-@pytest.mark.parametrize("rows", [8, 16, 64, 4096])
+@pytest.mark.parametrize("rows", [8, 16, 64, 1000, 4096])
 def test_the_windows_of_a_reversed_crop_count_as_a_copy_at_any_row_size(
     rows: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -370,9 +370,8 @@ def test_the_windows_of_a_reversed_crop_count_as_a_copy_at_any_row_size(
 
     from gbdraw.core import base_counts
 
-    monkeypatch.setattr(base_counts, "ROW_BYTES", rows)
-    monkeypatch.setattr(base_counts, "_ROW_KEYS", np.arange(base_counts.SLICE_BYTES, dtype=np.uint32) // rows * 256)
-    monkeypatch.setattr(record_sequences, "ROW_BYTES", rows)
+    monkeypatch.setattr(base_counts, "ROW_BASES", rows)
+    monkeypatch.setattr(record_sequences, "ROW_BASES", rows)
     rng = np.random.default_rng(rows)
     bases = np.frombuffer(b"ACGTNacgt", dtype=np.uint8)[rng.integers(0, 9, size=5_000, dtype=np.uint8)].tobytes()
     (record,) = read_sequence_file_records(str(_fasta(tmp_path, bases)), "fasta")
