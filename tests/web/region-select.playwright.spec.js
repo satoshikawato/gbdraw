@@ -3,6 +3,7 @@
 // placed from the axis Python wrote (services/region-axis.js), so a drag
 // lands where Python says a base is drawn.
 const { test, expect } = require('@playwright/test');
+const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
@@ -516,6 +517,24 @@ test('Save Session keeps the axis of the Result, and its Load enables Select reg
   expect(record).toMatchObject({ recordKey: expect.any(String), axis: { kind: 'circular', source: { drawnLength: 16_569 } } });
   await loadSessionFile(page, saved);
   await expect(page.locator('[data-region-select-toggle]')).toBeEnabled();
+});
+
+// OV-3240: a Session the gbdraw command saved carries the axis as a Web Save does, so a drag selects on its loaded
+// Result before any Generate.
+test('a Session saved by the gbdraw command enables Select region at Load: a drag selects a span without Generate', async ({ browser }, testInfo) => {
+  test.setTimeout(300_000);
+  const saved = testInfo.outputPath('cli.gbdraw-session.json');
+  execFileSync(process.env.PYTHON || 'python', [
+    '-m', 'gbdraw.cli', 'circular', '--gbk', HMMT, '-o', testInfo.outputPath('cli'), '-f', 'svg', '--session_output', saved
+  ], { cwd: process.cwd(), env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe' });
+  const page = await load(browser, saved);
+  try {
+    await turnOn(page);
+    await dragAlong(page, 0, [4000.5, 5000.5, 6000.5]);
+    await expectHeading(page, 'NC_012920.1', '4,001-6,001 (2,001 bp)');
+  } finally {
+    await page.context().close();
+  }
 });
 
 /** A 10 kb circular record whose four CDS lie in its first 1,200 bases, on both strands. */

@@ -565,6 +565,7 @@ def save_session_sidecar_if_requested(
         legacy_protein_derived_evidence=run_result.legacy_protein_derived_evidence,
         canonical_request=run_result.canonical_request,
         _canonical_request_is_resolved=True,
+        run_metadata=run_result.run_metadata,
     )
     # build_session_json validated the payload it returned (without "files").
     _write_validated_session_json(sidecar_path, payload, overwrite=overwrite)

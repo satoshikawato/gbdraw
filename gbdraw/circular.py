@@ -1574,7 +1574,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             collect_track_slot_geometry_records(
                 rendered_item.drawing,
                 result_index=result_index,
-                result_name=rendered_svg.svg_path.name,
+                result_name=rendered_svg.result_name,
             )
         )
         interactive_context = rendered_item.interactive_context

@@ -70,6 +70,7 @@ const { circularSourceInputs } = await import('../../gbdraw/web/js/services/inpu
 const { getResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
 const { resolveComparisonThresholds } = await import('../../gbdraw/web/js/mode-profiles.js');
 const { isCardRow } = await import('../../gbdraw/web/js/services/file-imports.js');
+const { readRegionAxisRecords } = await import('../../gbdraw/web/js/services/region-axis.js');
 // The Generate's reuse test of stored protein results is module-private; a
 // copy of run-analysis.js that exports it imports the same modules.
 const runAnalysisUrl = pathToFileURL(path.join(process.cwd(), 'gbdraw/web/js/app/run-analysis.js'));
@@ -145,6 +146,10 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
         assert.deepEqual(getCommittedCanonicalRenderRequest(), view.renderRequest);
         assert.ok(state.results.value.length > 0);
+        // OV-3240: each drawn record's axis loads with the Result, so Select region needs no Generate.
+        const axes = readRegionAxisRecords(state.trackSlotResolvedGeometry.value, 0);
+        assert.deepEqual(axes.map(({ recordKey, axis }) => [recordKey, axis.kind]),
+          view.renderRequest.records.map(({ recordKey }) => [recordKey, mode]), phase);
         if (label === 'single') assert.equal(state.activeDrawing().form.labels_mode, 'out');
         assert.equal(view.renderRequest.diagramOptions.output.legend, legend);
         assert.equal(state.activeDrawing().form.legend, legend);

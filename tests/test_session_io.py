@@ -3655,6 +3655,42 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     assert regenerated_prefix.with_suffix(".svg").exists()
 
 
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_cli_session_carries_the_track_slot_geometry_the_web_save_writes(
+    tmp_path: Path, examples_dir: Path, mode: str
+) -> None:
+    """OV-3240: a CLI-saved Session holds each record's axis, so the Web can
+    select a region on the loaded Result before any Generate. It is what the
+    Worker reports for the same request, which a Web Save writes."""
+
+    from gbdraw.web_support.request_render import render_embedded_canonical_web_request
+
+    session_path = tmp_path / "cli.gbdraw-session.json"
+    main = circular_main if mode == "circular" else linear_main
+    main([
+        "--gbk", str(examples_dir / "MjeNMV.gb"), "-o", str(tmp_path / "cli"), "-f", "svg",
+        "--save_session", "--session_output", str(session_path),
+    ])
+    payload = drawing_view(load_session(session_path))
+    web = render_embedded_canonical_web_request(
+        payload["renderRequest"], resources=payload["resources"], workspace=tmp_path / "web"
+    )
+
+    def without_result_name(geometry: dict) -> dict:
+        # A Result's file name follows its output prefix, which the Session does not keep.
+        return {**geometry, "records": [
+            {key: value for key, value in record.items() if key != "resultName"}
+            for record in geometry["records"]
+        ]}
+
+    saved = payload["runMetadata"]["trackSlotGeometry"]
+    assert saved["mode"] == mode
+    # Each record names its Result as the Session does, as in a Web Save (OV-3243).
+    assert [record["resultName"] for record in saved["records"]] == [payload["results"][0]["name"]]
+    assert [record["axis"]["kind"] for record in saved["records"]] == [mode]
+    assert without_result_name(saved) == without_result_name(web["metadata"]["trackSlotGeometry"])
+
+
 def _circular_genbank(*records: tuple[str, str, str]) -> str:
     """Small circular GenBank records: (record ID, gene, CDS location)."""
 

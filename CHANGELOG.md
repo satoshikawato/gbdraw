@@ -360,6 +360,11 @@ write-up of a release.
   click on a record's tracks that selects nothing left an open settings popup
   open unless the previous press was at the same place; it now closes it, as
   a click on the Result's background does.
+- Fixed: a Session saved by `gbdraw circular` or `gbdraw linear` with
+  `--save_session` or `--session_output` held no axis of its drawn records, so
+  in the Web app Select region stayed off on the loaded Result until one
+  Generate. The command now saves the same axis that a Web app Save writes for
+  the same figure, and Select region works right after Load (OV-3240).
 - Changed: the Web app's LOSAT is built from LOSAT `a20ad436a`, which runs
   tblastn in every LOSAT execution mode; the blastn, tblastx and blastp
   results of the app are unchanged. A saved Session whose LOSAT comparisons

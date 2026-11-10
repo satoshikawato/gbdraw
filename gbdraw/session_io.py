@@ -5836,8 +5836,14 @@ def build_session_json(
     legacy_protein_derived_evidence: Sequence[Mapping[str, Any]] | None = None,
     canonical_request: DiagramRequest | None = None,
     _canonical_request_is_resolved: bool = False,
+    run_metadata: Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
-    """Build a GUI-loadable session JSON payload from a CLI run."""
+    """Build a GUI-loadable session JSON payload from a CLI run.
+
+    ``run_metadata`` is what the run reported beside its Results
+    (``build_track_slot_geometry_run_metadata``, as the Web Worker reports
+    it for a Web Save); it replaces any a source Session held.
+    """
 
     source_version: int | None = None
     if context.source_session is not None:
@@ -5888,6 +5894,10 @@ def build_session_json(
         {"name": name or f"Result {index + 1}", "content": content}
         for index, (name, content) in enumerate(svg_results)
     ]
+    if run_metadata:
+        payload["runMetadata"] = _json_clone(run_metadata)
+    else:
+        payload.pop("runMetadata", None)
     editor_state = payload.get("editorState")
     editor_state = (
         dict(editor_state) if isinstance(editor_state, Mapping) else {}

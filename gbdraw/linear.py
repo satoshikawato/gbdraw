@@ -1941,7 +1941,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     track_slot_geometry_records = collect_track_slot_geometry_records(
         canvas,
         result_index=0,
-        result_name=rendered_svg.svg_path.name,
+        result_name=rendered_svg.result_name,
     )
 
     return DiagramRunResult(
