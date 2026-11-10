@@ -73,6 +73,16 @@
  * @property {string} limit
  */
 /**
+ * @typedef {object} RingGenomeFileLengths
+ * @property {number} length
+ * @property {number[]} recordLengths
+ */
+/**
+ * @typedef {object} RingGenomeInput
+ * @property {string[]} names
+ * @property {RingGenomeFileLengths[]} files
+ */
+/**
  * @typedef {object} RingGenomeScales
  * @property {(string | null)[]} scales
  * @property {RingScaleWarning[]} warnings

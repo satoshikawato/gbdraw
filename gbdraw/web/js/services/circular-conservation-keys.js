@@ -43,11 +43,10 @@ export const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(re
 
 /**
  * The conservation subject: the LOSAT FASTA of every record of the Circular reference, each source card's file
- * whole, in card order (the records the CLI loader reads, OV-1599, as `ring_subject_records` in
+ * whole, in card order (the records the CLI loader reads, OV-1599, as `ring_subject_sources` in
  * gbdraw/comparisons/circular_losat.py takes them; a record without a sequence is left out) and its SHA-256, the
- * entry's `subjectCanonicalHash`, which the CLI's ring of the same files has. `format` is the files' format (a GFF3
- * card gives its FASTA file).
- * @typedef {{ files: readonly FileLike[], format: 'genbank' | 'fasta', fasta: string, hash: string }} ConservationSubject
+ * entry's `subjectCanonicalHash`, which the CLI's ring of the same files has.
+ * @typedef {{ files: readonly FileLike[], fasta: string, hash: string }} ConservationSubject
  */
 /**
  * One conservation ring in ring order: its source, the bound Files of its comparison genome (in the listed order) and
@@ -95,7 +94,7 @@ export const readConservationSubject = async (files, fmt) => {
   // One file's subject is its own part, whose hash is kept with it.
   const fasta = parts.map((part) => part.fasta).join('');
   const hash = parts.length === 1 ? parts[0].hash : await sha256Hex(textToBytes(fasta));
-  return Object.freeze({ files: Object.freeze([...files]), format: fmt, fasta, hash });
+  return Object.freeze({ files: Object.freeze([...files]), fasta, hash });
 };
 
 /**

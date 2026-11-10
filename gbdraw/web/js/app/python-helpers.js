@@ -1793,8 +1793,11 @@ _WEB_JSON_HELPERS = {
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),
     "read_all_sequence_records": (read_all_sequence_records, "readAllSequenceRecords"),
     "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
-    # A Circular Generate's ring searches pass the search space Python plans for their genomes (PD-OI-018 revision 6).
-    "plan_ring_scales_json": (plan_ring_scales_json, "planRingScales"),
+    # A Circular Generate's ring searches pass the search space Python plans for their genomes (PD-OI-018 revision 6);
+    # the reference's parse is kept for that Generate's render.
+    "plan_ring_scales_json": (
+        _with_prepared_input_lookup(plan_ring_scales_json, 2, publish_inputs=True), "planRingScales"
+    ),
     "read_feature_override_table_json": (
         _with_prepared_input_lookup(read_feature_override_table_json, 2), "readFeatureOverrideTable"
     ),

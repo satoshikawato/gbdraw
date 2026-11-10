@@ -23,8 +23,9 @@ import {
   readFileBytes
 } from './file-content-cache.js';
 
-/** @import { FileLike } from './session-resource-backing.js' */
-/** @import { RingGenomeScales } from '../contracts/card-windows.generated.js' */
+/** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { GenerationPayload } from './diagram-generation.js' */
+/** @import { RingGenomeFileLengths, RingGenomeInput, RingGenomeScales } from '../contracts/card-windows.generated.js' */
 /** @import { InputFileRef } from './history-files.js' */
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
@@ -955,19 +956,31 @@ export const discoverSequenceRecords = async ({
  * LOSAT query FASTA of every record of its files, in the listed order, the
  * label its first file names itself (GenBank / DDBJ: first record's
  * DEFINITION, then organism) or null (FASTA), and the ID of each record of
- * the FASTA, in its order ('' for a FASTA entry without an ID).
- * @typedef {{ fasta: string, recordLabel: string | null, recordIds: readonly string[] }} ComparisonSequence
+ * the FASTA, in its order ('' for a FASTA entry without an ID). `genomeFiles` gives each file's lengths, which the
+ * ring planner reads back (`planRingScales`).
+ * @typedef {{ fasta: string, recordLabel: string | null, recordIds: readonly string[],
+ *   genomeFiles: readonly RingGenomeFileLengths[] }} ComparisonSequence
  */
 /**
  * The Worker's `readComparisonSequence` reply, as `read_comparison_sequence_json` writes it, or the error it raised.
- * @typedef {{ fasta: string, recordLabel: string | null, recordIds: string[] } | { error: unknown }} ComparisonSequencePayload
+ * @typedef {{ fasta: string, recordLabel: string | null, recordIds: string[], genomeFiles: RingGenomeFileLengths[] }
+ *   | { error: unknown }} ComparisonSequencePayload
  */
-/** @param {unknown} payload @returns {payload is { fasta: string, recordLabel: string | null, recordIds: string[] }} */
-const isComparisonSequenceReply = (payload) => {
+/** @param {unknown} value @returns {value is number} */
+const isCount = (value) => Number.isSafeInteger(value) && /** @type {number} */ (value) >= 0;
+/**
+ * @param {unknown} payload @param {number} fileCount
+ * @returns {payload is { fasta: string, recordLabel: string | null, recordIds: string[], genomeFiles: RingGenomeFileLengths[] }}
+ */
+const isComparisonSequenceReply = (payload, fileCount) => {
   if (typeof payload !== 'object' || payload === null) return false;
-  const { fasta, recordLabel, recordIds } = /** @type {Record<string, unknown>} */ (payload);
+  const { fasta, recordLabel, recordIds, genomeFiles } = /** @type {Record<string, unknown>} */ (payload);
   return typeof fasta === 'string' && (recordLabel === null || typeof recordLabel === 'string')
-    && Array.isArray(recordIds) && recordIds.every((recordId) => typeof recordId === 'string');
+    && Array.isArray(recordIds) && recordIds.every((recordId) => typeof recordId === 'string')
+    && Array.isArray(genomeFiles) && genomeFiles.length === fileCount && genomeFiles.every((file) => (
+      typeof file === 'object' && file !== null && isCount(file.length)
+      && Array.isArray(file.recordLengths) && file.recordLengths.every(isCount)
+    ));
 };
 // Only the Python ring reader reads the files; there is no fast path. Add Seq and
 // every Generate share one read per genome (OV-1545), frozen, as every reader gets it.
@@ -987,13 +1000,16 @@ export const readComparisonSequence = ({
     { files: await Promise.all(files.map(async (file) => ({ role: 'source', bytes: await cloneFileBytesForTransfer(file) }))) }
   );
   if (result && 'error' in result) throw result.error;
-  if (!isComparisonSequenceReply(result)) {
+  if (!isComparisonSequenceReply(result, files.length)) {
     throw diagnosticError('HELPER_PROTOCOL', {}, {
       stage: 'helper', operation: DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE
     });
   }
-  const { fasta, recordLabel, recordIds } = result;
-  return Object.freeze({ fasta, recordLabel, recordIds: Object.freeze([...recordIds]) });
+  const { fasta, recordLabel, recordIds, genomeFiles } = result;
+  return Object.freeze({
+    fasta, recordLabel, recordIds: Object.freeze([...recordIds]),
+    genomeFiles: Object.freeze(genomeFiles.map(({ length, recordLengths }) => ({ length, recordLengths: [...recordLengths] })))
+  });
 });
 
 /**
@@ -1039,32 +1055,35 @@ export const readComparisonSequenceDigest = (options) => readOncePerFile(
 );
 
 /**
- * The search space of each ring search, in ring order (`RingGenomeScales`, PD-OI-018 revision 6): Python reads the
- * reference files and each ring's files and answers from the owner the CLI ring search reads
- * (`plan_ring_scales_json` of gbdraw/web_support/comparison_sequences.py), so the page passes the CLI's values and
- * sums no genome. Kept per set of Files, whose bytes never change.
- * @param {{ files: readonly FileLike[], format: 'genbank' | 'fasta' }} subject The reference files, one per source card
- *   (`ConservationSubject`).
+ * The search space of each ring search, in ring order (`RingGenomeScales`, PD-OI-018 revision 6): Python answers it
+ * from the owner the CLI ring search reads (`plan_ring_scales_json` of gbdraw/web_support/comparison_sequences.py), so
+ * the page passes the CLI's values and sums no genome. The reference's record sources are staged under the ids the
+ * next Generate's request names them by (`requestRecordSources`), so Python parses the reference once, for this plan
+ * and that Generate's render; each ring sends the file lengths the ring reader answered (`readComparisonSequence`),
+ * so no ring file is read again. Kept per set of Files, whose bytes never change.
+ * @param {{ sources: readonly unknown[], resources: Readonly<Record<string, RawSessionResourceDescriptor>>,
+ *   files: readonly FileLike[] }} reference The reference's record sources (`requestRecordSources`).
  * @param {readonly { files: readonly [FileLike, ...FileLike[]] }[]} rings The bound rings, in ring order.
  * @param {'losatn' | 'tlosatx'} program
  * @returns {Promise<RingGenomeScales>}
  */
-export const planRingScales = (subject, rings, program) => {
-  const ringFiles = rings.map(({ files }) => files);
-  const files = [...subject.files, ...ringFiles.flat()];
-  const shape = ringFiles.map((list) => list.length).join(',');
-  return readOncePerFile(/** @type {[FileLike, ...FileLike[]]} */ (files), `ring-scales:${program}:${subject.format}:${subject.files.length}:${shape}`, async () => {
-    /** @param {'reference' | 'ring'} role @param {FileLike} file */
-    const staged = async (role, file) => ({ role, bytes: await cloneFileBytesForTransfer(file) });
+export const planRingScales = (reference, rings, program) => {
+  const files = [...reference.files, ...rings.flatMap(({ files: ringFiles }) => ringFiles)];
+  const shape = rings.map(({ files: ringFiles }) => ringFiles.length).join(',');
+  return readOncePerFile(/** @type {[FileLike, ...FileLike[]]} */ (files), `ring-scales:${program}:${reference.files.length}:${shape}`, async () => {
+    /** @type {RingGenomeInput[]} */
+    const ringInputs = await Promise.all(rings.map(async ({ files: ringFiles }) => ({
+      names: ringFiles.map((file) => String(file.name ?? '')),
+      files: (await readComparisonSequence({ files: ringFiles })).genomeFiles.map(({ length, recordLengths }) => ({
+        length, recordLengths: [...recordLengths]
+      }))
+    })));
     const { result } = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_RING_SCALES, {
       program,
-      format: subject.format,
-      referenceNames: subject.files.map((file) => file.name),
-      ringNames: ringFiles.map((list) => list.map((file) => file.name)),
-      files: await Promise.all([
-        ...subject.files.map((file) => staged('reference', file)),
-        ...ringFiles.flat().map((file) => staged('ring', file))
-      ])
+      referenceSources: reference.sources,
+      // The transport validates each descriptor when it stages it.
+      resources: /** @type {NonNullable<GenerationPayload['resources']>} */ (reference.resources),
+      rings: ringInputs
     });
     return readRingScales(result, rings.length);
   });

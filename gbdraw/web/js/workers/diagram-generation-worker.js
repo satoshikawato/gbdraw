@@ -542,9 +542,7 @@ const HELPER_FILE_NAMES = Object.freeze({
   pairs: 'pairs.json',
   visibility: 'feature-visibility.tsv',
   featureOverrides: 'feature-overrides.tsv',
-  rawTsv: 'raw-losatp.tsv',
-  reference: 'reference.bin',
-  ring: 'ring.bin'
+  rawTsv: 'raw-losatp.tsv'
 });
 
 const requirePayloadObject = (payload, operation) => {
@@ -1273,28 +1271,23 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
-  // A Circular Generate's ring searches pass the search space Python plans from the reference files and each ring's
-  // files (PD-OI-018 revision 6): `ringNames[k]` names ring k's files, in order, so it also says how many it has.
+  // A Circular Generate's ring searches pass the search space Python plans for the reference and each ring
+  // (PD-OI-018 revision 6): the reference's record sources are staged under the ids the next Generate's request names
+  // them by, so Python reads the parse that Generate renders; each ring comes as the ring reader's file lengths.
   [DIAGRAM_HELPER_OPERATIONS.PLAN_RING_SCALES]: {
-    keys: ['files', 'program', 'format', 'referenceNames', 'ringNames'],
-    fileRoles: ['reference[]', 'ring[]'],
-    run: (pyodide, payload, paths, operation) => {
-      const ringPaths = requireHelperFiles(paths, 'ring', operation);
-      const ringNames = Array.isArray(payload.ringNames) ? payload.ringNames : [];
-      /** @type {string[][]} */
-      const rings = [];
-      let next = 0;
-      for (const names of ringNames) {
-        const count = Array.isArray(names) ? names.length : 0;
-        rings.push(ringPaths.slice(next, next + count));
-        next += count;
-      }
-      return callJsonHelper(pyodide, 'plan_ring_scales_json', [
-        String(payload.program), String(payload.format),
-        jsonArgument(requireHelperFiles(paths, 'reference', operation), []), jsonArgument(payload.referenceNames, []),
-        jsonArgument(rings, []), jsonArgument(payload.ringNames, [])
-      ]);
-    }
+    keys: ['program', 'referenceSources', 'rings'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'plan_ring_scales_json', [
+        String(payload.program),
+        jsonArgument(payload.referenceSources, []),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        // The file names a per-file warning names, as the input summary names them.
+        jsonArgument(Object.fromEntries(payload.resourceManifest.map(({ resourceId, name }) => [resourceId, name])), {}),
+        jsonArgument(payload.rings, []),
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
   },
   [DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS]: {
     keys: ['records', 'pairs'],

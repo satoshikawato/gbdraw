@@ -100,6 +100,7 @@ export const DIAGRAM_HELPER_OPERATION_NAMES = Object.freeze(
  * @property {unknown} [canonicalRequest]
  * @property {{ canonicalRequest?: unknown } | null} [projection]
  * @property {unknown} [recordSource]
+ * @property {unknown} [referenceSources]
  */
 
 /**
@@ -107,7 +108,8 @@ export const DIAGRAM_HELPER_OPERATION_NAMES = Object.freeze(
  * names: the page stages those resources as a Generate does and adds the
  * staged payload keys; the Worker accepts those keys from these helpers only.
  * A helper's references come from the committed request, from the request of
- * a projection, or (blastp extraction, OV-1555) from the one record source it reads.
+ * a projection, from the one record source it reads (blastp extraction, OV-1555), or from the
+ * reference's record sources (the ring scales, which the next Generate's render reuses).
  * @type {Readonly<Record<string, (payload: StagingHelperPayload) => unknown>>}
  */
 const STAGED_HELPER_REFERENCES = Object.freeze({
@@ -121,7 +123,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: (payload) => payload.projection?.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA]: (payload) => payload.recordSource,
-  [DIAGRAM_HELPER_OPERATIONS.PLAN_GENOME_SCALES]: (payload) => payload.canonicalRequest
+  [DIAGRAM_HELPER_OPERATIONS.PLAN_GENOME_SCALES]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.PLAN_RING_SCALES]: (payload) => payload.referenceSources
 });
 
 /**

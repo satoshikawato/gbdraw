@@ -1589,17 +1589,19 @@ test('a ring comparison file is read once, and a failed read is read again', asy
   const replies = [
     { result: { error: new Error('injected ring read failure') } },
     { result: { fasta: '>ring\nACGT\n', recordLabel: 'Ring' } },
-    { result: { fasta: '>ring\nACGT\n', recordLabel: 'Ring', recordIds: ['ring'] } }
+    { result: { fasta: '>ring\nACGT\n', recordLabel: 'Ring', recordIds: ['ring'], genomeFiles: [{ length: 4, recordLengths: [4] }] } }
   ];
   const runHelperOperation = async (operation) => {
     operations.push(operation);
     return replies.shift();
   };
   await assert.rejects(readComparisonSequence({ files: [file], runHelperOperation }), /injected ring read failure/);
-  // A reply without its record IDs is a protocol error, and it is not kept either.
+  // A reply without its record IDs (or without each file's lengths) is a protocol error, and it is not kept either.
   await assert.rejects(readComparisonSequence({ files: [file], runHelperOperation }), { code: 'HELPER_PROTOCOL' });
   const read = await readComparisonSequence({ files: [file], runHelperOperation });
-  assert.deepEqual(read, { fasta: '>ring\nACGT\n', recordLabel: 'Ring', recordIds: ['ring'] });
+  assert.deepEqual(read, {
+    fasta: '>ring\nACGT\n', recordLabel: 'Ring', recordIds: ['ring'], genomeFiles: [{ length: 4, recordLengths: [4] }]
+  });
   assert.equal(await readComparisonSequence({ files: [file], runHelperOperation }), read);
   assert.deepEqual(operations, ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence']);
 });
@@ -1611,7 +1613,7 @@ test('a ring comparison read is frozen and its digest is kept with it', async ()
   const operations = [];
   const runHelperOperation = async (operation) => {
     operations.push(operation);
-    return { result: { fasta: '>ring\nACGT\n', recordLabel: null, recordIds: ['ring'] } };
+    return { result: { fasta: '>ring\nACGT\n', recordLabel: null, recordIds: ['ring'], genomeFiles: [{ length: 4, recordLengths: [4] }] } };
   };
   const read = await readComparisonSequence({ files: [file], runHelperOperation });
   assert.equal(Object.isFrozen(read), true);
@@ -1634,7 +1636,10 @@ test('a ring comparison genome of two files is one read of both, kept for those 
   const sent = [];
   const runHelperOperation = async (operation, payload) => {
     sent.push([operation, payload.files.map(({ role, bytes }) => [role, new TextDecoder().decode(bytes)])]);
-    return { result: { fasta: `>read${sent.length}\nACGT\n`, recordLabel: null, recordIds: [`read${sent.length}`] } };
+    return { result: {
+      fasta: `>read${sent.length}\nACGT\n`, recordLabel: null, recordIds: [`read${sent.length}`],
+      genomeFiles: payload.files.map(() => ({ length: 4, recordLengths: [4] }))
+    } };
   };
   const both = await readComparisonSequence({ files: [first, second], runHelperOperation });
   assert.deepEqual(sent, [['readComparisonSequence', [['source', '>chr1\nacgt\n'], ['source', '>chr2\nttgg\n']]]]);
@@ -1877,7 +1882,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
         fasta: comparisonTexts[index],
         format: index === 1 ? 'genbank' : 'fasta',
         recordLabel: null,
-        recordIds: [comparisonTexts[index].slice(1).split('\n')[0]]
+        recordIds: [comparisonTexts[index].slice(1).split('\n')[0]],
+        genomeFiles: [{ length: 8, recordLengths: [8] }]
       }
     });
     workerHelperResponses.push(ringSequenceReply(0));
@@ -2047,7 +2053,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       workerMessages.filter(({ type }) => type === 'helper').slice(helpersBeforeBomReference)
         .map(({ operation, payload }) => [operation, payload.format, payload.files?.map(({ role }) => role)]),
       [['listSequenceRecords', 'genbank', ['source']], ['readAllSequenceRecords', 'genbank', ['source']],
-        ['planRingScales', 'genbank', ['reference', 'ring', 'ring', 'ring']],
+        ['planRingScales', undefined, undefined],
         ['convertRingTablesToSearchFrame', undefined, undefined]]
     );
     assert.equal(workerHelperResponses.length, 0);
@@ -3051,7 +3057,7 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
   };
   const oracle = spawnSync(process.env.PYTHON || 'python', ['tests/web/circular-ring-subject-oracle.py'], oracleOptions);
   assert.equal(oracle.status, 0, `Python ring subject oracle failed:\n${oracle.stderr}`);
-  const { query, cases } = JSON.parse(oracle.stdout);
+  const { query, queryReply, cases } = JSON.parse(oracle.stdout);
   const webStates = {
     'records not drawn': { selector: '', multi: true, off: ['#2'], region: [null, null] },
     'single presentation': { selector: '#2', multi: false, off: [], region: [null, null] },
@@ -3120,9 +3126,7 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
     }
   };
   // The ring query is read once, by the Python reader, for every case.
-  workerHelperResponses.push({
-    ok: true, result: { fasta: query, format: 'fasta', recordLabel: null, recordIds: ['QUERY1'] }
-  });
+  workerHelperResponses.push({ ok: true, result: queryReply });
   try {
     for (const [index, testCase] of cases.entries()) {
       const webState = webStates[testCase.name];
@@ -3168,8 +3172,10 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
       assert.deepEqual(searched?.cacheKeys, [testCase.cliCacheKey], testCase.name);
       assert.deepEqual([...state.losatCache.value.values()].map(({ args }) => args), [testCase.cliArgs], testCase.name);
       assert(testCase.cliArgs.includes('--searchsp'), testCase.name);
+      // The ring sends the lengths the ring reader answered; the reference is staged as the request names it.
       const scaleRequest = workerMessages.slice(messagesBefore).find(({ operation }) => operation === 'planRingScales');
-      assert.deepEqual(scaleRequest?.payload.ringNames, [[queryFile.name]], testCase.name);
+      assert.deepEqual(scaleRequest?.payload.rings, [{ names: [queryFile.name], files: queryReply.genomeFiles }], testCase.name);
+      assert.deepEqual(scaleRequest?.payload.referenceSources, testCase.referenceSources, testCase.name);
       // One conversion per Generate; the request renders (and a Session saves) the CLI's ring rows, and the raw
       // LOSAT cache keeps the search output.
       const caseMessages = workerMessages.slice(messagesBefore);

@@ -69,7 +69,7 @@ import {
   bindCanonicalTypedResource,
   isCanonicalTypedResourceBound,
   committedFeatureVisibilityMatches,
-  linearRecordSourceResources,
+  requestRecordSources,
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectLiveSettingWrites,
@@ -1279,7 +1279,7 @@ const logPostGbdrawTimings = (entries) => {
  * The source of a Linear record as a request names it, with its resources, when the request draws these files
  * (a GenBank file, or a GFF3 file and its FASTA file); otherwise null.
  * @param {Readonly<Record<string, unknown>> | null | undefined} resources The committed Session's resources, or
- *   those the next Generate's request names (`linearRecordSourceResources`).
+ *   those the next Generate's request names (`requestRecordSources`).
  * @param {CanonicalRecordSource['kind']} sourceKind
  * @param {FileLike} sourceFile
  * @param {FileLike | null} fastaFile
@@ -3418,14 +3418,20 @@ export const createRunAnalysis = ({
               : null));
             const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
             // Generate checked above that the Circular input is complete, so the subject and every ring are bound.
-            const subject = /** @type {ConservationSubject} */ (conservationKeys.subject);
-            const { fasta: subjectFasta, hash: subjectHash } = subject;
+            const { fasta: subjectFasta, hash: subjectHash } = /** @type {ConservationSubject} */ (conservationKeys.subject);
             const boundRings = conservationKeys.rings.map((ring) => ({
               files: /** @type {readonly [FileLike, ...FileLike[]]} */ (ring.files)
             }));
-            // The search space of each ring's genome pair (PD-OI-018 revision 6): Python plans it from the files, as
-            // for the CLI's ring searches, so both pass one value; a ring searched per file shows Python's warning.
-            const ringScales = await planRingScales(subject, boundRings, circularLosatSuffix);
+            // The search space of each ring's genome pair (PD-OI-018 revision 6): Python plans it as for the CLI's ring
+            // searches, so both pass one value; a ring searched per file shows Python's warning. The reference is
+            // staged as this Generate's request names it, so Python parses it once, for the plan and the render.
+            const reference = requestRecordSources(drawing.circularSources.map((card) => ({
+              gb: inputFiles.fileOf(card.gb),
+              gff: inputFiles.fileOf(card.gff),
+              fasta: inputFiles.fileOf(card.fasta)
+            })), drawing.inputType.value);
+            if (!reference) throw new Error('The Circular reference of the comparison rings lacks a file.');
+            const ringScales = await planRingScales(reference, boundRings, circularLosatSuffix);
             const perFileNotice = perFileWarningNotice(showNotice);
             ringScales.warnings.forEach(perFileNotice);
             /** A ring's search arguments, with the tables checked above and its genome pair's search space. @param {number} index */
@@ -3907,12 +3913,12 @@ export const createRunAnalysis = ({
         const nextRecordResources = () => {
           // The descriptors' payload owners are the cards' files (the store's), not their refs.
           if (nextResources === undefined) {
-            nextResources = linearRecordSourceResources(linearSeqs.map((seq) => ({
+            nextResources = requestRecordSources(linearSeqs.map((seq) => ({
               ...seq,
               gb: inputFiles.fileOf(seq.gb),
               gff: inputFiles.fileOf(seq.gff),
               fasta: inputFiles.fileOf(seq.fasta)
-            })), drawing.inputType.value);
+            })), drawing.inputType.value)?.resources ?? null;
           }
           return nextResources;
         };

@@ -1696,22 +1696,30 @@ const inputRecordSource = (resources, inputType, slots, index) => {
 const linearRecordSource = (resources, inputType, seq, index) => inputRecordSource(resources, inputType, seq, index);
 
 /**
- * The record-source resources the next Generate's request names for these drawn Linear cards, under the same ids
- * (`linearRecordSource`). The descriptors hold no bytes: their payload owner is the File, which a helper stages
- * under that id so the Generate finds its bytes and parsed records in the Worker (OV-1595). Null when a card lacks
- * a file the request needs.
- * @param {readonly RequestLinearSeq[]} linearSeqs The drawn cards, in request order.
+ * The record sources the next Generate's request names for these inputs (drawn Linear cards, or the Circular source
+ * cards), in request order, with their resources under the same ids (`inputRecordSource`) and the Files they read.
+ * The descriptors hold no bytes: their payload owner is the File, which a helper stages under that id so the Generate
+ * finds its bytes and parsed records in the Worker (OV-1595). Null when an input lacks a file the request needs.
+ * @template {Readonly<Partial<Record<InputSlot, FileLike | null>>>} C
+ * @param {readonly C[]} inputs In request order.
  * @param {unknown} inputType
- * @returns {Readonly<Record<string, RawSessionResourceDescriptor>> | null}
+ * @returns {{ sources: CanonicalRecord['source'][], resources: Readonly<Record<string, RawSessionResourceDescriptor>>,
+ *   files: FileLike[] } | null}
  */
-export const linearRecordSourceResources = (linearSeqs, inputType) => {
+export const requestRecordSources = (inputs, inputType) => {
   const resources = createResourceBuilder({ encode: false });
+  /** @type {CanonicalRecord['source'][]} */
+  let sources;
   try {
-    linearSeqs.forEach((seq, index) => linearRecordSource(resources, inputType, seq, index));
+    sources = inputs.map((input, index) => inputRecordSource(resources, inputType, input, index));
   } catch {
     return null;
   }
-  return resources.resources;
+  const files = inputs.flatMap((input) => {
+    const { primaryFile, pairedFile } = inputSourceFiles(inputType, input);
+    return [primaryFile, pairedFile].filter((file) => file !== null);
+  });
+  return { sources, resources: resources.resources, files };
 };
 
 /**

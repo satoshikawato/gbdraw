@@ -76,7 +76,10 @@ def ring_searches(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
         return ""
 
     monkeypatch.setattr(circular_losat_module, "run_losat_search", fake_search)
-    monkeypatch.setattr(circular_losat_module, "losat_takes_genome_scale", lambda *_args, **_kwargs: True)
+    # ``raising=False``: on a base without the probe, the searches fail on their scale, not on this fixture.
+    monkeypatch.setattr(
+        circular_losat_module, "losat_takes_genome_scale", lambda *_args, **_kwargs: True, raising=False
+    )
     return searches
 
 
@@ -176,32 +179,40 @@ def test_each_ring_has_its_own_genome(tmp_path: Path, ring_searches: list[dict[s
     ]  # the third ring repeats the first search, which the raw cache serves
 
 
-def test_a_runtime_without_searchsp_searches_as_before_with_a_warning(
+def test_a_losat_without_searchsp_searches_as_before_and_warns(
     tmp_path: Path, ring_searches: list[dict[str, object]], monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    """A LOSAT whose ``blastn --help`` lists no ``-searchsp`` (v0.1.0): the probe the CLI runs logs the warning."""
+
+    from types import SimpleNamespace
+
     import gbdraw.comparisons.circular_losat as circular_losat_module
+    import gbdraw.comparisons.losat_runtime as runtime_module
 
-    probes: list[str] = []
+    helps: list[str] = []
 
-    def no_genome_scale(program, **_kwargs):
-        probes.append(str(program.name))
-        return False
+    def help_text(_executable: str, search: str) -> str:
+        helps.append(search)
+        return "      -task <TASK>\n"
 
-    monkeypatch.setattr(circular_losat_module, "losat_takes_genome_scale", no_genome_scale)
+    monkeypatch.setattr(circular_losat_module, "losat_takes_genome_scale", runtime_module.losat_takes_genome_scale)
+    monkeypatch.setattr(runtime_module, "resolve_losat_runtime",
+                        lambda *_args, **_kwargs: SimpleNamespace(kind="losat", executable="losat"))
+    monkeypatch.setattr(runtime_module, "_subcommand_help", help_text)
     reference = _genbank(tmp_path / "reference.gb", "REF1", "REF2")
-    plan = _plan([reference], [[_fasta(tmp_path / "ring.fasta", "RINGA")]])
+    with caplog.at_level(logging.WARNING):
+        plan = _plan([reference], [[_fasta(tmp_path / "ring.fasta", "RINGA")]])
 
-    assert probes == ["losatn"]
+    assert len(helps) == 1
+    assert "has no -searchsp or -dbsize (LOSAT v0.1.0" in caplog.text
     (search,) = ring_searches
     assert search["options"].searchsp is None
     (entry,) = plan.losat_cache_entries
     assert entry["args"] == ["--task", "megablast"]
 
 
-def test_a_genome_pair_past_what_losat_reads_is_searched_per_file_with_a_warning(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
+def test_a_genome_pair_past_what_losat_reads_is_searched_per_file_and_named_in_its_warning() -> None:
     from gbdraw.comparisons.circular_losat import RingGenomeFile, ring_search_spaces
 
     big = 3_100_000_000
@@ -218,42 +229,67 @@ def test_a_genome_pair_past_what_losat_reads_is_searched_per_file_with_a_warning
     assert "computed per file" in first.message()
 
 
+def _web_plan(program: str, reference: dict[str, object], rings: list[list[Path]]) -> dict[str, object]:
+    """The Web helper's reply: the reference staged under its request resource ids (``reference``: its record source
+    and paths; the page names each resource ``my-<file name>``), each ring as the lengths the ring reader answers
+    for its files."""
+
+    from gbdraw.web_support.comparison_sequences import plan_ring_scales_json, read_comparison_sequence_json
+
+    paths: dict[str, str] = reference["paths"]  # type: ignore[assignment]
+    return json.loads(plan_ring_scales_json(
+        program, json.dumps([reference["source"]]), json.dumps(paths),
+        json.dumps({resource_id: f"my-{Path(path).name}" for resource_id, path in paths.items()}),
+        json.dumps([
+            {"names": [path.name for path in ring],
+             "files": json.loads(read_comparison_sequence_json(*(str(path) for path in ring)))["genomeFiles"]}
+            for ring in rings
+        ]),
+    ))
+
+
 def test_the_web_helper_plans_the_values_the_command_line_passes(
     tmp_path: Path, ring_searches: list[dict[str, object]]
 ) -> None:
-    """``plan_ring_scales_json`` reads the files the Web stages and answers each ring's ``--searchsp``, as a decimal
-    string, with the warnings: the values of the CLI's searches of the same files."""
-
-    from gbdraw.web_support.comparison_sequences import plan_ring_scales_json
+    """``plan_ring_scales_json`` answers each ring's ``--searchsp`` as a decimal string, with the warnings: the values
+    of the CLI's searches of the same files."""
 
     reference = _genbank(tmp_path / "reference.gb", "REF1", "REF2")
     rings = [[_fasta(tmp_path / "a.fasta", "RINGA"), _fasta(tmp_path / "b.fasta", "RINGB")],
              [_fasta(tmp_path / "c.fasta", "RINGC")]]
+    staged = {"source": {"kind": "genbank", "resourceId": "record-1-genbank"},
+              "paths": {"record-1-genbank": str(reference)}}
     for program in ("losatn", "tlosatx"):
         ring_searches.clear()
         _plan([reference], rings, program=program)
-        reply = json.loads(plan_ring_scales_json(
-            program, "genbank", json.dumps([str(reference)]), json.dumps(["reference.gb"]),
-            json.dumps([[str(path) for path in ring] for ring in rings]),
-            json.dumps([[path.name for path in ring] for ring in rings]),
-        ))
-        assert reply == {
+        assert _web_plan(program, staged, rings) == {
             "scales": [str(search["options"].searchsp) for search in ring_searches],
             "warnings": [],
         }
 
 
-def test_the_web_helper_reads_a_gff3_reference_as_its_fasta_file(tmp_path: Path) -> None:
-    """A GFF3 and FASTA reference counts every FASTA entry, as the CLI ring database does."""
+def test_the_web_helper_counts_every_fasta_entry_of_a_gff3_reference_and_names_its_gff3_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A GFF3 and FASTA reference counts every FASTA entry, also one its GFF3 file does not name, as the CLI ring
+    database does; a warning names the reference by its GFF3 file, as the command line does."""
 
-    from gbdraw.web_support.comparison_sequences import plan_ring_scales_json
+    import gbdraw.comparisons.losat_jobs as jobs_module
 
-    fasta = _fasta(tmp_path / "reference.fasta", "REF1", "REF2")
-    reply = json.loads(plan_ring_scales_json(
-        "losatn", "fasta", json.dumps([str(fasta)]), json.dumps(["reference.fasta"]),
-        json.dumps([[str(_fasta(tmp_path / "ring.fasta", "RINGA"))]]), json.dumps([["ring.fasta"]]),
-    ))
-    assert reply["scales"] == [str(_length("REF1", "REF2") * _length("RINGA"))]
+    gff = tmp_path / "reference.gff3"
+    gff.write_text("##gff-version 3\nREF1\t.\tgene\t5\t40\t.\t+\t.\tID=gene1\n", encoding="ascii")
+    staged = {"source": {"kind": "gffFasta", "gffResourceId": "record-1-gff3", "fastaResourceId": "record-1-fasta"},
+              "paths": {"record-1-gff3": str(gff), "record-1-fasta": str(_fasta(tmp_path / "reference.fasta", "REF1", "REF2"))}}
+    ring = [_fasta(tmp_path / "ring.fasta", "RINGA")]
+    space = _length("REF1", "REF2") * _length("RINGA")
+    assert _web_plan("losatn", staged, [ring])["scales"] == [str(space)]
+
+    monkeypatch.setattr(jobs_module, "LOSAT_SEARCH_SPACE_LIMIT", 10)
+    reply = _web_plan("losatn", staged, [ring])
+    assert reply["scales"] == [None]
+    assert reply["warnings"] == [{"ring": 0, "text": jobs_module.PER_FILE_WARNING_TEXT, "params": {
+        "first": "my-reference.gff3", "second": "ring.fasta", "space": f"{space:,}", "limit": "10",
+    }}]
 
 
 def test_the_command_line_logs_the_per_file_warning_once(

@@ -37,7 +37,7 @@ from gbdraw.api.request_render import plan_circular_request, resolve_request_rec
 from gbdraw.api.requests import GenBankInputSource, GffFastaInputSource  # noqa: E402
 from gbdraw.io.record_select import parse_record_selector  # noqa: E402
 from gbdraw.io.regions import parse_region_spec  # noqa: E402
-from gbdraw.web_support.comparison_sequences import plan_ring_scales_json  # noqa: E402
+from gbdraw.web_support.comparison_sequences import plan_ring_scales_json, read_comparison_sequence_json  # noqa: E402
 from gbdraw.web_support.ring_search_frame import circular_ring_tables_in_search_frame_json  # noqa: E402
 
 QUERY = ">QUERY1\nACGTACGTACGTACGTACGT\n"
@@ -114,6 +114,8 @@ def main() -> None:
         root = Path(directory)
         query = root / "query.fasta"
         query.write_text(QUERY, encoding="ascii")
+        # The ring reader's reply for the query file, which the page reads once.
+        query_reply = json.loads(read_comparison_sequence_json(str(query)))
         specs = [
             ("records not drawn", {"source": multi}, "genbank",
              lambda paths: [RecordInput(source=GenBankInputSource(path=paths["source"]), selector=parse_record_selector(s))
@@ -146,6 +148,15 @@ def main() -> None:
             ))
             (entry,) = plan.losat_cache_entries
             subject_path = paths["fasta" if fmt == "fasta" else "source"]
+            # The record source of the first source card, under the ids the page's request names its files by.
+            reference_sources: list[dict[str, str]] = [
+                {"kind": "gffFasta", "gffResourceId": "record-1-gff3", "fastaResourceId": "record-1-fasta"}
+                if fmt == "fasta" else {"kind": "genbank", "resourceId": "record-1-genbank"}
+            ]
+            resource_paths = (
+                {"record-1-gff3": paths["source"], "record-1-fasta": paths["fasta"]}
+                if fmt == "fasta" else {"record-1-genbank": paths["source"]}
+            )
             helper_reply = json.loads(read_all(subject_path, fmt))
             # The records the page lists: the GFF3 reader's records, which are not every FASTA entry.
             listed = (
@@ -162,14 +173,17 @@ def main() -> None:
                 "cliRingRows": plan.request.options.conservation_search_results[0].text,
                 "recordList": listed,
                 "helperReply": helper_reply,
-                # The Worker helper's ring scales for the files the page stages: the scale of the CLI's search.
+                # The Worker helper's ring scales for the reference the page stages under the request's resource ids
+                # and the lengths the ring reader answered: the scale of the CLI's search.
+                "referenceSources": reference_sources,
                 "ringScales": json.loads(plan_ring_scales_json(
-                    "losatn", fmt, json.dumps([subject_path]), json.dumps([Path(subject_path).name]),
-                    json.dumps([[str(query)]]), json.dumps([[query.name]]),
+                    "losatn", json.dumps(reference_sources), json.dumps(resource_paths),
+                    json.dumps({resource_id: Path(path).name for resource_id, path in resource_paths.items()}),
+                    json.dumps([{"names": [query.name], "files": query_reply["genomeFiles"]}]),
                 )),
                 "cliArgs": entry["args"],
             })
-    json.dump({"query": QUERY, "cases": cases}, sys.stdout)
+    json.dump({"query": QUERY, "queryReply": query_reply, "cases": cases}, sys.stdout)
 
 
 if __name__ == "__main__":
