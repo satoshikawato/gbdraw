@@ -62,7 +62,7 @@ import { t } from '../utils/i18n.js';
  * @property {string} legendName The Legend name the popup's field holds.
  * @property {string} appliedLegendName The Legend name the drawing applies.
  * @property {string} strokeColor
- * @property {number} strokeWidth
+ * @property {number | ''} strokeWidth '' after a stroke reset when neither the Legend row nor the drawn feature has a width.
  * @property {string | null} strokeWidthDraft The stroke width typed or stepped into the popup's field and not committed yet; null: none, the field shows `strokeWidth`.
  * @property {string} labelKey
  * @property {string} labelText

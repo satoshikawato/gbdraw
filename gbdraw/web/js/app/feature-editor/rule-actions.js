@@ -484,7 +484,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // the rule preparation for their matches: a commit prepares the candidate
   // rows, a color action prepares the rules it reads as they are.
   /**
-   * @param {Partial<SpecificColorRule>[]} rules
+   * @param {readonly Partial<SpecificColorRule>[]} rules
    * @param {Parameters<import('../rule-matching.js').RulePreparation['prepareCandidate']>[1]} [options]
    */
   const prepareRules = (rules, options) => prepareRuleCandidate(rules, options);
@@ -496,7 +496,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // the run did nothing (OV-280). A rule write that commits meanwhile makes it
   // stale the same way: the run prepares again, so it is not dropped (OV-444).
   /**
-   * @param {Partial<SpecificColorRule>[]} rules
+   * @param {readonly Partial<SpecificColorRule>[]} rules
    * @param {() => unknown} commit
    * @returns {unknown}
    */

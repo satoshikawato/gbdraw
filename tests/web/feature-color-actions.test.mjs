@@ -104,9 +104,7 @@ const featureStyleScopeDialog = {
   displayLabelSiblingCount: 0,
   annotationLabel: null,
   annotationLabelSiblingCount: 0,
-  existingCaptionRule: null,
-  existingCaptionColor: null,
-  resolve: null
+  existingCaptionColor: null
 };
 
 let applySpecificRulesCount = 0;

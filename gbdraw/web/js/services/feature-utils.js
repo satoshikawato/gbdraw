@@ -20,6 +20,13 @@ import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
  *   qualifiers?: unknown
  * }} FeatureSelector
  */
+/**
+ * A feature row of the Features list, as the feature color actions read it: its type and its
+ * rendered id (null for the row-less placeholder of the Legend popup's count),
+ * and the label fields Python writes as text, beside the Python fields that rule
+ * matching reads by name.
+ * @typedef {Readonly<Record<string, unknown>> & { type?: string, svg_id?: string | null, product?: string, gene?: string, locus_tag?: string }} ColorFeature
+ */
 
 /**
  * @param {unknown} value
