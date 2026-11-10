@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
+/** @import { DrawingState, WebState } from '../state.js' */
 /** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
@@ -71,26 +71,37 @@ export const createAuxiliaryFileImports = (reactive, store) => {
  * @typedef {object} WatchersPreviewRuntime
  * @property {() => void} clearActiveRuntime
  * @property {(options: MountedResultContextOptions) => MountedResultContext} createMountedResultContext
- * @property {(context: MountedResultContext) => Promise<any>} bindMountedResult
+ * @property {(context: MountedResultContext) => Promise<unknown>} bindMountedResult
  */
 
 /**
  * @typedef {object} WatchersOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Pick<WebState, 'activeDrawing' | 'autoLabelReflowEnabled' | 'clickedPairwiseMatch' | 'drawingList' |
+ *   'drawingTabs' | 'errorLog' | 'featureCatalog' | 'featurePanelTab' | 'inputFiles' | 'isFeatureDrawerMounted' |
+ *   'labelReflowForceRequestSeq' | 'labelReflowRequestSeq' | 'labelSearch' | 'layoutRepositionMode' |
+ *   'linearReorderNotice' | 'orthogroupSearch' | 'results' | 'selectedFeatureRecordIdx' |
+ *   'selectedOrthogroupAlignmentFeature' | 'selectedOrthogroupId' | 'selectedResultIndex' |
+ *   'semanticFileWatchersSuppressed' | 'sessionOperationAvailability' | 'skipCaptureBaseConfig' |
+ *   'skipExtractOnSvgChange' | 'svgContainer' | 'svgContent' |
+ *   'trustedArtifactRestoreInProgress'>} state App state (state.js): the members the watchers read.
  * @property {RulePreparation['isCurrent']} isRuleInputCurrent
  *   Whether a snapshot of the rule inputs is still the current inputs (the rule preparation's reader).
  * @property {RulePreparation['snapshot']} snapshotRuleInputs
  *   The rule inputs now (the rule preparation's reader).
  * @property {AuxiliaryFileImports['track']} trackAuxiliaryFileImport Holds an import until it settles (`createAuxiliaryFileImports`).
- * @property {(value?: any) => { value: any }} ref Vue `ref`.
- * @property {(getter: () => any) => { readonly value: any }} computed Vue `computed`.
- * @property {(source: any, callback: (...args: any[]) => any, options?: Record<string, any>) => any} watch Vue `watch`.
+ * @property {<T>(value: T) => { value: T }} ref Vue `ref`.
+ * @property {<T>(getter: () => T) => { readonly value: T }} computed Vue `computed`.
+ * @property {(
+ *   source: unknown,
+ *   callback: (value: unknown, previous: unknown) => unknown,
+ *   options?: { flush?: 'pre' | 'post' | 'sync' }
+ * ) => unknown} watch Vue `watch`.
  * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`.
- * @property {(callback: () => any) => void} onMounted Vue `onMounted`.
+ * @property {(callback: () => unknown) => void} onMounted Vue `onMounted`.
  * @property {{ refreshLegendDragAffordances: () => void }} legendActions
  *   The Legend owner's reaction to a rebuilt Legend.
  * @property {{
- *   syncLabelEditor: (options?: Record<string, any>) => void,
+ *   syncLabelEditor: (options?: { reuseCurrentBinding?: boolean }) => void,
  *   importSpecificRules: (text: string, options?: { drawing?: DrawingState, isCurrent?: () => boolean }) => Promise<number | false>,
  *   removeImportedSpecificRules: (drawing: DrawingState) => Promise<unknown>
  * }} featureActions The feature editor's label reaction and the rule owner's import of a rules TSV and its Remove.
@@ -100,14 +111,14 @@ export const createAuxiliaryFileImports = (reactive, store) => {
  *   importDefaultColors: (drawing: DrawingState, colors: Record<string, string>) => void,
  *   removeImportedDefaultColors: (drawing: DrawingState) => void
  * }} resultsManager The Results owner's Default colors file's colors and their Remove (OV-1280).
- * @property {(() => Promise<any>) | null} [runLabelReflow] Generate's label reflow.
- * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} [resetPreviewViewport] The preview owner's viewport reset.
+ * @property {(() => Promise<unknown>) | null} [runLabelReflow] Generate's label reflow.
+ * @property {() => void} [resetPreviewViewport] The preview owner's viewport reset.
  * @property {() => void} resetRightDrawer The right drawer owner's reset.
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {() => void} closeHiddenLabelTextDialog The label owner's port: closes the Label Not Shown dialog as Cancel.
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
  * @property {WatchersPreviewRuntime} previewRuntime The preview owner's mounted-Result binding.
- * @property {(() => Promise<any>) | null} [preparePaletteDefinitions] The palette loader's load of the browser palette definitions.
+ * @property {(() => Promise<unknown>) | null} [preparePaletteDefinitions] The palette loader's load of the browser palette definitions.
  */
 
 /**
@@ -289,7 +300,7 @@ export const setupWatchers = ({
   // shown and on no other drawing, and Retry is that drawing's step (R16-4).
   // One failure per drawing ID. A Load or History restore builds new drawing
   // objects, so a failure of a replaced drawing is never shown again.
-  const auxiliaryImportFailures = /** @type {{ value: Readonly<Record<string, AuxiliaryImportFailure>> }} */ (ref({}));
+  const auxiliaryImportFailures = ref(/** @type {Readonly<Record<string, AuxiliaryImportFailure>>} */ ({}));
   /** @param {DrawingState} drawing */
   const auxiliaryImportFailureOf = (drawing) => {
     const failure = auxiliaryImportFailures.value[drawing.id];
@@ -352,7 +363,7 @@ export const setupWatchers = ({
    * @param {InputFileCandidate} file
    */
   const bindCard = (drawing, key, file) => bindInputFile(state.inputFiles, drawing.slices.inputs, key, file);
-  /** @type {Promise<any>} */
+  /** @type {Promise<unknown>} */
   let fileImportApplications = Promise.resolve();
   /**
    * Applies the text of an auxiliary file to the drawing it was chosen in;

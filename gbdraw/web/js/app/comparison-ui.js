@@ -10,6 +10,7 @@ import { comparisonStateForMode } from '../mode-profiles.js';
 import { joinSentences, listText, msg, t, tm, tn } from '../utils/i18n.js';
 /** @import { ComparisonState } from '../mode-profiles.js' */
 /** @import { CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
+/** @import { ProteinBlastpMode } from '../services/current-option-values.js' */
 import { DEFAULT_COLLINEAR_ANCHOR_MODE } from '../services/losat-normalization.js';
 
 const LINEAR_COMPARISON_INTENT_KEYS = Object.freeze({
@@ -64,6 +65,7 @@ const LINEAR_COMPARISON_SECTION_KEYS = Object.freeze({
 });
 
 /** @typedef {Readonly<{ key: string, label: string, adjacentOnly?: boolean }>} ComparisonModeEntry */
+/** @typedef {ComparisonModeEntry & Readonly<{ key: ProteinBlastpMode }>} LosatpModeEntry */
 
 /** @type {readonly ComparisonModeEntry[]} */
 const LOSAT_MODES = Object.freeze([
@@ -81,7 +83,7 @@ const LOSAT_MODES = Object.freeze([
   })
 ]);
 
-/** @type {readonly ComparisonModeEntry[]} */
+/** @type {readonly LosatpModeEntry[]} */
 const LOSATP_MODES = Object.freeze([
   Object.freeze({
     key: LINEAR_COMPARISON_LOSATP_MODE_KEYS.SIMILARITY_GROUPS,
@@ -100,6 +102,7 @@ const LOSATP_MODES = Object.freeze([
 ]);
 
 const LOSAT_MODE_BY_KEY = new Map(LOSAT_MODES.map((mode) => [mode.key, mode]));
+/** @type {ReadonlyMap<string, LosatpModeEntry>} */
 const LOSATP_MODE_BY_KEY = new Map(LOSATP_MODES.map((mode) => [mode.key, mode]));
 
 /** @type {Readonly<Record<string, Readonly<{ disclosureKey: string, focusTargetKey: string }>>>} */

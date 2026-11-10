@@ -740,6 +740,8 @@ under "Cited ids without a record".
   - `tests/test_session_resources.py`
   - `tests/web/legend-gradient-relayout.test.mjs`
   - `tests/web/live-generate-parity-legend.playwright.spec.js`
+  - `tests/web/ring-hover.playwright.spec.js`
+  - `tests/web/ring-hover.test.mjs`
   - `tests/web/run-info.test.mjs`
 
 - [PD-OI-111](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-111-partial-feature-ends-drawn-open): Partial feature ends drawn open. ACCEPTED, concern `features.partial-ends-open`, scenario revision 1.

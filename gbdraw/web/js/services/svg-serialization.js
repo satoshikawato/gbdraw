@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
-import { PREVIEW_MATCH_BUTTON_ATTRIBUTE } from './preview-affordances.js';
+import { PREVIEW_MATCH_BUTTON_ATTRIBUTE, setClassToken } from './preview-affordances.js';
 
 /**
  * A Vue ref, or the `{ value }` cell that stands in for one (a Gallery
@@ -50,47 +50,6 @@ const TRANSIENT_PREVIEW_CLASSES = Object.freeze([
   'feature-selection-status'
 ]);
 
-/**
- * @param {Element | null | undefined} element
- * @param {string} token
- * @param {unknown} enabled
- */
-export const setClassToken = (element, token, enabled) => {
-  if (!element) return;
-  if (element.classList?.toggle) {
-    element.classList.toggle(token, Boolean(enabled));
-    return;
-  }
-  const existing = String(element.getAttribute('class') || '').trim();
-  const tokens = existing ? existing.split(/\s+/).filter(Boolean) : [];
-  const nextTokens = tokens.filter((entry) => entry !== token);
-  if (enabled) nextTokens.push(token);
-  if (nextTokens.length) {
-    element.setAttribute('class', nextTokens.join(' '));
-  } else {
-    element.removeAttribute('class');
-  }
-};
-
-/**
- * @param {Element | null | undefined} element
- * @param {string} token
- */
-const removeClassToken = (element, token) => {
-  if (!element) return;
-  if (element.classList?.remove) {
-    element.classList.remove(token);
-    if (element.classList.length === 0) element.removeAttribute('class');
-    return;
-  }
-  const tokens = String(element.getAttribute('class') || '').split(/\s+/).filter((entry) => entry && entry !== token);
-  if (tokens.length) {
-    element.setAttribute('class', tokens.join(' '));
-  } else {
-    element.removeAttribute('class');
-  }
-};
-
 // Also drops an inline style that Preview feedback (a cursor, a hover, a drag)
 // left empty when it was removed.
 /** @param {Element | null | undefined} svg */
@@ -115,7 +74,7 @@ export const stripTransientPreviewState = (svg, { stripCursor = true } = {}) => 
   if (!svg) return;
   /** @param {Element} element */
   const stripClasses = (element) => {
-    TRANSIENT_PREVIEW_CLASSES.forEach((className) => removeClassToken(element, className));
+    TRANSIENT_PREVIEW_CLASSES.forEach((className) => setClassToken(element, className, false));
   };
   stripClasses(svg);
   svg.querySelectorAll(TRANSIENT_PREVIEW_CLASSES.map((className) => `.${className}`).join(','))

@@ -32,6 +32,7 @@ from ...analysis.conservation import (
     ConservationLegendSource,
     ConservationTrack,
     conservation_legend_sources,
+    named_conservation_tracks,
     conservation_slot_track,
     conservation_track_gradient_colors,
 )
@@ -4480,8 +4481,11 @@ def _assemble_circular_record(
     legend_sources = LegendSources.of(
         configurators.feature, configurators.gc, configurators.skew, feature_density_legend(record.feature_density, profile)
     )
+    # The table the Legend draws; with no Legend, the one that names the rings (a Multi-Record Canvas names them
+    # from its shared Legend before it draws each record).
     legend_table = LegendTable()
-    if canvas_config.legend_position != "none":
+    unnamed = any(track.legend_name is None for track in record.conservation_tracks or ())
+    if canvas_config.legend_position != "none" or unnamed:
         legend_table = circular_legend_table(
             [record.gb_record],
             legend_sources,
@@ -4495,6 +4499,12 @@ def _assemble_circular_record(
             conservation_legend=conservation_legend_sources(record.conservation_tracks),
             conservation_min_identity=record.conservation_min_identity,
         )
+    if unnamed:
+        record = replace(
+            record, conservation_tracks=named_conservation_tracks(record.conservation_tracks or (), legend_table.ring_names())
+        )
+    if canvas_config.legend_position == "none":
+        legend_table = LegendTable()
     canvas: Drawing = canvas_config.create_svg_canvas()
     attach_legend_row_facts(
         canvas,

@@ -335,7 +335,8 @@ const { nextTick, ref } = window.Vue;
 
 // How LOSAT runs: one app-level setting for both drawings (Session 46
 // `ui.losatExecution`; a Session 44 or older draft keeps it in `config.losat`).
-const LOSAT_EXECUTION_FIELDS = MODE_SCOPED_SETTINGS.losatExecutionFields;
+// The generated list names the four fields of `LosatExecution`.
+const LOSAT_EXECUTION_FIELDS = /** @type {readonly (keyof LosatExecution)[]} */ (MODE_SCOPED_SETTINGS.losatExecutionFields);
 /**
  * Installs saved LOSAT execution settings; a field the value lacks takes its
  * normalized default, as a saved draft always read.
@@ -343,18 +344,20 @@ const LOSAT_EXECUTION_FIELDS = MODE_SCOPED_SETTINGS.losatExecutionFields;
  */
 export const applyLosatExecutionData = (source) => {
   LOSAT_EXECUTION_ROWS.forEach(({ field, read }) => {
-    state.losatExecution[field] = read(source[/** @type {keyof SessionLosatExecution} */ (field)], source).value;
+    // The rows read these four fields: text, and `undefined` for Auto parallel runs.
+    /** @type {Record<string, unknown>} */ (state.losatExecution)[field] = read(source[/** @type {keyof SessionLosatExecution} */ (field)], source).value;
   });
 };
-/** @returns {Record<string, any>} The settings as Save writes them (`ui.losatExecution`). */
+/** @returns {Partial<LosatExecution>} The settings as Save writes them (`ui.losatExecution`; JSON drops Auto parallel runs). */
 export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
-  LOSAT_EXECUTION_FIELDS.map((/** @type {string} */ field) => [field, state.losatExecution[field]])
+  LOSAT_EXECUTION_FIELDS.map((field) => [field, state.losatExecution[field]])
 ));
 
 /** @import { ActiveWebConfig, AlignmentResetCanonical } from './session-active-config-contract.js' */
 /** @import { SettingLoss, SettingsContainers } from './config-field-readers.js' */
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { LosatExecution } from './session-active-config-contract.js' */
 /** @import { ProteinFrameSource, StoredDrawing } from './main-session-comparison-frame.js' */
 /** @import { CommittedCanonicalSession, LiveSettingItem, LiveSettingWrite, SessionRequestProjection,
  *   SettingsOnlyProjectionInput } from './session-request.js' */
@@ -6319,7 +6322,8 @@ const applyFeatureArtifactData = (features = {}) => {
  */
 export const applyFeatureStateData = (drawing, features = {}) => {
   applyFeatureArtifactData(features);
-  state.selectedFeatureRecordIdx.value = Number.isInteger(features.selectedFeatureRecordIdx)
+  state.selectedFeatureRecordIdx.value = typeof features.selectedFeatureRecordIdx === 'number'
+    && Number.isInteger(features.selectedFeatureRecordIdx)
     ? features.selectedFeatureRecordIdx
     : 0;
   applyDrawingFeatureData(drawing, features);

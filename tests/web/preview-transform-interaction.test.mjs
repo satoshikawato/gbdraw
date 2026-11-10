@@ -72,7 +72,11 @@ for (const path of ['services/drawing/feature-edits.js', 'services/drawing/paint
   // svg-actions.js finds the feature a modifier click selects with feature-selection.js, which reads a Shift+click
   // range on the record axis and holds its gesture.
   'app/feature-selection.js', 'services/svg-serialization.js', 'services/region-axis.js', 'services/record-options.js',
-  'utils/pointer-gesture.js']) await copyModule(path, path);
+  'utils/pointer-gesture.js',
+  // svg-actions.js gives a similarity ring hit the ring hover (ring-hover.js); its Legend name and colour reads are
+  // stubbed below.
+  'app/feature-editor/ring-hover.js', 'services/legend-layout.js', 'services/font-families.js',
+  'utils/font-family-rules.generated.js']) await copyModule(path, path);
 // No admitted catalog: features open as the Result draws them.
 await writeFile(
   join(tempDir, 'services', 'feature-catalog.js'),
@@ -81,7 +85,8 @@ await writeFile(
 );
 await writeFile(
   join(tempDir, 'utils', 'color-utils.js'),
-  'export const resolveColorToHex = (value) => value || "#94a3b8";\n',
+  'export const resolveColorToHex = (value) => value || "#94a3b8";\n'
+    + 'export const hexToRgb = () => ({ r: 148, g: 163, b: 184 });\n',
   'utf8'
 );
 await writeFile(
@@ -124,7 +129,8 @@ await writeFile(
 await writeFile(
   join(tempDir, 'services', 'legend-svg.js'),
   'export const COMPARISON_LEGEND_SELECTOR = "[data-gbdraw-role=comparison-legend]";\n' +
-    'export const legendEntryKey = (entry) => String(entry?.caption || "");\n',
+    'export const legendEntryKey = (entry) => String(entry?.caption || "");\n' +
+    'export const drawnLegendRowName = () => null;\n',
   'utf8'
 );
 // No Legend row or record definition in these fixtures opens a popup.
@@ -185,6 +191,8 @@ globalThis.window = {
 globalThis.requestAnimationFrame = window.requestAnimationFrame;
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame;
 globalThis.CSS = { escape: (value) => String(value) };
+// The fake roots below have no preview host element, so the ring hover binds nothing.
+globalThis.HTMLElement = class {};
 
 class ListenerTarget {
   constructor() {

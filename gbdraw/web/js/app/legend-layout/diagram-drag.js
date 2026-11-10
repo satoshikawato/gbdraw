@@ -7,7 +7,7 @@ import {
   compositionUserDeltas
 } from './composition-actions.js';
 import { closestRecordGroup, isMultiRecordCanvasSvg } from '../record-groups.js';
-import { setClassToken } from '../../services/svg-serialization.js';
+import { setClassToken } from '../../services/preview-affordances.js';
 import { LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
 import { msg } from '../../utils/i18n.js';
 /** @import { WebState } from '../../state.js' */

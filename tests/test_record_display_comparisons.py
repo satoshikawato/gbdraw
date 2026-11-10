@@ -183,6 +183,10 @@ def test_interactive_catalog_has_one_source_match_for_all_dom_fragments(mode):
     catalog = json.loads(next(n.text for n in enriched.iter() if n.get("id") == "gbdraw-interactive-feature-metadata"))
     assert len(catalog["items"][0]["comparisonMatches"]) == 1
     assert len({n.get("id") for n in paths}) == len(paths)
+    if mode == "circular":
+        # Bases 21..60 of a 100-bp record drawn from base 41: 21..40 end the drawing, 41..60 start it. The fragments
+        # agree on the source endpoints and keep their own drawn spans (what the Web's ring hover reads).
+        assert [(n.get("data-display-start"), n.get("data-display-end")) for n in paths] == [("80", "100"), ("0", "20")]
 
 
 def endpoint_oracle(endpoints, starts, lengths, reverses):
@@ -422,7 +426,13 @@ def test_duplicate_record_instances_use_their_own_comparison_transform(mode):
     assert len(paths) == (2 if mode == "linear" else 3)
     assert len({n.get("id") for n in paths}) == len(paths)
     context = build_interactive_svg_context(plan.records, mode=mode, linear_rendered_feature_ids=mode == "linear", record_transforms=plan.transforms)
-    enrich_svg(ET.tostring(root, encoding="unicode"), context)
+    enriched = ET.fromstring(enrich_svg(ET.tostring(root, encoding="unicode"), context))
+    if mode == "circular":
+        # The record drawn from base 41 draws bases 21..60 in two pieces; its copy drawn from base 11 in one.
+        spans = [(n.get("data-gbdraw-match-id"), n.get("data-display-start"), n.get("data-display-end"))
+                 for n in enriched.iter() if n.get("data-gbdraw-interactive-match") == "true"]
+        assert spans == [("homology_ring1_hit1", "80", "100"), ("homology_ring1_hit1", "0", "20"),
+                         ("homology_ring1_hit1_record_2", "10", "50")]
 
 
 def test_rotated_single_circular_record_context_matches_rendered_feature_ids():

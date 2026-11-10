@@ -777,6 +777,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   var FEATURE_SELECTOR =
     'path[' + FEATURE_ID_ATTRIBUTE + '], polygon[' + FEATURE_ID_ATTRIBUTE + '], rect[' + FEATURE_ID_ATTRIBUTE + '], ' +
     'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
+  // The attributes a fragment of one match holds on its own (Python's MATCH_FRAGMENT_OWN_ATTRIBUTES, written in by
+  // the embedder); its other data- attributes are the match's and agree across its fragments.
+  var MATCH_FRAGMENT_OWN_ATTRIBUTES = [/* gbdraw: MATCH_FRAGMENT_OWN_ATTRIBUTES */];
   var MATCH_SELECTOR =
     'path[data-gbdraw-match-id], path[data-match-kind], path[data-pairwise-match-style]';
   var ANNOTATION_SELECTOR = '[data-gbdraw-interactive-annotation="true"][data-gbdraw-annotation-id]';
@@ -2024,7 +2027,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       var id = matchAttr(element, 'id');
       var fragment = matchAttr(element, 'data-gbdraw-match-fragment');
       var metadata = Array.prototype.slice.call(element.attributes).filter(function (attribute) {
-        return attribute.name.indexOf('data-') === 0 && attribute.name !== 'data-gbdraw-match-fragment';
+        return attribute.name.indexOf('data-') === 0 && MATCH_FRAGMENT_OWN_ATTRIBUTES.indexOf(attribute.name) < 0;
       }).map(function (attribute) { return [attribute.name, attribute.value]; }).sort();
       var current = JSON.stringify(metadata);
       if (!id || ids.has(id) || !/^(0|[1-9][0-9]*)$/.test(fragment) || fragments.has(fragment)

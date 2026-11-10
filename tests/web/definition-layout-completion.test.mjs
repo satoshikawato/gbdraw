@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { setClassToken } from '../../gbdraw/web/js/services/svg-serialization.js';
+import { setClassToken } from '../../gbdraw/web/js/services/preview-affordances.js';
 import * as transforms from '../../gbdraw/web/js/services/svg-transform.js';
 
 // Load the existing owners with a controlled scheduler and Worker response.

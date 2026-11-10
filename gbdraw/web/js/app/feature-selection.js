@@ -1,5 +1,5 @@
 // @ts-check
-import { setClassToken } from '../services/svg-serialization.js';
+import { setClassToken } from '../services/preview-affordances.js';
 import { featureParts, onTheWay, partsMidpoint } from '../services/region-axis.js';
 import { capturePointer, holdTextSelection } from '../utils/pointer-gesture.js';
 

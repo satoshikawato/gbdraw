@@ -8,9 +8,9 @@ import {
   PREVIEW_FEATURE_SEARCH_MATCH_CLASS,
   PREVIEW_FEATURE_SEARCH_ROOT_ACTIVE_CLASS,
   PREVIEW_FEATURE_SEARCH_ROOT_UPDATING_CLASS,
-  setClassToken,
   stripPreviewFeatureSearchClasses
 } from '../../services/svg-serialization.js';
+import { setClassToken } from '../../services/preview-affordances.js';
 
 /** @import { FeatureSvgRoot } from '../../services/feature-dom.js' */
 

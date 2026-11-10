@@ -8,6 +8,7 @@
 /** @import { MatchPopupPayload, PopupRow } from '../../services/pairwise-match-popup.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 /** @import { PreviewTransformInteractionListener } from '../ui.js' */
+/** @import { RegionAxisRecord } from '../../services/region-axis.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds, primaryPressAfter } from '../../utils/popup-bounds.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
@@ -28,11 +29,12 @@ import { getFeatureOverride } from '../../services/feature-override-identity.js'
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
+import { attachRingHover, ringPopupShows } from './ring-hover.js';
 import { fillRecordOf, legendEntryKey } from '../../services/drawing/paint.js';
 import { PREVIEW_ITEM_SELECTOR, matchPopupOf, previewItemPopupOf, previewItemTarget } from '../../services/match-frame-popup.js';
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
-import { PREVIEW_MATCH_BUTTON_ATTRIBUTE } from '../../services/preview-affordances.js';
+import { PREVIEW_MATCH_BUTTON_ATTRIBUTE, setClassToken } from '../../services/preview-affordances.js';
 import { ANNOTATION_SELECTOR, REGION_LABEL_FOR_ATTRIBUTE, REGION_LABEL_FRONT_SELECTOR } from '../../services/drawn-groups.js';
 import { ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SET_ID_ATTRIBUTE } from '../../services/drawn-attributes.generated.js';
 import {
@@ -143,6 +145,7 @@ export {
  * hover. It returns the unsubscribe.
  * @typedef {(listener: PreviewTransformInteractionListener) => () => void} SubscribePreviewTransformChangesPort
  */
+/** @typedef {() => RegionAxisRecord[]} ShownAxisRecordsPort The records of the shown Result whose axis Python wrote. */
 
 /**
  * The visibility owner's preparation of the rule matches `resolveFeatureDrawn`
@@ -184,6 +187,7 @@ export {
  * @property {SubscribePreviewTransformChangesPort} subscribePreviewTransformChanges
  * @property {() => boolean} [previewPopupsHeld] While it holds (the Review alignment panel is open, the popups
  *   hidden), no gesture on the figure opens, retargets or closes a popup.
+ * @property {ShownAxisRecordsPort} [shownAxisRecords]
  * @property {ShowElementSettings} [showElementSettings]
  * @property {() => unknown} [closeElementSettings] The pane's closing of the popup that holds a settings section.
  */
@@ -297,6 +301,33 @@ export {
 
 /** @typedef {{ svgId: string, identity: FeatureIdentity }} RenderedIdentityEntry */
 
+/**
+ * Places an alignment ring button around a candidate's box in the viewport; hides it without a box.
+ * @param {HTMLElement} ring
+ * @param {{ left: number, right: number, top: number, bottom: number, x: number } | null} box
+ */
+const placeRing = (ring, box) => {
+  ring.hidden = !box;
+  if (!box) return;
+  const width = Math.max(box.right - box.left, 8) + 6;
+  Object.assign(ring.style, { left: (box.x - width / 2) + 'px', top: (box.top - 3) + 'px',
+    width: width + 'px', height: (box.bottom - box.top + 6) + 'px' });
+};
+
+/**
+ * A label centred on `x`, kept inside the viewport.
+ * @param {HTMLElement} label
+ * @param {number} x
+ * @param {number} top
+ * @param {number} frameWidth
+ */
+const placeLabel = (label, x, top, frameWidth) => {
+  label.hidden = false;
+  const width = label.offsetWidth;
+  label.style.left = Math.max(4, Math.min(x - width / 2, frameWidth - width - 4)) + 'px';
+  label.style.top = top + 'px';
+};
+
 /** @param {FeatureSvgActionsOptions} options */
 export const createFeatureSvgActions = ({
   state,
@@ -310,7 +341,7 @@ export const createFeatureSvgActions = ({
   consumeSuppressNextClick, selectFeatureByClick, markPlainFeatureClick, clearFeatureSelection, startMarqueePointer, moveMarqueePointer, commitMarqueePointer, cancelMarqueePointer,
   isPreviewTransformActive,
   subscribePreviewTransformChanges,
-  previewPopupsHeld = () => false,
+  previewPopupsHeld = () => false, shownAxisRecords = () => [],
   showElementSettings = () => false,
   closeElementSettings = () => {}
 }) => {
@@ -1476,30 +1507,6 @@ export const createFeatureSvgActions = ({
           const y = (box.top + box.bottom) / 2;
           return x < 0 || x > frame.width || y < 0 || y > frame.height ? null : { ...box, x, y };
         };
-        /**
-         * @param {HTMLElement} ring
-         * @param {NonNullable<ReturnType<typeof boxIn>> | null} box
-         */
-        const placeRing = (ring, box) => {
-          ring.hidden = !box;
-          if (!box) return;
-          const width = Math.max(box.right - box.left, 8) + 6;
-          Object.assign(ring.style, { left: (box.x - width / 2) + 'px', top: (box.top - 3) + 'px',
-            width: width + 'px', height: (box.bottom - box.top + 6) + 'px' });
-        };
-        /**
-         * A label centred on `x`, kept inside the viewport.
-         * @param {HTMLElement} label
-         * @param {number} x
-         * @param {number} top
-         * @param {number} frameWidth
-         */
-        const placeLabel = (label, x, top, frameWidth) => {
-          label.hidden = false;
-          const width = label.offsetWidth;
-          label.style.left = Math.max(4, Math.min(x - width / 2, frameWidth - width - 4)) + 'px';
-          label.style.top = top + 'px';
-        };
         // Down from the candidate, then along to the reference line.
         /**
          * @param {NonNullable<ReturnType<typeof boxIn>>} box
@@ -1601,17 +1608,17 @@ export const createFeatureSvgActions = ({
         }
         const next = new Set(selected);
         handlerState.selectedMatchElements.forEach((element) => {
-          if (!next.has(element)) element.classList.toggle('gbdraw-match-selected', false);
+          if (!next.has(element)) setClassToken(element, 'gbdraw-match-selected', false);
         });
         next.forEach((element) => {
-          if (!handlerState.selectedMatchElements.has(element)) element.classList.toggle('gbdraw-match-selected', true);
+          if (!handlerState.selectedMatchElements.has(element)) setClassToken(element, 'gbdraw-match-selected', true);
         });
         handlerState.selectedMatchElements = next;
       };
 
       const clearPendingMatch = () => {
         if (!handlerState.pendingMatchElement) return;
-        matchFragments(handlerState.pendingMatchElement).forEach((element) => element.classList.remove('gbdraw-match-pending'));
+        matchFragments(handlerState.pendingMatchElement).forEach((element) => setClassToken(element, 'gbdraw-match-pending', false));
         handlerState.pendingMatchElement = null;
       };
 
@@ -1620,7 +1627,7 @@ export const createFeatureSvgActions = ({
         if (handlerState.pendingMatchElement === matchElement) return;
         clearPendingMatch();
         handlerState.pendingMatchElement = matchElement;
-        matchFragments(matchElement).forEach((element) => element.classList.add('gbdraw-match-pending'));
+        matchFragments(matchElement).forEach((element) => setClassToken(element, 'gbdraw-match-pending', true));
       };
 
       /** @param {PointerPosition | null | undefined} eventLike */
@@ -1670,6 +1677,12 @@ export const createFeatureSvgActions = ({
 
       /** @param {Element} matchEl @param {HoverPoint | null | undefined} eventLike */
       const activateMatchHover = (matchEl, eventLike) => {
+        // A similarity ring's hit shows the ring popup (ring-hover.js) instead, when the Result can show it.
+        if (ringPopupShows(svg, matchEl, shownAxisRecords())) {
+          clearHover();
+          hideHoverSummary();
+          return false;
+        }
         handlerState.alignmentOverlay?.setHover(null);
         forgetFeatureHover();
         const matchKey = getMatchHoverKey(matchEl);
@@ -1975,7 +1988,13 @@ export const createFeatureSvgActions = ({
       window.addEventListener?.('pointerup', clearPendingMatch, true);
       window.addEventListener?.('pointercancel', clearPendingMatch, true);
       window.addEventListener?.('blur', clearPendingMatch);
+      const detachRingHover = attachRingHover({
+        svg, isPreviewTransformActive,
+        axisRecords: shownAxisRecords,
+        held: () => Boolean(clickedFeature.value || clickedPairwiseMatch?.value || featureSelectionDrag?.active || previewPopupsHeld())
+      });
       handlerState.cleanup = () => {
+        detachRingHover();
         svg.removeEventListener('mouseover', handleMouseOver);
         svg.removeEventListener('mousemove', handleMouseMove);
         svg.removeEventListener('mouseout', handleMouseOut);
