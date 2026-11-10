@@ -130,7 +130,7 @@ import { windowLosatFilenamesOf } from './linear-comparison-retained.js';
 import { foldLoadedLinearSources, groupLinearSourceRecords, restoreFoldedLinearSources } from './linear-sources.js';
 import { buildSessionDrawingResources } from './session-resources.js';
 import { savedDrawingsOf } from './session-drawings.js';
-import { ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
+import { ARTIFACT_SLOT_KEYS, createArtifactSlot, installShownSetLegend } from './artifact-slot.js';
 import {
   base64ToBytes,
   fileDescriptorOf,
@@ -1431,14 +1431,15 @@ export const applyEditorStateData = (
 };
 
 // The shown Result's editor artifacts: its alignment Reset receipt, generated
-// Legend inventory and colors, stroke defaults, and feature catalog.
+// Legend inventory and colors (`installShownSetLegend`, by the rule of a set
+// without a Result), stroke defaults, and feature catalog. The caller has
+// installed the Results.
 /** @param {Record<string, any>} normalized The result of `normalizeEditorStateData`. */
 const applyEditorArtifactData = (normalized) => {
   if (state.similarityAlignmentResetReceipt) {
     state.similarityAlignmentResetReceipt.value = normalized.alignmentResetReceipt ?? null;
   }
-  state.originalLegendOrder.value = normalized.legend.originalOrder;
-  state.originalLegendColors.value = normalized.legend.originalColors;
+  installShownSetLegend(state, normalized.legend);
   state.originalSvgStroke.value = normalized.originalSvgStroke;
   if (state.featureCatalog) {
     state.featureCatalog.value = admittedFeatureCatalog(normalized.featureCatalog);
@@ -8494,7 +8495,6 @@ const importSessionDocument = async (e, options = {}) => {
     const shownGroupIds = applyOrthogroupArtifactData(loadedOrthogroupState, { catalogFeatureState: currentCatalogFeatureState });
     if (groupNamesDrawingId !== null) installGroupNames(state.drawingOf(groupNamesDrawingId), loadedOrthogroupState, shownGroupIds);
     storedGroupNames.forEach(({ id, names, groupIds }) => installGroupNames(state.drawingOf(id), names, groupIds));
-    applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(committedSetDrawingId)) });
     if (legacyFeatureRecoveryPlan) {
       applySessionFeatureRecoveryPlan(legacyFeatureRecoveryPlan);
     }
@@ -8509,6 +8509,7 @@ const importSessionDocument = async (e, options = {}) => {
     recordSessionLifecycleEvent('session-candidate-adopted');
     recordSessionLifecycleEvent('preview-mount-start');
     applyResultsData(committedImportedResults, ui);
+    applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(committedSetDrawingId)) });
     state.annotationWarnings.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.annotationWarnings || []
     );

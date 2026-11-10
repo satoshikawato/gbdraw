@@ -95,6 +95,36 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFAC
 export const resultSetInventory = (results, inventory) => (results.length > 0 ? [...inventory] : []);
 
 /**
+ * The shown Result set's generated Legend inventory and colors, as an
+ * artifact install (a drawing switch, a Session Load, its rollback, a History
+ * step) leaves them.
+ * @typedef {object} ShownSetLegend
+ * @property {PythonLegendKey[]} originalOrder The inventory the set was drawn with.
+ * @property {Record<string, string>} originalColors Python's color of each generated row, by its key.
+ */
+/**
+ * The refs of the displayed Legend inventory and colors, and of the shown Results that decide them.
+ * @typedef {object} ShownSetLegendRefs
+ * @property {{ readonly value: readonly unknown[] }} results
+ * @property {{ value: PythonLegendKey[] }} originalLegendOrder
+ * @property {{ value: Record<string, string> }} originalLegendColors
+ */
+
+/**
+ * The one writer of the displayed inventory and colors after an artifact
+ * install, after the install wrote the shown Results: it writes `legend` by
+ * the rule of `resultSetInventory`. The Legend owner calls it after a switch
+ * and a Load (`adoptShownSetInventory`); the config service calls it for the
+ * set a Load, its rollback and a History step restore.
+ * @param {ShownSetLegendRefs} refs
+ * @param {ShownSetLegend} legend
+ */
+export const installShownSetLegend = (refs, { originalOrder, originalColors }) => {
+  refs.originalLegendColors.value = originalColors;
+  refs.originalLegendOrder.value = resultSetInventory(refs.results.value, originalOrder);
+};
+
+/**
  * A slot of `drawing`'s artifact; a value it is not given is the empty
  * slot's for the drawing's mode.
  * @param {{ drawing: DrawingIdentity, values: ArtifactSlot['values'], legendInventory?: ArtifactSlot['legendInventory'],

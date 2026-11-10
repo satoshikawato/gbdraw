@@ -246,6 +246,41 @@ console.log('History restores nullable config values and preserves key guards.')
   console.log('History and Session rollback keep the admitted feature catalog by reference.');
 }
 
+// OV-3282: a restore installs the generated Legend inventory by the rule of a
+// Result set: a step taken while no Result was shown restores no inventory,
+// whatever it captured, and its colors as captured.
+{
+  const { buildEditorStateData, applyEditorStateData } = await import('../../gbdraw/web/js/services/config.js');
+  installShownDrawing('circular');
+  state.results.value = [];
+  state.originalLegendOrder.value = ['CDS', 'repeat_region'];
+  state.originalLegendColors.value = { CDS: '#112233' };
+  const inventorySnapshots = createHistorySnapshotService({
+    state, fileStore: createInputFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData,
+    buildEditorStateData, applyEditorStateData
+  });
+  const inventoryHistory = createHistoryManager({
+    ...inventorySnapshots.drawingHistory(state.activeDrawing().id),
+    signatureFor: inventorySnapshots.snapshotSignature
+  });
+  await inventoryHistory.captureBaseline();
+  await inventoryHistory.runUndoableCheckpoint('Change legend', () => {
+    state.activeDrawing().legendEntries.value = [{ caption: 'OV-3282', color: '#123456' }];
+  });
+  await inventoryHistory.undo();
+  assert.deepEqual(state.originalLegendOrder.value, [], 'a step without a Result restores no inventory');
+  assert.deepEqual(state.originalLegendColors.value, { CDS: '#112233' }, 'the restore installs the captured colors');
+
+  state.results.value = [{ name: 'diagram.svg', content: '<svg />' }];
+  applyEditorStateData(state.activeDrawing(), { legend: { originalOrder: ['CDS'], originalColors: {} } });
+  assert.deepEqual(state.originalLegendOrder.value, ['CDS'], 'a restore with a Result installs its inventory');
+  state.results.value = [];
+  state.originalLegendOrder.value = [];
+  state.originalLegendColors.value = {};
+  state.activeDrawing().legendEntries.value = [];
+  console.log('A restore installs no Legend inventory for a step without a Result.');
+}
+
 // F-1 (G-H, R11): an Undo or Redo installs the captured state exactly. Unset
 // slot sides, the Features lane direction, both axis indexes, and the Circular
 // multi-record layout stay unset, and the Result's named stroke color stays
