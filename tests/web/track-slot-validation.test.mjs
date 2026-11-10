@@ -1005,8 +1005,8 @@ test('a stack without an Axis index places each row on its own side in both mode
     { axisIndex: 0, ids: ['features', 'gc', 'skew'] });
   assert.deepEqual(circular([row('features', 'features'), row('gc', 'dinucleotide_content')], 'spreadout'),
     { axisIndex: 1, ids: ['features', 'gc'] });
-  // The row on the Axis follows the rows outside. Python lists the Legend entries of Annotations rows in the stack's
-  // order, so an Overlay set row stays before an Annotations row written after it.
+  // The row on the Axis follows the rows outside. Region labels keep off the labels of the slots before theirs,
+  // so an Overlay set row stays before an Annotations row written after it.
   assert.deepEqual(circular([
     row('gc', 'dinucleotide_content'), row('hl', 'annotations', 'overlay', { set_id: 'r', anchor_slot: 'features' }),
     row('features', 'features'), row('regions', 'annotations', 'outside', { set_id: 'r' })
@@ -1020,8 +1020,8 @@ test('a stack without an Axis index places each row on its own side in both mode
   assert.deepEqual(circular([row('regions', 'annotations', null, { set_id: 'r' }), highlight, row('features', 'features')], 'tuckin'),
     { axisIndex: 2, ids: ['regions', 'hl', 'features'] });
   // Python paints an overlay on its layer's side of every row of its z (`slots_in_paint_order`), so of the paint only
-  // the overlays' own order is left; the Legend lists Annotations rows in the stack's order, so an overlay also keeps
-  // its order against the other Annotations rows (OV-3184, OV-3185).
+  // the overlays' own order is left; region labels read the order of Annotations rows, so an overlay also
+  // keeps its order against the other Annotations rows (OV-3184, OV-3185).
   const overlay = (id, z = 1, toSlot = null) => ({
     ...row(id, 'annotations', 'overlay', { set_id: id, anchor_slot: 'features', ...(toSlot ? { to_slot: toSlot } : {}) }), z
   });
@@ -1047,7 +1047,7 @@ test('a stack without an Axis index places each row on its own side in both mode
     { axisIndex: 2, ids: ['regions', 'up', 'features', 'gc'] });
   assert.deepEqual(linear(['gc:content', 'features:features@side=overlay', 'regions:annotations@set_id=r,side=above']),
     { axisIndex: 1, ids: ['regions', 'features', 'gc'] });
-  // An Annotations row written before an overlay stays before it in the Legend (`b` below, then the span `a`).
+  // An Annotations row written before an overlay stays before it (`b` below, then the span `a`).
   assert.deepEqual(linear(['features:features', 'b:annotations@set_id=b,side=below,z=1',
     'a:annotations@set_id=a,side=overlay,anchor_slot=features,to_slot=sk,z=1', 'up:skew@side=above', 'sk:skew@side=below']),
   { axisIndex: 1, ids: ['up', 'features', 'b', 'a', 'sk'] });

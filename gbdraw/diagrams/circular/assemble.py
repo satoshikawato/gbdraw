@@ -4119,13 +4119,15 @@ def _circular_legend_slots(
     if slots is not None or not depth_tracks:
         return slots
     return legend_slot_sources(
-        default_circular_track_slots(
-            show_ticks=False,
-            show_depth=True,
-            depth_track_count=max(int(track.track_index) for track in depth_tracks) + 1,
-            show_gc=show_gc,
-            show_skew=show_skew,
-            dinucleotide=str(gc.dinucleotide),
+        normalize_circular_track_slots(
+            default_circular_track_slots(
+                show_ticks=False,
+                show_depth=True,
+                depth_track_count=max(int(track.track_index) for track in depth_tracks) + 1,
+                show_gc=show_gc,
+                show_skew=show_skew,
+                dinucleotide=str(gc.dinucleotide),
+            )
         )
     )
 
@@ -4195,6 +4197,15 @@ def build_circular_legend_table(
     return apply_legend_row_edits(legend_table, edits)
 
 
+def circular_legend_slot_sources(
+    slots: Sequence[CircularTrackSlot] | None, axis_index: int | None
+) -> tuple[LegendSlotSource, ...] | None:
+    """The slot list after annotation planning, in the Legend's order: normalized with its Axis index, so each slot
+    has the side it is drawn on (``legend_slot_sources``)."""
+
+    return legend_slot_sources(normalize_circular_track_slots_with_axis(slots, axis_index)) if slots is not None else None
+
+
 def circular_legend_table(
     records: Sequence[SeqRecord],
     sources: LegendSources,
@@ -4204,15 +4215,14 @@ def circular_legend_table(
     depth_df: DataFrame | None,
     depth_tracks: Sequence[DepthTrackData] | None,
     depth_track_count_value: int,
-    circular_track_slots: list[CircularTrackSlot] | None,
+    slots: tuple[LegendSlotSource, ...] | None,
     annotations: ResolvedAnnotationBundle | None,
     conservation_legend: Sequence[ConservationLegendSource],
     conservation_min_identity: float,
 ) -> LegendTable:
     """Call the ``legend_table`` stage with the legend-only parts of the drawing settings.
 
-    ``circular_track_slots`` is the slot list after annotation planning;
-    annotation rows read it normalized.
+    ``slots`` are the drawing's slots in the Legend's order (``circular_legend_slot_sources``).
     """
 
     conservation = profile.config.objects.conservation
@@ -4228,12 +4238,8 @@ def circular_legend_table(
         has_depth_frame=depth_df is not None,
         depth_tracks=depth_legend_sources(depth_tracks) if depth_tracks is not None else None,
         depth_track_count_value=depth_track_count_value,
-        slots=legend_slot_sources(circular_track_slots),
-        annotation_slots=(
-            legend_slot_sources(normalize_circular_track_slots(circular_track_slots))
-            if circular_track_slots is not None and annotations is not None
-            else None
-        ),
+        slots=slots,
+        annotation_slots=slots if annotations is not None else None,
         annotations=annotations,
         conservation_legend=tuple(conservation_legend),
         conservation_colors=(conservation.min_color, conservation.max_color),
@@ -4303,7 +4309,7 @@ def _assemble_circular_record(
             depth_df=record.depth_df,
             depth_tracks=record.depth_tracks,
             depth_track_count_value=resolved_depth_track_count,
-            circular_track_slots=planned.slots,
+            slots=circular_legend_slot_sources(planned.slots, planned.circular_track_axis_index),
             annotations=planned.annotations,
             conservation_legend=conservation_legend_sources(record.conservation_tracks),
             conservation_min_identity=record.conservation_min_identity,
@@ -4334,6 +4340,7 @@ __all__ = [
     "CircularAssemblyResult",
     "add_record_on_circular_canvas",
     "build_circular_legend_table",
+    "circular_legend_slot_sources",
     "kept_annotation_measures",
     "plan_circular_annotation_slots",
 ]

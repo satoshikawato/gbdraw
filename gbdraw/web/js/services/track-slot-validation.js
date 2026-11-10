@@ -399,9 +399,9 @@ const missingAnnotationTrackSlots = (rows, sets, mode, slotFields = {}) => {
  * The gap of each Overlay set row among the side-ordered rows: gap g puts it before `fixed[g]`, gap `fixed.length` at
  * the end. Python paints the rows of one z as underlay overlays, then the other rows, then foreground overlays, and
  * keeps the request's order only within each of those (`slots_in_paint_order`), so the overlays keep their order.
- * Python also reads the order of Annotations rows in the stack, overlays included, in two places: the Legend entries,
- * and Circular region labels, which keep off the labels of earlier slots. So each
- * overlay takes, never before an earlier overlay, the gap that leaves the fewest other Annotations rows on the other
+ * Python also reads the order of Annotations rows in the stack, overlays included, in region labels, which keep off
+ * the labels of earlier slots (the Legend lists them by side, whatever the order: `legend_slot_sources`). So
+ * each overlay takes, never before an earlier overlay, the gap that leaves the fewest other Annotations rows on the other
  * side of it than in the request, and of those the one nearest its place before the row that followed it in the
  * request (the end when none did).
  * @param {readonly { readonly renderer?: unknown }[]} rows

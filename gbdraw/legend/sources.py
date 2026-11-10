@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -22,6 +22,7 @@ from gbdraw.features.colors import precompute_used_color_rules
 from gbdraw.tracks.parsing import SlotView, slot_skew_colors, slots_draw_features
 
 if TYPE_CHECKING:
+    from gbdraw.annotations.models import AnnotationTrackParams
     from gbdraw.analysis.depth_tracks import DepthTrackData
     from gbdraw.configurators import (
         BlastMatchConfigurator,
@@ -224,16 +225,45 @@ class LegendSlotSource:
         return True
 
 
-def legend_slot_sources(slots: Iterable[SlotView] | None) -> tuple[LegendSlotSource, ...] | None:
-    """The enabled slots in order; ``None`` (no slot list) stays ``None``."""
+class SidedSlotView(SlotView, Protocol):
+    """A normalized track slot, in either mode: its side and, for an annotation slot, its parsed params."""
+
+    @property
+    def side(self) -> str: ...
+
+    @property
+    def annotation(self) -> AnnotationTrackParams | None: ...
+
+
+# The rank of each side in the Legend: the outer side, the Axis, the inner side. A slot other than an annotation
+# overlay on side ``overlay`` lies on the Axis.
+_SIDE_RANKS = {"outside": 0, "above": 0, "overlay": 1, "inside": 2, "below": 2}
+
+
+def legend_slot_sources(slots: Iterable[SidedSlotView] | None) -> tuple[LegendSlotSource, ...] | None:
+    """The enabled slots in the order the Legend lists their entries; ``None`` (no slot list) stays ``None``.
+
+    The order is the order the rows lie in from the outer edge, in both modes: the outer side (outside, above), the
+    Axis, the inner side (inside, below), each in the written order. An annotation overlay comes right after its
+    anchor, and the overlays on one anchor in their written order. So the Legend reads the same order whatever the
+    order of the sides in the list, as the Web stack holds it (OV-3187).
+    """
 
     if slots is None:
         return None
-    return tuple(
-        LegendSlotSource(slot.id, slot.renderer, dict(slot.params))
-        for slot in slots
-        if slot.enabled
-    )
+    enabled = [slot for slot in slots if slot.enabled]
+    place = {slot.id: index for index, slot in enumerate(enabled)}
+
+    def row(slot: SidedSlotView) -> tuple[int, int]:
+        return _SIDE_RANKS[slot.side], place[slot.id]
+
+    def key(slot: SidedSlotView) -> tuple[int, int, int]:
+        anchor_id = slot.annotation.anchor_slot if slot.annotation is not None and slot.side == "overlay" else None
+        if anchor_id is None or anchor_id not in place:
+            return (*row(slot), -1)
+        return (*row(enabled[place[anchor_id]]), place[slot.id])
+
+    return tuple(LegendSlotSource(slot.id, slot.renderer, dict(slot.params)) for slot in sorted(enabled, key=key))
 
 
 __all__ = [
@@ -244,6 +274,7 @@ __all__ = [
     "LegendSlotSource",
     "LegendSources",
     "NumericLegendSource",
+    "SidedSlotView",
     "depth_legend_sources",
     "feature_legend_presence",
     "legend_slot_sources",

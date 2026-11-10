@@ -778,6 +778,14 @@ may also carry `fileName`, which is ignored; slot text lowercases keys, so
 an error that names the slot and the parameter; `anchor_slot` and `to_slot`
 belong to annotation slots only.
 
+The Legend lists the track rows of the slots, then their annotation rows, each
+in the order the slots lie from the outer edge: the slots `outside` the Axis, then the slots on it, then the slots
+`inside`, each side in the order the slots are written. An annotation slot with
+`side=overlay` is listed right after its `anchor_slot`, and the overlays on one
+anchor in their written order. So a stack lists the same Legend whatever the
+order of its sides in the list, and a Session it saves lists it so in the Web
+app too.
+
 Small label defects of horizontal Circular labels, up to 100 per record
 (overlaps, crossing leader lines, and inner labels over the definition text),
 are first repaired by moving outer and inner labels slightly.
@@ -1970,7 +1978,8 @@ For a Depth slot, `track_index` is the zero-based non-negative integer identity
 of a logical `--depth_track` series. Negative, fractional, nonnumeric, and
 globally out-of-range values are rejected. Slot order changes placement, not
 source binding. When a custom stack is active, enabled Depth slots are
-authoritative for the legend: entries follow slot order, `legend_label`
+authoritative for the legend: entries follow the slots' Legend order (the
+rows `above` the Axis, then on it, then `below`, as in Circular), `legend_label`
 overrides the series title, and series without an enabled slot are omitted.
 
 A `--linear_track_slot` takes only the parameters its renderer reads:
@@ -1984,7 +1993,11 @@ Sessions and Python slot objects may also carry `fileName`, which is ignored;
 slot text lowercases keys, so `fileName` cannot be given there. Any other parameter is an error that names the slot and the parameter;
 `anchor_slot` and `to_slot` belong to annotation slots only. Each enabled content and skew slot
 draws its own legend rows, named by its `legend_label` or else by its
-dinucleotide (for example `AT content`), as in Circular.
+dinucleotide (for example `AT content`), as in Circular. The Legend lists the
+content rows, then the Depth rows, then the skew rows, then the annotation
+rows; within each, the slots `above` the Axis come first, then the slots on it,
+then the slots `below`, each side in the order the slots are written, and an
+annotation slot with `side=overlay` right after its `anchor_slot`.
 
 An overlay annotation's `anchor_slot` and `to_slot` must each resolve to an
 enabled drawable, non-annotation slot in the complete stack. Unknown IDs,
