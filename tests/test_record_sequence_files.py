@@ -85,6 +85,22 @@ def test_records_read_through_a_link_keep_reading_after_the_link_goes(tmp_path: 
     assert str(records[0].seq) == _sequence(GENBANK)
 
 
+def test_a_holder_of_records_asks_whether_their_files_still_hold_their_bytes(tmp_path: Path) -> None:
+    """A file written again with the same bytes is a new file to the records: the holder parses it again."""
+
+    path = tmp_path / "a.gb"
+    shutil.copy(GENBANK, path)
+    records = read_flat_file_records(str(path))
+    assert record_sequences.sequence_files_unchanged(records)
+    assert record_sequences.sequence_files_unchanged(gbdraw.api.load_gbks([str(path)]))  # in memory
+    data = path.read_bytes()
+    path.unlink()
+    path.write_bytes(data)
+    assert not record_sequences.sequence_files_unchanged(records)
+    path.unlink()
+    assert not record_sequences.sequence_files_unchanged(records)
+
+
 @pytest.mark.parametrize("change", ["same size", "shorter", "removed"])
 def test_a_file_that_changed_under_its_records_is_refused_by_name(change: str, tmp_path: Path) -> None:
     path = tmp_path / "a.gb"

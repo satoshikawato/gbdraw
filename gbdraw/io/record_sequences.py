@@ -126,7 +126,10 @@ _Stamp = tuple[int, int, int]
 
 
 def _stamp(handle: IO[bytes]) -> _Stamp:
-    status = os.fstat(handle.fileno())
+    return _stamp_of(os.fstat(handle.fileno()))
+
+
+def _stamp_of(status: os.stat_result) -> _Stamp:
     return status.st_size, status.st_mtime_ns, status.st_ino
 
 
@@ -273,6 +276,14 @@ class _SequenceFile:
         """``size`` bytes from ``offset``, all within the file as it was indexed."""
 
         return _OPEN.read(self, offset, size)
+
+    def unchanged(self) -> bool:
+        """Whether the file still holds the bytes the parse pass indexed (one stat, no read)."""
+
+        try:
+            return _stamp_of(os.stat(self.path)) == self.stamp
+        except OSError:
+            return False
 
     def changed(self) -> InputFileError:
         return InputFileError(
@@ -972,6 +983,29 @@ def detached_records(records: Iterable[SeqRecord]) -> list[SeqRecord]:
     return detached
 
 
+def sequence_files_unchanged(records: Iterable[SeqRecord]) -> bool:
+    """Whether every file the records' sequences read still holds the bytes it held when they were read.
+
+    One stat per distinct file and no read: a holder of records kept across
+    requests (the prepared input cache) asks before it reuses them, and builds
+    them again from the file when a file was removed or written again.
+    Records that hold their sequence in memory read no file.
+    """
+
+    checked: set[int] = set()
+    for record in records:
+        data = getattr(record.seq, "_data", None)
+        if not isinstance(data, RecordSequence):
+            continue
+        source = data._table.source
+        if source.key in checked:
+            continue
+        if not source.unchanged():
+            return False
+        checked.add(source.key)
+    return True
+
+
 def read_gff3_text(path: str | PathLike[str], read: Callable[[Iterator[str]], _Read]) -> _Read:
     """What ``read`` makes of a GFF3 file's lines; its ``##FASTA`` part keeps only its header lines.
 
@@ -989,4 +1023,5 @@ __all__ = [
     "read_fasta_records",
     "read_flat_records",
     "read_gff3_text",
+    "sequence_files_unchanged",
 ]
