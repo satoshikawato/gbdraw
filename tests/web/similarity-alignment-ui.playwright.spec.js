@@ -103,13 +103,13 @@ const figureFit = (page) => page.evaluate(() => {
       && figure.top >= frame.top && figure.bottom <= frame.bottom
   };
 });
-// A change of the canvas size has reached its observers once two frames have been drawn.
 // A Load leaves the Editor closed: a step that starts after another step closes it the same way.
 const closeEditor = async (page) => {
   if (await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
   await expect.poll(async () => (await editorDrawer(page)).open, { message: 'the Editor is closed, as after a Load' })
     .toBe(false);
 };
+// A change of the canvas size has reached its observers once two frames have been drawn.
 const roomSettled = (page) => evaluateWithRetainedPromise(page, () => new Promise((resolve) => {
   requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
 }));
@@ -3358,7 +3358,7 @@ test('live settings before and under an open review are drawn by Apply and keep 
   // OV-1082: a live setting change redraws the Result of the same records (PD-OI-102). The review
   // still shows its draft on it: the rings are drawn again, the figure follows the room, and the
   // end (Cancel, Apply) gives back the view and the Editor. Apply draws the change (OV-1083).
-  await test.step('a live setting change under an open review keeps its rings, its fit and the view it gives back (OV-1082, PD-OI-102)', async () => {
+  await test.step('a live setting change under an open review keeps its rings, its fit and the view it gives back (OV-1082, OV-1083, PD-OI-102)', async () => {
     const { before, dialog } = await reviewOverOwnView(page);
     const rings = page.locator('button.gbdraw-alignment-ring');
     const ringCount = await rings.count();
