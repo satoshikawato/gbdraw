@@ -379,6 +379,9 @@ test('v2 trigger sites count calls of a producer port in the module that receive
     'runDrawn@10 via app/feature-editor.js:createSvgOwner.runWithDrawn'
   ]);
   assert.equal(detector.encodeSubject({ producer: 'rulePreparation', path: 'app/svg-owner.js' }), 'rulePreparation|app/svg-owner.js');
+  // The summary counts what the baseline counts (v2), so a call moved into a port is not reported as removed.
+  const summary = summarizeWebOwnerGraph(detectWebOwnerGraph(PORT_SOURCES, PORT_REGISTRY));
+  assert.deepEqual([summary.triggerSites, summary.triggerModules], [3, 1]);
   // Not sites: the default parameter (`runWithDrawn = (commit) => commit()`),
   // the binding itself, `notifyChanges` and `isPrepared` (not run methods), a
   // port the module only hands on (`other-owner.js`), a factory that is not in
