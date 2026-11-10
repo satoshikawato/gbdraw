@@ -83,8 +83,8 @@ const PAINT_ROUTES = new Set([
   // edit's step: track data that no longer names a caption (OV-87), and Delete
   // settings of OFF records, which no Result draws.
   'retire',
-  // The Legend name input shows its row's name again after a refused or
-  // cancelled rename: a copy of the list with the same rows, outside a step.
+  // The Legend name input shows its row's name again after a cancelled
+  // rename: a copy of the list with the same rows, outside a step.
   'redisplay',
   // Undo and Redo install a captured step (R11).
   'history',
