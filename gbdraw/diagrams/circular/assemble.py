@@ -3991,9 +3991,8 @@ def add_record_on_circular_canvas(
     inputs: the slots, the annotations, the axis index and the record's index
     on its canvas. The requested slots are not passed.
 
-    With ``one_circle`` the circle draws several records one after another (``record`` is the first): each
-    record's features, ticks and tracks are drawn on its own arc, the labels are placed once round the circle (from
-    each record's own features and display parts), and the centre definition speaks for the circle. A single record is the one-record case of the same steps.
+    With ``one_circle`` several records share the circle (``record`` is the first): each record's features, ticks and tracks are drawn on its own
+    arc, labels are placed once round the circle, and the centre definition speaks for the circle. One record is the one-record case of these steps.
     """
     annotation_track_layouts = planned.annotation_track_layouts
     primary_target_start = len(getattr(canvas, "elements", []))
