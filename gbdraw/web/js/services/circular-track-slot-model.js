@@ -814,7 +814,7 @@ export const createDefaultCircularTrackSlots = ({
  * @param {string} track
  * @returns {CircularTrackSlot}
  */
-export const circularFeatureDensitySlot = (track) => makeSlot({
+const circularFeatureDensitySlot = (track) => makeSlot({
   id: featureDensitySlotId(track), renderer: 'feature_density', params: { track }
 });
 

@@ -49,6 +49,7 @@ const circularState = (slots, { showDepth = false, depthFiles = [] } = {}) => wi
     features: ['CDS'],
     feature_shapes: { CDS: 'arrow' },
     depth_tracks: [],
+    feature_density_tracks: [],
     feature_width_circular: null,
     depth_width_circular: null,
     gc_content_width_circular: null,
@@ -70,6 +71,7 @@ const linearState = (slots, { showDepth = false, depthFiles = [] } = {}) => with
     linear_track_slots_axis_index: 0,
     linear_track_slots: structuredClone(slots),
     depth_tracks: [],
+    feature_density_tracks: [],
     depth_height: null,
     gc_height: null
   },
@@ -1328,5 +1330,28 @@ test('a row changed from or to Feature density drops or picks its track, in both
     assert.equal(slots()[2].params.track, 'genes', `${mode}: spacer -> density picks the first undrawn track`);
     setRenderer(slots()[1], 'feature_density');
     assert.equal(slots()[1].params.track, 'ltr', `${mode}: the next one picks the next undrawn track`);
+  }
+});
+
+// #1836 review r1 finding 4: Use custom stack builds a stack no Session saved (the mode's stack of an empty list) from
+// the simple controls, with a row per feature density track; it adds no row to a stack the user changed, so density
+// rows the user deleted do not come back (as PD-OI-058 decides for Depth rows).
+test('Use custom stack adds feature density rows only to the stack no Session saved, in both modes', () => {
+  for (const [mode, open] of Object.entries(MODES)) {
+    const row = mode === 'circular' ? circularRow : linearRow;
+    const own = [row('features', 'features', {}, mode === 'circular' ? 'inside' : 'overlay'), row('sp', 'spacer')];
+    const edited = open(own);
+    edited.state.adv.feature_density_tracks = [{ id: 'genes' }];
+    edited.turnOn(false);
+    edited.turnOn(true);
+    assert.deepEqual(edited.slots().map(({ id }) => id), ['features', 'sp'], `${mode}: a stack the user changed keeps its rows`);
+
+    const unsaved = open([]);
+    unsaved.state.adv.feature_density_tracks = [{ id: 'genes' }];
+    unsaved.editor[mode === 'circular' ? 'normalizeCircularTrackSlots' : 'normalizeLinearTrackSlots'](unsaved.state.activeDrawing());
+    unsaved.turnOn(false);
+    unsaved.turnOn(true);
+    const ids = unsaved.slots().map(({ id }) => id);
+    assert.equal(ids[ids.indexOf('features') + 1], 'density_genes', `${mode}: ${JSON.stringify(ids)}`);
   }
 });

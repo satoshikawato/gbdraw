@@ -47,11 +47,11 @@ export const projectFeatureDensityTracks = (requested) => cloneJsonData([...(req
 /**
  * The request's `featureDensityTracks` of a draft: the key only when the drawing has tracks, so the request of a
  * drawing without them is the request it was before the tracks existed. A drawing's draft always holds the list
- * (`createDefaultAdv`); a draft object built without it, as the request tests build theirs, has no tracks.
- * @param {{ feature_density_tracks?: readonly CanonicalFeatureDensityTrack[] }} adv
+ * (`createDefaultAdv`).
+ * @param {{ feature_density_tracks: readonly CanonicalFeatureDensityTrack[] }} adv
  * @returns {{ featureDensityTracks?: CanonicalFeatureDensityTrack[] }}
  */
-export const requestFeatureDensityTracks = ({ feature_density_tracks: tracks = [] }) => (
+export const requestFeatureDensityTracks = ({ feature_density_tracks: tracks }) => (
   tracks.length > 0 ? { featureDensityTracks: cloneJsonData([...tracks]) } : {}
 );
 
@@ -73,12 +73,11 @@ export const normalizeFeatureDensitySlotParams = (params) => {
 };
 
 /**
- * The ids of a draft's tracks, in order. A draft object built without the list, as the request tests build theirs,
- * has no tracks (`requestFeatureDensityTracks`).
- * @param {{ feature_density_tracks?: readonly CanonicalFeatureDensityTrack[] }} adv
+ * The ids of a draft's tracks, in order.
+ * @param {{ feature_density_tracks: readonly CanonicalFeatureDensityTrack[] }} adv
  * @returns {string[]}
  */
-export const featureDensityTrackIds = ({ feature_density_tracks: tracks = [] }) => tracks.map(({ id }) => id);
+export const featureDensityTrackIds = ({ feature_density_tracks: tracks }) => tracks.map(({ id }) => id);
 
 /**
  * The track a new `feature_density` row draws: the first of the drawing's tracks no enabled row draws yet, else the

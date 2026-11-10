@@ -1334,6 +1334,23 @@ export const paramsKeptOnRendererChange = (params, renderer) => Object.fromEntri
 );
 
 /**
+ * Whether a stored stack is the one the Web makes when a Session saved none (`fallback`, the mode's normalizer of an
+ * empty stack): row for row the same ids, renderers, switches, sides and params. Use custom stack builds such a stack
+ * again from the simple controls, with the feature density rows; it adds no row to any other stored stack, so rows a
+ * user deleted or turned off do not come back (as PD-OI-058 decides for Depth rows).
+ * @typedef {{ id: string, renderer: string, enabled?: boolean, side?: string | null, params?: Record<string, unknown> }} StoredStackRow
+ */
+/**
+ * @param {readonly StoredStackRow[]} rows
+ * @param {readonly StoredStackRow[]} fallback
+ * @returns {boolean}
+ */
+export const isUnsavedDefaultStack = (rows, fallback) => {
+  const key = (/** @type {readonly StoredStackRow[]} */ list) => JSON.stringify(list.map(({ id, renderer, enabled, side, params }) => [id, renderer, enabled, side, params]));
+  return key(rows) === key(fallback);
+};
+
+/**
  * The ID of a track slot or annotation set that Add creates, in both modes: the
  * default ID of its kind (a slot's renderer, `annotations` for a set) while
  * nothing uses it, then that ID numbered `_2`, `_3`, and so on, taking the

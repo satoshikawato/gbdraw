@@ -41,13 +41,15 @@ test('a feature density row keeps its renderer and its track id in both modes', 
   assert.deepEqual(buildLinearTrackSlotPayload(linear).params, { track: 'genes' });
 });
 
+// The renderer lists Load checks with (session-active-config-contract.js); tests/web/mode-scoped-session.test.mjs
+// loads such a Session end to end.
 test('a Load of a stack with feature density rows passes the binding check (OV-3173)', () => {
   for (const [mode, sides] of [['circular', ['inside', 'outside', 'overlay']], ['linear', ['above', 'below', 'overlay']]]) {
     assert.doesNotThrow(() => validateTrackSlotBindingInvariants([
       { id: 'features', renderer: 'features', enabled: true, side: 'overlay', z: 0, params: {} },
       { id: 'density_genes', renderer: 'feature_density', enabled: true, side: null, z: 0, params: { track: 'genes' } }
     ], {
-      modeLabel: mode, layoutKind: mode, supportedRenderers: MODE_PROFILE_DATA.modes[mode].trackRenderers,
+      modeLabel: mode, layoutKind: mode, supportedRenderers: mode === 'circular' ? CIRCULAR_TRACK_RENDERERS : LINEAR_TRACK_RENDERERS,
       supportedSides: sides, anchorlessRenderers: ['spacer'], depthTrackCount: 0
     }), mode);
   }

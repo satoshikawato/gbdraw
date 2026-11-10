@@ -677,6 +677,8 @@ test('Add track names the missing source of the chosen renderer (OV-1254)', () =
 // row, so the custom stack draws the tracks the simple stack drew.
 test('Use custom stack adds the feature density rows the simple stack drew (OV-3174)', () => {
   const state = createState();
+  // A stack no Session saved (review r1 finding 4: a stack the user changed gets no row).
+  state.adv.circular_track_slots = [];
   state.adv.circular_track_slots_enabled = false;
   state.adv.feature_density_tracks = [{ id: 'genes' }];
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });

@@ -156,8 +156,12 @@ feature density tracks of `--feature_density_track` and
 [CLI Reference](../CLI_Reference.md#--feature_density_table)); a request
 without it draws none. The Web app keeps a loaded Session's tracks in each
 drawing's `config.adv.feature_density_tracks`, draws them again at Generate,
-and saves them; it has no editor for them yet and shows how many the drawing
-has under the track switches.
+and saves them. Its track stacks take `feature_density` rows, each naming a
+track by id, and its Source recipe writes the tracks as
+`--feature_density_track` words. Use custom stack builds a stack that no
+Session saved with a row per track after the features row; it adds no row to
+a stack you changed. It has no editor for the tracks themselves yet and shows
+how many the drawing has under the track switches.
 
 The Python reader (`gbdraw ... --session` and the Python API) checks a
 schema-10 request against `describe_canonical_request()`: it refuses a key

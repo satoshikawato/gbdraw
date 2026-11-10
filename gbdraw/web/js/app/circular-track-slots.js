@@ -48,7 +48,7 @@ import {
 } from '../services/circular-track-slot-model.js';
 import { listText, msg, t, tm, tn } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
-import { featureDensityTrackIds, insertFeatureDensitySlots, nextFeatureDensitySlotTrack } from '../services/feature-density-tracks.js';
+import { featureDensityTrackIds, nextFeatureDensitySlotTrack } from '../services/feature-density-tracks.js';
 import {
   OVERLAY_ANNOTATION_PARAMS,
   annotationSetForNewRow,
@@ -57,6 +57,7 @@ import {
   nextCopyId,
   nextNumberedId,
   overlayAnnotationZ,
+  isUnsavedDefaultStack,
   paramsKeptOnRendererChange,
   parseOptionalCircularScalar,
   parseOptionalPixel,
@@ -70,7 +71,6 @@ import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
   cloneParams,
-  circularFeatureDensitySlot,
   createDefaultCircularTrackSlots,
   DEFAULT_SLOT_IDS,
   DEFAULT_TICK_LABEL_LAYOUT,
@@ -1154,15 +1154,15 @@ export const createCircularTrackSlotEditor = ({
     if (sessionBusy) return sessionBusy;
     drawing.adv.circular_track_slots_enabled = Boolean(enabled);
     if (!drawing.adv.circular_track_slots_enabled) return;
-    if (!Array.isArray(drawing.adv.circular_track_slots) || drawing.adv.circular_track_slots.length === 0) {
+    const rows = drawing.adv.circular_track_slots;
+    if (!Array.isArray(rows) || rows.length === 0
+      || isUnsavedDefaultStack(rows, normalizeCircularTrackSlots([], drawing.adv.nt, drawing.form.track_type))) {
+      // A stack no Session saved is built from the simple controls, with the feature density rows (OV-3174).
       resetSlotsToPreset(drawing, drawing.form.track_type);
     } else {
-      // The stack it turns on holds the managed comparison ring rows, feature density rows when it draws none
-      // (OV-3174), and the rows of the Region Annotation sets it does not name (D-35).
+      // The stack it turns on holds the managed comparison ring rows and the rows of the Region Annotation sets it
+      // does not name (D-35).
       syncConservationSlots(drawing);
-      const rows = drawing.adv.circular_track_slots;
-      drawing.adv.circular_track_slots_axis_index = insertFeatureDensitySlots(rows, axisIndexForCurrentSlots(drawing, rows),
-        featureDensityTrackIds(drawing.adv), circularFeatureDensitySlot);
       drawing.adv.circular_track_slots_axis_index = prependMissingAnnotationTrackSlots(rows, axisIndexForCurrentSlots(drawing, rows),
         drawing.annotationSets, 'circular', (added) => normalizeCircularTrackSlots(added, drawing.adv.nt, drawing.form.track_type), CIRCULAR_SLOT_SIZE_FIELDS);
     }
