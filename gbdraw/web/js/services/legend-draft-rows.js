@@ -11,7 +11,6 @@ import {
 } from './legend-svg.js';
 import { ruleLegendCaptions } from './specific-color-rules.js';
 import { refitFieldsBeforeStep } from './setting-application.js';
-import { legendEntryKey } from './drawing/paint.js';
 /** @import { PythonLegendKey } from './legend-svg.js' */
 /** @import { SpecificColorRule } from './specific-color-rules.js' */
 /** @import { CanvasPadding } from './drawing/canvas.js' */
@@ -48,6 +47,9 @@ const text = (value) => String(value ?? '').trim();
 // a restore that brings the old key back (Undo, Load) finds the row's id again. An id belongs to the key it was last
 // moved to while that key is listed. Never the row's caption, which a rename writes, or its place, which a rename
 // can change. Not saved: a Session and a History step name rows by their keys.
+// The Legend list reads `legendRowIds` in a computed (app/legend.js), so these maps are written inside it. The writes
+// are deterministic: the maps are not reactive (no dependency, no new run), and a new id a read gives a key is that
+// key's id from then on, so reading the same keys again gives the same ids.
 /** @type {Map<PythonLegendKey, LegendRowId>} */
 const rowIdOfKey = new Map();
 /** @type {Map<LegendRowId, PythonLegendKey>} The key each id belongs to. */
@@ -64,13 +66,13 @@ const giveRowId = (key, id) => {
 const newRowId = (key) => giveRowId(key, /** @type {LegendRowId} */ (`legend-row-${++rowIdCount}`));
 
 /**
- * The ids of a Legend list's rows, in its order. A key whose id belongs to another listed key gets a new id; a
- * second row of one key (no writer lists one) gets its first row's id with its count.
- * @param {readonly { readonly caption?: unknown, readonly originalCaption?: unknown }[]} rows
+ * The ids of a Legend list's rows, given their keys (`legendEntryKey`) in the list's order. A key whose id belongs
+ * to another listed key gets a new id; a second row of one key (no writer lists one) gets its first row's id with
+ * its count.
+ * @param {readonly PythonLegendKey[]} keys
  * @returns {LegendRowId[]}
  */
-export const legendRowIds = (rows) => {
-  const keys = rows.map(legendEntryKey);
+export const legendRowIds = (keys) => {
   const listed = new Set(keys);
   /** @type {Map<LegendRowId, number>} */
   const seen = new Map();

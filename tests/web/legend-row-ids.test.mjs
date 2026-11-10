@@ -5,7 +5,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const { legendRowIds, rekeyLegendRowIds } = await import('../../gbdraw/web/js/services/legend-draft-rows.js');
+const { legendRowIds: legendRowIdsOfKeys, rekeyLegendRowIds } = await import('../../gbdraw/web/js/services/legend-draft-rows.js');
+const { legendEntryKey } = await import('../../gbdraw/web/js/services/drawing/paint.js');
+
+/** The ids of a list's rows, read as the Legend list reads them: by the rows' keys. */
+const legendRowIds = (rows) => legendRowIdsOfKeys(rows.map(legendEntryKey));
 
 const row = (key, caption = key) => ({ caption, originalCaption: key, color: '#cccccc', xPos: 0, yPos: 0, featureIds: [] });
 // A copy of a list as a Session Load or a History restore installs it: new row objects of the same keys.

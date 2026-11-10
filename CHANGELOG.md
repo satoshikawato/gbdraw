@@ -515,7 +515,8 @@ write-up of a release.
   "Stroke options for AT skew (+)" instead of the renamed row's). The focus
   now stays on the renamed row's control. A row the list moves while you type
   its name keeps the typed name and the focus, instead of showing another
-  row's name (OV-3070).
+  row's name (OV-3070). A row removed while you type its name no longer gives
+  the typed name to the row that takes its place (OV-3255).
 - Fixed (Web app): an Undo could show a figure that did not match its
   settings. After a label or visibility edit that only a redraw can show (for
   example Feature visibility On for a feature the figure did not draw), a step

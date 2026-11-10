@@ -3130,8 +3130,10 @@ test('A renamed color rule row of the Legend list keeps the focus Tab moved to i
   }), 'focus stays on the renamed row\'s own Stroke options').toBe('Stroke options for Cytochromes');
 });
 
-// A row the Legend list moves while its name is being typed keeps the typed name and the focus (OV-3070): the move
-// neither commits the name nor shows another row's name in the field, and Tab then renames that row.
+// A row the Legend list moves while its name is being typed keeps the typed name and the focus (OV-3070): the move,
+// here the grip's drop ("Move legend item"), neither commits the name nor shows another row's name in the field. Tab
+// then renames that row once, in a step of its own. History joins an action without an owner, such as the drop, to
+// the step that is open, which is the name field's, so the move is that step and Undo takes the rename back first.
 test('A Legend name typed while the list moves its row keeps the typed name and the focus', async ({ page }) => {
   test.setTimeout(300000);
   await loadCircularSession(page);
@@ -3145,7 +3147,12 @@ test('A Legend name typed while the list moves its row keeps the typed name and 
   await name.evaluate((field) => { field.__typedRow = true; });
   await name.selectText();
   await name.pressSequentially('Coding');
-  await page.evaluate(([at, place]) => window.__GBDRAW_APP__.moveLegendEntry(at, place), [from, to]);
+  // The grip's drop, called without a pointer so that the field keeps the focus.
+  await page.evaluate(([at, place]) => {
+    const app = window.__GBDRAW_APP__;
+    app.legendReorder.from = at;
+    app.dropLegendReorder(new DragEvent('drop', { cancelable: true }), place);
+  }, [from, to]);
   await expect.poll(async () => (await legendNamesAndUndoCount(page)).names[to]).toBe('CDS');
   expect(await page.evaluate(() => document.activeElement?.__typedRow === true), 'the typed field keeps the focus').toBe(true);
   const field = page.locator('[data-legend-drawer-row]').nth(to).getByRole('textbox');
@@ -3153,6 +3160,95 @@ test('A Legend name typed while the list moves its row keeps the typed name and 
   expect(await field.evaluate((input) => input.__changes), 'the move committed nothing').toEqual([]);
   await field.press('Tab');
   await expect.poll(async () => (await legendNamesAndUndoCount(page)).names[to], { timeout: 60000 }).toBe('Coding');
+  expect(await field.evaluate((input) => input.__changes), 'one commit of the typed name').toEqual(['Coding']);
+  // The Undo list, newest first: the rename, then the step that holds the move.
+  const newSteps = () => page.evaluate((count) => {
+    const undo = window.__GBDRAW_HISTORY__.timeline().undo;
+    return undo.slice(0, undo.length - count).map((step) => step.label);
+  }, before.undoCount);
+  await expect.poll(newSteps).toHaveLength(2);
+  expect((await newSteps())[0]).toBe('Rename legend item');
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await expect.poll(async () => (await legendNamesAndUndoCount(page)).names[to], 'Undo takes the rename back').toBe('CDS');
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await expect.poll(async () => (await legendNamesAndUndoCount(page)).names, 'and then the move').toEqual(before.names);
+});
+
+// The Legend list's focus hold (app/list-focus.js) on a keyed list of its own. When the focus does not come back to
+// the held field after the render, because a dialog the render mounts took it, the field's edit ends then: its held
+// `change` commits the typed name to its own row, and its `focusout` reaches the page, where History ends the field's
+// step. A row the render removes takes its typed name with it (OV-3255): nothing is committed, neither into it nor
+// into the row that takes its place, and no listener is left on its field.
+const LIST_FOCUS_PAGE = `<!doctype html><html><body>
+<div id="app">
+  <div v-if="dialog" v-takes-focus><button id="dialog-button">OK</button></div>
+  <div v-keeps-list-focus>
+    <div v-for="(row, idx) in rows" :key="row.id">
+      <input :aria-label="'name ' + row.id" v-committed-value="row.name" @change="commit(idx, $event.target.value)">
+    </div>
+  </div>
+  <button id="outside">outside</button>
+</div>
+<script src="./vendor/vue/vue.global.prod.js"></script>
+<script type="module">
+import { keepsListFocus } from './js/app/list-focus.js';
+import { committedValue } from './js/app/committed-value.js';
+const state = window.S = Vue.reactive({ rows: [{ id: 'a', name: 'Alpha' }, { id: 'b', name: 'Beta' }], dialog: false });
+window.commits = [];
+window.focusouts = [];
+// A commit by the row's place, as the Legend list's rename makes it.
+const commit = (idx, value) => {
+  const row = state.rows[idx];
+  window.commits.push([row ? row.id : null, value]);
+  if (row) row.name = value;
+};
+const app = Vue.createApp({ setup: () => ({ ...Vue.toRefs(state), commit }) });
+app.directive('keeps-list-focus', keepsListFocus);
+app.directive('committed-value', committedValue);
+app.directive('takes-focus', { mounted: (element) => element.querySelector('button').focus() });
+app.mount('#app');
+document.getElementById('app').addEventListener('focusout', (event) => window.focusouts.push(event.target.getAttribute('aria-label')));
+window.ready = true;
+</script></body></html>`;
+
+test('A Legend list field ends its edit when a dialog takes its focus, and commits nothing when its row leaves', async ({ page }) => {
+  await page.route('**/gbdraw/web/list-focus-test.html', (route) => route.fulfill({ contentType: 'text/html', body: LIST_FOCUS_PAGE }));
+  const open = async () => {
+    await page.goto('/gbdraw/web/list-focus-test.html');
+    await page.waitForFunction(() => window.ready === true);
+  };
+  const typeX = async () => {
+    const field = page.getByLabel('name a', { exact: true });
+    await field.click();
+    await field.press('End');
+    await field.pressSequentially('X');
+  };
+
+  await open();
+  await typeX();
+  await page.evaluate(() => { window.S.dialog = true; });
+  await expect.poll(() => page.evaluate(() => window.commits), 'the typed name commits to its row').toEqual([['a', 'AlphaX']]);
+  expect(await page.evaluate(() => [document.activeElement.id, window.focusouts])).toEqual(['dialog-button', ['name a']]);
+
+  // The row leaves the list, at once or after a move that left its typed name owed.
+  for (const moveFirst of [false, true]) {
+    await open();
+    await typeX();
+    if (moveFirst) {
+      await page.evaluate(() => { window.S.rows.reverse(); });
+      await expect(page.getByLabel('name a', { exact: true })).toBeFocused();
+    }
+    await page.evaluate(() => {
+      window.removed = document.activeElement;
+      window.S.rows.splice(window.S.rows.findIndex((row) => row.id === 'a'), 1);
+    });
+    await expect(page.getByLabel('name a', { exact: true })).toHaveCount(0);
+    await page.locator('#outside').click();
+    // A blur of the removed field, as a later one would come, finds no listener that commits.
+    await page.evaluate(() => window.removed.dispatchEvent(new FocusEvent('blur')));
+    expect(await page.evaluate(() => window.commits), `nothing is committed (moved first: ${moveFirst})`).toEqual([]);
+    await expect(page.getByLabel('name b', { exact: true })).toHaveValue('Beta');
+  }
 });
 
 // Display start commits after an await; an out-of-range start is refused with its error and the stored start shows.

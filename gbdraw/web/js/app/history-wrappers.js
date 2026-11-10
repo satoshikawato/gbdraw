@@ -23,7 +23,7 @@ import { msg } from '../utils/i18n.js';
 /** @import { EditableLabelEntry, LabelTableInput } from './feature-editor/label-actions.js' */
 /** @import { VisibilityScopeChoice, VisibilityTarget } from './feature-editor/visibility-actions.js' */
 
-const { computed, nextTick, reactive, ref } = window.Vue;
+const { computed, reactive, ref } = window.Vue;
 
 /**
  * History's undoable step: `fn` runs as one step under `label`; `joinsOpenStep` joins the step already open.
@@ -239,27 +239,23 @@ export const createLegendEditHistory = ({
   const handleLegendNameCommitWithHistory = undoableAction(msg('Rename legend item'), handleLegendNameCommit);
   const joinLegendGroupWithHistory = undoableAction(msg('Rename legend item'), joinLegendGroup);
   // The Legend tab's grip reorders a row by drag or by the Up and Down arrow
-  // keys; neither is a click, so each move records its own History step.
+  // keys; neither is a click, so each move records its own History step. The
+  // list keys its rows by identity and keeps the moved row's focus
+  // (`v-keeps-list-focus`, OV-3070), so the grip the keys moved stays focused.
   const moveLegendEntryWithHistory = undoableAction(msg('Move legend item'), moveLegendEntry);
   const legendReorder = reactive({ from: /** @type {number | null} */ (null), over: /** @type {number | null} */ (null) });
-  /** @param {number} from @param {number} to @param {boolean} [refocus] */
-  const reorderLegendEntry = (from, to, refocus = false) => {
+  /** @param {number} from @param {number} to */
+  const reorderLegendEntry = (from, to) => {
     const count = state.activeDrawing().legendEntries.value.length;
     if (from === to || to < 0 || to >= count) return;
     moveLegendEntryWithHistory(from, to);
-    if (refocus) {
-      nextTick(() => {
-        const handle = document.querySelector(`[data-legend-reorder-handle="${to}"]`);
-        if (handle instanceof HTMLElement) handle.focus();
-      });
-    }
   };
   /** @param {KeyboardEvent} event @param {number} index */
   const handleLegendReorderKey = (event, index) => {
     const step = event.key === 'ArrowUp' ? -1 : (event.key === 'ArrowDown' ? 1 : 0);
     if (!step) return;
     event.preventDefault();
-    reorderLegendEntry(index, index + step, true);
+    reorderLegendEntry(index, index + step);
   };
   /** @param {DragEvent} event @param {number} index */
   const startLegendReorder = (event, index) => {

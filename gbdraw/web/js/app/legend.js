@@ -85,8 +85,14 @@ export const createLegendManager = ({
 
   return {
     ...entryActions,
-    // The ids the Legend list keys the shown drawing's rows by (OV-3070), never their places.
-    legendRowIds: computed(() => legendRowIds(state.activeDrawing().legendEntries.value)),
+    // What the Legend list reads to name and key its rows, which the root hands to the template as it is.
+    legendListView: {
+      shownLegendName: entryActions.shownLegendName,
+      shownLegendEntryName: entryActions.shownLegendEntryName,
+      legendEntryMerged: entryActions.legendEntryMerged,
+      // The ids the list keys the shown drawing's rows by (OV-3070), never their places.
+      legendRowIds: computed(() => legendRowIds(state.activeDrawing().legendEntries.value.map(legendEntryKey)))
+    },
     // A row a rule draws, including its N-06 "<caption> [<hex>]" row, edits
     // that rule through the rule owner's port (R13); any other row is a
     // legend-only edit, which the root shows on the Result. A row that stands
