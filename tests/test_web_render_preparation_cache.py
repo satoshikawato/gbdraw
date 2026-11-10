@@ -54,6 +54,7 @@ from gbdraw.annotations import (
 from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.labels.fit import SEPARATE_FEATURES_PATH
 import gbdraw.api.prepared as prepared_module
+from gbdraw.io import record_sequences
 import gbdraw.api.request_render as request_render_module
 import gbdraw.web_support.request_render as web_request_render_module
 from gbdraw.api.request_render import normalize_request_records, plan_request
@@ -944,6 +945,54 @@ def test_each_drawing_keeps_the_prepared_inputs_of_its_last_request(tmp_path: Pa
     render(_document(second), 6, "linear", ())
     released = render(first_document, 7, "circular", ())
     assert released["parsedSourceParseCount"] == 1
+
+
+@pytest.mark.parametrize("kept_by", ["its drawing's last request", "another drawing", "a held file"])
+def test_an_entry_whose_input_file_was_written_again_is_parsed_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kept_by: str
+) -> None:
+    """Kept records read their sequences from the input file; a file written again under them is parsed again.
+
+    The Worker may release a token's cache file and stage the same bytes again
+    (a new file at the same path), and a long-lived caller may rewrite an input.
+    The cache owner then parses the input again instead of handing out records
+    whose file no longer holds the bytes they indexed (which a read refuses).
+    """
+
+    # Every read opens its file and no decoded block is kept: as after other inputs took their places.
+    monkeypatch.setattr(record_sequences, "_OPEN_FILES", 0)
+    monkeypatch.setattr(record_sequences, "_CACHE_BYTES", 0)
+    first = tmp_path / "first.gbk"
+    second = tmp_path / "second.gbk"
+    _write_genbank(first, (_record("first-record"),))
+    _write_genbank(second, (_record("second-record"),))
+    cache = PreparedBiologicalInputCache()
+    first_token, second_token = _token(101), _token(201)
+
+    def render(document: dict[str, object], request_id: int, drawing: str, retained: tuple[str, ...], held: tuple[str, ...] = ()):
+        return _render(
+            tmp_path, cache, document, request_id=request_id, token_numbers={"record-1-genbank": int(_token_number(document))},
+            retention={"drawing": drawing, "resourceTokens": list(retained), "heldTokens": list(held)},
+        )
+
+    def _token_number(document: dict[str, object]) -> int:
+        return 101 if document is first_document or document is first_region else 201
+
+    first_document, first_region, second_document = _document(first), _document(first, region="20-400"), _document(second)
+    render(first_document, 1, "circular", ())
+    if kept_by == "another drawing":
+        render(second_document, 2, "linear", (first_token,))
+    elif kept_by == "a held file":
+        render(second_document, 2, "circular", (first_token,), (first_token,))
+    cached = tmp_path / "gbdraw-web-render-resource-cache" / f"{first_token}.bin"
+    data = cached.read_bytes()
+    cached.unlink()
+    cached.write_bytes(data)
+    result, diagnostics = render(first_region, 3, "circular", (second_token,))
+    assert "error" not in result
+    metrics = _metrics(diagnostics)
+    assert metrics["parsedSourceCacheHitCount"] == 0
+    assert metrics["parsedSourceParseCount"] == 1
 
 
 @pytest.mark.parametrize(

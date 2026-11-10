@@ -119,6 +119,7 @@ from gbdraw.layout.record_transform import detected_topology
 from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
 from gbdraw.mode_profiles import ComparisonThresholds
 from gbdraw.io.record_select import parse_record_selector, select_record_units
+from gbdraw.io.record_sequences import detached_records
 from gbdraw.layout.record_placement import (
     FeatureAnchorPlacement,
     parse_record_row_position,
@@ -152,7 +153,7 @@ from .diagram import (
     resolve_default_colors,
     resolve_feature_inputs,
 )
-from .io import load_gbks
+from .io import load_render_gbks as load_gbks  # the render's reader; tests replace it under this name
 from .migration_report import SessionMigrationReport
 from .options import (
     CircularDiagramOptions,
@@ -1712,7 +1713,7 @@ def resolve_request_records(request: DiagramRequest) -> ResolvedRecordCollection
 def normalize_request_records(request: DiagramRequest) -> tuple[SeqRecord, ...]:
     """Resolve typed record inputs according to their explicit cardinality."""
 
-    return resolve_request_records(request).records
+    return tuple(detached_records(resolve_request_records(request).records))
 
 
 def _materialized_record_inputs(

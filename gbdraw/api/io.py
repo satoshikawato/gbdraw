@@ -15,6 +15,7 @@ from gbdraw.io.genome import (
     load_gbks as _load_gbks,
     load_gff_fasta as _load_gff_fasta,
 )
+from gbdraw.io.record_sequences import detached_records
 from gbdraw.io.cli_tables import (
     CircularTrackTable,
     ConservationTable,
@@ -47,12 +48,16 @@ from gbdraw.io.regions import (
 )
 
 
-def load_gbks(
+def load_render_gbks(
     gbk_list: Sequence[str],
     record_selectors: list[str] | None = None,
     reverse_flags: list[bool] | None = None,
 ) -> list[SeqRecord]:
-    """Load GenBank files without applying diagram-mode policy."""
+    """GenBank records as a render reads them: each sequence is read from its file when needed.
+
+    Internal to the render path; :func:`load_gbks` gives a caller records that
+    hold their sequences.
+    """
 
     try:
         return _load_gbks(
@@ -62,6 +67,16 @@ def load_gbks(
         )
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
+
+
+def load_gbks(
+    gbk_list: Sequence[str],
+    record_selectors: list[str] | None = None,
+    reverse_flags: list[bool] | None = None,
+) -> list[SeqRecord]:
+    """Load GenBank files without applying diagram-mode policy; each record holds its sequence."""
+
+    return detached_records(load_render_gbks(gbk_list, record_selectors, reverse_flags))
 
 
 def load_gff_fasta(
@@ -89,7 +104,7 @@ def load_gff_fasta(
             )
             candidate_features = candidate_types
             resolved_keep_all_features = table_requires_all
-        return _load_gff_fasta(
+        records = _load_gff_fasta(
             list(gff_list),
             list(fasta_list),
             selected_features_set=candidate_features,
@@ -98,6 +113,7 @@ def load_gff_fasta(
             reverse_flags=reverse_flags,
             source_feature_catalogs=source_feature_catalogs,
         )
+        return detached_records(records)
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
 

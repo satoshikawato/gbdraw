@@ -34,6 +34,7 @@ from pandas import DataFrame
 
 from gbdraw.core.fonts import registered_fonts
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.record_sequences import sequence_files_unchanged
 from gbdraw.features.source import SourceFeatureCatalog
 
 
@@ -844,6 +845,15 @@ class PreparedBiologicalInputCache:
             return pending
         entry = self._layers[layer].get(key)
         if entry is None:
+            return None
+        # Records read their sequences from their input files: an entry whose
+        # file was removed or written again (the Worker staged its token again,
+        # a caller rewrote it) is not a hit. It is built again from the file,
+        # and a write transaction drops it (a lookup changes no layer).
+        records = _records_from_value(entry.value)
+        if records is not None and not sequence_files_unchanged(records):
+            if not transaction.read_only:
+                self._evict(layer, key, transaction)
             return None
         # D-05: the structure here, every feature at commit; in full here too
         # after a transaction that did not commit. A render-stage entry has no

@@ -387,3 +387,32 @@ test('the blastp extraction reads a staged GFF3 and FASTA pair in their roles (O
   assert.deepEqual(reply.result, { source: '##gff-version 3\n', format: 'gff', fasta: '>G1\nATG\n' });
   assert.deepEqual(worker.messages.filter(m => m.type === 'helper').map(m => m.payload.stagedResources), [[]]);
 });
+
+// A token names its bytes. Staging a token the Worker already caches at the same size keeps that
+// file: records Python read from it before stay readable, since Python refuses a file whose inode
+// or modification time changed under them.
+test('a resource sent again after a cancel keeps the cache file its earlier records read', async () => {
+  globalThis.crossOriginIsolated = true;
+  try {
+    const committed = [];
+    setDiagramResourceRetainSource({ readCommittedResourceSets: () => committed, readDraftHeldFiles: () => [] });
+    const a = payload({ source: 'A' });
+    await runDiagramGeneration(a);
+    committed.push(a);
+    const worker = current();
+    const [[path, file]] = worker.fs.cacheFiles();
+    worker.mode = 'hold';
+    const staged = new Promise(resolve => { worker.staged = resolve; });
+    const rejected = assert.rejects(run({ source: 'B' }), /canceled/);
+    await staged;
+    cancelDiagramGeneration();
+    await rejected;
+    worker.mode = 'success';
+    assert.deepEqual(content(await runDiagramGeneration(a)), { source: 'A' });
+    assert.equal(current(), worker);
+    assert.deepEqual(transferred(worker), ['source'], 'the page sends A again after the cancel');
+    assert.equal(worker.fs.entries.get(path), file, 'the cached file of A was replaced');
+  } finally {
+    delete globalThis.crossOriginIsolated;
+  }
+});

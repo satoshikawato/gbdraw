@@ -6,7 +6,9 @@ owner of the repairs made to the text before they read it, and of the feature-ty
 spelling after they read it. A line that needs no repair reaches the parser as
 written, so the text is streamed, never held twice. An input file may be
 gzip-compressed, whatever its name: ``open_input_text`` and ``read_input_bytes``
-expand one, told by its first two bytes, and every reader opens its file there.
+expand one, told by its first two bytes, and every reader opens its file there;
+the record sequence reader opens its files with ``open_input_bytes``, a gzip one
+expanded first with ``expand_input_copy``.
 A gzip input expands to at most ``MAX_EXPANDED_INPUT_BYTES``: a small file can
 hold gigabytes, so reading stops past the cap and names the file. A plain file
 has no cap.
@@ -20,10 +22,12 @@ import io
 import locale
 import os
 import re
+import shutil
+import tempfile
 import zlib
 from collections.abc import Callable, Iterator
 from os import PathLike
-from typing import TYPE_CHECKING, Literal, TextIO, TypeVar
+from typing import IO, TYPE_CHECKING, Literal, TextIO, TypeVar
 
 from Bio.SeqFeature import SeqFeature
 
@@ -121,6 +125,35 @@ def _expanded_gzip(path: str | PathLike[str], capped: bool) -> io.BufferedReader
     return io.BufferedReader(_CappedExpansion(path, MAX_EXPANDED_INPUT_BYTES), buffer_size=_READ_CHUNK)
 
 
+def open_input_bytes(path: str | PathLike[str]) -> IO[bytes]:
+    """A plain input file opened for its bytes, unbuffered: read in order, or at offsets.
+
+    The record sequence reader (:mod:`gbdraw.io.record_sequences`) opens its files
+    here; a gzip input is first expanded with :func:`expand_input_copy`.
+    """
+
+    return open(path, "rb", buffering=0)
+
+
+def expand_input_copy(path: str | PathLike[str], directory: str) -> str:
+    """Expand a gzip input file into a new file in ``directory``, and return its path.
+
+    The expansion stops past ``MAX_EXPANDED_INPUT_BYTES`` as ``open_input_text``
+    stops, and leaves no file behind when it fails. Removing the copy is the
+    caller's.
+    """
+
+    with tempfile.NamedTemporaryFile(dir=directory, prefix="input-", delete=False) as copy:
+        try:
+            with _expanded_gzip(path, capped=True) as expanded:
+                shutil.copyfileobj(expanded, copy, 8 * _MIB)
+        except BaseException:
+            copy.close()
+            os.unlink(copy.name)
+            raise
+    return copy.name
+
+
 def is_gzip_file(path: str | PathLike[str]) -> bool:
     """Whether the file starts with the gzip signature; its name does not count."""
 
@@ -160,15 +193,27 @@ def read_sequence_text(path: str | PathLike[str], read: Callable[[Iterator[str]]
     the UTF-8 error stands. ``read`` takes every line it needs before it returns.
     """
 
-    try:
-        with open_input_text(path) as handle:
+    def read_in(encoding: str) -> _Read:
+        with open_input_text(path, encoding=encoding) as handle:
             return read(text_lines(handle))
+
+    return in_sequence_encoding(read_in)
+
+
+def in_sequence_encoding(read: Callable[[str], _Read]) -> _Read:
+    """``read("utf-8")``, else, when that meets text that is not UTF-8, ``read`` in the locale's encoding.
+
+    The one rule of the encoding a sequence or annotation file is read in
+    (:func:`read_sequence_text`, :mod:`gbdraw.io.record_sequences`).
+    """
+
+    try:
+        return read("utf-8")
     except UnicodeDecodeError:
         encoding = locale.getpreferredencoding(False)
         if codecs.lookup(encoding).name == "utf-8":
             raise
-        with open_input_text(path, encoding=encoding) as handle:
-            return read(text_lines(handle))
+        return read(encoding)
 
 
 def read_input_bytes(path: str | PathLike[str]) -> bytes:
@@ -342,12 +387,15 @@ __all__ = [
     "MAX_EXPANDED_INPUT_BYTES",
     "canonical_feature_type",
     "canonicalize_feature_types",
+    "expand_input_copy",
     "flat_file_format",
     "flat_file_stream",
     "gff3_stream",
     "is_gzip_file",
+    "open_input_bytes",
     "open_input_text",
     "read_input_bytes",
     "read_sequence_text",
+    "in_sequence_encoding",
     "text_lines",
 ]
