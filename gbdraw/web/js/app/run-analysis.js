@@ -9,7 +9,7 @@
 /** @import { ParsedSequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
-/** @import { LinearUnitPlanPayload, LinearUnitSearch, LinearUnitWindow, LinearUnitWindowsOf } from '../services/linear-units.js' */
+/** @import { LinearUnitPlace, LinearUnitPlanPayload, LinearUnitSearch, LinearUnitWindow, LinearUnitWindowsOf } from '../services/linear-units.js' */
 /** @import { CommittedCanonicalSession, RequestRecordDisplayRow } from '../services/session-request.js' */
 /** @import { LiveRedrawLegend } from './legend/entry-actions.js' */
 /** @import { LabelCapacityNotice } from '../services/label-fit.js' */
@@ -114,10 +114,11 @@ import {
   buildLosatJobSpecs,
   effectiveCollinearSearchScope,
   canonicalGridDisplayPairs,
+  linearComparisonEdgeKey,
   numberLosatDisplayPairs,
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
-import { catalogUnitPlaces, generateUnitSearch } from '../services/linear-units.js';
+import { catalogUnitPlaces, generateUnitSearch, searchUnitPlaces } from '../services/linear-units.js';
 import {
   movedIdentityValues,
   movedRecordEdits,
@@ -187,6 +188,7 @@ import {
   sameLosatArgs,
   transitionLegacyProteinCandidate,
   losatEdgeFilename,
+  windowPairLosatFilename,
   validateDerivedProteinReferences,
   webLosatRuntimeRecord,
   isReusableLosatEntry,
@@ -1009,6 +1011,20 @@ const buildLosatSuffix = (drawing) => {
  */
 const buildLosatFilename = (drawing, leftLabel, rightLabel) => (
   losatEdgeFilename(leftLabel, rightLabel, buildLosatSuffix(drawing))
+);
+
+/**
+ * The raw LOSAT TSV name of a pair of drawn units, the one owner of that name for Generate's cache-info row and the
+ * File name field: its card pair's name (the name typed on the card pair, else `cardPairDefault`), with a window
+ * pair's window numbers (`windowPairLosatFilename`, OV-2742). A pair of cards drawn whole keeps the card pair's name.
+ * @param {Pick<LinearComparisonResolvedEdge, 'losatFilename' | 'losatFilenameActive'> | null} cardPair The card
+ *   pair's edge, null when the plan has none.
+ * @param {string} cardPairDefault
+ * @param {LinearUnitPlace | undefined} query @param {LinearUnitPlace | undefined} subject The places of the units.
+ */
+const losatUnitPairFilename = (cardPair, cardPairDefault, query, subject) => windowPairLosatFilename(
+  normalizeLosatFilename(cardPair?.losatFilenameActive ? cardPair.losatFilename : '', cardPairDefault),
+  query?.window ?? null, subject?.window ?? null
 );
 
 /**
@@ -2314,7 +2330,8 @@ export const createRunAnalysis = ({
   /**
    * The default raw LOSAT TSV name of a pair the Comparison card shows: a card pair by its resolved edge or its
    * cache-info row, whose indexes count the drawn cards; a window pair by its row, whose units name their records
-   * (the drawn Result's units, OV-2742), so its cards are found by record key, never by the row's unit indexes.
+   * (the drawn Result's units, OV-2742), so its cards are found by record key, never by the row's unit indexes, and
+   * its name is its card pair's with its windows' numbers, as Generate names it (`losatUnitPairFilename`).
    * @param {DrawingState} drawing
    * @param {string} edgeKey
    */
@@ -2322,14 +2339,21 @@ export const createRunAnalysis = ({
     const edge = getResolvedLinearEdge(drawing, edgeKey) || getLosatCacheInfoEntry(edgeKey);
     const drawnSeqs = drawing.drawnLinearSeqs.value;
     const places = catalogUnitPlaces(featureCatalog.value);
-    const windowPair = [edge?.queryUid, edge?.subjectUid].some((uid) => places.get(String(uid ?? ''))?.window);
-    /** @param {string | undefined} uid @param {number | undefined} index */
-    const cardIndex = (uid, index) => (windowPair
-      ? drawnSeqs.findIndex((seq, at) => linearSeqRecordKey(seq, at) === (places.get(String(uid ?? ''))?.recordKey ?? uid))
+    const query = places.get(String(edge?.queryUid ?? ''));
+    const subject = places.get(String(edge?.subjectUid ?? ''));
+    const windowPair = Boolean(query?.window || subject?.window);
+    /** @param {LinearUnitPlace | undefined} place @param {string | undefined} uid @param {number | undefined} index */
+    const cardIndex = (place, uid, index) => (windowPair
+      ? drawnSeqs.findIndex((seq, at) => linearSeqRecordKey(seq, at) === (place?.recordKey ?? uid))
       : Number(index));
-    return losatCardPairName(
-      drawing, drawnSeqs, cardIndex(edge?.queryUid, edge?.queryIndex), cardIndex(edge?.subjectUid, edge?.subjectIndex)
+    const cardPairName = losatCardPairName(
+      drawing, drawnSeqs, cardIndex(query, edge?.queryUid, edge?.queryIndex),
+      cardIndex(subject, edge?.subjectUid, edge?.subjectIndex)
     );
+    if (!windowPair) return cardPairName;
+    const cardPair = getResolvedLinearEdge(drawing, linearComparisonEdgeKey(
+      query?.recordKey ?? edge?.queryUid, subject?.recordKey ?? edge?.subjectUid));
+    return losatUnitPairFilename(cardPair, cardPairName, query, subject);
   };
   // LOSAT pairs are the Linear comparisons: the three pair handlers act for
   // the drawing their caller (the panel binding) gives, and do nothing for a
@@ -3592,6 +3616,7 @@ export const createRunAnalysis = ({
         if (inherited) requestDrawing = savedPipelineSearchDrawing(requestDrawing, inherited.pipeline);
         searchedSavedPipeline = inherited !== null;
         const { resolution: unitResolution, sequences: unitSeqs } = unitSearch;
+        const unitPlaces = searchUnitPlaces(unitSearch);
         const hasComparisonIntent = unitResolution.hasComparisonIntent === true;
         const hasLosatIntent = unitResolution.hasLosatIntent === true;
         requestComparisonPlan = unitResolution;
@@ -4223,13 +4248,11 @@ export const createRunAnalysis = ({
           const edge = unitResolution.edges.find(
             (/** @type {LinearComparisonResolvedEdge} */ candidate) => candidate.edgeKey === spec.edgeKey
           );
-          // Named by its edge's units' cards: a window pair by the cards whose windows it compares (OV-2742).
+          // Named by its edge's units' cards: a window pair by the cards whose windows it compares, with its windows'
+          // numbers (OV-2742). A unit edge carries its card pair's typed name.
           const fallback = losatCardPairName(searchDrawing, losatCards, Number(edge?.queryIndex), Number(edge?.subjectIndex),
             queryEntry.recordId, subjectEntry.recordId);
-          return normalizeLosatFilename(
-            edge?.losatFilenameActive ? edge.losatFilename : '',
-            fallback
-          );
+          return losatUnitPairFilename(edge ?? null, fallback, unitPlaces.get(spec.queryUid), unitPlaces.get(spec.subjectUid));
         };
 
         /**

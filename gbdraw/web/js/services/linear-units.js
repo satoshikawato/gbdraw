@@ -44,11 +44,12 @@ const FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'planLinearU
 
 /**
  * The searches of one Generate over the drawn units: each unit's card, under the unit's key when it is one of several
- * windows (`sequences`), the card itself (`cards`), the unit's record key, `windowOf` and window (the span its search
- * reads, null for a record drawn whole), and the comparison plan whose edges join units (`resolution`).
+ * windows (`sequences`), the card itself (`cards`), the unit's key, record key, `windowOf` and window (the span its
+ * search reads, null for a record drawn whole), and the comparison plan whose edges join units (`resolution`).
  * @typedef {object} LinearUnitSearch
  * @property {LinearSeq[]} sequences
  * @property {LinearSeq[]} cards
+ * @property {string[]} unitKeys
  * @property {string[]} recordKeys
  * @property {(string | null)[]} windowOf
  * @property {(LinearUnitWindow | null)[]} windows
@@ -126,6 +127,22 @@ export const catalogUnitRecords = (recordKeys, windowOf) => {
  * @typedef {{ recordKey: string, window: number | null }} LinearUnitPlace
  */
 /**
+ * @param {readonly string[]} unitKeys The units, in drawing order.
+ * @param {LinearUnitRecords} units The record each unit draws.
+ * @returns {Map<string, LinearUnitPlace>}
+ */
+const unitPlacesOf = (unitKeys, units) => {
+  /** @type {Map<string, number>} */
+  const counted = new Map();
+  return new Map(unitKeys.map((unitKey, unit) => {
+    const of = units.windowOf[unit];
+    const window = of === null ? null : (counted.get(of) ?? 0) + 1;
+    if (of !== null && window !== null) counted.set(of, window);
+    return [unitKey, { recordKey: units.recordKeys[unit], window }];
+  }));
+};
+
+/**
  * The place of each unit a drawn Result's catalog names, by unit key (`LinearUnitPlace`): its record
  * (`catalogUnitRecords`) and its window number, counted in drawing order, which is the order of the record's window
  * list (Python's `record_drawn_windows`). Empty without a catalog item. Every item names the same units
@@ -135,17 +152,15 @@ export const catalogUnitRecords = (recordKeys, windowOf) => {
  */
 export const catalogUnitPlaces = (catalog) => {
   const [item] = catalog === null ? [] : catalog.items;
-  if (!item) return new Map();
-  const units = catalogUnitRecords(item.recordKeys, item.windowOf);
-  /** @type {Map<string, number>} */
-  const counted = new Map();
-  return new Map(item.recordKeys.map((unitKey, unit) => {
-    const of = units.windowOf[unit];
-    const window = of === null ? null : (counted.get(of) ?? 0) + 1;
-    if (of !== null && window !== null) counted.set(of, window);
-    return [unitKey, { recordKey: units.recordKeys[unit], window }];
-  }));
+  return item ? unitPlacesOf(item.recordKeys, catalogUnitRecords(item.recordKeys, item.windowOf)) : new Map();
 };
+
+/**
+ * The place of each unit a Generate searches, by unit key (`LinearUnitPlace`), counted as `catalogUnitPlaces` counts
+ * the units of the Result it draws: Python plans both.
+ * @param {Pick<LinearUnitSearch, 'unitKeys' | 'recordKeys' | 'windowOf'>} search
+ */
+export const searchUnitPlaces = (search) => unitPlacesOf(search.unitKeys, search);
 
 /**
  * Whether a LOSAT cache-info row is a window pair of the drawn Result (OV-2742, OV-2918): one of its two units is a
@@ -289,6 +304,7 @@ export const linearUnitSearch = (cards, resolution, plan) => {
   return {
     sequences: units.map(({ sequence }) => sequence),
     cards: units.map(({ card }) => card),
+    unitKeys: plan.units.map(({ unitKey }) => unitKey),
     recordKeys: plan.units.map(({ recordKey }) => recordKey),
     windowOf: plan.units.map(({ windowOf }) => windowOf),
     windows: plan.units.map(({ window }) => window),
@@ -351,9 +367,11 @@ export const savedPairsUnitSearch = async (cards, pairs, windowsOf, runHelper, r
  * @param {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} runHelper Runs the Worker helper.
  * @returns {Promise<LinearUnitSearch>}
  */
-export const generateUnitSearch = async (cards, resolution, windowsOf, runHelper) => (resolution.hasComparisonIntent === true
-  ? planLinearUnitSearch(cards, resolution, windowsOf, runHelper)
-  : {
-      sequences: [...cards], cards: [...cards], recordKeys: cards.map((card, index) => linearSeqRecordKey(card, index)),
-      windowOf: cards.map(() => null), windows: cards.map(() => null), resolution
-    });
+export const generateUnitSearch = async (cards, resolution, windowsOf, runHelper) => {
+  if (resolution.hasComparisonIntent === true) return planLinearUnitSearch(cards, resolution, windowsOf, runHelper);
+  const recordKeys = cards.map((card, index) => linearSeqRecordKey(card, index));
+  return {
+    sequences: [...cards], cards: [...cards], unitKeys: recordKeys, recordKeys,
+    windowOf: cards.map(() => null), windows: cards.map(() => null), resolution
+  };
+};

@@ -197,7 +197,25 @@ test('a record drawn in two windows searches each window against the other recor
   await expect(windowPairs).toHaveCount(2);
   await expect(windowPairs.nth(0)).toContainText('#1 window 1 → #2');
   await expect(windowPairs.nth(1)).toContainText('#1 window 2 → #2');
-  await windowPairs.nth(1).getByText('File name', { exact: true }).click();
+  // Each window pair's raw TSV has a name of its own: its card pair's name with its window's number.
+  const rowNames = () => page.evaluate(() => window.__GBDRAW_APP__.losatCacheInfo.map(({ filename }) => filename));
+  const openFileName = async (row) => {
+    const details = windowPairs.nth(row).locator('details');
+    if (!await details.evaluate((element) => element.open)) await details.locator(':scope > summary').click();
+  };
+  for (const row of [0, 1]) await openFileName(row);
+  await page.locator('fieldset[data-linear-comparison-pair-row]').screenshot({ path: test.info().outputPath('window-pair-names.png') });
+  const [firstName, secondName] = await rowNames();
+  expect(firstName).toMatch(/\.losatn\.w1\.tsv$/);
+  expect(secondName).toBe(firstName.replace(/\.w1\.tsv$/, '.w2.tsv'));
+  // A name typed on the card pair is the stem of its window pairs' names; it does not become every one's name.
+  await page.locator('summary[aria-label="Raw LOSAT file name for #1 to #2"]').click();
+  const cardPairName = page.getByRole('textbox', { name: 'Raw LOSAT filename for #1 to #2', exact: true });
+  await cardPairName.fill('card-pair');
+  await cardPairName.press('Enter');
+  await generateAndWaitForResult(page);
+  expect(await rowNames()).toEqual(['card-pair.w1.tsv', 'card-pair.w2.tsv']);
+  await openFileName(1);
   const name = windowPairs.nth(1).getByRole('textbox', { name: 'Raw LOSAT filename for #1 window 2 to #2', exact: true });
   await name.fill('second-window');
   await name.press('Enter');
