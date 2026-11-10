@@ -3927,6 +3927,73 @@ test('CLI per-record rows keep File order available and move whole File blocks',
   expect(drawnOrder).toEqual(['TESTA', 'TESTB', 'REGEX.1']);
 });
 
+// OV-3324: a Session whose Linear card draws a whole multi-record File, with a saved comparison that names the File's
+// records one by one (a hand-edited or older Session), asks for a decision on Load. After Replace, Generate splits the
+// card as it does for an editable comparison, so LOSATP searches every record of the File and the figure draws.
+test('Replace on a loaded whole multi-record card splits it on Generate and searches every record', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  const blast = testInfo.outputPath('testb-regex.tsv');
+  writeFileSync(blast, 'TESTB\tREGEX.1\t100\t300\t0\t0\t1\t300\t1\t300\t1e-30\t500\n');
+  const cliSession = testInfo.outputPath('whole-card-cli.gbdraw-session.json.gz');
+  await promisify(execFile)('python', [
+    '-m', 'gbdraw.cli', 'linear', '--gbk',
+    join(repoRoot, 'tests/fixtures/web_batch_two_records.gb'),
+    join(repoRoot, 'tests/fixtures/regex_rules.gb'),
+    '-b', blast, '-o', testInfo.outputPath('whole-card-cli'), '--session_output', cliSession
+  ], { cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: repoRoot }, timeout: 300000, maxBuffer: 1_000_000 });
+  // The CLI writes one card per record; this one draws the whole File, and its comparison names record #2 (TESTB)
+  // and record #3 (REGEX.1) of the File's records.
+  const session = JSON.parse(gunzipSync(readFileSync(cliSession)).toString('utf8'));
+  const saved = shownSavedDrawing(session).renderRequest;
+  Object.assign(saved.records[0], { cardinality: 'all', selector: null });
+  Object.assign(saved.comparisons.find((comparison) => comparison.kind === 'nucleotideBlast'),
+    { queryRecordIndex: 1, subjectRecordIndex: 2 });
+  const wholeSession = testInfo.outputPath('whole-card.gbdraw-session.json');
+  writeFileSync(wholeSession, JSON.stringify(session));
+
+  await page.addInitScript(() => {
+    window.__WHOLE_CARD_SEARCHED__ = [];
+    // Each protein matches the subject's protein of the same place over their whole length.
+    window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+      const proteins = (key) => [...String(options.sequences.get(key) || '').matchAll(/^>([^\n]*)\n([^>]*)/gm)]
+        .map((match) => ({ header: match[1], id: match[1].split(/\s/)[0], length: match[2].replace(/\s+/g, '').length }));
+      return jobs.map((job) => {
+        const [query, subject] = [proteins(job.querySequenceKey), proteins(job.subjectSequenceKey)];
+        window.__WHOLE_CARD_SEARCHED__.push(...query.map(({ header }) => header), ...subject.map(({ header }) => header));
+        const rows = query.slice(0, subject.length).map((protein, index) => {
+          const length = Math.min(protein.length, subject[index].length);
+          return [protein.id, subject[index].id, '100', length, '0', '0', '1', length, '1', length, '1e-30', '500'].join('\t');
+        });
+        return { cacheKey: job.cacheKey, text: `${rows.join('\n')}\n` };
+      });
+    };
+  });
+  await openApp(page);
+  await loadDefinitionSession(page, wholeSession);
+  const cards = () => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.region_record_id));
+  expect(await cards()).toEqual(['', '']);
+  const resolution = page.locator('[data-imported-comparison-resolution]');
+  await expect(resolution).toContainText('Saved comparison needs a decision');
+  await page.locator('[data-linear-comparison-card]').getByRole('group', { name: 'Set all adjacent comparisons' })
+    .getByRole('button', { name: 'Run LOSAT for all adjacent pairs' }).click();
+  await page.getByRole('group', { name: 'LOSAT Mode' }).getByRole('button', { name: 'LOSATP', exact: true }).click();
+  await resolution.getByRole('button', { name: 'Replace with current controls' }).click();
+  await expect(resolution).toContainText('REPLACE');
+
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await cards()).toEqual(['TESTA', 'TESTB', '']);
+  const searched = await page.evaluate(() => window.__WHOLE_CARD_SEARCHED__.join('\n'));
+  // TESTA_*, TESTB_* and R* are the proteins of TESTA, TESTB and REGEX.1.
+  for (const protein of [' TESTA_0001', ' TESTB_0001', ' R0']) expect(searched).toContain(protein);
+  // Every drawn record has ribbons: those of TESTB come from its own search.
+  const ribbonRecords = await page.evaluate(() => {
+    const svg = new DOMParser().parseFromString(window.__GBDRAW_APP__.currentResults()[0].content, 'image/svg+xml');
+    return [...new Set([...svg.querySelectorAll('[data-pairwise-match-style]')].flatMap((ribbon) => [
+      ribbon.getAttribute('data-query-record-index'), ribbon.getAttribute('data-subject-record-index')]))].sort();
+  });
+  expect(ribbonRecords).toEqual(['0', '1', '2']);
+});
+
 test('@comparison-contract source order survives pending multi-record discovery', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
   await showDrawing(page, { kind: 'linear' });
