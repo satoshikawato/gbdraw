@@ -1,13 +1,16 @@
 // @ts-check
 /** @import { AlignmentResetReceipt } from '../services/session-active-config-contract.js' */
-/** @import { CanonicalRecordWindow } from '../contracts/request.generated.js' */
+/**
+ * @import { CanonicalAlignmentAnchorIdentity, CanonicalAlignmentRecordDecision, CanonicalRecordWindow,
+ *   CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js'
+ */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { joinSentences, listText, msg, t, tm, tn, tx } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { recordTranslationsFor } from '../services/linear-record-layout.js';
 import { canonicalRecordReverseComplement, cropFormReverseComplement, linearCardCropForm } from '../services/record-display-model.js';
-/** @import { LinearSeq } from '../state.js' */
+/** @import { LinearSeq, WebState } from '../state.js' */
 import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import {
@@ -25,6 +28,7 @@ import { catalogNameIndex } from '../services/feature-catalog.js';
  * @import { FeatureCatalog } from '../services/feature-catalog.js'
  * @import { AnnotationCatalogRecord, AnnotationRecordCatalog } from './annotations/record-catalog.js'
  * @import { AliasSource, CommittedRecord } from '../services/feature-identity.js'
+ * @import { OrthogroupGroup, OrthogroupMember } from '../services/orthogroup-feature-metadata.js'
  * @import { CommittedCanonicalSession } from '../services/session-request.js'
  */
 
@@ -67,10 +71,7 @@ const { computed, ref, watch } = window.Vue;
  * @typedef {{ status: 'stale', reason: string, binding: string }} StaleDirections
  * @typedef {{ mode: string, byRecordKey?: Record<string, string> }} DirectionIntent
  *   The Review panel's direction choice; `projectSimilarityAlignmentDirections` validates it.
- * @typedef {{
- *   recordKey: string, biologicalFeatureId: string, sourceFeatureIndex: number | null,
- *   stableFeatureSvgId: string | null
- * }} AnchorIdentity The exact feature identity that a plan or a candidate names.
+ * @typedef {CanonicalAlignmentAnchorIdentity} AnchorIdentity The exact feature identity that a plan or a candidate names.
  * @typedef {{
  *   anchor: AnchorIdentity, displayName: string, sourceStart: number, sourceEnd: number,
  *   displayCenter: number | null, displayedStrand: DisplayedStrand, hidden: boolean,
@@ -85,10 +86,8 @@ const { computed, ref, watch } = window.Vue;
  *   kind: 'ambiguous', status?: undefined, recordKey: string, candidates: AlignmentCandidate[],
  *   directRbhCandidates: AnchorIdentity[], recommendedAnchor: AnchorIdentity, recommendationReason: string
  * }} AlignmentAmbiguity
- * @typedef {{ recordKey: string, status: string, rationale: string, anchor: AnchorIdentity | null }} AlignmentPlanRecord
- * @typedef {{
- *   schema: 2, groupId: string, reference: AnchorIdentity, records: AlignmentPlanRecord[]
- * }} AlignmentPlan
+ * @typedef {CanonicalAlignmentRecordDecision} AlignmentPlanRecord
+ * @typedef {CanonicalSimilarityAlignmentPlan} AlignmentPlan
  * @typedef {{ anchor: AnchorIdentity, centerX: number }} ProjectionBeforeAnchor
  * @typedef {{
  *   anchor: AnchorIdentity, displayedStrand: DisplayedStrand, displayCenter: number | null, centerX: number | null
@@ -370,8 +369,8 @@ const uniqueCatalogFeature = (features, anchor) => {
  * @param {{
  *   recordKeys: string[],
  *   request?: Record<string, any> | null,
- *   linearSeqs?: Record<string, any>[],
- *   catalog?: Record<string, any> | null
+ *   linearSeqs?: readonly LinearSeq[],
+ *   catalog?: FeatureCatalog | null
  * }} options
  */
 const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = null }) => {
@@ -539,10 +538,10 @@ const successfulSummary = (plan, reversed) => {
 const baseReverseComplement = canonicalRecordReverseComplement;
 
 /**
- * @param {Record<string, any> | null | undefined} plan
+ * @param {AlignmentPlan | null} plan
  * @param {{
  *   linearSeqs?: LinearSeq[],
- *   catalog?: Record<string, any> | null,
+ *   catalog?: FeatureCatalog | null,
  *   request?: Record<string, any> | null
  * }} [options]
  */
@@ -1215,18 +1214,20 @@ const anchorsAgree = (left, right) => {
  * @property {string} operation
  * @property {string} label
  * @property {Record<string, any> | null} alignmentResetBefore
- * @property {Record<string, any> | null | undefined} alignmentResetReceipt
+ * @property {AlignmentResetReceipt | null | undefined} alignmentResetReceipt
  * @property {{ recordKey: string, reverseComplement: boolean }[]} orientations
  */
 
 /**
  * The ports and state that the alignment owner receives. Ports are function
- * types; the shapes of orthogroups, requests, and helper payloads belong to
- * their owners (the committed request to Python, R7) and stay `Record<string, any>`.
+ * types; the shapes of requests and helper payloads belong to their owners
+ * (the committed request to Python, R7) and stay `Record<string, any>`.
  * @typedef {object} SimilarityAlignmentActionsOptions
- * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
- * @property {(groupId: string) => Record<string, any> | null} getOrthogroupById
- * @property {(group: Record<string, any> | string | null) => Record<string, any>[]} getEnrichedOrthogroupMembers
+ * @property {Pick<WebState, 'activeDrawing' | 'featureCatalog' | 'linearRecordTranslations' | 'mode'
+ *   | 'selectedOrthogroupId' | 'similarityAlignmentPlan' | 'similarityAlignmentResetReceipt'>} state
+ *   the Web state members the alignment actions read and write
+ * @property {(groupId: string) => OrthogroupGroup | null} getOrthogroupById
+ * @property {(group: OrthogroupGroup | string | null) => OrthogroupMember[]} getEnrichedOrthogroupMembers
  * @property {{ readonly value: SelectedGroupDetail | null }} selectedOrthogroupDetail
  *   the orthogroup owner's detail of the drawer's selected group (OV-920)
  * @property {() => Record<string, any> | null} getCommittedRequest
@@ -1272,7 +1273,7 @@ const anchorsAgree = (left, right) => {
  * @typedef {object} AlignmentArtifactStamp
  * @property {string} records
  * @property {string} group
- * @property {any} selectedGroup
+ * @property {string} selectedGroup
  * @property {unknown} resources
  * @property {string} translations
  */
@@ -1542,7 +1543,7 @@ export const createSimilarityAlignmentActions = ({
    *   canonical: Record<string, any>,
    *   label: string,
    *   alignmentResetBefore?: Record<string, any> | null,
-   *   alignmentResetReceipt?: Record<string, any> | null
+   *   alignmentResetReceipt?: AlignmentResetReceipt | null
    * }} options
    */
   const runAlignmentCandidate = async ({ canonical, label, alignmentResetBefore = null,
@@ -2160,16 +2161,16 @@ export const createSimilarityAlignmentActions = ({
     const orderedKeys = (Array.isArray(recordKeys) ? recordKeys : []).map(String);
     const plan = state.similarityAlignmentPlan?.value;
     if (plan) {
-      const decisions = new Map(plan.records.map((/** @type {AlignmentPlanRecord} */ entry) => [entry.recordKey, entry]));
-      if (orderedKeys.every((recordKey) => decisions.has(recordKey))) {
+      const decisions = new Map(plan.records.map((entry) => [entry.recordKey, entry]));
+      if (orderedKeys.every((recordKey) => decisions.has(recordKey))) { // So each `get` below finds its decision.
         state.similarityAlignmentPlan.value = {
           ...cloneJson(plan),
-          records: orderedKeys.map((recordKey) => cloneJson(decisions.get(recordKey)))
+          records: orderedKeys.map((recordKey) => cloneJson(/** @type {AlignmentPlanRecord} */ (decisions.get(recordKey))))
         };
       }
     }
     const translations = new Map(
-      (state.linearRecordTranslations?.value || []).map((/** @type {{ recordKey: string }} */ entry) => [entry.recordKey, entry])
+      (state.linearRecordTranslations?.value || []).map((entry) => [entry?.recordKey, entry])
     );
     if (orderedKeys.every((recordKey) => translations.has(recordKey))) {
       state.linearRecordTranslations.value = orderedKeys.map(
