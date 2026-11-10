@@ -523,11 +523,9 @@ into the `[Unreleased]` list below.
   Result and the notices were missing until one Generate. The command now
   saves the same axis and notices that a Web app Save writes for the same
   figure, also when it saves a Session again (OV-3240, OV-3244).
-- Changed: the Web app's LOSAT is built from LOSAT `5234c754f`, which runs
-  tblastn in every LOSAT execution mode and reads the genome scales
-  (`-searchsp`, `-dbsize`) in every execution mode, Serial included; the
-  blastn, tblastx and blastp results of searches without them are unchanged.
-  A saved Session whose LOSAT comparisons
+- Changed: the Web app's LOSAT is built from LOSAT `a20ad436a`, which runs
+  tblastn in every LOSAT execution mode; the blastn, tblastx and blastp
+  results of the app are unchanged. A saved Session whose LOSAT comparisons
   the previous build ran runs them once more at its first Generate, because a
   saved LOSAT result is reused only by the LOSAT build that wrote it; the
   results are the same.

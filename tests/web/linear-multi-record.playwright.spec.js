@@ -4348,7 +4348,12 @@ for (const mode of ['orthogroup', 'collinear']) {
     const oneRow = await completeComparisonSnapshot(page);
     expect(oneRow.rows).toEqual([1, 1, 1, 1, 1]);
     expect(oneRow.svgPairs).toEqual([]);
-    expect(oneRow.jobs.flat().flatMap((job) => job.pairs).map((pair) => pair.join('->')).sort()).toEqual(allPairs);
+    // Swapping the rows keeps each file a genome of its own, so that Generate reuses the stored results. One row
+    // joins both files into one genome: the database size of every LOSATP search changes, and all pairs search again.
+    expect(oneRow.jobs).toHaveLength(2);
+    for (const run of oneRow.jobs) {
+      expect(run.flatMap((job) => job.pairs).map((pair) => pair.join('->')).sort()).toEqual(allPairs);
+    }
   });
 }
 
