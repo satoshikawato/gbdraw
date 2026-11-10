@@ -234,21 +234,22 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 });
 
-// One majanivirus Load serves these cases; each case is a step. The zoom-control
-// cases resize the loaded page (its Fit is read again at each size); the field
-// names run before the row edits, which replace the Session's groups.
-test('zoom controls do not overlap the Editor toggle or drawer at each size; hidden search row; similarity-group field names and rows on one majanivirus Load', async ({
+// One page serves these cases; each case is a step. Each zoom-control step loads
+// the majanivirus Session again at its size, so the Load's Fit (R17-25) runs at
+// that size, as when each was a case; the field names run before the row edits,
+// which replace the Session's groups.
+test('zoom controls do not overlap the Editor toggle or drawer at each size; hidden search row; similarity-group field names and rows on one page', async ({
   page
 }) => {
   test.setTimeout(120000);
-  await page.setViewportSize({ width: ISSUE_461_VIEWPORTS[0].width, height: ISSUE_461_VIEWPORTS[0].height });
-  const imported = await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz');
-  expect(imported.status).toBe('ok');
   const defaultViewport = test.info().project.use.viewport;
 
   for (const viewport of ISSUE_461_VIEWPORTS) {
     await test.step(`zoom controls do not overlap the Editor toggle or drawer at ${viewport.id}`, async () => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      const imported = await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz');
+      expect(imported.status).toBe('ok');
+
       const toggle = page.locator('.drawer-toggle');
       const drawer = page.locator('.right-drawer');
       await expect(toggle).toHaveAttribute('aria-expanded', 'false');
@@ -302,7 +303,7 @@ test('zoom controls do not overlap the Editor toggle or drawer at each size; hid
   });
 
   // OV-427: the drawer's Display name and Description fields are named by their labels.
-  await test.step('the similarity-group name fields are named by their visible labels', async () => {
+  await test.step('OV-427: the similarity-group name fields are named by their visible labels', async () => {
     await page.setViewportSize(defaultViewport);
     await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
     const drawer = page.locator('.right-drawer');

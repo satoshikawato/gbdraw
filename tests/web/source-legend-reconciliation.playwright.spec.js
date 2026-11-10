@@ -620,7 +620,7 @@ for (const mode of ['linear', 'circular']) {
     test.setTimeout(900_000);
     const page = await loadGenerated(browser, mode, mode === 'linear' ? { show_gc: true } : {});
     try {
-      await test.step(`M9 ${mode}: a Legend row renamed in the editor is laid out live and at Generate alike`, async () => {
+      await test.step(`M9 ${mode} (OV-127): a Legend row renamed in the editor is laid out live and at Generate alike`, async () => {
         await evaluateWithRetainedPromise(page, async () => {
           const app = window.__GBDRAW_APP__;
           await app.renameLegendEntry(app.legendEntries.findIndex(e => e.caption === 'GC content'),
@@ -635,7 +635,7 @@ for (const mode of ['linear', 'circular']) {
         await page.evaluate(() => { window.__GBDRAW_APP__.form.show_skew = true; });
         await generate(page);
       }
-      await test.step(`M12 ${mode}: a GC skew row renamed onto the other GC skew row offers no Merge`, async () => {
+      await test.step(`M12 ${mode} (OV-151): a GC skew row renamed onto the other GC skew row offers no Merge`, async () => {
         const before = await legendRowsByCaption(page);
         expect(before.editor.slice(-2)).toEqual(['GC skew (+)', 'GC skew (-)']);
         expect(before.drawn).toEqual(oneRowEach(before));
@@ -717,7 +717,7 @@ const loadWithGc = (browser, mode) => loadGenerated(browser, mode, mode === 'lin
 // the rows left to copy from are GC rows (drawn without a stroke).
 // M16 runs inside M14, on a Session saved right after M14's two deletes.
 for (const mode of ['linear', 'circular']) {
-  test(`M14 ${mode}: deleted Legend rows return through Restore and Restore all; M16: a row restored after a Session load with only GC rows left takes Generate's stroke`, async ({ browser }, testInfo) => {
+  test(`M14 ${mode} (OV-154): deleted Legend rows return through Restore and Restore all; M16 (OV-167): a row restored after a Session load with only GC rows left takes Generate's stroke`, async ({ browser }, testInfo) => {
     test.setTimeout(900_000);
     const page = await loadWithGc(browser, mode);
     let fresh;
@@ -741,7 +741,7 @@ for (const mode of ['linear', 'circular']) {
       await settleLive(page);
       await expect(deletedList.getByRole('listitem')).toHaveCount(2);
 
-      await test.step(`M16 ${mode}: a row restored after a Session load with only GC rows left takes Generate's stroke`, async () => {
+      await test.step(`M16 ${mode} (OV-167): a row restored after a Session load with only GC rows left takes Generate's stroke`, async () => {
         const left = (await legendRowsByCaption(page)).editor;
         expect(left.length, 'GC rows are left').toBeGreaterThan(0);
         expect(left.every(caption => /^GC /.test(caption)), `only GC rows are left: ${left}`).toBe(true);
@@ -856,7 +856,7 @@ test('M17 and M13 circular: Reset Stroke and Reset all strokes give the strokes 
   test.setTimeout(900_000);
   const page = await loadGenerated(browser, 'circular');
   try {
-    await test.step('M17 circular: Reset Stroke and Reset all strokes give the strokes Generate draws, next to an underlay', async () => {
+    await test.step('M17 circular (OV-168): Reset Stroke and Reset all strokes give the strokes Generate draws, next to an underlay', async () => {
       const generated = await drawnStrokes(page);
       expect(Object.keys(generated.mounted.features).length).toBeGreaterThan(1);
       const strokeRows = async () => {
@@ -889,7 +889,7 @@ test('M17 and M13 circular: Reset Stroke and Reset all strokes give the strokes 
       await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetAllStrokes(); });
       await expectGenerated('Reset all strokes');
     });
-    await test.step('M13 circular: Stroke options is a disclosure without a History step or a saved field', async () => {
+    await test.step('M13 circular (OV-157): Stroke options is a disclosure without a History step or a saved field', async () => {
       const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
       await page.locator('.drawer-toggle').click();
       await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));

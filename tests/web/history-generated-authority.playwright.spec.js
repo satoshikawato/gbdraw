@@ -125,7 +125,7 @@ test('Undo Generate restores request A and Result A while preserving draft B thr
     expectArtifact(await inspect(page, testInfo, 'undo-setting-generate'), a);
     expect(page.externalRequests).toEqual([]);
     // Continues on this generated page: its first step was this Generate.
-    await test.step('Undo and Redo are busy during Generate and leave the committed request unchanged',
+    await test.step('GE-06: Undo and Redo are busy during Generate and leave the committed request unchanged',
       () => expectBusyUndoRedoDuringGenerate(page));
   } finally { await page.context().close(); }
 });
