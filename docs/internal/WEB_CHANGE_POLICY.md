@@ -96,14 +96,16 @@ the up-to-date requirement:
 
 - A pull request that changes one of the files below states in its body
   whether the change can turn a passing pull request into a failing one: a
-  new or stricter rule, a lower threshold, a removed allowlist entry, or a CI
-  plan that requires a job it did not require before.
-  - If it can, then after it merges into `dev`, update the open pull requests
-    it can affect with `gh pr update-branch <number>`, and merge them only
-    after their required checks pass again. Its body names those pull
-    requests, or says all of them when the change cannot be narrowed to paths.
+  new or stricter rule, a tighter threshold, a removed allowlist entry, or a
+  CI plan that requires a job it did not require before.
+  - If it can, its body also names the paths whose pull requests it can
+    affect, or says all pull requests when the change cannot be narrowed to
+    paths. After it merges into `dev`, update each open pull request that
+    changes one of those paths (or every open pull request) with
+    `gh pr update-branch <number>`, and merge it only after its required
+    checks pass again.
   - If it cannot (it loosens or corrects a judgement, fixes a false positive,
-    or re-routes jobs without dropping any), open pull requests need no
+    or re-routes jobs without requiring a new one), open pull requests need no
     update: a result computed on the older base passed rules at least as
     strict as the new ones.
 
@@ -149,8 +151,8 @@ A maintainer may queue a merge with
 pull request head is exactly `<sha>`, and merges once the required checks
 pass. This needs repository auto-merge to be enabled. The two rules above
 still apply: update the branch first when a change that can turn a passing
-pull request into a failing one, and that names this pull request or all of
-them, merged after its last run.
+pull request into a failing one, and that names this pull request's paths or
+all pull requests, merged after its last run.
 
 ## Gate and Review are independent
 
