@@ -968,7 +968,7 @@ const rewriteMappedProteinReferences = (value, idMap) => {
  * @param {Map<string, LosatDerivedCacheEntry> | null | undefined} cacheMap
  * @param {string} key
  * @param {{ mode: unknown, payload: Record<string, unknown> | null | undefined, manifest: unknown, rawKeys: readonly string[] }} entry
- *   `rawKeys`: the raw searches it is converted from, which name it (`liveLosatEvidence`).
+ *   `rawKeys`: the raw searches it is converted from; an Undo or a Redo puts it back with them (`losatEvidenceAfterStep`).
  */
 const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest, rawKeys }) => {
   if (!cacheMap || !key || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -1683,12 +1683,11 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {() => DrawingState} displayedArtifactDrawing The drawing the displayed Result belongs to.
  * @property {(drawing: DrawingState) => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
  *   The artifact owners' values, with the color rules and queued palette of `drawing`.
- * @property {(ownerSet: Record<string, any>, options: { drawing: DrawingState, selectedResultIndex: number, installResults: (results: SvgResultEntry[]) => void }) => void} installGeneratedArtifactOwnerSet
- *   Installs an owner set as the displayed artifact, its color rules and queued palette into `drawing`.
+ * @property {(ownerSet: Record<string, any>, options: { drawing: DrawingState, selectedResultIndex: number, installResults: (results: SvgResultEntry[]) => void, commit: boolean }) => void} installGeneratedArtifactOwnerSet
+ *   Installs a Generate's owner set (`commit`) as the displayed artifact, its color rules and queued palette into `drawing`.
  * @property {(drawingId: DrawingState['id'], redrawn: RedrawnArtifact, options: { installResults: (results: SvgResultEntry[]) => void }) => void} installRedrawnArtifact
  *   The artifact owner's install of a label rerender into its Result's drawing (OV-111).
- * @property {(handle: HistoryArtifactHandle, options: { rollback: boolean }) => unknown} restoreGeneratedArtifactHandle
- *   `rollback`: a failed Generate restores the handle it replaced, whose LOSAT caches stay whole (D-196 (c)).
+ * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
  * @property {() => void} [emptyKeptProteinIdentityManifests] Empties the protein identity manifest each drawing not
  *   shown keeps in its artifact slot (Clear LOSAT results, D-197).
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
@@ -2041,6 +2040,7 @@ export const createRunAnalysis = ({
       installGeneratedArtifactOwnerSet(candidate.ownerSet, {
         drawing,
         selectedResultIndex,
+        commit: true,
         installResults(nextResults) {
           results.value = nextResults;
         }
@@ -2059,7 +2059,7 @@ export const createRunAnalysis = ({
       recordStructuralMetric('generatedArtifactRollbackCount', 1);
       const currentAlert = errorLog.value;
       try {
-        await restoreGeneratedArtifactHandle(handle, { rollback: true });
+        await restoreGeneratedArtifactHandle(handle);
       } finally {
         // Snapshot restoration clones presentation. Retain the notification
         // that owned the rollback boundary, without deriving its cause here.

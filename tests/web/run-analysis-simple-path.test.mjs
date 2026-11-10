@@ -2049,6 +2049,44 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     losatCalls = 0;
     setCircularFile(referenceView);
 
+    // OV-3260 (D-200): no Generate and no Undo removes a cached search, so a later Generate reuses a search its last
+    // Generate did not use. Each Generate below sends the rings it draws.
+    const circularDrawing = modeDrawing(state, 'circular');
+    const ringSeries = [...circularDrawing.circularConservation.series];
+    // The copy above left the project without its rows (the drawing list's Delete holds them): no other row names the
+    // ring searches.
+    state.losatCacheInfo.value = state.losatCacheInfo.value.filter(({ drawingId }) => drawingId !== 'circular-copy');
+    const shownRingKeys = () => state.losatCacheInfo.value.filter(({ drawingId }) => drawingId === circularDrawing.id).map(({ key }) => key);
+    /** A Generate of the reference-a drawing with the comparison rings `indexes`. @param {number[]} indexes */
+    const generateRings = async (indexes) => {
+      circularDrawing.circularConservation.series.splice(0, circularDrawing.circularConservation.series.length,
+        ...indexes.map((index) => ringSeries[index]));
+      circularDrawing.files.c_conservation_fastas = bound(indexes.map((index) => comparisonViews[index]));
+      workerHelperResponses.push(ringTablesUnchanged);
+      const ringResult = result(`rings-${indexes.join('')}.svg`, `rings-${indexes.join('')}`);
+      workerResponses.push(response(ringResult, validCatalog(ringResult.name)));
+      assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    };
+    // Back on reference-a after the BOM reference's Generate: its ring searches are still cached.
+    await generateRings([0, 1, 2]);
+    assert.equal(losatCalls, 0, 'reference-a\'s ring searches outlive the BOM reference\'s Generate');
+    // Ring d removed, then added again.
+    await generateRings([0, 1]);
+    const twoRings = shownRingKeys();
+    await generateRings([0, 1, 2]);
+    assert.equal(losatCalls, 0, 'ring d\'s search outlives the Generate without it');
+    const ringDKey = shownRingKeys().find((key) => !twoRings.includes(key));
+    // Through an Undo: ring d searched by a Generate whose Undo then runs, and Generated again.
+    state.losatCache.value = new Map([...state.losatCache.value].filter(([key]) => key !== ringDKey));
+    await generateRings([0, 1]);
+    const beforeRingD = await artifactSnapshots.captureGeneratedArtifactHandle(state.activeDrawing());
+    await generateRings([0, 1, 2]);
+    assert.equal(losatCalls, 1, 'ring d searched');
+    await artifactSnapshots.restoreGeneratedArtifactHandle(beforeRingD);
+    await generateRings([0, 1, 2]);
+    assert.equal(losatCalls, 1, 'the Undo of the Generate that searched ring d keeps its search');
+    losatCalls = 0;
+
     // OV-2818: with Show Comparison Rings off, Generate reads no ring file, runs no LOSAT search (the cache is
     // empty) and sends no ring; the ring files and rows stay.
     const cachedRings = state.losatCache.value;
@@ -2305,8 +2343,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       /comparison-nucleotide-|\/blast_0\.txt/
     );
 
-    const committedLosatCache = state.losatCache.value;
-    const committedLosatCacheEntries = Array.from(committedLosatCache.entries());
+    const committedLosatCacheEntries = Array.from(state.losatCache.value.entries());
     const committedLosatCacheInfo = structuredClone(state.losatCacheInfo.value);
     const committedLosatTelemetry = structuredClone(
       globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__
@@ -2337,12 +2374,14 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().losat.blastn.task = 'megablast';
     assert.equal(state.errorLog.value?.code, 'UNKNOWN');
     assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected LOSAT late artifact adoption failure/);
-    assert.equal(state.losatCache.value, committedLosatCache);
+    // D-200: the rollback puts back the committed rows and keeps every search, the failed run's completed one too
+    // (PD-OI-022 retry): no install removes a cached search.
     assert.deepEqual(
-      Array.from(state.losatCache.value.entries()),
+      Array.from(state.losatCache.value.entries()).slice(0, committedLosatCacheEntries.length),
       committedLosatCacheEntries,
-      'artifact rollback must reinstall the exact committed cache owner'
+      'artifact rollback keeps the committed searches'
     );
+    assert.equal(state.losatCache.value.size, committedLosatCacheEntries.length + 1, 'and the failed run\'s completed search');
     assert.deepEqual(state.losatCacheInfo.value, committedLosatCacheInfo);
     assert.deepEqual(
       globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__,

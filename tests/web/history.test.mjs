@@ -2010,8 +2010,10 @@ const createLayoutPreferences = () => ({
       state.legacyProteinDerivedEvidence.value,
       expected.legacyProteinDerivedEvidence
     );
-    assert.equal(state.losatCache.value, expected.losatCache);
-    assert.equal(state.losatDerivedCache.value, expected.losatDerivedCache);
+    // An Undo or a Redo puts back the step's searches and payloads its rows name and removes none (D-200).
+    for (const cache of ['losatCache', 'losatDerivedCache']) {
+      expected[cache].forEach((entry, key) => assert.equal(state[cache].value.get(key), entry, `${cache} ${key}`));
+    }
     assert.equal(state.losatCacheInfo.value, expected.losatCacheInfo);
   };
   const authorityOwnersA = captureAuthorityOwners();
@@ -2202,7 +2204,7 @@ const createLayoutPreferences = () => ({
     [1]
   );
   let installedResults = null;
-  // An install reads the current searches, which other drawings may name (D-196); the capture above read none.
+  // An install adds to the current searches (D-200), so it reads them; only the capture above must not.
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
   snapshots.installGeneratedArtifactOwnerSet(originalOwnerSet, {
@@ -2304,6 +2306,7 @@ const createLayoutPreferences = () => ({
   assert.equal(state.legendEntries.value[0].caption, 'A');
   assert.equal(state.featureIdentityNotices.value, noticesA);
   assertAuthorityOwners(authorityOwnersA);
+  assert.deepEqual([...state.losatCache.value.keys()], ['replacement', 'raw-a'], 'the later search stays (D-200, OV-3260)');
   assert.equal(state.appliedPaletteColors.value, appliedPaletteColorsA);
   assert.equal(state.pendingPaletteColors.value, pendingPaletteColorsA);
   const recapturedA = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());

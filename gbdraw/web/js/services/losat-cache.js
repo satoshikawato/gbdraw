@@ -143,55 +143,32 @@ export const losatRowsAfterStep = (rows, drawingId, stepRows) => {
 };
 
 /**
- * What names LOSAT evidence besides the rows in the state (D-196): the rows and the protein identity manifests that
- * the drawings out of the list hold for the History steps that still exist (Delete, the Undo of New or Duplicate).
- * @typedef {{ rows: readonly { key: unknown }[], manifests: readonly unknown[] }} HeldLosatEvidence
- */
-
-/**
- * The LOSAT evidence a Generate, an Undo, a Redo or a Generate's rollback leaves (D-196): a search, and a converted
- * protein payload, exists exactly while something names it. Named are (a) the searches of the rows in the state after
- * the install, (b) those of the rows a drawing out of the list holds for a History step that still exists, (c) a
- * protein search whose two record instances resolve in the protein identity manifest of a drawing (D-199: the
- * all-against-all searches of Similarity groups and Collinear blocks have no row), and (d), only on a rollback, the
- * step's whole caches: they hold the completed searches a retry reuses (PD-OI-022), which are valid only with the
- * step's cache Map itself. A converted payload is named when every search it was converted from (`rawKeys`) is. So a
- * step takes away no search another drawing or a held drawing names (OV-3207, OV-3212) and brings back none that
- * nothing names (OV-3215, PD-OI-022: no History replacement revives unrelated evidence). The legacy protein candidates
- * stay the project's until a Generate promotes or rejects them (D-198); a promoted one's search is named here like any
- * other. The step's Maps themselves when they are the whole result, so an unchanged owner set keeps them (OV-2210).
- * A drawing that leaves or comes back moves its rows and slot between the state and its step only, so the named set
- * and the caches stay as they are.
+ * The LOSAT caches an install leaves (D-200). No install removes a cached search or converted payload: only Clear does,
+ * for the whole project, as on dev. A Generate's commit installs its caches whole: they are the cache it started from
+ * and what it searched or converted (as on dev). An Undo, a Redo or a rollback keeps the current caches and puts back
+ * from the step only the evidence of the drawing it restores: the searches its rows name, the protein searches that
+ * resolve in its protein identity manifest (the all-against-all searches of Similarity groups and Collinear have no
+ * row), and the converted payloads all of whose searches (`rawKeys`) are then cached. So a Clear's searches come back
+ * only with a row or a manifest that names them (PD-OI-022: no History replacement revives unrelated retry data,
+ * OV-3215), and a search no row names any more stays for a later Generate to reuse (OV-3260). The current Maps
+ * themselves when nothing comes back, so a rollback keeps the retry of the searches its run completed.
  * @template Entry
  * @template {{ rawKeys?: readonly unknown[] }} Derived
- * @param {{ rows: readonly { key: unknown }[], held: HeldLosatEvidence, manifests: readonly unknown[], rollback: boolean }} named
- *   `manifests`: those of the drawings in the list (the shown one's after the install, and each kept slot's).
- * @param {{ cache: ReadonlyMap<unknown, Entry>, derived: ReadonlyMap<unknown, Derived> }} step The caches the step installs.
- * @param {ReadonlyMap<unknown, Entry>} cache The current cache.
+ * @param {{ commit: boolean, rows: readonly { key: unknown }[], manifest: unknown }} restored A Generate's commit, or
+ *   the rows and manifest of the drawing an Undo, a Redo or a rollback restores.
+ * @param {{ cache: ReadonlyMap<unknown, Entry>, derived: ReadonlyMap<unknown, Derived> }} step The caches the step holds.
+ * @param {{ cache: ReadonlyMap<unknown, Entry>, derived: ReadonlyMap<unknown, Derived> }} current The current caches.
  * @returns {{ cache: ReadonlyMap<unknown, Entry>, derived: ReadonlyMap<unknown, Derived> }}
  */
-export const liveLosatEvidence = ({ rows, held, manifests, rollback }, step, cache) => {
-  if (rollback) return step;
-  /** @param {readonly { key: unknown }[]} namingRows @param {readonly unknown[]} namingManifests */
-  const namedBy = (namingRows, namingManifests) => {
-    const keys = new Set(namingRows.map(({ key }) => key));
-    return (/** @type {Entry} */ entry, /** @type {unknown} */ key) => keys.has(key)
-      || namingManifests.some((manifest) => proteinSearchResolvesIn(entry, manifest));
-  };
-  const [listed, kept] = [namedBy(rows, manifests), namedBy(held.rows, held.manifests)];
-  /** @type {Map<unknown, Entry>} */
-  const live = new Map();
-  // A held drawing keeps its searches that are cached; after a Clear it brings none back (it comes back without them).
-  /** @type {[ReadonlyMap<unknown, Entry>, (entry: Entry, key: unknown) => boolean][]} */
-  const sources = [[step.cache, listed], [cache, listed], [cache, kept]];
-  sources.forEach(([source, named]) => source.forEach((entry, key) => {
-    if (!live.has(key) && named(entry, key)) live.set(key, entry);
-  }));
-  const derived = [...step.derived].filter(([, { rawKeys }]) => Array.isArray(rawKeys) && rawKeys.every((key) => live.has(key)));
-  return {
-    cache: live.size === step.cache.size && [...live.keys()].every((key) => step.cache.has(key)) ? step.cache : live,
-    derived: derived.length === step.derived.size ? step.derived : new Map(derived)
-  };
+export const losatEvidenceAfterStep = ({ commit, rows, manifest }, step, current) => {
+  if (commit) return step;
+  const keys = new Set(rows.map(({ key }) => key));
+  const searches = [...step.cache].filter(([key, entry]) => !current.cache.has(key)
+    && (keys.has(key) || proteinSearchResolvesIn(entry, manifest)));
+  const cache = searches.length ? new Map([...current.cache, ...searches]) : current.cache;
+  const payloads = [...step.derived].filter(([key, { rawKeys }]) => !current.derived.has(key)
+    && Array.isArray(rawKeys) && rawKeys.every((rawKey) => cache.has(rawKey)));
+  return { cache, derived: payloads.length ? new Map([...current.derived, ...payloads]) : current.derived };
 };
 
 // The runtime identity the Web stores beside each raw entry it searches
@@ -412,7 +389,7 @@ export const isCurrentRawLosatCacheEntry = (entry) => {
 /**
  * A derived cache entry: what `isLosatDerivedCacheEntry` has checked. `mode` is stored unchecked. `rawKeys`, in memory
  * only (Save writes no derived entry), are the keys of the raw searches it was converted from, which name it
- * (`liveLosatEvidence`); an entry without them (a Session's) is named by nothing.
+ * (`losatEvidenceAfterStep`); an entry without them (a Session's) never comes back with a step.
  * @typedef {{ schema: number, kind: 'derived-losatp-payload', key: string, payload: Record<string, unknown>, idEncoding?: unknown, mode?: unknown,
  *   rawKeys?: readonly string[] }} LosatDerivedCacheEntry
  */

@@ -1,4 +1,4 @@
-// Guard: the LOSAT cache-info rows and evidence through every drawing-list step and History (#1777 rounds 14 to 16,
+// Guard: the LOSAT cache-info rows and evidence through every drawing-list step and History (#1777 rounds 14 to 17,
 // after reviews 8 to 13 each found a defect in them). A deterministic walk (fixed seeds, bounded steps) over a Generate
 // (one History step that writes the shown drawing's rows: Circular ring rows; Linear window-pair rows with their protein
 // searches, one all-against-all search without a row, the converted payload, and the drawing's protein identity
@@ -16,10 +16,9 @@
 //   (i) a drawing that comes back (an Undo of its Delete, a Redo of its New or Duplicate) has the rows it left with,
 //       or none after a Clear (OV-3209, OV-3212: another drawing's Generate and its Undo in between take none away);
 //   (j) the shown drawing's evidence resolves: each protein row's search names record instances of the drawing's own
-//       manifest (OV-3213, OV-3214), and the all-against-all search of the Generate its rows come from is cached (D-199);
-//   (k) nothing else is: every cached search is named by a row of a drawing in the project or of one that left and may
-//       come back, or is the all-against-all search of such a row's Generate, and every converted payload's searches
-//       are cached (D-196; OV-3215: Clear then an Undo brings back none).
+//       manifest (OV-3213, OV-3214), and the all-against-all search of the Generate its rows come from is cached;
+//   (k') no step but Clear removes a cached search or converted payload (D-200, OV-3260: a later Generate reuses
+//       them), and every converted payload's searches are cached.
 // An Undo or a Redo of the walk is not taken back: the next Undo or Redo may be another drawing's step.
 // The walk's Generate writes as Generate commits (the other drawings' rows stay), so its Undo and Redo put back the
 // drawing's rows only (OV-3207, OV-3212). Save and Load (check (e)) are not walked: a Save writes a drawing's entries
@@ -131,8 +130,8 @@ const onlyShownDrawing = (app) => state.drawingTabs.value.map((tab) => tab.id)
   .filter((id) => id !== state.activeDrawingId.value).forEach((id) => app.drawingList.deleteDrawing(id));
 
 // OV-3207 (review 9's order): History's Undo of a Generate put back the project's rows and searches as they were
-// before it, so another drawing's later Generate lost its results. It puts back the drawing's own rows only, and the
-// searches a row still names.
+// before it, so another drawing's later Generate lost its results. It puts back the drawing's own rows only, and no
+// search goes (D-200: a later Generate reuses it, OV-3260).
 test('Undo of one drawing\'s Generate keeps another drawing\'s LOSAT results; Redo gives its own back (OV-3207)', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
@@ -143,8 +142,8 @@ test('Undo of one drawing\'s Generate keeps another drawing\'s LOSAT results; Re
     app.selectDrawing(a); await generateRows([ringRow('k1')]);
     app.selectDrawing(b); await generateRows([ringRow('k2')]);
     app.selectDrawing(a); await history.undo();
-    assert.deepEqual([keysOf(a), keysOf(b), cachedKeys()], [[], ['k2'], ['k2']],
-      'B keeps its result; the search no row names any more goes (PD-OI-022)');
+    assert.deepEqual([keysOf(a), keysOf(b), cachedKeys()], [[], ['k2'], ['k1', 'k2']],
+      'B keeps its result; A\'s search stays for its next Generate');
     await history.redo();
     assert.deepEqual([keysOf(a), keysOf(b), cachedKeys()], [['k1'], ['k2'], ['k1', 'k2']]);
   } finally { resetLosat(); }
@@ -171,11 +170,11 @@ test('a deleted drawing\'s LOSAT results survive another drawing\'s Generate and
         app.selectDrawing(a); await history.undo();
       } else {
         await history.undo();
-        assert.deepEqual(cachedKeys(), ['k2'], 'the search the Delete holds stays cached');
+        assert.deepEqual(cachedKeys(), ['k1', 'k2'], 'the search the Delete holds stays cached');
         await history.undo();
       }
       assert.ok(state.drawingTabs.value.some((tab) => tab.id === b), 'B is back');
-      assert.deepEqual([keysOf(a), keysOf(b), cachedKeys()], [[], ['k2'], ['k2']], `Delete undone first: ${deleteUndoneFirst}`);
+      assert.deepEqual([keysOf(a), keysOf(b), cachedKeys()], [[], ['k2'], ['k1', 'k2']], `Delete undone first: ${deleteUndoneFirst}`);
       app.drawingList.deleteDrawing(c);
     } finally { resetLosat(); }
   }
@@ -193,13 +192,13 @@ test('a deleted drawing\'s LOSAT results survive another drawing\'s Generate and
     await history.undo();
     assert.deepEqual([keysOf(a), keysOf(b), cachedKeys()], [['k1'], ['k2'], ['k1', 'k2']], 'the Delete is undone first');
     await history.undo();
-    assert.deepEqual([keysOf(a), keysOf(b), cachedKeys()], [[], ['k2'], ['k2']], 'then A\'s Generate');
+    assert.deepEqual([keysOf(a), keysOf(b), cachedKeys()], [[], ['k2'], ['k1', 'k2']], 'then A\'s Generate');
   } finally { resetLosat(); }
 });
 
 // OV-3212 (review 13's P1 and P2): a drawing whose New or Duplicate is undone holds its rows; the Undo of another
-// drawing's older Generate in between keeps the searches those held rows name (D-196 (b)), so the Redo of the New or
-// Duplicate brings the drawing back with them.
+// drawing's older Generate in between keeps every cached search (D-200), so the Redo of the New or Duplicate brings
+// the drawing back with them.
 test('a drawing held by an undone New or Duplicate keeps its searches through another drawing\'s older Generate\'s Undo and Redo (OV-3212)', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
@@ -215,7 +214,7 @@ test('a drawing held by an undone New or Duplicate keeps its searches through an
       await history.undo();
       assert.ok(!state.drawingTabs.value.some((tab) => tab.id === b), `${make}: B is held`);
       await history.undo();
-      assert.deepEqual([keysOf(a), cachedKeys()], [[], ['k2']], `${make}: the search B's held rows name stays`);
+      assert.deepEqual([keysOf(a), cachedKeys()], [[], ['k1', 'k2']], `${make}: the search B's held rows name stays`);
       await history.redo();
       await history.redo();
       assert.deepEqual([keysOf(a), keysOf(b), cachedKeys()], [['k1'], ['k2'], ['k1', 'k2']], `${make}: B comes back with its rows`);
@@ -322,13 +321,8 @@ test('a drawing\'s LOSAT rows follow it through Generate, New, Duplicate, Delete
         || !state.losatCache.value.has(`all-${generationOf.get(key)}`));
     }).map(({ key }) => key);
     assert.deepEqual(unresolved, [], `${where} (j): protein rows whose evidence does not resolve in the drawing`);
-    const namingRows = [...rows, ...[...away.values()].filter((left) => left.clears === clears)
-      .flatMap((left) => left.rows.map(([key]) => ({ key })))];
-    const named = new Set(namingRows.flatMap(({ key }) => [key, `all-${generationOf.get(key)}`]));
-    const unnamed = installed ? [...state.losatCache.value.keys()].filter((key) => !named.has(key)) : [];
-    assert.deepEqual(unnamed, [], `${where} (k): cached searches nothing names`);
     const orphans = [...state.losatDerivedCache.value.values()].filter(({ rawKeys }) => !rawKeys.every((key) => state.losatCache.value.has(key)));
-    assert.deepEqual(orphans.map(({ key }) => key), [], `${where} (k): converted payloads whose searches are gone`);
+    assert.deepEqual(orphans.map(({ key }) => key), [], `${where} (k'): converted payloads whose searches are gone`);
     if (shown.mode !== 'linear') return;
     const own = rows.filter((row) => row.drawingId === shown.id).map((row) => row.edgeKey).sort();
     // The units come from the shown Result's catalog, which a switch replaces: the walk's Results all draw CATALOG.
@@ -340,19 +334,10 @@ test('a drawing\'s LOSAT rows follow it through Generate, New, Duplicate, Delete
   };
   /** The Generate a row's search came from: a Linear Generate's searches and payload are named after it. */
   const generationOf = new Map();
-  // Whether the caches are as an install left them: a Generate commits through the install an Undo or a Redo of a
-  // Generate runs (D-196), which the walk's Generate does not run (it writes the state the step holds), so its
-  // searches that nothing names any more stay until the next install, and (k) waits for it.
-  let installed = true;
-  /** An Undo or a Redo; one of a Generate installs its step. @param {'undo' | 'redo'} direction */
-  const traverse = async (direction) => {
-    const generated = history.timeline()[direction][0]?.label === 'Generate diagram';
-    await history[direction]();
-    installed ||= generated;
-  };
+  /** An Undo or a Redo. @param {'undo' | 'redo'} direction */
+  const traverse = (direction) => history[direction]();
   /** A Generate of the shown drawing that searched `count` pairs, one History step. @param {number} count */
   const generate = (count) => {
-    installed = false;
     const drawing = state.activeDrawing();
     const meaning = `g${search + 1}`;
     const rows = Array.from({ length: count }, (_, index) => {
@@ -377,11 +362,17 @@ test('a drawing\'s LOSAT rows follow it through Generate, New, Duplicate, Delete
   let clears = 0;
   let returns = 0;
   const lives = () => new Map(tabIds().map((id) => [state.drawingOf(id), id]));
+  /** The cached searches' and converted payloads' keys. */
+  const cacheKeys = () => [...[...state.losatCache.value.keys()].map((key) => `search:${key}`),
+    ...[...state.losatDerivedCache.value.keys()].map((key) => `payload:${key}`)];
   /** @param {string} where @param {() => unknown} move @param {{ undoOrRedo?: boolean }} [options] */
   const tracked = async (where, move, { undoOrRedo = false } = {}) => {
-    const before = { rows: JSON.parse(rowsByDrawing()), lives: lives() };
+    const before = { rows: JSON.parse(rowsByDrawing()), lives: lives(), clears, caches: cacheKeys() };
     await move();
     const after = { rows: JSON.parse(rowsByDrawing()), lives: lives() };
+    const kept = new Set(cacheKeys());
+    const gone = before.clears === clears ? before.caches.filter((key) => !kept.has(key)) : [];
+    assert.deepEqual(gone, [], `${where} (k'): a step that is not Clear removed cached evidence`);
     before.lives.forEach((id, drawing) => {
       if (!after.lives.has(drawing)) away.set(drawing, { rows: before.rows[id], clears });
     });
@@ -419,7 +410,7 @@ test('a drawing\'s LOSAT rows follow it through Generate, New, Duplicate, Delete
           else if (kind === 'duplicate') recorded = app.drawingList.duplicateDrawing(pick(ids)).status === 'ok';
           else if (kind === 'delete' && ids.length > 1) recorded = app.drawingList.deleteDrawing(pick(ids)).status === 'ok';
           else if (kind === 'switch') app.selectDrawing(pick(ids));
-          else if (kind === 'clear') { app.clearLosatCache(); clears += 1; installed = true; }
+          else if (kind === 'clear') { app.clearLosatCache(); clears += 1; }
           else if ((kind === 'undo' || kind === 'redo') && timeline[kind].length > 0) await traverse(kind);
         }, { undoOrRedo: kind === 'undo' || kind === 'redo' });
         if (kind === 'clear') assert.equal(app.clearableLosatResultCount.value, 0, `${at} (g): Clear left searches`);

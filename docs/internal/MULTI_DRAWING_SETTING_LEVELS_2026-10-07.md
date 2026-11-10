@@ -69,6 +69,10 @@ Of the 28 `ui` rows: 18 `[ui:view]`, 8 `[ui:app]`, 2 `[ui:session]`.
 Linear, Depth, conservation, comparison), colour-table bytes, label-filter bytes, LOSAT caches (raw, derived,
 protein raw), protein manifest, record-list and parsed-source caches, GC series cache, record genetic codes
 (two rows), Session title, drawing order.
+Since #1777 (2026-11-10) the protein manifest is a drawing's generated artifact, kept with its Result: each
+Generate writes the manifest its own protein searches resolve in, and two drawings can give one record
+instance key different proteins (a copy cropped to another region), so one shared manifest would make one
+drawing's protein results unreadable in the other.
 
 Migration tokens in the table: `own-mode` 105, `both` 58, `dropped` 44, `active` 38, `project` 16, `ui` 7,
 other 2 (`absent in v44`, `own-mode by leaf path`).
