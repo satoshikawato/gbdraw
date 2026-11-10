@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `138`
+- Contract revision: `139`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -5013,8 +5013,12 @@ Status: active Product authority
     passage after it, so the citation keeps its meaning.
   - `PD-OI-070` is not amended: it names Linear record settings, and this
     receipt states the Circular range it does not name.
-  - The Session format is unchanged: a grid or batch record already holds a
-    source, a selector, and windows.
+  - The canonical request is unchanged: a grid or batch record already holds
+    a source, a selector, and windows. The Session 51 draft gains the
+    per-record range fields `config.form.circular_record_ranges` and
+    `config.form.circular_range_fields_record`; Session 51 has not reached
+    `main`, so its version stays and no migration is added (corrected in
+    Revision 139).
   - No other record is amended or retired.
   - This change is Contract-only: the runtime that implements it merges after
     it in a separate pull request, and the Review is `REQUIRED`.
@@ -5221,6 +5225,15 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime and tests
     that implement it are in the same pull request, and the Review is
     `REQUIRED`.
+- Revision 139 changes: one sentence of the Revision 132 entry
+  (`PD-OI-044` scenario revision `5`) is corrected. It said "The Session
+  format is unchanged". The canonical request is unchanged, and the Session 51
+  draft gains the per-record range fields `config.form.circular_record_ranges`
+  and `config.form.circular_range_fields_record` (Session 51 has not reached
+  `main`, so its version stays and no migration is added). No record, receipt,
+  or outcome changes.
+  - No other record is amended or retired.
+  - This change is Contract-only, and the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
