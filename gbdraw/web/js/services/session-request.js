@@ -2,7 +2,7 @@
 import { storedRegionWindows, writeCanonicalRecordReverseComplement } from './record-display-model.js';
 import {
   INPUT_TYPES, inputSourceFiles, inputTypeOfSourceKind, inputTypeSpec,
-  recordSourceOf, recordSourceSlotIds
+  recordSourceFilesOf, recordSourceOf, recordSourceSlotIds
 } from './input-types.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
 import { cardCropWindow } from './drawing/inputs.js';
@@ -163,7 +163,7 @@ import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from './linear-wrap-form.js';
 import { FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH, figureLengthFormValue } from './figure-size-form.js';
 import { featureDensityTrackIds, projectFeatureDensityTracks, requestFeatureDensityTracks } from './feature-density-tracks.js';
-import { NO_STORED_READINGS } from './stored-leaf-readings.js';
+import { NO_STORED_READINGS, storedRecordIdKey } from './stored-leaf-readings.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
   CONFIG_UNSET_NUMBER_PATHS,
@@ -329,6 +329,7 @@ const requestDrawingMode = (drawing) => {
  * @property {readonly { start?: unknown, end?: unknown, reverseComplement?: unknown, column?: unknown }[]} windows Required at
  *   request schema 10, which Load promotes every stored request to first.
  * @property {{ reverseComplement?: unknown } | null} [presentation]
+ * @property {{ kind?: unknown } | null} [source]
  */
 /**
  * A record of the request before its display options are bound.
@@ -479,7 +480,7 @@ export { CANONICAL_REQUEST_SCHEMA };
 /**
  * @import {
  *   CanonicalCircularDiagramOptions,
- *   CanonicalCircularLayout, CanonicalComparison, CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalLinearTrackSlot, CanonicalCircularTrackSlot, CanonicalRecord,
+ *   CanonicalCircularLayout, CanonicalComparison, CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalLinearTrackSlot, CanonicalCircularTrackSlot, CanonicalRecord, CanonicalRecordSource,
  *   CanonicalRenderRequest,
  *   CanonicalSimilarityAlignmentPlan, CanonicalTableRef
  * } from '../contracts/request.generated.js'
@@ -1487,14 +1488,30 @@ const cropFieldsOfWindows = (record) => {
   };
 };
 
+/**
+ * A request record's selector as a Linear card's record text (`canonicalRecordSelector`). A record ID that the text
+ * would read as a `#N` (`#2`, `#+2`) takes the place Load read for it in its file (`storedRecordIdKey`, OV-3311),
+ * the text the Record select gives such a record, so the card draws the record of that ID; without one it stays.
+ * @param {RequestRecordView | null | undefined} record
+ * @param {StoredLeafReadings} readings
+ */
+const cardRecordText = (record, readings) => {
+  const text = canonicalRecordSelector(record) || '';
+  const source = record?.source;
+  const place = record?.selector?.kind === 'recordId' && recordSourceFilesOf(source?.kind).length > 0
+    ? readings.get(storedRecordIdKey(recordSourceResourceIds(/** @type {CanonicalRecordSource} */ (source)), text))
+    : undefined;
+  return typeof place === 'string' ? place : text;
+};
+
 // The Linear card fields that hold a request record's selection, windows, and
 // orientation: one window is the card's own crop, several the windows it shows
 // (`createLinearSeq`).
-/** @param {RequestRecordView | null | undefined} record */
-const linearSeqRecordFields = (record) => {
+/** @param {RequestRecordView | null | undefined} record @param {StoredLeafReadings} [readings] */
+const linearSeqRecordFields = (record, readings = NO_STORED_READINGS) => {
   const { only, listed, reverse } = cropFieldsOfWindows(record);
   return {
-    region_record_id: canonicalRecordSelector(record) || '',
+    region_record_id: cardRecordText(record, readings),
     region_start: only?.start ?? null,
     region_end: only?.end ?? null,
     region_reverse: reverse,
@@ -6409,7 +6426,7 @@ export const projectCanonicalSessionRequest = ({
         linearSeqs: explicitBindings.linearSeqs.flatMap((sequence, index) => (
           // A key of the map: `fileRecordKeys` lists its keys.
           /** @type {string[]} */ (recordKeysByFile.get(fileRecordKeys[index])).map((uid) => {
-            const fields = linearSeqRecordFields(recordsByKey.get(uid));
+            const fields = linearSeqRecordFields(recordsByKey.get(uid), leafReadings);
             return {
               ...sequence,
               uid,
@@ -6573,7 +6590,7 @@ export const projectCanonicalSessionRequest = ({
         }),
         file_definition: fileDefinition,
         file_subtitle: fileSubtitle,
-        ...linearSeqRecordFields(record)
+        ...linearSeqRecordFields(record, leafReadings)
       };
     });
     files.linearComparisons = [];

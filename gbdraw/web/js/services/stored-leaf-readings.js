@@ -18,3 +18,13 @@ export const NO_STORED_READINGS = new Map();
  * @param {unknown} raw The value as stored.
  */
 export const storedLeafKey = (path, raw) => JSON.stringify([path, raw]);
+
+/**
+ * The key of a stored request record whose selector is a record ID that a card's record text reads as a `#N`
+ * (`#2`, `#+2`): the card cannot hold that ID as text, so Load reads its place in its file (`#k`, the text the
+ * Record select gives such a record; `readStoredRecordIdPlaces`, services/record-discovery.js) and the card takes
+ * it (OV-3311).
+ * @param {readonly string[]} resourceIds The record source's files (`recordSourceResourceIds`).
+ * @param {string} recordId
+ */
+export const storedRecordIdKey = (resourceIds, recordId) => storedLeafKey('records.selector', [resourceIds, recordId]);

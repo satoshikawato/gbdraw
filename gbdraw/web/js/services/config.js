@@ -53,6 +53,7 @@ import {
   readRecordTranslations, readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
 import { cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
+import { readStoredRecordIdPlaces } from './record-discovery.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
@@ -1395,8 +1396,16 @@ const unreadStoredLeaves = (data) => {
 const readStoredLeaves = async (data) => {
   const leaves = unreadStoredLeaves(data);
   const validator = unmanagedConfigOverrideValidator;
+  const resources = isPlainObject(data) && isPlainObject(data.resources) ? data.resources : {};
+  /** @param {string} resourceId */
+  const fileOf = (resourceId) => {
+    const file = deserializeFile(Object.hasOwn(resources, resourceId) ? resources[resourceId] : null);
+    return Array.isArray(file) ? null : file;
+  };
+  // The place in its file of each stored Linear record ID a card's text would read as a `#N` (OV-3311).
   /** @type {Map<string, unknown>} */
-  const readings = new Map();
+  const readings = new Map(await readStoredRecordIdPlaces(
+    storedResultSets(/** @type {SessionChecked} */ (data)).map(({ set }) => set.renderRequest), fileOf));
   if (leaves.length === 0 || !validator) return readings;
   for (const { row, value } of leaves) {
     const reply = await validator({

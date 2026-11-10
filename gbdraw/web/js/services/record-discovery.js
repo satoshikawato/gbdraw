@@ -7,8 +7,11 @@ import { genbankHeaderIds, pythonStrip, scanGenBankHeader } from './genbank-head
 import { ORGANISM_NAME_RULE } from '../contracts/schema.generated.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { circularInputComplete, circularSourceInputs } from './input-types.js';
-import { recordIdentity, resliceCardRows } from './record-draw-selection.js';
+import {
+  circularInputComplete, circularSourceInputs, inputTypeOfSourceKind, inputTypeSpec, recordSourceFilesOf, recordSourceResourceIds
+} from './input-types.js';
+import { recordIdentity, recordSelectorNumber, resliceCardRows } from './record-draw-selection.js';
+import { storedRecordIdKey } from './stored-leaf-readings.js';
 import { isRecordMajorDepthFileMatrix } from './depth-track-state.js';
 import {
   bytesToText,
@@ -23,6 +26,7 @@ import {
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { InputTypeSpec } from './input-types.js' */
+/** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 /** @import { CircularCardMark, CircularSource, DrawingInputFiles } from './drawing/inputs.js' */
 
 /**
@@ -1091,6 +1095,41 @@ const INPUT_RECORD_READERS = Object.freeze({
 export const discoverInputRecords = (spec, primaryFile, pairedFile) => (
   INPUT_RECORD_READERS[spec.sourceKind].read(primaryFile, pairedFile)
 );
+
+/**
+ * The place (`#k`, its file's record list as Python reads it) of each stored Linear record whose selector is a
+ * record ID that a card's record text reads as a `#N` (`#2`, `#+2`), by `storedRecordIdKey`: Load gives the card
+ * that place, so the card draws the record of that ID (OV-3311). An ID no record or several records hold has no
+ * place. Only such a record's files are read; a Session without one reads none.
+ * @param {readonly unknown[]} requests The stored render requests (unvalidated).
+ * @param {(resourceId: string) => FileLike | null} fileOf The file of a stored resource.
+ * @returns {Promise<Map<string, string>>}
+ */
+export const readStoredRecordIdPlaces = async (requests, fileOf) => {
+  /** @type {Map<string, string>} */
+  const places = new Map();
+  const read = new Set();
+  for (const request of requests) {
+    const view = /** @type {{ mode?: unknown, records?: unknown } | null} */ (request && typeof request === 'object' ? request : null);
+    if (view?.mode !== 'linear' || !Array.isArray(view.records)) continue;
+    for (const record of /** @type {{ selector?: { kind?: unknown, value?: unknown }, source?: { kind?: unknown } }[]} */ (view.records)) {
+      const recordId = record?.selector?.kind === 'recordId' ? record.selector.value : null;
+      const source = record?.source;
+      if (typeof recordId !== 'string' || recordSelectorNumber(recordId) === null || recordSourceFilesOf(source?.kind).length === 0) continue;
+      const resourceIds = recordSourceResourceIds(/** @type {CanonicalRecordSource} */ (source));
+      const key = storedRecordIdKey(resourceIds, recordId);
+      if (read.has(key)) continue;
+      read.add(key);
+      const [primaryFile, pairedFile] = resourceIds.map(fileOf);
+      // A file Load cannot list gives no place: the card keeps the stored text.
+      const records = await discoverInputRecords(inputTypeSpec(inputTypeOfSourceKind(source?.kind)), primaryFile, pairedFile)
+        .catch(() => []);
+      const named = records.filter((entry) => entry.recordId === recordId);
+      if (named.length === 1) places.set(key, named[0].selector);
+    }
+  }
+  return places;
+};
 
 /** @param {Readonly<InputTypeSpec>} spec The helper operation a failed read of this input names. */
 export const inputRecordsOperation = (spec) => INPUT_RECORD_READERS[spec.sourceKind].operation;
