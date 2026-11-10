@@ -1110,6 +1110,7 @@ def test_session_capture_reads_the_records_as_the_readers_upload_did(
     events: list[str] = []
     monkeypatch.setattr(capture_tool, "wait_for_app_shell", lambda page: None)
     monkeypatch.setattr(capture_tool, "load_web_app_session", lambda page, path: events.append("load session"))
+    monkeypatch.setattr(capture_tool, "dismiss_session_notice", lambda page: events.append("dismiss Session notice"))
     monkeypatch.setattr(capture_tool, "inspect_shown_records", lambda page: events.append("read records"))
     monkeypatch.setattr(capture_tool, "replay_tutorial_steps", lambda page, sample, through: events.append("replay"))
     monkeypatch.setattr(capture_tool, "apply_capture_action", lambda page, action: events.append("action"))
@@ -1128,12 +1129,44 @@ def test_session_capture_reads_the_records_as_the_readers_upload_did(
         assert events == [
             "open page",
             "load session",
+            "dismiss Session notice",
             "open Linear File cards",
             "hide Files in this Session",
             "replay",
             "read records",
             "action",
         ]
+
+
+def test_session_notice_is_closed_by_its_dismiss_button() -> None:
+    """OV-3369: the reader who uploaded the files sees no `Session loaded` notice above the Result.
+
+    The notice moved the Preview down under popups that captures place at a fixed height, so their
+    crops took a strip of the Preview toolbar.
+    """
+
+    events: list[str] = []
+
+    class Locator:
+        def __init__(self, selector: str) -> None:
+            self.selector = selector
+
+        def locator(self, selector: str) -> "Locator":
+            return Locator(f"{self.selector} {selector}")
+
+        def click(self) -> None:
+            events.append(f"click {self.selector}")
+
+        def wait_for(self, state: str) -> None:
+            events.append(f"wait {self.selector} {state}")
+
+    class FakePage:
+        def locator(self, selector: str) -> Locator:
+            return Locator(selector)
+
+    capture_tool.dismiss_session_notice(FakePage())
+
+    assert events == ["click [data-app-notice] .app-notice-dismiss", "wait [data-app-notice] hidden"]
 
 
 def test_webapp_crop_refuses_records_not_inspected() -> None:

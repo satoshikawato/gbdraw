@@ -717,6 +717,19 @@ SHOWN_RECORDS_READ_SCRIPT = """
 """
 
 
+def dismiss_session_notice(page) -> None:
+    """Close the `Session loaded` notice with its Dismiss button (OV-3369).
+
+    A tutorial reader uploaded the files and has no Session, so no capture shows the notice. It
+    stands above the Result: a popup that a capture places at a fixed height met the Preview
+    toolbar the notice moved down. Reset Settings, which a replay starts with, closes it too.
+    """
+
+    notice = page.locator("[data-app-notice]")
+    notice.locator(".app-notice-dismiss").click()
+    notice.wait_for(state="hidden")
+
+
 def inspect_shown_records(page) -> None:
     """Read the shown drawing's records, as the reader's upload did (OV-3139).
 
@@ -1439,6 +1452,7 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
         session_path = resolve_gallery_reference(session_ref)
         if session_path is not None and session_path.exists():
             load_web_app_session(page, session_path)
+            dismiss_session_notice(page)
             # A loaded Session folds its Linear File cards. A tutorial reader uploaded
             # the files, so every capture shows the cards open.
             page.evaluate(

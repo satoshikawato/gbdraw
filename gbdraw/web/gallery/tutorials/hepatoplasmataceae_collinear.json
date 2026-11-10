@@ -1001,7 +1001,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector('[data-gbdraw-stable-feature-id=fe826bac7]')) throw new Error('DnaA feature target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.canvasPan) { app.canvasPan.x = 245; app.canvasPan.y = 10; }"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); document.querySelector('.settings-pane')?.style.setProperty('visibility', 'hidden', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector('[data-gbdraw-stable-feature-id=fe826bac7]')) throw new Error('DnaA feature target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.canvasPan) { app.canvasPan.x = 245; app.canvasPan.y = 10; }"
               },
               {
                 "type": "wait",
@@ -1018,7 +1018,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-stable-feature-id='fe826bac7']\"); const app = window.__GBDRAW_APP__; if (!popup || !target) throw new Error('DnaA popup bounds are unavailable.'); popup.style.width = '600px'; if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = 185; }"
+                "script": "const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-stable-feature-id='fe826bac7']\"); const app = window.__GBDRAW_APP__; if (!popup || !target) throw new Error('DnaA popup bounds are unavailable.'); popup.style.width = '600px'; if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = Math.round(document.querySelector('.preview-canvas').getBoundingClientRect().top) + 24; }"
               },
               {
                 "type": "wait",
