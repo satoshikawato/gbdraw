@@ -347,7 +347,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
-/** @import { CurrentResultsPort, LegacyResultNormalization, SavedResultEdits } from './svg-result-ingestion.js' */
+/** @import { CurrentResultsPort, LegacyResultNormalization, SavedResultEdits, SvgResultCandidate } from './svg-result-ingestion.js' */
 /** @import { DroppedLegendRecord, PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 /** @import { SessionResourceDrawing, SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
@@ -3231,7 +3231,7 @@ const savedLegendRekeys = (rules, kept) => {
  * A Result that `legacy.applies` to (no composition metadata: a Session 40
  * Result of main 8228ffab or 7aad9e3e, OV-273) takes `legacy.transform`, the
  * transform of a pre-40 Result; every other Result is admitted as written.
- * @param {Record<string, any>[]} logicalResults
+ * @param {SvgResultCandidate[]} logicalResults
  * @param {{ featureCatalog: FeatureCatalog, mode: 'circular' | 'linear', selectedFeatureTypes: readonly string[] | null | undefined,
  *   savedEdits: SavedResultEdits | null, legacy?: LegacyResultNormalization | null }} set
  */

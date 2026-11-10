@@ -74,11 +74,28 @@ const text = (value) => String(value ?? '').trim();
  */
 
 /**
- * One Result of a Worker response or a Session: its `name` and its SVG text
- * (`content`), or for a decoded Generate reply its `document`; the other
- * members pass through unread. A committed copy holds its runtime state under
- * `COMMITTED_SVG_RESULT`, and the segments of its document under `SEGMENTS`.
- * @typedef {Record<string, any> & {
+ * One Result of a Worker response or a Session before its admission: its
+ * `name` and its SVG text (`content`), or for a decoded Generate reply (Python's
+ * `WebRenderResult`) its `document` and, under `SEGMENTS`, the held segments it
+ * names. A History checkpoint's Result is already committed: it holds its
+ * runtime state under `COMMITTED_SVG_RESULT`. Other members of a saved Result
+ * pass through unread.
+ * @typedef {{
+ *   name: string,
+ *   content?: string,
+ *   document?: Readonly<DecodedSvgDocument>,
+ *   [COMMITTED_SVG_RESULT]?: CommittedSvgState,
+ *   [SEGMENTS]?: ReadonlyMap<string, Readonly<HeldSegment>>
+ * }} SvgResultCandidate
+ */
+/**
+ * An admitted Result, the element of the app state's `results`: its `name`,
+ * its sanitized SVG text (`content`), its runtime state under
+ * `COMMITTED_SVG_RESULT` and, for a Worker document, the sanitized segment of
+ * each revision under `SEGMENTS`.
+ * @typedef {{
+ *   name: string,
+ *   content: string,
  *   [COMMITTED_SVG_RESULT]?: CommittedSvgState,
  *   [SEGMENTS]?: ReadonlyMap<string, Readonly<HeldSegment>>
  * }} SvgResultEntry
@@ -118,7 +135,7 @@ const text = (value) => String(value ?? '').trim();
 /**
  * A caller's rewrite of one parsed Result SVG. The return value is ignored.
  * A transform that returns false changed nothing; any other value counts as a change (OV-345).
- * @typedef {(svg: SvgResultRoot, context: { result: SvgResultEntry, resultIndex: number }) => unknown} SvgResultTransform
+ * @typedef {(svg: SvgResultRoot, context: { result: SvgResultCandidate, resultIndex: number }) => unknown} SvgResultTransform
  */
 
 /**
@@ -157,7 +174,7 @@ const text = (value) => String(value ?? '').trim();
  * admissions.
  * @typedef {object} SvgResultSource
  * @property {string} sourceClass
- * @property {SvgResultEntry[]} results
+ * @property {SvgResultCandidate[]} results
  * @property {FeatureCatalogAdmission | null} catalogAdmission Set for a current source only.
  * @property {readonly SvgLegendRowFacts[] | null} [legendRows] Python's Legend row facts, one per Result; set for a current generated source only.
  */
@@ -195,7 +212,7 @@ const text = (value) => String(value ?? '').trim();
  */
 
 /**
- * @param {SvgResultEntry | null | undefined} result
+ * @param {SvgResultCandidate | null | undefined} result
  * @returns {CommittedSvgState | null}
  */
 const committedState = (result) => (
@@ -206,7 +223,7 @@ const committedState = (result) => (
 
 /**
  * @param {unknown} results
- * @returns {SvgResultEntry[]}
+ * @returns {SvgResultCandidate[]}
  */
 const requireResultList = (results) => {
   if (!Array.isArray(results)) {
@@ -247,7 +264,7 @@ const requireAlignedCatalogAdmission = (admission, results) => {
 
 /**
  * @param {string} sourceClass
- * @param {SvgResultEntry[]} results
+ * @param {SvgResultCandidate[]} results
  * @param {FeatureCatalogAdmission | null} [catalogAdmission]
  * @param {readonly SvgLegendRowFacts[] | null} [legendRows]
  * @returns {SvgResultSource}
@@ -273,7 +290,7 @@ const invalidResult = () => diagnosticError('RESULT_INVALID', {}, { stage: 'resu
 // persisted. Without them (a replayed Session, a stub) a required row stays required.
 /**
  * @param {unknown} legendRows
- * @param {SvgResultEntry[]} results
+ * @param {SvgResultCandidate[]} results
  * @returns {readonly SvgLegendRowFacts[] | null}
  */
 const normalizeLegendRowFacts = (legendRows, results) => {
@@ -317,7 +334,7 @@ const legendRowMayBeAbsent = (legendRows, resultIndex, caption) => {
  * provenance. The catalog keeps this path parse-free and preserves lazy Worker use.
  */
 /**
- * @param {SvgResultEntry[]} results
+ * @param {SvgResultCandidate[]} results
  * @param {FeatureCatalogAdmission} catalogAdmission
  * @returns {SvgResultSource}
  */
@@ -331,7 +348,7 @@ export const createCurrentSessionResultSource = (results, catalogAdmission) => (
 
 /** Classify persisted historical input as the sole compatibility-normalization source. */
 /**
- * @param {SvgResultEntry[]} results
+ * @param {SvgResultCandidate[]} results
  * @returns {SvgResultSource}
  */
 export const createLegacyImportResultSource = (results) => (
@@ -505,7 +522,7 @@ const sanitizeDocumentPieces = (document, held, sanitizer, { phase, resultIndex 
 /**
  * Sanitize one Result: a current Worker document piece by piece, any other
  * Result (a saved Session, a legacy import, a test) as its whole `content`.
- * @param {SvgResultEntry} result
+ * @param {SvgResultCandidate} result
  * @param {SvgSanitizer | undefined} sanitizer
  * @param {SvgAdmissionSite} site
  * @returns {{ content: string, segments: Map<string, Readonly<HeldSegment>> | null }}
@@ -530,7 +547,7 @@ const sanitizeAdmittedSvg = (result, sanitizer, site) => {
  * The Result a sanitized candidate commits as: its members without the decoded
  * document, the sanitized `content`, and under `SEGMENTS` the sanitized
  * segment of each revision of its document (none for a whole-text Result).
- * @param {SvgResultEntry} result
+ * @param {SvgResultCandidate} result
  * @param {{ content: string, segments: Map<string, Readonly<HeldSegment>> | null }} admitted
  * @returns {SvgResultEntry}
  */
@@ -575,7 +592,11 @@ const metadataFromCatalogAdmission = (catalogAdmission, resultIndex, sourceClass
   });
 };
 
-/** @param {SvgResultEntry | null | undefined} result */
+/**
+ * Whether the Result was admitted: only `markCommitted` writes its runtime state.
+ * @param {SvgResultCandidate | null | undefined} result
+ * @returns {result is SvgResultEntry}
+ */
 export const isCommittedSvgResult = (result) => Boolean(committedState(result));
 
 /** @param {SvgResultEntry | null | undefined} result */
@@ -1637,7 +1658,7 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
 };
 
 /**
- * @param {SvgResultEntry} result
+ * @param {SvgResultCandidate} result
  * @param {CommittedSvgResultMetadata} metadata
  * @param {SvgMutationOperations | null} operations
  * @param {{ sanitizer?: SvgSanitizer, parser?: typeof DOMParser, resultIndex: number, sourceClass: string, legendRows?: readonly SvgLegendRowFacts[] | null }} options
@@ -1784,7 +1805,7 @@ export const admitCurrentSessionResults = (
 );
 
 /**
- * @param {SvgResultEntry} result
+ * @param {SvgResultCandidate} result
  * @param {{ sanitizer?: SvgSanitizer, parser?: typeof DOMParser, transformSvg?: SvgResultTransform | null, sourceClass: string, resultIndex: number, selectedFeatureTypes: readonly string[] | null }} options
  */
 const ingestSvgResult = (

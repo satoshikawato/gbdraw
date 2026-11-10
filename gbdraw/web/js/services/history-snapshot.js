@@ -95,7 +95,7 @@ const editedIntentPartOf = (path, value) => (
 /** @typedef {{ mode?: unknown, defaultSource?: unknown, edges?: unknown }} LinearComparisonPlanData */
 /** @typedef {{ x?: unknown, y?: unknown }} OffsetData */
 /** @typedef {HistorySnapshotServiceOptions['state']} HistorySnapshotState The app state (state.js has no typedef for it yet). */
-/** @import { CurrentResultsPort } from './svg-result-ingestion.js' */
+/** @import { CurrentResultsPort, SvgResultEntry } from './svg-result-ingestion.js' */
 /** @typedef {{ receipt?: AlignmentResetReceipt | null, plan?: unknown, recordTranslations?: unknown }} AlignmentStateData */
 /** @import { LinearCardOrientation } from './record-display-model.js' */
 /** @import { LinearSeqWindow } from './drawing/inputs.js' */
@@ -840,7 +840,7 @@ const applyFilesData = (state, drawing, filesData, fileStore) => {
 
 /**
  * @typedef {Readonly<{ featureCatalog: unknown, extractedFeatures: readonly unknown[],
- *   biologicalFeatures: readonly unknown[], results: unknown[], labelFitReports: readonly unknown[],
+ *   biologicalFeatures: readonly unknown[], results: SvgResultEntry[], labelFitReports: readonly unknown[],
  *   inputSummaries: readonly DrawnInputSummary[] }>} RedrawnArtifact
  *   What a label rerender draws again of its Result's drawing (OV-111).
  */
@@ -1026,7 +1026,7 @@ export const createHistorySnapshotService = ({
     /**
      * `drawing` receives the owner set's color rules and queued palette: the
      * drawing whose Generate commits it or whose History handle restores it.
-     * @type {{ drawing: D, selectedResultIndex?: number, installResults?: ((results: any[]) => unknown) | null }}
+     * @type {{ drawing: D, selectedResultIndex?: number, installResults?: ((results: SvgResultEntry[]) => unknown) | null }}
      */
     { drawing, selectedResultIndex = 0, installResults = null }
   ) => {
@@ -1119,7 +1119,7 @@ export const createHistorySnapshotService = ({
   /**
    * @param {DrawingId} drawingId
    * @param {RedrawnArtifact} redrawn
-   * @param {{ installResults: (results: unknown[]) => void }} options
+   * @param {{ installResults: (results: SvgResultEntry[]) => void }} options
    */
   const installRedrawnArtifact = (drawingId, redrawn, { installResults }) => {
     const displayed = displayedArtifactDrawing();

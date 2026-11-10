@@ -10,6 +10,7 @@ import {
   resetCompositionUserDeltas
 } from './legend-layout/composition-actions.js';
 /** @import { WebState } from '../state.js' */
+/** @import { SvgResultEntry } from '../services/svg-result-ingestion.js' */
 
 /**
  * One Result's composition offsets: the primary groups', the Legend's, and the title's.
@@ -21,7 +22,7 @@ import {
  * the preview owner.
  * @typedef {object} LegendLayoutPreviewPort
  * @property {(reason: string) => boolean} commitActiveResultEdit
- * @property {(result: any) => string} getResultIdentity
+ * @property {(result: SvgResultEntry) => string} getResultIdentity
  * @property {() => { svg?: Element | null, resultIdentity?: string } | null} getActiveRuntime
  * @property {(
  *   resultIndex: number,
@@ -110,7 +111,7 @@ export const createLegendLayout = ({
       [...map.keys()].forEach((identity) => { if (!keep.has(identity)) map.delete(identity); });
     }
   };
-  /** @param {unknown} result */
+  /** @param {SvgResultEntry} result */
   const resultIdentity = (result) => previewRuntime?.getResultIdentity?.(result) || '';
   /** @param {readonly string[]} identities The Results of the drawing whose History captures. */
   const captureCompositionIntent = (identities) => {
@@ -150,7 +151,7 @@ export const createLegendLayout = ({
     let reconciled = false;
     identities.forEach((identity) => {
       const deltas = record?.[identity] || firstSeenDeltas.get(identity);
-      const index = state.results.value.findIndex((/** @type {unknown} */ result) => resultIdentity(result) === identity);
+      const index = state.results.value.findIndex((result) => resultIdentity(result) === identity);
       if (!deltas || index < 0) return;
       const changed = previewRuntime?.commitResultEdit(index, (svg, { mounted }) => {
         const applied = applyCompositionUserDeltas(svg, deltas);

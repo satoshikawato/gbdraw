@@ -35,7 +35,7 @@ import {
  * The refs the runtime reads and writes (state.js owns them).
  * @typedef {object} PreviewRuntimeState
  * @property {{ value: any }} [svgContainer] The element that holds the mounted SVG.
- * @property {{ value: Record<string, any>[] }} results
+ * @property {{ value: SvgResultEntry[] }} results
  * @property {{ value: number }} selectedResultIndex
  * @property {{ value: any }} [featureCatalog]
  * @property {{ value: boolean }} [skipCaptureBaseConfig]
@@ -54,7 +54,7 @@ import {
  * The preview readiness a caller registers before it changes the mounted
  * Result, and the receipt the binder must return for it.
  * @typedef {object} ReadinessExpectationOptions
- * @property {Record<string, any>} result
+ * @property {SvgResultEntry} result
  * @property {number} [resultIndex]
  * @property {any} [artifactIdentity] A fingerprint object or string.
  * @property {string} [generationToken]
@@ -67,7 +67,7 @@ import {
 /**
  * @typedef {object} ReadinessExpectation
  * @property {number} identity
- * @property {Record<string, any>} result
+ * @property {SvgResultEntry} result
  * @property {number} resultIndex
  * @property {string} resultIdentity
  * @property {string} artifactIdentity
@@ -103,7 +103,7 @@ import {
  * @typedef {object} PreviewResultRuntime
  * @property {number} resultIndex
  * @property {SVGSVGElement} svg
- * @property {Record<string, any>} result
+ * @property {SvgResultEntry} result
  * @property {string} resultIdentity
  * @property {string} artifactIdentity
  * @property {string} generationToken
@@ -121,7 +121,7 @@ import {
  * selected Result.
  * @typedef {object} MountedResultContextOptions
  * @property {SVGSVGElement} root
- * @property {Record<string, any>} [result]
+ * @property {SvgResultEntry} [result]
  * @property {number} [resultIndex]
  * @property {any} [catalogState]
  * @property {PreviewBindingOptions} [bindingOptions]
@@ -131,7 +131,7 @@ import {
  * What a binder step receives for one observed mount.
  * @typedef {object} MountedResultContext
  * @property {SVGSVGElement} root
- * @property {Record<string, any>} result
+ * @property {SvgResultEntry} result
  * @property {string} sourceClass
  * @property {number} resultIndex
  * @property {string} resultIdentity

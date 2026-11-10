@@ -13,6 +13,7 @@ import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { normalizeOptionalHexColor } from '../utils/color-utils.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 /** @import { DrawingState, WebState } from '../state.js' */
+/** @import { SvgResultEntry } from '../services/svg-result-ingestion.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { LiveRedrawLegend } from './legend/entry-actions.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
@@ -50,7 +51,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
 /**
  * @typedef {object} MountedLegendBindingPorts
  * @property {WebState} state
- * @property {{ readonly value: Record<string, unknown>[] }} results The displayed drawing's Results.
+ * @property {{ readonly value: SvgResultEntry[] }} results The displayed drawing's Results.
  * @property {() => string[]} liveResultIdentities The Results of all drawings.
  * @property {(drawing: DrawingState, context: BoundResultContext, resultLegendOrder: string[]) => Promise<void>} projectEditorIntentOnDisplay
  * @property {(drawing: DrawingState, context: BoundResultContext) => void} rememberCommittedEditorState
@@ -63,7 +64,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
  * @property {(options?: { replaceGeneratedInventory?: boolean, liveRedraw?: LiveRedrawLegend | null, liveResultIdentities?: string[] }) => unknown} extractLegendEntries
  * @property {() => unknown} setupLegendDrag
  *   The Legend owner's methods.
- * @property {(result: Record<string, unknown>) => string} getResultIdentity
+ * @property {(result: SvgResultEntry) => string} getResultIdentity
  * @property {(reason: string) => unknown} commitActiveResultEdit
  *   The preview runtime's methods.
  * @property {(write: () => void, request: { requestedAt: number }) => unknown} adoptDrawnWrite History's adoption of a drawn write.

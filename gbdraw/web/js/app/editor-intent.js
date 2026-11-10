@@ -23,6 +23,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { toRaw } from '../utils/vue-raw.js';
 /** @import { DrawingState, WebState } from '../state.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
+/** @import { SvgResultEntry } from '../services/svg-result-ingestion.js' */
 /** @import { KeptLegendRow, LegendRow } from '../services/drawing/paint.js' */
 /** @import { DisplayedLegendRowContext } from '../services/feature-visibility.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
@@ -54,7 +55,7 @@ const { watch } = window.Vue;
 /**
  * @typedef {object} EditorIntentShowPorts
  * @property {WebState} state
- * @property {{ readonly value: Record<string, unknown>[] }} results The displayed drawing's Results.
+ * @property {{ readonly value: SvgResultEntry[] }} results The displayed drawing's Results.
  * @property {{ readonly value: readonly AddressedFeature[] | null }} extractedFeatures The features read from a Result without a catalog.
  * @property {{ readonly value: string[] }} originalLegendOrder The captions of the rows Python drew.
  * @property {{ readonly value: Element | null }} svgContainer The element that holds the mounted SVG.
@@ -103,7 +104,7 @@ export const createEditorIntentShow = ({
       catalogAdmission: catalog
         ? admitFeatureCatalog(catalog, toRaw(results.value), { mode: drawing.mode })
         : displayedFeatureAddressing(
-          toRaw(extractedFeatures.value) || [], /** @type {string[]} */ (results.value.map((/** @type {{ name?: unknown } | null | undefined} */ result) => result?.name)), resultIndex, svg
+          toRaw(extractedFeatures.value) || [], results.value.map((result) => result?.name), resultIndex, svg
         ),
       featureColorOverrides: drawing.featureColorOverrides,
       featureStrokeOverrides: drawing.featureStrokeOverrides,
