@@ -751,7 +751,7 @@
         },
         {
           "path": "tests/test_python_structure_ratchet.py",
-          "symbol": "FUNCTION_LINES",
+          "symbol": "FUNCTION_STATEMENTS",
           "kind": "py-count-map"
         },
         {
@@ -761,7 +761,7 @@
         },
         {
           "path": "tests/test_python_structure_ratchet.py",
-          "symbol": "MAX_FUNCTION_LINES",
+          "symbol": "MAX_FUNCTION_STATEMENTS",
           "kind": "py-count"
         },
         {
@@ -786,17 +786,17 @@
       "allowlists": [
         {
           "path": "tests/web/function-size-ratchet.test.mjs",
-          "symbol": "FUNCTION_LINES",
+          "symbol": "FUNCTION_STATEMENTS",
           "kind": "count-map"
         },
         {
           "path": "tests/web/function-size-ratchet.test.mjs",
-          "symbol": "MAX_FUNCTION_LINES",
+          "symbol": "MAX_FUNCTION_STATEMENTS",
           "kind": "count"
         },
         {
           "path": "tests/web/function-size-ratchet.test.mjs",
-          "symbol": "COMPOSITION_ROOT_LOGIC_LINES",
+          "symbol": "COMPOSITION_ROOT_LOGIC_STATEMENTS",
           "kind": "count-map"
         }
       ]
