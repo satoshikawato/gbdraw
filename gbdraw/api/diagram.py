@@ -243,6 +243,7 @@ from gbdraw.layout.spatial import Aabb
 from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from gbdraw.legend.sources import LegendSources
 from gbdraw.legend.table import (
+    DrawnLegendName,
     LegendTable,
     draws_legend,
     pairwise_identity_legend_from_comparisons,
@@ -3035,6 +3036,57 @@ def assemble_circular_diagram_from_record(
     return result.drawing
 
 
+def _canvas_legend_table_and_ring_names(
+    records: Sequence[SeqRecord],
+    legend_sources: LegendSources,
+    tracks: CircularTrackInputs,
+    *,
+    profile: CircularRenderProfile,
+    legend: str,
+    depth_config: DepthConfigurator | None,
+    record_depth_tracks: Sequence[Sequence[DepthTrackData]] | None,
+    available_depth_track_count: int,
+    conservation_legend: Sequence[ConservationLegendSource],
+    conservation_min_identity: float,
+) -> tuple[LegendTable, dict[int, DrawnLegendName]]:
+    """The table the Multi-Record Canvas's shared Legend draws (empty with Legend position ``none``), and the name
+    that table gives each similarity ring, by ring (``LegendTable.ring_names``), for every record's copy of the ring.
+
+    With no Legend but with rings, the table is still built, so the rings are named as a drawn Legend would name them.
+    """
+
+    legend_table = LegendTable()
+    if legend != "none" or conservation_legend:
+        legend_slots, legend_annotations = plan_circular_annotation_slots(
+            tracks,
+            records,
+            show_ticks=bool(profile.config.objects.scale.show),
+            show_depth=bool(profile.show_depth and depth_config is not None),
+            show_gc=profile.show_gc,
+            show_skew=profile.show_skew,
+            depth_track_count=max(1, available_depth_track_count),
+        )
+        legend_depth_tracks = representative_depth_tracks(record_depth_tracks)
+        legend_depth_track_zero = index_depth_track_row(legend_depth_tracks).get(0)
+        legend_table = circular_legend_table(
+            records,
+            legend_sources,
+            profile=profile,
+            depth_config=depth_config,
+            depth_df=legend_depth_track_zero.df if legend_depth_track_zero is not None else None,
+            depth_tracks=legend_depth_tracks,
+            depth_track_count_value=depth_track_data_count(record_depth_tracks),
+            slots=circular_legend_slot_sources(legend_slots, tracks.circular_track_axis_index),
+            annotations=legend_annotations,
+            conservation_legend=conservation_legend,
+            conservation_min_identity=conservation_min_identity,
+        )
+    ring_names = legend_table.ring_names()
+    if legend == "none":
+        legend_table = LegendTable()
+    return legend_table, ring_names
+
+
 def assemble_circular_diagram_from_records(
     records: Sequence[SeqRecord],
     inputs: CircularAssemblyInputs,
@@ -3340,36 +3392,20 @@ def assemble_circular_diagram_from_records(
         skew_config,
         feature_density_legend(record_feature_density[0] if record_feature_density else None, profile),
     )
-    # The table the shared Legend draws; with no Legend, the one that names every record's copy of each ring.
-    legend_table = LegendTable()
-    if legend_effective != "none" or first_record_conservation_legend:
-        legend_slots, legend_annotations = plan_circular_annotation_slots(
-            CircularTrackInputs(parsed_circular_track_slots, implicit_track_stack, annotations=resolved_annotations),
-            records,
-            show_ticks=bool(cfg.objects.scale.show),
-            show_depth=bool(profile.show_depth and depth_config is not None),
-            show_gc=profile.show_gc,
-            show_skew=profile.show_skew,
-            depth_track_count=max(1, available_depth_track_count),
-        )
-        legend_depth_tracks = representative_depth_tracks(record_depth_track_data)
-        legend_depth_track_zero = index_depth_track_row(legend_depth_tracks).get(0)
-        legend_table = circular_legend_table(
-            records,
-            legend_sources,
-            profile=profile,
-            depth_config=depth_config,
-            depth_df=legend_depth_track_zero.df if legend_depth_track_zero is not None else None,
-            depth_tracks=legend_depth_tracks,
-            depth_track_count_value=depth_track_data_count(record_depth_track_data),
-            slots=circular_legend_slot_sources(legend_slots, circular_track_axis_index),
-            annotations=legend_annotations,
-            conservation_legend=first_record_conservation_legend,
-            conservation_min_identity=float(identity),
-        )
-    ring_names = legend_table.ring_names()
-    if legend_effective == "none":
-        legend_table = LegendTable()
+    legend_table, ring_names = _canvas_legend_table_and_ring_names(
+        records,
+        legend_sources,
+        CircularTrackInputs(
+            parsed_circular_track_slots, implicit_track_stack, circular_track_axis_index, annotations=resolved_annotations
+        ),
+        profile=profile,
+        legend=legend_effective,
+        depth_config=depth_config,
+        record_depth_tracks=record_depth_track_data,
+        available_depth_track_count=available_depth_track_count,
+        conservation_legend=first_record_conservation_legend,
+        conservation_min_identity=float(identity),
+    )
 
     record_results: list[CircularAssemblyResult] = []
     record_radii_px: list[float] = []
