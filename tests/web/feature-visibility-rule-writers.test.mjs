@@ -108,7 +108,6 @@ export const PAINT_INTENT_WRITERS = {
     renameLegendRow: 'rename',
     // Also the stroke scope choice (`applyStrokeToSelectedFeatures`).
     recordFeatureStrokeOverride: 'edit',
-    renameLegendEntry: 'redisplay',
     setClickedFeatureStrokeColorValue: 'edit'
   },
   'js/app/feature-editor/rule-actions.js': { commitOnce: 'rule', refreshFeatureOverrides: 'rule' },
