@@ -8,6 +8,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { withBootPalettes } from './helpers/boot-palettes.mjs';
+import { buildPaletteColorOverrideRows } from '../../gbdraw/web/js/utils/color-utils.js';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { SESSION_DRAWINGS_LAYOUT } from '../../gbdraw/web/js/contracts/schema.generated.js';
@@ -1159,6 +1160,67 @@ test('a Session 51 with a 180 x 180 mm figure size loads both sides into the for
     assert.deepEqual(loadDialogs.flatMap((dialog) => dialog.items), [], session ? 'the fixture' : 'its Save');
   }
 });
+
+// OV-3259: a Web Session of gbdraw 0.14.5 saved its palette's rows with the user's colors (`config.colors`); its
+// committed request holds only the user's rows. After OV-3114 changed misc_feature and default in 53 palettes, Load
+// reads a saved row that still holds its palette's 0.14.5 color as the palette's color now, as the CLI replay of the
+// committed request draws it; a color the user set stays.
+const v0145Session = (edit = () => {}) => {
+  const session = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw-session.json.gz', import.meta.url))));
+  edit(session.drawings.find(({ id }) => id === 'circular'), session);
+  return session;
+};
+const loadedColorsOf = async (session) => {
+  resetDrawings();
+  loadDialogs.length = 0;
+  const loaded = await load(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  return { ...state.drawingOf('circular').currentColors.value };
+};
+const currentPalette = (name) => state.paletteDefinitions.value[name];
+
+test('a 0.14.5 Session reads its palette\'s saved misc_feature and default rows as the palette\'s colors now (OV-3259)', () => withBootPalettes(state, async () => {
+  const session = v0145Session();
+  const stored = session.drawings[0].config.colors;
+  assert.deepEqual([stored.misc_feature, stored.default], ['#d3d3d3', '#d3d3d3']);
+  const colors = await loadedColorsOf(session);
+  assert.deepEqual([colors.misc_feature, colors.default], [currentPalette('default').misc_feature, currentPalette('default').default]);
+  // Every other row is as saved; no row differs from the palette, so a Generate writes no -d row.
+  for (const key of Object.keys(stored).filter((key) => !['misc_feature', 'default'].includes(key))) assert.equal(colors[key], stored[key], key);
+  assert.deepEqual(buildPaletteColorOverrideRows({ colors, paletteColors: currentPalette('default') }), []);
+  // Without the colors its Result shows (a Session no Web Generate saved), a row is read as 0.14.5 read it.
+  const unapplied = await loadedColorsOf(v0145Session((drawing) => { delete drawing.ui.appliedPaletteColors; }));
+  assert.equal(unapplied.misc_feature, currentPalette('default').misc_feature);
+}));
+
+test('Load keeps a saved color the user set: a live edit, a committed row, and a palette whose rows did not change (OV-3259)', () => withBootPalettes(state, async () => {
+  // A live Instant Preview edit after the last Generate: the draft and the shown colors hold it, the request does not.
+  const live = await loadedColorsOf(v0145Session((drawing) => {
+    Object.assign(drawing.config.colors, { CDS: '#123456', misc_feature: '#123456' });
+    Object.assign(drawing.ui.appliedPaletteColors, { CDS: '#123456', misc_feature: '#123456' });
+  }));
+  assert.deepEqual([live.CDS, live.misc_feature, live.default], ['#123456', '#123456', currentPalette('default').default]);
+  // A misc_feature #d3d3d3 row the committed Default colors table sets: a user color the last Generate drew.
+  const table = 'feature_type\tcolor\nmisc_feature\t#d3d3d3\n';
+  const committed = await loadedColorsOf(v0145Session((drawing, session) => {
+    session.resources['colors-default-colors'] = {
+      kind: 'canonical-tsv', name: 'colors-default-colors-colors-default-colors.tsv', type: 'text/tab-separated-values',
+      size: Buffer.byteLength(table), lastModified: 0, encoding: 'base64', data: Buffer.from(table).toString('base64')
+    };
+    drawing.renderRequest.diagramOptions.colors.defaultColors = { resourceId: 'colors-default-colors', representation: 'canonicalTsv' };
+  }));
+  assert.deepEqual([committed.misc_feature, committed.default], ['#d3d3d3', currentPalette('default').default]);
+  // A palette OV-3114 did not change (earthtones): every saved row stays.
+  const earthtones = { ...currentPalette('earthtones') };
+  const kept = await loadedColorsOf(v0145Session((drawing) => {
+    drawing.config.palette = 'earthtones';
+    drawing.config.colors = { ...earthtones };
+    drawing.ui.appliedPaletteName = 'earthtones';
+    drawing.ui.appliedPaletteColors = { ...earthtones };
+    drawing.renderRequest.diagramOptions.colors.defaultColorsPalette = 'earthtones';
+  }));
+  assert.deepEqual(kept, earthtones);
+}));
 
 // The request Generate builds from a drawing's draft. It reads the Legend rows of the loaded Result's SVG; Node has no
 // SVG parser, and no row matters to the feature density cases.

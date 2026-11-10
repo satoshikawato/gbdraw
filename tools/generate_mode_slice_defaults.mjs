@@ -75,8 +75,80 @@ const EARLIER_DEFAULTS = [
     path: 'depth_tracks',
     reason: 'Sessions 46 and 47 of main saved the default Depth series with the label Depth.',
     value: [{"label": "Depth", "color": "#4A90E2", "height": null, "large_tick_interval": null, "small_tick_interval": null, "tick_font_size": null}]
+  },
+  {
+    domain: 'config',
+    path: 'colors',
+    reason: 'gbdraw 0.14.5 and earlier saved the default palette with one color for repeat_region, misc_feature and every unlisted type (OV-3114).',
+    value: {"CDS": "#54bcf8", "rRNA": "#71ee7d", "tRNA": "#e8b441", "tmRNA": "#ded44e", "ncRNA": "#c4fac3", "repeat_region": "#d3d3d3", "misc_feature": "#d3d3d3", "default": "#d3d3d3", "skew_high": "#6dded3", "skew_low": "#ad72e3", "gc_content": "#a1a1a1", "pairwise_match": "#d3d3d3", "pairwise_match_min": "#FFE7E7", "pairwise_match_max": "#FF7272", "collinear_block_plus_min": "#f0f1f5", "collinear_block_plus": "#8b9cc1", "collinear_block_minus_min": "#FFE7E7", "collinear_block_minus": "#E15759"}
   }
 ];
+
+// The rows of each packaged palette whose color gbdraw 0.14.5 saved and the
+// palette has since changed (OV-3114, D-54), as that release's
+// gbdraw/data/color_palettes.toml holds them; written from the tag, and
+// tests/test_user_colors.py compares them with it. A 0.14.5 Web Session saved
+// its palette's rows with the user's colors; Web Load reads a saved row that
+// still holds such a value as the palette's own (OV-3259, `savedPaletteRowsOf`).
+const EARLIER_PALETTE_ROWS = {
+  release: '0.14.5',
+  reason: 'gbdraw 0.14.5 and earlier saved each palette\'s misc_feature and default rows, which OV-3114 changed, in config.colors.',
+  palettes: {
+    "default": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "mint": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "orange": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "soil": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "spring": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "ajisai": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "alpine_retreat": {"misc_feature": "#f0f4f8", "default": "#f0f4f8"},
+    "arctic": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "arctic_dawn": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "autumn": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "autumn_harvest": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "berry_field": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "citrine_verdure": {"misc_feature": "#f0f8e7", "default": "#f0f8e7"},
+    "citrus_grove": {"misc_feature": "#e0e0e0", "default": "#e0e0e0"},
+    "deep_saturates": {"misc_feature": "#afafaf", "default": "#afafaf"},
+    "desert_mirage": {"misc_feature": "#c0c0c0", "default": "#c0c0c0"},
+    "dune": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "earth": {"misc_feature": "#eaeaea", "default": "#eaeaea"},
+    "earth_and_clay": {"misc_feature": "#c5bcb3", "default": "#c5bcb3"},
+    "edelweiss": {"misc_feature": "#eaebed", "default": "#eaebed"},
+    "emerald_twilight": {"misc_feature": "#e0f2e9", "default": "#e0f2e9"},
+    "forest": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "forest_canopy": {"misc_feature": "#e5e5e5", "default": "#e5e5e5"},
+    "forest_morning": {"misc_feature": "#f0f0f0", "default": "#f0f0f0"},
+    "fugaku": {"misc_feature": "#e4e4e4", "default": "#e4e4e4"},
+    "galaxy": {"misc_feature": "#f0f0f0", "default": "#f0f0f0"},
+    "herbal_garden": {"misc_feature": "#dce1de", "default": "#dce1de"},
+    "kuroshio": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "lavender_fields": {"misc_feature": "#d8d8d8", "default": "#d8d8d8"},
+    "majestic_sunrise": {"misc_feature": "#f4a460", "default": "#f4a460"},
+    "marine": {"misc_feature": "#bbbbbb", "default": "#bbbbbb"},
+    "matcha_whispers": {"misc_feature": "#e1e1e1", "default": "#e1e1e1"},
+    "metallic_sheen": {"misc_feature": "#cd7f32", "default": "#cd7f32"},
+    "metropolitan_blues": {"misc_feature": "#eef0f2", "default": "#eef0f2"},
+    "misty_mountains": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "oceanic_voyage": {"misc_feature": "#e8e8e8", "default": "#e8e8e8"},
+    "orchid": {"misc_feature": "#dddddd", "default": "#dddddd"},
+    "pbt": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "pine_reflection": {"misc_feature": "#e3ebe7", "default": "#e3ebe7"},
+    "royal_gala": {"misc_feature": "#dda0dd", "default": "#dda0dd"},
+    "sakura": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "savannah": {"misc_feature": "#ededed", "default": "#ededed"},
+    "seaside": {"misc_feature": "#e8e8e8", "default": "#e8e8e8"},
+    "soft_pastels": {"misc_feature": "#e1bee7", "default": "#e1bee7"},
+    "sunset": {"misc_feature": "#f1f1f1", "default": "#f1f1f1"},
+    "sunset_desert": {"misc_feature": "#f2f2f2", "default": "#f2f2f2"},
+    "tropical": {"misc_feature": "#e0e0e0", "default": "#e0e0e0"},
+    "tropical_sunset": {"misc_feature": "#ebf8e1", "default": "#ebf8e1"},
+    "urban": {"misc_feature": "#f2e9e4", "default": "#f2e9e4"},
+    "loess": {"misc_feature": "#d3d3d3", "default": "#d3d3d3"},
+    "vintage_postcard": {"misc_feature": "#fdfbfa", "default": "#fdfbfa"},
+    "volcano": {"misc_feature": "#e8e8e8", "default": "#e8e8e8"},
+    "zen": {"misc_feature": "#6a6a6a", "default": "#6a6a6a"}
+  }
+};
 
 /**
  * @param {{ domain: string, path: string }} row
@@ -139,6 +211,7 @@ const document = {
   registryRevision: MODE_SCOPED_SETTINGS.revision,
   normalize: NORMALIZE,
   earlierDefaults: EARLIER_DEFAULTS,
+  earlierPaletteRows: EARLIER_PALETTE_ROWS,
   defaults: { circular: modeDefaults('circular'), linear: modeDefaults('linear') }
 };
 // One row per line, so a default change is a one-line diff.
@@ -152,7 +225,7 @@ const render = () => {
   return `{\n${head.join(',\n')},\n  "defaults": {\n${modes.join(',\n')}\n  }\n}\n`;
 };
 
-// The same data as a frozen ES module; `normalize`, `earlierDefaults` and `defaults` only (the
+// The same data as a frozen ES module; `normalize`, `earlierDefaults`, `earlierPaletteRows` and `defaults` only (the
 // description and schema name the JSON file).
 const renderModule = () => `// @ts-check
 // Generated by tools/generate_mode_slice_defaults.mjs from the Web's new
@@ -167,10 +240,20 @@ const renderModule = () => `// @ts-check
  * @typedef {{ readonly domain: string, readonly path: string, readonly value?: unknown }} ModeSliceDefault
  */
 /**
+ * The rows a released palette held that the palette has since changed: by
+ * palette name, each feature type's color in release \`release\`.
+ * @typedef {{
+ *   readonly release: string,
+ *   readonly reason: string,
+ *   readonly palettes: Readonly<Record<string, Readonly<Record<string, string>>>>
+ * }} EarlierPaletteRows
+ */
+/**
  * @typedef {{
  *   readonly registryRevision: number,
  *   readonly normalize: readonly UnarrangedFieldRule[],
  *   readonly earlierDefaults: readonly (ModeSliceDefault & { readonly reason: string })[],
+ *   readonly earlierPaletteRows: EarlierPaletteRows,
  *   readonly defaults: Readonly<Record<'circular' | 'linear', readonly ModeSliceDefault[]>>
  * }} ModeSliceDefaults
  */
@@ -191,6 +274,7 @@ export const MODE_SLICE_DEFAULTS = deepFreeze({
   "registryRevision": ${JSON.stringify(document.registryRevision)},
   "normalize": ${JSON.stringify(document.normalize)},
   "earlierDefaults": ${JSON.stringify(document.earlierDefaults)},
+  "earlierPaletteRows": ${JSON.stringify(document.earlierPaletteRows)},
   "defaults": {
 ${Object.entries(document.defaults).map(([mode, rows]) => (
     `    ${JSON.stringify(mode)}: [\n${rows.map((row) => `      ${JSON.stringify(row)}`).join(',\n')}\n    ]`

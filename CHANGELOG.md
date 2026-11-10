@@ -407,6 +407,29 @@ write-up of a release.
   with `--conservation_colors '#6e91b7' '#f4a251' '#8fc4c0' '#e67577'
   '#c6bebb' '#77b26f' '#be92b2' '#f0d369' '#ae8e7c' '#ffafb7'`, repeating
   from ring 11 (PD-OI-110 scenario revision 3).
+- Fixed: in 53 of the 55 packaged palettes, `repeat_region`, `misc_feature` and the
+  color of every type the palette does not list (`default`, which is also the color
+  of `ncRNA` in 48 of them) were one gray or one color, so a Legend showed
+  several rows with the same swatch and the map did not tell them apart. In each of
+  those palettes `misc_feature` is now a sand tone and the unlisted types a
+  blue-gray tone derived from the palette's own `repeat_region` color, which is
+  unchanged (in the `default` palette: `#e3cfab` and `#aebccb`). `earthtones` and
+  `psyche` already differed. The features of an unlisted type (`ncRNA` in most
+  palettes, `D-loop`, `rep_origin`) are now drawn in the palette's `default`
+  color, the color their Legend row shows; they were drawn in `#d3d3d3` whatever
+  the palette, so in a palette whose `default` was not `#d3d3d3` the map and the
+  Legend disagreed. The Web's live preview and the feature popup use the same
+  color. A figure changes only where it draws a `misc_feature` or an unlisted
+  type. To keep the earlier colors, give a Default colors table that sets
+  `misc_feature` and `default` to `#d3d3d3` (`-d/--default_colors colors.tsv`,
+  with the two rows `misc_feature<TAB>#d3d3d3` and `default<TAB>#d3d3d3`; in
+  the Web, Default colors). A Session whose Default colors table sets those rows
+  keeps its colors. A Session the Web saved with gbdraw 0.14.5 or earlier, whose
+  table does not set them, follows the new colors at its next Generate, as its
+  command-line replay already does: the Web now reads its saved `misc_feature`
+  and `default` rows at the palette's 0.14.5 color as the palette's own, not as
+  colors the user changed (OV-3259). A test now requires the three to differ in
+  every palette (OV-3114).
 - Fixed: a Circular Legend on the left or right centred the feature rows and
   the whole block of similarity rings and gradient bars each on its own, with
   the ring names at that block's left edge, so the blocks sat apart. Every

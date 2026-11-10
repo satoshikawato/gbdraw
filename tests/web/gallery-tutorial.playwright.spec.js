@@ -138,7 +138,8 @@ test('Circular Palette Explorer recolors one semantic SVG across all built-in pa
 
   await paletteSelect.selectOption('ajisai');
   const ncRnaSwatch = page.locator('.palette-swatch').filter({ hasText: 'ncRNA' });
-  await expect(ncRnaSwatch.locator('code')).toHaveText('#d3d3d3');
+  // ajisai lists no ncRNA, so its swatch shows the palette's default colour.
+  await expect(ncRnaSwatch.locator('code')).toHaveText('#aebccb');
 
   await page.setViewportSize({ width: 390, height: 844 });
   // The header takes its two-row layout in the page's resize event, which can run after setViewportSize returns.
