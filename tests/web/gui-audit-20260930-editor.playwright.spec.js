@@ -34,7 +34,7 @@ const notDrawn = (value) => value == null || /\|hidden$/.test(value);
 // edits of the record-wide and legend steps are the three History actions of
 // D-07, which then undoes them back to the Generate.
 test('batch Results: the drawer, edits that reach the other Result, its export, Session and Undo, then annotations, padding and a failed live edit', async ({ page, browser }, testInfo) => {
-  test.setTimeout(600_000);
+  test.setTimeout(150_000);
   await openBatch(page);
   const showFirstResult = async () => {
     if (await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await selectResult(page, 0);
@@ -102,7 +102,7 @@ test('batch Results: the drawer, edits that reach the other Result, its export, 
   // the annotationLabel scope, hide with the product scope, the GC content
   // legend deletion) are those of the two steps before, made on Result 1;
   // Result 2 is shown.
-  await test.step('batch edits shown on another Result reach its export, its Session, and Undo', async () => {
+  await test.step('batch edits shown on another Result reach its export, its Session, and Undo (D-07, PD-OI-062)', async () => {
     const shown = await featurePresentation(page, ['TESTB_0001', 'TESTB_0004']);
     expect(shown.TESTB_0001.results[1]).toBe('#ff0000|shown');
     expect(notDrawn(shown.TESTB_0004.mounted)).toBe(true);
@@ -173,7 +173,7 @@ test('batch Results: the drawer, edits that reach the other Result, its export, 
   });
 
   // D-09 (PD-OI-064): one canvas padding reaches every batch Result, once.
-  await test.step('canvas padding reaches every batch Result through Generate and applies once', async () => {
+  await test.step('canvas padding reaches every batch Result through Generate and applies once (D-09, PD-OI-064)', async () => {
     await settle(page);
     await showFirstResult();
     const canvases = () => page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => {
@@ -210,7 +210,7 @@ test('batch Results: the drawer, edits that reach the other Result, its export, 
   // OV-36 (R1(c), Owner-delegated recommended choice): a successful Generate
   // draws every edit, so it clears the note of an earlier failed live edit. A
   // failed Generate leaves the Result as it was, so the note stays.
-  await test.step('a successful Generate clears the note of a failed live edit, and a failed Generate keeps it', async () => {
+  await test.step('a successful Generate clears the note of a failed live edit, and a failed Generate keeps it (OV-36)', async () => {
     const note = page.locator('[data-live-application-feedback]');
     const resultContents = () => page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => result.content));
     const reflowFailed = () => page.evaluate(() => Boolean(window.__GBDRAW_APP__.labelReflowLastError));
@@ -267,7 +267,7 @@ test('a Feature Visibility rule hides the label on the other batch Result when i
 // it starts with its own Generate and leaves draft settings that apply on
 // Generate.
 test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, legend order, rename and conflict, and a label reflow', async ({ browser }) => {
-  test.setTimeout(600_000);
+  test.setTimeout(120_000);
   const page = await load(browser, HMMT_SESSION);
   try {
     await test.step('the Load ends without the Load repair dialog or an error', () => expectSessionLoadedWithoutWarnings(page));
@@ -403,7 +403,7 @@ test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, le
     // N-16 (D-11, PD-OI-066): a label reflow renders the committed Session with
     // the current editor edits. Draft settings that apply on Generate must not
     // reach the Result through it.
-    await test.step('a label reflow leaves Applies on Generate draft settings out of the Result', async () => {
+    await test.step('a label reflow leaves Applies on Generate draft settings out of the Result (N-16, PD-OI-066)', async () => {
       await generate(page);
       const resultFacts = () => page.evaluate(async () => {
         const { state } = await import('./js/state.js');
@@ -460,7 +460,7 @@ test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, le
 // The Linear LAMBDA Gallery Session on one page. A page error anywhere in the
 // case fails the legend-free step.
 test('lambda: a Linear legend side change applies on Generate or at once, and a position change after a legend-free Generate raises no page error', async ({ browser }) => {
-  test.setTimeout(600_000);
+  test.setTimeout(120_000);
   const page = await load(browser, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
@@ -469,7 +469,7 @@ test('lambda: a Linear legend side change applies on Generate or at once, and a 
     // either applies on Generate, with the note beside the control, and leaves the
     // Result unchanged until then, or shows at once as Generate draws it. The note
     // (OIC-024) tells which applies.
-    await test.step('a Linear legend side change applies on Generate with the note, or at once as Generate draws it', async () => {
+    await test.step('a Linear legend side change applies on Generate with the note, or at once as Generate draws it (PD-OI-084 A)', async () => {
       await generate(page);
       // The side, the canvas and where each legend row is drawn, in SVG units.
       const read = () => page.evaluate(() => {
@@ -1329,14 +1329,14 @@ const expectLabelNotShownReason = async (page, locator, sentence, cause) => {
 // which deletes it again: no rule, both features and labels drawn, as the
 // Underlay and OV-48 steps start.
 test('forced-label fixture: the Label Not Shown reasons, and Feature Visibility rules that hide a label, are deleted, or are edited during Generate', async ({ page }) => {
-  test.setTimeout(600_000);
+  test.setTimeout(120_000);
   await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {});
   const sameStart = sameStepStart(page);
 
-  await test.step('the Label Not Shown dialog names the reason: Show Labels None', async () => {
+  await test.step('the Label Not Shown dialog names the reason: Show Labels None (R-4)', async () => {
     await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'none'; });
     await generate(page);
-    await sameStart('the Label Not Shown dialog names the reason: Show Labels None');
+    await sameStart('the Generated Show Labels None state');
     await expectLabelNotShownReason(page, 'FL1', 'Labels are set to "None"', 'Show Labels = None');
     // Undo of the text edit returns to the Generate.
     await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
@@ -1358,7 +1358,7 @@ test('forced-label fixture: the Label Not Shown reasons, and Feature Visibility 
   // takes its label with it, as Generate draws it, also with Auto Reflow off and
   // before the editor has bound the labels. The rule edit, Undo and Redo (History
   // apply), and Generate show the same features and labels.
-  await test.step('a Feature Visibility rule that hides a feature hides its label too', async () => {
+  await test.step('a Feature Visibility rule that hides a feature hides its label too (OV-35)', async () => {
     await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });
     await generate(page);
     expect(await autoReflowOff(page)).toBe(true);
@@ -1384,7 +1384,7 @@ test('forced-label fixture: the Label Not Shown reasons, and Feature Visibility 
   // OV-34: with Auto Reflow off, deleting the rule that hid a feature at Generate
   // draws the feature and its label live (the automatic rerender), as Generate
   // draws them.
-  await test.step('deleting a Feature Visibility rule draws the feature it hid at Generate', async () => {
+  await test.step('deleting a Feature Visibility rule draws the feature it hid at Generate (OV-34)', async () => {
     expect(await autoReflowOff(page)).toBe(true);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.featureVisibilityManualRules
       .map(({ recordId, featureType, qualifier, value, action }) => ({ recordId, featureType, qualifier, value, action }))),
@@ -1402,7 +1402,7 @@ test('forced-label fixture: the Label Not Shown reasons, and Feature Visibility 
     expect(await shown()).toEqual({ drawn: [fl1, fl2], labeled: [fl1, fl2] });
   });
 
-  await test.step('the Label Not Shown dialog names the reason: a feature drawn as Underlay', async () => {
+  await test.step('the Label Not Shown dialog names the reason: a feature drawn as Underlay (R-4)', async () => {
     await expectLabelNotShownReason(page, 'repeat_region', 'Labels are not drawn for features drawn as "Underlay".', 'drawn as Underlay');
     await waitForLabelReflow(page);
   });
@@ -1411,7 +1411,7 @@ test('forced-label fixture: the Label Not Shown reasons, and Feature Visibility 
   // for a rerender while Generate runs waits for it (the rerender would take the
   // newer generation token and end Generate with no Result and no message), and
   // the rerender then runs once, so the edit is drawn.
-  await test.step('an automatic rerender requested during Generate waits for it and then runs once', async () => {
+  await test.step('an automatic rerender requested during Generate waits for it and then runs once (OV-48)', async () => {
     expect(await glyphPresent(fl1)).toBe(true);
 
     // Hold the first Python response (Generate's); count every response.
