@@ -367,18 +367,52 @@ export const automaticAnnotationTrackSlots = (sets, mode, slotFields = {}) => {
   return slots;
 };
 
+/** A stack row as the annotation set rules read it: its renderer and its params. @typedef {{ renderer?: unknown, params?: unknown }} SetNamingRow */
+/**
+ * The set id an Annotations row names, '' for none or for a row of another renderer.
+ * @param {SetNamingRow | null | undefined} row
+ */
+export const annotationRowSetId = (row) => (row?.renderer === 'annotations'
+  ? String(/** @type {{ set_id?: unknown } | null | undefined} */ (row.params)?.set_id || '').trim() : '');
+/**
+ * The set ids the Annotations rows of a stack name: also a row turned off and an Overlay row.
+ * @param {readonly SetNamingRow[]} rows
+ */
+const annotationSetIdsNamed = (rows) => new Set(rows.map(annotationRowSetId).filter(Boolean));
+
+/**
+ * The ids of a drawing's Region Annotation sets, in their order.
+ * @param {readonly { id?: unknown }[] | null | undefined} sets
+ * @returns {string[]}
+ */
+export const annotationSetIdsOf = (sets) => (Array.isArray(sets) ? sets : [])
+  .map((set) => String(set?.id || '').trim()).filter(Boolean);
+
+/**
+ * The set a new Annotations row of a stack draws, by set id (OV-3153, Owner
+ * D-60 of 2026-11-10): the first set, in the sets' order, that no Annotations
+ * row of the stack names (`annotationSetIdsNamed`); null when every set has a
+ * row (Add track then asks) or there is no set.
+ * @param {readonly SetNamingRow[]} rows
+ * @param {readonly { id?: unknown }[] | null | undefined} sets
+ * @returns {string | null}
+ */
+export const annotationSetForNewRow = (rows, sets) => {
+  const named = annotationSetIdsNamed(rows);
+  return annotationSetIdsOf(sets).find((id) => !named.has(id)) ?? null;
+};
+
 /**
  * The automatic slots of the sets that no row of `rows` names (also a row
  * turned off), the rows a stack gets so that it draws every set as Python's
  * automatic placement does.
- * @param {readonly { renderer?: unknown, params?: unknown }[]} rows
+ * @param {readonly SetNamingRow[]} rows
  * @param {Parameters<typeof automaticAnnotationTrackSlots>[0]} sets
  * @param {'circular' | 'linear'} mode
  * @param {Readonly<Record<string, null>>} [slotFields]
  */
 const missingAnnotationTrackSlots = (rows, sets, mode, slotFields = {}) => {
-  const named = new Set(rows.filter((row) => row?.renderer === 'annotations')
-    .map((row) => String(/** @type {{ set_id?: unknown } | null | undefined} */ (row.params)?.set_id || '').trim()).filter(Boolean));
+  const named = annotationSetIdsNamed(rows);
   const taken = new Set(rows.map((row) => String(/** @type {{ id?: unknown }} */ (row)?.id || '').trim()));
   return automaticAnnotationTrackSlots(sets, mode, slotFields)
     .filter((slot) => !named.has(slot.params.set_id))
@@ -478,7 +512,7 @@ export const stackTrackSlotsBySide = (rows, placementOf, outerSide) => {
  * @param {Readonly<Record<string, null>>} [slotFields]
  */
 export const prependMissingAnnotationTrackSlots = (rows, axisIndex, sets, mode, normalize, slotFields = {}) => {
-  const added = missingAnnotationTrackSlots(/** @type {readonly { renderer?: unknown, params?: unknown }[]} */ (rows), sets, mode, slotFields);
+  const added = missingAnnotationTrackSlots(/** @type {readonly SetNamingRow[]} */ (rows), sets, mode, slotFields);
   if (added.length > 0) rows.splice(0, 0, ...normalize(added));
   return axisIndex + added.length;
 };

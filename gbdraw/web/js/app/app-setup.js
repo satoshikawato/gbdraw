@@ -217,7 +217,7 @@ import {
 import { createRightDrawerController } from './right-drawer.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
-import { askTrackSourceRemoval, askingTrackRowRemoval, askingTrackRowSwitch } from './track-slot-edits.js';
+import { askTrackSourceRemoval, askingAnnotationTrackAdd, askingTrackRowRemoval, askingTrackRowSwitch } from './track-slot-edits.js';
 import { createAnnotationEditor } from './annotations.js';
 import { createDrawingLegendRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
@@ -1371,10 +1371,10 @@ export const createAppSetup = () => {
   });
   // PD-OI-104 scenario revisions 6 and 7: a row's own switch, a row's Remove, and
   // the removal of a Depth file or series ask before they take out of the shown
-  // stack a row that other rows start at or extend to.
-  /** @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
+  // stack a row that other rows start at or extend to (Add track: OV-3153).
+  /** @param {'circular_track_slots' | 'linear_track_slots'} slotsKey @returns {AskingStackPorts<SwitchedTrackRow>} */
   const askingStackPorts = (slotsKey) => ({
-    askChoice, runUndoable: history.runUndoable, busy: sessionOperationAvailability,
+    askChoice, runUndoable: history.runUndoable, busy: sessionOperationAvailability, annotationSets: () => state.activeDrawing().annotationSets,
     rows: () => /** @type {readonly SwitchedTrackRow[]} */ (state.activeDrawing().adv[slotsKey]),
     mode: /** @type {'circular' | 'linear'} */ (slotsKey === 'circular_track_slots' ? 'circular' : 'linear')
   });
@@ -3710,7 +3710,7 @@ export const createAppSetup = () => {
     setCircularSkewSuppressed: circularTrackSlotEditor.setCircularSkewSuppressed,
     setCircularDinucleotide: circularTrackSlotEditor.setCircularDinucleotide,
     setCircularTrackSlotNt: circularTrackSlotEditor.setCircularTrackSlotNt,
-    addCircularTrackSlot: circularTrackSlotEditor.addCircularTrackSlot,
+    addCircularTrackSlot: askingAnnotationTrackAdd(askingStackPorts('circular_track_slots'), circularTrackSlotEditor.addCircularTrackSlot),
     circularTrackAddBlockReason: circularTrackSlotEditor.circularTrackAddBlockReason,
     duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
     canDuplicateCircularTrackSlot: circularTrackSlotEditor.canDuplicateCircularTrackSlot,
@@ -3767,7 +3767,7 @@ export const createAppSetup = () => {
     linearTrackRendererLabel: linearTrackSlotEditor.linearTrackRendererLabel,
     resetLinearTrackSlotsFromSimpleControls: linearTrackSlotEditor.resetLinearTrackSlotsFromSimpleControls,
     setLinearTrackSlotsEnabled: linearTrackSlotEditor.setLinearTrackSlotsEnabled,
-    addLinearTrackSlot: linearTrackSlotEditor.addLinearTrackSlot,
+    addLinearTrackSlot: askingAnnotationTrackAdd(askingStackPorts('linear_track_slots'), linearTrackSlotEditor.addLinearTrackSlot),
     linearTrackAddBlockReason: linearTrackSlotEditor.linearTrackAddBlockReason,
     duplicateLinearTrackSlot: linearTrackSlotEditor.duplicateLinearTrackSlot,
     canDuplicateLinearTrackSlot: linearTrackSlotEditor.canDuplicateLinearTrackSlot,
