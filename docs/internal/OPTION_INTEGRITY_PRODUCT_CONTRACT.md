@@ -5249,14 +5249,15 @@ Status: active Product authority
   make way is replaced: on lambda they go from 7 to 0 (`--labels out`) and
   from 4 to 0 (`--labels both`, where "Lysis" is drawn 5 px further along
   its region, where it can be backed). It comes from the Product Decision
-  Owner `satoshikawato`'s replies of `2026-11-10` in the Claude Code session
-  `46e5d387` of the campaign `gallery-rings-depth-20261108` (`DECISIONS.md`
+  Owner `satoshikawato`'s replies of `2026-11-10` in the Claude Code sessions
+  `a95badd3` (`D-61`) and `46e5d387` (`D-65`) of the campaign
+  `gallery-rings-depth-20261108` (`DECISIONS.md`
   `D-61` and `D-65`, bug `OV-3156`).
   - D-61 (`2026-11-10`). The session showed the ways to treat these labels,
     each rendered from the same figures, with the recommendation B (a
     backing as in Linear) and a complete receipt for B, as question Q15. The
     Owner replied 「Q14=D Q15=B 受領文OK Q16=B」 (Q14 and Q16 concern other
-    work and no record of this Contract).
+    work and amend no record of this Contract).
   - D-65 (`2026-11-10`). On the code built from `dev` after Revision 138,
     three statements of that receipt did not hold: it said no label moves,
     that "Lysis" is left unbacked with `--labels both`, and it gave the
