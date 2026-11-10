@@ -251,6 +251,7 @@ import {
  *   from '../services/circular-conservation-keys.js'
  */
 /** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
+/** @import { ProteinBlastpMode } from '../services/current-option-values.js' */
 /** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
 /** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
@@ -3717,7 +3718,8 @@ export const createRunAnalysis = ({
         if (useLosat) recordSessionLifecycleEvent('losat-cache-preparation-start');
 
         if (useProteinBlastp) {
-          searchDrawing.losat.blastp.mode = blastpMode;
+          // `useProteinBlastp`: `requireCurrentProteinBlastpMode` gave `blastpMode`.
+          searchDrawing.losat.blastp.mode = /** @type {ProteinBlastpMode} */ (blastpMode);
           searchDrawing.losat.blastp.candidateLimit = blastpCandidateLimit;
         }
         if (usePairwiseBlastp) {

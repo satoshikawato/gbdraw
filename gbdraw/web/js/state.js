@@ -197,7 +197,7 @@ const defaultEditorDraftState = createDefaultEditorDraftState();
 // App-level settings shared by every drawing: the LOSAT execution and thread
 // settings (Session `ui.losatExecution`) and the rich feature popup
 // (`ui.richFeaturePopup`), PD-OI-090.
-const losatExecution = reactive(createDefaultLosatExecution());
+const losatExecution = typedReactive(createDefaultLosatExecution());
 const richFeaturePopup = ref(true);
 
 const losatCacheInfo = ref([]);
@@ -977,7 +977,7 @@ export const createDrawingState = (id, drawingMode) => {
       updateActiveLayoutPreference(layoutPreferences, drawingMode, form.multi_record_canvas, { plotTitlePosition: value });
     }
   });
-  const losat = reactive(initial.losat);
+  const losat = typedReactive(initial.losat);
   const losatProgram = typedRef(initial.losatProgram);
   const linearComparisonPlan = reactive(initial.linearComparisonPlan);
   const linearRecordLayoutEnabled = typedRef(initial.linearRecordLayoutEnabled);
