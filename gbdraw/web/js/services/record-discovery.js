@@ -7,6 +7,7 @@ import { genbankHeaderIds, pythonStrip, scanGenBankHeader } from './genbank-head
 import { ORGANISM_NAME_RULE } from '../contracts/schema.generated.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { readRingScales } from './linear-units.js';
 import {
   circularInputComplete, circularSourceInputs, inputTypeOfSourceKind, inputTypeSpec
 } from './input-types.js';
@@ -23,6 +24,7 @@ import {
 } from './file-content-cache.js';
 
 /** @import { FileLike } from './session-resource-backing.js' */
+/** @import { RingGenomeScales } from '../contracts/card-windows.generated.js' */
 /** @import { InputFileRef } from './history-files.js' */
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
@@ -1035,6 +1037,38 @@ export const readComparisonSequenceDigest = (options) => readOncePerFile(
   options.files, 'comparison-sequence-sha256',
   async () => sha256Hex(textToBytes((await readComparisonSequence(options)).fasta))
 );
+
+/**
+ * The search space of each ring search, in ring order (`RingGenomeScales`, PD-OI-018 revision 6): Python reads the
+ * reference files and each ring's files and answers from the owner the CLI ring search reads
+ * (`plan_ring_scales_json` of gbdraw/web_support/comparison_sequences.py), so the page passes the CLI's values and
+ * sums no genome. Kept per set of Files, whose bytes never change.
+ * @param {{ files: readonly FileLike[], format: 'genbank' | 'fasta' }} subject The reference files, one per source card
+ *   (`ConservationSubject`).
+ * @param {readonly { files: readonly [FileLike, ...FileLike[]] }[]} rings The bound rings, in ring order.
+ * @param {'losatn' | 'tlosatx'} program
+ * @returns {Promise<RingGenomeScales>}
+ */
+export const planRingScales = (subject, rings, program) => {
+  const ringFiles = rings.map(({ files }) => files);
+  const files = [...subject.files, ...ringFiles.flat()];
+  const shape = ringFiles.map((list) => list.length).join(',');
+  return readOncePerFile(/** @type {[FileLike, ...FileLike[]]} */ (files), `ring-scales:${program}:${subject.format}:${subject.files.length}:${shape}`, async () => {
+    /** @param {'reference' | 'ring'} role @param {FileLike} file */
+    const staged = async (role, file) => ({ role, bytes: await cloneFileBytesForTransfer(file) });
+    const { result } = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_RING_SCALES, {
+      program,
+      format: subject.format,
+      referenceNames: subject.files.map((file) => file.name),
+      ringNames: ringFiles.map((list) => list.map((file) => file.name)),
+      files: await Promise.all([
+        ...subject.files.map((file) => staged('reference', file)),
+        ...ringFiles.flat().map((file) => staged('ring', file))
+      ])
+    });
+    return readRingScales(result, rings.length);
+  });
+};
 
 /**
  * @param {{

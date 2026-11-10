@@ -201,6 +201,12 @@ def ring_subject_sources(
     return tuple(found)
 
 
+def ring_subject_records(sources: Iterable[RingSubjectSource]) -> tuple[SeqRecord, ...]:
+    """The records of the ring subject database (:func:`ring_subject_sources`), source after source."""
+
+    return tuple(record for source in sources for record in source.records)
+
+
 def comparison_genome_files(
     comparison: ComparisonGenome, names: Sequence[str] | None = None
 ) -> tuple[RingGenomeFile, ...]:
@@ -439,7 +445,7 @@ def resolve_circular_conservation_losat(
         )
 
     # The subject database: the whole subject-side source files (D-25).
-    subject_records = tuple(record for source in subject_sources for record in source.records)
+    subject_records = ring_subject_records(subject_sources)
     subject_fasta = ring_subject_fasta(subject_records)
     subject_hash = sha256_text(subject_fasta)
     subject_ids = _fasta_ids(subject_fasta)
@@ -550,6 +556,7 @@ __all__ = [
     "ring_genome_file",
     "ring_search_spaces",
     "ring_subject_fasta",
+    "ring_subject_records",
     "ring_subject_sources",
     "RingGenomeFile",
     "RingSearchSpaces",

@@ -37,6 +37,7 @@ from gbdraw.api.request_render import plan_circular_request, resolve_request_rec
 from gbdraw.api.requests import GenBankInputSource, GffFastaInputSource  # noqa: E402
 from gbdraw.io.record_select import parse_record_selector  # noqa: E402
 from gbdraw.io.regions import parse_region_spec  # noqa: E402
+from gbdraw.web_support.comparison_sequences import plan_ring_scales_json  # noqa: E402
 from gbdraw.web_support.ring_search_frame import circular_ring_tables_in_search_frame_json  # noqa: E402
 
 QUERY = ">QUERY1\nACGTACGTACGTACGTACGT\n"
@@ -102,6 +103,8 @@ def main() -> None:
         return raw_rows(subject)
 
     circular_losat.run_losat_search = fake_search
+    # A runtime that takes -searchsp, as the Web's LOSAT does (PD-OI-018 revision 6).
+    circular_losat.losat_takes_genome_scale = lambda *_args, **_kwargs: True
     read_all = helpers()["read_all_sequence_records"]
     multi = "".join(genbank(record_id, SEQUENCES[record_id]) for record_id in ("SUBA", "SUBB", "SUBC")).encode()
     gff = b"##gff-version 3\nSUBB\t.\tgene\t5\t40\t.\t+\t.\tID=gene1\n"
@@ -159,6 +162,12 @@ def main() -> None:
                 "cliRingRows": plan.request.options.conservation_search_results[0].text,
                 "recordList": listed,
                 "helperReply": helper_reply,
+                # The Worker helper's ring scales for the files the page stages: the scale of the CLI's search.
+                "ringScales": json.loads(plan_ring_scales_json(
+                    "losatn", fmt, json.dumps([subject_path]), json.dumps([Path(subject_path).name]),
+                    json.dumps([[str(query)]]), json.dumps([[query.name]]),
+                )),
+                "cliArgs": entry["args"],
             })
     json.dump({"query": QUERY, "cases": cases}, sys.stdout)
 

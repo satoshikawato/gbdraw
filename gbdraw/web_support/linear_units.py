@@ -500,7 +500,12 @@ def plan_record_places_json(records_json: str) -> str:
 
 def describe_card_window_plan() -> dict[str, dict[str, Shape]]:
     """The requests and the answers of :func:`plan_card_windows_json` and :func:`plan_record_places_json`, and the
-    answer of :func:`plan_genome_scales_json`, as named shapes of :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py)."""
+    answers of :func:`plan_genome_scales_json` and of the ring planner
+    (``gbdraw.web_support.comparison_sequences.plan_ring_scales_json``), as named shapes of
+    :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py)."""
+
+    # The ring planner's module reads this one's warning parameters, so it is read here, when the shapes are made.
+    from gbdraw.web_support.comparison_sequences import RingGenomeScales
 
     types_: dict[str, Shape] = {}
 
@@ -512,7 +517,7 @@ def describe_card_window_plan() -> dict[str, dict[str, Shape]]:
             return ref(hint.__name__)
         return None
 
-    for root in (CardWindowRecordInput, CardWindowPlan, RecordPlaceInput, RecordPlace, LinearGenomeScales):
+    for root in (CardWindowRecordInput, CardWindowPlan, RecordPlaceInput, RecordPlace, LinearGenomeScales, RingGenomeScales):
         special(root)
     return {"types": types_}
 

@@ -716,6 +716,25 @@ test('a genome scale reply that does not fit the searched units is refused', asy
   assert.throws(() => readGenomeScales(good, ['a', 'b']).scaleOf(2, 0), { code: 'RESULT_INVALID' });
 });
 
+// PD-OI-018 revision 6 (OV-3319): a Circular Generate reads one scale per ring it searches; a reply for other rings, a
+// scale that is not a positive integer, or a warning of a ring it does not search is a helper failure.
+test('a ring scale reply that does not fit the searched rings is refused', async () => {
+  const { readRingScales } = await import('../../gbdraw/web/js/services/linear-units.js');
+  const params = { first: 'a.gb', second: 'b.fna', space: '9', limit: '8' };
+  const warning = { ring: 1, text: 'Genomes {first} and {second}', params };
+  const good = { scales: ['12', null], warnings: [warning] };
+  assert.deepEqual(readRingScales(good, 2), good);
+  const refused = (result, count = 2) => assert.throws(() => readRingScales(result, count), { code: 'RESULT_INVALID' });
+  refused(good, 1);
+  refused(good, 3);
+  refused({ ...good, scales: ['012', null] });
+  refused({ ...good, scales: [12, null] });
+  refused({ ...good, warnings: [{ ...warning, ring: 2 }] });
+  refused({ ...good, warnings: [{ ...warning, params: { ...params, limit: 8 } }] });
+  refused({ scales: good.scales });
+  refused(null);
+});
+
 // Owner decision 2026-11-10: a genome pair past what LOSAT reads is searched per file with one warning. The banner shows
 // the warnings of the pairs Generate searches, each once whatever the direction, translated from the English text
 // Python sends with its parameters (the text the command line logs); a pair of the reply no search reads shows none.

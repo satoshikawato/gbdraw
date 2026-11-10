@@ -2487,6 +2487,8 @@ const finalizeGeneratedRecipeFiles = (generatedFiles, allocatedMetadata) => {
 export const LOSAT_DATABASE_SCOPE_NOTE = msg('LOSAT E-values use the subject source file as the search database, without the query record when both records come from the same file.');
 // PD-OI-018 revision 6 (OV-3143): the E-value scale of each LOSAT program, which the Web and the CLI share.
 export const LOSAT_EVALUE_SCALE_NOTE = msg('LOSATN and TLOSATX E-values use one scale for each pair of genomes: a genome is the files whose records share a row, with every record of those files counted, drawn or not, so a crop, a window or a split into files does not change them. LOSATP E-values use the proteins of the subject genome as the database size, every protein of every record of its files, drawn or not, so a crop, a window or a split into files does not change them either. For a genome pair whose drawn records are each the whole of a one-record file, LOSAT keeps its own scale, which it adjusts for the length of a hit, so that pair\'s E-values differ slightly from those of the same genomes cropped. A genome pair whose search space is past the largest LOSAT reads is searched per file, with a warning.');
+// The same scale for Circular similarity rings: the reference genome against each ring's genome.
+export const LOSAT_RING_EVALUE_SCALE_NOTE = msg('LOSATN and TLOSATX similarity ring E-values use one scale for each ring: the reference genome is the files of the drawn records and the ring\'s genome is the files of that ring, with every record of those files counted, drawn or not, so a crop, the records drawn or a split into files does not change them. For a ring whose genome and the reference genome are each a one-record file, LOSAT keeps its own scale, which it adjusts for the length of a hit, so that ring\'s E-values differ slightly from those of the same genomes split into files. A ring whose search space is past the largest LOSAT reads is searched per file, with a warning.');
 const SOURCE_HELPER_FILE_NOTE = msg('The Source recipe references a browser-generated file: {files}. Use "Download reproducibility files" to save it next to the uploaded inputs before running the command in a terminal.');
 const SOURCE_HELPER_FILES_NOTE = msg('The Source recipe references browser-generated files: {files}. Use "Download reproducibility files" to save them next to the uploaded inputs before running the command in a terminal.');
 const UNMAPPED_PATHS_NOTE = msg('Some browser virtual paths could not be mapped to visible file names, so this command is only an approximation.');
@@ -2504,7 +2506,8 @@ export const shownRunInfoNoteParts = (noteParts) => noteParts.flatMap((part) => 
   if (part.text === SOURCE_HELPER_FILE_NOTE || part.text === SOURCE_HELPER_FILES_NOTE) {
     return [{ text: NEEDS_HELPER_FILES, params: part.params }];
   }
-  return [UNMAPPED_PATHS_NOTE, LOSAT_EVALUE_SCALE_NOTE, LOSAT_DATABASE_SCOPE_NOTE].includes(part.text) ? [part] : [];
+  return [UNMAPPED_PATHS_NOTE, LOSAT_EVALUE_SCALE_NOTE, LOSAT_RING_EVALUE_SCALE_NOTE, LOSAT_DATABASE_SCOPE_NOTE].includes(part.text)
+    ? [part] : [];
 });
 
 /** @type {Readonly<Record<string, string>>} */
@@ -2570,7 +2573,7 @@ export const summarizeLosatRuntimes = (cacheInfo, cacheMap) => {
  * @property {number} [resultCount]
  * @property {string} [startedAtIso]
  * @property {string} [generatedBy]
- * @property {boolean} [losatComparisons]
+ * @property {boolean} [losatComparisons] Whether LOSAT searched the comparisons (Linear) or the similarity rings (Circular).
  * @property {LosatRuntimeLine[]} [losatRuntimes]
  * @property {any[]} [featureIdentityNotices]
  */
@@ -2704,7 +2707,7 @@ export const buildRunInfo = ({
     noteParts.push({ text: msg('The Source recipe can be rerun with the uploaded file names shown here.') });
   }
   if (losatComparisons) {
-    noteParts.push({ text: LOSAT_EVALUE_SCALE_NOTE });
+    noteParts.push({ text: normalizedMode === 'circular' ? LOSAT_RING_EVALUE_SCALE_NOTE : LOSAT_EVALUE_SCALE_NOTE });
   }
   if (exact && exact.helperFiles.length > 0) {
     noteParts.push({

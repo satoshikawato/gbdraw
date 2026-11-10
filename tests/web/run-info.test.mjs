@@ -20,6 +20,7 @@ const {
   buildRunInfo,
   LOSAT_DATABASE_SCOPE_NOTE,
   LOSAT_EVALUE_SCALE_NOTE,
+  LOSAT_RING_EVALUE_SCALE_NOTE,
   buildSourceRecipe,
   quoteShellArg,
   reproducibilityLabel,
@@ -1925,6 +1926,20 @@ test('Run Info states the LOSAT E-value scale only when LOSAT comparisons are pr
   assert(!without.reproducibility.notes.includes(LOSAT_EVALUE_SCALE_NOTE));
   // A Result made before stored the database note, which stays true of it and is still shown.
   assert.deepEqual(shownRunInfoNoteParts([{ text: LOSAT_DATABASE_SCOPE_NOTE }]), [{ text: LOSAT_DATABASE_SCOPE_NOTE }]);
+});
+
+// PD-OI-018 revision 6 (OV-3319): a Circular Result with LOSAT rings states the rings' scale, the reference genome
+// against each ring's genome, in the words of the Linear note.
+test('Run Info states the similarity ring E-value scale of a Circular Result with LOSAT rings', () => {
+  const recipe = { mode: 'circular', available: true, args: ['--gbk', '/a.gb'], fileMetadata: [] };
+  const withRings = buildRunInfo({ mode: 'circular', sourceRecipe: recipe, losatComparisons: true });
+  assert(withRings.reproducibility.notes.includes(LOSAT_RING_EVALUE_SCALE_NOTE));
+  assert(!withRings.reproducibility.notes.includes(LOSAT_EVALUE_SCALE_NOTE));
+  assert.match(LOSAT_RING_EVALUE_SCALE_NOTE, /the reference genome is the files of the drawn records and the ring's genome is the files of that ring/);
+  assert.match(LOSAT_RING_EVALUE_SCALE_NOTE, /with every record of those files counted, drawn or not/);
+  assert.doesNotMatch(LOSAT_RING_EVALUE_SCALE_NOTE, /CLI/);
+  assert(!buildRunInfo({ mode: 'circular', sourceRecipe: recipe }).reproducibility.notes.includes(LOSAT_RING_EVALUE_SCALE_NOTE));
+  assert.deepEqual(shownRunInfoNoteParts([{ text: LOSAT_RING_EVALUE_SCALE_NOTE }]), [{ text: LOSAT_RING_EVALUE_SCALE_NOTE }]);
 });
 
 test('Run Info lists the search runtime of Web, CLI and unrecorded raw entries (D9/D10)', () => {

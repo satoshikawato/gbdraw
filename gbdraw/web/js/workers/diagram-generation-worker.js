@@ -542,7 +542,9 @@ const HELPER_FILE_NAMES = Object.freeze({
   pairs: 'pairs.json',
   visibility: 'feature-visibility.tsv',
   featureOverrides: 'feature-overrides.tsv',
-  rawTsv: 'raw-losatp.tsv'
+  rawTsv: 'raw-losatp.tsv',
+  reference: 'reference.bin',
+  ring: 'ring.bin'
 });
 
 const requirePayloadObject = (payload, operation) => {
@@ -1270,6 +1272,29 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]
     )
+  },
+  // A Circular Generate's ring searches pass the search space Python plans from the reference files and each ring's
+  // files (PD-OI-018 revision 6): `ringNames[k]` names ring k's files, in order, so it also says how many it has.
+  [DIAGRAM_HELPER_OPERATIONS.PLAN_RING_SCALES]: {
+    keys: ['files', 'program', 'format', 'referenceNames', 'ringNames'],
+    fileRoles: ['reference[]', 'ring[]'],
+    run: (pyodide, payload, paths, operation) => {
+      const ringPaths = requireHelperFiles(paths, 'ring', operation);
+      const ringNames = Array.isArray(payload.ringNames) ? payload.ringNames : [];
+      /** @type {string[][]} */
+      const rings = [];
+      let next = 0;
+      for (const names of ringNames) {
+        const count = Array.isArray(names) ? names.length : 0;
+        rings.push(ringPaths.slice(next, next + count));
+        next += count;
+      }
+      return callJsonHelper(pyodide, 'plan_ring_scales_json', [
+        String(payload.program), String(payload.format),
+        jsonArgument(requireHelperFiles(paths, 'reference', operation), []), jsonArgument(payload.referenceNames, []),
+        jsonArgument(rings, []), jsonArgument(payload.ringNames, [])
+      ]);
+    }
   },
   [DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS]: {
     keys: ['records', 'pairs'],

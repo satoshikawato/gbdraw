@@ -3137,6 +3137,9 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
       if (testCase.name === 'byte order mark') {
         workerHelperResponses.push({ ok: true, result: testCase.helperReply });
       }
+      // The ring scales Python plans for the staged files (PD-OI-018 revision 6): the subject file of several
+      // records searches with the CLI's -searchsp, so the raw cache key below is the CLI's with it.
+      workerHelperResponses.push({ ok: true, result: testCase.ringScales });
       workerHelperResponses.push(ringTableConversion);
       searched = null;
       searchOutput = testCase.rawRows;
@@ -3147,6 +3150,10 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
       assert.equal(workerHelperResponses.length, 0, testCase.name);
       assert.equal(searched?.subject, testCase.cliSubjectFasta, testCase.name);
       assert.deepEqual(searched?.cacheKeys, [testCase.cliCacheKey], testCase.name);
+      assert.deepEqual([...state.losatCache.value.values()].map(({ args }) => args), [testCase.cliArgs], testCase.name);
+      assert(testCase.cliArgs.includes('--searchsp'), testCase.name);
+      const scaleRequest = workerMessages.slice(messagesBefore).find(({ operation }) => operation === 'planRingScales');
+      assert.deepEqual(scaleRequest?.payload.ringNames, [[queryFile.name]], testCase.name);
       // One conversion per Generate; the request renders (and a Session saves) the CLI's ring rows, and the raw
       // LOSAT cache keeps the search output.
       const caseMessages = workerMessages.slice(messagesBefore);

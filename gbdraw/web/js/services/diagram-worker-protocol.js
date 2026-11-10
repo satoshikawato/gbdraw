@@ -74,6 +74,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   PLAN_GENOME_SCALES: 'planGenomeScales',
   PLAN_LINEAR_UNITS: 'planLinearUnits',
   PLAN_RECORD_PLACES: 'planRecordPlaces',
+  PLAN_RING_SCALES: 'planRingScales',
   PROMOTE_LEGACY_LOSATP_CACHE: 'promoteLegacyLosatpCache',
   READ_ALL_SEQUENCE_RECORDS: 'readAllSequenceRecords',
   READ_COMPARISON_SEQUENCE: 'readComparisonSequence',

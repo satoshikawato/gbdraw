@@ -172,7 +172,8 @@ import {
   readOncePerFile,
   readCircularSourceRecords,
   readParsedSequenceRecords,
-  circularDepthRowsAfterRead
+  circularDepthRowsAfterRead,
+  planRingScales
 } from '../services/record-discovery.js';
 import {
   bindDrawingInputFileTree, idleCircularRecordDiscovery, markCircularDepthRows, ringGenomeFileLists
@@ -3415,13 +3416,25 @@ export const createRunAnalysis = ({
             const ringGencodes = conservationKeys.rings.map((ring, index) => (tlosatx ? requireLosatGeneticCode(
               normalizePositiveInteger(ring.source.losat_gencode, 1), { field: 'conservation_losat_gencodes', inputOrdinal: index + 1 })
               : null));
-            /** A ring's search arguments. @param {number} index */
-            const buildExtraArgs = (index) => (dbGencode !== null
-              ? ['--query-gencode', String(ringGencodes[index]), '--db-gencode', String(dbGencode)]
-              : ['--task', String(drawing.losat.blastn?.task || 'megablast').trim() || 'megablast']);
             const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
             // Generate checked above that the Circular input is complete, so the subject and every ring are bound.
-            const { fasta: subjectFasta, hash: subjectHash } = /** @type {ConservationSubject} */ (conservationKeys.subject);
+            const subject = /** @type {ConservationSubject} */ (conservationKeys.subject);
+            const { fasta: subjectFasta, hash: subjectHash } = subject;
+            const boundRings = conservationKeys.rings.map((ring) => ({
+              files: /** @type {readonly [FileLike, ...FileLike[]]} */ (ring.files)
+            }));
+            // The search space of each ring's genome pair (PD-OI-018 revision 6): Python plans it from the files, as
+            // for the CLI's ring searches, so both pass one value; a ring searched per file shows Python's warning.
+            const ringScales = await planRingScales(subject, boundRings, circularLosatSuffix);
+            const perFileNotice = perFileWarningNotice(showNotice);
+            ringScales.warnings.forEach(perFileNotice);
+            /** A ring's search arguments, with the tables checked above and its genome pair's search space. @param {number} index */
+            const buildExtraArgs = (index) => nucleotideLosatArgs({
+              program: circularLosatProgram,
+              task: String(drawing.losat.blastn?.task || 'megablast').trim() || 'megablast',
+              gencodes: () => [ringGencodes[index], dbGencode],
+              searchSpace: ringScales.scales[index]
+            });
             const subjectSequenceKey = `circular-subject:${subjectHash}`;
             const sequenceEntriesByKey = new Map([[subjectSequenceKey, subjectFasta]]);
             const cacheMap = new Map(losatCache.value || []);
@@ -5258,7 +5271,8 @@ export const createRunAnalysis = ({
           elapsedMs: getNow() - manualRunStartedAt,
           resultCount: candidateCommit.results.length,
           startedAtIso: manualRunStartedAtIso,
-          losatComparisons: mode.value === 'linear' && requestComparisonPlan?.hasLosatIntent === true,
+          losatComparisons: mode.value === 'linear'
+            ? requestComparisonPlan?.hasLosatIntent === true : searchedRingTables.length > 0,
           losatRuntimes: summarizeLosatRuntimes(
             losatResultRowsOfDrawing(pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo, drawing.id),
             pendingLosatCacheCommit?.cacheMap || losatCache.value

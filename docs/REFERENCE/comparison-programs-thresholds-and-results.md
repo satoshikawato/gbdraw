@@ -170,7 +170,7 @@ that search was requested. Settings shows the job count from the same plan that
 Generate runs.
 
 In Linear diagrams, LOSATN and TLOSATX E-values use one scale for each pair of
-genomes. Circular comparison rings still compute E-values per searched file.
+genomes, and so do Circular similarity rings (see below).
 In a Linear diagram, files whose records share a row are one genome, and so is
 every file linked to them through other shared rows; a file that shares no row with
 another file is a genome of its own. A genome's length is every record of its
@@ -191,6 +191,22 @@ warning names the pair's files. A LOSAT
 without `-searchsp` (v0.1.0, which `gbdraw setup-losat` installs) makes the CLI
 search with the scale of the searched sequences and say so in a warning; one
 scale per genome needs a newer LOSAT or NCBI BLAST+.
+
+Circular similarity rings use the same scale. The reference genome is the
+files of the drawn records and each ring's genome is the files of that ring
+(`--conservation_genome` lists them), with every record of those files
+counted, drawn or not and before any crop; for a GFF3 and FASTA pair, every
+sequence of the FASTA file. Every ring search passes the reference genome's
+length multiplied by the ring genome's as the search space (`-searchsp`;
+TLOSATX counts each length in amino acids), so a ring's E-values do not change
+with the records drawn, a crop, or a genome split over files. When the
+reference genome and the ring's genome are each one file of one record, no
+search space is passed, and those figures, raw cache keys, and Sessions are as
+before. A ring whose search space is past the largest LOSAT reads is searched
+with LOSAT's own search space, with the same warning, and a LOSAT without
+`-searchsp` makes the CLI search rings as before, with the same warning. The
+web app asks the same Python code for each ring's search space, so the CLI and
+the web app pass one value.
 
 In Linear diagrams, LOSATP E-values (Pairwise, Similarity groups, and
 Collinear) use one scale for each subject genome. Every LOSATP search passes the letters of every protein of
