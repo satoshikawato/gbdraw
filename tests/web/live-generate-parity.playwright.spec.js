@@ -17,7 +17,7 @@ const {
   answerSessionTitle, evaluateWithRetainedPromise, expectNoLoadRepairDialog, installPageProbe, WARM_APP_PAGE, warmAppTest: test
 } = require('./helpers/app-lifecycle.cjs');
 const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
-const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
+const { expectLiveEqualsGenerate, sameStepStart, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
@@ -789,9 +789,11 @@ const POPUP_RESET_CASES = [
   }
 ];
 // Reset Settings and a Generate, the edit, Reset Settings, and live = Generate.
-const resetShowsGenerate = async (page, { domain, edit, undoRedo, sameDrawing, resetShowsDrawn }) => {
+// `checkStart` (of `sameStepStart`) checks the state after the first Generate.
+const resetShowsGenerate = async (page, { domain, edit, undoRedo, sameDrawing, resetShowsDrawn }, checkStart = async () => {}) => {
   await resetSettings(page);
   await generate(page);
+  await checkStart(`Reset Settings after ${domain}`);
   const drawn = await semanticSnapshot(page);
   await edit(page);
   const edited = await semanticSnapshot(page);
@@ -820,8 +822,9 @@ for (const resetCase of RESET_CASES) {
 test('Reset Settings after each popup or rule edit shows what Generate draws', async ({ page }) => {
   test.setTimeout(240_000);
   await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  const checkStart = sameStepStart(page);
   for (const resetCase of POPUP_RESET_CASES) {
-    await test.step(`Reset Settings after ${resetCase.domain} shows what Generate draws`, () => resetShowsGenerate(page, resetCase));
+    await test.step(`Reset Settings after ${resetCase.domain} shows what Generate draws`, () => resetShowsGenerate(page, resetCase, checkStart));
   }
 });
 
@@ -1483,8 +1486,10 @@ test.describe('Undo and Redo', () => {
     test(`Undo and Redo of each edit domain apply at once with no rerender, Auto Reflow off (${mode})`, async ({ page }) => {
       test.setTimeout(240_000);
       await open(page, { mode, results: 'single', reflow: 'off' });
+      const checkStart = sameStepStart(page);
       for (const { domain, edit, edited } of AT_ONCE_CASES) {
         await test.step(`Undo and Redo of ${domain} apply at once with no rerender`, async () => {
+          await checkStart(`Undo and Redo of ${domain}`);
           const id = await featureIdOf(page, 'FL2');
           await edit(page);
           await settleLive(page);
