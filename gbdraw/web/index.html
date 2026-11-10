@@ -9964,7 +9964,18 @@
                        @keydown.enter="submitChoicePromptField"
                        class="form-input mt-1 w-full text-sm" autocomplete="off" spellcheck="false">
             </div>
-            <div class="mt-4 flex flex-wrap justify-end gap-2">
+            <!-- Options that say what they do: a list above Cancel, as the scope dialogs show theirs -->
+            <div v-if="choicePrompt.actions.some((action) => action.detail)" class="mt-4 flex flex-col gap-2" data-choice-prompt-options>
+                <button v-for="action in choicePrompt.actions" :key="action.id" type="button" data-history-managed
+                        :data-choice-prompt-action="action.id" @click="resolveChoicePrompt(action.id)"
+                        :class="['choice-option', { 'is-primary': action.tone === 'primary' }]">
+                    <i v-if="action.icon" class="ph" :class="action.icon" aria-hidden="true"></i>
+                    <span class="min-w-0"><span class="block">{{ action.label }}</span><span v-if="action.detail" class="block text-xs font-normal opacity-80">{{ action.detail }}</span></span>
+                </button>
+                <!-- Focus starts on Cancel, so that Enter never adds what the options describe -->
+                <button type="button" data-history-ignore data-dialog-initial-focus @click="resolveChoicePrompt('cancel')" class="choice-cancel">{{ choicePrompt.cancelLabel }}</button>
+            </div>
+            <div v-else class="mt-4 flex flex-wrap justify-end gap-2">
                 <button type="button" data-history-ignore @click="resolveChoicePrompt('cancel')" class="btn btn-secondary btn-sm">{{ choicePrompt.cancelLabel }}</button>
                 <button v-for="action in choicePrompt.actions" :key="action.id" type="button" data-history-managed
                         :data-choice-prompt-action="action.id" @click="resolveChoicePrompt(action.id)"

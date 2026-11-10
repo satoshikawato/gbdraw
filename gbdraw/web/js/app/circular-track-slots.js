@@ -49,6 +49,8 @@ import { listText, msg, t, tm, tn } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import {
   OVERLAY_ANNOTATION_PARAMS,
+  annotationSetForNewRow,
+  annotationSetIdsOf,
   automaticAnnotationTrackSlots,
   nextCopyId,
   nextNumberedId,
@@ -629,11 +631,7 @@ export const createCircularTrackSlotEditor = ({
   );
 
   /** @param {DrawingState} drawing */
-  const annotationSetIds = (drawing) => (
-    (Array.isArray(drawing.annotationSets) ? drawing.annotationSets : [])
-      .map((set) => String(set?.id || '').trim())
-      .filter(Boolean)
-  );
+  const annotationSetIds = (drawing) => annotationSetIdsOf(drawing.annotationSets);
 
   /** @param {DrawingState} drawing */
   const circularTrackValidationPlan = (drawing) => validateCustomTrackPlan({
@@ -1157,16 +1155,20 @@ export const createCircularTrackSlotEditor = ({
     }
   };
 
-  /** @param {string} renderer @param {unknown} [placement] */
-  const addCircularTrackSlot = (renderer, placement = null) => {
+  /**
+   * @param {string} renderer
+   * @param {string | null} [setId] The set a new Annotations row draws: '' for none yet (the row asks for one), null
+   *   for the first set no row names (`annotationSetForNewRow`; the root asks when every set has a row).
+   */
+  const addCircularTrackSlot = (renderer, setId = null) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (addBlockReasonOf(drawing, renderer) !== '') return;
     normalizeSlots(drawing);
-    const slot = createCircularTrackSlotForRenderer(renderer, drawing.adv.circular_track_slots, drawing.adv.nt, placement);
+    const slot = createCircularTrackSlotForRenderer(renderer, drawing.adv.circular_track_slots, drawing.adv.nt);
     if (slot.renderer === 'annotations') {
-      slot.params.set_id = String(drawing.annotationSets?.[0]?.id || '').trim();
+      slot.params.set_id = setId ?? annotationSetForNewRow(drawing.adv.circular_track_slots, drawing.annotationSets) ?? '';
     } else if (slot.renderer === 'depth') {
       const available = circularAvailableDepthTrackCount(drawing);
       const claimed = new Set(
@@ -1445,7 +1447,8 @@ export const createCircularTrackSlotEditor = ({
       slot.params.nt = normalizeNt(slot.params.nt, normalizeNt(drawing.adv.nt));
     } else if (renderer === 'annotations') {
       slot.side = slot.side === 'overlay' ? 'overlay' : 'outside';
-      slot.params.set_id = String(slot.params.set_id || drawing.annotationSets?.[0]?.id || '');
+      // The row itself names no set yet, so it does not count against one.
+      slot.params.set_id = String(slot.params.set_id || annotationSetForNewRow(drawing.adv.circular_track_slots, drawing.annotationSets) || '');
       slot.params.overflow = 'error';
       slot.params.show_labels = true;
       slot.params.layer = 'foreground';

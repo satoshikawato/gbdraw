@@ -38,7 +38,7 @@ const baseState = (mode, adv = {}) => ({
     depth_color: '#4A90E2', depth_show_axis: true, depth_show_ticks: true,
     pairwise_match_style: 'ribbon', multi_record_size_mode: 'auto',
     multi_record_min_radius_ratio: null, multi_record_column_gap_ratio: null,
-    multi_record_row_gap_ratio: null, multi_record_positions: [], depth_tracks: [],
+    multi_record_row_gap_ratio: null, multi_record_positions: [], depth_tracks: [], feature_density_tracks: [],
     circular_track_slots_enabled: false, circular_track_slots_axis_index: null,
     circular_track_slots: [], linear_track_slots_enabled: false,
     linear_track_slots_axis_index: null, linear_track_slots: [],

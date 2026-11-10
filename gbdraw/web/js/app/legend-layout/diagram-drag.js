@@ -334,7 +334,7 @@ export const createDiagramDragActions = ({
    * @param {SVGGraphicsElement | null | undefined} group
    */
   const startLengthBarDrag = (e, group) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!isLayoutRepositionModeEnabled()) return;
     if (!group) return;
@@ -358,7 +358,7 @@ export const createDiagramDragActions = ({
    * @param {SVGGraphicsElement | null | undefined} group
    */
   const startPlotTitleDrag = (e, group) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!isLayoutRepositionModeEnabled()) return;
     if (!group) return;
@@ -381,7 +381,7 @@ export const createDiagramDragActions = ({
   const startDiagramDrag = (e) => {
     // A mouse event on an SVG element has an element target.
     const target = /** @type {Element} */ (e.target);
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!isLayoutRepositionModeEnabled()) return;
     if (e.shiftKey) return;
@@ -433,7 +433,7 @@ export const createDiagramDragActions = ({
    * @param {number} clientY
    */
   const applyDiagramDragPosition = (clientX, clientY) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!diagramDragging.value || activeDragElements.length === 0) return;
 

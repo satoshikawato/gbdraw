@@ -56,6 +56,20 @@ test('the choice prompt resolves to the chosen action, and a new question cancel
   assert.equal(prompt.show, false);
 });
 
+// OV-3153: options that carry a detail line show as a list above Cancel, and
+// focus starts on Cancel there, so that Enter adds nothing; the button row of
+// every other question keeps the first-button focus.
+test('the choice prompt list of options starts its focus on Cancel; its button row does not', async () => {
+  const html = await readFile(join(repoRoot, 'gbdraw', 'web', 'index.html'), 'utf8');
+  const prompt = html.slice(html.indexOf('<choice-dialog v-if="choicePrompt.show"'));
+  const body = prompt.slice(0, prompt.indexOf('</choice-dialog>'));
+  const list = body.slice(body.indexOf('data-choice-prompt-options'), body.indexOf('<div v-else'));
+  const row = body.slice(body.indexOf('<div v-else'));
+  assert.match(list, /<button[^>]*data-dialog-initial-focus[^>]*resolveChoicePrompt\('cancel'\)/);
+  assert.equal((list.match(/data-dialog-initial-focus/g) || []).length, 1);
+  assert.doesNotMatch(row, /data-dialog-initial-focus/);
+});
+
 test('the notice banner shows warnings as a list and is cleared by dismiss', () => {
   const { notice, show, dismiss } = createNoticeBanner({ reactive });
   show({ text: 'Session loaded: a.gbdraw-session.json', items: ['', 'One warning'] });
