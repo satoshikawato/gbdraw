@@ -1871,18 +1871,23 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   try {
     const circularResult = result('lazy-circular.svg', 'lazy-circular');
     const helperMessageCount = workerMessages.filter(({ type }) => type === 'helper').length;
-    comparisonTexts.forEach((fasta, index) => workerHelperResponses.push({
+    const ringSequenceReply = (index) => ({
       ok: true,
       result: {
-        fasta,
+        fasta: comparisonTexts[index],
         format: index === 1 ? 'genbank' : 'fasta',
         recordLabel: null,
-        recordIds: [fasta.slice(1).split('\n')[0]]
+        recordIds: [comparisonTexts[index].slice(1).split('\n')[0]]
       }
-    }));
+    });
+    workerHelperResponses.push(ringSequenceReply(0));
     // Add Seq reads the first ring file with the same reader before Generate,
     // which reuses that read (OV-1545).
     assert.equal((await readComparisonSequence({ files: [comparisonViews[0]] })).fasta, comparisonTexts[0]);
+    // Generate reads the other rings for their keys, then plans the ring scales: one-record files keep LOSAT's
+    // own scale.
+    workerHelperResponses.push(ringSequenceReply(1), ringSequenceReply(2));
+    workerHelperResponses.push({ ok: true, result: { scales: [null, null, null], warnings: [] } });
     workerHelperResponses.push(ringTablesUnchanged);
     workerResponses.push(response(circularResult, validCatalog(circularResult.name)));
     // A Circular Generate replaces only its own drawing's cache-info rows (#1777 review 8, OV-3201).
@@ -1954,12 +1959,13 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       installShownDrawing('circular');
       state.removeDrawing(copy.id, { takeSlot: () => null });
     }
-    // Every ring file goes through the one Python reader (no JavaScript reader), once; Python then puts the
-    // ring rows in the search frame.
+    // Every ring file goes through the one Python reader (no JavaScript reader), once; Python plans the ring
+    // scales once and then puts the ring rows in the search frame.
     assert.deepEqual(
       workerMessages.filter(({ type }) => type === 'helper').slice(helperMessageCount)
         .map(({ operation }) => operation),
-      ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence', 'convertRingTablesToSearchFrame']
+      ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence', 'planRingScales',
+        'convertRingTablesToSearchFrame']
     );
     assert.equal(workerHelperResponses.length, 0);
     assert.deepEqual(
@@ -2022,7 +2028,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ].join('\n')).join('\n') + '\n'], 'bom-reference.gb');
     setCircularFile(bomReference);
     const helpersBeforeBomReference = workerMessages.filter(({ type }) => type === 'helper').length;
-    // The record list of the new reference, then the subject database.
+    // The record list of the new reference, the subject database, then the ring scales: the reference of two
+    // records gives every ring the search space 16 x 8.
     workerHelperResponses.push(
       { ok: true, result: { records: [
         { selector: '#1', record_id: 'BOMA', record_length: 8 }, { selector: '#2', record_id: 'BOMB', record_length: 8 }
@@ -2030,6 +2037,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       { ok: true, result: { records: [
         { id: 'BOMA', aliases: ['BOMA'], sequence: 'ACGTACGT' }, { id: 'BOMB', aliases: ['BOMB'], sequence: 'CCCCGGGG' }
       ] } },
+      { ok: true, result: { scales: ['128', '128', '128'], warnings: [] } },
       ringTablesUnchanged
     );
     const bomReferenceResult = result('bom-reference.svg', 'bom-reference');
@@ -2039,6 +2047,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       workerMessages.filter(({ type }) => type === 'helper').slice(helpersBeforeBomReference)
         .map(({ operation, payload }) => [operation, payload.format, payload.files?.map(({ role }) => role)]),
       [['listSequenceRecords', 'genbank', ['source']], ['readAllSequenceRecords', 'genbank', ['source']],
+        ['planRingScales', 'genbank', ['reference', 'ring', 'ring', 'ring']],
         ['convertRingTablesToSearchFrame', undefined, undefined]]
     );
     assert.equal(workerHelperResponses.length, 0);
@@ -2057,11 +2066,18 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // ring searches.
     state.losatCacheInfo.value = state.losatCacheInfo.value.filter(({ drawingId }) => drawingId !== 'circular-copy');
     const shownRingKeys = () => state.losatCacheInfo.value.filter(({ drawingId }) => drawingId === circularDrawing.id).map(({ key }) => key);
-    /** A Generate of the reference-a drawing with the comparison rings `indexes`. @param {number[]} indexes */
-    const generateRings = async (indexes) => {
+    /**
+     * A Generate of the reference-a drawing with the comparison rings `indexes`; `scales` is Python's reply for a
+     * ring set whose scales were not planned yet (one-record files: LOSAT's own scale). A ring table conversion
+     * held for the frame leaves its reply unread, so each Generate starts from no queued reply.
+     * @param {number[]} indexes @param {(string | null)[] | null} [scales]
+     */
+    const generateRings = async (indexes, scales = null) => {
       circularDrawing.circularConservation.series.splice(0, circularDrawing.circularConservation.series.length,
         ...indexes.map((index) => ringSeries[index]));
       circularDrawing.files.c_conservation_fastas = bound(indexes.map((index) => comparisonViews[index]));
+      workerHelperResponses.splice(0);
+      if (scales) workerHelperResponses.push({ ok: true, result: { scales, warnings: [] } });
       workerHelperResponses.push(ringTablesUnchanged);
       const ringResult = result(`rings-${indexes.join('')}.svg`, `rings-${indexes.join('')}`);
       workerResponses.push(response(ringResult, validCatalog(ringResult.name)));
@@ -2070,8 +2086,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // Back on reference-a after the BOM reference's Generate: its ring searches are still cached.
     await generateRings([0, 1, 2]);
     assert.equal(losatCalls, 0, 'reference-a\'s ring searches outlive the BOM reference\'s Generate');
-    // Ring d removed, then added again.
-    await generateRings([0, 1]);
+    // Ring d removed, then added again. The scales of the two rings are planned once.
+    await generateRings([0, 1], [null, null]);
     const twoRings = shownRingKeys();
     await generateRings([0, 1, 2]);
     assert.equal(losatCalls, 0, 'ring d\'s search outlives the Generate without it');
