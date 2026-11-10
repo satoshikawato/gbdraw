@@ -91,6 +91,7 @@ def test_slice_containers_of_a_version_hold_the_rows_that_version_wrote() -> Non
         ("config.form", "figure_width"), ("config.form", "figure_height"), ("config.form", "circular_windows"),
         ("config.adv", "feature_density_tracks"),
         ("config.form", "circular_record_ranges"), ("config.form", "circular_range_fields_record"),
+        ("config.adv", "depth_axis_labels"), ("config.adv", "gc_content_axis_labels"),
     }
     # The rows that Sessions 47-50 added, dated from first-parent history of main (the release that first held each).
     later_rows = {(row.domain, row.path): row.since for row in MODE_SCOPED_SETTINGS if 46 < row.since < 51}
