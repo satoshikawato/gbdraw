@@ -1220,13 +1220,11 @@ def test_drawing_with_crossing_leaders_carries_the_report_and_computes_rows(monk
 
 
 @pytest.mark.circular
-def test_a_region_label_among_outer_labels_leaves_the_outer_rows_with_its_note(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """OV-3105 (D-108): lambda at 17 pt with a region label among the outer labels. The outer rows clear the
-    crossings at their first values and draw with the region notice, after trying their next two values (OV-3110);
-    the font row fits; 11 full assemblies (120 when the label rows answered for the region label and walked to
-    offset 2)."""
+def _lambda_band_rows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, start: int, end: int, label: str
+) -> tuple[LabelFitReport, list[dict[str, object]], str]:
+    """Lambda at 17 pt with outer labels and one region band: the drawn report, every full assembly of its rows in
+    order, and the CLI warning text."""
 
     from gbdraw.annotations import AnnotationOptions
     from gbdraw.api.diagram import build_circular_diagram, label_fit_report
@@ -1251,7 +1249,7 @@ def test_a_region_label_among_outer_labels_leaves_the_outer_rows_with_its_note(
     # A clock that stands still computes every row within the warning's bound (LP-D48).
     monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: 0.0)
     band = tmp_path / "band.tsv"
-    band.write_text("set_id\tid\tmark\tstart\tend\tlabel\ns\ta\tband\t1\t500\tregion\n", encoding="utf-8")
+    band.write_text(f"set_id\tid\tmark\tstart\tend\tlabel\ns\ta\tband\t{start}\t{end}\t{label}\n", encoding="utf-8")
     options = CircularDiagramOptions(
         config_overrides={
             "labels.circular.scope": "outer",
@@ -1264,30 +1262,70 @@ def test_a_region_label_among_outer_labels_leaves_the_outer_rows_with_its_note(
     record = SeqIO.read(str(TEST_INPUTS / "NC_001416.gb"), "genbank")
     with pytest.warns(LabelLeadersCrossWarning) as caught:
         drawing = build_circular_diagram(record, options=options)
-
     report = label_fit_report(drawing)
-    assert report is not None and report.drawn and report.region_overlaps == 1
-    rows = {row.kind: (row.status, dict(row.values or {}), row_note(row)) for row in report.rows}
-    assert rows["outward_both"] == (
-        "found_with_notice", {X_OFFSET_PATH: 1.025, Y_OFFSET_PATH: 1.025}, REGION_NOTE
-    )
-    assert rows["outward_vertical"] == ("found_with_notice", {Y_OFFSET_PATH: 1.025}, REGION_NOTE)
-    assert rows["outward_horizontal"] == ("found_with_notice", {X_OFFSET_PATH: 1.075}, REGION_NOTE)
-    assert rows["smaller_font"] == ("found", {path: 14.0 for path in FONT_SIZE_PATHS}, None)
-    assert rows["tighter_rows"][0] == "not_found"
-    # The five rows' first values, and two more values for each outward row whose figure keeps the region warning.
-    assert len(assemblies) == 5 + 3 * 2, assemblies
+    assert report is not None and report.drawn
     text = str(next(item.message for item in caught if issubclass(item.category, LabelLeadersCrossWarning)))
-    # The CLI lists the rows that fit first, then the outer rows with the note (dev: "Not searched within 5 s").
+    return report, assemblies, text
+
+
+def test_a_region_label_among_outer_labels_leaves_the_rows_that_keep_it_with_its_note(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """OV-3105 (D-108), OV-3110 (D-109), D-110: lambda at 17 pt with a long region label among the outer labels,
+    which the rev 26 backing still counts (3 overlaps with feature labels' letters). Every row's first value comes
+    first; the outward rows whose first value keeps some of those overlaps take their next value that clears them;
+    the font row keeps 2 at 14, 13.5 and 13 pt and is offered at 14 pt with its note, after the rows that fit."""
+
+    report, assemblies, text = _lambda_band_rows(monkeypatch, tmp_path, 18500, 19000, "prophage integration region")
+    assert report.region_overlaps == 3
+    rows = {row.kind: (row.status, dict(row.values or {}), row_note(row)) for row in report.rows}
+    assert rows["outward_both"] == ("found", {X_OFFSET_PATH: 1.025, Y_OFFSET_PATH: 1.025}, None)
+    assert rows["outward_vertical"] == ("found", {Y_OFFSET_PATH: 1.05}, None)
+    assert rows["outward_horizontal"] == ("found", {X_OFFSET_PATH: 1.1}, None)
+    note = "the figure is drawn with 2 region label overlaps"
+    assert rows["smaller_font"] == ("found_with_notice", {path: 14.0 for path in FONT_SIZE_PATHS}, note)
+    assert rows["tighter_rows"][0] == "not_found"
+    font = FONT_SIZE_PATHS[0]
+    # The five rows' first values, then the next values of the rows whose first value keeps a region warning.
+    assert assemblies == [
+        {Y_OFFSET_PATH: 1.025},
+        {X_OFFSET_PATH: 1.025, Y_OFFSET_PATH: 1.025},
+        {X_OFFSET_PATH: 1.075},
+        {path: 14.0 for path in FONT_SIZE_PATHS},
+        {**{path: 15.5 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.025},
+        {Y_OFFSET_PATH: 1.05},
+        {X_OFFSET_PATH: 1.1},
+        {path: 13.5 for path in FONT_SIZE_PATHS},
+        {path: 13.0 for path in FONT_SIZE_PATHS},
+    ], [values.get(font) for values in assemblies]
+    # The CLI lists the rows that fit first, then the font row with its note.
     assert [" ".join(line.split()) for line in text.splitlines()[1:]] == [
         "Run again with one of:",
-        "--label_font_size 14 (smaller font)",
+        "--outer_label_x_radius_offset 1.025 --outer_label_y_radius_offset 1.025 (outward, both directions)",
+        "--outer_label_y_radius_offset 1.05 (outward, vertical only)",
+        "--outer_label_x_radius_offset 1.1 (outward, horizontal only)",
         "--outer_label_y_radius_offset 1.025 --label_font_size 15.5 (combination)",
-        f"--outer_label_x_radius_offset 1.025 --outer_label_y_radius_offset 1.025 (outward, both directions; {REGION_NOTE})",
-        f"--outer_label_y_radius_offset 1.025 (outward, vertical only; {REGION_NOTE})",
-        f"--outer_label_x_radius_offset 1.075 (outward, horizontal only; {REGION_NOTE})",
+        f"--label_font_size 14 (smaller font; {note})",
         "Tighter rows do not fit this map.",
     ]
+
+
+def test_outer_rows_walk_past_values_that_put_a_region_label_over_a_leader(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """D-112: lambda at 17 pt with the band 22000..22500, whose region label the rev 26 backing clears on the drawn
+    figure. Y 1.025 puts it over a feature label's letters, so the vertical, both-directions and combination rows walk
+    on to 1.05, which fits."""
+
+    report, assemblies, _text = _lambda_band_rows(monkeypatch, tmp_path, 22000, 22500, "region")
+    assert report.region_overlaps == 0
+    rows = {row.kind: (row.status, dict(row.values or {}), row_note(row)) for row in report.rows}
+    assert rows["outward_both"] == ("found", {X_OFFSET_PATH: 1.05, Y_OFFSET_PATH: 1.05}, None)
+    assert rows["outward_vertical"] == ("found", {Y_OFFSET_PATH: 1.05}, None)
+    assert rows["outward_horizontal"] == ("found", {X_OFFSET_PATH: 1.075}, None)
+    assert rows["smaller_font"] == ("found", {path: 14.0 for path in FONT_SIZE_PATHS}, None)
+    assert rows["combination"] == ("found", {**{path: 15.5 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.05}, None)
+    assert len(assemblies) == 8, assemblies
 
 
 def _drawn_label_digest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, args: list[str]) -> tuple[int, str]:
