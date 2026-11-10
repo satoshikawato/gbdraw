@@ -103,6 +103,7 @@ from .web_support.mode_scoped_settings import (
 )
 
 if TYPE_CHECKING:
+    from .api.run_metadata import RunMetadata
     from .analysis.protein_colinearity import ProteinIdentityManifest
     from .api.requests import DiagramRequest
 
@@ -299,6 +300,10 @@ class SessionBuildContext:
     source_session: Mapping[str, Any] | None = None
     cli_invocation_args: tuple[str, ...] = ()
     file_bindings: tuple[SessionFileBinding | Mapping[str, Any], ...] = ()
+    # What the run reported beside its Results (``gbdraw.api.run_metadata``,
+    # the producer of what a Web Save writes); the Session keeps its saved
+    # form in place of any ``runMetadata`` a source Session held.
+    run_metadata: RunMetadata | None = None
 
 
 def _feature_catalog_key(feature: Mapping[str, Any]) -> tuple[int, str] | None:
@@ -5836,14 +5841,9 @@ def build_session_json(
     legacy_protein_derived_evidence: Sequence[Mapping[str, Any]] | None = None,
     canonical_request: DiagramRequest | None = None,
     _canonical_request_is_resolved: bool = False,
-    run_metadata: Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
-    """Build a GUI-loadable session JSON payload from a CLI run.
-
-    ``run_metadata`` is what the run reported beside its Results
-    (``build_track_slot_geometry_run_metadata``, as the Web Worker reports
-    it for a Web Save); it replaces any a source Session held.
-    """
+    """Build a GUI-loadable session JSON payload from a CLI run."""
+    from gbdraw.api.run_metadata import saved_run_metadata
 
     source_version: int | None = None
     if context.source_session is not None:
@@ -5894,8 +5894,9 @@ def build_session_json(
         {"name": name or f"Result {index + 1}", "content": content}
         for index, (name, content) in enumerate(svg_results)
     ]
-    if run_metadata:
-        payload["runMetadata"] = _json_clone(run_metadata)
+    saved = saved_run_metadata(context.run_metadata) if context.run_metadata is not None else None
+    if saved:
+        payload["runMetadata"] = _json_clone(saved)
     else:
         payload.pop("runMetadata", None)
     editor_state = payload.get("editorState")

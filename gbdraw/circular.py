@@ -121,10 +121,7 @@ from .cli_utils.session import (
     save_session_sidecar_if_requested,
     read_stored_font_size_options,
 )
-from .render.track_slot_metadata import (
-    build_track_slot_geometry_run_metadata,
-    collect_track_slot_geometry_records,
-)
+from .api.run_metadata import RenderedResult, build_run_metadata
 from .session import SessionDocument, load_session_document, noting_session_png_dpi
 from .session_io import session_to_cli_args
 
@@ -1548,7 +1545,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     materialized_request = rendered.request
 
     outputs: list[RenderedSvg] = []
-    track_slot_geometry_records = []
+    run_results: list[RenderedResult] = []
     session_feature_metadata: list[Mapping[str, Any]] = []
     session_biological_feature_metadata: list[Mapping[str, Any]] = []
     session_interactive_contexts = []
@@ -1570,13 +1567,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             result_name=item_request.output.output_prefix,
         )
         outputs.append(rendered_svg)
-        track_slot_geometry_records.extend(
-            collect_track_slot_geometry_records(
-                rendered_item.drawing,
-                result_index=result_index,
-                result_name=rendered_svg.result_name,
-            )
-        )
+        run_results.append(RenderedResult(rendered_item, rendered_svg.result_name))
         interactive_context = rendered_item.interactive_context
         session_interactive_contexts.append(interactive_context)
         if interactive_context is not None:
@@ -1592,10 +1583,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         feature_metadata=tuple(session_feature_metadata),
         biological_feature_metadata=tuple(session_biological_feature_metadata),
         interactive_contexts=tuple(session_interactive_contexts),
-        run_metadata=build_track_slot_geometry_run_metadata(
-            mode="circular",
-            records=track_slot_geometry_records,
-        ),
+        run_metadata=build_run_metadata("circular", run_results),
         canonical_request=materialized_request,
         losat_cache_entries=rendered.losat_cache_entries,
     )

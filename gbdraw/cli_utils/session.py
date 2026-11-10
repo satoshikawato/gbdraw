@@ -31,10 +31,7 @@ from gbdraw.render.formats import (
     resolve_output_paths,
 )
 from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
-from gbdraw.render.track_slot_metadata import (
-    build_track_slot_geometry_run_metadata,
-    collect_track_slot_geometry_records,
-)
+from gbdraw.api.run_metadata import RenderedResult, RunMetadata, build_run_metadata, saved_run_metadata
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     CircularSourceCard,
@@ -82,7 +79,7 @@ class DiagramRunResult:
     protein_identity_manifest: Mapping[str, Any] | None = None
     legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] | None = None
     legacy_protein_derived_evidence: tuple[Mapping[str, Any], ...] | None = None
-    run_metadata: Mapping[str, Any] = field(default_factory=dict)
+    run_metadata: RunMetadata = field(default_factory=lambda: RunMetadata())
     canonical_request: DiagramRequest | None = None
     biological_feature_metadata: tuple[Mapping[str, Any], ...] = ()
     interactive_contexts: tuple[InteractiveSvgContext | None, ...] = ()
@@ -553,6 +550,7 @@ def save_session_sidecar_if_requested(
             source_session=source_session,
             cli_invocation_args=invocation_args,
             file_bindings=tuple(bindings),
+            run_metadata=run_result.run_metadata,
         ),
         svg_results=svg_results,
         embedded_files=session_files,
@@ -565,7 +563,6 @@ def save_session_sidecar_if_requested(
         legacy_protein_derived_evidence=run_result.legacy_protein_derived_evidence,
         canonical_request=run_result.canonical_request,
         _canonical_request_is_resolved=True,
-        run_metadata=run_result.run_metadata,
     )
     # build_session_json validated the payload it returned (without "files").
     _write_validated_session_json(sidecar_path, payload, overwrite=overwrite)
@@ -722,11 +719,11 @@ def _rendered_drawing_build(
         state["results"] = svg_results
     if isinstance(rendered, CircularBatchRenderResult):
         interactive_contexts = rendered.interactive_contexts
-        svg_drawings = rendered.drawings
+        items = rendered.items
         result_names = tuple(output.output_prefix for output in rendered.request.outputs)
     else:
         interactive_contexts = (rendered.interactive_context,)
-        svg_drawings = (rendered.drawing,)
+        items = (rendered,)
         result_names = (rendered.request.output.output_prefix,)
     replace_current_derived_feature_state(
         state,
@@ -735,20 +732,10 @@ def _rendered_drawing_build(
             interactive_contexts,
         ),
     )
-    run_metadata = build_track_slot_geometry_run_metadata(
-        mode=plan.drawing.mode,
-        records=[
-            record
-            for index, (svg_drawing, result_name) in enumerate(
-                zip(svg_drawings, result_names, strict=True)
-            )
-            for record in collect_track_slot_geometry_records(
-                svg_drawing,
-                result_index=index,
-                result_name=str(result_name),
-            )
-        ],
-    )
+    run_metadata = saved_run_metadata(build_run_metadata(
+        plan.drawing.mode,
+        [RenderedResult(item, str(name)) for item, name in zip(items, result_names, strict=True)],
+    ))
     if run_metadata:
         state["runMetadata"] = run_metadata
     else:
@@ -1378,9 +1365,7 @@ __all__ = [
     "SessionCliRequest",
     "add_session_args",
     "read_stored_font_size_options",
-    "build_track_slot_geometry_run_metadata",
     "collect_embedded_files_from_cli_args",
-    "collect_track_slot_geometry_records",
     "diagram_request_rendered_svgs",
     "make_rendered_svg",
     "parse_session_pre_args",

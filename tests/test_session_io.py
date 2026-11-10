@@ -3655,40 +3655,80 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     assert regenerated_prefix.with_suffix(".svg").exists()
 
 
+_RUN_METADATA_FIELDS = ("trackSlotGeometry", "annotationWarnings", "featureIdentityNotices", "comparisonWarnings")
+
+
+def _run_notice_inputs(tmp_path: Path) -> dict[str, Path]:
+    """Tables that make a render report one run notice of each kind."""
+
+    tables = {
+        # A region annotation whose feature the record lacks: an annotation warning.
+        "annotations": "set_id\tid\tmark\trecord\tfeature_selector\tlabel\n"
+        "s\tmissing\tband\t#1\tgene=PRIVATE-MISSING\tMissing\n",
+        # An edit of a lambda gene outside the crop: a feature identity notice.
+        "overrides": "record\tfeature_selector\tlabel_visibility\tlabel_text\n"
+        "NC_001416.1\tprotein_id=NP_040580.1\ton\tFirst gene\n",
+        # A comparison row whose sequence IDs name no drawn record: a comparison warning.
+        "blast": "contig_A\tcontig_B\t99.0\t1000\t0\t0\t2001\t3000\t1\t1000\t1e-100\t1800.0\n",
+    }
+    paths = {name: tmp_path / f"{name}.tsv" for name in tables}
+    for name, text in tables.items():
+        paths[name].write_text(text)
+    return paths
+
+
 @pytest.mark.parametrize("mode", ["circular", "linear"])
-def test_cli_session_carries_the_track_slot_geometry_the_web_save_writes(
-    tmp_path: Path, examples_dir: Path, mode: str
-) -> None:
-    """OV-3240: a CLI-saved Session holds each record's axis, so the Web can
-    select a region on the loaded Result before any Generate. It is what the
-    Worker reports for the same request, which a Web Save writes."""
+def test_cli_session_carries_the_run_metadata_the_web_save_writes(tmp_path: Path, mode: str) -> None:
+    """OV-3240, OV-3244: a CLI-saved Session holds each record's axis and the
+    run notices, so the Web can select a region on the loaded Result and shows
+    the notices before any Generate. They are what the Worker reports for the
+    same request, which a Web Save writes; a notice list without a notice is
+    left out (Load reads it as empty)."""
 
     from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 
+    root = Path(__file__).resolve().parents[1]
+    lambda_gb = root / "tests/test_inputs/NC_001416.gb"
+    tables = _run_notice_inputs(tmp_path)
     session_path = tmp_path / "cli.gbdraw-session.json"
-    main = circular_main if mode == "circular" else linear_main
-    main([
-        "--gbk", str(examples_dir / "MjeNMV.gb"), "-o", str(tmp_path / "cli"), "-f", "svg",
-        "--save_session", "--session_output", str(session_path),
-    ])
+    common = ["-o", str(tmp_path / "cli"), "-f", "svg", "--session_output", str(session_path),
+              "--annotation_table", str(tables["annotations"])]
+    if mode == "circular":
+        circular_main(["--gbk", str(lambda_gb), *common])
+    else:
+        linear_main([
+            "--gbk", str(lambda_gb), str(root / "tests/fixtures/sessions/cli-web-mito.gb"), *common,
+            "-b", str(tables["blast"]), "--feature_override_table", str(tables["overrides"]),
+            "--region", "NC_001416.1:20000-30000",
+        ])
     payload = drawing_view(load_session(session_path))
     web = render_embedded_canonical_web_request(
         payload["renderRequest"], resources=payload["resources"], workspace=tmp_path / "web"
-    )
+    )["metadata"]
 
-    def without_result_name(geometry: dict) -> dict:
-        # A Result's file name follows its output prefix, which the Session does not keep.
-        return {**geometry, "records": [
-            {key: value for key, value in record.items() if key != "resultName"}
-            for record in geometry["records"]
-        ]}
+    def rows(metadata: dict, field: str) -> list[dict]:
+        return metadata["records"] if field == "trackSlotGeometry" else metadata
 
-    saved = payload["runMetadata"]["trackSlotGeometry"]
-    assert saved["mode"] == mode
-    # Each record names its Result as the Session does, as in a Web Save (OV-3243).
-    assert [record["resultName"] for record in saved["records"]] == [payload["results"][0]["name"]]
-    assert [record["axis"]["kind"] for record in saved["records"]] == [mode]
-    assert without_result_name(saved) == without_result_name(web["metadata"]["trackSlotGeometry"])
+    def without_result_name(metadata: dict) -> dict:
+        # A Result's name follows its surface: its output prefix on the CLI, its file name on the Web.
+        normalized = {}
+        for field in _RUN_METADATA_FIELDS:
+            if not metadata.get(field):
+                continue
+            items = [{key: value for key, value in row.items() if key != "resultName"} for row in rows(metadata[field], field)]
+            normalized[field] = {**metadata[field], "records": items} if field == "trackSlotGeometry" else items
+        return normalized
+
+    saved = payload["runMetadata"]
+    expected_fields = ["trackSlotGeometry", "annotationWarnings"] + (
+        ["featureIdentityNotices", "comparisonWarnings"] if mode == "linear" else [])
+    assert list(saved) == expected_fields
+    assert saved["trackSlotGeometry"]["mode"] == mode
+    assert without_result_name(saved) == without_result_name(web)
+    # Each row names its Result as the Session does, as in a Web Save (OV-3243).
+    result_name = payload["results"][0]["name"]
+    assert {row["resultName"] for field in saved for row in rows(saved[field], field) if "resultName" in row} == {
+        result_name}
 
 
 def _circular_genbank(*records: tuple[str, str, str]) -> str:

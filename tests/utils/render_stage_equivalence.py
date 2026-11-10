@@ -60,10 +60,7 @@ from gbdraw.legend.row_facts import collect_legend_row_facts
 from svgwrite import Drawing
 
 from gbdraw.render.group_content import group_manifest
-from gbdraw.render.track_slot_metadata import (
-    build_track_slot_geometry_run_metadata,
-    collect_track_slot_geometry_records,
-)
+from gbdraw.api.run_metadata import RenderedResult, build_run_metadata
 from gbdraw.render_stages import RenderStageName
 from gbdraw.web_support.feature_catalog import (
     build_feature_catalog,
@@ -286,7 +283,7 @@ def _reply(
     results: list[JsonValue] = []
     catalog_items: list[dict[str, object]] = []
     legend_rows: list[JsonValue] = []
-    geometry: list[dict[str, object]] = []
+    geometry: list[RenderedResult] = []
     for result_index, item in enumerate(items):
         svg_paths = [path for path in item.output_paths if Path(path).suffix == ".svg"]
         svg_texts = [Path(path).read_text(encoding="utf-8") for path in svg_paths]
@@ -310,13 +307,7 @@ def _reply(
                 )
             )
         )
-        geometry.extend(
-            collect_track_slot_geometry_records(
-                item.drawing,
-                result_index=result_index,
-                result_name=result_name,
-            )
-        )
+        geometry.append(RenderedResult(item, result_name))
         results.append(
             {
                 "svg": [canonical(text) for text in svg_texts],
@@ -340,7 +331,7 @@ def _reply(
         "featureCatalog": canonical(build_feature_catalog(catalog_items)),
         "legendRows": legend_rows,
         "geometry": canonical(
-            build_track_slot_geometry_run_metadata(mode=captured.mode, records=geometry)
+            build_run_metadata(captured.mode, geometry).get("trackSlotGeometry", {})
         ),
     }
 

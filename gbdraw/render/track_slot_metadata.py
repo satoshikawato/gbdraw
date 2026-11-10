@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import MutableMapping
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping, Sequence, TypedDict
+from typing import Literal, Mapping, Sequence, TypedDict
 
 from Bio.SeqRecord import SeqRecord
 
@@ -245,11 +245,11 @@ def attach_feature_placement_targets(
 
 
 def collect_track_slot_geometry_records(
-    canvas: Any,
+    canvas: object,
     *,
     result_index: int,
     result_name: str,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     """Copy track-slot geometry from a canvas and add result identity."""
 
     geometry = getattr(canvas, TRACK_SLOT_GEOMETRY_ATTR, None)
@@ -258,7 +258,7 @@ def collect_track_slot_geometry_records(
     records = geometry.get("records")
     if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
         return []
-    copied_records: list[dict[str, Any]] = []
+    copied_records: list[dict[str, object]] = []
     for record in records:
         if not isinstance(record, Mapping):
             continue
@@ -276,22 +276,29 @@ def collect_track_slot_geometry_records(
     return copied_records
 
 
-def build_track_slot_geometry_run_metadata(
+class TrackSlotGeometry(TypedDict):
+    """A render's resolved track-slot geometry: one entry per drawn record of each Result."""
+
+    schema: Literal[1]
+    mode: Literal["circular", "linear"]
+    source: Literal["resolved"]
+    records: list[dict[str, object]]
+
+
+def resolved_track_slot_geometry(
     *,
     mode: Literal["circular", "linear"],
-    records: Sequence[Mapping[str, Any]],
-) -> dict[str, Any]:
-    """Build optional run metadata for resolved track-slot geometry."""
+    records: Sequence[Mapping[str, object]],
+) -> TrackSlotGeometry | None:
+    """The geometry of the collected records; ``None`` when no Result has any."""
 
     if not records:
-        return {}
+        return None
     return {
-        "trackSlotGeometry": {
-            "schema": 1,
-            "mode": mode,
-            "source": "resolved",
-            "records": [dict(record) for record in records],
-        }
+        "schema": 1,
+        "mode": mode,
+        "source": "resolved",
+        "records": [dict(record) for record in records],
     }
 
 
@@ -302,8 +309,9 @@ __all__ = [
     "LinearAxisRow",
     "RadialExtent",
     "RecordAxisInput",
-    "build_track_slot_geometry_run_metadata",
+    "TrackSlotGeometry",
     "circular_axis_geometry",
     "linear_axis_geometry",
     "collect_track_slot_geometry_records",
+    "resolved_track_slot_geometry",
 ]

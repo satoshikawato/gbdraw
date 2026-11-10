@@ -361,10 +361,13 @@ write-up of a release.
   open unless the previous press was at the same place; it now closes it, as
   a click on the Result's background does.
 - Fixed: a Session saved by `gbdraw circular` or `gbdraw linear` with
-  `--save_session` or `--session_output` held no axis of its drawn records, so
-  in the Web app Select region stayed off on the loaded Result until one
-  Generate. The command now saves the same axis that a Web app Save writes for
-  the same figure, and Select region works right after Load (OV-3240).
+  `--save_session` or `--session_output` held no axis of its drawn records and
+  none of the run's notices (a region annotation that draws no feature, an
+  edit of a feature outside the crop, comparison rows whose sequence IDs name
+  no drawn record), so in the Web app Select region stayed off on the loaded
+  Result and the notices were missing until one Generate. The command now
+  saves the same axis and notices that a Web app Save writes for the same
+  figure, also when it saves a Session again (OV-3240, OV-3244).
 - Changed: the Web app's LOSAT is built from LOSAT `a20ad436a`, which runs
   tblastn in every LOSAT execution mode; the blastn, tblastx and blastp
   results of the app are unchanged. A saved Session whose LOSAT comparisons

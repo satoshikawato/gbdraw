@@ -10,6 +10,7 @@ from time import perf_counter
 from typing import AbstractSet, Any, Iterator, Literal, Mapping, MutableMapping, TypedDict, cast
 
 from gbdraw.api.input_summary import input_summary_payload, with_source_names
+from gbdraw.api.run_metadata import RenderedResult, build_run_metadata
 from gbdraw.api.request_render import (
     CircularBatchRenderResult,
     RequestRenderResult,
@@ -29,10 +30,6 @@ from gbdraw.web_support.error_adapter import WebErrorAttributes, web_error_stage
 from gbdraw.legend.row_facts import collect_legend_row_facts
 from gbdraw.render.document import ContentPiece, DocumentParts, document_parts
 from gbdraw.render.formats import SVG_FORMAT, resolve_format_output_path
-from gbdraw.render.track_slot_metadata import (
-    build_track_slot_geometry_run_metadata,
-    collect_track_slot_geometry_records,
-)
 from gbdraw.render_stages import render_stage_revision
 from gbdraw.session import with_request_output
 from gbdraw.session_contract import SESSION_ID_RE
@@ -308,7 +305,6 @@ def _render_canonical_web_request(
         items = (rendered,)
 
     results: list[WebRenderResult] = []
-    geometry_records: list[dict[str, Any]] = []
     feature_catalog_items: list[dict[str, Any]] = []
     legend_rows: list[dict[str, Any]] = []
     for result_index, item in enumerate(items):
@@ -339,21 +335,14 @@ def _render_canonical_web_request(
                     result_name=result_name,
                 )
             )
-            geometry_records.extend(
-                collect_track_slot_geometry_records(
-                    item.drawing,
-                    result_index=result_index,
-                    result_name=result_name,
-                )
-            )
     if not results:
         with web_error_stage("result-admission"):
             raise ValidationError("The canonical Web request did not produce an SVG.")
     with _web_render_diagnostic_phase(diagnostics, "geometryMetadata"):
-        metadata = build_track_slot_geometry_run_metadata(
-            mode=rendered.mode,
-            records=geometry_records,
-        )
+        metadata: dict[str, Any] = dict(build_run_metadata(
+            rendered.mode,
+            [RenderedResult(item, result["name"]) for item, result in zip(items, results, strict=True)],
+        ))
     with _web_render_diagnostic_phase(diagnostics, "featureCatalog"):
         # The page keeps the catalog it holds when this render reused the same
         # item builds in this cache (gbdraw/web/CLAUDE.md, Runtime data flow).
@@ -365,50 +354,6 @@ def _render_canonical_web_request(
         )
     # Per Result: the Legend rows drawn and the feature rows the draft removed (OV-63).
     metadata["legendRows"] = legend_rows
-    metadata["annotationWarnings"] = [
-        {
-            "code": warning.code,
-            "setId": warning.set_id,
-            "annotationId": warning.annotation_id,
-            "recordId": warning.record_id,
-            "recordIndex": warning.record_index,
-            "missingCount": warning.missing_count,
-            "message": warning.message,
-            "resultIndex": result_index,
-            "resultName": results[result_index]["name"],
-        }
-        for result_index, item in enumerate(items)
-        for warning in item.annotation_warnings
-    ]
-    metadata["featureIdentityNotices"] = [
-        {
-            "recordKey": notice.record_key,
-            "biologicalFeatureId": notice.biological_feature_id,
-            "status": notice.status,
-            "kinds": list(notice.kinds),
-            "resultIndex": result_index,
-        }
-        for result_index, item in enumerate(items)
-        for notice in item.feature_identity_notices
-    ]
-    # Browser execution discards logging, so table-ID warnings travel as metadata.
-    metadata["comparisonWarnings"] = [
-        {
-            "code": warning.code,
-            "queryRecordIndex": warning.query_record_index,
-            "subjectRecordIndex": warning.subject_record_index,
-            "queryRecordId": warning.query_record_id,
-            "subjectRecordId": warning.subject_record_id,
-            "rowCount": warning.row_count,
-            "exampleIds": list(warning.example_ids),
-            "message": warning.message,
-            "resultIndex": result_index,
-            "resultName": results[result_index]["name"],
-        }
-        for result_index, item in enumerate(items)
-        if item.linear_metadata is not None
-        for warning in item.linear_metadata.comparison_warnings
-    ]
     # The CLI logs the same summary and warnings (gbdraw.api.input_summary); not saved in a Session.
     metadata["inputSummaries"] = [
         input_summary_payload(

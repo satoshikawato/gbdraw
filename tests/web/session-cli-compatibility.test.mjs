@@ -824,6 +824,45 @@ const nextGenerate = async () => {
   return candidate;
 };
 
+// OV-3244: a Session the gbdraw command saved holds the run notices a Web Save holds (an annotation that draws no
+// feature, an edit of a feature outside the crop, comparison rows whose IDs name no drawn record), so a Load shows
+// them without Generate. A CLI re-save of it holds them too.
+await test('a CLI Session and its CLI re-save show the run notices at Load without Generate', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-notices-'));
+  try {
+    const table = async (name, text) => {
+      const file = path.join(directory, name);
+      await writeFile(file, text, 'utf8');
+      return file;
+    };
+    const annotations = await table('annotations.tsv',
+      'set_id\tid\tmark\trecord\tfeature_selector\tlabel\ns\tmissing\tband\t#1\tgene=PRIVATE-MISSING\tMissing\n');
+    const overrides = await table('overrides.tsv',
+      'record\tfeature_selector\tlabel_visibility\tlabel_text\nNC_001416.1\tprotein_id=NP_040580.1\ton\tFirst gene\n');
+    const blast = await table('blast.tsv', 'contig_A\tcontig_B\t99.0\t1000\t0\t0\t2001\t3000\t1\t1000\t1e-100\t1800.0\n');
+    let input = ['--gbk', lambda, mito, '-b', blast, '--annotation_table', annotations,
+      '--feature_override_table', overrides, '--region', 'NC_001416.1:20000-30000'];
+    for (const phase of ['fresh', 'replay']) {
+      const output = path.join(directory, phase);
+      const file = `${output}.gbdraw-session.json.gz`;
+      execFileSync('python', ['-m', 'gbdraw.cli', 'linear', ...input, '-o', output, '--session_output', file], {
+        cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+      });
+      const result = await load(gunzipSync(await readFile(file)));
+      assert.equal(result.status, 'ok', result.error?.stack);
+      assert.deepEqual(state.annotationWarnings.value.map(({ code, recordId, resultIndex }) => [code, recordId, resultIndex]),
+        [['feature_selector_unmatched', 'NC_001416.1', 0]], phase);
+      assert.deepEqual(state.featureIdentityNotices.value.map(({ recordKey, status, kinds }) => [recordKey, status, kinds]),
+        [['record-1', 'crop_excluded', ['label_visibility', 'label_text']]], phase);
+      assert.deepEqual(state.comparisonWarnings.value.map(({ code, exampleIds }) => [code, exampleIds]),
+        [['comparison_record_id_unmatched', ['contig_A', 'contig_B']]], phase);
+      input = ['--session', file];
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 // The narrowing settings around the centre definition (`--no_track_narrowing`,
 // `--track_narrowing_min_px`) have no Web control yet. A CLI Session carries
 // them in its config; Load keeps them and the next Generate sends them, so the
