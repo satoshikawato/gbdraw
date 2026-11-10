@@ -93,7 +93,7 @@ const results = typedRef(/** @type {SvgResultEntry[]} */ ([]));
 const selectedResultIndex = typedRef(0);
 const failedGeneratePreservedResult = ref(false);
 const generationFailureRecovery = ref(null);
-const resultPanelTab = ref('preview');
+const resultPanelTab = typedRef('preview');
 const lastRunInfo = ref(null);
 const trackSlotResolvedGeometry = ref(null);
 const annotationWarnings = ref([]);
@@ -570,13 +570,10 @@ const isResizing = typedRef(false);
 // the Session, remembers the display (app/settings-pane.js).
 /** @import { SettingsPaneDisplay, SettingsPopup } from './services/settings-pane-state.js' */
 /** @import { SettingsSectionKey } from './services/settings-sections.js' */
-/** @type {{ value: SettingsPaneDisplay }} */
-const settingsPaneDisplay = ref(DEFAULT_SETTINGS_PANE_DISPLAY);
-/** @type {{ value: SettingsSectionKey | null }} */
-const settingsPaneDocked = ref(null);
+const settingsPaneDisplay = typedRef(/** @type {SettingsPaneDisplay} */ (DEFAULT_SETTINGS_PANE_DISPLAY));
+const settingsPaneDocked = typedRef(/** @type {SettingsSectionKey | null} */ (null));
 // The settings section a click on its drawn element moved to a popup beside the Result.
-/** @type {{ value: SettingsPopup | null }} */
-const settingsPopup = ref(null);
+const settingsPopup = typedRef(/** @type {SettingsPopup | null} */ (null));
 
 // Legend Editor state
 // The shown Result's generated Legend inventory: Python's keys of its rows, in the order it drew them.
