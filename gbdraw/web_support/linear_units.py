@@ -2,9 +2,11 @@
 and the numbers and omitted lengths a record card shows beside its windows (PD-OI-124).
 
 Before its comparison searches run, a Generate sends the records its request will draw (each record key with its
-windows, as the request writes them) and the record pairs its comparison plan compares. Python answers with the
-drawn units, in drawing order, and with the unit pairs of each record pair: every window of one record against every
-window of the other, the pairs a CLI search runs (``comparison_unit_pairs``). The page runs its searches over these
+windows and grid row, as the request writes them) and the record pairs its comparison plan compares. Python answers
+with the drawn units, in drawing order, with the unit pairs of each record pair: every window of one record against
+every window of the other, the pairs a CLI search runs (``comparison_unit_pairs``), and with the unit pairs the
+drawing displays when its units stand in a grid (``grid_display_pairs``, the rule the CLI drawing and the derived
+LOSATP identity read; OV-3248). The page runs its searches over these
 units and writes their indexes into the request, which Python reads as drawn-unit indexes. A comparison file
 (an uploaded BLAST TSV) gives the coordinates of one drawn unit, so a pair of a record drawn in several windows must
 be searched.
@@ -33,16 +35,19 @@ from gbdraw.api.requests import InputPlace, RecordPresentation, expanded_record_
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.regions import window_drawn_reverse
+from gbdraw.layout.linear_multi_record import drawn_unit_rows, grid_display_pairs
 from gbdraw.layout.linear_row_windows import plan_row_windows
 from gbdraw.layout.record_units import RecordUnit
 from gbdraw.session_request_codec import CanonicalRequestDecodingError, _decode_windows
 
 
 class LinearUnitRecordInput(TypedDict):
-    """A record the request draws: its key and its windows (``renderRequest.records[].windows``)."""
+    """A record the request draws: its key, its windows (``renderRequest.records[].windows``) and its grid row
+    (``renderRequest.records[].presentation.gridRow``: every record has one or none has)."""
 
     recordKey: str
     windows: list[object]
+    gridRow: int | None
 
 
 class LinearUnitPairInput(TypedDict):
@@ -82,11 +87,21 @@ class LinearUnitPair(TypedDict):
     subjectUnit: int
 
 
+class LinearUnitGridPair(TypedDict):
+    """A pair of units in adjacent rows that the drawing displays, the unit drawn first in request order first."""
+
+    queryUnit: int
+    subjectUnit: int
+
+
 class LinearUnitPlan(TypedDict):
-    """The drawn units in drawing order and the unit pairs, in the order of the record pairs."""
+    """The drawn units in drawing order, the unit pairs, in the order of the record pairs, and ``gridPairs``: the unit
+    pairs the drawing displays when its units stand in a grid (every pair of units in adjacent rows), else null
+    (each row holds one unit, in unit order: its comparisons join consecutive units)."""
 
     units: list[LinearDrawnUnit]
     pairs: list[LinearUnitPair]
+    gridPairs: list[LinearUnitGridPair] | None
 
 
 def _protocol_error(message: str) -> ValidationError:
@@ -104,12 +119,18 @@ def plan_linear_units(records: Sequence[object], pairs: Sequence[object]) -> Lin
 
     units: list[LinearDrawnUnit] = []
     units_by_record: dict[str, list[int]] = {}
+    unit_grid_rows: list[int | None] = []
     for position, record in enumerate(records):
         if not isinstance(record, Mapping):
             raise _protocol_error("A record of a unit plan must be an object.")
         record_key = _key(record.get("recordKey"), "record")
         if record_key in units_by_record:
             raise _protocol_error(f"Record {record_key!r} is named twice.")
+        if "gridRow" not in record:
+            raise _protocol_error(f"Record {record_key!r} has no gridRow: give a positive whole number or null.")
+        grid_row = record["gridRow"]
+        if grid_row is not None and not _positive_whole_number(grid_row):
+            raise _protocol_error(f"Record {record_key!r} has an invalid gridRow: give a positive whole number or null.")
         try:
             windows = _decode_windows(record.get("windows"), path=f"records[{position}].windows")
         except (CanonicalRequestDecodingError, ValueError) as exc:
@@ -117,6 +138,7 @@ def plan_linear_units(records: Sequence[object], pairs: Sequence[object]) -> Lin
         indexes = units_by_record[record_key] = []
         for window in record_drawn_windows(record_key, windows):
             indexes.append(len(units))
+            unit_grid_rows.append(cast(int | None, grid_row))
             units.append({
                 "unitKey": record_key if window is None else window.unit_key,
                 "recordKey": record_key,
@@ -145,7 +167,18 @@ def plan_linear_units(records: Sequence[object], pairs: Sequence[object]) -> Lin
             {"pair": number, "queryUnit": query_unit, "subjectUnit": subject_unit}
             for query_unit, subject_unit in comparison_unit_pairs(query, subject)
         )
-    return {"units": units, "pairs": planned}
+    try:
+        rows = drawn_unit_rows(unit_grid_rows, [unit["recordKey"] for unit in units])
+    except ValidationError as exc:
+        raise _protocol_error(str(exc)) from exc
+    grid_pairs = grid_display_pairs(rows)
+    return {
+        "units": units,
+        "pairs": planned,
+        "gridPairs": None if grid_pairs is None else [
+            {"queryUnit": query_unit, "subjectUnit": subject_unit} for query_unit, subject_unit in grid_pairs
+        ],
+    }
 
 
 def plan_linear_units_json(records_json: str, pairs_json: str) -> str:
@@ -392,6 +425,7 @@ __all__ = [
     "plan_card_windows",
     "plan_card_windows_json",
     "LinearDrawnUnit",
+    "LinearUnitGridPair",
     "LinearUnitPair",
     "LinearUnitPairInput",
     "LinearUnitPlan",

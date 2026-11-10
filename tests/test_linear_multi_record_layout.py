@@ -36,6 +36,8 @@ from gbdraw.layout.linear_multi_record import (
     LinearLayoutPlan,
     LinearRecordMeasurement,
     RecordKey,
+    drawn_unit_rows,
+    grid_display_pairs,
     record_pairs_between_adjacent_rows,
     resolve_record_row_positions,
     solve_linear_horizontal_layout,
@@ -188,6 +190,23 @@ def test_adjacent_row_pairs_exclude_same_row_records() -> None:
         (1, 2),
         (1, 3),
     )
+
+
+def test_grid_display_pairs_are_the_adjacent_row_pairs_of_rows_that_hold_several_records() -> None:
+    # Two records above one: both stand above it (OV-3248).
+    assert grid_display_pairs((0, 0, 1)) == ((0, 2), (1, 2))
+    # One record per row, rows in record order: the comparisons join consecutive records.
+    assert grid_display_pairs((0, 1, 2)) is None
+    # Rows out of record order: the records of adjacent rows, not consecutive records.
+    assert grid_display_pairs((2, 0, 1)) == ((0, 2), (1, 2))
+
+
+def test_drawn_unit_rows_read_grid_rows_else_one_row_per_record_shared_by_its_windows() -> None:
+    assert drawn_unit_rows((1, 1, 3), ("a", "b", "c")) == (0, 0, 1)
+    assert drawn_unit_rows((None, None, None), ("a", "a", "b")) == (0, 0, 1)
+    assert drawn_unit_rows((2, 2, 1), ("a", "a", "b")) == (1, 1, 0)
+    with pytest.raises(ValidationError, match="every record must have it"):
+        drawn_unit_rows((1, None), ("a", "b"))
 
 
 def test_layout_rejects_gap_that_consumes_available_width() -> None:

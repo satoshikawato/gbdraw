@@ -11,6 +11,7 @@
 // after the selector that takes the handler. The root passes the state, the
 // annotation rebind, and the Linear record selector's refresh as ports.
 import { inputTypeSpec } from '../services/input-types.js';
+import { IMPORTED_COMPARISON_DISPOSITIONS } from '../services/imported-comparison-intent.js';
 import { discoverInputRecords } from '../services/record-discovery.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 /** @import { DrawingState, SessionBusy, WebState } from '../state.js' */
@@ -139,5 +140,19 @@ export const createRecordDiscoveryRuns = ({
     });
     await refreshLinearRecords(drawing);
   };
-  return { handleCircularRecordsDiscovered, materializeAutomaticLinearRecords };
+  /**
+   * Generate's record step for a Linear drawing. With an editable comparison every automatic card is split into
+   * record cards first: Python numbers a comparison's records over the records a card draws, while the Web's unit
+   * plan counts a card as one, so a request with a comparison never carries a card that draws several records whole
+   * (OV-3272). Otherwise the cards' records are read again.
+   * @param {DrawingState} drawing
+   */
+  const prepareLinearGenerate = async (drawing) => {
+    if (drawing.importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
+      await materializeAutomaticLinearRecords(drawing);
+    } else {
+      await refreshLinearRecords(drawing);
+    }
+  };
+  return { handleCircularRecordsDiscovered, materializeAutomaticLinearRecords, prepareLinearGenerate };
 };

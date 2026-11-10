@@ -225,7 +225,7 @@ from gbdraw.layout.figure_size import (
     fit_base_length,
     larger_figure,
 )
-from gbdraw.layout.linear_multi_record import record_key_at, record_pairs_between_adjacent_rows, stable_record_keys
+from gbdraw.layout.linear_multi_record import grid_display_pairs, record_key_at, stable_record_keys
 from gbdraw.layout.linear_wrap import (
     LinearWrapSummary,
     drawn_axis_length,
@@ -2271,7 +2271,7 @@ def assemble_linear_diagram_from_records(
     normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(inputs.collinearity_color_mode))
     normalized_orthogroup_membership_mode = normalize_orthogroup_membership_mode(str(inputs.orthogroup_membership_mode))
     # The displayed pairs of a computed protein analysis when a row holds
-    # several records: every pair across adjacent rows (OV-2297, OV-2371).
+    # several records: every pair across adjacent rows (OV-2297, OV-2371, OV-3248).
     row_comparison_pairs: tuple[tuple[int, int], ...] | None = None
     if (
         (
@@ -2284,8 +2284,7 @@ def assemble_linear_diagram_from_records(
             records,
             layout.multi_record_positions,
         )
-        if len(set(analysis_rows)) < len(records):
-            row_comparison_pairs = record_pairs_between_adjacent_rows(analysis_rows)
+        row_comparison_pairs = grid_display_pairs(analysis_rows)
     if int(inputs.collinear_max_paralog_links_per_orthogroup) <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
     if normalized_protein_blastp_mode != "none" and inputs.protein_comparisons is not None:

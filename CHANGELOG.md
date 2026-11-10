@@ -16,6 +16,19 @@ into the `[Unreleased]` list below.
 
 ## [Unreleased]
 
+- Fixed: in the Web app, a Linear grid arranged in Record Layout (two records
+  in row 1, one in row 2) with LOSATP Collinear and Search between All records
+  drew a block only between the second record and the third, while the same
+  grid from a records table drew blocks from both records of row 1. Every grid
+  now joins every record pair of adjacent rows, whatever wrote the rows: the
+  Web reads the displayed pairs from the Python unit plan, and Python reads the
+  same rows for the drawing and for the saved LOSATP results (OV-3248). A
+  record drawn in two windows in one row above another record likewise drew a
+  Collinear block (Search between All records) only from its second window;
+  each window now joins the record below, as the CLI drew it. In the CLI, a
+  records table with one record per row whose rows do not follow the record
+  order (rows 3, 1, 2) no longer stops with "Linear comparison endpoints must
+  be in adjacent rows"; its records of adjacent rows are joined (OV-3286).
 - Fixed: in the Web app, Add track with the Annotations renderer gave the new
   row the first Region Annotation set even when that set already had a row,
   so the set was drawn twice without a word (two bracket rings for the tobacco

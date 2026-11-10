@@ -122,6 +122,7 @@ import {
   writeLosatCacheInfo,
   CIRCULAR_RECORD_FORM_DEFAULTS,
   linearCardWindowPlanRecords,
+  linearDrawingUnitPlaces,
   linearDrawingWindowsOf
 } from '../services/config.js';
 import { artifactSlotAs } from '../services/artifact-slot.js';
@@ -265,10 +266,7 @@ import {
 } from '../mode-profiles.js';
 import { joinSentences, msg, t, tm, tx } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
-import {
-  IMPORTED_COMPARISON_DISPOSITIONS,
-  importedComparisonExecution
-} from '../services/imported-comparison-intent.js';
+import { importedComparisonExecution } from '../services/imported-comparison-intent.js';
 import {
   activeDepthTrackIndices,
   compactDepthFileSlots,
@@ -743,7 +741,9 @@ export const createAppSetup = () => {
   const { rebindAnnotationRecords } = createAnnotationRecordRebind({
     state, getAnnotationRecordCatalog, sessionOperationAvailability
   });
-  const { handleCircularRecordsDiscovered, materializeAutomaticLinearRecords } = createRecordDiscoveryRuns({
+  const {
+    handleCircularRecordsDiscovered, materializeAutomaticLinearRecords, prepareLinearGenerate
+  } = createRecordDiscoveryRuns({
     pendingDiscoveryOf, requestRecordListAfterUpload, listedDrawingOf, rebindAnnotationRecords,
     refreshLinearRecords: linearRecordSelector.refresh
   });
@@ -1406,15 +1406,16 @@ export const createAppSetup = () => {
     });
   };
   const {
-    linearRegionNote, linearCardWindowView, linearLayoutCellRows, linearCardWindowsOf, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
+    linearRegionNote, linearCardWindowView, linearLayoutCellRows, linearUnitPlacesOf, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
     committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds, shownLinearWrapLeaf, shownLinearWrapReading
   } = createShownDrawingReaders({
     state, shownDrawingOfMode, linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor, refreshLinearRecords: linearRecordSelector.refresh,
-    committedLinearRecordCards, getCommittedCanonicalRenderRequest, windowsOf: linearDrawingWindowsOf, planCardWindows,
+    committedLinearRecordCards, getCommittedCanonicalRenderRequest, windowsOf: linearDrawingWindowsOf,
+    unitPlacesOf: linearDrawingUnitPlaces, planCardWindows,
     cardWindowPlanRecords: linearCardWindowPlanRecords, recordDisplayRows: () => recordDisplayControls.allRows.value || []
   });
-  const losatSettings = createLosatSettings({ state, planLinearUnits, shownWindowsOf: () => linearCardWindowsOf(state.activeDrawing()) });
+  const losatSettings = createLosatSettings({ state, planLinearUnits, shownPlacesOf: () => linearUnitPlacesOf(state.activeDrawing()) });
   // Auto values follow the records the next Generate draws; until they are
   // known the values name their rule.
   const autoValueDisplay = createAutoValueDisplay(state, {
@@ -2656,13 +2657,7 @@ export const createAppSetup = () => {
     const patternDrafts = featureActions.captureSpecificRulePatternDrafts();
     return runGeneratedDiagramAnalysis(null, null, null, {
       prepareGenerate: async () => {
-        if (mode.value === 'linear') {
-          if (drawing.importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
-            await materializeAutomaticLinearRecords(drawing);
-          } else {
-            await linearRecordSelector.refresh(drawing);
-          }
-        }
+        if (mode.value === 'linear') await prepareLinearGenerate(drawing);
         if (similarityAlignmentActions?.validateBeforeGenerate) {
           const validation = await similarityAlignmentActions.validateBeforeGenerate();
           if (validation?.status !== 'ok') {

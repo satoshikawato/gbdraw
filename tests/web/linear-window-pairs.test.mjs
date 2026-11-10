@@ -14,7 +14,7 @@ globalThis.window = {
 
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { linearComparisonEdgeKey } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
-const { linearWindowsPayload } = await import('../../gbdraw/web/js/services/session-request.js');
+const { linearDrawingUnitPlaces } = await import('../../gbdraw/web/js/services/session-request.js');
 const {
   catalogUnitPlaces, isDrawnWindowPairRow, linearWindowPairsByCardEdge, planLinearUnitSearch, searchUnitPlaces,
   windowLosatFilenamesAfterRemoval
@@ -47,8 +47,9 @@ const resolutionOf = (cards, pairs) => {
  */
 const generated = async (cards, pairs) => {
   const resolution = resolutionOf(cards, pairs);
-  const search = await planLinearUnitSearch(cards, resolution, (card) => linearWindowsPayload(card, { arranged: false, ordinal: 1, record: { length: null, id: '' } }),
-    async (payload) => ({ result: pythonLinearUnitPlan(payload) }));
+  const search = await planLinearUnitSearch(cards, resolution, linearDrawingUnitPlaces(
+    { linearRecordLayoutEnabled: { value: false }, linearRecordRows: [], linearSeqs: cards }, () => ({ length: null, id: '', count: 1 })),
+  async (payload) => ({ result: pythonLinearUnitPlan(payload) }));
   const unitKeys = search.sequences.map((sequence) => sequence.uid);
   const windowOf = Object.fromEntries(unitKeys.flatMap((unitKey, unit) => (
     search.windowOf[unit] === null ? [] : [[unitKey, search.windowOf[unit]]])));

@@ -2,9 +2,10 @@
 // The drawn units of a Linear Generate's comparison searches, planned by Python (`planLinearUnits`,
 // gbdraw/web_support/linear_units.py; D-01, D-37). A record drawn in several windows draws one unit per window, and a
 // comparison of two records searches every window of one against every window of the other. The page sends the
-// records its request will draw and the record pairs of its comparison plan, reads Python's plan, and runs its
-// searches over the units: every index a search writes into the request is a unit index, as Python reads it. The Web
-// derives no unit and no pair itself.
+// records its request will draw (keys, windows and grid rows) and the record pairs of its comparison plan, reads
+// Python's plan, and runs its searches over the units: every index a search writes into the request is a unit index,
+// as Python reads it. Python also says which unit pairs the drawing displays when its units stand in a grid (rows
+// that are not one unit each in unit order; `gridPairs`, OV-3248). The Web derives no unit and no pair itself.
 /** @import { LinearSeq } from './drawing/inputs.js' */
 /** @import { LinearComparisonResolution, LinearComparisonResolvedEdge, WindowLosatFilenames } from './linear-comparisons.js' */
 /** @import { CanonicalRecordWindow } from '../contracts/request.generated.js' */
@@ -15,13 +16,19 @@ import { diagnosticError } from '../utils/error-normalization.js';
 const FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'planLinearUnits' });
 
 /**
- * A record the request will draw (`LinearUnitRecordInput`): its key and its windows, as the request writes them.
- * @typedef {{ recordKey: string, windows: CanonicalRecordWindow[] }} LinearUnitRecordInput
+ * A record the request will draw (`LinearUnitRecordInput`): its key, its windows and its grid row (null when the
+ * request places no record in a grid row), as the request writes them.
+ * @typedef {{ recordKey: string, windows: CanonicalRecordWindow[], gridRow: number | null }} LinearUnitRecordInput
  */
 /**
- * The windows the request writes for a card (`linearWindowsPayload` of `services/session-request.js`, which the
- * caller passes with its layout, so this module reads the request writer's windows without importing it).
- * @typedef {(card: LinearSeq) => CanonicalRecordWindow[]} LinearUnitWindowsOf
+ * Where the request places a drawn card: its windows and its grid row, as the request writes them.
+ * @typedef {{ windows: CanonicalRecordWindow[], gridRow: number | null }} LinearCardPlace
+ */
+/**
+ * The places the request writes for the drawn cards, in request order (`linearDrawingUnitPlaces` of
+ * `services/session-request.js`, which the caller passes with its drawing, so this module reads the request writer's
+ * places without importing it).
+ * @typedef {(cards: readonly LinearSeq[]) => LinearCardPlace[]} LinearCardPlacesOf
  */
 /**
  * A record pair of the comparison plan (`LinearUnitPairInput`), by record keys.
@@ -40,7 +47,16 @@ const FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'planLinearU
  * @typedef {{ unitKey: string, recordKey: string, windowOf: string | null, window: LinearUnitWindow | null }} LinearDrawnUnit
  */
 /** One unit pair of record pair `pair` (`LinearUnitPair`). @typedef {{ pair: number, queryUnit: number, subjectUnit: number }} LinearUnitPair */
-/** The `planLinearUnits` reply (`LinearUnitPlan`). @typedef {{ units: LinearDrawnUnit[], pairs: LinearUnitPair[] }} LinearUnitPlan */
+/**
+ * A pair of units in adjacent rows the drawing displays (`LinearUnitGridPair`), the unit first in request order first.
+ * @typedef {{ queryUnit: number, subjectUnit: number }} LinearUnitGridPair
+ */
+/**
+ * The `planLinearUnits` reply (`LinearUnitPlan`): the units, the unit pairs, and `gridPairs`, the unit pairs the
+ * drawing displays when its units stand in a grid, every pair of units in adjacent rows (null when each row holds one
+ * unit, in unit order: its comparisons join consecutive units).
+ * @typedef {{ units: LinearDrawnUnit[], pairs: LinearUnitPair[], gridPairs: LinearUnitGridPair[] | null }} LinearUnitPlan
+ */
 
 /**
  * The searches of one Generate over the drawn units: each unit's card, under the unit's key when it is one of several
@@ -54,6 +70,8 @@ const FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'planLinearU
  * @property {(string | null)[]} windowOf
  * @property {(LinearUnitWindow | null)[]} windows
  * @property {LinearComparisonResolution} resolution
+ * @property {LinearUnitGridPair[] | null} gridPairs The unit pairs the drawing displays when its units stand in a
+ *   grid (Python's `grid_display_pairs`), else null.
  */
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
@@ -64,6 +82,14 @@ const isIndex = (value) => Number.isSafeInteger(value) && Number(value) >= 0;
 /** @param {unknown} value @returns {value is LinearUnitWindow | null} */
 const isWindow = (value) => value === null || (isRecord(value) && isIndex(value.start) && isIndex(value.end)
   && typeof value.reverseComplement === 'boolean' && typeof value.searchRegion === 'string' && value.searchRegion !== '');
+
+/**
+ * @param {unknown} value
+ * @param {number} unitCount
+ * @returns {value is LinearUnitGridPair}
+ */
+const isGridPair = (value, unitCount) => isRecord(value) && isIndex(value.queryUnit) && isIndex(value.subjectUnit)
+  && value.queryUnit < value.subjectUnit && value.subjectUnit < unitCount;
 
 /** @param {unknown} value @returns {value is LinearDrawnUnit} */
 const isUnit = (value) => isRecord(value) && typeof value.unitKey === 'string' && typeof value.recordKey === 'string'
@@ -80,7 +106,9 @@ export const readLinearUnitPlan = (result, asked) => {
   const keys = new Set(asked.records.map(({ recordKey }) => recordKey));
   const units = isRecord(result) && Array.isArray(result.units) ? result.units : null;
   const pairs = isRecord(result) && Array.isArray(result.pairs) ? result.pairs : null;
+  const gridPairs = isRecord(result) ? result.gridPairs : undefined;
   const valid = units !== null && pairs !== null && units.every(isUnit)
+    && (gridPairs === null || (Array.isArray(gridPairs) && gridPairs.every((pair) => isGridPair(pair, units.length))))
     && units.every((unit) => keys.has(unit.recordKey))
     && new Set(units.map((unit) => unit.recordKey)).size === keys.size
     && pairs.every((pair) => isRecord(pair) && isIndex(pair.pair) && pair.pair < asked.pairs.length
@@ -279,24 +307,28 @@ export const unitRecordsOf = (records, units) => {
 };
 
 /**
- * The drawn cards' records, keyed and windowed as the request writes them: what Python plans the units of.
+ * The drawn cards' records, keyed, windowed and placed in rows as the request writes them: what Python plans the
+ * units of.
  * @param {readonly LinearSeq[]} cards The drawn cards, in request order.
- * @param {LinearUnitWindowsOf} windowsOf The windows the request writes for a card.
+ * @param {LinearCardPlacesOf} placesOf The places the request writes for the cards.
  * @returns {LinearUnitRecordInput[]}
  */
-export const unitRecordInputs = (cards, windowsOf) => cards.map((card, index) => (
-  { recordKey: linearSeqRecordKey(card, index), windows: windowsOf(card) }));
+export const unitRecordInputs = (cards, placesOf) => {
+  const places = placesOf(cards);
+  return cards.map((card, index) => (
+    { recordKey: linearSeqRecordKey(card, index), windows: places[index].windows, gridRow: places[index].gridRow }));
+};
 
 /**
  * What `planLinearUnits` is asked: the drawn cards' records (`unitRecordInputs`) and the record pairs of the plan's
  * edges.
  * @param {readonly LinearSeq[]} cards The drawn cards, in request order.
  * @param {LinearComparisonResolution} resolution
- * @param {LinearUnitWindowsOf} windowsOf The windows the request writes for a card.
+ * @param {LinearCardPlacesOf} placesOf The places the request writes for the cards.
  * @returns {LinearUnitPlanPayload}
  */
-export const linearUnitPlanPayload = (cards, resolution, windowsOf) => ({
-  records: unitRecordInputs(cards, windowsOf),
+export const linearUnitPlanPayload = (cards, resolution, placesOf) => ({
+  records: unitRecordInputs(cards, placesOf),
   pairs: resolution.edges.map((edge) => ({ queryRecordKey: edge.queryUid, subjectRecordKey: edge.subjectUid, source: edge.source }))
 });
 
@@ -352,7 +384,8 @@ export const linearUnitSearch = (cards, resolution, plan) => {
     recordKeys: plan.units.map(({ recordKey }) => recordKey),
     windowOf: plan.units.map(({ windowOf }) => windowOf),
     windows: plan.units.map(({ window }) => window),
-    resolution: unitResolution(resolution, plan)
+    resolution: unitResolution(resolution, plan),
+    gridPairs: plan.gridPairs
   };
 };
 
@@ -361,12 +394,12 @@ export const linearUnitSearch = (cards, resolution, plan) => {
  * a Result, New drawing from a region) and the LOSAT job estimate read it here, so all write or count unit indexes.
  * @param {readonly LinearSeq[]} cards The drawn cards, in request order.
  * @param {LinearComparisonResolution} resolution
- * @param {LinearUnitWindowsOf} windowsOf
+ * @param {LinearCardPlacesOf} placesOf
  * @param {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} runHelper Runs the Worker helper.
  * @returns {Promise<LinearUnitSearch>}
  */
-export const planLinearUnitSearch = async (cards, resolution, windowsOf, runHelper) => {
-  const payload = linearUnitPlanPayload(cards, resolution, windowsOf);
+export const planLinearUnitSearch = async (cards, resolution, placesOf, runHelper) => {
+  const payload = linearUnitPlanPayload(cards, resolution, placesOf);
   const reply = await runHelper(payload);
   return linearUnitSearch(cards, resolution, readLinearUnitPlan(reply?.result, payload));
 };
@@ -377,15 +410,15 @@ export const planLinearUnitSearch = async (cards, resolution, windowsOf, runHelp
  * draw. `resolve` gives the comparison plan of those record pairs, one edge per pair in their order.
  * @param {readonly LinearSeq[]} cards The drawn cards, in request order.
  * @param {readonly Omit<LinearUnitPair, 'pair'>[]} pairs Indexes of the units Python plans for `cards`.
- * @param {LinearUnitWindowsOf} windowsOf
+ * @param {LinearCardPlacesOf} placesOf
  * @param {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} runHelper Runs the Worker helper.
  * @param {(pairs: LinearUnitPairInput[]) => LinearComparisonResolution} resolve
  * @returns {Promise<LinearUnitSearch>}
  */
-export const savedPairsUnitSearch = async (cards, pairs, windowsOf, runHelper, resolve) => {
+export const savedPairsUnitSearch = async (cards, pairs, placesOf, runHelper, resolve) => {
   /** @type {LinearUnitPlanPayload} */
-  const payload = { records: unitRecordInputs(cards, windowsOf), pairs: [] };
-  const { units } = readLinearUnitPlan((await runHelper(payload))?.result, payload);
+  const payload = { records: unitRecordInputs(cards, placesOf), pairs: [] };
+  const { units, gridPairs } = readLinearUnitPlan((await runHelper(payload))?.result, payload);
   if (pairs.some(({ queryUnit, subjectUnit }) => !units[queryUnit] || !units[subjectUnit])) {
     throw diagnosticError('RESULT_INVALID', {}, FAILURE);
   }
@@ -399,7 +432,7 @@ export const savedPairsUnitSearch = async (cards, pairs, windowsOf, runHelper, r
     if (!pairOf.has(key)) pairOf.set(key, recordPairs.push({ queryRecordKey, subjectRecordKey, source: 'losat' }) - 1);
     return { pair: /** @type {number} */ (pairOf.get(key)), queryUnit, subjectUnit };
   });
-  return linearUnitSearch(cards, resolve(recordPairs), { units, pairs: unitPairs });
+  return linearUnitSearch(cards, resolve(recordPairs), { units, pairs: unitPairs, gridPairs });
 };
 
 /**
@@ -407,15 +440,15 @@ export const savedPairsUnitSearch = async (cards, pairs, windowsOf, runHelper, r
  * and the cards are the units (no window, none a window of another).
  * @param {readonly LinearSeq[]} cards The drawn cards, in request order.
  * @param {LinearComparisonResolution} resolution
- * @param {LinearUnitWindowsOf} windowsOf
+ * @param {LinearCardPlacesOf} placesOf
  * @param {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} runHelper Runs the Worker helper.
  * @returns {Promise<LinearUnitSearch>}
  */
-export const generateUnitSearch = async (cards, resolution, windowsOf, runHelper) => {
-  if (resolution.hasComparisonIntent === true) return planLinearUnitSearch(cards, resolution, windowsOf, runHelper);
+export const generateUnitSearch = async (cards, resolution, placesOf, runHelper) => {
+  if (resolution.hasComparisonIntent === true) return planLinearUnitSearch(cards, resolution, placesOf, runHelper);
   const recordKeys = cards.map((card, index) => linearSeqRecordKey(card, index));
   return {
     sequences: [...cards], cards: [...cards], unitKeys: recordKeys, recordKeys,
-    windowOf: cards.map(() => null), windows: cards.map(() => null), resolution
+    windowOf: cards.map(() => null), windows: cards.map(() => null), resolution, gridPairs: null
   };
 };

@@ -277,7 +277,7 @@ assert.equal(budgetSettings.losatThreadedOptionLabel.value, 'Threaded (unavailab
   const { pythonLinearUnitPlan } = await import('./helpers/linear-unit-plan.mjs');
   const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const { linearComparisonEdgeKey } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
-  const { linearWindowsPayload } = await import('../../gbdraw/web/js/services/session-request.js');
+  const { linearDrawingUnitPlaces } = await import('../../gbdraw/web/js/services/session-request.js');
   const window = (start, end) => ({ start, end, reverseComplement: false, column: null });
   const windowsState = {
     linearSeqs: [createLinearSeq({ uid: 'a', windows: [window(1, 150), window(151, 300)] }), createLinearSeq({ uid: 'b' })],
@@ -293,7 +293,7 @@ assert.equal(budgetSettings.losatThreadedOptionLabel.value, 'Threaded (unavailab
   const asked = [];
   const windowsSettings = createLosatSettings({
     state: withDrawings(windowsState),
-    shownWindowsOf: () => (card) => linearWindowsPayload(card, { arranged: false, ordinal: 1, record: { length: null, id: '' } }),
+    shownPlacesOf: () => linearDrawingUnitPlaces(windowsState, () => ({ length: null, id: '', count: 1 })),
     planLinearUnits: async (payload) => {
       asked.push(payload);
       return { result: pythonLinearUnitPlan(payload) };

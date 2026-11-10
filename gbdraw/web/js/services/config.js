@@ -111,6 +111,7 @@ import {
   projectSettingsOnlySession,
   readCanonicalResourceRecordCount,
   readStoredRenderRequest,
+  linearDrawingUnitPlaces,
   linearDrawingWindowsOf,
   linearCardWindowPlanRecords
 } from './session-request.js';
@@ -181,9 +182,10 @@ import {
 } from './session-file.js';
 // The Session file writer's encoding of the inputs Generate described: the exact replay Session uses it too.
 export { encodeSessionResources };
-// The windows a Linear card writes in its request and the records its window plan reads, for the shown-drawing
-// readers (services/session-request.js owns both).
-export { linearCardWindowPlanRecords, linearDrawingWindowsOf };
+// The windows a Linear card writes in its request, the places its drawn cards write (the drawn-unit plan reads them)
+// and the records its window plan reads, for the shown-drawing readers and Generate (services/session-request.js owns
+// all three).
+export { linearCardWindowPlanRecords, linearDrawingUnitPlaces, linearDrawingWindowsOf };
 import { importSessionFile } from './session-import-client.js';
 import {
   convertStoredProteinResultFrames, withConvertedResources
@@ -7159,7 +7161,7 @@ export const projectDraftRequest = async (sourceState, drawing, {
     { comparisonPlan: cardPlan, linearRecordCatalog });
   // The request writes the indexes of the drawn units, as Generate writes them (OV-2738).
   const comparisonPlanSnapshot = cardPlan?.hasComparisonIntent === true && drawsSeveralUnits(drawing.drawnLinearSeqs.value)
-    ? (await planLinearUnitSearch(drawing.drawnLinearSeqs.value, cardPlan, linearDrawingWindowsOf(drawing,
+    ? (await planLinearUnitSearch(drawing.drawnLinearSeqs.value, cardPlan, linearDrawingUnitPlaces(drawing,
       (card) => catalogCardRecord(/** @type {LinearRecordCatalogRecords} */ (linearRecordCatalog),
         drawing.drawnLinearSeqs.value.indexOf(card))),
       planLinearUnits)).resolution
