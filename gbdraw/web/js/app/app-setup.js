@@ -1990,7 +1990,7 @@ export const createAppSetup = () => {
     canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, auxiliaryImportFailureOnArrival, resetModeTransientUi
   } = setupWatchers({
     state,
-    rulePreparation,
+    isRuleInputCurrent: rulePreparation.isCurrent, snapshotRuleInputs: rulePreparation.snapshot,
     trackAuxiliaryFileImport: auxiliaryFileImports.track,
     ref, computed, watch,
     nextTick,

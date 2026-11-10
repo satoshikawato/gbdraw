@@ -402,9 +402,12 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The snapshot service's restore of a captured handle; History awaits it.
  * @property {(value: unknown) => string} [signatureFor]
  *   The signature that detects a change; JSON by default.
- * @property {HistoryFileRetention | null} [fileStore]
- *   The file store that keeps the files that entries name (F-05); read only
- *   when no `budget` is given.
+ * @property {HistoryBudgetOptions['estimateFileBytes']} [estimateFileBytes]
+ *   The file store's estimate of the bytes of the files that entries name (F-05); read only
+ *   when no `budget` is given. Without it files count as zero bytes.
+ * @property {HistoryBudgetOptions['retainOnlyFiles']} [retainOnlyFiles]
+ *   The file store's release of the files no entry names; read only when no `budget` is given.
+ *   Without it none is released.
  * @property {(() => Iterable<string>) | null} [collectCurrentFileIds]
  *   The ids of the files bound now, from the snapshot service.
  * @property {number} [maxActions] Undo entries kept.
@@ -640,13 +643,11 @@ export const createHistoryManager = ({
   captureGeneratedArtifactHandle = null,
   restoreGeneratedArtifactHandle = null,
   signatureFor = (value) => JSON.stringify(value),
-  fileStore = null,
+  estimateFileBytes = null, retainOnlyFiles = null,
   collectCurrentFileIds = null,
   maxActions = DEFAULT_MAX_ACTIONS,
   maxBytes = DEFAULT_MAX_BYTES,
-  budget = createHistoryBudget({
-    maxBytes, estimateFileBytes: fileStore?.estimateBytes, retainOnlyFiles: fileStore?.retainOnly
-  }),
+  budget = createHistoryBudget({ maxBytes, estimateFileBytes, retainOnlyFiles }),
   onHistoryLimit = () => {},
   makeRef = makeBox,
   mutationAvailability = () => null,

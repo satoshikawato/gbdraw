@@ -777,7 +777,7 @@ const createLayoutPreferences = () => ({
   };
   const history = createHistoryManager({
     maxActions: 0,
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     buildIntent: buildState,
     applyIntent: applyState,
     buildCheckpoint: buildState,
@@ -787,6 +787,39 @@ const createLayoutPreferences = () => ({
   currentFile = null;
   await history.runUndoable('Remove file', () => {});
   assert.equal(fileStore.has(first.fileId), false);
+}
+
+// A History built without a budget counts the bytes its file store estimates
+// for the files its steps name (`estimateFileBytes`): steps whose files exceed
+// `maxBytes` drop, oldest first. Without the file store's functions, files
+// count no bytes.
+{
+  /** @param {(fileStore: ReturnType<typeof createInputFileStore>) => object} filePorts */
+  const undoCountAfterThreeFiles = async (filePorts) => {
+    const fileStore = createInputFileStore();
+    let currentFile = makeFile('start.gb');
+    const buildState = async () => ({ file: fileStore.registerFile(currentFile) });
+    const applyState = async (snapshot) => {
+      currentFile = fileStore.fileOf(snapshot.file);
+    };
+    const history = createHistoryManager({
+      maxBytes: 100_000,
+      ...filePorts(fileStore),
+      buildIntent: buildState,
+      applyIntent: applyState,
+      buildCheckpoint: buildState,
+      applyCheckpoint: applyState
+    });
+    await history.captureBaseline('initial');
+    for (const name of ['a.gb', 'b.gb', 'c.gb']) {
+      await history.runUndoable(`Load ${name}`, () => { currentFile = makeFile(name, 60_000); });
+    }
+    return history.getUndoCount();
+  };
+  assert.equal(await undoCountAfterThreeFiles(() => ({})), 3);
+  assert.equal(await undoCountAfterThreeFiles((fileStore) => ({
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly
+  })), 1);
 }
 
 {
@@ -1222,7 +1255,7 @@ const createLayoutPreferences = () => ({
   // The comparison files are the Linear drawing's: its History records them.
   state.mode.value = 'linear';
   const history = createHistoryManager({
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     ...snapshots.drawingHistory('linear')
   });
   await history.captureBaseline('P3 baseline');
@@ -1639,7 +1672,7 @@ const createLayoutPreferences = () => ({
     c_conservation_sequence_sources: [...derivedSources]
   });
   const replayHistory = createHistoryManager({
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     collectCurrentFileIds: snapshots.collectCurrentFileIds,
     ...snapshots.drawingHistory('circular'),
     buildCheckpoint: () => {
@@ -1732,7 +1765,7 @@ const createLayoutPreferences = () => ({
   let artifactBuilds = 0;
   const snapshots = createHistorySnapshotService({ state: withDrawings(state), fileStore, currentResults: () => state.results.value });
   const history = createHistoryManager({
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     collectCurrentFileIds: snapshots.collectCurrentFileIds,
     buildIntent: async () => ({ setting }),
     applyIntent: async (intent) => {
@@ -1793,7 +1826,7 @@ const createLayoutPreferences = () => ({
   const history = createHistoryRouter({
     drawingIds: ['circular'],
     activeDrawingId: () => 'circular',
-    managerOptions: () => ({ fileStore, ...snapshots.drawingHistory('circular') }),
+    managerOptions: () => ({ ...snapshots.drawingHistory('circular') }),
     sessionHistory: snapshots.sessionHistory()
   });
   const draftState = () => ({
@@ -2307,7 +2340,7 @@ const createLayoutPreferences = () => ({
     }, { results: state.results.value });
   };
   const ownerHistory = createHistoryManager({
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     buildIntent: async () => ({}),
     applyIntent: async () => {},
     buildCheckpoint: () => {
