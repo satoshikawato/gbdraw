@@ -253,6 +253,54 @@ def test_record_order_names_a_record_with_windows_by_the_same_grammar(record_id:
     assert rows((RecordWindow(1, 400), RecordWindow(600, 900))) == [1, 1, 2]
 
 
+_NULL_WORDS = ("none", "-", "null", "undefined", "jsnull", "jsundefined")
+
+
+def _named_records(*names: str) -> list[SeqRecord]:
+    made = [SeqRecord(Seq("A" * 1000), id=name) for name in names]
+    for record in made:
+        record.annotations["molecule_type"] = "DNA"
+    return made
+
+
+@pytest.mark.parametrize("word", _NULL_WORDS)
+@pytest.mark.parametrize("windows", ((), (RecordWindow(1, 400), RecordWindow(600, 900))), ids=("whole", "windows"))
+def test_a_no_selector_word_names_the_one_drawn_record(word: str, windows: tuple[RecordWindow, ...]) -> None:
+    # D-211: a Record Order token names the record with that ID; a word `parse_record_selector` reads as no selector
+    # names the one drawn record when no record has that ID; otherwise it is refused. Records drawn in windows drew
+    # `none@1` on dev; whole records refused it in Linear.
+    [real] = _named_records("real")
+    request = LinearDiagramRequest(
+        records=(RecordInput(InMemoryRecordSource(real), windows=windows, record_key="real"),),
+        layout=LinearMultiRecordOptions(multi_record_positions=(f"{word}@1",)),
+    )
+    build_request_diagram(request)
+    for compatibility in ("linear", "circular"):
+        assert resolve_record_row_positions(
+            [real], (f"{word}@1",), _compatibility=compatibility  # type: ignore[arg-type]
+        ) == ((0,), (0,))
+
+
+@pytest.mark.parametrize("word", _NULL_WORDS)
+@pytest.mark.parametrize("windows", ((), (RecordWindow(1, 400), RecordWindow(600, 900))), ids=("whole", "windows"))
+def test_a_no_selector_word_is_refused_when_several_records_are_drawn(word: str, windows: tuple[RecordWindow, ...]) -> None:
+    real, other = _named_records("real", "other")
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(InMemoryRecordSource(real), windows=windows, record_key="real"),
+            RecordInput(InMemoryRecordSource(other), record_key="other"),
+        ),
+        layout=LinearMultiRecordOptions(multi_record_positions=(f"{word}@1", "other@2")),
+    )
+    with pytest.raises(ValidationError, match="did not match any record ID"):
+        build_request_diagram(request)
+    for compatibility in ("linear", "circular"):
+        with pytest.raises(ValidationError, match="did not match any record ID"):
+            resolve_record_row_positions(
+                [real, other], (f"{word}@1", "other@2"), _compatibility=compatibility  # type: ignore[arg-type]
+            )
+
+
 def test_adjacent_row_pairs_exclude_same_row_records() -> None:
     assert record_pairs_between_adjacent_rows((0, 0, 1, 1)) == (
         (0, 2),

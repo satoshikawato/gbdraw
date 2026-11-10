@@ -1868,7 +1868,7 @@ def _unit_positions(request: LinearDiagramRequest, layout: LinearMultiRecordOpti
     for token in layout.multi_record_positions or ():
         selector, row = parse_record_row_position(str(token))
         try:
-            units = select_record_units(records, record_order_selector(selector))
+            units = select_record_units(records, record_order_selector(selector, records))
         except ValueError as exc:
             raise ValidationError(f"multi_record_position selector '{selector}': {exc}") from exc
         positions.extend(f"#{unit + 1}@{row}" for unit in units)

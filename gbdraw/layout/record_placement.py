@@ -9,7 +9,7 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.record_select import RecordSelector, parse_record_selector
+from gbdraw.io.record_select import RecordSelector, drawn_record_units, parse_record_selector
 
 
 _PlacementCompatibility = Literal["linear", "circular"]
@@ -72,16 +72,31 @@ def parse_record_row_position(value: str) -> tuple[str, int]:
         raise ValidationError(
             f"multi_record_position entry '{raw}' must use a positive integer row."
         )
-    record_order_selector(selector)
+    if selector.startswith("#"):
+        _record_index_selector(selector)
     return selector, row
 
 
-def record_order_selector(selector: str) -> RecordSelector:
-    """The record a Record Order selector names, the one reader of it with or without windows: a ``#N`` as
-    :func:`parse_record_selector` reads it, any other text a record ID as it is (``none`` and ``-`` included)."""
+def record_order_selector(selector: str, records: Sequence[SeqRecord]) -> RecordSelector:
+    """The record a Record Order selector names among the drawn ``records``, the one reader of it with or without
+    windows, in both modes: a ``#N`` as :func:`parse_record_selector` reads it; any other text the record with that
+    ID; a word :func:`parse_record_selector` reads as no selector (``none``, ``-``) that no record has as its ID, the
+    one drawn record when only one is drawn (D-211). Any other text names no record, and resolving it refuses it."""
 
-    if not selector.startswith("#"):
-        return RecordSelector(raw=selector, record_id=selector, record_index=None)
+    if selector.startswith("#"):
+        return _record_index_selector(selector)
+    if (
+        parse_record_selector(selector) is None
+        and all(record.id != selector for record in records)
+        and len(drawn_record_units(records)) == 1
+    ):
+        return RecordSelector(raw=selector, record_id=None, record_index=0)
+    return RecordSelector(raw=selector, record_id=selector, record_index=None)
+
+
+def _record_index_selector(selector: str) -> RecordSelector:
+    """A ``#N`` Record Order selector as :func:`parse_record_selector` reads it, refused as a ``ValidationError``."""
+
     try:
         parsed = parse_record_selector(selector)
     except ValueError as exc:
@@ -93,7 +108,7 @@ def record_order_selector(selector: str) -> RecordSelector:
 
 def _resolve_record_selector_index(records: Sequence[SeqRecord], selector: str) -> int:
     record_count = len(records)
-    record_index = record_order_selector(selector).record_index
+    record_index = record_order_selector(selector, records).record_index
     if record_index is not None:
         if record_index < record_count:
             return record_index
