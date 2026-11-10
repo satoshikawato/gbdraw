@@ -22,7 +22,9 @@ The sequence lines are checked in runs of lines of one length. A run laid out as
 writers lay out sequence lines (coordinates, then letters and spaces) is read
 with one ``bytes.translate``; any other line is read with the rule Biopython
 applies to each line, so both give Biopython's bytes. A cache budget decides how
-many decoded bases stay in memory, never what a read returns.
+many decoded bases stay in memory, never what a read returns: a short read (a
+feature's bases) keeps the chunks it decoded, and a read of ``_BLOCK_BYTES`` or
+more (a pass over a span) is decoded in bulk and keeps nothing.
 
 The same pass counts the bases (``gbdraw.core.base_counts``): the one producer of
 a record's base counts. The letter check of a FASTA entry, the GC percent of a
@@ -79,7 +81,7 @@ from .input_text import FlatFileFormat, in_sequence_encoding, is_gzip_file, open
 
 SequenceFormat = Literal["genbank", "embl", "fasta"]
 
-_BLOCK_BYTES = 8 << 20  # sequential reads of the parse pass
+_BLOCK_BYTES = 1 << 20  # sequential reads of the parse pass; a read this long or longer is decoded in bulk
 _CHUNK_BYTES = 64 << 10  # most raw bytes of one indexed chunk (whole lines)
 _CACHE_BYTES = 256 << 20  # decoded bases the block cache keeps, all input files together
 _OPEN_FILES = 16  # input files kept open for reads at offsets, all records together
@@ -135,7 +137,7 @@ class _BlockCache:
     """The decoded bases read so far, least recently used dropped first past ``_CACHE_BYTES``.
 
     One cache serves every input file, so the budget bounds the memory of all of
-    them. A block is a whole record sequence that fits the budget, else one chunk.
+    them. A block is one chunk.
     """
 
     def __init__(self) -> None:
@@ -481,10 +483,8 @@ class _SequenceTable:
         return _decode_chunk(kind, self.source.read_at(offset, size), self.source.encoding, warn=False)
 
     def _block(self, index: int) -> bytes:
-        """Chunk ``index``'s bases (``-1``: the whole sequence), through the block cache."""
+        """Chunk ``index``'s bases, through the block cache."""
 
-        if index < 0:
-            return _CACHE.get((self.source.key, self.key, -1), lambda: self._bulk(0, self.length))
         return _CACHE.get((self.source.key, self.key, index), lambda: self._decode(index, index + 1))
 
     def _decode(self, first: int, stop: int) -> bytes:
@@ -497,18 +497,14 @@ class _SequenceTable:
     def read(self, start: int, stop: int) -> bytes:
         """Bases ``start``..``stop - 1`` (``0 <= start <= stop <= length``).
 
-        A sequence that fits the cache budget is one block: read whole once, then
-        every read is a slice of it (the whole read the block itself). A longer one
-        is read a chunk at a time through the cache, or past half the budget in
-        bulk, around the cache.
+        A read of ``_BLOCK_BYTES`` bases or more is decoded in bulk, around the cache:
+        it is a pass over a span (a digest, a crop written out), which keeps nothing.
+        A shorter read (a feature's bases) reads its chunks through the cache.
         """
 
         if start >= stop:
             return b""
-        if self.length <= _CACHE_BYTES:
-            whole = self._block(-1)
-            return whole if stop - start == self.length else whole[start:stop]
-        if stop - start > _CACHE_BYTES // 2:
+        if stop - start >= _BLOCK_BYTES:
             return self._bulk(start, stop)
         index = bisect.bisect_right(self.starts, start) - 1
         pieces: list[bytes] = []
