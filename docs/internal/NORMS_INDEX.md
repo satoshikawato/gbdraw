@@ -737,14 +737,25 @@ under "Cited ids without a record".
   - `tests/web/session50-load-resave.test.mjs`
 
 - [PD-OI-110](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-110-similarity-ring-colors-and-hover): Similarity-ring colors and hover. ACCEPTED, concern `tracks.circular-conservation-ring-colors`, scenario revision 3, supersedes scenario revision 2.
+  - `tests/fixtures/sessions/README.md`
+  - `tests/fixtures/sessions/web-ring-color-scheme-preserved.v50.provenance.json`
   - `tests/test_circular_conservation.py`
   - `tests/test_conservation_color_schemes.py`
   - `tests/test_session_resources.py`
+  - `tests/web/circular-rings-setting.test.mjs`
+  - `tests/web/circular-track-slots.test.mjs`
+  - `tests/web/conservation-series.test.mjs`
+  - `tests/web/gallery-examples.test.mjs`
   - `tests/web/legend-gradient-relayout.test.mjs`
   - `tests/web/live-generate-parity-legend.playwright.spec.js`
+  - `tests/web/ring-colors.playwright.spec.js`
   - `tests/web/ring-hover.playwright.spec.js`
   - `tests/web/ring-hover.test.mjs`
+  - `tests/web/ring-identity-walk.test.mjs`
   - `tests/web/run-info.test.mjs`
+  - `tests/web/session-losat-cache-validation.test.mjs`
+  - `tests/web/session-request.test.mjs`
+  - `tests/web/session50-load-resave.test.mjs`
 
 - [PD-OI-111](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-111-partial-feature-ends-drawn-open): Partial feature ends drawn open. ACCEPTED, concern `features.partial-ends-open`, scenario revision 1.
 
