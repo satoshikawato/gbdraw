@@ -822,14 +822,11 @@ const validateCurrentSemanticCoverage = (request) => {
     ));
   });
   (Array.isArray(options.conservationBlastFiles) ? options.conservationBlastFiles : []).forEach((ref, index) => (
-    coverResourceRef(coverage, ref, `diagramOptions.conservationBlastFiles[${index}]`)
-  ));
+    coverResourceRef(coverage, ref, `diagramOptions.conservationBlastFiles[${index}]`)));
   // The files of each ring's comparison genome (request schema 10).
   (Array.isArray(options.conservationFastaFiles) ? options.conservationFastaFiles : []).forEach((ring, index) => (
     (Array.isArray(ring) ? ring : []).forEach((ref, fileIndex) => (
-      coverResourceRef(coverage, ref, `diagramOptions.conservationFastaFiles[${index}][${fileIndex}]`)
-    ))
-  ));
+      coverResourceRef(coverage, ref, `diagramOptions.conservationFastaFiles[${index}][${fileIndex}]`)))));
   if (options.annotations !== undefined) {
     throw recipeUnavailable(msg('canonical annotation semantics have no fully lossless current CLI projection.'));
   }
