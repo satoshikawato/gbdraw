@@ -229,6 +229,33 @@ def test_showcase_comparisons_keep_worked_example_context() -> None:
             assert "none" not in panel.recipe.extra_args
 
 
+def _option(args: tuple[str, ...], name: str) -> str | None:
+    """The value after ``name`` in ``args``; None when ``name`` is absent or ends them."""
+    index = args.index(name) + 1 if name in args else len(args)
+    return args[index] if index < len(args) else None
+
+
+def test_circular_inner_labels_beside_explicit_inner_tracks_are_radial() -> None:
+    """gbdraw keeps tracks a recipe names in ``--circular_track_order`` and sets horizontal inner
+    labels over them; radial inner labels get their own band (OV-3122)."""
+    horizontal: list[str] = []
+    for figure_id, spec in _figure_specs().items():
+        recipe = spec.recipe
+        panels = recipe.panels if isinstance(recipe, CompositeRecipe) else ()
+        for cli in [recipe, *(panel.recipe for panel in panels)]:
+            if not isinstance(cli, CliRecipe) or cli.subcommand != "circular":
+                continue
+            order = _option(cli.extra_args, "--circular_track_order")
+            if (
+                _option(cli.extra_args, "--labels") == "both"
+                and order is not None
+                and set(order.split(",")) - {"features", "ticks"}
+                and _option(cli.extra_args, "--label_placement") != "radial"
+            ):
+                horizontal.append(figure_id)
+    assert horizontal == []
+
+
 def test_non_layout_linear_showcases_use_on_axis_features_and_line_styling() -> None:
     figures = _figure_specs()
     on_axis_figure_ids = (
