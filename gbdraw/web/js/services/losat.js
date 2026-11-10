@@ -10,6 +10,7 @@ import {
   hasDirectLosatApi,
   isLosatOwnFailure,
   losatRunFailure,
+  losatThreadedTrapFailure,
   losatThreadsFailure,
   losatTrapFailure,
   reportedLosatFailure,
@@ -112,6 +113,23 @@ const SERIAL_LOSATN_TASKS = new Set(['megablast', 'blastn']);
  * @property {number} [spawnCount]
  * @property {number} [tid]
  * @property {string} [stderr]
+ */
+
+/**
+ * What the page posts to a threaded LOSAT job worker (workers/losat-threaded-worker.js `runThreadedJob`) to run one
+ * pair job: the compiled threaded module and the URLs to load it and the WASI shim from, the job with its two FASTA
+ * texts, the threads per job, and the name of the job's fault BroadcastChannel (empty without BroadcastChannel).
+ * @typedef {object} LosatThreadedRunMessage
+ * @property {'run'} type
+ * @property {string} id
+ * @property {WebAssembly.Module} module
+ * @property {string} wasmUrl
+ * @property {string} wasiShimUrl
+ * @property {LosatJob} job
+ * @property {string} queryFasta
+ * @property {string} subjectFasta
+ * @property {number} threadsPerJob
+ * @property {string} faultChannel
  */
 
 /**
@@ -863,7 +881,8 @@ const runLosatPairsThreaded = async (
     const failOrRetryTrap = (index, error, trapped) => {
       const attempt = (trapRetries.get(index) || 0) + 1;
       if (!trapped || attempt > THREADED_TRAP_RETRY_LIMIT || settled || signal?.aborted) {
-        fail(error);
+        // A trap left after the retries is the threaded trap, which the serial engine may not have (OV-3327).
+        fail(trapped ? losatThreadedTrapFailure(error.message) : error);
         return;
       }
       trapRetries.set(index, attempt);
@@ -963,7 +982,7 @@ const runLosatPairsThreaded = async (
       worker.addEventListener('error', handleError);
       worker.addEventListener('messageerror', handleMessageError);
       faultChannel?.addEventListener('message', handleThreadFault);
-      worker.postMessage({
+      worker.postMessage(/** @type {LosatThreadedRunMessage} */ ({
         type: 'run',
         id,
         module: compiledModule,
@@ -974,7 +993,7 @@ const runLosatPairsThreaded = async (
         subjectFasta: payloadJob.subjectFasta,
         threadsPerJob: effectiveThreads,
         faultChannel: faultChannelName
-      });
+      }));
     };
 
     handleAbort = () => fail(getAbortReason(signal));

@@ -8,7 +8,7 @@ import test from 'node:test';
 
 const web = new URL('../../gbdraw/web/', import.meta.url);
 const runtime = await import(new URL('js/services/losat-runtime.js', web).href);
-const { normalizeUserFacingError } = await import(new URL('js/utils/error-normalization.js', web).href);
+const { losatFailureRepeats, normalizeUserFacingError } = await import(new URL('js/utils/error-normalization.js', web).href);
 const { errorText } = await import(new URL('js/utils/error-text.js', web).href);
 const wasiShimUrl = new URL('vendor/browser_wasi_shim/dist/index.js', web).href;
 
@@ -148,6 +148,29 @@ test('a LOSAT trap names the comparison search and leads to the comparison setti
   assert.deepEqual(model.actions, ['edit-comparison']);
   assert.equal(normalizeUserFacingError(failure, { operation: 'findInOtherFiles' }).summary,
     'The search could not run or returned unusable output. Check the search settings, then click Search again. LOSAT stopped unexpectedly.');
+});
+
+// A trap the threaded pool still sees after its retries may be Chromium's trap after a shared-memory growth, which the
+// serial engine does not have (services/losat.js THREADED_TRAP_RETRY_LIMIT; Auto falls back to Serial for it): it
+// names Serial and Auto as well as the comparison settings, keeps Retry, and is not a failure that repeats.
+test('a threaded trap after its retries names Serial or Auto and keeps Retry', () => {
+  const failure = runtime.losatThreadedTrapFailure('LOSAT pair #1: LOSAT thread 2 failed: memory access out of bounds');
+  assert.deepEqual({ code: failure.code, stage: failure.stage, context: failure.context },
+    { code: 'LOSAT_RUNTIME', stage: 'losat', context: { reason: 'THREADED_TRAP' } });
+  assert.equal(runtime.isLosatTrapFailure(failure), false);
+  assert.equal(runtime.reportedLosatFailure(failure), null);
+  const model = normalizeUserFacingError(failure, { operation: 'generate' });
+  assert.equal(losatFailureRepeats(model), false);
+  assert.equal(model.summary, 'LOSAT stopped unexpectedly in threaded execution. Select Serial or Auto execution, or change the comparison settings or inputs, then Generate again.');
+  assert.deepEqual(model.actions, ['edit-comparison', 'retry']);
+  assert.equal(normalizeUserFacingError(failure, { operation: 'searchHitAnnotationSet' }).summary,
+    'The search could not run or returned unusable output. Check the search settings, then click Search again.'
+    + ' LOSAT stopped unexpectedly in threaded execution; Serial or Auto execution may run the search.');
+  // The serial engine's trap keeps its text and its one action (OV-3327).
+  const serial = normalizeUserFacingError(runtime.losatTrapFailure('unreachable'), { operation: 'generate' });
+  assert.equal(losatFailureRepeats(serial), true);
+  assert.deepEqual(serial.actions, ['edit-comparison']);
+  assert.match(serial.summary, /^LOSAT stopped unexpectedly during the comparison search\. Generating again/);
 });
 
 test('the serial reactor raises the LOSAT trap for a genetic code LOSAT does not know', async () => {

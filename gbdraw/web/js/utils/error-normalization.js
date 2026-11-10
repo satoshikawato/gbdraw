@@ -134,6 +134,9 @@ const REASONS = Object.freeze({
   // A trap of LOSAT's code (services/losat-runtime.js `losatTrapFailure`, OV-3327), in Sequence search and Find in
   // other files; Generate says it in its own first sentence (`losatTrapped`).
   TRAP: 'LOSAT stopped unexpectedly.',
+  // A trap left after the threaded pool's retries (services/losat-runtime.js `losatThreadedTrapFailure`), in the same
+  // two searches; Generate says it in its own first sentence (`losatThreadedTrapped`).
+  THREADED_TRAP: 'LOSAT stopped unexpectedly in threaded execution; Serial or Auto execution may run the search.',
   OUTPUT: 'The search output was not BLAST outfmt 6 rows for the searched records.',
   JSON_FORMAT: 'Use valid JSON.', VISIBILITY_ACTION: 'Use show, off, or exclude_matching; accepted aliases are on, hide, false, and 0.',
   TARGET_RECORD: 'Choose an available target record.',
@@ -409,6 +412,9 @@ const PHRASES = Object.freeze({
   // message and the reason's sentence: the one action leads to the comparison settings, never to Retry (OV-3317).
   losatRefused: 'LOSAT stopped the comparison search. Generating again with the same settings and inputs stops the same way; change what LOSAT names below, then Generate again.',
   losatTrapped: 'LOSAT stopped unexpectedly during the comparison search. Generating again with the same settings and inputs stops the same way; change the comparison settings or inputs, then Generate again.',
+  // The first sentence of a threaded trap on Generate, in place of the code's message and the reason's sentence: the
+  // serial engine may run the search, so it names Serial and Auto and keeps Retry.
+  losatThreadedTrapped: 'LOSAT stopped unexpectedly in threaded execution. Select Serial or Auto execution, or change the comparison settings or inputs, then Generate again.',
   // LOSAT_RUNTIME in Sequence search (OV-3288) and Find in other files: the code's message names Generate, which
   // neither search uses; each runs from its own Search button.
   searchFailed: 'The search could not run or returned unusable output. Check the search settings, then click Search again.',
@@ -999,14 +1005,15 @@ export const losatFailureRepeats = (error) => error.code === 'LOSAT_RUNTIME'
 
 /**
  * The first sentence of a failure: the code's message for its operation where the code's own names a step that
- * operation does not have (`OPERATION_MESSAGES`), else for a LOSAT failure that repeats the sentence that says so,
- * which also stands for the reason's sentence (`coversReason`), else the code's message.
+ * operation does not have (`OPERATION_MESSAGES`), else for a threaded trap or a LOSAT failure that repeats the sentence
+ * that says so, which also stands for the reason's sentence (`coversReason`), else the code's message.
  * @param {{ code: string, operation: string, context: UserFacingContext }} error
  * @returns {{ text: string, coversReason: boolean }}
  */
 const leadSentence = (error) => {
   const operationMessages = Object.hasOwn(OPERATION_MESSAGES, error.code) ? OPERATION_MESSAGES[error.code] : {};
   if (Object.hasOwn(operationMessages, error.operation)) return { text: operationMessages[error.operation], coversReason: false };
+  if (error.code === 'LOSAT_RUNTIME' && error.context.reason === 'THREADED_TRAP') return { text: PHRASES.losatThreadedTrapped, coversReason: true };
   if (!losatFailureRepeats(error)) return { text: DEFINITIONS[error.code][0], coversReason: false };
   return { text: error.context.reason === 'TRAP' ? PHRASES.losatTrapped : PHRASES.losatRefused, coversReason: true };
 };

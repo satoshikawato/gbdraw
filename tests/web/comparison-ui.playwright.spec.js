@@ -1389,11 +1389,13 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   await settled();
   expect(await history()).toEqual({ count: before.count + 1, label: 'Change comparisons', mode: 'collinear', plan: 'adjacent' });
   // A LOSAT runtime failure has no pair issue: Show in Comparison opens
-  // Settings at Execution.
+  // Settings at Execution, also for a threaded trap after its retries,
+  // which Serial or Auto may run (OV-3327).
   await expect(issues).toHaveCount(0);
-  for (const code of ['LOSAT_THREADING_UNAVAILABLE', 'LOSAT_RUNTIME']) {
+  for (const error of [{ code: 'LOSAT_THREADING_UNAVAILABLE', stage: 'comparison' }, { code: 'LOSAT_RUNTIME', stage: 'comparison' },
+    { code: 'LOSAT_RUNTIME', operation: 'generate', stage: 'losat', context: { reason: 'THREADED_TRAP' } }]) {
     await comparisonSettings(page).evaluate((details) => { details.open = false; });
-    await page.evaluate((errorCode) => { window.__GBDRAW_APP__.errorLog = { code: errorCode, stage: 'comparison' }; }, code);
+    await page.evaluate((errorLog) => { window.__GBDRAW_APP__.errorLog = errorLog; }, error);
     await page.getByRole('button', { name: 'Show in Comparison', exact: true }).click();
     await expect(comparisonSettings(page)).toHaveAttribute('open', '');
     await expect(page.getByRole('combobox', { name: 'LOSAT execution' })).toBeFocused();

@@ -4,6 +4,8 @@ import {
 } from '../services/losat-runtime.js';
 import { LOSAT_WASM_BUILD } from '../services/losat-build.generated.js';
 
+/** @import { LosatThreadedRunMessage } from '../services/losat.js' */
+
 // The shared memory of a job: the initial pages the threaded file imports (recorded from the file), and at most
 // 1 GiB (16384 pages) reserved, below the file's own maximum.
 const MEMORY_INITIAL_PAGES = LOSAT_WASM_BUILD.threadedMemoryPages.initial;
@@ -364,7 +366,7 @@ const runThreadedLosat = async ({
 /**
  * One threaded job: its thread workers and what failed in this host while LOSAT ran (`hostFailures`), the failure
  * named before the thread workers are terminated (`jobFailure`).
- * @param {object} data the `run` message
+ * @param {LosatThreadedRunMessage} data the `run` message
  */
 const runThreadedJob = async (data) => {
   /** @type {string[]} */

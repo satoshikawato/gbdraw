@@ -107,7 +107,7 @@ export const reportedLosatFailure = (error) => {
  * A LOSAT failure that its context names (`code` and `reason`); `detail` is kept as the message for the console, and
  * the normalizer words the failure.
  * @param {'LOSAT_RUNTIME' | 'LOSAT_THREADING_UNAVAILABLE'} code
- * @param {'TRAP' | 'THREADS_FAILED'} reason
+ * @param {'TRAP' | 'THREADED_TRAP' | 'THREADS_FAILED'} reason
  * @param {string} detail
  * @returns {DiagnosticError}
  */
@@ -152,6 +152,16 @@ export const isLosatThreadsFailure = (error) => isNamedLosatFailure(error, 'LOSA
  * @returns {DiagnosticError}
  */
 export const losatTrapFailure = (detail) => namedLosatFailure('LOSAT_RUNTIME', 'TRAP', detail);
+
+/**
+ * The failure of a threaded LOSAT run whose trap remained after the threaded pool ran the job again
+ * (services/losat.js `THREADED_TRAP_RETRY_LIMIT`): `LOSAT_RUNTIME` with the reason `THREADED_TRAP`. It may be LOSAT's
+ * own trap, which the serial engine has too, or Chromium's trap after a shared-memory growth, which it does not (Auto
+ * continues with the serial engine), so it is not a failure that repeats.
+ * @param {string} detail the last trap's message
+ * @returns {DiagnosticError}
+ */
+export const losatThreadedTrapFailure = (detail) => namedLosatFailure('LOSAT_RUNTIME', 'THREADED_TRAP', detail);
 
 /**
  * Whether a failure is the LOSAT trap (`losatTrapFailure`).

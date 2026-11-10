@@ -9,5 +9,6 @@
   setting; in a Circular diagram, which had no button for it, Show in Comparison now opens Pairwise Comparisons
   (OV-3317).
 - Fixed: Web app: a comparison search in which LOSAT stops unexpectedly (a LOSAT crash, for example on a genetic code
-  it does not know) now says so on both the serial and the threaded engine, with Show in Comparison and without
-  Retry Generate, instead of an unrecognized failure (OV-3327).
+  it does not know) now says so instead of showing an unrecognized failure (OV-3327). On the serial engine the panel
+  offers Show in Comparison and no Retry Generate; with Threaded execution, where the stop may come from the browser's
+  threaded engine, it names Serial and Auto and keeps Retry Generate.

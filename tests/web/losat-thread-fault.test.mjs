@@ -330,10 +330,10 @@ test('explicit threaded LOSAT runs a trapped job again and keeps its result', as
 test('explicit threaded LOSAT fails the job after its bounded trap retries', async (t) => {
   const { owner, workers } = await setupPage(t);
   const run = owner.runLosatPairsParallel([job], { ...options, executionMode: 'threaded' });
-  // OV-3327: the trap that remains is the LOSAT trap, not an unknown failure.
+  // OV-3327: the trap that remains is the threaded trap, not an unknown failure, and not the serial engine's trap.
   await assert.rejects(
     settleWithin(run, 5000, 'threaded LOSAT run'),
-    (error) => error.code === 'LOSAT_RUNTIME' && error.context.reason === 'TRAP'
+    (error) => error.code === 'LOSAT_RUNTIME' && error.context.reason === 'THREADED_TRAP'
       && error.message === 'LOSAT pair #1: LOSAT thread 2 failed: memory access out of bounds'
   );
   // One attempt and two retries.
@@ -425,14 +425,16 @@ for (const [label, setup, threadedWorkers] of [['a thread that did not start', {
   });
 }
 
-// OV-3327: a LOSAT trap reaches the page as the LOSAT trap from either pool. The threaded pool retries it first; the
-// serial pool does not run the jobs again in the page, where LOSAT would trap the same way.
-for (const [label, executionMode, threadedWorkers] of [['serial', 'serial', [false]], ['threaded', 'threaded', [true, true, true]]]) {
-  test(`a ${label} LOSAT trap reaches the page as the LOSAT trap`, async (t) => {
+// OV-3327: a LOSAT trap reaches the page as a named trap from either pool. The serial pool's is the LOSAT trap and is
+// not run again in the page, where LOSAT would trap the same way; the threaded pool retries its trap first and ends with
+// the threaded trap, which the serial engine may not have.
+for (const [label, executionMode, threadedWorkers, reason] of [['serial', 'serial', [false], 'TRAP'],
+  ['threaded', 'threaded', [true, true, true], 'THREADED_TRAP']]) {
+  test(`a ${label} LOSAT trap reaches the page as a named trap`, async (t) => {
     const { owner, workers } = await setupPage(t, { trappedAttempts: 0, trapReply: true });
     await assert.rejects(
       settleWithin(owner.runLosatPairsParallel([job], { ...options, executionMode }), 5000, label),
-      (error) => error.code === 'LOSAT_RUNTIME' && error.stage === 'losat' && error.context.reason === 'TRAP'
+      (error) => error.code === 'LOSAT_RUNTIME' && error.stage === 'losat' && error.context.reason === reason
     );
     assert.deepEqual(workers.map((worker) => worker.threaded), threadedWorkers);
   });

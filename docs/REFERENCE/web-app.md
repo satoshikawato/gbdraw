@@ -455,10 +455,12 @@ happened, and it does not guess a cause. A failure in the diagram engine's drawi
 that no validation classifies names the Python exception class (for example
 `ValueError`) and offers **Save Session** instead of **Retry Generate**, because
 the same inputs fail the same way. A comparison search that LOSAT stops with its
-own message, shown after **LOSAT reported:**, or that LOSAT stops unexpectedly,
-offers no **Retry Generate** either: **Show in Comparison** opens the LOSAT mode in
-the Comparison settings of a Linear diagram, and **Pairwise Comparisons** in a
-Circular diagram. A diagram that was drawn but is too large for
+own message, shown after **LOSAT reported:**, or that serial LOSAT stops
+unexpectedly, offers no **Retry Generate** either: **Show in Comparison** opens the
+LOSAT mode in the Comparison settings of a Linear diagram, and **Pairwise
+Comparisons** in a Circular diagram. When threaded LOSAT stops unexpectedly even
+after running the search again, the panel names **Serial** and **Auto** and keeps
+**Retry Generate**. A diagram that was drawn but is too large for
 the browser page to receive also offers **Save Session** and no **Retry
 Generate**: draw a smaller region, turn off tracks or labels you do not need, or
 draw it from the saved Session with `gbdraw circular --session` or
