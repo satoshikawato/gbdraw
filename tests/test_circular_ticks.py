@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from gbdraw.render.groups.circular.ticks import TickGroup
 from gbdraw.render.groups.linear.length_bar import format_linear_tick_label
 from gbdraw.svg.circular_ticks import (
     CircularTickLabelGeometry,
+    circular_tick_label_margin_px,
     circular_tick_labels,
     generate_circular_tick_labels,
     get_circular_tick_path_radius_bounds,
@@ -481,3 +483,157 @@ def test_tick_labels_that_keep_apart_are_all_drawn() -> None:
 
     assert group.label_stride == 1
     assert _drawn_label_texts(group) == [f"{tick / 1_000_000} Mbp" for tick in range(500_000, _SAKAI_BP, 500_000)]
+
+
+def _slot_arc_radii(svg: str, slot_id: str, path_id_prefix: str = "") -> list[float]:
+    """The arc radii of the paths in slot ``slot_id``'s group, of those whose id starts with ``path_id_prefix``."""
+
+    import xml.etree.ElementTree as ET
+
+    (group,) = [
+        element for element in ET.fromstring(svg).iter() if element.get("data-gbdraw-slot-id") == slot_id
+    ]
+    return [
+        float(radius)
+        for element in group.iter()
+        if element.tag.rsplit("}", 1)[-1] == "path" and str(element.get("id") or "").startswith(path_id_prefix)
+        for radius in re.findall(r"A ([0-9.]+),[0-9.]+ ", str(element.get("d") or ""))
+    ]
+
+
+def _slot_outer_edge_px(svg: str, slot_id: str) -> float:
+    """Where the paint of slot ``slot_id`` ends outward: the largest arc radius in its group, or the farthest
+    point of its lines."""
+
+    import xml.etree.ElementTree as ET
+
+    (group,) = [
+        element for element in ET.fromstring(svg).iter() if element.get("data-gbdraw-slot-id") == slot_id
+    ]
+    points = [
+        math.hypot(float(x), float(y))
+        for element in group.iter()
+        if element.tag.rsplit("}", 1)[-1] == "path"
+        for x, y in re.findall(r"[ML] ?([-0-9.]+)[ ,]([-0-9.]+)", str(element.get("d") or ""))
+    ]
+    return max([*_slot_arc_radii(svg, slot_id), *points])
+
+
+def _tick_label_inner_edge_px(svg: str) -> float:
+    """The circle the scale's tick labels stand on inside the ticks: their paths (above the path at the top, below
+    it at the bottom)."""
+
+    return min(_slot_arc_radii(svg, "ticks", "circular_tick_label_path_"))
+
+
+def _ring_below_the_ticks(ring: str, background: bool, slots: tuple[str, ...] | None = None) -> str:
+    """A 600 kbp record drawn with ``ring`` (a conservation ring with or without its background, or a feature
+    density heatmap or histogram) in the row just inside the scale, whose labels face it; or in the ``slots`` given,
+    where ``RING`` stands for the ring's slot (followed by more of its parameters)."""
+
+    from gbdraw.analysis.feature_density import FeatureDensityTrack
+    from gbdraw.api.assembly_inputs import CircularAssemblyInputs
+    from gbdraw.api.diagram import assemble_circular_diagram_from_record
+    from gbdraw.features.query import FeatureQuery
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+    from Bio.SeqFeature import SeqFeature, SimpleLocation
+    import pandas as pd
+
+    length = 600_000
+    record = SeqRecord(Seq("ACGT" * (length // 4)), id="rec1", name="rec1", description="test record")
+    record.annotations["molecule_type"] = "DNA"
+    record.annotations["topology"] = "circular"
+    record.features = [
+        SeqFeature(SimpleLocation(start, start + 900, strand=1), type="CDS") for start in range(0, length, 2_000)
+    ]
+    hits = pd.DataFrame(
+        [("q", "rec1", 90.0, 1000, 0, 0, 1, 1000, start + 1, start + 1000, 1e-20, 100.0) for start in range(0, length, 4_000)],
+        columns=COMPARISON_COLUMNS,
+    )
+    slot = {
+        "conservation": "ring:sequence_conservation@source_index=0",
+        "heatmap": "ring:feature_density@track=cds",
+        "histogram": "ring:feature_density@track=cds_bars",
+    }[ring]
+    return assemble_circular_diagram_from_record(
+        record,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, {"objects.conservation.show_background": background}),
+            legend="none",
+            conservation_dataframes=[hits] if ring == "conservation" else None,
+            conservation_reference="subject" if ring == "conservation" else None,
+            feature_density_tracks=(
+                FeatureDensityTrack("cds", FeatureQuery("CDS")),
+                FeatureDensityTrack("cds_bars", FeatureQuery("CDS"), style="histogram"),
+            ),
+            circular_track_slots=[
+                slot + entry[len("RING"):] if entry.startswith("RING") else entry
+                for entry in (slots or ("features:features", "ticks:ticks", "RING", "gc_content:dinucleotide_content"))
+            ],
+        ),
+    ).tostring()
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    ("ring", "background"),
+    [("conservation", True), ("conservation", False), ("heatmap", True)],
+    ids=["conservation-background", "conservation-hits", "density-heatmap"],
+)
+def test_the_tick_labels_keep_their_margin_from_a_ring_that_paints_its_edge(ring, background) -> None:
+    """OV-3149: the tick labels inside the ticks stood on the edge of a conservation ring (its background ring, or
+    hits that fill its band's height) or of a feature density heatmap (cells that fill its band's height), as on a
+    Percent GC band (OV-3116)."""
+
+    cfg = apply_config_overrides(None, None)
+    margin = circular_tick_label_margin_px(float(cfg.objects.ticks.tick_labels.font_size), float(cfg.objects.ticks.tick_width))
+    svg = _ring_below_the_ticks(ring, background)
+
+    assert _tick_label_inner_edge_px(svg) - _slot_outer_edge_px(svg, "ring") == pytest.approx(margin, abs=0.01)
+
+
+@pytest.mark.circular
+def test_the_tick_labels_keep_the_band_edge_of_a_density_histogram() -> None:
+    """A histogram's bars rise to its band's outer edge only at the highest windows: the tick labels keep the
+    packing's band edge beside it, as beside a GC content line."""
+
+    svg = _ring_below_the_ticks("histogram", True)
+
+    assert _tick_label_inner_edge_px(svg) - _slot_outer_edge_px(svg, "ring") == pytest.approx(0.0, abs=0.05)
+
+
+def _tick_label_outer_edge_px(svg: str) -> float:
+    """Where the scale's tick labels end outward when they stand outside the ticks: their paths plus a line box."""
+
+    from gbdraw.core.text import drawn_text_box
+
+    cfg = apply_config_overrides(None, None)
+    _width, height = drawn_text_box("0 kbp", str(cfg.objects.text.font_family), float(cfg.objects.ticks.tick_labels.font_size))
+    return max(_slot_arc_radii(svg, "ticks", "circular_tick_label_path_")) + float(height)
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("gap", [None, 1.0, 6.0], ids=["default-gap", "gap-below-margin", "gap-above-margin"])
+def test_outward_tick_labels_keep_the_larger_of_the_slot_gap_and_their_margin_from_a_ring(gap) -> None:
+    """OV-3150: below a ring that paints its edge, labels standing outside their ticks kept the slot gap plus their
+    margin (7.0 px by default); the packing keeps the gap there, so the margin counts only where the gap is less."""
+
+    cfg = apply_config_overrides(None, None)
+    margin = circular_tick_label_margin_px(float(cfg.objects.ticks.tick_labels.font_size), float(cfg.objects.ticks.tick_width))
+    ring_gap = "" if gap is None else f",inner_gap_px={gap}"
+    tick_gap = "" if gap is None else f",outer_gap_px={gap}"
+    svg = _ring_below_the_ticks(
+        "conservation",
+        True,
+        (
+            "features:features",
+            f"RING{ring_gap}",
+            f"ticks:ticks@tick_label_layout=label_out_tick_in{tick_gap}",
+            "gc_content:dinucleotide_content",
+        ),
+    )
+    clearance = min(_slot_arc_radii(svg, "ring")) - _tick_label_outer_edge_px(svg)
+    # The default slot gap at this radius: what dev draws there.
+    default_gap = 3.9
+    expected = max(default_gap if gap is None else gap, margin)
+    assert clearance == pytest.approx(expected, abs=0.01)
