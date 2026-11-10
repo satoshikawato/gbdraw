@@ -12,3 +12,6 @@
   Similarity alignment works in such a drawing and in the drawing it came from
   (OV-3377). In the drawing it came from, the feature popup's record start and
   orientation actions also work again on a File drawn whole.
+- Fixed: in the Web app, Find in other files no longer drops a Search started
+  right after an edit of Start or End and a tick of Across the origin; before,
+  the dialog went back to the search without a proposal or a message.

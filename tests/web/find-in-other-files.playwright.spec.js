@@ -255,7 +255,13 @@ const findWholePlasmid = async (page, { reference, other, start, end }) => {
   if ((await origin.isChecked()) !== (start > end)) await origin.click();
   await expect(dialog.locator('[data-find-files-search]')).toBeEnabled({ timeout: 120_000 });
   await dialog.locator('[data-find-files-search]').click();
-  await expect.poll(() => status(page), { timeout: 1_200_000 }).toBe('proposal');
+  // The search ends in the proposal; a search that ends anywhere else fails here at once, with the dialog's message.
+  const searchState = () => page.evaluate(() => {
+    const { status: now, message } = window.__GBDRAW_APP__.findInOtherFiles.dialog;
+    return { status: now, message };
+  });
+  await expect.poll(async () => (await searchState()).status, { timeout: 1_200_000 }).not.toMatch(/^(searching|deriving)$/);
+  expect(await searchState()).toEqual({ status: 'proposal', message: '' });
   await dialog.locator('[data-find-files-create]').click();
   await expect(dialog).toHaveCount(0);
   const outcome = await evaluateWithRetainedPromise(page, async () => {

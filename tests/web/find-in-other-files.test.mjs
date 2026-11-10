@@ -440,6 +440,25 @@ test('a tick or an edit while Python answers the last one is not taken', async (
   assert.deepEqual(owner.dialog.proposal[1].windows.map((window) => window.number), ['', '①']);
 });
 
+test('an edit counted at once drops the count still waiting for typing, so a Search started after it stands', async () => {
+  // Type End, tick Across the origin, and Search before typing pauses: the tick counts the windows as they are now, so
+  // the count that waited for typing must not start later and discard the search (CI saw Search return to the search).
+  const { owner, calls } = harness({ held: 'search', files: [{ fileKey: 'ref', records: [record('ref', 'REF', 12000, true)] }, ...FILES.slice(1)] });
+  await owner.open({ recordKey: 'ref', start: 1, end: 12000 });
+  const [row] = owner.dialog.rows;
+  const counted = calls.steps.filter((step) => step.step === 'reference').length;
+  owner.editRow(row.id, { start: '11001' });
+  owner.editRow(row.id, { end: '500' });
+  await owner.editRow(row.id, { acrossOrigin: true });
+  assert.equal(owner.searchReason(), '');
+  const searching = owner.search();
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  calls.release();
+  await searching;
+  assert.deepEqual([owner.dialog.screen, owner.dialog.status, owner.dialog.message], ['proposal', 'proposal', '']);
+  assert.equal(calls.steps.filter((step) => step.step === 'reference').length, counted + 1);
+});
+
 test('typing in Start or End counts the genes once typing pauses', async () => {
   const { owner, calls } = harness();
   await owner.open();
