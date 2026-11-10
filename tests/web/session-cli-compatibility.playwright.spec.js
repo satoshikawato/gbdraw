@@ -124,6 +124,16 @@ const load = async (browser, file, viewport, requirePreview = true) => {
   if (requirePreview) await expect(page.locator('.origin-top svg')).toBeVisible();
   return { context, page, external, errors, dialogs };
 };
+// A further Load into the page of `load`: it is done when the shown Results are no longer the ones before it.
+const loadInto = async (run, file) => {
+  const shown = () => run.page.evaluate(() => window.__GBDRAW_APP__.currentResults().map(result => String(result.content || '')).join('\n'));
+  const before = await shown();
+  await run.page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await expect.poll(async () => !(await run.page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)) && (await shown()) !== before,
+    { timeout: 180_000 }).toBe(true);
+  await expectSessionLoadedWithoutWarnings(run.page, { timeout: 180_000 });
+  await expect(run.page.locator('.origin-top svg')).toBeVisible();
+};
 
 for (const entry of cases) {
   test(`Session current CLI ${entry.name} survives Web Generate and bidirectional replay`, async ({ browser }, testInfo) => {
@@ -238,9 +248,8 @@ const windowedLosatpArgs = (mode) => {
 // drawn units, one per window, in its comparisons. The Web offers Inherit for it (its record indexes cannot hold
 // window pairs), and Generate draws the saved figure with the saved unit pairs. A Pairwise run stores the tables it
 // drew as Similarity groups does, so Inherit draws them without LOSAT (OV-3037).
-for (const mode of [null, 'pairwise']) test(`Session CLI windowed record with LOSAT${mode ? ` ${mode}` : ''} regenerates through Inherit`, async ({ browser }, testInfo) => {
-  test.setTimeout(900_000);
-  const file = await cli('linear', windowedLosatpArgs(mode), testInfo, 'windowed');
+// Returns the figure the CLI drew, read from the Load (`svgSemantics`).
+const windowedInherit = async (browser, file) => {
   const saved = shownSavedDrawing(await readSession(file)).renderRequest;
   const unitPairs = request => request.comparisons.filter(comparison => comparison.kind === 'precomputedProteinComparison')
     .map(comparison => [comparison.queryRecordIndex, comparison.subjectRecordIndex]);
@@ -264,9 +273,14 @@ for (const mode of [null, 'pairwise']) test(`Session CLI windowed record with LO
     expect(await run.page.evaluate(svgSemantics, after.selected)).toEqual(expectedSvg);
     expect(run.external).toEqual([]);
     expect(run.errors).toEqual([]);
+    return expectedSvg;
   } finally {
     await run.context.close();
   }
+};
+test('Session CLI windowed record with LOSAT regenerates through Inherit', async ({ browser }, testInfo) => {
+  test.setTimeout(900_000);
+  await windowedInherit(browser, await cli('linear', windowedLosatpArgs(null), testInfo, 'windowed'));
 });
 
 // OV-3047: a CLI Session of whole records stores the LOSATP results it drew and no Web controls. It loads with the
@@ -296,9 +310,8 @@ for (const mode of ['pairwise', 'collinear']) test(`Session CLI LOSATP ${mode} l
 // window pairs (as Python's locate writes it), and one that names none (as the CLI wrote a Pairwise run before it
 // stored its tables). Inherit runs it in the browser, for the named pairs or else the records of adjacent rows, and
 // draws what the CLI drew from its own search.
-for (const [name, pairs] of [['names its pairs', [[0, 2], [1, 2]]], ['names no pairs', []]]) test(`Session with a windowed LOSATP pipeline that ${name} and no results runs it through Inherit`, async ({ browser }, testInfo) => {
-  test.setTimeout(900_000);
-  const file = await cli('linear', windowedLosatpArgs('pairwise'), testInfo, 'windowed-pairwise');
+// `expectedSvg`: the figure of the CLI Session `file`, as its Load shows it.
+const windowedPipeline = async (browser, testInfo, file, expectedSvg, pairs) => {
   const session = await readSession(file);
   const drawing = shownSavedDrawing(session);
   const tables = drawing.renderRequest.comparisons.filter(comparison => comparison.kind === 'precomputedProteinComparison');
@@ -313,11 +326,8 @@ for (const [name, pairs] of [['names its pairs', [[0, 2], [1, 2]]], ['names no p
   }];
   drawing.losatCache = { entries: [] };
   drawing.losatDerivedCache = { entries: [] };
-  const unrendered = testInfo.outputPath('windowed-pipeline.gbdraw-session.json.gz');
+  const unrendered = testInfo.outputPath(`windowed-pipeline-${pairs.length}.gbdraw-session.json.gz`);
   await fs.writeFile(unrendered, gzipSync(JSON.stringify(session)));
-  const cliRun = await load(browser, file, { width: 1600, height: 1000 });
-  const expectedSvg = await cliRun.page.evaluate(svgSemantics, (await snapshot(cliRun.page)).selected);
-  await cliRun.context.close();
   const run = await load(browser, unrendered, { width: 1600, height: 1000 });
   try {
     const resolution = run.page.locator('[data-imported-comparison-resolution]');
@@ -336,6 +346,18 @@ for (const [name, pairs] of [['names its pairs', [[0, 2], [1, 2]]], ['names no p
     expect(run.errors).toEqual([]);
   } finally {
     await run.context.close();
+  }
+};
+// One CLI run of the Pairwise windows serves the three: its Load is the Inherit case's, and the figure that Load
+// shows is what the two pipeline Sessions made from it must draw.
+test('Session CLI windowed record with LOSAT pairwise regenerates through Inherit, and windowed LOSATP pipelines that name their pairs or none run through Inherit', async ({ browser }, testInfo) => {
+  test.setTimeout(900_000);
+  const file = await cli('linear', windowedLosatpArgs('pairwise'), testInfo, 'windowed-pairwise');
+  const expectedSvg = await test.step('Session CLI windowed record with LOSAT pairwise regenerates through Inherit',
+    () => windowedInherit(browser, file));
+  for (const [name, pairs] of [['names its pairs', [[0, 2], [1, 2]]], ['names no pairs', []]]) {
+    await test.step(`Session with a windowed LOSATP pipeline that ${name} and no results runs it through Inherit`,
+      () => windowedPipeline(browser, testInfo, file, expectedSvg, pairs));
   }
 });
 
@@ -469,7 +491,7 @@ test('Session CLI feature density tracks survive Web Generate', async ({ browser
 // outside or above, a Linear features slot without a side below). The Session it saves, loaded and generated in the
 // Web, draws the CLI's figure: the region set stays outside (above) the Axis, and Overlay set rows paint where Python
 // paints them.
-for (const [name, mode, slots, axis, stack, coveredOfItsZ = []] of [
+const NO_AXIS_STACKS = [
   ['circular', 'circular', ['features:features', 'regions:annotations@set_id=regions,side=outside'],
     1, [['regions', 'outside'], ['features', 'inside']]],
   ['linear', 'linear', ['features:features', 'regions:annotations@set_id=regions,side=above'],
@@ -505,8 +527,9 @@ for (const [name, mode, slots, axis, stack, coveredOfItsZ = []] of [
     1, [['sk', 'outside'], ['features', 'inside'], ['gc', 'inside']]],
   ['linear Annotations rows out of side order', 'linear', ['features:features', 'b:annotations@set_id=b,side=below',
     'r:annotations@set_id=r,side=above'], 1, [['r', 'above'], ['features', 'below'], ['b', 'below']]]
-]) test(`Session CLI ${name} stack without an Axis index draws its region set where the CLI drew it`, async ({ browser }, testInfo) => {
-  test.setTimeout(900_000);
+];
+// One stack: the CLI draws it, and its Session loads into `run` (a page of its own when `run.page` is unset).
+const noAxisStack = async (browser, run, testInfo, [, mode, slots, axis, stack, coveredOfItsZ = []]) => {
   await fs.writeFile(testInfo.outputPath('regions.tsv'), [
     'set_id\tid\tmark\tstart\tend\tlabel\tlegend_label',
     'regions\thead\tline\t1\t9500\tHead genes\tRegion set', 'regions\ttail\tline\t9600\t19000\tTail genes\tRegion set',
@@ -516,59 +539,74 @@ for (const [name, mode, slots, axis, stack, coveredOfItsZ = []] of [
     })
       .filter(([set]) => slots.some((slot) => slot.includes(`set_id=${set},`))).map(([, row]) => row)
   ].join('\n') + '\n');
+  // The CLI writes no output over an earlier stack's: the steps of one case share its output folder.
+  await Promise.all(['no-axis.gbdraw-session.json.gz', 'no-axis.svg'].map((name) => fs.rm(testInfo.outputPath(name), { force: true })));
   const file = await cli(mode, ['--gbk', lambda, '--annotation_table', 'regions.tsv',
     ...slots.flatMap((slot) => [`--${mode}_track_slot`, slot]), '-f', 'svg'], testInfo, 'no-axis');
   const stored = shownSavedDrawing(await readSession(file));
   const [slotsKey, axisKey] = [`${mode}TrackSlots`, `${mode}TrackAxisIndex`];
   expect(stored.renderRequest.diagramOptions.tracks[axisKey]).toBe(null);
-  const run = await load(browser, file, { width: 1600, height: 1000 });
-  try {
-    // The figure's size and each slot group's place and paths, by slot id (4 decimals, as `svgSemantics`).
-    const slotGroups = (svg) => run.page.evaluate((text) => {
-      const round = (value) => value && value.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, (number) => String(Math.round(Number(number) * 1e4) / 1e4));
-      const root = new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
-      return {
-        size: [round(root.getAttribute('width')), round(root.getAttribute('height'))],
-        slots: [...root.querySelectorAll('[data-gbdraw-slot-id]')].map((group) => [
-          group.getAttribute('data-gbdraw-slot-id'), round(group.getAttribute('transform')),
-          [...group.querySelectorAll('path')].map((item) => round(item.getAttribute('d'))).sort()
-        ]).sort((a, b) => a[0].localeCompare(b[0]))
-      };
-    }, svg);
-    // The Web stack lists the rows outside (above) the Axis first, so its slot groups and their texts come in that order.
-    const semantics = async (svg) => {
-      const read = await run.page.evaluate(svgSemantics, svg);
-      return { ...read, text: [...read.text].sort() };
+  if (run.page) await loadInto(run, file);
+  else Object.assign(run, await load(browser, file, { width: 1600, height: 1000 }));
+  // The figure's size and each slot group's place and paths, by slot id (4 decimals, as `svgSemantics`).
+  const slotGroups = (svg) => run.page.evaluate((text) => {
+    const round = (value) => value && value.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, (number) => String(Math.round(Number(number) * 1e4) / 1e4));
+    const root = new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
+    return {
+      size: [round(root.getAttribute('width')), round(root.getAttribute('height'))],
+      slots: [...root.querySelectorAll('[data-gbdraw-slot-id]')].map((group) => [
+        group.getAttribute('data-gbdraw-slot-id'), round(group.getAttribute('transform')),
+        [...group.querySelectorAll('path')].map((item) => round(item.getAttribute('d'))).sort()
+      ]).sort((a, b) => a[0].localeCompare(b[0]))
     };
-    // Overlay set rows overlap each other and the rows of their z they reach: whether each overlay's group comes after
-    // each of those in the document is whether Python paints it over them.
-    const overlays = stack.filter(([, drawnSide]) => drawnSide === 'overlay').map(([id]) => id);
-    const painted = (svg) => run.page.evaluate(([text, overlayIds, otherIds]) => {
-      const order = [...new DOMParser().parseFromString(text, 'image/svg+xml').querySelectorAll('[data-gbdraw-slot-id]')]
-        .map((group) => group.getAttribute('data-gbdraw-slot-id'));
-      return overlayIds.flatMap((overlay) => [...overlayIds, ...otherIds].filter((id) => id !== overlay)
-        .map((id) => [overlay, id, order.indexOf(overlay) > order.indexOf(id)]));
-    }, [svg, overlays, coveredOfItsZ]);
-    // The Legend's entries, in the order it lists them.
-    const legend = (svg) => run.page.evaluate((text) => [...new DOMParser().parseFromString(text, 'image/svg+xml')
-      .querySelectorAll('#legend text')].map((item) => item.textContent), svg);
-    const drawn = await slotGroups(stored.results[0].content);
-    const before = await snapshot(run.page);
-    expect(await slotGroups(before.selected)).toEqual(drawn);
-    await generateAndWaitForResult(run.page);
-    const after = await snapshot(run.page);
-    expect(await slotGroups(after.selected)).toEqual(drawn);
-    expect(await painted(after.selected)).toEqual(await painted(stored.results[0].content));
-    expect(await legend(after.selected)).toEqual(await legend(stored.results[0].content));
-    expect(await semantics(after.selected)).toEqual(await semantics(before.selected));
-    const tracks = after.request.diagramOptions.tracks;
-    expect({ axis: tracks[axisKey], slots: tracks[slotsKey].map(({ id, side: drawnSide }) => [id, drawnSide]) })
-      .toEqual({ axis, slots: stack });
-    expect(run.errors).toEqual([]);
-  } finally {
-    await run.context.close();
-  }
-});
+  }, svg);
+  // The Web stack lists the rows outside (above) the Axis first, so its slot groups and their texts come in that order.
+  const semantics = async (svg) => {
+    const read = await run.page.evaluate(svgSemantics, svg);
+    return { ...read, text: [...read.text].sort() };
+  };
+  // Overlay set rows overlap each other and the rows of their z they reach: whether each overlay's group comes after
+  // each of those in the document is whether Python paints it over them.
+  const overlays = stack.filter(([, drawnSide]) => drawnSide === 'overlay').map(([id]) => id);
+  const painted = (svg) => run.page.evaluate(([text, overlayIds, otherIds]) => {
+    const order = [...new DOMParser().parseFromString(text, 'image/svg+xml').querySelectorAll('[data-gbdraw-slot-id]')]
+      .map((group) => group.getAttribute('data-gbdraw-slot-id'));
+    return overlayIds.flatMap((overlay) => [...overlayIds, ...otherIds].filter((id) => id !== overlay)
+      .map((id) => [overlay, id, order.indexOf(overlay) > order.indexOf(id)]));
+  }, [svg, overlays, coveredOfItsZ]);
+  // The Legend's entries, in the order it lists them.
+  const legend = (svg) => run.page.evaluate((text) => [...new DOMParser().parseFromString(text, 'image/svg+xml')
+    .querySelectorAll('#legend text')].map((item) => item.textContent), svg);
+  const drawn = await slotGroups(stored.results[0].content);
+  const before = await snapshot(run.page);
+  expect(await slotGroups(before.selected)).toEqual(drawn);
+  await generateAndWaitForResult(run.page);
+  const after = await snapshot(run.page);
+  expect(await slotGroups(after.selected)).toEqual(drawn);
+  expect(await painted(after.selected)).toEqual(await painted(stored.results[0].content));
+  expect(await legend(after.selected)).toEqual(await legend(stored.results[0].content));
+  expect(await semantics(after.selected)).toEqual(await semantics(before.selected));
+  const tracks = after.request.diagramOptions.tracks;
+  expect({ axis: tracks[axisKey], slots: tracks[slotsKey].map(({ id, side: drawnSide }) => [id, drawnSide]) })
+    .toEqual({ axis, slots: stack });
+  expect(run.errors).toEqual([]);
+};
+// The stacks of one mode share a page: each Load replaces the drawing (a Load replaces the whole project), and each
+// step names its stack.
+for (const mode of ['circular', 'linear']) {
+  test(`Session CLI ${mode} stacks without an Axis index draw their region sets where the CLI drew them`, async ({ browser }, testInfo) => {
+    test.setTimeout(900_000);
+    const run = {};
+    try {
+      for (const entry of NO_AXIS_STACKS.filter(([, entryMode]) => entryMode === mode)) {
+        await test.step(`Session CLI ${entry[0]} stack without an Axis index draws its region set where the CLI drew it`,
+          () => noAxisStack(browser, run, testInfo, entry));
+      }
+    } finally {
+      await run.context?.close();
+    }
+  });
+}
 
 test('Session schema-1 Web binding control still loads', async ({ browser }, testInfo) => {
   const run = await load(browser, path.join(root, 'tests/fixtures/sessions/single.v41-bindings1.json'), { width: 1600, height: 1000 }, false);

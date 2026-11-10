@@ -8,7 +8,6 @@ const { showDrawing, showPhonePane, shownDrawing } = require('./helpers/drawing-
 const { createHash } = require('node:crypto');
 const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, answerSessionTitle, openApp, waitForAppShell, evaluateWithRetainedPromise, getDiagramWorkerActivity, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated, reveal } = require('./helpers/app-lifecycle.cjs');
 const { generate: generateFromButton } = require('./helpers/mode-transition.cjs');
-const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -92,8 +91,8 @@ const loadDefinitionSession = async (page, path) => {
 
 test('Linear automatic replicon names follow Generate and preserve saved subtitles', async ({ page }, testInfo) => {
   test.setTimeout(120000);
-  // The case counts the wheel requests of the prefetch and the cold boot.
-  await forceColdPyodideBoot(page);
+  // The case counts the wheel requests of the prefetch and the Worker's boot. The cold boot after a snapshot that
+  // fails to restore, and the wheel that boot downloads, are pyodide-snapshot-boot.playwright.spec.js's.
   const wheelResponses = [];
   await page.context().route(/\/gbdraw-[^/]+\.whl(?:\?|$)/, async route => {
     const response = await fetchRoute(route);
@@ -134,14 +133,13 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
     expect(lines.filter((line) => line.kind === 'replicon').map((line) => line.text))
       .toEqual(enabled ? ['p1', 'p2', 'Plastid:chloroplast'] : []);
   }
-  // One Worker serves every Generate. With a served snapshot, the Worker that
-  // cannot restore it is replaced once by one that boots cold. The page
-  // downloads the wheel when the file is chosen, and each Worker downloads it
-  // again (a routed request bypasses the HTTP cache).
-  const expectedWorkers = process.env.GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR ? 2 : 1;
-  expect((await getDiagramWorkerActivity(page)).constructions).toBe(expectedWorkers);
+  // One Worker serves every Generate. The page downloads the wheel when the
+  // file is chosen, and the Worker downloads it again (a routed request
+  // bypasses the HTTP cache), whether it boots cold or restores the served
+  // snapshot (measured 2026-11-10: two downloads either way).
+  expect((await getDiagramWorkerActivity(page)).constructions).toBe(1);
   const servedWheels = wheelResponses;
-  expect(servedWheels).toHaveLength(1 + expectedWorkers);
+  expect(servedWheels).toHaveLength(2);
   for (const served of servedWheels) {
     const wheelPath = new URL(served.url).pathname.replace(/^\//, '');
     expect(served.sha256).toBe(createHash('sha256').update(readFileSync(join(repoRoot, wheelPath))).digest('hex'));
@@ -2176,118 +2174,128 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   );
 });
 
-test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ page }) => {
-  test.setTimeout(180000);
-  page.on('dialog', (dialog) => dialog.accept());
-  await openApp(page, { waitForPalette: false });
-
-  const imported = await evaluateWithRetainedPromise(page, async () => {
-    const response = await fetch(
-      '/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'
-    );
-    const text = await response.text();
-    const session = JSON.parse(text);
-    const shown = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId);
-    const sourceVisibleEntries = shown.losatCache.entries.filter(
-      (entry) => entry.display !== false
-    );
-    const file = new File(
-      [text],
-      'BGC0000708-BGC0000713.gbdraw-session.json',
-      { type: 'application/json' }
-    );
-    const result = await window.__GBDRAW_APP__.importSession({
-      target: { files: [file], value: '' }
-    });
-    return {
-      status: result?.status,
-      sourceHasNoEdgeIdentity: sourceVisibleEntries.every(
-        (entry) => !entry.edgeKey && !entry.queryUid && !entry.subjectUid
-      ),
-      restoredEdgeKeys: window.__GBDRAW_APP__.losatCacheInfo.map(
-        (entry) => entry.edgeKey
-      )
-    };
-  });
-
-  expect(imported).toEqual({
-    status: 'ok',
-    sourceHasNoEdgeIdentity: true,
-    restoredEdgeKeys: [
-      'record-1->record-2',
-      'record-2->record-3',
-      'record-3->record-4',
-      'record-4->record-5'
-    ]
-  });
-  await openLinearSelectedPairs(page);
-  const firstRawResult = page.locator(
-    '[data-linear-raw-result="record-1->record-2"]'
-  );
-  // Save Raw LOSAT TSV is shown only for a cached result.
-  await expect(firstRawResult.getByRole('button', {
-    name: 'Save Raw LOSAT TSV for #1 to #2'
-  })).toBeEnabled();
-});
-
+// The BGC Gallery Session imported once for three cases: the restored cache and the File name disclosure are read
+// first (at the disclosure's own 1440 px viewport), then the last File is removed.
 // OV-2291: the BGC Gallery Session holds a Similarity alignment plan and one record
 // translation per record. Removing its last File clears the plan but not the
 // translations; Generate then failed with UNKNOWN at the request projection. The
 // request now carries the translations of the records it draws
 // (`recordTranslationsFor` in services/linear-record-layout.js).
-test('Generate draws after the last File of an aligned Gallery Session is removed', async ({ page }) => {
-  test.setTimeout(240000);
+// OV-499: the open disclosure stayed in the column beside Save Raw LOSAT TSV,
+// about 75 px of a 320 px sidebar, so its label wrapped one word per line.
+test('BGC Gallery Session: edge-owned raw LOSAT cache, the File name disclosure row, and Generate after its last File is removed', async ({ page }) => {
+  test.setTimeout(420000);
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
-  const imported = await evaluateWithRetainedPromise(page, async () => {
-    const response = await fetch('/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
-    const text = await response.text();
-    const file = new File([text], 'BGC0000708-BGC0000713.gbdraw-session.json', { type: 'application/json' });
-    const result = await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } });
-    return result?.status;
-  });
-  expect(imported).toBe('ok');
-  await generateFromButton(page);
-  const layoutState = () => page.evaluate(async () => {
-    const { state } = await import('./js/state.js');
-    const { getCommittedCanonicalSession } = await import('./js/services/config.js');
-    const request = getCommittedCanonicalSession().renderRequest;
-    return {
-      records: request.records.map((record) => record.recordKey),
-      requestTranslations: (request.layout.recordTranslations || []).map((entry) => entry.recordKey),
-      pageTranslations: state.linearRecordTranslations.value.map((entry) => entry.recordKey),
-      plan: state.similarityAlignmentPlan.value ? state.similarityAlignmentPlan.value.records.map((entry) => entry.recordKey) : null,
-      files: window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.gb?.name ?? null)
-    };
-  });
-  const five = ['record-1', 'record-2', 'record-3', 'record-4', 'record-5'];
-  expect(await layoutState()).toEqual({
-    records: five, requestTranslations: five, pageTranslations: five, plan: five,
-    files: ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk', 'BGC0000713.gbk']
-  });
+  await test.step('Existing Gallery session restores edge-owned raw LOSAT cache', async () => {
 
-  // Remove the last File through its controls.
-  const removeLast = page.getByRole('button', { name: 'Remove last sequence', exact: true });
-  await reveal(removeLast);
-  await removeLast.click();
-  const dialog = page.locator('[data-linear-source-removal-dialog]');
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('heading')).toHaveText('Remove BGC0000713.gbk?');
-  await dialog.getByRole('button', { name: 'Remove file', exact: true }).click();
-  await expect(dialog).toHaveCount(0);
-  await settleLive(page);
-  // The plan is cleared; the page keeps its translations.
-  expect(await layoutState()).toMatchObject({ pageTranslations: five, plan: null, files: ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk'] });
+    const imported = await evaluateWithRetainedPromise(page, async () => {
+      const response = await fetch(
+        '/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'
+      );
+      const text = await response.text();
+      const session = JSON.parse(text);
+      const shown = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId);
+      const sourceVisibleEntries = shown.losatCache.entries.filter(
+        (entry) => entry.display !== false
+      );
+      const file = new File(
+        [text],
+        'BGC0000708-BGC0000713.gbdraw-session.json',
+        { type: 'application/json' }
+      );
+      const result = await window.__GBDRAW_APP__.importSession({
+        target: { files: [file], value: '' }
+      });
+      return {
+        status: result?.status,
+        sourceHasNoEdgeIdentity: sourceVisibleEntries.every(
+          (entry) => !entry.edgeKey && !entry.queryUid && !entry.subjectUid
+        ),
+        restoredEdgeKeys: window.__GBDRAW_APP__.losatCacheInfo.map(
+          (entry) => entry.edgeKey
+        )
+      };
+    });
 
-  // Generate draws the four remaining records; the request carries their translations only,
-  // and the page keeps its list (a record turned off keeps its place).
-  await generateFromButton(page);
-  const four = five.slice(0, 4);
-  expect(await layoutState()).toEqual({
-    records: four, requestTranslations: four, pageTranslations: five, plan: null,
-    files: ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk']
+    expect(imported).toEqual({
+      status: 'ok',
+      sourceHasNoEdgeIdentity: true,
+      restoredEdgeKeys: [
+        'record-1->record-2',
+        'record-2->record-3',
+        'record-3->record-4',
+        'record-4->record-5'
+      ]
+    });
+    await openLinearSelectedPairs(page);
+    const firstRawResult = page.locator(
+      '[data-linear-raw-result="record-1->record-2"]'
+    );
+    // Save Raw LOSAT TSV is shown only for a cached result.
+    await expect(firstRawResult.getByRole('button', {
+      name: 'Save Raw LOSAT TSV for #1 to #2'
+    })).toBeEnabled();
   });
-  expect(await page.evaluate(async () => (await import('./js/state.js')).state.results.value.length)).toBe(1);
+  await test.step('OV-499: an open pair File name disclosure takes the whole row under Save Raw LOSAT TSV', async () => {
+    const viewport = page.viewportSize();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const rawResult = page.locator('[data-linear-raw-result]').first();
+    await rawResult.evaluate((element) => {
+      for (let owner = element.closest('details'); owner; owner = owner.parentElement?.closest('details')) owner.open = true;
+    });
+    await expect(rawResult.getByRole('button', { name: /^Save Raw LOSAT TSV/ })).toBeVisible();
+    await openRawFilename(rawResult);
+    const widths = await rawResult.evaluate((element) => ({
+      row: element.clientWidth,
+      field: element.querySelector('details input[type="text"]').getBoundingClientRect().width
+    }));
+    expect(widths.field).toBeGreaterThan(widths.row - 8);
+    await page.setViewportSize(viewport);
+  });
+  await test.step('OV-2291: Generate draws after the last File of an aligned Gallery Session is removed', async () => {
+    await generateFromButton(page);
+    const layoutState = () => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+      const request = getCommittedCanonicalSession().renderRequest;
+      return {
+        records: request.records.map((record) => record.recordKey),
+        requestTranslations: (request.layout.recordTranslations || []).map((entry) => entry.recordKey),
+        pageTranslations: state.linearRecordTranslations.value.map((entry) => entry.recordKey),
+        plan: state.similarityAlignmentPlan.value ? state.similarityAlignmentPlan.value.records.map((entry) => entry.recordKey) : null,
+        files: window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.gb?.name ?? null)
+      };
+    });
+    const five = ['record-1', 'record-2', 'record-3', 'record-4', 'record-5'];
+    expect(await layoutState()).toEqual({
+      records: five, requestTranslations: five, pageTranslations: five, plan: five,
+      files: ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk', 'BGC0000713.gbk']
+    });
+
+    // Remove the last File through its controls.
+    const removeLast = page.getByRole('button', { name: 'Remove last sequence', exact: true });
+    await reveal(removeLast);
+    await removeLast.click();
+    const dialog = page.locator('[data-linear-source-removal-dialog]');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('heading')).toHaveText('Remove BGC0000713.gbk?');
+    await dialog.getByRole('button', { name: 'Remove file', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await settleLive(page);
+    // The plan is cleared; the page keeps its translations.
+    expect(await layoutState()).toMatchObject({ pageTranslations: five, plan: null, files: ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk'] });
+
+    // Generate draws the four remaining records; the request carries their translations only,
+    // and the page keeps its list (a record turned off keeps its place).
+    await generateFromButton(page);
+    const four = five.slice(0, 4);
+    expect(await layoutState()).toEqual({
+      records: four, requestTranslations: four, pageTranslations: five, plan: null,
+      files: ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk']
+    });
+    expect(await page.evaluate(async () => (await import('./js/state.js')).state.results.value.length)).toBe(1);
+  });
 });
 
 test('Candidate render post-processing sanitizes and reapplies stable styles before commit', async ({ page }) => {
@@ -2878,28 +2886,6 @@ ORIGIN
   expect(target).toEqual({ kind: 'recordId', value: 'RecB' });
 });
 
-test('Region annotation IDs accept continuous typing without losing focus', async ({ page }) => {
-  await openApp(page, { waitForPalette: false });
-
-  await page.evaluate(() => {
-    const app = window.__GBDRAW_APP__;
-    const set = app.addAnnotationSet('review');
-    app.addCoordinateAnnotation(set);
-  });
-
-  await page.locator('summary[aria-label="Region Annotations"]').press('Enter');
-  const idInput = page.getByLabel('Annotation id', { exact: true });
-  await idInput.selectText();
-  await idInput.pressSequentially('Repeat');
-
-  await expect(idInput).toBeFocused();
-  await expect(idInput).toHaveValue('Repeat');
-  await idInput.press('Tab');
-  await expect.poll(() => page.evaluate(() => (
-    window.__GBDRAW_APP__.annotationSets[0].annotations[0].id
-  ))).toBe('Repeat');
-});
-
 // OV-3068: a field the user types into shows its model's value through `v-committed-value`. A render of the page
 // that does not change the value (here a new Session title) leaves the text typed into the field, also during an IME
 // composition; when the commit ends the field shows the stored value, with or without focus, once the commit has
@@ -2929,17 +2915,49 @@ const tabAndReadFirstFrame = async (locator) => {
   return locator.evaluate((field) => field.__firstFrameAfterBlur);
 };
 
-test('A text field that commits on change keeps typed text through a render of the page', async ({ page }) => {
+// The Region annotation id field of one page, in an order that gives each step the value it starts from: the trimmed
+// commit first (the id is still `region_1`), then typing through a render, an IME composition, and continuous typing.
+test('Region annotation id: a kept commit, typing and an IME composition through a render of the page, and continuous typing', async ({ page }) => {
   const idInput = await openRegionAnnotationId(page);
-  await idInput.selectText();
-  await idInput.pressSequentially('Repeat');
-  await renderPageWithTitle(page, 'Render while typing');
-  await expect(idInput).toBeFocused();
-  await expect(idInput).toHaveValue('Repeat');
-  expect(await annotationId(page)).toBe('region_1');
-  await idInput.press('Tab');
-  await expect.poll(() => annotationId(page)).toBe('Repeat');
-  await expect(idInput).toHaveValue('Repeat');
+  await test.step('A field whose commit keeps the old value shows that value once it loses focus', async () => {
+    await idInput.selectText();
+    // The id is stored trimmed, so the commit leaves `region_1` as it was.
+    await idInput.pressSequentially('  region_1  ');
+    await idInput.press('Tab');
+    await expect(idInput).not.toBeFocused();
+    await expect(idInput).toHaveValue('region_1');
+    expect(await annotationId(page)).toBe('region_1');
+  });
+  await test.step('A text field that commits on change keeps typed text through a render of the page', async () => {
+    await idInput.selectText();
+    await idInput.pressSequentially('Repeat');
+    await renderPageWithTitle(page, 'Render while typing');
+    await expect(idInput).toBeFocused();
+    await expect(idInput).toHaveValue('Repeat');
+    expect(await annotationId(page)).toBe('region_1');
+    await idInput.press('Tab');
+    await expect.poll(() => annotationId(page)).toBe('Repeat');
+    await expect(idInput).toHaveValue('Repeat');
+  });
+  await test.step('A field keeps the text of an IME composition through a render of the page', async () => {
+    const cdp = await page.context().newCDPSession(page);
+    await idInput.selectText();
+    await cdp.send('Input.imeSetComposition', { text: 'かめ', selectionStart: 2, selectionEnd: 2 });
+    await renderPageWithTitle(page, 'Render while composing');
+    await cdp.send('Input.insertText', { text: '亀' });
+    await expect(idInput).toBeFocused();
+    await expect(idInput).toHaveValue('亀');
+    await idInput.press('Tab');
+    await expect.poll(() => annotationId(page)).toBe('亀');
+  });
+  await test.step('Region annotation IDs accept continuous typing without losing focus', async () => {
+    await idInput.selectText();
+    await idInput.pressSequentially('Repeat');
+    await expect(idInput).toBeFocused();
+    await expect(idInput).toHaveValue('Repeat');
+    await idInput.press('Tab');
+    await expect.poll(() => annotationId(page)).toBe('Repeat');
+  });
 });
 
 test('A number field that commits on change keeps typed text through a render of the page', async ({ page }) => {
@@ -2956,30 +2974,6 @@ test('A number field that commits on change keeps typed text through a render of
   await min.press('Tab');
   await expect.poll(async () => (await scale())?.[0]).toBe(40);
   await expect(min).toHaveValue('40');
-});
-
-test('A field keeps the text of an IME composition through a render of the page', async ({ page }) => {
-  const idInput = await openRegionAnnotationId(page);
-  const cdp = await page.context().newCDPSession(page);
-  await idInput.selectText();
-  await cdp.send('Input.imeSetComposition', { text: 'かめ', selectionStart: 2, selectionEnd: 2 });
-  await renderPageWithTitle(page, 'Render while composing');
-  await cdp.send('Input.insertText', { text: '亀' });
-  await expect(idInput).toBeFocused();
-  await expect(idInput).toHaveValue('亀');
-  await idInput.press('Tab');
-  await expect.poll(() => annotationId(page)).toBe('亀');
-});
-
-test('A field whose commit keeps the old value shows that value once it loses focus', async ({ page }) => {
-  const idInput = await openRegionAnnotationId(page);
-  await idInput.selectText();
-  // The id is stored trimmed, so the commit leaves `region_1` as it was.
-  await idInput.pressSequentially('  region_1  ');
-  await idInput.press('Tab');
-  await expect(idInput).not.toBeFocused();
-  await expect(idInput).toHaveValue('region_1');
-  expect(await annotationId(page)).toBe('region_1');
 });
 
 // The Linear record row stores each keystroke; an empty row is refused, so the next render used to put the old row
@@ -3067,42 +3061,57 @@ const recordChanges = (locator) => locator.evaluate((field) => {
   field.addEventListener('change', () => { field.__changes.push(field.value); }, true);
 });
 
-// Enter in the Legend name, which has no Enter handler of its own, commits by the browser's `change`: a valid name
-// renames the row and stays in the field, which keeps focus.
-test('A Legend name committed by Enter renames the row and stays in the field', async ({ page }) => {
+// One Load of the Gallery Session for three field journeys, in an order that leaves each the state it starts from:
+// the refused name changes nothing, the rename changes only the CDS row, and Display start is another control.
+test('Legend names committed by Enter, refused and accepted, and Display start, on one loaded Session', async ({ page }) => {
   test.setTimeout(300000);
   await loadCircularSession(page);
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
-  const name = page.getByLabel('Legend entry CDS name', { exact: true });
-  await expect(name).toHaveValue('CDS');
-  const row = (await legendNamesAndUndoCount(page)).names.indexOf('CDS');
-  const field = page.locator('[data-legend-drawer-row]').nth(row).getByRole('textbox');
-  await name.selectText();
-  await name.pressSequentially('Coding');
-  await field.press('Enter');
-  await expect.poll(async () => (await legendNamesAndUndoCount(page)).names[row], { timeout: 60000 }).toBe('Coding');
-  await expect(field).toBeFocused();
-  await expect(field).toHaveValue('Coding');
-});
-
-// Enter commits the Legend name; a refused (empty) name shows the stored one again at once, while the field keeps
-// focus, so the row never looks deleted. The commit ran: the field's `change` carried the empty name, and the refusal
-// left the list and the History as they were.
-test('A refused Legend name committed by Enter shows the stored name while the field keeps focus', async ({ page }) => {
-  test.setTimeout(300000);
-  await loadCircularSession(page);
-  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
-  const name = page.getByLabel('Legend entry CDS name', { exact: true });
-  await expect(name).toHaveValue('CDS');
-  const before = await legendNamesAndUndoCount(page);
-  await recordChanges(name);
-  await name.selectText();
-  await name.press('Backspace');
-  await name.press('Enter');
-  await expect(name).toBeFocused();
-  await expect(name).toHaveValue('CDS');
-  expect(await name.evaluate((field) => field.__changes), 'the Enter committed the empty name').toEqual(['']);
-  expect(await legendNamesAndUndoCount(page)).toEqual(before);
+  // Enter commits the Legend name; a refused (empty) name shows the stored one again at once, while the field keeps
+  // focus, so the row never looks deleted. The commit ran: the field's `change` carried the empty name, and the refusal
+  // left the list and the History as they were.
+  await test.step('A refused Legend name committed by Enter shows the stored name while the field keeps focus', async () => {
+    const name = page.getByLabel('Legend entry CDS name', { exact: true });
+    await expect(name).toHaveValue('CDS');
+    const before = await legendNamesAndUndoCount(page);
+    await recordChanges(name);
+    await name.selectText();
+    await name.press('Backspace');
+    await name.press('Enter');
+    await expect(name).toBeFocused();
+    await expect(name).toHaveValue('CDS');
+    expect(await name.evaluate((field) => field.__changes), 'the Enter committed the empty name').toEqual(['']);
+    expect(await legendNamesAndUndoCount(page)).toEqual(before);
+  });
+  // Enter in the Legend name, which has no Enter handler of its own, commits by the browser's `change`: a valid name
+  // renames the row and stays in the field, which keeps focus.
+  await test.step('A Legend name committed by Enter renames the row and stays in the field', async () => {
+    const name = page.getByLabel('Legend entry CDS name', { exact: true });
+    await expect(name).toHaveValue('CDS');
+    const row = (await legendNamesAndUndoCount(page)).names.indexOf('CDS');
+    const field = page.locator('[data-legend-drawer-row]').nth(row).getByRole('textbox');
+    await name.selectText();
+    await name.pressSequentially('Coding');
+    await field.press('Enter');
+    await expect.poll(async () => (await legendNamesAndUndoCount(page)).names[row], { timeout: 60000 }).toBe('Coding');
+    await expect(field).toBeFocused();
+    await expect(field).toHaveValue('Coding');
+  });
+  // Display start commits after an await; an out-of-range start is refused with its error and the stored start shows.
+  await test.step('Display start shows a valid start at once and the stored start after a refused one', async () => {
+    await page.locator('[data-circular-inspect]').click();
+    const start = page.getByLabel(/^Display start NC_012920\.1/);
+    await expect(start).toBeVisible({ timeout: 180000 });
+    await expect(start).toHaveValue('1');
+    await start.selectText();
+    await start.pressSequentially('100');
+    expect(await tabAndReadFirstFrame(start), 'the first frame after Tab').toBe('100');
+    await expect(start).toHaveValue('100');
+    await start.selectText();
+    await start.pressSequentially('99999999');
+    await start.press('Tab');
+    await expect(start).toHaveValue('100');
+  });
 });
 
 // A rename of a Legend row that a color rule draws gives the row a new key and moves it (OV-3070); the list keys its
@@ -3256,24 +3265,6 @@ test('A Legend list field ends its edit when a dialog takes its focus, and commi
     expect(await page.evaluate(() => window.commits), `nothing is committed (moved first: ${moveFirst})`).toEqual([]);
     await expect(page.getByLabel('name b', { exact: true })).toHaveValue('Beta');
   }
-});
-
-// Display start commits after an await; an out-of-range start is refused with its error and the stored start shows.
-test('Display start shows a valid start at once and the stored start after a refused one', async ({ page }) => {
-  test.setTimeout(300000);
-  await loadCircularSession(page);
-  await page.locator('[data-circular-inspect]').click();
-  const start = page.getByLabel(/^Display start NC_012920\.1/);
-  await expect(start).toBeVisible({ timeout: 180000 });
-  await expect(start).toHaveValue('1');
-  await start.selectText();
-  await start.pressSequentially('100');
-  expect(await tabAndReadFirstFrame(start), 'the first frame after Tab').toBe('100');
-  await expect(start).toHaveValue('100');
-  await start.selectText();
-  await start.pressSequentially('99999999');
-  await start.press('Tab');
-  await expect(start).toHaveValue('100');
 });
 
 test('@comparison-contract GFF annotation targets follow FASTA record order', async ({ page }) => {
@@ -4785,28 +4776,4 @@ FEATURES             Location/Qualifiers
   // A blank record Definition previews what Generate draws: the inferred value.
   await expect(page.getByLabel('Definition for sequence 1'))
     .toHaveAttribute('placeholder', '<i>Escherichia coli</i> O157:H7 str. Sakai');
-});
-
-// OV-499: the open disclosure stayed in the column beside Save Raw LOSAT TSV,
-// about 75 px of a 320 px sidebar, so its label wrapped one word per line.
-test('an open pair File name disclosure takes the whole row under Save Raw LOSAT TSV', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  const bytes = [...readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json')];
-  await evaluateWithRetainedPromise(page, async (sessionBytes) => {
-    const file = new File([new Uint8Array(sessionBytes)], 'BGC0000708-BGC0000713.gbdraw-session.json');
-    await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } });
-  }, bytes);
-  const rawResult = page.locator('[data-linear-raw-result]').first();
-  await rawResult.evaluate((element) => {
-    for (let owner = element.closest('details'); owner; owner = owner.parentElement?.closest('details')) owner.open = true;
-  });
-  await expect(rawResult.getByRole('button', { name: /^Save Raw LOSAT TSV/ })).toBeVisible();
-  await openRawFilename(rawResult);
-  const widths = await rawResult.evaluate((element) => ({
-    row: element.clientWidth,
-    field: element.querySelector('details input[type="text"]').getBoundingClientRect().width
-  }));
-  expect(widths.field).toBeGreaterThan(widths.row - 8);
 });

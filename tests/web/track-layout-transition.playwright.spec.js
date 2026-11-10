@@ -170,81 +170,81 @@ test('Linear Use custom stack asks before dropping a Linear lane, and Circular S
   }
 });
 
-test('Circular Row actions run from the menu and by keyboard, and focus stays with the row', async ({ browser }) => {
+// One Session Load for both: Track on Axis runs first and gives the Axis back to
+// the features row, the start the Row actions journey needs.
+test('Circular Track on Axis and the Row actions run from the menu and by keyboard, and focus stays with the row', async ({ browser }) => {
   test.setTimeout(300000);
   const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
   try {
     await openStack(page, 'circular');
-    // The features row sits on the Axis, so the Axis marker is inside that row.
-    expect(await stackOrder(page, 'circular')).toEqual(['features', 'gc_content', 'gc_skew', 'a_skew_2', 'ticks']);
-    const gc = slotRow(page, 'circular', 'gc_content');
-    // Move up and Move down stay the row's buttons; the other actions are menu items.
-    await expect(gc.getByRole('button', { name: 'Circular track slot gc_content Move outward', exact: true })).toBeVisible();
-    await expect(gc.getByRole('button', { name: 'Circular track slot gc_content Move inward', exact: true })).toBeVisible();
-    await expect(menuItems(gc)).toHaveText(['Move outside Axis', 'Move inside Axis', 'Duplicate', 'Remove']);
-    await expect(menuItem(gc, 'Move inside Axis')).toBeDisabled();
-
-    await runRowAction(gc, 'Move outside Axis');
-    await expect(rowMenu(gc)).not.toHaveAttribute('open', '');
-    await expect(menuToggle(gc)).toBeFocused();
-    expect(await stackOrder(page, 'circular')).toEqual(['gc_content', 'features', 'gc_skew', 'a_skew_2', 'ticks']);
-
-    // Keyboard: Arrow Down opens the menu on its first enabled item, the
-    // arrows move through the enabled items, Escape closes it, Enter runs one.
-    await page.keyboard.press('ArrowDown');
-    const inside = rowMenu(gc).getByRole('button', { name: 'Move inside Axis', exact: true });
-    await expect(inside).toBeFocused();
-    await expect(rowMenu(gc).getByRole('button', { name: 'Move outside Axis', exact: true })).toBeDisabled();
-    await page.keyboard.press('ArrowDown');
-    await expect(rowMenu(gc).getByRole('button', { name: 'Duplicate', exact: true })).toBeFocused();
-    await page.keyboard.press('ArrowUp');
-    await expect(inside).toBeFocused();
-    await page.keyboard.press('Escape');
-    await expect(rowMenu(gc)).not.toHaveAttribute('open', '');
-    await expect(menuToggle(gc)).toBeFocused();
-    await page.keyboard.press('ArrowDown');
-    await expect(inside).toBeFocused();
-    await page.keyboard.press('Enter');
-    await expect(menuToggle(gc)).toBeFocused();
-    expect(await stackOrder(page, 'circular')).toEqual(['features', 'gc_content', 'gc_skew', 'a_skew_2', 'ticks']);
-
-    await runRowAction(gc, 'Duplicate');
-    await expect(menuToggle(gc)).toBeFocused();
-    expect(await stackOrder(page, 'circular')).toEqual(['features', 'gc_content', 'gc_content_2', 'gc_skew', 'a_skew_2', 'ticks']);
-    // Remove: focus goes to the row now in its place.
-    await runRowAction(slotRow(page, 'circular', 'gc_content_2'), 'Remove');
-    await expect(menuToggle(slotRow(page, 'circular', 'gc_skew'))).toBeFocused();
-    // The last row's Remove focuses the row before it.
-    await runRowAction(slotRow(page, 'circular', 'ticks'), 'Remove');
-    await expect(menuToggle(slotRow(page, 'circular', 'a_skew_2'))).toBeFocused();
-    expect(await stackOrder(page, 'circular')).toEqual(['features', 'gc_content', 'gc_skew', 'a_skew_2']);
-
-    // Track on Axis is offered where the renderer can sit on the Axis.
-    const features = slotRow(page, 'circular', 'features');
-    await expect(menuItem(features, 'Track on Axis')).toHaveCount(1);
-    await expect(menuItem(gc, 'Track on Axis')).toHaveCount(0);
-    await expect(menuItem(features, 'Remove')).toHaveClass(/action-menu-item-danger/);
-  } finally {
-    await page.context().close();
-  }
-});
-
-test('Circular Track on Axis runs from the Row actions menu', async ({ browser }) => {
-  test.setTimeout(300000);
-  const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
-  try {
-    await openStack(page, 'circular');
-    const features = slotRow(page, 'circular', 'features');
-    const ticks = slotRow(page, 'circular', 'ticks');
-    await expect(menuItem(features, 'Track on Axis')).toBeDisabled();
-    await runRowAction(ticks, 'Track on Axis');
-    await expect(menuToggle(ticks)).toBeFocused();
-    await expect(menuItem(ticks, 'Track on Axis')).toBeDisabled();
-    await expect(menuItem(features, 'Track on Axis')).toBeEnabled();
-    expect(await page.evaluate(() => {
+    const axisRow = () => page.evaluate(() => {
       const app = window.__GBDRAW_APP__;
       return app.adv.circular_track_slots[app.adv.circular_track_slots_axis_index]?.id;
-    })).toBe('ticks');
+    });
+    await test.step('Circular Track on Axis runs from the Row actions menu', async () => {
+      const features = slotRow(page, 'circular', 'features');
+      const ticks = slotRow(page, 'circular', 'ticks');
+      await expect(menuItem(features, 'Track on Axis')).toBeDisabled();
+      await runRowAction(ticks, 'Track on Axis');
+      await expect(menuToggle(ticks)).toBeFocused();
+      await expect(menuItem(ticks, 'Track on Axis')).toBeDisabled();
+      await expect(menuItem(features, 'Track on Axis')).toBeEnabled();
+      expect(await axisRow()).toBe('ticks');
+      // Back to the Session's Axis row for the next step.
+      await runRowAction(features, 'Track on Axis');
+      expect(await axisRow()).toBe('features');
+    });
+    await test.step('Circular Row actions run from the menu and by keyboard, and focus stays with the row', async () => {
+      // The features row sits on the Axis, so the Axis marker is inside that row.
+      expect(await stackOrder(page, 'circular')).toEqual(['features', 'gc_content', 'gc_skew', 'a_skew_2', 'ticks']);
+      const gc = slotRow(page, 'circular', 'gc_content');
+      // Move up and Move down stay the row's buttons; the other actions are menu items.
+      await expect(gc.getByRole('button', { name: 'Circular track slot gc_content Move outward', exact: true })).toBeVisible();
+      await expect(gc.getByRole('button', { name: 'Circular track slot gc_content Move inward', exact: true })).toBeVisible();
+      await expect(menuItems(gc)).toHaveText(['Move outside Axis', 'Move inside Axis', 'Duplicate', 'Remove']);
+      await expect(menuItem(gc, 'Move inside Axis')).toBeDisabled();
+
+      await runRowAction(gc, 'Move outside Axis');
+      await expect(rowMenu(gc)).not.toHaveAttribute('open', '');
+      await expect(menuToggle(gc)).toBeFocused();
+      expect(await stackOrder(page, 'circular')).toEqual(['gc_content', 'features', 'gc_skew', 'a_skew_2', 'ticks']);
+
+      // Keyboard: Arrow Down opens the menu on its first enabled item, the
+      // arrows move through the enabled items, Escape closes it, Enter runs one.
+      await page.keyboard.press('ArrowDown');
+      const inside = rowMenu(gc).getByRole('button', { name: 'Move inside Axis', exact: true });
+      await expect(inside).toBeFocused();
+      await expect(rowMenu(gc).getByRole('button', { name: 'Move outside Axis', exact: true })).toBeDisabled();
+      await page.keyboard.press('ArrowDown');
+      await expect(rowMenu(gc).getByRole('button', { name: 'Duplicate', exact: true })).toBeFocused();
+      await page.keyboard.press('ArrowUp');
+      await expect(inside).toBeFocused();
+      await page.keyboard.press('Escape');
+      await expect(rowMenu(gc)).not.toHaveAttribute('open', '');
+      await expect(menuToggle(gc)).toBeFocused();
+      await page.keyboard.press('ArrowDown');
+      await expect(inside).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(menuToggle(gc)).toBeFocused();
+      expect(await stackOrder(page, 'circular')).toEqual(['features', 'gc_content', 'gc_skew', 'a_skew_2', 'ticks']);
+
+      await runRowAction(gc, 'Duplicate');
+      await expect(menuToggle(gc)).toBeFocused();
+      expect(await stackOrder(page, 'circular')).toEqual(['features', 'gc_content', 'gc_content_2', 'gc_skew', 'a_skew_2', 'ticks']);
+      // Remove: focus goes to the row now in its place.
+      await runRowAction(slotRow(page, 'circular', 'gc_content_2'), 'Remove');
+      await expect(menuToggle(slotRow(page, 'circular', 'gc_skew'))).toBeFocused();
+      // The last row's Remove focuses the row before it.
+      await runRowAction(slotRow(page, 'circular', 'ticks'), 'Remove');
+      await expect(menuToggle(slotRow(page, 'circular', 'a_skew_2'))).toBeFocused();
+      expect(await stackOrder(page, 'circular')).toEqual(['features', 'gc_content', 'gc_skew', 'a_skew_2']);
+
+      // Track on Axis is offered where the renderer can sit on the Axis.
+      const features = slotRow(page, 'circular', 'features');
+      await expect(menuItem(features, 'Track on Axis')).toHaveCount(1);
+      await expect(menuItem(gc, 'Track on Axis')).toHaveCount(0);
+      await expect(menuItem(features, 'Remove')).toHaveClass(/action-menu-item-danger/);
+    });
   } finally {
     await page.context().close();
   }
@@ -435,16 +435,24 @@ const historyStep = async (page, step) => {
   await evaluateWithRetainedPromise(page, (name) => window.__GBDRAW_HISTORY__[name](), step);
   await settleLive(page);
 };
+const generatedState = (page) => page.evaluate(async () => {
+  const { state } = await import('./js/state.js');
+  return { error: state.errorLog.value?.code ?? null, results: state.results.value.length };
+});
 const expectGenerates = async (page) => {
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
-  expect(await page.evaluate(async () => {
-    const { state } = await import('./js/state.js');
-    return { error: state.errorLog.value?.code ?? null, results: state.results.value.length };
-  })).toEqual({ error: null, results: 1 });
+  expect(await generatedState(page)).toEqual({ error: null, results: 1 });
+};
+// After `expectLiveEqualsGenerate`, which ran a Generate of this same draft:
+// that Generate drew, read from state instead of drawing the draft again.
+const expectParityGenerated = async (page) => {
+  expect(await generatedState(page), 'the parity Generate drew').toEqual({ error: null, results: 1 });
 };
 // Cancel, the choice, Undo, Redo, Generate. `trigger` makes the real click;
-// `focused` is the control that holds the focus after Cancel.
-const exerciseAsk = async (page, mode, { trigger, title, focused, expectAfter, beforeGenerate = async () => {}, live = false, cancel = 'Cancel', generates = true }) => {
+// `focused` is the control that holds the focus after Cancel. `expectAfter`
+// runs right after the choice. With `live` and no `beforeGenerate`, the parity
+// check's Generate is the Generate of the draft.
+const exerciseAsk = async (page, mode, { trigger, title, focused, expectAfter, beforeGenerate, live = false, cancel = 'Cancel', generates = true }) => {
   const prompt = page.locator('[data-choice-prompt]');
   const heading = prompt.getByRole('heading', { name: title, exact: true });
   const before = await stackState(page, mode);
@@ -463,7 +471,7 @@ const exerciseAsk = async (page, mode, { trigger, title, focused, expectAfter, b
   await expect(heading).toHaveCount(0);
   await settleLive(page);
   const after = await stackState(page, mode);
-  expectAfter(after);
+  await expectAfter(after);
   expect(await undoCount(page), 'one Undo step').toBe(steps + 1);
   await historyStep(page, 'undo');
   expect(await stackState(page, mode), 'Undo restores it together').toEqual(before);
@@ -471,7 +479,8 @@ const exerciseAsk = async (page, mode, { trigger, title, focused, expectAfter, b
   expect(await stackState(page, mode), 'Redo makes it again').toEqual(after);
   if (live) await expectLiveEqualsGenerate(page, { label: title });
   if (!generates) return;
-  await beforeGenerate();
+  if (live && !beforeGenerate) return expectParityGenerated(page);
+  if (beforeGenerate) await beforeGenerate();
   await expectGenerates(page);
 };
 const rowNumber = (state, id) => state.rows.findIndex((row) => row.startsWith(`${id}:`)) + 1;
@@ -507,15 +516,6 @@ const generatedWithReach = async (browser, mode) => {
   await settleLive(page);
   return page;
 };
-// The Session a Save writes for that drawing, loaded: its Result draws Depth,
-// and its Web input inventory names the Depth file.
-const loadedWithReach = async (browser, mode, testInfo) => {
-  const saved = await generatedWithReach(browser, mode);
-  const file = testInfo.outputPath(`saved-${mode}.gbdraw-session.json`);
-  await savedSession(saved, file);
-  await saved.context().close();
-  return load(browser, file);
-};
 const choose = async (page, title) => {
   const prompt = page.locator('[data-choice-prompt]');
   await expect(prompt.getByRole('heading', { name: title, exact: true })).toBeVisible();
@@ -525,58 +525,47 @@ const choose = async (page, title) => {
 };
 const drawsDepth = (page) => page.evaluate(() => window.__GBDRAW_APP__.svgContainer.querySelector('svg').querySelectorAll('[id*="depth" i]').length > 0);
 
+// The bodies of the reach journeys; one case per mode runs them (`reach matrix` below).
+const reachFileRemovalAfterGenerate = async (page, mode) => {
+  const start = await stackState(page, mode);
+  await exerciseAsk(page, mode, {
+    trigger: () => removeDepthFile(page, mode),
+    title: `Remove the Depth file and turn off Track row ${rowNumber(start, 'mark')}?`,
+    live: true,
+    expectAfter: expectDepthLeft
+  });
+};
+const reachFileRemovalAfterLoad = async (page, mode) => {
+  const start = await stackState(page, mode);
+  expect(await drawsDepth(page)).toBe(true);
+  await removeDepthFile(page, mode);
+  await choose(page, `Remove the Depth file and turn off Track row ${rowNumber(start, 'mark')}?`);
+  expectDepthLeft(await stackState(page, mode));
+  expect(await reflowError(page)).toBeNull();
+  expect(await drawsDepth(page), 'the drawn Depth track left at once').toBe(false);
+  await historyStep(page, 'undo');
+  expect(await stackState(page, mode)).toEqual(start);
+  expect(await reflowError(page)).toBeNull();
+  expect(await drawsDepth(page), 'its Undo shows it again').toBe(true);
+  await historyStep(page, 'redo');
+  expect(await drawsDepth(page)).toBe(false);
+  await expectLiveEqualsGenerate(page, { label: `${mode} file after Load` });
+  await expectParityGenerated(page);
+};
+const reachRowRemovalAfterLoad = async (page, mode) => {
+  await openStack(page, mode);
+  const start = await stackState(page, mode);
+  await runRowAction(slotRow(page, mode, 'depth'), mode === 'circular' ? 'Remove' : 'Delete');
+  await choose(page, `Remove Track row ${rowNumber(start, 'depth')} and turn off Track row ${rowNumber(start, 'mark')}?`);
+  expect(await reflowError(page)).toBeNull();
+  expect(await drawsDepth(page)).toBe(false);
+  await expectLiveEqualsGenerate(page, { label: `${mode} row after Load` });
+};
+
 for (const mode of ['circular', 'linear']) {
-  test(`rev 7: ${mode} Depth file removal after Generate asks, the row leaves, and the live Result equals Generate`, async ({ browser }) => {
-    test.setTimeout(420000);
-    const page = await generatedWithReach(browser, mode);
-    try {
-      const start = await stackState(page, mode);
-      await exerciseAsk(page, mode, {
-        trigger: () => removeDepthFile(page, mode),
-        title: `Remove the Depth file and turn off Track row ${rowNumber(start, 'mark')}?`,
-        live: true,
-        expectAfter: expectDepthLeft
-      });
-    } finally { await page.context().close(); }
-  });
-
-  test(`rev 7: ${mode} Depth file removal after Load asks, removes the drawn track at once, and its Undo shows it again`, async ({ browser }, testInfo) => {
-    test.setTimeout(420000);
-    const page = await loadedWithReach(browser, mode, testInfo);
-    try {
-      const start = await stackState(page, mode);
-      expect(await drawsDepth(page)).toBe(true);
-      await removeDepthFile(page, mode);
-      await choose(page, `Remove the Depth file and turn off Track row ${rowNumber(start, 'mark')}?`);
-      expectDepthLeft(await stackState(page, mode));
-      expect(await reflowError(page)).toBeNull();
-      expect(await drawsDepth(page), 'the drawn Depth track left at once').toBe(false);
-      await historyStep(page, 'undo');
-      expect(await stackState(page, mode)).toEqual(start);
-      expect(await reflowError(page)).toBeNull();
-      expect(await drawsDepth(page), 'its Undo shows it again').toBe(true);
-      await historyStep(page, 'redo');
-      expect(await drawsDepth(page)).toBe(false);
-      await expectLiveEqualsGenerate(page, { label: `${mode} file after Load` });
-      await expectGenerates(page);
-    } finally { await page.context().close(); }
-  });
-
-  test(`rev 7: ${mode} removing the Depth row a loaded Result drew removes the track at once, equal to Generate`, async ({ browser }, testInfo) => {
-    test.setTimeout(420000);
-    const page = await loadedWithReach(browser, mode, testInfo);
-    try {
-      await openStack(page, mode);
-      const start = await stackState(page, mode);
-      await runRowAction(slotRow(page, mode, 'depth'), mode === 'circular' ? 'Remove' : 'Delete');
-      await choose(page, `Remove Track row ${rowNumber(start, 'depth')} and turn off Track row ${rowNumber(start, 'mark')}?`);
-      expect(await reflowError(page)).toBeNull();
-      expect(await drawsDepth(page)).toBe(false);
-      await expectLiveEqualsGenerate(page, { label: `${mode} row after Load` });
-    } finally { await page.context().close(); }
-  });
-
-  test(`rev 7: ${mode} Depth file removal writes only its own fields, with other pending values`, async ({ browser }) => {
+  // Two journeys on one fixture: the choice writes only its own fields (other
+  // pending values are set first), then Undo, Redo and Generate.
+  test(`rev 7: ${mode} removing the last Depth file asks, writes only its own fields with other pending values, and its Undo restores the file and the row`, async ({ browser }) => {
     test.setTimeout(420000);
     const page = await openReachFixture(browser, mode);
     try {
@@ -597,28 +586,16 @@ for (const mode of ['circular', 'linear']) {
         drawing.form.legend = 'bottom';
       });
       const before = await pending();
-      await removeDepthFile(page, mode);
-      await choose(page, `Remove the Depth file and turn off Track row ${rowNumber(start, 'mark')}?`);
-      expect(await pending()).toBe(before);
-    } finally { await page.context().close(); }
-  });
-
-  test(`rev 7: ${mode} removing the last Depth file asks, and its Undo restores the file and the row`, async ({ browser }) => {
-    test.setTimeout(420000);
-    const page = await openReachFixture(browser, mode);
-    try {
-      await addDepthSeries(page, rev7Depth(mode, 1));
-      await addReachRow(page, { id: 'mark', anchor: 'depth', setId: setIdOf(mode), mode });
-      const start = await stackState(page, mode);
       const name = `Track row ${rowNumber(start, 'mark')}`;
       await exerciseAsk(page, mode, {
         trigger: () => removeDepthFile(page, mode),
         title: `Remove the Depth file and turn off ${name}?`,
-        expectAfter: (after) => {
+        expectAfter: async (after) => {
           expect(after.rows).toContain('mark:false');
           expect(after.rows.some((row) => row.startsWith('depth:true'))).toBe(false);
           expect(after.depth).not.toContain('s1.tsv');
           expect(after.showDepth).toBe(false);
+          expect(await pending(), 'rev 7: Depth file removal writes only its own fields, with other pending values').toBe(before);
         }
       });
     } finally { await page.context().close(); }
@@ -675,25 +652,59 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
-test('rev 7: Circular Hide GC Content with Use custom stack off asks, and the stack turned on after the choice draws', async ({ browser }) => {
+// Two Hide questions on one TOBACCO Load, with Use custom stack off: Hide GC
+// Content first (its Generate is the one at the end, after the stack is turned
+// on), then Hide GC Skew on rows that reach the skew row.
+test('rev 7: Circular Hide GC Content and Hide GC Skew with Use custom stack off ask when they turn off a row another row reaches, and the stack turned on after the choice draws', async ({ browser }) => {
   test.setTimeout(420000);
   const page = await load(browser, TOBACCO);
   try {
-    await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(false));
-    await openStack(page, 'circular');
-    const box = await reveal(page.getByRole('checkbox', { name: 'Hide GC Content', exact: true }));
-    const start = await stackState(page, 'circular');
-    await exerciseAsk(page, 'circular', {
-      trigger: () => box.click(),
-      title: 'Hide GC content?',
-      cancel: 'Keep GC content',
-      focused: () => box,
-      expectAfter: (after) => {
-        expect(after.suppressGc).toBe(true);
-        expect(after.rows).toContain('gc_content:false');
-        expect(after.rows).toContain('plastome_tint:false');
-      },
-      beforeGenerate: () => page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(true))
+    await test.step('rev 7: Circular Hide GC Content with Use custom stack off asks, and the stack turned on after the choice draws', async () => {
+      await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(false));
+      await openStack(page, 'circular');
+      const box = await reveal(page.getByRole('checkbox', { name: 'Hide GC Content', exact: true }));
+      await exerciseAsk(page, 'circular', {
+        trigger: () => box.click(),
+        title: 'Hide GC content?',
+        cancel: 'Keep GC content',
+        focused: () => box,
+        generates: false,
+        expectAfter: (after) => {
+          expect(after.suppressGc).toBe(true);
+          expect(after.rows).toContain('gc_content:false');
+          expect(after.rows).toContain('plastome_tint:false');
+        }
+      });
+    });
+    await test.step('rev 7: Circular Hide GC Skew with Use custom stack off asks when it turns off a row another row reaches', async () => {
+      await evaluateWithRetainedPromise(page, async () => {
+        const { state } = await import('./js/state.js');
+        await window.__GBDRAW_HISTORY__.runUndoable('Setup', () => {
+          const drawing = state.activeDrawing();
+          drawing.form.suppress_skew = false;
+          // The rows as the editor's normalizer leaves them, so the question has nothing to normalize.
+          const auto = { width: null, radius: null, inner_gap_px: null, outer_gap_px: null };
+          drawing.adv.circular_track_slots.push(
+            { id: 'gc_skew', renderer: 'dinucleotide_skew', enabled: true, side: 'inside', z: 0, params: {}, ...auto },
+            { id: 'mark', renderer: 'annotations', enabled: true, side: 'overlay', z: 1,
+              params: { set_id: 'plastome_tint', anchor_slot: 'gc_skew', layer: 'foreground', marks: ['highlight'], overflow: 'error', show_labels: true }, ...auto }
+          );
+        });
+      });
+      await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(false));
+      await openStack(page, 'circular');
+      const box = await reveal(page.getByRole('checkbox', { name: 'Hide GC Skew', exact: true }));
+      await exerciseAsk(page, 'circular', {
+        trigger: () => box.click(),
+        title: 'Hide GC skew?',
+        cancel: 'Keep GC skew',
+        focused: () => box,
+        expectAfter: (after) => {
+          expect(after.rows).toContain('gc_skew:false');
+          expect(after.rows).toContain('mark:false');
+        },
+        beforeGenerate: () => page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(true))
+      });
     });
   } finally { await page.context().close(); }
 });
@@ -790,33 +801,60 @@ const drawnFrom = async (page, file) => ({
   viewBox: await page.evaluate(() => window.__GBDRAW_APP__.svgContainer.querySelector('svg').getAttribute('viewBox').split(' ').map(Number))
 });
 
-for (const viaLoad of [false, true]) {
-  const when = viaLoad ? 'after Load of a Session whose row holds the written height' : 'after Generate';
-  const open = (browser, testInfo) => (viaLoad ? loadedWithWrittenHeight(browser, testInfo) : generatedLinear(browser));
+const linearFileRemovalNoReach = async (page) => {
+  await removeDepthFile(page, 'linear');
+  await expectNoQuestion(page);
+  expect((await stackState(page, 'linear')).rows.some((row) => row.startsWith('depth:'))).toBe(false);
+  await expectGenerates(page);
+};
+const linearSeriesRemovalNoReach = async (page) => {
+  const section = await openDepthSources(page, 'linear');
+  await section.getByRole('button', { name: 'Remove series', exact: true }).first().click();
+  await expectNoQuestion(page);
+  expect(await linearDepthRows(page)).toEqual([]);
+  await expectGenerates(page);
+};
+const WRITTEN_LOAD = 'after Load of a Session whose row holds the written height';
 
-  test(`rev 7: Linear Depth file removal with no row reaching it ${when} takes the row out without a question, and Generate draws`, async ({ browser }, testInfo) => {
-    test.setTimeout(420000);
-    const page = await open(browser, testInfo);
+// 854 reads the generated drawing and saves it; the file removal then starts
+// from that drawing, as its own case did.
+test('rev 7: a Linear Generate keeps the written height, and a Depth file removal with no row reaching it after Generate takes the row out without a question, and Generate draws', async ({ browser }, testInfo) => {
+  test.setTimeout(420000);
+  const page = await generatedLinear(browser);
+  try {
+    await test.step('rev 7: a Linear Generate keeps the written height in the row, in the Session draft and its request', async () => {
+      expect(await linearDepthRows(page)).toEqual([{ id: 'depth', height: '10px' }]);
+      expect(heightsInSession(await savedSession(page, testInfo.outputPath('kept-height.gbdraw-session.json'))))
+        .toEqual({ draft: ['10px'], request: [{ value: 10, unit: 'px' }] });
+    });
+    await test.step('rev 7: Linear Depth file removal with no row reaching it after Generate takes the row out without a question, and Generate draws',
+      () => linearFileRemovalNoReach(page));
+  } finally { await page.context().close(); }
+});
+
+test('rev 7: Linear Depth series removal after Generate takes the row out, and Generate draws', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await generatedLinear(browser);
+  try {
+    await linearSeriesRemovalNoReach(page);
+  } finally { await page.context().close(); }
+});
+
+// One written Session; each removal loads it into a page of its own.
+test(`rev 7: Linear Depth file and series removals with no row reaching them ${WRITTEN_LOAD} take the row out without a question, and Generate draws`, async ({ browser }, testInfo) => {
+  test.setTimeout(420000);
+  await test.step(`rev 7: Linear Depth file removal with no row reaching it ${WRITTEN_LOAD} takes the row out without a question, and Generate draws`, async () => {
+    const page = await loadedWithWrittenHeight(browser, testInfo);
+    try { await linearFileRemovalNoReach(page); } finally { await page.context().close(); }
+  });
+  await test.step(`rev 7: Linear Depth series removal ${WRITTEN_LOAD} takes the row out, and Generate draws`, async () => {
+    const page = await load(browser, testInfo.outputPath('written-height.gbdraw-session.json'));
     try {
-      await removeDepthFile(page, 'linear');
-      await expectNoQuestion(page);
-      expect((await stackState(page, 'linear')).rows.some((row) => row.startsWith('depth:'))).toBe(false);
-      await expectGenerates(page);
+      expect(await linearDepthRows(page)).toEqual([{ id: 'depth', height: '10px' }]);
+      await linearSeriesRemovalNoReach(page);
     } finally { await page.context().close(); }
   });
-
-  test(`rev 7: Linear Depth series removal ${when} takes the row out, and Generate draws`, async ({ browser }, testInfo) => {
-    test.setTimeout(420000);
-    const page = await open(browser, testInfo);
-    try {
-      const section = await openDepthSources(page, 'linear');
-      await section.getByRole('button', { name: 'Remove series', exact: true }).first().click();
-      await expectNoQuestion(page);
-      expect(await linearDepthRows(page)).toEqual([]);
-      await expectGenerates(page);
-    } finally { await page.context().close(); }
-  });
-}
+});
 
 test('rev 7: Linear Depth file removal after Load of a Session whose row holds the written height asks, and its choice is one Undo step', async ({ browser }, testInfo) => {
   test.setTimeout(420000);
@@ -862,16 +900,6 @@ test('rev 7: a typed Linear Depth height: the row leaves with its last file, the
   } finally { await page.context().close(); }
 });
 
-test('rev 7: a Linear Generate keeps the written height in the row, in the Session draft and its request', async ({ browser }, testInfo) => {
-  test.setTimeout(420000);
-  const page = await generatedLinear(browser);
-  try {
-    expect(await linearDepthRows(page)).toEqual([{ id: 'depth', height: '10px' }]);
-    expect(heightsInSession(await savedSession(page, testInfo.outputPath('kept-height.gbdraw-session.json'))))
-      .toEqual({ draft: ['10px'], request: [{ value: 10, unit: 'px' }] });
-  } finally { await page.context().close(); }
-});
-
 // One File of two records: its Depth controls are the mixed row's Remove from
 // all records and each record's own uploader. The records are stubs, so these
 // stop before Generate.
@@ -893,71 +921,37 @@ const twoRecordFile = async (browser) => {
   await addReachRow(page, { id: 'mark', anchor: 'depth', setId: 'marks', mode: 'linear' });
   return page;
 };
-test('rev 7: Linear Remove from all records of a File asks before it clears the last source of a series', async ({ browser }) => {
+// Both Depth controls on one two-record File: the Undo after the first returns
+// the start the second needs.
+test('rev 7: Linear Remove from all records of a File and the per-record uploader ask before they clear the last source of a series', async ({ browser }) => {
   test.setTimeout(420000);
   const page = await twoRecordFile(browser);
   try {
-    const source = page.locator('[data-linear-source-depth]').first();
-    await reveal(source);
-    if (!(await source.evaluate((node) => node.open))) await source.locator(':scope > summary').click();
-    const start = await stackState(page, 'linear');
-    await exerciseAsk(page, 'linear', {
-      trigger: () => source.getByRole('button', { name: 'Remove from all records', exact: true }).click(),
-      title: `Remove the Depth file and turn off Track row ${rowNumber(start, 'mark')}?`,
-      generates: false,
-      expectAfter: expectDepthLeft
-    });
-  } finally { await page.context().close(); }
-});
-test('rev 7: Linear per-record uploader asks when it removes the last source of a series', async ({ browser }) => {
-  test.setTimeout(420000);
-  const page = await twoRecordFile(browser);
-  try {
-    const perRecord = page.locator('[data-linear-source-records] details[data-setting="depth-sources"]').first();
-    await perRecord.evaluate((node) => { for (let open = node; open; open = open.parentElement.closest('details')) open.open = true; });
-    await reveal(perRecord);
-    const start = await stackState(page, 'linear');
-    await exerciseAsk(page, 'linear', {
-      trigger: () => perRecord.getByRole('button', { name: /^Remove Depth TSV/ }).first().click(),
-      title: `Remove the Depth file and turn off Track row ${rowNumber(start, 'mark')}?`,
-      generates: false,
-      expectAfter: expectDepthLeft
-    });
-  } finally { await page.context().close(); }
-});
-
-test('rev 7: Circular Hide GC Skew with Use custom stack off asks when it turns off a row another row reaches', async ({ browser }) => {
-  test.setTimeout(420000);
-  const page = await load(browser, TOBACCO);
-  try {
-    await evaluateWithRetainedPromise(page, async () => {
-      const { state } = await import('./js/state.js');
-      await window.__GBDRAW_HISTORY__.runUndoable('Setup', () => {
-        const drawing = state.activeDrawing();
-        drawing.form.suppress_skew = false;
-        // The rows as the editor's normalizer leaves them, so the question has nothing to normalize.
-        const auto = { width: null, radius: null, inner_gap_px: null, outer_gap_px: null };
-        drawing.adv.circular_track_slots.push(
-          { id: 'gc_skew', renderer: 'dinucleotide_skew', enabled: true, side: 'inside', z: 0, params: {}, ...auto },
-          { id: 'mark', renderer: 'annotations', enabled: true, side: 'overlay', z: 1,
-            params: { set_id: 'plastome_tint', anchor_slot: 'gc_skew', layer: 'foreground', marks: ['highlight'], overflow: 'error', show_labels: true }, ...auto }
-        );
+    await test.step('rev 7: Linear Remove from all records of a File asks before it clears the last source of a series', async () => {
+      const source = page.locator('[data-linear-source-depth]').first();
+      await reveal(source);
+      if (!(await source.evaluate((node) => node.open))) await source.locator(':scope > summary').click();
+      const start = await stackState(page, 'linear');
+      await exerciseAsk(page, 'linear', {
+        trigger: () => source.getByRole('button', { name: 'Remove from all records', exact: true }).click(),
+        title: `Remove the Depth file and turn off Track row ${rowNumber(start, 'mark')}?`,
+        generates: false,
+        expectAfter: expectDepthLeft
       });
+      await historyStep(page, 'undo');
+      expect(await stackState(page, 'linear'), 'back to the start for the next step').toEqual(start);
     });
-    await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(false));
-    await openStack(page, 'circular');
-    const box = await reveal(page.getByRole('checkbox', { name: 'Hide GC Skew', exact: true }));
-    const start = await stackState(page, 'circular');
-    await exerciseAsk(page, 'circular', {
-      trigger: () => box.click(),
-      title: 'Hide GC skew?',
-      cancel: 'Keep GC skew',
-      focused: () => box,
-      expectAfter: (after) => {
-        expect(after.rows).toContain('gc_skew:false');
-        expect(after.rows).toContain('mark:false');
-      },
-      beforeGenerate: () => page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(true))
+    await test.step('rev 7: Linear per-record uploader asks when it removes the last source of a series', async () => {
+      const perRecord = page.locator('[data-linear-source-records] details[data-setting="depth-sources"]').first();
+      await perRecord.evaluate((node) => { for (let open = node; open; open = open.parentElement.closest('details')) open.open = true; });
+      await reveal(perRecord);
+      const start = await stackState(page, 'linear');
+      await exerciseAsk(page, 'linear', {
+        trigger: () => perRecord.getByRole('button', { name: /^Remove Depth TSV/ }).first().click(),
+        title: `Remove the Depth file and turn off Track row ${rowNumber(start, 'mark')}?`,
+        generates: false,
+        expectAfter: expectDepthLeft
+      });
     });
   } finally { await page.context().close(); }
 });
@@ -988,37 +982,65 @@ const REACH_UNDO_ROUTES = {
     await runRowAction(slotRow(page, mode, 'depth'), mode === 'circular' ? 'Remove' : 'Delete');
   }
 };
+const reachUndoCell = async (page, mode, route, after, testInfo) => {
+  const drawnBefore = await slotDrawnCount(page, 'mark');
+  const slotsBefore = await committedSlotsOf(page, mode);
+  expect(drawnBefore).toBeGreaterThan(0);
+  await REACH_UNDO_ROUTES[route](page, mode);
+  await chooseAsked(page);
+  expect(await reflowError(page)).toBeNull();
+  expect(await slotDrawnCount(page, 'mark'), 'the choice takes it out').toBe(0);
+  const slotsAfter = await committedSlotsOf(page, mode);
+  expect(slotIdsOf(slotsAfter)).not.toContain('mark');
+  await historyStep(page, 'undo');
+  expect(await reflowError(page)).toBeNull();
+  expect(await slotDrawnCount(page, 'mark'), 'Undo draws it again').toBe(drawnBefore);
+  expect(await committedSlotsOf(page, mode), 'Undo gives the committed request back').toEqual(slotsBefore);
+  const saved = await savedSession(page, testInfo.outputPath('after-undo.gbdraw-session.json'));
+  expect(slotIdsOf(shownSavedDrawing(saved).renderRequest.diagramOptions.tracks[`${mode}TrackSlots`]), 'a Save after the Undo holds it').toContain('mark');
+  await historyStep(page, 'redo');
+  expect(await slotDrawnCount(page, 'mark'), 'Redo takes it out again').toBe(0);
+  expect(await committedSlotsOf(page, mode)).toEqual(slotsAfter);
+  await historyStep(page, 'undo');
+  await expectLiveEqualsGenerate(page, { label: `${mode} ${route} after ${after}` });
+};
+const reachUndoTitle = (mode, route, after) => `rev 7: Undo and Redo of a chosen ${route} return the reaching row to the Result and the committed request (${mode}, after ${after})`;
+
+// Reach matrix: a drawing with one Depth file and its row reached by `mark`,
+// after Generate and after Load of its saved Session. One Generate serves every
+// after-Generate step: each Undo-and-Redo step ends with the removal undone and
+// a parity Generate, the state it started from (it asserts the drawn row and the
+// committed request are back), and the file removal that ends removed runs
+// last. One Save of that drawing serves every after-Load step; each step loads
+// it into a page of its own.
+// The timeout is about twice the measured local time of the circular case.
+const MATRIX_TIMEOUT_MS = 600000;
 for (const mode of ['circular', 'linear']) {
-  for (const [route, trigger] of Object.entries(REACH_UNDO_ROUTES)) {
-    for (const after of ['Generate', 'Load']) {
-      test(`rev 7: Undo and Redo of a chosen ${route} return the reaching row to the Result and the committed request (${mode}, after ${after})`, async ({ browser }, testInfo) => {
-        test.setTimeout(420000);
-        const page = after === 'Load' ? await loadedWithReach(browser, mode, testInfo) : await generatedWithReach(browser, mode);
-        try {
-          const drawnBefore = await slotDrawnCount(page, 'mark');
-          const slotsBefore = await committedSlotsOf(page, mode);
-          expect(drawnBefore).toBeGreaterThan(0);
-          await trigger(page, mode);
-          await chooseAsked(page);
-          expect(await reflowError(page)).toBeNull();
-          expect(await slotDrawnCount(page, 'mark'), 'the choice takes it out').toBe(0);
-          const slotsAfter = await committedSlotsOf(page, mode);
-          expect(slotIdsOf(slotsAfter)).not.toContain('mark');
-          await historyStep(page, 'undo');
-          expect(await reflowError(page)).toBeNull();
-          expect(await slotDrawnCount(page, 'mark'), 'Undo draws it again').toBe(drawnBefore);
-          expect(await committedSlotsOf(page, mode), 'Undo gives the committed request back').toEqual(slotsBefore);
-          const saved = await savedSession(page, testInfo.outputPath('after-undo.gbdraw-session.json'));
-          expect(slotIdsOf(shownSavedDrawing(saved).renderRequest.diagramOptions.tracks[`${mode}TrackSlots`]), 'a Save after the Undo holds it').toContain('mark');
-          await historyStep(page, 'redo');
-          expect(await slotDrawnCount(page, 'mark'), 'Redo takes it out again').toBe(0);
-          expect(await committedSlotsOf(page, mode)).toEqual(slotsAfter);
-          await historyStep(page, 'undo');
-          await expectLiveEqualsGenerate(page, { label: `${mode} ${route} after ${after}` });
-        } finally { await page.context().close(); }
-      });
+  test(`rev 7: reach matrix (${mode}): Depth file, series and row removals a row reaches, after Generate and after Load`, async ({ browser }, testInfo) => {
+    test.setTimeout(MATRIX_TIMEOUT_MS);
+    const file = testInfo.outputPath(`saved-${mode}.gbdraw-session.json`);
+    const page = await generatedWithReach(browser, mode);
+    try {
+      // The Session `after Load` steps load: this drawing, saved before any step.
+      await savedSession(page, file);
+      for (const route of Object.keys(REACH_UNDO_ROUTES)) {
+        await test.step(reachUndoTitle(mode, route, 'Generate'), () => reachUndoCell(page, mode, route, 'Generate', testInfo));
+      }
+      await test.step(`rev 7: ${mode} Depth file removal after Generate asks, the row leaves, and the live Result equals Generate`,
+        () => reachFileRemovalAfterGenerate(page, mode));
+    } finally { await page.context().close(); }
+    const afterLoad = (title, body) => test.step(title, async () => {
+      const loaded = await load(browser, file);
+      try { await body(loaded); } finally { await loaded.context().close(); }
+    });
+    for (const route of Object.keys(REACH_UNDO_ROUTES)) {
+      await afterLoad(reachUndoTitle(mode, route, 'Load'), (loaded) => reachUndoCell(loaded, mode, route, 'Load', testInfo));
     }
-  }
+    await afterLoad(`rev 7: ${mode} Depth file removal after Load asks, removes the drawn track at once, and its Undo shows it again`,
+      (loaded) => reachFileRemovalAfterLoad(loaded, mode));
+    await afterLoad(`rev 7: ${mode} removing the Depth row a loaded Result drew removes the track at once, equal to Generate`,
+      (loaded) => reachRowRemovalAfterLoad(loaded, mode));
+  });
 }
 
 // PD-OI-104 scenario revision 9: a Depth series' last file.
@@ -1040,61 +1062,70 @@ const generateError = async (page) => {
 };
 const depthRowsOf = (state) => state.rows.filter((row) => /^depth(_\d+)?:/.test(row));
 
+// The three starts nest on one page: the first journey ends generated with the
+// file back and the row off, the start of `after a Generate`; that journey's
+// end, saved and loaded, is the start of `after a Load`. The first must stay
+// first: it is the only one with no Generate before it.
+const offRowJourney = async (current, browser, mode, testInfo) => {
+  const steps = await undoCount(current.page);
+  const start = await stackState(current.page, mode);
+  await removeDepthFile(current.page, mode);
+  await expectNoQuestion(current.page);
+  const removed = await stackState(current.page, mode);
+  expect(depthRowsOf(removed), 'the row stays, off').toEqual(['depth:false']);
+  expect(removed.showDepth).toBe(false);
+  expect(await reflowError(current.page)).toBeNull();
+  expect(await undoCount(current.page)).toBe(steps + 1);
+  await historyStep(current.page, 'undo');
+  expect(await stackState(current.page, mode)).toEqual(start);
+  await historyStep(current.page, 'redo');
+  await expectGenerates(current.page);
+  expect(depthRowsOf(await stackState(current.page, mode))).toEqual(['depth:false']);
+  const savedFile = testInfo.outputPath('off-removed.gbdraw-session.json');
+  await savedSession(current.page, savedFile);
+  await addDepthFile(current.page, mode);
+  await settleLive(current.page);
+  const back = await stackState(current.page, mode);
+  expect(depthRowsOf(back), 'a re-added file adds no row and does not turn it on').toEqual(['depth:false']);
+  expect(back.showDepth).toBe(true);
+  await expectGenerates(current.page);
+  expect(await drawsDepth(current.page), 'the row is off').toBe(false);
+  await current.page.context().close();
+  current.page = await load(browser, savedFile);
+  expect(depthRowsOf(await stackState(current.page, mode)), 'a Session saved in that state keeps it').toEqual(['depth:false']);
+  await addDepthFile(current.page, mode);
+  await settleLive(current.page);
+  expect(depthRowsOf(await stackState(current.page, mode))).toEqual(['depth:false']);
+  await expectGenerates(current.page);
+};
+
 for (const mode of ['circular', 'linear']) {
-  for (const when of ['before the first Generate', 'after a Generate', 'after a Load']) {
-    test(`rev 7: ${mode} a Depth row turned off stays off without a question when its last file goes and comes back, ${when}, and Generate draws`, async ({ browser }, testInfo) => {
-      test.setTimeout(420000);
-      let page = await openReachFixture(browser, mode);
-      try {
-        await addDepthSeries(page, rev7Depth(mode, 1));
-        await page.evaluate(async (stackMode) => {
-          const { state } = await import('./js/state.js');
-          const app = window.__GBDRAW_APP__;
-          const row = state.activeDrawing().adv[`${stackMode}_track_slots`].find((slot) => slot.id === 'depth');
-          if (stackMode === 'circular') app.setCircularTrackSlotEnabled(row, false); else app.setLinearTrackSlotEnabled(row, false);
-        }, mode);
-        await settleLive(page);
-        if (when !== 'before the first Generate') await expectGenerates(page);
-        if (when === 'after a Load') {
-          const file = testInfo.outputPath('off.gbdraw-session.json');
-          await savedSession(page, file);
-          await page.context().close();
-          page = await load(browser, file);
-          expect(depthRowsOf(await stackState(page, mode))).toEqual(['depth:false']);
-        }
-        const steps = await undoCount(page);
-        const start = await stackState(page, mode);
-        await removeDepthFile(page, mode);
-        await expectNoQuestion(page);
-        const removed = await stackState(page, mode);
-        expect(depthRowsOf(removed), 'the row stays, off').toEqual(['depth:false']);
-        expect(removed.showDepth).toBe(false);
-        expect(await reflowError(page)).toBeNull();
-        expect(await undoCount(page)).toBe(steps + 1);
-        await historyStep(page, 'undo');
-        expect(await stackState(page, mode)).toEqual(start);
-        await historyStep(page, 'redo');
-        await expectGenerates(page);
-        expect(depthRowsOf(await stackState(page, mode))).toEqual(['depth:false']);
-        const savedFile = testInfo.outputPath('off-removed.gbdraw-session.json');
-        await savedSession(page, savedFile);
-        await addDepthFile(page, mode);
-        await settleLive(page);
-        const back = await stackState(page, mode);
-        expect(depthRowsOf(back), 'a re-added file adds no row and does not turn it on').toEqual(['depth:false']);
-        expect(back.showDepth).toBe(true);
-        await expectGenerates(page);
-        expect(await drawsDepth(page), 'the row is off').toBe(false);
-        await page.context().close();
-        page = await load(browser, savedFile);
-        expect(depthRowsOf(await stackState(page, mode)), 'a Session saved in that state keeps it').toEqual(['depth:false']);
-        await addDepthFile(page, mode);
-        await settleLive(page);
-        expect(depthRowsOf(await stackState(page, mode))).toEqual(['depth:false']);
-        await expectGenerates(page);
-      } finally { await page.context().close(); }
-    });
-  }
+  test(`rev 7: ${mode} a Depth row turned off stays off without a question when its last file goes and comes back, before the first Generate, after a Generate and after a Load, and Generate draws`, async ({ browser }, testInfo) => {
+    test.setTimeout(420000);
+    const current = { page: await openReachFixture(browser, mode) };
+    try {
+      await addDepthSeries(current.page, rev7Depth(mode, 1));
+      await current.page.evaluate(async (stackMode) => {
+        const { state } = await import('./js/state.js');
+        const app = window.__GBDRAW_APP__;
+        const row = state.activeDrawing().adv[`${stackMode}_track_slots`].find((slot) => slot.id === 'depth');
+        if (stackMode === 'circular') app.setCircularTrackSlotEnabled(row, false); else app.setLinearTrackSlotEnabled(row, false);
+      }, mode);
+      await settleLive(current.page);
+      const title = (when) => `rev 7: ${mode} a Depth row turned off stays off without a question when its last file goes and comes back, ${when}, and Generate draws`;
+      await test.step(title('before the first Generate'), () => offRowJourney(current, browser, mode, testInfo));
+      // Generated, the file present and the row off.
+      await test.step(title('after a Generate'), () => offRowJourney(current, browser, mode, testInfo));
+      await test.step(title('after a Load'), async () => {
+        const file = testInfo.outputPath('off.gbdraw-session.json');
+        await savedSession(current.page, file);
+        await current.page.context().close();
+        current.page = await load(browser, file);
+        expect(depthRowsOf(await stackState(current.page, mode))).toEqual(['depth:false']);
+        await offRowJourney(current, browser, mode, testInfo);
+      });
+    } finally { await current.page.context().close(); }
+  });
 
   test(`rev 7: ${mode} a manual Depth row another row reaches asks, and the choice turns it off too`, async ({ browser }) => {
     test.setTimeout(420000);
@@ -1177,31 +1208,7 @@ for (const mode of ['circular', 'linear']) {
       expect(await generateError(page)).toBe('DEPTH_INVALID');
     } finally { await page.context().close(); }
   });
-
-  test(`rev 7: ${mode} the sentence is left out when it is not true: a series removal, and the only series' last file`, async ({ browser }) => {
-    test.setTimeout(420000);
-    const page = await openReachFixture(browser, mode);
-    try {
-      await addDepthSeries(page, rev7Depth(mode, 2));
-      const seriesRow = await page.evaluate(async (stackMode) => {
-        const { state } = await import('./js/state.js');
-        return state.activeDrawing().adv[`${stackMode}_track_slots`].find((row) => row.renderer === 'depth' && row.params.track_index === 0).id;
-      }, mode);
-      await addReachRow(page, { id: 'mark', anchor: seriesRow, setId: setIdOf(mode), mode });
-      const section = await openDepthSources(page, mode);
-      await section.getByRole('button', { name: 'Remove series', exact: true }).first().click();
-      await expect(page.locator('[data-choice-prompt]')).toBeVisible();
-      expect(await promptText(page)).not.toContain('stays empty');
-      await page.locator('[data-choice-prompt]').getByRole('button', { name: 'Cancel', exact: true }).click();
-      await removeDepthFile(page, mode);
-      await expect(page.locator('[data-choice-prompt]')).toBeVisible();
-      expect(await promptText(page), 'a second series still has a file').toContain('stays empty');
-      await chooseAsked(page);
-      // The second series' last file, no row reaching it: nothing asks.
-      await removeDepthFile(page, mode);
-      await expectNoQuestion(page);
-    } finally { await page.context().close(); }
-  });
+  // `the sentence is left out when it is not true` runs in node: track-slot-row-edits.test.mjs.
 }
 
 // Generate asks for a file only while it draws Depth: with the stack off, Show Depth.
@@ -1301,32 +1308,43 @@ const LINEAR_FILE_ROUTES = {
   },
   'the primary file set to none': (page) => page.evaluate(() => { window.__GBDRAW_APP__.setLinearSeqPrimaryFile(1, 'gb', null); })
 };
-for (const [route, trigger] of Object.entries(LINEAR_FILE_ROUTES)) {
-  test(`rev 7: Linear ${route} holding a series' last file asks after its own question, as one Undo step`, async ({ browser }) => {
-    test.setTimeout(420000);
-    // The record list opens for a File with more than one record.
-    const page = await twoFiles(browser, { gb: `${TESTA_GB}\n${TESTA_GB.replaceAll('TESTA', 'TESTB')}` });
-    try {
-      await expectGenerates(page);
-      await settleLive(page);
-      const start = await stackState(page, 'linear');
-      await exerciseAsk(page, 'linear', {
-        trigger: () => trigger(page),
-        title: `Remove the File and turn off Track row ${rowNumber(start, 'mark0')}?`,
-        beforeGenerate: async () => {
-          const list = page.locator('[data-record-list-dialog]');
-          if (await list.count()) await list.getByRole('button', { name: 'Close', exact: true }).click();
-        },
-        expectAfter: (after) => {
-          expect(after.rows).toContain('mark0:false');
-          expect(depthRowsOf(after), 'the row leaves').toEqual([]);
-          expect(after.depth).not.toContain('s1.tsv');
-          expect(after.showDepth).toBe(false);
-        }
+// The three routes share one setup: after each, Undo returns the Files and the
+// rows, and a Generate draws that start again for the next route.
+test('rev 7: Linear File card Remove, the record list Remove File, and the primary file set to none, holding a series\' last file, ask after their own question, as one Undo step', async ({ browser }) => {
+  test.setTimeout(420000);
+  // The record list opens for a File with more than one record.
+  const page = await twoFiles(browser, { gb: `${TESTA_GB}\n${TESTA_GB.replaceAll('TESTA', 'TESTB')}` });
+  try {
+    await expectGenerates(page);
+    await settleLive(page);
+    const files = () => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.gb?.name ?? null));
+    const filesBefore = await files();
+    const start = await stackState(page, 'linear');
+    for (const [route, trigger] of Object.entries(LINEAR_FILE_ROUTES)) {
+      await test.step(`rev 7: Linear ${route} holding a series' last file asks after its own question, as one Undo step`, async () => {
+        expect(await stackState(page, 'linear'), 'the start of every route').toEqual(start);
+        expect(await files()).toEqual(filesBefore);
+        await exerciseAsk(page, 'linear', {
+          trigger: () => trigger(page),
+          title: `Remove the File and turn off Track row ${rowNumber(start, 'mark0')}?`,
+          beforeGenerate: async () => {
+            const list = page.locator('[data-record-list-dialog]');
+            if (await list.count()) await list.getByRole('button', { name: 'Close', exact: true }).click();
+          },
+          expectAfter: (after) => {
+            expect(after.rows).toContain('mark0:false');
+            expect(depthRowsOf(after), 'the row leaves').toEqual([]);
+            expect(after.depth).not.toContain('s1.tsv');
+            expect(after.showDepth).toBe(false);
+          }
+        });
+        await historyStep(page, 'undo');
+        await expectGenerates(page);
+        await settleLive(page);
       });
-    } finally { await page.context().close(); }
-  });
-}
+    }
+  } finally { await page.context().close(); }
+});
 
 test('rev 7: Linear File removal: Cancel on the second question keeps the File, returns the focus, and other pending values stay', async ({ browser }, testInfo) => {
   test.setTimeout(420000);
