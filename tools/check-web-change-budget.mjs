@@ -110,7 +110,37 @@ const sizeReviewProfiles = Object.freeze({
 });
 const selectedProfileName = architectureChange ? 'architecture' : 'ordinary';
 const selectedProfile = sizeReviewProfiles[selectedProfileName];
-const diffRefs = head ? [base, head] : [base];
+// What the pull request itself changes. A branch behind its base is measured from the merge
+// base of base and head, so a change that reached the base after the branch forked never reads
+// as the head's change in reverse (a lowered count baseline as an expansion). Every rule reads
+// the trusted policy from the base. Without a merge base the diff falls back to the base
+// (two-dot). Without --head (the working tree) the diff is always against the base.
+let baseAncestryResult = null;
+const baseAncestry = () => {
+  if (baseAncestryResult) return baseAncestryResult;
+  baseAncestryResult = { contained: true, mergeBase: null };
+  if (!head) return baseAncestryResult;
+  const ancestry = spawnSync(
+    'git',
+    ['-C', repositoryRoot, 'merge-base', '--is-ancestor', base, head],
+    { stdio: 'ignore' }
+  );
+  if (ancestry.status === 0) return baseAncestryResult;
+  const mergeBase = ancestry.status === 1
+    ? spawnSync(
+      'git',
+      ['-C', repositoryRoot, 'merge-base', base, head],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+    )
+    : null;
+  baseAncestryResult = {
+    contained: false,
+    mergeBase: mergeBase?.status === 0 ? mergeBase.stdout.trim() : null
+  };
+  return baseAncestryResult;
+};
+const changeFrom = head ? baseAncestry().mergeBase || base : base;
+const diffRefs = head ? [changeFrom, head] : [base];
 const githubEventName = process.env.GITHUB_EVENT_NAME || '';
 const githubEventPath = process.env.GITHUB_EVENT_PATH || '';
 const githubEventPayloadSource = isPullRequestEvent(githubEventName)
@@ -913,7 +943,7 @@ if (designRuleGuardRegistry) {
   designRuleGuardRegistry.rules.forEach((rule) => {
     rule.allowlists.forEach(({ path, symbol, kind }) => {
       if (!changed.has(path)) return;
-      const before = readAllowlistLiteral(readRevisionFile(base, path), symbol, kind);
+      const before = readAllowlistLiteral(readRevisionFile(changeFrom, path), symbol, kind);
       const after = readAllowlistLiteral(readHeadFile(path), symbol, kind);
       const subject = `${rule.id} ${path}#${symbol}`;
       let direction;
@@ -1007,7 +1037,7 @@ const countScopeEntriesByPath = [
   ...(productionPaths.length ? [...COUNTING_CODE_PATHS].filter((path) => changed.has(path)).map((path) => [path, []]) : [])
 ];
 const designRuleCountScopeChanges = countScopeEntriesByPath.flatMap(([path, entries]) => {
-  const baseSource = readRevisionFile(base, path);
+  const baseSource = readRevisionFile(changeFrom, path);
   if (baseSource === null) return [];
   const before = withoutAllowlistLiterals(baseSource, entries);
   // A literal unreadable in the trusted base is already a co-change expansion.
@@ -1070,9 +1100,9 @@ const allProductionSources = new Map(allProductionJavaScriptPaths.map((path) => 
   path.slice('gbdraw/web/js/'.length),
   headRevisionSources?.get(path) ?? readHeadFile(path) ?? ''
 ]));
-const baseProductionJavaScriptPaths = listRevisionProductionJavaScriptPaths(base);
+const baseProductionJavaScriptPaths = listRevisionProductionJavaScriptPaths(changeFrom);
 const changedBaseSources = readRevisionFiles(
-  base,
+  changeFrom,
   baseProductionJavaScriptPaths.filter((path) => (
     changed.has(path) || !allProductionSources.has(path.slice('gbdraw/web/js/'.length))
   ))
@@ -1210,7 +1240,7 @@ const listHeadProductionPaths = () => {
   ));
 };
 const productionFileDelta = summarizeArchitectureInventory(
-  listRevisionProductionPaths(base),
+  listRevisionProductionPaths(changeFrom),
   listHeadProductionPaths()
 );
 
@@ -1505,33 +1535,6 @@ const impossibleVendorEntries = addedVendorEntries.flatMap((entry) => {
   return [];
 });
 // An entry pins the bytes the change leaves (add, replace) or removes (remove).
-// The diff is two-dot. When the head does not contain the base and leaves a path as their
-// merge base had it, the path changed only in the base: the branch is behind, not wrong.
-let baseAncestryResult = null;
-const baseAncestry = () => {
-  if (baseAncestryResult) return baseAncestryResult;
-  baseAncestryResult = { contained: true, mergeBase: null };
-  if (!head) return baseAncestryResult;
-  const ancestry = spawnSync(
-    'git',
-    ['-C', repositoryRoot, 'merge-base', '--is-ancestor', base, head],
-    { stdio: 'ignore' }
-  );
-  if (ancestry.status === 0) return baseAncestryResult;
-  const mergeBase = ancestry.status === 1
-    ? spawnSync(
-      'git',
-      ['-C', repositoryRoot, 'merge-base', base, head],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
-    )
-    : null;
-  baseAncestryResult = {
-    contained: false,
-    mergeBase: mergeBase?.status === 0 ? mergeBase.stdout.trim() : null
-  };
-  return baseAncestryResult;
-};
-const vendorMergeBase = changedVendorPaths.length ? baseAncestry().mergeBase : null;
 // Files the trusted base pins in the immutable-asset manifest are served for a year at their
 // URL, so a replace would never reach returning visitors: new bytes need a new path.
 const immutableAssetsManifestPath = 'tools/immutable-web-assets.json';
@@ -1565,20 +1568,9 @@ const vendorChanges = changedVendorPaths.map((path) => {
     };
   }
   const pinned = sha256OfBytes(
-    change === 'remove' ? readRevisionBytes(base, path) : readHeadBytes(path)
+    change === 'remove' ? readRevisionBytes(changeFrom, path) : readHeadBytes(path)
   );
   if (entry.change === change && pinned === entry.sha256) return { path, change, entry, reason: '' };
-  if (
-    vendorMergeBase
-    && sha256OfBytes(readHeadBytes(path)) === sha256OfBytes(readRevisionBytes(vendorMergeBase, path))
-  ) {
-    return {
-      path,
-      change,
-      reason: 'changed only in the base since this branch forked; '
-        + 'the branch is behind its base: update it from dev'
-    };
-  }
   if (entry.change !== change) {
     return { path, change, reason: `listed as ${entry.change}, but the change is ${change}` };
   }
@@ -1744,7 +1736,6 @@ const removedPersistedContractExemptions = candidatePersistedContractPolicy
   : [];
 // Kinds (with the exports or modules behind each) and review-only additions and renames. The
 // JSDoc modules (request.generated.js, session.generated.js) hold no values and never count.
-// A branch behind its base is measured from the merge base: what the pull request itself changes.
 const classifyPersistedContractChange = () => {
   const kinds = new Map();
   const note = (kind, subject) => kinds.set(kind, [...(kinds.get(kind) || []), subject]);
@@ -1752,11 +1743,8 @@ const classifyPersistedContractChange = () => {
   const addedModules = [];
   const renamedExports = [];
   const versions = {};
-  const from = baseAncestry().mergeBase || base;
-  const paths = new Set(from === base ? changedPaths : runGit(repositoryRoot, [
-    'diff', '--no-renames', '--name-only', from, head, '--'
-  ]).split('\n').filter(Boolean));
-  const baseSchema = readRevisionFile(from, contractSchemaModulePath);
+  const paths = new Set(changedPaths);
+  const baseSchema = readRevisionFile(changeFrom, contractSchemaModulePath);
   if (paths.has(contractSchemaModulePath) && baseSchema === null) {
     addedModules.push(contractSchemaModulePath);
   } else if (paths.has(contractSchemaModulePath)) {
@@ -1800,7 +1788,7 @@ const classifyPersistedContractChange = () => {
   }
   Object.entries(contractDescriptionModules).forEach(([path, kind]) => {
     if (!paths.has(path)) return;
-    const before = readRevisionFile(from, path);
+    const before = readRevisionFile(changeFrom, path);
     if (before === null) {
       addedModules.push(path);
       return;

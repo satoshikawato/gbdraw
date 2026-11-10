@@ -91,10 +91,11 @@ this skill, they win.
   `gh run rerun <id> --failed`.
 - When a local check predicts a CI failure, settle it now with CI's own
   comparison, then fix it or state that nothing is needed. "Web change budget"
-  diffs `pull_request.base.sha` against the head (two-dot), so reproduce it
-  with `--base <PR base.sha>`, not `origin/dev`. "Web base policy (trusted
-  base)" compares the `dev` tree with the PR head, so a branch that lacks a
-  later `dev` baseline reduction must merge or rebase `dev`.
+  and "Web base policy (trusted base)" measure the PR's own change, from the
+  merge base of `pull_request.base.sha` and the head; reproduce them with
+  `--base <PR base.sha> --head <head sha>`. A baseline lowered or a guard
+  changed on `dev` after the branch forked does not fail them, so do not
+  rebase for it.
 - Read only failing logs, into a file:
   `gh run view <id> --log-failed > "$TASK_DIR/logs/<id>.log"`. Quote the
   failing lines, not the whole log.

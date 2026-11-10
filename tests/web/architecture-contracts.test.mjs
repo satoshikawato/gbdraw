@@ -5349,9 +5349,7 @@ const runForkedVendorChangeCase = ({ entry, merged, branch, behind }) => withCha
     return execute({ base, head });
   }
 );
-const BEHIND_BASE = /the branch is behind its base: update it from dev/;
-
-test('only a branch that is really behind its base is told to update', () => {
+test('a vendored change that merged after a branch forked is not the branch\'s change', () => {
   const prodPath = 'gbdraw/web/vendor/library.prod.js';
   const unrelated = (write) => write(
     'gbdraw/web/js/app/secondary.js',
@@ -5377,8 +5375,10 @@ test('only a branch that is really behind its base is told to update', () => {
       merged: (write) => write(VENDOR_LIBRARY_PATH, null)
     }
   ].forEach(({ name, entry, merged }) => {
+    // The diff runs from the merge base, so the listed change is not in it.
     const result = runForkedVendorChangeCase({ entry, merged, branch: unrelated, behind: true });
-    assertVendorGateFailure(result, BEHIND_BASE, `behind ${name}`);
+    assert.equal(result.status, 0, `behind ${name}\n${result.output}`);
+    assert.doesNotMatch(result.output, /library(?:\.prod)?\.js: /, `behind ${name}`);
   });
 
   // Up to date: the base merged the listed replace, and the head changes the file again.
@@ -5393,7 +5393,6 @@ test('only a branch that is really behind its base is told to update', () => {
     new RegExp(`library\\.js: sha256 ${sha256Hex('EVIL\n')} does not match the listed`),
     'up-to-date tampering'
   );
-  assert.doesNotMatch(tampered.output, BEHIND_BASE);
 
   // Up to date: the head deletes a file that a spent add entry still lists.
   const spentAdd = runForkedVendorChangeCase({
@@ -5407,7 +5406,6 @@ test('only a branch that is really behind its base is told to update', () => {
     /library\.prod\.js: listed as add, but the change is remove/,
     'spent add deleted'
   );
-  assert.doesNotMatch(spentAdd.output, BEHIND_BASE);
 });
 
 test('an add entry for a path that is a directory in the base fails', () => {
@@ -7118,6 +7116,75 @@ test('an unreadable design-rule allowlist counts as an expansion', () => {
     assert.equal(result.status, 1, result.output);
     assert.match(result.output, /design-rule\.co-change: .*#BASELINE \(unreadable\)/);
   });
+});
+
+// The branch forks at the registered guards; `dev` then changes them before the branch's head
+// is committed, so the head is behind its base, as an open pull request is after another merges.
+const runBehindDesignRuleCase = ({ dev, head }) => withDesignRuleGuardRepository(
+  ({ base: branchPoint, commit, execute, git, write }) => {
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource(dev));
+    const base = commit('dev lowers the guard baselines');
+    assert.equal(git(['checkout', '--quiet', branchPoint]).status, 0);
+    runtimeChange(write);
+    if (head) write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource(head));
+    return execute({ base, head: commit('branch forked before the baselines were lowered') });
+  }
+);
+
+test('a baseline lowered on dev after a branch forked is not the branch\'s expansion', () => {
+  // The branch leaves the guard test alone: nothing of it is in the branch's change.
+  const untouched = runBehindDesignRuleCase({ dev: { baseline: 45, throwBaseline: "{ 'app/a.js': 2, 'app/b.js': 0 }" } });
+  assert.equal(untouched.status, 0, untouched.output);
+  assert.match(untouched.output, /Gate: \*\*PASS\*\*/);
+  assert.doesNotMatch(
+    untouched.output,
+    /design-rule\.(?:co-change|count-scope)|allowlists expanded|- (?:expansion|contraction): |Web guard\/CI files changed together/
+  );
+
+  // The branch lowers one literal while dev lowered another: only the branch's own contraction counts.
+  const ownContraction = runBehindDesignRuleCase({
+    dev: { baseline: 45 },
+    head: { throwBaseline: "{ 'app/a.js': 2, 'app/b.js': 0 }" }
+  });
+  assert.equal(ownContraction.status, 0, ownContraction.output);
+  assert.match(ownContraction.output, /- contraction: R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#THROW_BASELINE/);
+  assert.doesNotMatch(ownContraction.output, /design-rule\.co-change|- expansion: |#BASELINE/);
+});
+
+test('a branch behind dev still fails on its own design-rule allowlist expansion', () => {
+  const result = runBehindDesignRuleCase({
+    dev: { throwBaseline: "{ 'app/a.js': 2, 'app/b.js': 0 }" },
+    head: { baseline: 47 }
+  });
+  assert.equal(result.status, 1, result.output);
+  assert.match(
+    result.output,
+    /design-rule\.co-change: a registered design-rule allowlist expanded alongside production runtime files \(R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#BASELINE \(expansion\)\)/
+  );
+  assert.doesNotMatch(result.output, /#THROW_BASELINE \(expansion\)/);
+});
+
+// The gate above measures only the branch's own change. A count that the branch raises past a
+// baseline lowered on dev after it forked is caught by the guard tests themselves: every Tests
+// job checks out the pull request's merge commit (no ref, or github.sha), not its head.
+test('pull request test jobs check out the merge commit', () => {
+  const lines = TEST_WORKFLOW.split('\n');
+  const workspaceCheckoutRefs = lines.flatMap((line, index) => {
+    if (!/uses: actions\/checkout@/.test(line)) return [];
+    const indent = line.search(/\S/);
+    const step = [];
+    for (const next of lines.slice(index + 1)) {
+      if (next.trim() && next.search(/\S/) < indent) break;
+      step.push(next.trim());
+    }
+    if (step.some((entry) => entry.startsWith('path:'))) return [];
+    return [step.find((entry) => entry.startsWith('ref:')) || 'ref: (default)'];
+  });
+  assert.ok(workspaceCheckoutRefs.length > 10, workspaceCheckoutRefs.join('\n'));
+  assert.deepEqual(
+    [...new Set(workspaceCheckoutRefs)].sort(),
+    ['ref: ${{ github.sha }}', 'ref: (default)']
+  );
 });
 
 test('the design-rule guard registry is read from the trusted base and fails closed when malformed', () => {
