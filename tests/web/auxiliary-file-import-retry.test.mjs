@@ -39,14 +39,14 @@ const runWatches = () => {
 // Any other port of the watcher owner: a function that does nothing.
 const port = () => new Proxy({}, { get: () => () => {} });
 let inputs = 0;
-const owner = { calls: 0, outcome: /** @type {number | false} */ (false), removal: async () => true };
+const owner = { calls: 0, outcome: /** @type {number | false} */ (false), error: null, removal: async () => true };
 const imports = createAuxiliaryFileImports((target) => target, state.inputFiles);
 const {
   importAuxiliaryTable, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, auxiliaryImportFailureOnArrival
 } = setupWatchers({
   state,
-  snapshotRuleInputs: /** @type {any} */ (() => ({ inputs, linearFiles: [], inputFiles: [] })),
-  isRuleInputCurrent: /** @type {any} */ ((before) => before.inputs === inputs),
+  snapshotRuleInputs: () => ({ inputs, linearFiles: [], inputFiles: [] }),
+  isRuleInputCurrent: (before) => before.inputs === inputs,
   trackAuxiliaryFileImport: imports.track,
   ref: (value) => ({ value }),
   computed: (getter) => ({ get value() { return getter(); } }),
@@ -65,6 +65,7 @@ const {
     importSpecificRules: async () => {
       owner.calls += 1;
       if (owner.outcome === false) inputs += 3;
+      if (owner.error) state.errorLog.value = owner.error;
       return owner.outcome;
     },
     removeImportedSpecificRules: async (drawing) => owner.removal(drawing)
@@ -100,6 +101,25 @@ test('a rules import the owner gave up on keeps Retry through later input change
   assert.equal(await retryAuxiliaryImportFailure(), true);
   assert.deepEqual({ calls: owner.calls, selected: card('t_color'), error: state.errorLog.value },
     { calls: 2, selected: ref, error: null });
+});
+
+// A rules import that failed on the rule inputs it was checked against keeps
+// their snapshot, and offers Retry only while they are still the current ones.
+test('a rules import that failed on given rule inputs withdraws Retry once they change', async () => {
+  const file = { name: 'rules.tsv', size: 1, text: async () => 'CDS\tproduct\t(\t#123456\tBad\n' };
+  bindCard('t_color', null);
+  state.errorLog.value = null;
+  owner.outcome = false;
+  owner.error = { code: 'INPUT_INVALID', message: 'Invalid pattern' };
+  assert.equal(await importAuxiliaryTable('t_color', file), false);
+  owner.error = null;
+  assert.equal(state.errorLog.value?.code, 'INPUT_INVALID');
+  assert.equal(canRetryAuxiliaryImportFailure.value, true, 'the inputs it was checked against are current');
+  inputs += 1;
+  assert.equal(canRetryAuxiliaryImportFailure.value, false, 'the rule inputs changed: no Retry');
+  assert.equal(await retryAuxiliaryImportFailure(), false);
+  state.errorLog.value = null;
+  owner.outcome = 1;
 });
 
 // REVIEW-1 N1: Remove on the card while the rule owner refuses to take the

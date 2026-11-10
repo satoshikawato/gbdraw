@@ -789,6 +789,39 @@ const createLayoutPreferences = () => ({
   assert.equal(fileStore.has(first.fileId), false);
 }
 
+// A History built without a budget counts the bytes its file store estimates
+// for the files its steps name (`estimateFileBytes`): steps whose files exceed
+// `maxBytes` drop, oldest first. Without the file store's functions, files
+// count no bytes.
+{
+  /** @param {(fileStore: ReturnType<typeof createInputFileStore>) => object} filePorts */
+  const undoCountAfterThreeFiles = async (filePorts) => {
+    const fileStore = createInputFileStore();
+    let currentFile = makeFile('start.gb');
+    const buildState = async () => ({ file: fileStore.registerFile(currentFile) });
+    const applyState = async (snapshot) => {
+      currentFile = fileStore.fileOf(snapshot.file);
+    };
+    const history = createHistoryManager({
+      maxBytes: 100_000,
+      ...filePorts(fileStore),
+      buildIntent: buildState,
+      applyIntent: applyState,
+      buildCheckpoint: buildState,
+      applyCheckpoint: applyState
+    });
+    await history.captureBaseline('initial');
+    for (const name of ['a.gb', 'b.gb', 'c.gb']) {
+      await history.runUndoable(`Load ${name}`, () => { currentFile = makeFile(name, 60_000); });
+    }
+    return history.getUndoCount();
+  };
+  assert.equal(await undoCountAfterThreeFiles(() => ({})), 3);
+  assert.equal(await undoCountAfterThreeFiles((fileStore) => ({
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly
+  })), 1);
+}
+
 {
   let value = 0;
   let history = null;
