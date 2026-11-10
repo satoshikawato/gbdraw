@@ -1194,7 +1194,8 @@ class _Scan:
         return table
 
     def flat_lines(self) -> Iterator[str]:
-        """A flat file's lines without its sequence lines (Biopython reads an empty sequence)."""
+        """A flat file's lines without its sequence lines (Biopython reads an empty sequence): a line at a time, or
+        a block of indented lines (header continuations, a feature table) as one piece."""
 
         genbank = self.fmt == "genbank"
         width = 12 if genbank else 5
@@ -1205,7 +1206,7 @@ class _Scan:
             if not footer and not self._first:  # header continuations and the feature table, as blocks
                 block = self._lines.indented_block()
                 if block:
-                    yield from _block_lines(block.decode(self.source.encoding))
+                    yield _text_mode_endings(block.decode(self.source.encoding))
                     continue
             line = self._lines.readline()
             if not line:
@@ -1275,15 +1276,10 @@ class _Scan:
                 raw.decode(self.source.encoding)  # text that is not in the encoding stops the read, as before
 
 
-def _block_lines(text: str) -> Iterator[str]:
-    """The lines of a block of whole lines, each ending in ``\\n`` as text mode reads them."""
+def _text_mode_endings(text: str) -> str:
+    """Whole lines with their endings read as ``\\n``, as text mode reads them."""
 
-    if "\r" in text:
-        text = text.replace("\r\n", "\n").replace("\r", "\n")
-    lines = text.split("\n")
-    lines.pop()
-    for line in lines:
-        yield line + "\n"
+    return text.replace("\r\n", "\n").replace("\r", "\n") if "\r" in text else text
 
 
 def _starts_entry(line: bytes) -> bool:

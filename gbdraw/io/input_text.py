@@ -19,6 +19,7 @@ from __future__ import annotations
 import codecs
 import gzip
 import io
+import itertools
 import locale
 import os
 import re
@@ -50,6 +51,8 @@ _FEATURE_KEY_AND_LOCATION = re.compile(r"^(\S+)[ \t]+(.*)$", re.DOTALL)
 # EMBL: every feature-table line starts with FT.
 _GENBANK_FEATURES = "FEATURES"
 _EMBL_FEATURE_LINE = "FT"
+# A line of text whose lines end in "\n" (the last may have no ending).
+_LINE = re.compile(r"[^\n]*\n|[^\n]+\Z")
 
 # INSDC feature keys (Feature Table Definition, section 7.2). GFF3 writers and some
 # GenBank writers spell them in another case (`cds`, `trna`); the readers give each
@@ -273,23 +276,34 @@ def _locus_line(line: str) -> str:
     return prefix + "_".join(name.split()) + rest
 
 
-def _normalized_flat_lines(lines: Iterator[str], fmt: FlatFileFormat) -> Iterator[str]:
+def _normalized_flat_lines(pieces: Iterator[str], fmt: FlatFileFormat) -> Iterator[str]:
+    """The flat-file text of ``pieces`` (each a line, or whole lines), lines repaired as Biopython needs them.
+
+    Lines that start with a space and hold no tab are left as they are and leave the
+    state as it is, so a piece of only such lines (a feature table read as one
+    block) passes whole; the lines of any other piece are repaired one by one.
+    """
+
     in_genbank_features = False
-    for line in lines:
-        if fmt == "embl":
-            if "\t" in line and line.startswith(_EMBL_FEATURE_LINE):
-                line = _EMBL_FEATURE_LINE + _feature_table_line("  " + line[2:])[2:]
-        elif line.startswith("LOCUS"):
-            in_genbank_features = False
-            line = _locus_line(line)
-        elif line.startswith(_GENBANK_FEATURES):
-            in_genbank_features = True
-        elif in_genbank_features:
-            if line[:1] not in (" ", "\t"):
+    for piece in pieces:
+        if piece[:1] == " " and "\t" not in piece and piece.count("\n ") + 1 >= piece.count("\n"):
+            yield piece
+            continue
+        for line in _LINE.findall(piece) if piece.count("\n") > 1 else (piece,):
+            if fmt == "embl":
+                if "\t" in line and line.startswith(_EMBL_FEATURE_LINE):
+                    line = _EMBL_FEATURE_LINE + _feature_table_line("  " + line[2:])[2:]
+            elif line.startswith("LOCUS"):
                 in_genbank_features = False
-            elif "\t" in line:
-                line = _feature_table_line(line)
-        yield line
+                line = _locus_line(line)
+            elif line.startswith(_GENBANK_FEATURES):
+                in_genbank_features = True
+            elif in_genbank_features:
+                if line[:1] not in (" ", "\t"):
+                    in_genbank_features = False
+                elif "\t" in line:
+                    line = _feature_table_line(line)
+            yield line
 
 
 def _gff3_attributes(column: str) -> str:
@@ -338,32 +352,56 @@ def text_lines(handle: TextIO) -> Iterator[str]:
 
 
 class LineStream:
-    """A read-only text handle over a line iterator, as Biopython and BCBio-GFF read one."""
+    """A read-only text handle over pieces of text, as Biopython and BCBio-GFF read one.
 
-    def __init__(self, lines: Iterator[str]) -> None:
-        self._lines = lines
+    A piece is a line, or whole lines (each ending in ``\\n``): the lines of a piece
+    are split at once, so a reader takes each of them from a list.
+    """
+
+    def __init__(self, pieces: Iterator[str]) -> None:
+        self._pieces = iter(pieces)
+        self._lines: Iterator[str] = iter(())
 
     def __iter__(self) -> Iterator[str]:
-        return self._lines
+        yield from self._lines
+        for piece in self._pieces:
+            if piece.count("\n") > 1:
+                self._lines = iter(_LINE.findall(piece))
+                yield from self._lines
+            elif piece:
+                yield piece
 
     def __next__(self) -> str:
-        return next(self._lines)
+        line = self.readline()
+        if not line:
+            raise StopIteration
+        return line
 
     def readline(self) -> str:
-        return next(self._lines, "")
+        line = next(self._lines, "")
+        if line:
+            return line
+        for piece in self._pieces:
+            if piece.count("\n") > 1:
+                self._lines = iter(_LINE.findall(piece))
+                return next(self._lines)
+            if piece:
+                return piece
+        return ""
 
     def read(self, size: int = -1) -> str:
         if size == 0:  # Biopython reads nothing to tell a text handle from a binary one.
             return ""
         if size < 0:
-            return "".join(self._lines)
+            return "".join(itertools.chain(self._lines, self._pieces))
         raise io.UnsupportedOperation("read(size) of a line stream")
 
 
-def flat_file_stream(lines: Iterator[str], fmt: FlatFileFormat) -> LineStream:
-    """The flat-file text Biopython reads from ``lines``: tab layout and spaced LOCUS names repaired."""
+def flat_file_stream(pieces: Iterator[str], fmt: FlatFileFormat) -> LineStream:
+    """The flat-file text Biopython reads from ``pieces`` (lines, or whole lines): tab layout and spaced LOCUS names
+    repaired."""
 
-    return LineStream(_normalized_flat_lines(lines, fmt))
+    return LineStream(_normalized_flat_lines(pieces, fmt))
 
 
 def gff3_stream(lines: Iterator[str]) -> LineStream:
