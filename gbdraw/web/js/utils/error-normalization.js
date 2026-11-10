@@ -35,6 +35,8 @@ placement strict compress reserve gapAfter gap_after innerRadius inner_radius ou
 const REASONS = Object.freeze({
   CROSS_ORIGIN_ISOLATION: 'This page is not cross-origin isolated.', SHARED_MEMORY: 'This browser does not provide SharedArrayBuffer.',
   WORKERS: 'This browser does not provide Web Workers.', THREADED_WASM: 'The threaded LOSAT runtime could not start.',
+  // A threaded run whose host could not run LOSAT's threads (services/losat-runtime.js `losatThreadsFailure`, OV-3316).
+  THREADS_FAILED: 'The threaded LOSAT engine could not start or keep its threads running in this browser.',
   DECORATION_IDENTITY: 'Source, region, mode, grouping or record identity changed, is unknown, or is ambiguous.',
   DECORATION_TARGET: 'The decoration target is missing or ambiguous.',
   DECORATION_METADATA: 'Composition metadata is invalid or unavailable.',
@@ -973,6 +975,14 @@ const trackRoomParts = ({ keptInsidePx, keptInsideTracks, slotTrack }) => {
   return parts;
 };
 
+/**
+ * Whether LOSAT exited with an error and said why (`losatMessage`, services/losat-runtime.js `losatRunFailure`): the
+ * same search stops the same way, so the failure offers the comparison settings and never Retry (OV-3317).
+ * @param {{ code: string, context: UserFacingContext }} error
+ * @returns {boolean}
+ */
+export const losatReportedFailure = (error) => error.code === 'LOSAT_RUNTIME' && error.context.losatMessage !== undefined;
+
 /** @typedef {{ operation?: string | null, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} UserFacingOptions A null operation is read as no known operation. */
 
 /**
@@ -1089,6 +1099,7 @@ export const normalizeUserFacingError = (value, {
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
   // A table stored in a Session is corrected in the Session file, not in this page.
   result.actions = sessionTable !== undefined || saveOverCap ? ['select-input']
+    : losatReportedFailure(result) ? ['edit-comparison']
     : [...(reason !== undefined && Object.hasOwn(REASON_ACTIONS, reason) ? REASON_ACTIONS[reason] : actions)];
   return result;
 };

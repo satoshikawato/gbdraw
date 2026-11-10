@@ -1398,6 +1398,17 @@ test('structured comparison errors open and focus their owning disclosure', asyn
     await expect(comparisonSettings(page)).toHaveAttribute('open', '');
     await expect(page.getByRole('combobox', { name: 'LOSAT execution' })).toBeFocused();
   }
+  // OV-3317: LOSAT said why it stopped (an option it refused), so Show in Comparison opens Settings at the LOSAT
+  // options, not at Execution, and Retry Generate is not offered.
+  await comparisonSettings(page).evaluate((details) => { details.open = false; });
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.errorLog = { code: 'LOSAT_RUNTIME', operation: 'generate', stage: 'losat',
+      context: { reason: 'FAILED', losatMessage: 'BLAST query/options error: No hits are being saved' } };
+  });
+  await page.getByRole('button', { name: 'Show in Comparison', exact: true }).click();
+  await expect(comparisonSettings(page)).toHaveAttribute('open', '');
+  await expect(page.locator('[data-comparison-focus="losat-options"] button').first()).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
   await page.evaluate(() => { window.__GBDRAW_APP__.errorLog = null; });
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   expect(await history()).toEqual(before);

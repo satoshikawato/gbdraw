@@ -28,7 +28,9 @@ test('a LOSAT failure names the search and shows what LOSAT reported, as text', 
   const model = normalizeUserFacingError(failure, { operation: 'generate' });
   assert.equal(model.code, 'LOSAT_RUNTIME');
   assert.equal(model.stage, 'losat');
-  assert.deepEqual(model.actions, ['edit-comparison', 'retry']);
+  // OV-3317: LOSAT said why it stopped, so Generate with the same settings stops the same way: the one action shows
+  // the comparison settings.
+  assert.deepEqual(model.actions, ['edit-comparison']);
   assert.equal(model.summary, 'The comparison search could not run or returned unusable output. Check the LOSAT or NCBI BLAST+ runtime, then Generate again.'
     + ' The search runtime exited with an error; check its message and inputs.'
     + " LOSAT reported: invalid value '9' for '\u2011searchsp <INT_VALUE>': too large");
@@ -45,6 +47,8 @@ test('a LOSAT failure names the search and shows what LOSAT reported, as text', 
   const silent = runtime.losatRunFailure('');
   assert.deepEqual(silent.context, { reason: 'FAILED' });
   assert.doesNotMatch(normalizeUserFacingError(silent).summary, /LOSAT reported/);
+  // Without LOSAT's words the cause is not known to repeat, so Retry stays.
+  assert.deepEqual(normalizeUserFacingError(silent, { operation: 'generate' }).actions, ['edit-comparison', 'retry']);
   assert.equal(runtime.reportedLosatFailure(silent), '');
   assert.equal(runtime.reportedLosatFailure(failure), failure.context.losatMessage);
   assert.equal(runtime.reportedLosatFailure(new Error('LOSAT_RUNTIME')), null);
@@ -92,4 +96,21 @@ test('the serial pool worker posts what LOSAT reported', async (t) => {
   assert.deepEqual(posted.map(({ id, ok }) => ({ id, ok })), [{ id: 'i', ok: true }, { id: 'r', ok: false }]);
   assert.match(posted[1].losatReported, /searchsp/);
   assert.equal(isRefusal(runtime.losatRunFailure(posted[1].losatReported)), true);
+});
+
+// OV-3316: the threaded engine's host could not run LOSAT's threads (a thread that did not start in time, a thread
+// worker that could not be made). The failure says so and names the engines that can run, never an unknown failure.
+test('a threaded host failure names the threaded engine and the engines that can run', () => {
+  const failure = runtime.losatThreadsFailure('timed out waiting for LOSAT WASI thread 1 to start after 30s');
+  assert.deepEqual({ code: failure.code, stage: failure.stage, context: failure.context },
+    { code: 'LOSAT_THREADING_UNAVAILABLE', stage: 'losat', context: { reason: 'THREADS_FAILED' } });
+  assert.match(failure.message, /thread 1 to start/);
+  assert.equal(runtime.isLosatThreadsFailure(failure), true);
+  assert.equal(runtime.isLosatThreadsFailure(runtime.losatRunFailure('error: x')), false);
+  assert.equal(runtime.reportedLosatFailure(failure), null);
+  const model = normalizeUserFacingError(failure, { operation: 'generate' });
+  assert.equal(model.summary, 'Threaded LOSAT execution is unavailable in this browser environment. Select Serial or Auto execution, then Generate again.'
+    + ' The threaded LOSAT engine could not start or keep its threads running in this browser.');
+  assert.deepEqual(model.actions, ['edit-comparison', 'retry']);
+  assert.doesNotMatch(model.summary, /thread 1/);
 });

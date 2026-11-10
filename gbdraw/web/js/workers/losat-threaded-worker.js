@@ -1,5 +1,6 @@
 import {
-  compileLosatWasm, concatUint8Arrays, losatCommandArgs, losatRunFailure, reportedLosatFailure
+  compileLosatWasm, concatUint8Arrays, isLosatThreadsFailure, losatCommandArgs, losatRunFailure, losatThreadsFailure,
+  reportedLosatFailure
 } from '../services/losat-runtime.js';
 import { LOSAT_WASM_BUILD } from '../services/losat-build.generated.js';
 
@@ -163,14 +164,18 @@ const prepareThreadWorker = ({
 
 /**
  * The failure of a job that exited with `exitCode`. After a failure of this host while LOSAT ran (a thread that could
- * not start, a thread worker that failed), a nonzero exit is a host failure: a plain Error, which the page may follow
- * with the serial engine. Without one, it is LOSAT's own error exit (`losatRunFailure`, OV-3289).
+ * not start, a thread worker that failed), a nonzero exit is the threaded host failure (`losatThreadsFailure`), which
+ * the page may follow with the serial engine (OV-3316). Without one, it is LOSAT's own error exit (`losatRunFailure`,
+ * OV-3289).
  */
 const exitFailure = (exitCode, stderrText, hostFailures) => {
   if (exitCode === 0) return null;
   if (hostFailures.length === 0) return losatRunFailure(stderrText);
-  return new Error([...hostFailures, stderrText.trim()].filter(Boolean).join('\n'));
+  return losatThreadsFailure([...hostFailures, stderrText.trim()].filter(Boolean).join('\n'));
 };
+
+/** A thread worker that could not be prepared is a failure of this host (`losatThreadsFailure`). */
+const preparationFailure = (error) => { throw losatThreadsFailure(String(error?.message || error)); };
 
 const runThreadedLosat = async ({
   module,
@@ -348,7 +353,7 @@ const runThreadedLosat = async ({
             hostFailures
           })
         )
-      );
+      ).catch(preparationFailure);
       threadSlots.push(...prepared);
     }
     const exitCode = wasi.start(instance);
@@ -386,6 +391,7 @@ self.onmessage = async (event) => {
       ok: false,
       error: error?.message ? String(error.message) : String(error || 'Threaded LOSAT worker failed'),
       losatReported: reportedLosatFailure(error),
+      hostFailure: isLosatThreadsFailure(error),
       trap: error instanceof WebAssembly.RuntimeError
     });
   }

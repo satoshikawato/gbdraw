@@ -103,6 +103,29 @@ export const reportedLosatFailure = (error) => {
   return context.reason === 'FAILED' ? context.losatMessage ?? '' : null;
 };
 
+/**
+ * The failure of a threaded LOSAT run whose host could not run LOSAT's threads: a thread worker that could not be made
+ * or prepared, a thread that did not start in time, a thread worker that failed (OV-3316). The serial engine runs no
+ * threads, so Auto continues with it and Threaded names it: `LOSAT_THREADING_UNAVAILABLE` with the reason
+ * `THREADS_FAILED`.
+ * @param {string} detail what failed in the host, kept as the message for the console; the normalizer words the failure
+ * @returns {DiagnosticError}
+ */
+export const losatThreadsFailure = (detail) => Object.assign(
+  diagnosticError('LOSAT_THREADING_UNAVAILABLE', { reason: 'THREADS_FAILED' }, { stage: 'losat' }),
+  detail ? { message: detail } : {}
+);
+
+/**
+ * Whether a failure is the threaded host failure (`losatThreadsFailure`), which the threaded job worker posts as
+ * `hostFailure` so the page raises it again.
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export const isLosatThreadsFailure = (error) => error instanceof Error
+  && /** @type {Partial<DiagnosticError>} */ (error).code === 'LOSAT_THREADING_UNAVAILABLE'
+  && /** @type {DiagnosticError} */ (error).context.reason === 'THREADS_FAILED';
+
 /** @type {Readonly<Record<string, string>>} */
 const SEARCH_FLAGS = LOSAT_SEARCH_FLAGS;
 

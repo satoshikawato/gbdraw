@@ -18,7 +18,7 @@ import { linearRecordPositionTokens } from '../services/linear-record-layout.js'
 import { linearRecordNames } from '../services/linear-sources.js';
 import { catalogUnitPlaces, isDrawnWindowPairRow, linearWindowPairsByCardEdge } from '../services/linear-units.js';
 import { inputSourceFiles } from '../services/input-types.js';
-import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { diagnosticError, losatReportedFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 import { t } from '../utils/i18n.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
@@ -283,12 +283,15 @@ export const createLinearComparisonFocus = ({ state, mode, errorLog, linearCompa
   };
 
   // The Generate error's "Show in Comparison": the first issue's
-  // control, the Execution setting for a LOSAT runtime failure, or the
-  // Comparison card when the cause has no control.
+  // control; the LOSAT options when LOSAT said why it stopped (OV-3317); the
+  // Execution setting for another LOSAT runtime failure; or the Comparison
+  // card when the cause has no control.
   const showLinearComparisonCause = async () => {
-    const code = normalizeUserFacingError(errorLog.value)?.code;
-    const runtimeCause = code === 'LOSAT_THREADING_UNAVAILABLE' || code === 'LOSAT_RUNTIME'
-      ? { disclosureKey: 'settings', focusTargetKey: 'losat-execution' } : null;
+    const error = normalizeUserFacingError(errorLog.value);
+    const code = error?.code;
+    const runtimeCause = error && losatReportedFailure(error) ? { disclosureKey: 'settings', focusTargetKey: 'losat-options' }
+      : code === 'LOSAT_THREADING_UNAVAILABLE' || code === 'LOSAT_RUNTIME'
+        ? { disclosureKey: 'settings', focusTargetKey: 'losat-execution' } : null;
     if (await focusLinearComparisonIssue(linearComparisonUi.value.issues[0] || runtimeCause)) return;
     const card = /** @type {HTMLElement | null} */ (document.querySelector('[data-linear-comparison-card]'));
     if (!card) return;

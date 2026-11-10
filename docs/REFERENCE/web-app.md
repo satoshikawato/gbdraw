@@ -50,7 +50,9 @@ gbdraw is installed. Browser security policy still applies. Threaded LOSAT
 also requires a cross-origin-isolated page. Select **Serial** under
 **Execution** when that capability is unavailable; the **Threaded** choice then
 reads **Threaded (unavailable here)**, and Generate with uncached LOSAT jobs
-reports `LOSAT_THREADING_UNAVAILABLE` at the `losat` stage. **Auto** runs threaded
+reports `LOSAT_THREADING_UNAVAILABLE` at the `losat` stage. **Threaded** reports the
+same code when its threads cannot start or keep running in the browser, for example
+when a thread does not start in time. **Auto** runs threaded
 LOSAT wherever the page allows it, for every LOSAT program, and serial LOSAT on a page
 without it or after a threaded job keeps failing. LOSATN task `dc-megablast` runs only
 threaded: with **Serial**, or wherever **Auto** runs serial LOSAT, Generate stops before
@@ -452,7 +454,10 @@ correction, and no **Save Session** when Save itself failed. For an unknown fail
 happened, and it does not guess a cause. A failure in the diagram engine's drawing stage
 that no validation classifies names the Python exception class (for example
 `ValueError`) and offers **Save Session** instead of **Retry Generate**, because
-the same inputs fail the same way. A diagram that was drawn but is too large for
+the same inputs fail the same way. A comparison search that LOSAT stops with its
+own message, shown after **LOSAT reported:**, offers no **Retry Generate** either;
+in a Linear diagram, **Show in Comparison** opens the LOSAT options in the
+Comparison settings. A diagram that was drawn but is too large for
 the browser page to receive also offers **Save Session** and no **Retry
 Generate**: draw a smaller region, turn off tracks or labels you do not need, or
 draw it from the saved Session with `gbdraw circular --session` or
