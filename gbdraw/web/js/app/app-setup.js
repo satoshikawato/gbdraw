@@ -144,7 +144,8 @@ import {
   getLinearSourceDefaultSubtitle,
   setLinearSourceDefaultSubtitle,
   resolveLinearRecordEffectiveDefinition,
-  resolveLinearRecordEffectiveSubtitle
+  resolveLinearRecordEffectiveSubtitle,
+  losatReadsGeneticCode
 } from '../services/linear-sources.js';
 import { captureSvgExport, serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
@@ -1475,7 +1476,8 @@ export const createAppSetup = () => {
   };
   // The problems a File card marks, for the open card and its folded line:
   // a file whose inspection failed, and a record that TLOSATX cannot search
-  // without a translation table.
+  // without a translation table LOSAT reads (the rule of Generate's refusal,
+  // `losatReadsGeneticCode`, OV-3326).
   /** @param {LinearSourceGroup} source a File card of the shown drawing */
   const linearSourceInspectionFailed = (source) => Boolean(linearRecordSelector.errorFor(state.activeDrawing(), source.sequence));
   /** @param {LinearSeq} seq */
@@ -1483,7 +1485,7 @@ export const createAppSetup = () => {
     const drawing = shownDrawingOfMode('linear');
     if (!drawing) return false;
     return drawing.hasActiveLinearLosatIntent.value && drawing.losatProgram.value === 'tblastx'
-      && !(Number(seq.losat_gencode) >= 1);
+      && !losatReadsGeneticCode(Number(seq.losat_gencode));
   };
   /** @param {LinearSourceGroup} source */
   const linearSourceGencodeRequired = (source) => source.records.some(({ sequence }) => linearRecordGencodeRequired(sequence));

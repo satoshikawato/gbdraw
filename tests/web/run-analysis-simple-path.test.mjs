@@ -2993,10 +2993,20 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     }))).status, 'error');
     assert.equal(searches, 0);
     assert.equal(state.errorLog.value?.code, 'COMPARISON_INPUT');
-    assert.match(state.errorLog.value?.summary, /Sequence 3\. Field: Gencode \(this entry\)\./);
+    assert.match(state.errorLog.value?.summary, /Sequence 3\. Field: LOSAT Gencode\./);
     assert.match(state.errorLog.value?.summary, /Genetic codes LOSAT reads: 1–6, 9–16, 21–33\./);
-    state.activeDrawing().linearSeqs[2].losat_gencode = 1;
+    // The refusal leads to its cause only: no Retry, which refuses the same code again (OV-3317 rule).
+    assert.deepEqual(state.errorLog.value?.actions, ['edit-comparison']);
+    // Review B-2: LOSATN reads no genetic code, so the Gencode 7 left on the card (hidden under LOSATN) refuses nothing.
     state.activeDrawing().losatProgram.value = 'blastn';
+    state.errorLog.value = null;
+    await runner.runAnalysis(resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
+      losatProgram: 'blastn', blastpMode: state.activeDrawing().losat.blastp.mode
+    }));
+    assert.notEqual(state.errorLog.value?.code, 'COMPARISON_INPUT', state.errorLog.value?.summary);
+    assert.ok(searches > 0, 'LOSATN searches');
+    state.activeDrawing().linearSeqs[2].losat_gencode = 1;
     state.errorLog.value = null;
   } finally {
     state.similarityAlignmentPlan.value = null;

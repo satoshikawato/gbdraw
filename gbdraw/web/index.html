@@ -3420,7 +3420,7 @@
                             </div>
                             <div v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="linear-primary-label mb-1">{{ t('LOSAT Gencode') }}</div>
-                                <input type="number" v-model.number="seq.losat_gencode" :aria-label="t('TLOSATX gencode for sequence {n}', { n: idx + 1 })" :placeholder="t('Gencode (this entry)')" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                <input type="number" v-model.number="seq.losat_gencode" :data-linear-gencode-input="seq.uid" :aria-label="t('TLOSATX gencode for sequence {n}', { n: idx + 1 })" :placeholder="t('Gencode (this entry)')" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                             </div>
                                 </div>
                             </details>

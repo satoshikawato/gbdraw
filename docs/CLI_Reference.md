@@ -466,13 +466,15 @@ options:
                         runtime that does not support the task stops before
                         searching (default: megablast).
   --losat_gencode CODE  TLOSATX genetic code of the reference file with
-                        --losat tlosatx (default: 1).
+                        --losat tlosatx; LOSAT reads the NCBI tables 1–6,
+                        9–16, 21–33 (default: 1).
   --conservation_losat_gencode CODE [CODE ...]
                         TLOSATX genetic code of each comparison genome with
                         --losat tlosatx: one for every ring or one per
                         comparison genome, in the same order; the
                         --conservation_table losat_gencode column sets it per
-                        row (default: 1).
+                        row. LOSAT reads the NCBI tables 1–6, 9–16, 21–33
+                        (default: 1).
   --losat_bin PATH      Native LOSAT executable for --losat (default:
                         automatic runtime resolution).
   --ncbi_blast_bin PATH
@@ -1437,8 +1439,9 @@ options:
   --losat_gencode CODE [CODE ...]
                         TLOSATX genetic code with --losat tlosatx: one for
                         every record or one per record input; the records
-                        table losat_gencode column sets it per row (default:
-                        the runtime default, 1).
+                        table losat_gencode column sets it per row. LOSAT
+                        reads the NCBI tables 1–6, 9–16, 21–33 (default: the
+                        runtime default, 1).
   --losat_bin PATH      Native LOSAT executable for --losat (default:
                         automatic runtime resolution).
   --ncbi_blast_bin PATH

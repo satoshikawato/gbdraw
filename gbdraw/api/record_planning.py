@@ -46,6 +46,7 @@ from gbdraw.core.record_metadata import (
     _source_period,
 )
 from gbdraw.io.cli_tables import (
+    ConservationTable,
     RecordsTableRecord,
     read_comparisons_table,
     read_conservation_table,
@@ -2362,6 +2363,21 @@ def resolve_circular_options(
         return options
     losat = options.losat_search is not None
     table = read_conservation_table(options.conservation_table_file, losat=losat)
+    try:
+        return _with_conservation_table(options, table, losat=losat)
+    except ValidationError as exc:
+        # The typed check names its field; the table's user knows the column (OV-3326).
+        if (exc.diagnostic or {}).get("field") != "conservation_losat_gencodes":
+            raise
+        column = f"{options.conservation_table_file}: losat_gencode column"
+        raise ValidationError(
+            str(exc).replace("conservation_losat_gencodes", column, 1), diagnostic=exc.diagnostic
+        ) from exc
+
+
+def _with_conservation_table(
+    options: CircularDiagramOptions, table: ConservationTable, *, losat: bool
+) -> CircularDiagramOptions:
     return replace(
         options,
         conservation_table_file=None,

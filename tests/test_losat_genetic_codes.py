@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import sys
 
 import pytest
@@ -10,19 +11,27 @@ import pytest
 import gbdraw.comparisons.losat_runtime as runtime_module
 from gbdraw.api import LosatSearchOptions
 from gbdraw.api.options import CircularDiagramOptions
-from gbdraw.comparisons.losat_runtime import LOSAT_GENETIC_CODE_TEXT, LOSAT_GENETIC_CODES
 from gbdraw.exceptions import ValidationError
 from gbdraw.linear import linear_main
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LAMBDA = REPO_ROOT / "tests" / "test_inputs" / "NC_001416.gb"
 DE3 = REPO_ROOT / "gbdraw" / "web" / "tutorial-data" / "de3" / "NC_042057.1.gb"
+# The NCBI tables LOSAT reads (TABLES in LOSAT's src/utils/genetic_code.rs, from NCBI gc.prt), and how a refusal names
+# them. The behaviour tests below use these literals, so they also run on a tree without the owner constants.
+TABLES = frozenset((*range(1, 7), *range(9, 17), *range(21, 34)))
+TABLE_TEXT = "1\u20136, 9\u201316, 21\u201333"
 
 
 def test_the_tables_are_the_ncbi_tables_losat_reads() -> None:
-    # LOSAT's TABLES (src/utils/genetic_code.rs, from NCBI gc.prt) and Biopython's CodonTable list the same ids.
-    assert LOSAT_GENETIC_CODES == frozenset((*range(1, 7), *range(9, 17), *range(21, 34)))
-    assert LOSAT_GENETIC_CODE_TEXT == "1\u20136, 9\u201316, 21\u201333"
+    from Bio.Data.CodonTable import unambiguous_dna_by_id
+
+    from gbdraw.comparisons.losat_runtime import LOSAT_GENETIC_CODE_TEXT, LOSAT_GENETIC_CODES
+
+    assert LOSAT_GENETIC_CODES == TABLES
+    # Biopython's CodonTable, which translates /transl_table (gbdraw/core/sequence.py), lists the same ids.
+    assert LOSAT_GENETIC_CODES == frozenset(unambiguous_dna_by_id)
+    assert LOSAT_GENETIC_CODE_TEXT == TABLE_TEXT
 
 
 @pytest.mark.parametrize("code", [7, 8, 17, 20, 34, 99])
@@ -32,12 +41,12 @@ def test_record_gencodes_refuse_a_code_losat_does_not_read(code: int) -> None:
     assert caught.value.diagnostic == {
         "code": "COMPARISON_INPUT", "reason": "GENETIC_CODE", "field": "record_gencodes",
     }
-    assert LOSAT_GENETIC_CODE_TEXT in str(caught.value)
+    assert TABLE_TEXT in str(caught.value)
 
 
 def test_record_gencodes_keep_every_table_and_none() -> None:
-    search = LosatSearchOptions(program="tlosatx", record_gencodes=(*sorted(LOSAT_GENETIC_CODES), None))
-    assert search.record_gencodes == (*sorted(LOSAT_GENETIC_CODES), None)
+    search = LosatSearchOptions(program="tlosatx", record_gencodes=(*sorted(TABLES), None))
+    assert search.record_gencodes == (*sorted(TABLES), None)
 
 
 def test_ring_gencodes_refuse_a_code_losat_does_not_read() -> None:
@@ -105,3 +114,33 @@ def test_circular_cli_names_the_ring_and_reference_flags(tmp_path: Path) -> None
             ])
         assert caught.value.diagnostic["reason"] == "GENETIC_CODE"
         assert named in str(caught.value)
+    # A --conservation_table losat_gencode cell is named by its table and column, not by the typed field.
+    table = tmp_path / "rings.tsv"
+    table.write_text(f"comparison_sequence\tlosat_gencode\n{LAMBDA}\t7\n", encoding="utf-8")
+    with pytest.raises(ValidationError) as cell:
+        circular_main([
+            "--gbk", str(LAMBDA), "--conservation_table", str(table), "--losat", "tlosatx",
+            "--losat_bin", losat, "-o", str(tmp_path / "table"), "-f", "svg",
+        ])
+    assert cell.value.diagnostic["reason"] == "GENETIC_CODE"
+    assert f"{table}: losat_gencode column" in str(cell.value)
+    assert "conservation_losat_gencodes" not in str(cell.value)
+    searched = _log.read_text(encoding="utf-8").splitlines() if _log.exists() else []
+    assert all(line in {"--version", "-version"} for line in searched), searched
+
+
+@pytest.mark.parametrize(("main", "flags"), [
+    ("gbdraw.linear:linear_main", ["--losat_gencode"]),
+    ("gbdraw.circular:circular_main", ["--losat_gencode", "--conservation_losat_gencode"]),
+])
+def test_cli_help_lists_the_tables(main: str, flags: list[str], capsys: pytest.CaptureFixture[str]) -> None:
+    import importlib
+
+    module, function = main.split(":")
+    with pytest.raises(SystemExit):
+        getattr(importlib.import_module(module), function)(["-h"])
+    # Each option's entry: its line in the options list and the indented lines under it.
+    entries = re.split(r"\n(?=  -)", capsys.readouterr().out)
+    for flag in flags:
+        (entry,) = [item for item in entries if item.lstrip().startswith(f"{flag} ")]
+        assert TABLE_TEXT in " ".join(entry.split()), (flag, entry)

@@ -327,7 +327,7 @@ const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Pairwise display 
   losatp_max_hits: 'Pairwise display max hits', losatp_max_target_seqs: 'LOSATP Max target seqs',
   losatp_member_max_hits: 'Max hits per protein for groups',
   output_prefix: 'Output Prefix',
-  losat_gencode: 'Gencode (this entry)', conservation_losat_gencodes: 'Comparison gencode', reference_gencode: 'Reference gencode',
+  losat_gencode: 'LOSAT Gencode', conservation_losat_gencodes: 'Comparison gencode', reference_gencode: 'Reference gencode',
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
   depth_window: 'Depth Window', depth_step: 'Depth Step', dinucleotide: 'Dinucleotide',
@@ -357,9 +357,8 @@ NotImplementedError RecursionError RuntimeError TypeError UnboundLocalError Name
 // Locators shown in the summary; indexes are zero-based, ordinals one-based.
 /** @type {Readonly<Record<string, string>>} */
 const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result {n}.', COMPARISON_INPUT: 'Comparison sequence {n}.' });
-// A field that numbers its own list: a Linear card's Gencode (this entry) counts the cards, not comparison sequences.
-/** @type {Readonly<Record<string, string>>} */
-const FIELD_ORDINAL_LABELS = Object.freeze({ losat_gencode: 'Sequence {n}.' });
+// Fields whose ordinal counts the Linear cards (PHRASES.sequence), not comparison sequences: a card's LOSAT Gencode.
+const CARD_ORDINAL_FIELDS = new Set(['losat_gencode']);
 // The tables a Session stores as text resources, as the documentation names them.
 /** @type {Readonly<Record<string, string>>} */
 export const SESSION_TABLE_LABELS = Object.freeze({ 'default-colors': 'Default colors', 'specific-colors': 'Specific colors',
@@ -583,6 +582,7 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [latestSessionVersion] The newest Session version this app reads.
  * @property {string} [readSessionVersions] The Session versions this app reads, as words ("27–33, 39–42, and 44").
  * @property {string} [geneticCodes] The NCBI genetic codes LOSAT reads, as Python names them ("1–6, 9–16, 21–33").
+ * @property {string} [cardUid] The Linear card whose LOSAT Gencode was refused, whose input "Show in Comparison" focuses.
  * @property {number} [sessionBytes] The size in bytes of a Session that Save refused: its expanded size, or its gzip file's with `sessionSizeKind`.
  * @property {number} [sessionByteLimit] The size in bytes that Load opens at most.
  * @property {'file'} [sessionSizeKind] Set when the two sizes are those of the gzip file, not of its expanded JSON.
@@ -857,6 +857,7 @@ const contextFor = (value) => {
   if (Number.isSafeInteger(value.sessionVersion)) context.sessionVersion = value.sessionVersion;
   if (Number.isSafeInteger(value.latestSessionVersion)) context.latestSessionVersion = value.latestSessionVersion;
   if (typeof value.geneticCodes === 'string' && /^[0-9\u2013, ]{1,80}$/.test(value.geneticCodes)) context.geneticCodes = value.geneticCodes;
+  if (typeof value.cardUid === 'string' && /^[A-Za-z0-9_.:~-]{1,128}$/.test(value.cardUid)) context.cardUid = value.cardUid;
   if (typeof value.readSessionVersions === 'string' && /^[0-9\u2013, and]{1,200}$/.test(value.readSessionVersions)) {
     context.readSessionVersions = value.readSessionVersions;
   }
@@ -1020,6 +1021,16 @@ export const losatFailureRepeats = (error) => error.code === 'LOSAT_RUNTIME'
   && (error.context.losatMessage !== undefined || error.context.reason === 'TRAP');
 
 /**
+ * Whether the same Generate would stop on the same comparison setting again: a LOSAT failure that repeats
+ * (`losatFailureRepeats`), or a TLOSATX genetic code LOSAT does not read (OV-3326). The failure offers the comparison
+ * settings and never Retry, in both modes.
+ * @param {{ code: string, context: UserFacingContext }} error
+ * @returns {boolean}
+ */
+export const comparisonCauseRepeats = (error) => losatFailureRepeats(error)
+  || (error.code === 'COMPARISON_INPUT' && error.context.reason === 'GENETIC_CODE');
+
+/**
  * The first sentence of a failure: the code's message for its operation where the code's own names a step that
  * operation does not have (`OPERATION_MESSAGES`), else for a threaded trap or a LOSAT failure that repeats the sentence
  * that says so, which also stands for the reason's sentence (`coversReason`), else the code's message.
@@ -1094,7 +1105,7 @@ export const normalizeUserFacingError = (value, {
     saveOverCap && { text: PHRASES.sessionSaveRemedy },
     diagramMode !== undefined && { text: diagramMode === 'linear' ? PHRASES.diagramLinear : PHRASES.diagramCircular },
     sessionTable !== undefined && { text: PHRASES.sessionTable, params: { table: { text: SESSION_TABLE_LABELS[sessionTable] } } },
-    inputOrdinal !== undefined && { text: FIELD_ORDINAL_LABELS[field ?? ''] || ORDINAL_LABELS[result.code] || PHRASES.sequence, params: { n: inputOrdinal } },
+    inputOrdinal !== undefined && { text: (!CARD_ORDINAL_FIELDS.has(field ?? '') && ORDINAL_LABELS[result.code]) || PHRASES.sequence, params: { n: inputOrdinal } },
     // A comparison pair as the comparison panel numbers it (#1 to #2).
     queryRecordIndex !== undefined && subjectRecordIndex !== undefined
       && { text: PHRASES.pair, params: { query: queryRecordIndex + 1, subject: subjectRecordIndex + 1 } },
@@ -1150,7 +1161,7 @@ export const normalizeUserFacingError = (value, {
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
   // A table stored in a Session is corrected in the Session file, not in this page.
   result.actions = sessionTable !== undefined || saveOverCap ? ['select-input']
-    : losatFailureRepeats(result) ? ['edit-comparison']
+    : comparisonCauseRepeats(result) ? ['edit-comparison']
     : [...(reason !== undefined && Object.hasOwn(REASON_ACTIONS, reason) ? REASON_ACTIONS[reason] : actions)];
   return result;
 };

@@ -338,9 +338,18 @@ export const resolveLinearRecordEffectiveSubtitle = (sequence, source = null) =>
 };
 
 /**
- * Where a TLOSATX genetic code was typed: a Linear card's Gencode (this entry), a comparison ring's Comparison gencode
- * (each with its number in its list), or the Circular Reference gencode.
- * @typedef {{ field: 'losat_gencode' | 'conservation_losat_gencodes', inputOrdinal: number }
+ * Whether LOSAT reads a TLOSATX genetic code: one of the NCBI tables in Python's `LOSAT_GENETIC_CODES`. The one rule of
+ * Generate's refusal (`requireLosatGeneticCode`) and of the File card's "Gencode required" mark (OV-3326).
+ * @param {number} code
+ */
+export const losatReadsGeneticCode = (code) => LOSAT_GENETIC_CODES.includes(code);
+
+/**
+ * Where a TLOSATX genetic code was typed: a Linear card's LOSAT Gencode (its number among the cards, and its identity,
+ * which the refusal's action focuses), a comparison ring's Comparison gencode (its number among the rings), or the
+ * Circular Reference gencode.
+ * @typedef {{ field: 'losat_gencode', inputOrdinal: number, cardUid: string }
+ *   | { field: 'conservation_losat_gencodes', inputOrdinal: number }
  *   | { field: 'reference_gencode' }} LosatGeneticCodeField
  */
 
@@ -353,21 +362,33 @@ export const resolveLinearRecordEffectiveSubtitle = (sequence, source = null) =>
  * @returns {number}
  */
 export const requireLosatGeneticCode = (code, at) => {
-  if (LOSAT_GENETIC_CODES.includes(code)) return code;
+  if (losatReadsGeneticCode(code)) return code;
   throw diagnosticError('COMPARISON_INPUT', { ...at, reason: 'GENETIC_CODE', geneticCodes: LOSAT_GENETIC_CODE_TEXT });
 };
 
 /**
- * The explicit LOSAT translation table of one Linear card, or null for the default; a table LOSAT does not read is
- * refused (`requireLosatGeneticCode`).
+ * The explicit LOSAT translation table typed on one Linear card, or null for the default.
  * @param {{ losat_gencode?: unknown } | null | undefined} sequence
- * @param {number} inputOrdinal The card's number among the drawing's cards, which the refusal names.
+ * @returns {number | null}
  */
-export const losatRecordGencode = (sequence, inputOrdinal) => {
+export const losatRecordGencode = (sequence) => {
   const raw = sequence?.losat_gencode;
   if (raw === null || raw === undefined || raw === '') return null;
   const value = Number(raw);
-  return Number.isFinite(value) ? requireLosatGeneticCode(value, { field: 'losat_gencode', inputOrdinal }) : null;
+  return Number.isFinite(value) ? value : null;
+};
+
+/**
+ * The translation table a TLOSATX search passes for one Linear card, or null for the default; a table LOSAT does not
+ * read is refused (`requireLosatGeneticCode`), naming the card.
+ * @param {{ losat_gencode?: unknown } | null | undefined} sequence
+ * @param {{ inputOrdinal: number, cardUid: string }} card The card's number among the drawing's cards, which the
+ *   refusal names, and its identity, whose LOSAT Gencode the refusal's action focuses.
+ * @returns {number | null}
+ */
+export const searchedLosatGencode = (sequence, card) => {
+  const code = losatRecordGencode(sequence);
+  return code === null ? null : requireLosatGeneticCode(code, { field: 'losat_gencode', ...card });
 };
 
 /**
@@ -381,14 +402,17 @@ const losatArgs = (options) => options.flatMap(([flag, value]) => (value === nul
 /**
  * The arguments of a LOSATN or TLOSATX search: LOSATN's task, TLOSATX's translation tables (none for a default
  * table), and the search space of the genome pair when Python plans one (`plan_genome_scales`, OV-3143). Generate and
- * the job estimate build them here.
- * @param {{ program: 'blastn' | 'tblastx', task: string, queryGencode: number | null, dbGencode: number | null,
+ * the job estimate build them here. Only TLOSATX reads the tables (`gencodes`, query then database): LOSATN reads none,
+ * so a Gencode left on a card (hidden under LOSATN) is never read or refused for it.
+ * @param {{ program: 'blastn' | 'tblastx', task: string, gencodes: () => readonly [number | null, number | null],
  *   searchSpace: string | null }} search
  * @returns {string[]}
  */
-export const nucleotideLosatArgs = ({ program, task, queryGencode, dbGencode, searchSpace }) => losatArgs(program === 'blastn'
-  ? [['--task', task], ['--searchsp', searchSpace]]
-  : [['--query-gencode', queryGencode], ['--db-gencode', dbGencode], ['--searchsp', searchSpace]]);
+export const nucleotideLosatArgs = ({ program, task, gencodes, searchSpace }) => {
+  if (program === 'blastn') return losatArgs([['--task', task], ['--searchsp', searchSpace]]);
+  const [queryGencode, dbGencode] = gencodes();
+  return losatArgs([['--query-gencode', queryGencode], ['--db-gencode', dbGencode], ['--searchsp', searchSpace]]);
+};
 
 /**
  * The arguments of a LOSATP search: one HSP per subject protein for Pairwise, the candidate limit, and the proteins of

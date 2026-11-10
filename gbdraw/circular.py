@@ -74,7 +74,7 @@ from .tracks import (
 from .cli_utils.losat_output import parse_positive_int, write_losat_output_files
 from .comparisons.identity_scale import CIRCULAR_IDENTITY_SCALE_PATH
 from .comparisons.losat_jobs import unique_losat_filenames
-from .comparisons.losat_runtime import COMPARISON_LOSAT_PROGRAMS
+from .comparisons.losat_runtime import COMPARISON_LOSAT_PROGRAMS, LOSAT_GENETIC_CODE_TEXT
 from .core.numeric import argparse_float, argparse_integer, argparse_scale_interval, parse_ascii_finite_float
 from .render.output_paths import preflight_output_paths
 from .cli_utils.common import (
@@ -565,7 +565,10 @@ def _get_args(
         metavar='CODE',
         type=parse_positive_int,
         default=None,
-        help='TLOSATX genetic code of the reference file with --losat tlosatx (default: 1).',
+        help=(
+            'TLOSATX genetic code of the reference file with --losat tlosatx; LOSAT '
+            f'reads the NCBI tables {LOSAT_GENETIC_CODE_TEXT} (default: 1).'
+        ),
     )
     parser.add_argument(
         '--conservation_losat_gencode',
@@ -576,7 +579,8 @@ def _get_args(
         help=(
             'TLOSATX genetic code of each comparison genome with --losat tlosatx: one '
             'for every ring or one per comparison genome, in the same order; the '
-            '--conservation_table losat_gencode column sets it per row (default: 1).'
+            '--conservation_table losat_gencode column sets it per row. LOSAT reads '
+            f'the NCBI tables {LOSAT_GENETIC_CODE_TEXT} (default: 1).'
         ),
     )
     runtime_group = parser.add_mutually_exclusive_group()
