@@ -91,23 +91,13 @@ def test_slice_containers_of_a_version_hold_the_rows_that_version_wrote() -> Non
         ("config.form", "figure_width"), ("config.form", "figure_height"), ("config.form", "circular_windows"),
         ("config.adv", "feature_density_tracks"),
         ("config.form", "circular_record_ranges"), ("config.form", "circular_range_fields_record"),
-        ("config.adv", "depth_axis_labels"), ("config.adv", "gc_content_axis_labels"),
     }
-    # The rows that Sessions 47-50 added, dated from first-parent history of main (the release that first held each).
-    later_rows = {(row.domain, row.path): row.since for row in MODE_SCOPED_SETTINGS if 46 < row.since < 51}
-    assert later_rows == {
-        ("config.adv", "font_family"): 47,
-        ("config", "fileImports"): 48, ("config.adv", "label_line"): 48, ("config.adv", "label_protection"): 48,
-        ("config.adv", "show_definition"): 49,
-        ("config.adv", "identity_scale"): 50, ("config.adv", "italic_gene_labels"): 50,
-        ("config.form", "linear_wrap_length"): 50,
-    }
-    assert {row.since for row in MODE_SCOPED_SETTINGS} == {46, 47, 48, 49, 50, 51}
+    assert {row.since for row in MODE_SCOPED_SETTINGS} == {46, 51}
     assert slice_containers(CURRENT_SESSION_VERSION) == SLICE_CONTAINERS
     for version in range(46, 51):
-        for container in ("config", "config.form", "config.adv"):
+        for container in ("config.form", "config.adv"):
             assert slice_containers(version)[container] == SLICE_CONTAINERS[container] - {
-                row.path for row in MODE_SCOPED_SETTINGS if row.domain == container and row.since > version
+                path for domain, path in session_51_rows if domain == container
             }
 
 

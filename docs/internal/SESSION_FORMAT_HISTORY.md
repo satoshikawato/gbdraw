@@ -1133,19 +1133,6 @@ Python document loading and materialization accept settings-only documents.
 CLI replay, typed request conversion and rendering require a biological request
 and reject this variant explicitly; they never fall back to legacy argv.
 
-## Mode-slice rows by first Session version
-
-Sessions 46 to 50 admit each mode-slice registry row only from the Session version
-in which `main` first wrote it (`since` in `gbdraw/web_support/mode_scoped_settings.py`).
-The first-parent history of `main` and the release tags give: `config.adv.font_family` 47
-(`150d26706`, v0.14.0); `config.fileImports`, `config.adv.label_line`,
-`config.adv.label_protection` 48 (`9fdab5f4d`, v0.14.0); `config.adv.show_definition` 49
-(`1392772bf`, v0.14.3); `config.adv.identity_scale`, `config.adv.italic_gene_labels`,
-`config.form.linear_wrap_length` 50 (`b19df11f1`, v0.14.5). `config.adv.depth_axis_labels` and
-`config.adv.gc_content_axis_labels` never reached `main` in Session 50, so they are Session 51 rows.
-For every release tag from v0.14.0 to v0.14.5, each registry row of that tag has a `since` at or
-below the Session version its writer stamps, so no Session a release wrote is refused.
-
 ## Supported versions
 
 The current writer and the versions current readers accept are in the table of
