@@ -1504,6 +1504,13 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
   };
 };
 
+/** @typedef {ReturnType<typeof buildModeSliceData>} ModeSliceData */
+/**
+ * A slice as Save writes it: `config.colors` may be left out (`savedModeSlice`).
+ * @typedef {Omit<ModeSliceData, 'config'> & {
+ *   config: Omit<ModeSliceData['config'], 'colors'> & { colors?: ModeSliceData['config']['colors'] }
+ * }} SavedModeSlice
+ */
 /**
  * A drawing's slice as Save writes it: without `config.colors` when the
  * drawing changed none of its palette's colors (`buildPaletteColorOverrideRows`),
@@ -1512,14 +1519,14 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
  * colors as overrides, and a Load of a Session with a draft reads its colors
  * from the slice, not from its request's Default colors table.
  * @param {DrawingState} drawing
- * @param {ReturnType<typeof buildModeSliceData>} slice
- * @returns {ReturnType<typeof buildModeSliceData>}
+ * @param {ModeSliceData} slice
+ * @returns {SavedModeSlice}
  */
 const savedModeSlice = (drawing, slice) => {
   const paletteColors = paletteColorsFromDefinitions(drawing.selectedPalette.value);
   if (!paletteColors || buildPaletteColorOverrideRows({ colors: slice.config.colors, paletteColors }).length) return slice;
   const { colors: _paletteColors, ...config } = slice.config;
-  return { ...slice, config: /** @type {typeof slice.config} */ (config) };
+  return { ...slice, config };
 };
 
 const CONFIG_SLICE_ROWS = MODE_SCOPED_SETTINGS.rows.filter((/** @type {{ domain: string }} */ row) => (
@@ -8797,7 +8804,7 @@ export const exportSession = (titleOverride = null, options) => {
     savedDrawings.forEach((saved) => validateCurrentWriterActiveConfig({
       mode: saved.mode, storedConfig: buildConfigData(saved)
     }));
-    /** @type {Map<DrawingId, ReturnType<typeof buildModeSliceData>>} */
+    /** @type {Map<DrawingId, SavedModeSlice>} */
     const slices = new Map(savedDrawings.map((saved) => [saved.id, savedModeSlice(saved, buildModeSliceData(saved, saved.mode, {
       selectedFeatureRecordIdx: saved.id === drawing.id ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
     }))]));

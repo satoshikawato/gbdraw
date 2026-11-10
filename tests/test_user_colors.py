@@ -540,7 +540,9 @@ def test_a_cli_session_stores_only_the_default_colors_rows_the_user_gave(tmp_pat
     )
     session = session_view(json.loads((tmp_path / "out.gbdraw-session.json").read_text(encoding="utf-8")))
     colors = session["renderRequest"]["diagramOptions"]["colors"]
-    ref = colors["defaultColorsFile"] or colors["defaultColors"]
+    # A file: its rows apply over the palette; a canonical table would be complete.
+    assert colors["defaultColors"] is None
+    ref = colors["defaultColorsFile"]
     text = base64.b64decode(session["resources"][ref["resourceId"]]["data"]).decode("utf-8")
     assert [line.split("\t") for line in text.splitlines() if line.strip()] == [["CDS", "#123456"]]
 

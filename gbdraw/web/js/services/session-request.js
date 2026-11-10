@@ -8493,10 +8493,10 @@ const normalizePublicationRequestAliases = (request, resources) => {
   }
   if (drawsNoComparison(normalized.comparisons || [])) normalized.comparisons = [];
   const colors = normalized.diagramOptions?.colors;
+  // A Color table as a file or as a canonical table is one table. Default colors
+  // are not aliased: a canonical table is complete, a file applies over the palette.
   if (colors) {
-    colors.defaultColors = colors.defaultColors || colors.defaultColorsFile || null;
     colors.colorTable = colors.colorTable || colors.colorTableFile || null;
-    delete colors.defaultColorsFile;
     delete colors.colorTableFile;
   }
   const options = normalized.diagramOptions;

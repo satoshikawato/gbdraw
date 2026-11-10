@@ -300,8 +300,8 @@ assert.equal((await compareCanonicalRenderRequests({
   actualResources: lambdaPrepared.session.resources
 })).equivalent, true);
 
-// The same Default colors rows, as a file or as a canonical table, are one request (BGC holds a file table; the Gallery
-// Sessions that held a canonical table held only palette rows, which OV-3257 dropped).
+// The same Default colors rows as a file or as a canonical table are two requests: a canonical table is complete (a
+// missing type draws the fallback grey), a file applies over the palette (BGC holds a file table).
 const bgcPrepared = await prepareGallerySessionForPublication(await loadSession('BGC0000708-BGC0000713.gbdraw-session.json'));
 const bgcWithCanonicalDefaultColors = structuredClone(bgcPrepared.session.renderRequest);
 bgcWithCanonicalDefaultColors.diagramOptions.colors.defaultColors = {
@@ -317,7 +317,7 @@ assert.equal((await compareCanonicalRenderRequests({
   expectedResources: bgcPrepared.session.resources,
   actualRequest: bgcWithCanonicalDefaultColors,
   actualResources: bgcWithCanonicalDefaultColorsResources
-})).equivalent, true);
+})).equivalent, false);
 
 // Overrides stored before the axis label style existed drew numbered ticks:
 // they equal a rebuilt request that states numbered, and differ from range.
