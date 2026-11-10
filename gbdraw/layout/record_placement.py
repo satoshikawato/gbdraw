@@ -9,7 +9,7 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.record_select import parse_record_selector
+from gbdraw.io.record_select import RecordSelector, parse_record_selector
 
 
 _PlacementCompatibility = Literal["linear", "circular"]
@@ -72,27 +72,28 @@ def parse_record_row_position(value: str) -> tuple[str, int]:
         raise ValidationError(
             f"multi_record_position entry '{raw}' must use a positive integer row."
         )
-    _record_index_of(selector)
+    record_order_selector(selector)
     return selector, row
 
 
-def _record_index_of(selector: str) -> int | None:
-    """The record index a ``#N`` selector names (:func:`parse_record_selector`), ``None`` for a record ID."""
+def record_order_selector(selector: str) -> RecordSelector:
+    """The record a Record Order selector names, the one reader of it with or without windows: a ``#N`` as
+    :func:`parse_record_selector` reads it, any other text a record ID as it is (``none`` and ``-`` included)."""
 
     if not selector.startswith("#"):
-        return None
+        return RecordSelector(raw=selector, record_id=selector, record_index=None)
     try:
         parsed = parse_record_selector(selector)
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc
     # ``parse_record_selector`` refuses or reads every text that starts with ``#``.
     assert parsed is not None and parsed.record_index is not None
-    return parsed.record_index
+    return parsed
 
 
 def _resolve_record_selector_index(records: Sequence[SeqRecord], selector: str) -> int:
     record_count = len(records)
-    record_index = _record_index_of(selector)
+    record_index = record_order_selector(selector).record_index
     if record_index is not None:
         if record_index < record_count:
             return record_index

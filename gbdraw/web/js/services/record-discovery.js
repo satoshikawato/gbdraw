@@ -8,10 +8,11 @@ import { ORGANISM_NAME_RULE } from '../contracts/schema.generated.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import {
-  circularInputComplete, circularSourceInputs, inputTypeOfSourceKind, inputTypeSpec, recordSourceFilesOf, recordSourceResourceIds
+  circularInputComplete, circularSourceInputs, inputTypeOfSourceKind, inputTypeSpec, storedRecordSourceResourceIds
 } from './input-types.js';
 import { recordIdentity, recordSelectorNumber, resliceCardRows } from './record-draw-selection.js';
 import { storedRecordIdKey } from './stored-leaf-readings.js';
+import { sessionResourceReadOwner } from './session-resource-backing.js';
 import { isRecordMajorDepthFileMatrix } from './depth-track-state.js';
 import {
   bytesToText,
@@ -26,7 +27,6 @@ import {
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { InputTypeSpec } from './input-types.js' */
-/** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 /** @import { CircularCardMark, CircularSource, DrawingInputFiles } from './drawing/inputs.js' */
 
 /**
@@ -731,18 +731,19 @@ const fastPathRecords = async (files, parse) => {
 // frame, the ring comparison sequence with its digest, and what Generate reads
 // for LOSAT (the parsed sequences, the Circular reference FASTA, and the
 // Worker's FASTA and protein extractions). Each read is kept once per File
-// object (or per GFF3 and FASTA pair) and key: an uploaded File and a Session
-// resource view never change their bytes. A failed read is not kept; each
+// object (or per GFF3 and FASTA pair) and key, and once per resource for the
+// views of one Session resource (`sessionResourceReadOwner`): an uploaded File
+// and a Session resource never change their bytes. A failed read is not kept; each
 // reader keeps an error it treats as final in its own state.
 /**
- * @typedef {{ reads: Map<string, Promise<unknown>>, paired: WeakMap<FileLike, FileReads> }} FileReads
+ * @typedef {{ reads: Map<string, Promise<unknown>>, paired: WeakMap<object, FileReads> }} FileReads
  */
-/** @type {WeakMap<FileLike, FileReads>} */
+/** @type {WeakMap<object, FileReads>} */
 const fileReads = new WeakMap();
 
 /**
- * @param {WeakMap<FileLike, FileReads>} byFile
- * @param {FileLike} file
+ * @param {WeakMap<object, FileReads>} byFile
+ * @param {object} file A File, or the resource of a Session resource view (`sessionResourceReadOwner`).
  * @returns {FileReads}
  */
 const fileReadsOf = (byFile, file) => {
@@ -761,8 +762,8 @@ const fileReadsOf = (byFile, file) => {
  */
 export const readOncePerFile = (files, key, read, limit = Infinity) => {
   const [file, pairedFile] = files;
-  const owner = fileReadsOf(fileReads, file);
-  const { reads } = pairedFile ? fileReadsOf(owner.paired, pairedFile) : owner;
+  const owner = fileReadsOf(fileReads, sessionResourceReadOwner(file));
+  const { reads } = pairedFile ? fileReadsOf(owner.paired, sessionResourceReadOwner(pairedFile)) : owner;
   const held = /** @type {Promise<T> | undefined} */ (reads.get(key));
   if (held) return held;
   if (Number.isFinite(limit)) {
@@ -1097,38 +1098,63 @@ export const discoverInputRecords = (spec, primaryFile, pairedFile) => (
 );
 
 /**
- * The place (`#k`, its file's record list as Python reads it) of each stored Linear record whose selector is a
- * record ID that a card's record text reads as a `#N` (`#2`, `#+2`), by `storedRecordIdKey`: Load gives the card
- * that place, so the card draws the record of that ID (OV-3311). An ID no record or several records hold has no
- * place. Only such a record's files are read; a Session without one reads none.
- * @param {readonly unknown[]} requests The stored render requests (unvalidated).
- * @param {(resourceId: string) => FileLike | null} fileOf The file of a stored resource.
- * @returns {Promise<Map<string, string>>}
+ * A record of a stored render request as Load holds it before the request is read: any field may be missing or of
+ * another type.
+ * @typedef {{ readonly selector?: Readonly<Record<string, unknown>> | null,
+ *   readonly source?: Readonly<Record<string, unknown>> | null }} UnreadStoredRecord
+ */
+/**
+ * The record ID of a stored record whose selector is a record ID that a record text reads as a `#N` (`#2`, `#+2`),
+ * with the input type of its source and the source's resource ids; null for any other record.
+ * @param {UnreadStoredRecord | null} record
+ * @returns {{ recordId: string, spec: Readonly<InputTypeSpec>, resourceIds: string[] } | null}
+ */
+const hashLikeRecordIdOf = (record) => {
+  const value = record?.selector?.kind === 'recordId' ? record.selector.value : null;
+  const resourceIds = storedRecordSourceResourceIds(record?.source);
+  if (typeof value !== 'string' || recordSelectorNumber(value) === null || resourceIds.length === 0) return null;
+  return { recordId: value, spec: inputTypeSpec(inputTypeOfSourceKind(record?.source?.kind)), resourceIds };
+};
+
+/**
+ * The place (`#k`, its file's record list as Python reads it) of each stored record whose selector is a record ID
+ * that a record text reads as a `#N`, by `storedRecordIdKey`: Load gives a Linear card, the Circular Record select
+ * and a Circular record range that place, so they draw the record of that ID, as Python does (OV-3311). `unresolved`
+ * lists each such record whose file cannot be listed or holds no single record with the ID; it keeps its text.
+ * Only such a record's files are read, so a Session without one reads none.
+ * @param {readonly { at: string, renderRequest: unknown }[]} requests Each stored request, by where the file holds
+ *   its set (`storedResultSets`).
+ * @param {(resourceId: string) => FileLike} fileOf A view of the stored resource on the table Load adopted: a card's
+ *   later read of the file is this read (`readOncePerFile`).
+ * @returns {Promise<{ places: Map<string, string>, unresolved: { path: string, recordId: string }[] }>}
  */
 export const readStoredRecordIdPlaces = async (requests, fileOf) => {
   /** @type {Map<string, string>} */
   const places = new Map();
+  /** @type {{ path: string, recordId: string }[]} */
+  const unresolved = [];
   const read = new Set();
-  for (const request of requests) {
-    const view = /** @type {{ mode?: unknown, records?: unknown } | null} */ (request && typeof request === 'object' ? request : null);
-    if (view?.mode !== 'linear' || !Array.isArray(view.records)) continue;
-    for (const record of /** @type {{ selector?: { kind?: unknown, value?: unknown }, source?: { kind?: unknown } }[]} */ (view.records)) {
-      const recordId = record?.selector?.kind === 'recordId' ? record.selector.value : null;
-      const source = record?.source;
-      if (typeof recordId !== 'string' || recordSelectorNumber(recordId) === null || recordSourceFilesOf(source?.kind).length === 0) continue;
-      const resourceIds = recordSourceResourceIds(/** @type {CanonicalRecordSource} */ (source));
+  for (const { at, renderRequest } of requests) {
+    const records = typeof renderRequest === 'object' && renderRequest !== null
+      ? /** @type {{ readonly records?: unknown }} */ (renderRequest).records : null;
+    if (!Array.isArray(records)) continue;
+    for (const [index, record] of /** @type {(UnreadStoredRecord | null)[]} */ (records).entries()) {
+      const named = hashLikeRecordIdOf(record);
+      if (!named) continue;
+      const { recordId, spec, resourceIds } = named;
       const key = storedRecordIdKey(resourceIds, recordId);
       if (read.has(key)) continue;
       read.add(key);
-      const [primaryFile, pairedFile] = resourceIds.map(fileOf);
-      // A file Load cannot list gives no place: the card keeps the stored text.
-      const records = await discoverInputRecords(inputTypeSpec(inputTypeOfSourceKind(source?.kind)), primaryFile, pairedFile)
+      const [primaryFile, pairedFile] = resourceIds;
+      const listed = await Promise.resolve()
+        .then(() => discoverInputRecords(spec, fileOf(primaryFile), pairedFile === undefined ? null : fileOf(pairedFile)))
         .catch(() => []);
-      const named = records.filter((entry) => entry.recordId === recordId);
-      if (named.length === 1) places.set(key, named[0].selector);
+      const matches = listed.filter((entry) => entry.recordId === recordId);
+      if (matches.length === 1) places.set(key, matches[0].selector);
+      else unresolved.push({ path: `${at}renderRequest.records[${index}].selector.value`, recordId });
     }
   }
-  return places;
+  return { places, unresolved };
 };
 
 /** @param {Readonly<InputTypeSpec>} spec The helper operation a failed read of this input names. */

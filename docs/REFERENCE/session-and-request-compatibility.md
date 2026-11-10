@@ -604,6 +604,12 @@ Which records Web draws from a CLI session depends on the request:
   also reads that file and selects each drawn record by record ID, or by `#n`
   when another record of the file has the same ID. The file stays one File that
   draws only those records.
+- A record ID that reads like a record number (`#2`, `#+2`), which only the
+  Python API or a hand edit stores, names the record with that ID: Load finds
+  its place in the file and gives the Linear card, the Circular Record select
+  or the Circular record range that place (`#k`). When the file cannot be read,
+  or no single record has that ID, Load lists it in its repair dialog and the
+  text reads as that record number.
 - A Linear record, or the record of a single Circular request, can be drawn
   cropped or reverse-complemented. The session then stores its crop in source
   coordinates as `region` and its orientation as `region.reverseComplement` or

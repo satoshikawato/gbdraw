@@ -291,6 +291,18 @@ kept such a selector as it was, a key no record has; it now places it at the rec
 edited by hand. Vector: the OV-2988 case of `tests/fixtures/sessions/drawings-vectors.json`, run by
 `tests/test_session_drawings_vectors.py` and `tests/web/session-drawings-upgrade.test.mjs`.
 
+A hand-edited Circular Record select `#+2` of a Session 41 to 50 matched, on `dev`, a record whose ID is `#+2` (the
+Record select compares a value with the record's place first, then with its ID); it now names record 2, as `#2` did.
+
+The Web Load also reads a stored record selector of kind `recordId` whose value reads as `#N` (`#2`, `#+2`) by its
+kind (OV-3311). A Linear card, the Circular Record select and a Circular record range hold their record as text,
+which reads `#N` as a record number, so on `dev` a stored record ID `#2` drew record 2 in the Web while Python drew
+the record with that ID (with the pattern above, `#+2` would too). Load now lists the record's file once through the resources it adopted (`readStoredRecordIdPlaces`,
+`services/record-discovery.js`) and gives the text the record's place `#k`; a file it cannot list, or one that holds
+no single record with that ID, keeps the text and adds a `record-id-unresolved` row to the Load repair dialog. A
+Session with no such selector reads no file for this. No gbdraw writer stores such a selector (the Web and Python
+writers name such a record by its place). Test: `tests/web/stored-record-id-places.test.mjs`.
+
 ## 0.14.5: Session 50 stores the Linear wrap length, italic gene names, and the identity colour scale
 
 Session version 50 adds the config leaf `canvas.linear.wrap_length` (`"none"`,

@@ -224,9 +224,11 @@ write-up of a release.
   row with a plus sign (`#2@+1`) and a record ID that holds `@` or is `none`
   or `-`, which one mode drew and the other refused, now draw in both
   (OV-2988, OV-3312).
-- Fixed: a Linear record that a Session stores by a record ID that reads like
-  a record number (`#2`, `#+2`) now draws that record in the Web app after
-  Load, as the command line draws it; the Web drew record 2 (OV-3311).
+- Fixed: a record that a Session stores by a record ID that reads like a
+  record number (`#2`, `#+2`) now draws that record in the Web app after Load,
+  in a Linear card, the Circular Record select and a Circular record range, as
+  the command line draws it; the Web drew record 2. When Load cannot find one
+  record with that ID in its file, its repair dialog says so (OV-3311).
 - Changed: a Session saved by the command line or the Python API
   (`--save_session`, `--session_output`) no longer depends on the machine or on
   when its input files were last changed: each embedded file stores no guessed

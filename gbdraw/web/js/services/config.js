@@ -1391,21 +1391,13 @@ const unreadStoredLeaves = (data) => {
  * configuration check, which reads each with the config model's validator, before its readers run. A value the
  * check refuses has no reading, and its reader drops it with a row.
  * @param {unknown} data The Session as `readSessionImportParts` reads it (unvalidated).
- * @returns {Promise<StoredLeafReadings>}
+ * @returns {Promise<Map<string, unknown>>} Load adds the places of stored record IDs (`readStoredRecordIdReadings`).
  */
 const readStoredLeaves = async (data) => {
   const leaves = unreadStoredLeaves(data);
   const validator = unmanagedConfigOverrideValidator;
-  const resources = isPlainObject(data) && isPlainObject(data.resources) ? data.resources : {};
-  /** @param {string} resourceId */
-  const fileOf = (resourceId) => {
-    const file = deserializeFile(Object.hasOwn(resources, resourceId) ? resources[resourceId] : null);
-    return Array.isArray(file) ? null : file;
-  };
-  // The place in its file of each stored Linear record ID a card's text would read as a `#N` (OV-3311).
   /** @type {Map<string, unknown>} */
-  const readings = new Map(await readStoredRecordIdPlaces(
-    storedResultSets(/** @type {SessionChecked} */ (data)).map(({ set }) => set.renderRequest), fileOf));
+  const readings = new Map();
   if (leaves.length === 0 || !validator) return readings;
   for (const { row, value } of leaves) {
     const reply = await validator({
@@ -1417,6 +1409,23 @@ const readStoredLeaves = async (data) => {
     if (canonical !== undefined && !row.read(canonical).lost) readings.set(storedLeafKey(row.path, value), canonical);
   }
   return readings;
+};
+
+/**
+ * Adds to `readings` the place in its file of each stored record ID that a record text reads as a `#N` (OV-3311),
+ * read through `table`, the resources Load adopted, so a card's own read of the file is this one; `repairs` lists
+ * each such ID Load could not place, which keeps its text.
+ * @param {SessionInput | Session51} data The Session Load reads, or the document of a stored drawing.
+ * @param {ReturnType<typeof adoptCurrentSessionResources>} table
+ * @param {Map<string, unknown>} readings `readStoredLeaves`'s.
+ * @param {LoadRepair[]} repairs
+ */
+const readStoredRecordIdReadings = async (data, table, readings, repairs) => {
+  const { places, unresolved } = await readStoredRecordIdPlaces(
+    storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest })),
+    (resourceId) => createSessionResourceFileView(table, resourceId));
+  places.forEach((place, key) => readings.set(key, place));
+  repairs.push(...unresolved.map(({ path, recordId }) => loadRepair({ code: 'record-id-unresolved', path, effect: 'changed', stored: recordId })));
 };
 
 /** @param {DrawingState} drawing */
@@ -2843,6 +2852,7 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
     recordSessionLifecycleEvent('resource-table-adoption-start');
     currentResourceTable = adoptCurrentSessionResources(catalogData.resources);
     recordSessionLifecycleEvent('resource-table-adoption-end');
+    await readStoredRecordIdReadings(rawData, currentResourceTable, leafReadings, repairs);
     // A CLI-written Session 40-41 `config` is no Web draft (OV-269), as in
     // migrate_session_flat_draft.
     const { config: _cliConfig, ...withoutCliConfig } = catalogData;
@@ -7034,13 +7044,15 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
   const entry = /** @type {SessionDrawing51} */ (/** @type {unknown} */ ({ id, mode, renderRequest }));
   // A Session 51 document holds the resources beside its drawings (OV-2462).
   const document = /** @type {Session51} */ (/** @type {unknown} */ ({ version: SESSION_VERSION, resources, drawings: [entry] }));
-  const inputs = storedDrawingInputsOf(document, entry, adoptCurrentSessionResources(resources),
-    sessionSourceFactsOf(SESSION_VERSION, false), await readStoredLeaves(document));
+  const table = adoptCurrentSessionResources(resources);
+  /** @type {LoadRepair[]} */
+  const repairs = [];
+  const leafReadings = await readStoredLeaves(document);
+  await readStoredRecordIdReadings(document, table, leafReadings, repairs);
+  const inputs = storedDrawingInputsOf(document, entry, table, sessionSourceFactsOf(SESSION_VERSION, false), leafReadings);
   if (inputs.restoredConfig && inputs.requestOverrides) {
     inputs.restoredConfig.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides(inputs.requestOverrides);
   }
-  /** @type {LoadRepair[]} */
-  const repairs = [];
   const config = inputs.restoredConfig ?? overlayModeSliceConfig(null, undefined);
   const files = loadFiles(inputs.files, config, inputs.inputType, 'webFiles.bindings',
     { adoptCanonicalPayloads: true, resolveRecordInputs: true, repairs, circularRequest: inputs.circularRequest });

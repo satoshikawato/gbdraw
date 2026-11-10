@@ -669,6 +669,17 @@ export const sessionResourceSource = (file) => {
 };
 
 /**
+ * What a read of `file` is kept under (`readOncePerFile`): a clean Session resource view by its resource, so every
+ * view of one resource shares one read of it; any other file by itself.
+ * @param {FileLike} file
+ * @returns {object}
+ */
+export const sessionResourceReadOwner = (file) => {
+  const backing = fileViewBackings.get(file);
+  return backing && !backing.dirty ? backing : file;
+};
+
+/**
  * @param {FileLike | null | undefined} file
  * @returns {Promise<Uint8Array> | null}
  */

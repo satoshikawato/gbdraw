@@ -118,11 +118,12 @@ from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import detected_topology
 from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
 from gbdraw.mode_profiles import ComparisonThresholds
-from gbdraw.io.record_select import parse_record_selector, select_record_units
+from gbdraw.io.record_select import select_record_units
 from gbdraw.io.record_sequences import detached_records
 from gbdraw.layout.record_placement import (
     FeatureAnchorPlacement,
     parse_record_row_position,
+    record_order_selector,
     resolve_record_row_positions,
 )
 from gbdraw.layout.similarity_alignment import (
@@ -1867,7 +1868,7 @@ def _unit_positions(request: LinearDiagramRequest, layout: LinearMultiRecordOpti
     for token in layout.multi_record_positions or ():
         selector, row = parse_record_row_position(str(token))
         try:
-            units = select_record_units(records, parse_record_selector(selector))
+            units = select_record_units(records, record_order_selector(selector))
         except ValueError as exc:
             raise ValidationError(f"multi_record_position selector '{selector}': {exc}") from exc
         positions.extend(f"#{unit + 1}@{row}" for unit in units)

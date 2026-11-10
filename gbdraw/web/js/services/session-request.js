@@ -329,7 +329,7 @@ const requestDrawingMode = (drawing) => {
  * @property {readonly { start?: unknown, end?: unknown, reverseComplement?: unknown, column?: unknown }[]} windows Required at
  *   request schema 10, which Load promotes every stored request to first.
  * @property {{ reverseComplement?: unknown } | null} [presentation]
- * @property {{ kind?: unknown } | null} [source]
+ * @property {CanonicalRecordSource} source Required at request schema 10.
  */
 /**
  * A record of the request before its display options are bound.
@@ -1489,18 +1489,17 @@ const cropFieldsOfWindows = (record) => {
 };
 
 /**
- * A request record's selector as a Linear card's record text (`canonicalRecordSelector`). A record ID that the text
- * would read as a `#N` (`#2`, `#+2`) takes the place Load read for it in its file (`storedRecordIdKey`, OV-3311),
- * the text the Record select gives such a record, so the card draws the record of that ID; without one it stays.
+ * A request record's selector as a record text: a Linear card's, the Circular Record select's, or a Circular record
+ * range's (`canonicalRecordSelector`). A record ID that the text would read as a `#N` (`#2`, `#+2`) takes the place
+ * Load read for it in its file (`storedRecordIdKey`, OV-3311), the text the Record select gives such a record, so
+ * the text names the record of that ID; without one it stays.
  * @param {RequestRecordView | null | undefined} record
  * @param {StoredLeafReadings} readings
  */
 const cardRecordText = (record, readings) => {
   const text = canonicalRecordSelector(record) || '';
-  const source = record?.source;
-  const place = record?.selector?.kind === 'recordId' && recordSourceFilesOf(source?.kind).length > 0
-    ? readings.get(storedRecordIdKey(recordSourceResourceIds(/** @type {CanonicalRecordSource} */ (source)), text))
-    : undefined;
+  if (!record || record.selector?.kind !== 'recordId' || recordSourceFilesOf(record.source.kind).length === 0) return text;
+  const place = readings.get(storedRecordIdKey(recordSourceResourceIds(record.source), text));
   return typeof place === 'string' ? place : text;
 };
 
@@ -7088,7 +7087,7 @@ export const projectCanonicalSessionRequest = ({
       const windows = only ? [only] : listed;
       const source = circularCardOfRecord.get(record);
       return windows.length && source
-        ? [{ source, record: canonicalRecordSelector(record) || '', windows: windows.map((window) => ({ ...window, column: null })) }]
+        ? [{ source, record: cardRecordText(record, leafReadings), windows: windows.map((window) => ({ ...window, column: null })) }]
         : [];
     }))
     : [];
@@ -7110,7 +7109,7 @@ export const projectCanonicalSessionRequest = ({
       ? grouping === 'grid'
       : WEB_UX_PROFILE.circular.gridByDefault,
     circular_record_selector: circularPresentationRecord
-      ? (canonicalRecordSelector(circularPresentationRecord) || '')
+      ? cardRecordText(circularPresentationRecord, leafReadings)
       : '',
     circular_region_start: circularPresentationRegion?.start ?? null,
     circular_region_end: circularPresentationRegion?.end ?? null,

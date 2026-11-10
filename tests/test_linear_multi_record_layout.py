@@ -229,6 +229,30 @@ def test_record_order_reads_one_grammar_in_both_modes(compatibility: str) -> Non
         )
 
 
+@pytest.mark.parametrize("record_id", ("none", "-"))
+def test_record_order_names_a_record_with_windows_by_the_same_grammar(record_id: str) -> None:
+    # OV-3312: a record drawn in windows takes its Record Order row through the same reader as any other record, so
+    # a record ID `none` or `-` names that record with windows as it does without them.
+    def record(name: str) -> SeqRecord:
+        made = SeqRecord(Seq("A" * 1000), id=name)
+        made.annotations["molecule_type"] = "DNA"
+        return made
+
+    def rows(windows: tuple[RecordWindow, ...]) -> list[int]:
+        request = LinearDiagramRequest(
+            records=(
+                RecordInput(InMemoryRecordSource(record(record_id)), windows=windows, record_key="named"),
+                RecordInput(InMemoryRecordSource(record("other")), record_key="other"),
+            ),
+            layout=LinearMultiRecordOptions(multi_record_positions=(f"{record_id}@1", "other@2")),
+        )
+        axes = [entry["axisYpx"] for entry in build_request_diagram(request).drawing._gbdraw_track_slot_geometry["records"]]
+        return [sorted(set(axes)).index(axis) + 1 for axis in axes]
+
+    assert rows(()) == [1, 2]
+    assert rows((RecordWindow(1, 400), RecordWindow(600, 900))) == [1, 1, 2]
+
+
 def test_adjacent_row_pairs_exclude_same_row_records() -> None:
     assert record_pairs_between_adjacent_rows((0, 0, 1, 1)) == (
         (0, 2),
