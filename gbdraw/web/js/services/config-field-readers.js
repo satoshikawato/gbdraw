@@ -2,7 +2,8 @@
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 import { LABEL_STYLE_CHOICES, labelStyleForMode, readGcContentMode } from '../mode-profiles.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
-import { readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
+import { normalizeOptionalHexColor, readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
+import { CONSERVATION_COLOR_SCHEMES, CONSERVATION_DEFAULT_COLOR_SCHEME } from '../utils/conservation-colors.generated.js';
 import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
 import { readLinearSeqWindows } from './drawing/inputs.js';
 import { readCanonicalRecordTranslations, readCanonicalSimilarityAlignmentPlan } from './linear-record-layout.js';
@@ -211,23 +212,17 @@ const listReading = (read, stored, dropped, leaves) => {
 };
 
 /**
- * @param {unknown} value
- * @param {string} [fallback]
- * @returns {FieldReading<string>}
+ * A ring's own colour (PD-OI-110): a colour reads as hand-set, so a Session up to 50, whose Web writer filled every
+ * ring, opens with the colours it was saved with; unset or '' (a CLI or Python ring without a colour) is null, the
+ * scheme's colour. A value that is no colour reads as null.
+ * @type {FieldReader<string | null>}
  */
-const normalizeHexColor = (value, fallback = '#4e79a7') => {
-  const resolved = String(resolveColorToHex(String(value || fallback).trim()) || fallback).trim();
-  const shortMatch = resolved.match(/^#([0-9a-fA-F]{3})$/);
-  if (shortMatch) {
-    return { value: `#${shortMatch[1].split('').map((char) => char + char).join('').toLowerCase()}`, lost: false };
-  }
-  return /^#[0-9a-fA-F]{6}$/.test(resolved) ? { value: resolved.toLowerCase(), lost: false } : { value: fallback, lost: true };
+const readRingColor = (value) => {
+  const color = normalizeOptionalHexColor(value);
+  return { value: color, lost: color === null && !isUnsetValue(value) };
 };
 const readGencode = numberOr(isPositiveInteger, 1);
-/**
- * @typedef {{ sourceKey: string, fileName: string, sourceIndex: number, label: string, color: string,
- *   losat_gencode: number }} ConservationSeries
- */
+/** @typedef {import('./conservation-series.js').ConservationSeriesEntry} ConservationSeries */
 /** @type {FieldReader<ConservationSeries[]>} */
 export const readConservationSeries = (value) => {
   const entries = Array.isArray(value) ? value : [];
@@ -237,8 +232,11 @@ export const readConservationSeries = (value) => {
   const series = [];
   entries.forEach((entry, index) => {
     if (!isPlainObject(entry)) return;
-    const color = normalizeHexColor(entry.color);
+    const color = readRingColor(entry.color);
     const gencode = readGencode(entry.losat_gencode);
+    // A ring without its scheme index (unset: before the Ring colors setting) takes its place in the list.
+    const schemeIndex = numberOr((index) => Number.isInteger(index) && index >= 0, series.length)(entry.schemeIndex);
+    if (schemeIndex.lost) leaves.push({ at: `[${index}].schemeIndex`, stored: entry.schemeIndex, used: schemeIndex.value });
     if (color.lost) leaves.push({ at: `[${index}].color`, stored: entry.color, used: color.value });
     if (gencode.lost) leaves.push({ at: `[${index}].losat_gencode`, stored: entry.losat_gencode, used: gencode.value });
     // A series without its file index (unset or blank) takes its place in the list.
@@ -250,6 +248,7 @@ export const readConservationSeries = (value) => {
       sourceIndex: sourceIndex.value,
       label: String(entry.label ?? entry.name ?? ''),
       color: color.value,
+      schemeIndex: schemeIndex.value,
       losat_gencode: gencode.value
     });
   });
@@ -772,6 +771,8 @@ const CONSERVATION_ROWS = Object.freeze([
   row('subject_gencode', numberOr(isPositiveInteger, 1)),
   row('reference', textChoice(['auto', 'query', 'subject'], 'auto')),
   { field: 'series', read: (value) => readConservationSeries(value), inPlace: true },
+  row('colorScheme', textChoice(Object.keys(CONSERVATION_COLOR_SCHEMES), CONSERVATION_DEFAULT_COLOR_SCHEME)),
+  row('reassignOnReorder', onlyTrue),
   row('ring_width', positiveNumberOrNull),
   row('ring_gap', positiveNumberOrNull)
 ]);

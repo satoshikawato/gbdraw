@@ -10,7 +10,9 @@ import {
   circularRingSources,
   isManagedConservationSlot,
   orderedConservationSources,
+  reassignRingColorsOnReorder,
   ringKeyAfter,
+  ringSwatchColor,
   safeConservationSlotId
 } from '../services/conservation-series.js';
 import {
@@ -585,6 +587,22 @@ export const editCircularFeatureDensityRows = (changeTrackLayout, drawing, edit,
  *   change and every stack edit run in: the drawn track's Legend rows leave and return with it (OV-1198, OV-1215;
  *   default: apply directly).
  */
+
+/**
+ * A stack move that re-assigns the rings' scheme colours after it while 「トラックを並び替えたら色を振り直す」 is on,
+ * in the move's own step (PD-OI-110); `sync` carries the new colours to the ring rows. A move that answers (a busy
+ * Session) moved nothing.
+ * @template {unknown[]} A
+ * @template R
+ * @param {(drawing: DrawingState, ...args: A) => R} move
+ * @param {(drawing: DrawingState) => void} sync
+ * @returns {(drawing: DrawingState, ...args: A) => R}
+ */
+const reassigningRingColors = (move, sync) => (drawing, ...args) => {
+  const answer = move(drawing, ...args);
+  if (!answer && reassignRingColorsOnReorder(drawing)) sync(drawing);
+  return answer;
+};
 
 // `changeTrackLayout` is the feature placement owner's transition, injected as
 // a port (R10, Q3, R13): every stack edit that can change the feature slot
@@ -1263,8 +1281,8 @@ export const createCircularTrackSlotEditor = ({
   };
 
   /** @param {unknown} fromIndex @param {unknown} toIndex */
-  const moveCircularTrackSlot = (fromIndex, toIndex) => {
-    const drawing = state.activeDrawing();
+  const moveCircularTrackSlot = (fromIndex, toIndex) => moveSlotOf(state.activeDrawing(), fromIndex, toIndex);
+  const moveSlotOf = reassigningRingColors((/** @type {DrawingState} */ drawing, /** @type {unknown} */ fromIndex, /** @type {unknown} */ toIndex) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (wouldCircularTrackSlotMoveCrossAxis(drawing, fromIndex, toIndex)) return;
@@ -1285,7 +1303,7 @@ export const createCircularTrackSlotEditor = ({
     const [moved] = drawing.adv.circular_track_slots.splice(from, 1);
     drawing.adv.circular_track_slots.splice(to, 0, moved);
     normalizeSlots(drawing);
-  };
+  }, syncConservationSlots);
 
   /** @param {DrawingState} drawing @param {unknown} index @param {unknown} direction */
   const canMoveSlotOf = (drawing, index, direction) => {
@@ -1344,8 +1362,7 @@ export const createCircularTrackSlotEditor = ({
     return drawing !== null && canMoveSlotToAxisOf(drawing, index);
   };
 
-  /** @param {DrawingState} drawing @param {unknown} index @param {unknown} placement */
-  const moveCircularTrackSlotToPlacement = (drawing, index, placement) => {
+  const moveCircularTrackSlotToPlacement = reassigningRingColors((/** @type {DrawingState} */ drawing, /** @type {unknown} */ index, /** @type {unknown} */ placement) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
@@ -1407,7 +1424,7 @@ export const createCircularTrackSlotEditor = ({
       drawing.adv.circular_track_slots_axis_index = onAxisIndex >= 0 ? onAxisIndex : axis;
     }
     normalizeSlots(drawing);
-  };
+  }, syncConservationSlots);
 
   /** @param {unknown} index */
   const moveCircularTrackSlotOutside = (index) => {
@@ -1701,9 +1718,9 @@ export const createCircularTrackSlotEditor = ({
     }
     return t('Legend label');
   };
-  /** @param {CircularTrackSlot | null | undefined} slot */
+  /** A ring row shows the colour its ring draws (`effectiveRingColor`). @param {CircularTrackSlot | null | undefined} slot */
   const circularTrackSlotColor = (slot) => {
-    if (isManagedConservationSlot(slot)) return String(slot?.params?.color || '').trim();
+    if (isManagedConservationSlot(slot)) return ringSwatchColor(String(slot?.params?.color || '').trim(), shownCircularDrawing());
     return '';
   };
 

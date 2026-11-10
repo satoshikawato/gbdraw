@@ -237,6 +237,34 @@ crop fields were filled from, or is empty, so a change made there stays through 
 record is chosen alone again; a stored config without the key reads as empty. The version does not change
 (Session 51 has not reached `main`).
 
+A Circular drawing of Session 51 stores the Ring colors setting of its comparison rings (PD-OI-110 scenario
+revision 3) in `config.circularConservation`: `colorScheme` (`"same"`, the default, `"ten"`, or `"per_five"`) and
+`reassignOnReorder` (`false` by default). Each `series[]` entry's `color` is the ring's own (hand-set) colour, a
+lowercase `#rrggbb`, or `null` when the ring takes the scheme's colour at its `schemeIndex` (an integer from 0; under
+`same` the ring draws the configured colour and the request sends `''`). Every colour that a Session up to 50 stores
+reads as hand-set, since its Web writer filled every ring, so it opens with the colours it was saved with; a missing
+`colorScheme` reads as `same`, a missing `schemeIndex` as the ring's place in the list, and an unset or `''` colour
+as `null`. A Session that the command line or the Python API saved, which has no Web draft, opens with its
+`objects.conservation.color_scheme` as `colorScheme` and its rings without a colour as `null`, each with its drawn
+position (the request's slot stack order) as `schemeIndex`; the config path is a Web-managed path, so it is no
+preserved setting and the Web never writes it back. A Session 50 that a gbdraw 0.14.4 or 0.14.5 Web Save wrote after it
+opened such a Session kept the scheme as a preserved override of its Circular draft
+(`unmanagedConfigOverrides["objects.conservation.color_scheme"]`); Load moves it into `colorScheme` with no dialog row.
+That Web had filled every ring with `#4e79a7` (OV-3054): while the draft's stored request is a Circular request that
+names no ring colour (`diagramOptions.conservationColors`) and whose slot stack the projection can read, a ring colour
+`#4e79a7` reads as `null` with the drawn position of its request ring (the request's slot stack order, as for a
+Session without a Web draft) as `schemeIndex`. A series entry finds its request ring by the key of the ring's file
+among the request's ring files (`ringKeysOfFiles` over `conservationBlastFiles` and their resources), else by the
+file's name (the entries a CLI Session's projection wrote hold an empty `sourceKey`), never by its place in the series,
+which the user may have changed before the Save; an entry no request ring names keeps its colour. A request that names
+ring colours, a request whose slot stack cannot be read (the projection refuses it), and a draft with no Circular
+request (a Session 46-50 whose one request is Linear, a flat draft whose request is Linear, or none), keep the draft's
+ring colours as its rings' own. Sessions up to 50 (gbdraw 0.14.5) kept the
+copy numbers of a ring's `sourceKey` (the order of copies of one file, same name, size and date) in the file order
+before the Generate, so after a copy moved the keys of two copies are swapped against their places (OV-3238). Load
+needs no repair: a key two copies share is ambiguous, so each series entry finds its ring by its stored place
+(`sourceIndex`, `conservationSourcesOfSeries`). The version does not change (Session 51 has not reached `main`).
+
 The mode-scoped registry names the first Session version of each row (`since`, 46 unless a later Session added the
 row). `config.form.figure_width`, `config.form.figure_height`, `config.form.circular_windows`,
 `config.form.circular_record_ranges` and `config.form.circular_range_fields_record` are `since` 51: no

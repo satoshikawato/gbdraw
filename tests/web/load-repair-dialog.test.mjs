@@ -1718,7 +1718,7 @@ test('a History restore reads a blank as the reader\'s default, other values as 
     ['average_identity', 'all', 'adjacent']);
   assert.deepEqual([state.losatExecution.executionMode, state.losatExecution.totalThreadBudget], ['auto', 'safe']);
   assert.deepEqual([circularConservation.source, circularConservation.series.map(({ color, losat_gencode, sourceIndex }) => [color, losat_gencode, sourceIndex])],
-    ['upload', [['#4e79a7', 1, 0]]]);
+    ['upload', [[null, 1, 0]]]);
   assert.deepEqual([drawing.linearRecordLayoutEnabled.value, drawing.linearRecordGap.value, [...drawing.linearRecordRows]],
     [true, 24, [{ uid: 'a', row: 2 }, { uid: 'b', row: 3, canonicalRow: 3, canonicalColumn: 1 }]]);
   assert.equal(drawing.importedComparisonIntent.action, null);

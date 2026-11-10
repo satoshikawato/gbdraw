@@ -1,0 +1,19 @@
+{
+  "purpose": "Positive fixture of the released flat Session 50 (tag v0.14.5) that the tag's Web app wrote after a ring Generate in which a second copy of one comparison file had moved outward: the tag kept each series entry's copy number of the file order, so the copies' sourceKey suffixes are swapped against their ring places (OV-3238). Load matches the copies by their stored places (sourceIndex; conservationSourcesOfSeries in gbdraw/web/js/services/conservation-series.js).",
+  "sourceCommit": "033a3aa89",
+  "history": "release tag v0.14.5 (first-parent main)",
+  "route": "From a worktree at tag v0.14.5: tools/prepare_browser_wheel.py, tools/serve_web_tests.py, then the Python Playwright script drives the real controls (the page made cross-origin isolated by a route, as tests/web/helpers/app-lifecycle.cjs routeCrossOriginIsolated does) and saves the Save Session download as is.",
+  "webWriter": "python3 /home/kawato/gbdraw-baselines/conservation-ring-colors-impl-20261028/scripts/write_v0145_losat_ring_fixture.py <port> <out-dir>, inputs in /home/kawato/gbdraw-baselines/conservation-ring-colors-impl-20261028/scripts/v0145-fixture-inputs/",
+  "steps": "Circular; load ref.gbk; Pairwise Comparisons > Run LOSAT > TLOSATX; add a.fna, a.fna, b.fna; ring 1 colour #ff0000 and genetic code 4; ring 2 colour #00ff00 and genetic code 11; Move series outward on ring 2; Generate; Save Session.",
+  "inputs": {
+    "ref.gbk (= tests/test_inputs/HmmtDNA.gbk)": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f",
+    "a.fna (HmmtDNA bases 1-6000)": "626ca27b560f4e343ca83d4f907630152c2113c77749c5ab6980e85e09c9cce0",
+    "b.fna (HmmtDNA bases 5001-11000)": "c5409a15f57d49f39aca2dbc5c37f43de26635ac9618e6bef37275c1182cecce"
+  },
+  "values": "modes.circular.config.circularConservation.series, outer to inner: a.fna|6105|1794291350724|1 sourceIndex 0 #00ff00 gencode 11; a.fna|6105|1794291350724|0 sourceIndex 1 #ff0000 gencode 4; b.fna|6109|1794291350724|0 sourceIndex 2 #77b26f gencode 1",
+  "decompressedSha256": "8b9d53299e683bee642bed370686df29c00245d0cb99d98454685f46ad7d2189",
+  "sha256": "ff10706ff613b5f2b2c97c3da471c135a2bfd5e7f9baeafce6ac43704ae01f26",
+  "compression": "as the v0.14.5 app downloaded it",
+  "sessionVersion": 50,
+  "requestSchema": 9
+}

@@ -245,6 +245,154 @@ test('a wrap length a v0.14.5 Web Save kept as a preserved override loads into W
   assert.equal(requestLeaf(drawing, 'canvas.linear.wrap_length'), 5000);
 });
 
+// PD-OI-110: tag v0.14.5's Web had no Ring colors, so a Save after it loaded a
+// CLI Session saved with `--conservation_color_scheme ten` kept the scheme as a
+// preserved override of the Circular draft, and filled every ring with #4e79a7
+// (OV-3054). Load moves the scheme into the drawing's Ring colors setting with no
+// dialog row. While the stored request names no ring colour, its rings drew the
+// scheme's, so the fill is no colour of the ring's own (D-38): the rings open, and
+// Generate draws them, in the scheme's colours, as the CLI replays the request.
+// A request that names ring colours (a Generate in that Web before the Save)
+// drew them: they stay the rings' own.
+const ringSchemeSession = () => JSON.parse(gunzipSync(readFileSync(new URL(
+  '../fixtures/sessions/web-ring-color-scheme-preserved.v50.gbdraw-session.json.gz', import.meta.url
+))));
+/** @param {Record<string, any>} session */
+const loadRingSchemeSession = async (session) => {
+  /** @type {unknown[]} */
+  const dialogs = [];
+  const loaded = await importSession({
+    target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' }
+  }, { confirmLoadRepairs: async (dialog) => { dialogs.push(dialog); return true; }, installLoadedArtifactSlots: () => {} });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(loaded.repairs, [], 'no dialog row');
+  assert.deepEqual(dialogs, []);
+  const circular = state.drawingOf('circular');
+  assert.equal(circular.circularConservation.colorScheme, 'ten');
+  assert.deepEqual({ ...circular.unmanagedConfigOverrides }, {});
+  return circular;
+};
+/** @param {Record<string, any>} circular */
+const requestRingColors = async (circular) => {
+  const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
+  const filesData = await sessionConfig.serializeActiveRenderFiles(state, circular);
+  const request = buildCanonicalRenderRequest({ state, drawing: circular, filesData }).renderRequest.diagramOptions;
+  assert.equal(Object.hasOwn(request.configOverrides ?? {}, 'objects.conservation.color_scheme'), false);
+  return request.conservationColors;
+};
+
+test('a ring scheme a v0.14.5 Web Save kept as a preserved override loads into Ring colors, the OV-3054 fill as no colour', async () => {
+  const { orderedConservationSources } = await import('../../gbdraw/web/js/services/conservation-series.js');
+  const { CONSERVATION_COLOR_SCHEMES } = await import('../../gbdraw/web/js/utils/conservation-colors.generated.js');
+  const session = ringSchemeSession();
+  assert.equal(session.version, 50);
+  const stored = session.modes.circular.config;
+  assert.deepEqual(stored.unmanagedConfigOverrides, { 'objects.conservation.color_scheme': 'ten' });
+  assert.equal(Object.hasOwn(stored.circularConservation, 'colorScheme'), false);
+  assert.deepEqual(stored.circularConservation.series.map((entry) => entry.color), ['#4e79a7', '#4e79a7', '#4e79a7']);
+  assert.equal(Object.hasOwn(session.renderRequest.diagramOptions, 'conservationColors'), false, 'the request names no ring colour');
+  // The stored Result: the v0.14.5 CLI's ten colours of its time, one per ring.
+  const storedResultColors = [...session.results[0].content.matchAll(/data-gbdraw-slot-renderer="sequence_conservation" data-source-index="(\d)" data-track-color="(#[0-9a-f]{6})"/g)]
+    .map((match) => match[2]);
+  assert.deepEqual(storedResultColors, ['#6e91b7', '#f4a251', '#8fc4c0']);
+
+  const circular = await loadRingSchemeSession(session);
+  assert.deepEqual(circular.circularConservation.series.map(({ color, schemeIndex }) => [color, schemeIndex]),
+    [[null, 0], [null, 1], [null, 2]], 'no ring has a colour of its own, so Use the scheme color is not offered');
+  const ten = CONSERVATION_COLOR_SCHEMES.ten.slice(0, 3);
+  // The panel swatches and the request read one owner (`effectiveRingColor`): the scheme's colours. The ten
+  // colours are the current ones (PD-OI-110 TEN-CALM), which the CLI draws for this request too.
+  assert.deepEqual(orderedConservationSources(circular.files.c_conservation_blasts, circular.circularConservation)
+    .map(({ color }) => color), ten);
+  assert.deepEqual(await requestRingColors(circular), ten, 'Generate draws the scheme colours of each ring\'s place');
+  const saved = await savedDocument('web-ring-scheme-preserved', () => []);
+  const drawing = saved.drawings.find((entry) => entry.mode === 'circular');
+  assert.equal(drawing.config.circularConservation.colorScheme, 'ten');
+  assert.deepEqual(drawing.config.unmanagedConfigOverrides ?? {}, {});
+  assert.deepEqual(drawing.config.circularConservation.series.map(({ color, schemeIndex }) => [color, schemeIndex]),
+    [[null, 0], [null, 1], [null, 2]]);
+});
+
+test('a v0.14.5 Web Session whose request names its ring colours keeps them as the rings\' own', async () => {
+  const session = ringSchemeSession();
+  const named = ['#4e79a7', '#4e79a7', '#4e79a7'];
+  session.renderRequest.diagramOptions.conservationColors = named;
+  const circular = await loadRingSchemeSession(session);
+  assert.deepEqual(circular.circularConservation.series.map((entry) => entry.color), named);
+  assert.deepEqual(await requestRingColors(circular), named, 'Generate draws the colours the request named');
+});
+
+// D-38 takes the scheme colour of each ring's drawn position, as the CLI replay of the stored request draws it: a
+// stack that draws the second ring outside the first gives the second ring the first colour.
+test('a v0.14.5 Web Session whose stack reorders the rings opens with the colours the CLI replay draws', async () => {
+  const { orderedConservationSources } = await import('../../gbdraw/web/js/services/conservation-series.js');
+  const { projectCanonicalSessionRequest, promoteCanonicalRenderRequestToCurrent } = await import('../../gbdraw/web/js/services/session-request.js');
+  const session = ringSchemeSession();
+  const slot = (id, renderer, params) => ({ kind: 'circularTrackSlot', id, renderer, enabled: true, side: null, radius: null,
+    width: null, z: 0, params, innerGapPx: null, outerGapPx: null });
+  const ring = (trackIndex) => slot(`ring_${trackIndex}`, 'sequence_conservation', { track_index: String(trackIndex) });
+  session.renderRequest.diagramOptions.tracks.circularTrackSlots = [slot('features', 'features', {}), ring(2), ring(1), ring(3)];
+  const replay = projectCanonicalSessionRequest({
+    renderRequest: promoteCanonicalRenderRequestToCurrent(structuredClone(session.renderRequest)), resources: session.resources
+  }).config.circularConservation;
+  assert.deepEqual(replay.series.map(({ schemeIndex }) => schemeIndex), [1, 0, 2], 'the CLI replay: ring 2 is drawn outermost');
+  const circular = await loadRingSchemeSession(session);
+  assert.deepEqual(circular.circularConservation.series.map(({ color, schemeIndex }) => [color, schemeIndex]),
+    [[null, 1], [null, 0], [null, 2]]);
+  const drawn = (conservation) => orderedConservationSources(circular.files.c_conservation_blasts, conservation).map(({ color }) => color);
+  assert.deepEqual(drawn(circular.circularConservation), drawn(replay), 'the colours equal the CLI replay\'s');
+});
+
+// D-38 releases the fill only when the draft's Circular request is known to name no ring colour. A draft without a
+// Circular request (a Session 46-50 whose one request is Linear, a flat draft whose request is Linear, or none) keeps
+// its ring colours: what its rings drew is not known.
+test('a v0.14.5 Web Session without a Circular request keeps its ring colours', async () => {
+  const { adoptPromotedPreservedOverrides } = await import('../../gbdraw/web/js/services/session-request.js');
+  const session = ringSchemeSession();
+  const stored = session.modes.circular.config;
+  const linearRequest = { mode: 'linear', diagramOptions: {} };
+  for (const [mode, request] of [[null, linearRequest], ['circular', null], [null, null]]) {
+    const { config } = adoptPromotedPreservedOverrides(structuredClone(stored), {}, mode, request, session.resources);
+    assert.equal(config.circularConservation.colorScheme, 'ten');
+    assert.deepEqual(config.circularConservation.series.map(({ color }) => color), ['#4e79a7', '#4e79a7', '#4e79a7'],
+      `${mode ?? 'flat'} draft, ${request ? 'Linear' : 'no'} request`);
+  }
+  const { config } = adoptPromotedPreservedOverrides(structuredClone(stored), {}, null, session.renderRequest, session.resources);
+  assert.deepEqual(config.circularConservation.series.map(({ color }) => color), [null, null, null],
+    'a flat draft whose request is Circular releases the fill');
+});
+
+// D-38 pairs each draft ring with the request ring it drew by the ring's file (its key, else, as the entries a CLI
+// Session's projection wrote hold no key, its name), never by place: a 0.14.5 user who moved the rings and saved
+// without a Generate gets each ring's own drawn colour. An entry no request ring names keeps its colour.
+test('a v0.14.5 Web Session whose rings moved after the CLI drew them opens with each ring\'s drawn colour', async () => {
+  const { adoptPromotedPreservedOverrides } = await import('../../gbdraw/web/js/services/session-request.js');
+  const session = ringSchemeSession();
+  const stored = session.modes.circular.config;
+  const [ring1, ring2, ring3] = stored.circularConservation.series;
+  assert.deepEqual([ring1, ring2, ring3].map(({ sourceKey, fileName }) => [sourceKey, fileName]),
+    [['', 'ring1.blast'], ['', 'ring2.blast'], ['', 'ring3.blast']], 'the 0.14.5 draft holds no keys');
+  const moved = structuredClone(stored);
+  moved.circularConservation.series = [ring3, ring1, ring2, { ...ring2, fileName: 'gone.blast', label: 'gone' }];
+  const { config } = adoptPromotedPreservedOverrides(moved, {}, 'circular', session.renderRequest, session.resources);
+  assert.deepEqual(config.circularConservation.series.map(({ label, color, schemeIndex }) => [label, color, schemeIndex ?? null]),
+    [['ring3', null, 2], ['ring1', null, 0], ['ring2', null, 1], ['gone', '#4e79a7', null]]);
+  // Two BLAST files of one name, the rings moved without a Generate: each entry takes the ring of its file name at its
+  // `sourceIndex` (the request ring it was read from), not the first one in series order.
+  const sameName = structuredClone(session);
+  for (const id of ['conservation-blast-files-1', 'conservation-blast-files-2']) sameName.resources[id].name = 'same.blast';
+  const twins = structuredClone(stored);
+  twins.circularConservation.series = [{ ...ring2, fileName: 'same.blast' }, { ...ring1, fileName: 'same.blast' }, ring3];
+  const { config: byIndex } = adoptPromotedPreservedOverrides(twins, {}, 'circular', sameName.renderRequest, sameName.resources);
+  assert.deepEqual(byIndex.circularConservation.series.map(({ label, schemeIndex }) => [label, schemeIndex]),
+    [['ring2', 1], ['ring1', 0], ['ring3', 2]]);
+  // An entry that holds the key of its ring's file finds it by the key, whatever its name.
+  const keyed = structuredClone(stored);
+  keyed.circularConservation.series = [{ ...ring2, sourceKey: 'ring1.blast|161|1794278967325|0', fileName: 'renamed' }];
+  const { config: byKey } = adoptPromotedPreservedOverrides(keyed, {}, 'circular', session.renderRequest, session.resources);
+  assert.deepEqual(byKey.circularConservation.series.map(({ color, schemeIndex }) => [color, schemeIndex]), [[null, 0]]);
+});
+
 test('a Session 50 that lists drawings (never released) is refused with a message', async () => {
   const saved = await savedDocument('combined-50', () => []);
   const loaded = await importSession({

@@ -501,9 +501,8 @@ into the `[Unreleased]` list below.
 - Changed: the `ten` similarity-ring colors are calmer. The blue is lighter
   (`#81a5cc`), and the orange, red, green and yellow are less saturated
   (`#e5a972`, `#d38282`, `#7cb075`, `#ead487`); the other five stay. The Web's
-  automatic ring colors come from the same list, so new rings in the Web take
-  the new colors. A ring that already has its own color keeps it, so Web
-  Sessions open unchanged. A CLI or Python Session saved with
+  **10 colors** under **Ring colors** come from the same list. A ring that
+  already has its own color keeps it, so Web Sessions open unchanged. A CLI or Python Session saved with
   `--conservation_color_scheme ten` and rings without their own colors now
   opens with the new colors. To draw the old ones, give them in ring order
   with `--conservation_colors '#6e91b7' '#f4a251' '#8fc4c0' '#e67577'

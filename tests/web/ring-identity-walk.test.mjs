@@ -113,10 +113,11 @@ const seeded = (seed) => () => {
 };
 
 /**
- * The walk's model: each ring by its own id, with its files' bases, its label, colour and LOSAT genetic code, its
+ * The walk's model: each ring by its own id, with its files' bases, its label, own colour (or null) and scheme index
+ * (PD-OI-110) and LOSAT genetic code, its
  * stack row's id and width once the stack has made it, and whether a Load lost its genome while its replayed table
  * stays (`lost`: drawn from its table, not searched by the next Generate).
- * @typedef {{ id: number, bases: Set<string>, label: string, color: string, code: number,
+ * @typedef {{ id: number, bases: Set<string>, label: string, color: string | null, schemeIndex: number, code: number,
  *   row: { id: string, width: unknown } | null, lost: boolean }} ModelRing
  */
 
@@ -140,7 +141,8 @@ const drawnRings = async (drawing) => {
   return Promise.all(drawn.map(async (source, index) => ({
     bases: await Promise.all((genomes[index] || []).map(async (file) => basesOfText(await readFileText(state.inputFiles.fileOf(file))))),
     label: source.label,
-    color: source.color,
+    color: source.ownColor,
+    schemeIndex: source.schemeIndex,
     code: source.losat_gencode,
     row: ringRows(drawing).find((slot) => String(slot.params.series_key) === source.sourceKey) || null
   })));
@@ -184,7 +186,7 @@ const runWalk = async (seed, steps) => {
         ? ring.bases.length === 0
         : ring.bases.length > 0 && ring.bases.every((bases) => expected.bases.has(bases)) && ring.bases.length === expected.bases.size,
       `ring ${index} draws ring ${expected.id}'s files (${where})`);
-      assert.deepEqual([ring.label, ring.color, ring.code], [expected.label, expected.color, expected.code],
+      assert.deepEqual([ring.label, ring.color, ring.schemeIndex, ring.code], [expected.label, expected.color, expected.schemeIndex, expected.code],
         `ring ${expected.id}'s label, colour and genetic code (${where})`);
       if (drawing.adv.circular_track_slots_enabled !== true) return;
       assert.ok(ring.row, `ring ${expected.id} has its stack row (${where})`);
@@ -213,7 +215,7 @@ const runWalk = async (seed, steps) => {
   const newRingOf = (index, bases) => {
     const entry = drawing.circularConservation.series[index];
     ringCount += 1;
-    return { id: ringCount, bases: new Set([bases]), label: entry.label, color: entry.color, code: entry.losat_gencode, row: null, lost: false };
+    return { id: ringCount, bases: new Set([bases]), label: entry.label, color: entry.color, schemeIndex: entry.schemeIndex, code: entry.losat_gencode, row: null, lost: false };
   };
   /** A change of the genome files leaves a LOSAT-cache replay: a ring whose genome a Load lost goes with its table. */
   const leaveReplay = () => { model = model.filter((ring) => !ring.lost); };
@@ -283,7 +285,7 @@ const runWalk = async (seed, steps) => {
         // Half of the labels hold a comma, which no stored list may split into another ring's name (OV-3193).
         entry.label = random() < 0.5 ? `ring ${model[index].id}, strain K-${model[index].id}` : `ring ${model[index].id}`;
         entry.color = `#00${String(model[index].id).padStart(2, '0')}aa`;
-        panel.refreshShownCircularConservationSlots();
+        panel.refreshCircularConservationSlots();
         Object.assign(model[index], { label: entry.label, color: entry.color });
       }
     },

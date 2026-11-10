@@ -733,3 +733,32 @@ test('re-picked tables of other names are named after their files, not after the
   panel.setCircularConservationUploadFiles([]);
   panel.changeCircularConservationSource('losat');
 });
+
+// PD-OI-110 (D-21): under Same color the re-assignment controls are disabled, and disabled has no effect. A move of
+// the series arrows with 「トラックを並び替えたら色を振り直す」 on re-assigns under 10 colors, not under Same color, so
+// the indexes are those before the move when 10 colors comes back.
+test('a series move re-assigns the scheme colours with the checkbox on, except under Same color', async () => {
+  const drawing = circular();
+  for (const name of ['a.fasta', 'b.fasta', 'c.fasta']) await addSeq(name);
+  const indexes = () => drawing.circularConservation.series.map(({ fileName, schemeIndex }) => [fileName, schemeIndex]);
+  assert.deepEqual(indexes(), [['a.fasta', 0], ['b.fasta', 1], ['c.fasta', 2]]);
+  panel.setCircularConservationColorScheme('ten');
+  panel.setCircularConservationReassignOnReorder(true);
+  panel.moveCircularConservationSeries(2, -1);
+  assert.deepEqual(indexes(), [['a.fasta', 0], ['c.fasta', 1], ['b.fasta', 2]], '10 colors re-assigns in the new order');
+
+  panel.setCircularConservationColorScheme('same');
+  panel.moveCircularConservationSeries(2, -1);
+  assert.deepEqual(ringNames(), ['a.fasta', 'b.fasta', 'c.fasta']);
+  panel.setCircularConservationColorScheme('ten');
+  assert.deepEqual(indexes(), [['a.fasta', 0], ['b.fasta', 2], ['c.fasta', 1]], 'Same color kept the indexes of before the move');
+  panel.reassignCircularConservationColors();
+  assert.deepEqual(indexes(), [['a.fasta', 0], ['b.fasta', 1], ['c.fasta', 2]]);
+  panel.setCircularConservationColorScheme('same');
+  panel.moveCircularConservationSeries(1, 1);
+  panel.reassignCircularConservationColors();
+  assert.deepEqual(indexes(), [['a.fasta', 0], ['c.fasta', 2], ['b.fasta', 1]], 'the button does nothing under Same color');
+
+  panel.setCircularConservationReassignOnReorder(false);
+  while (drawing.circularConservation.series.length > 0) comparisonFiles.removeCircularConservationSource(0);
+});

@@ -2023,10 +2023,13 @@ const adoptRequestLegendEdits = (data, parser = globalThis.DOMParser) => {
  * @returns {T}
  */
 const adoptPromotedPreservedSettings = (data, repairs, leafReadings) => {
-  const document = /** @type {{ config?: unknown, modes?: unknown, drawings?: unknown }} */ (data);
-  /** @param {unknown} config @param {string} path */
-  const adopt = (config, path) => {
-    const adoption = adoptPromotedPreservedOverrides(config, leafReadings);
+  const document = /** @type {{ config?: unknown, modes?: unknown, drawings?: unknown, renderRequest?: unknown, resources?: unknown }} */ (data);
+  /**
+   * @param {unknown} config @param {string} path @param {'circular' | 'linear' | null} mode
+   * @param {unknown} request The stored request of the draft's mode, or null.
+   */
+  const adopt = (config, path, mode, request) => {
+    const adoption = adoptPromotedPreservedOverrides(config, leafReadings, mode, request, document.resources ?? null);
     // The cast: the adoption changes only a plain object.
     const stored = /** @type {Record<string, unknown>} */ (config);
     for (const container of adoption.containers) repairs.push(...valueRepairs(readPlainObject, stored[container], `${path}.${container}`));
@@ -2036,7 +2039,7 @@ const adoptPromotedPreservedSettings = (data, repairs, leafReadings) => {
   /** @type {{ config?: unknown, modes?: unknown, drawings?: unknown }} */
   let adopted = document;
   if (isPlainObject(document.config)) {
-    const config = adopt(document.config, 'config');
+    const config = adopt(document.config, 'config', null, document.renderRequest ?? null);
     if (config !== document.config) adopted = { ...adopted, config };
   }
   if (isPlainObject(document.modes)) {
@@ -2045,7 +2048,9 @@ const adoptPromotedPreservedSettings = (data, repairs, leafReadings) => {
     for (const mode of SLICE_MODES) {
       const slice = /** @type {{ config?: unknown }} */ (modes[mode]);
       if (!isPlainObject(slice) || !isPlainObject(slice.config)) continue;
-      const config = adopt(slice.config, `modes.${mode}.config`);
+      // A Session 46-50 holds one request, of its Result's mode.
+      const request = isPlainObject(document.renderRequest) && document.renderRequest.mode === mode ? document.renderRequest : null;
+      const config = adopt(slice.config, `modes.${mode}.config`, mode, request);
       if (config === slice.config) continue;
       modes[mode] = { ...slice, config };
       changed = true;
@@ -2055,7 +2060,9 @@ const adoptPromotedPreservedSettings = (data, repairs, leafReadings) => {
   if (Array.isArray(document.drawings)) {
     const entries = document.drawings.map((entry, index) => {
       if (!isPlainObject(entry) || !isPlainObject(entry.config)) return entry;
-      const config = adopt(entry.config, `${drawingSetPath(index)}config`);
+      // A drawing whose mode is no mode is refused later; its draft is read as a flat one here.
+      const mode = entry.mode === 'circular' || entry.mode === 'linear' ? entry.mode : null;
+      const config = adopt(entry.config, `${drawingSetPath(index)}config`, mode, entry.renderRequest ?? null);
       return config === entry.config ? entry : { ...entry, config };
     });
     if (entries.some((entry, index) => entry !== /** @type {unknown[]} */ (document.drawings)[index])) adopted = { ...adopted, drawings: entries };
@@ -3429,13 +3436,14 @@ const buildLoadedArtifactSlot = (set, {
     matchSequenceOwner: state.matchSequenceRegistry?.buildSourceOwner?.([
       ...(features.sequenceSources || []), ...restoredSequenceSources
     ]) || null,
-    runtimeState: { canonical: {
+    // The artifact's committed request, as `canonicalRenderArtifactOwner` restores it.
+    runtimeState: { canonical: /** @satisfies {CanonicalArtifactState} */ ({
       committedCanonicalSession: adoptRuntimeCanonicalSession({
         renderRequest: set.renderRequest, resources, webFiles: isPlainObject(webFiles) ? webFiles : {}
       }),
       activeSessionResourceTable: resourceTable,
       conservationPairs
-    } },
+    }) },
     retainedBytes
   });
 };

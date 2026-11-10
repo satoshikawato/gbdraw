@@ -1,8 +1,11 @@
 // @ts-check
-import { CONSERVATION_TEN_COLORS } from '../utils/conservation-colors.generated.js';
-import { resolveColorToHex } from '../utils/color-utils.js';
+import {
+  CONSERVATION_COLOR_SCHEMES, CONSERVATION_DEFAULT_COLOR_SCHEME, CONSERVATION_MAX_COLOR_PATH, CONSERVATION_SAME_COLOR
+} from '../utils/conservation-colors.generated.js';
+import { normalizeOptionalHexColor } from '../utils/color-utils.js';
 import { ringGenomeFileLists } from './drawing/inputs.js';
 /** @import { InputFileRef } from './history-files.js' */
+/** @import { ConservationColorScheme } from '../utils/conservation-colors.generated.js' */
 
 /**
  * What a comparison source slot holds, as these helpers read it (its name,
@@ -12,19 +15,32 @@ import { ringGenomeFileLists } from './drawing/inputs.js';
  */
 
 /**
- * One comparison ring: the source file it reads and how it is drawn.
+ * One comparison ring: the source file it reads and how it is drawn. `color` is the ring's own colour (hand-set,
+ * lowercase #rrggbb), or null when it takes the colour of the drawing's Ring colors scheme at `schemeIndex`
+ * (`effectiveRingColor`, PD-OI-110).
  * @typedef {{
- *   sourceKey: string, fileName: string, sourceIndex: number, label: string, color: string, losat_gencode: number
+ *   sourceKey: string, fileName: string, sourceIndex: number, label: string, color: string | null,
+ *   schemeIndex: number, losat_gencode: number
  * }} ConservationSeriesEntry
  */
 /**
  * A series entry as a Session or an older draft holds it: every field is unvalidated.
  * @typedef {{
  *   sourceKey?: unknown, fileName?: unknown, sourceIndex?: unknown, label?: unknown, name?: unknown,
- *   color?: unknown, losat_gencode?: unknown
+ *   color?: unknown, schemeIndex?: unknown, losat_gencode?: unknown
  * }} RawConservationSeriesEntry
  */
-/** @typedef {{ series?: RawConservationSeriesEntry[] | null, labels?: unknown }} CircularConservationLike */
+/**
+ * The comparison rings of a drawing as these helpers read them: the series, the legacy names, and the Ring colors
+ * scheme (`colorScheme`; unset or unknown reads as `same`).
+ * @typedef {{ series?: RawConservationSeriesEntry[] | null, labels?: unknown, colorScheme?: unknown }} CircularConservationLike
+ */
+/**
+ * A ring as the request, the managed stack row, and the panel read it: `color` is the colour it draws
+ * (`effectiveRingColor`), or '' when it draws the configured colour (`same`), as Python reads ''.
+ * @typedef {Omit<ConservationSeriesEntry, 'sourceKey' | 'fileName' | 'sourceIndex' | 'color' | 'schemeIndex'>
+ *   & { color: string }} DrawnRingFields
+ */
 /**
  * One comparison source: `files` are what it reads, `file` the first of them, which names it (its file name, its
  * default label). A BLAST table is a source of one file; a ring's comparison genome is a source of its files, in the
@@ -40,15 +56,161 @@ import { ringGenomeFileLists } from './drawing/inputs.js';
  * @typedef {F | readonly (F | null)[] | null | undefined} ConservationSourcePlace
  */
 /**
+ * A ring in drawn order: its source, the fields it draws, its place, and the colour fields of the series entry it
+ * reads (`ownColor`, the entry's own colour or null, and `schemeIndex`), which a Generate's adoption gives back to the
+ * ring it searched (the request holds only the drawn colour).
  * @template {ConservationFile} [F=ConservationFile]
- * @typedef {ConservationSourceDescriptor<F> & Omit<ConservationSeriesEntry, 'sourceKey' | 'fileName' | 'sourceIndex'> & { orderIndex: number }} OrderedConservationSource
+ * @typedef {ConservationSourceDescriptor<F> & DrawnRingFields
+ *   & { orderIndex: number, ownColor: string | null, schemeIndex: number }} OrderedConservationSource
  */
 
 export const CONSERVATION_SLOT_MANAGER = 'circular_conservation';
 
-// The colour of a row without one, by position, repeating: the colours of
-// Python's `ten` ring scheme, in the order the Web has always given them.
-const CONSERVATION_SERIES_COLORS = [0, 1, 5, 3, 2, 7, 6, 9, 8, 4].map((index) => CONSERVATION_TEN_COLORS[index]);
+/**
+ * The Ring colors scheme a stored value names, else the default (`CONSERVATION_DEFAULT_COLOR_SCHEME`, Python's).
+ * @param {unknown} value
+ * @returns {ConservationColorScheme}
+ */
+export const readRingColorScheme = (value) => (
+  typeof value === 'string' && Object.hasOwn(CONSERVATION_COLOR_SCHEMES, value)
+    ? /** @type {ConservationColorScheme} */ (value) : CONSERVATION_DEFAULT_COLOR_SCHEME
+);
+
+/**
+ * The one owner of the colour a comparison ring draws (PD-OI-110): its own colour (hand-set) on every scheme, else
+ * the scheme's colour at its `schemeIndex`, repeating, else null under `same` (the configured colour). The panel,
+ * the managed stack row, and the request read it through `orderedConservationSources`.
+ * @param {RawConservationSeriesEntry | null | undefined} entry
+ * @param {unknown} scheme
+ * @returns {string | null}
+ */
+export const effectiveRingColor = (entry, scheme) => {
+  const own = normalizeOptionalHexColor(entry?.color);
+  if (own) return own;
+  const cycle = CONSERVATION_COLOR_SCHEMES[readRingColorScheme(scheme)];
+  if (cycle.length === 0) return null;
+  return cycle[readSchemeIndex(entry?.schemeIndex, 0) % cycle.length];
+};
+
+/**
+ * What the Same color colour reads of a drawing: the configuration values its Session or request stored that the
+ * Web does not manage, by dotted config path (the drawing's preserved settings).
+ * @typedef {{ readonly unmanagedConfigOverrides: Readonly<Record<string, unknown>> }} SameRingColorDrawing
+ */
+/**
+ * The colour a swatch shows for a ring colour: for a ring that draws the configured colour ('' or null), the
+ * drawing's `objects.conservation.max_color` (a preserved setting), else the packaged one, as Python draws it.
+ * @param {string | null | undefined} color
+ * @param {SameRingColorDrawing | null} drawing
+ */
+export const ringSwatchColor = (color, drawing) => color
+  || normalizeOptionalHexColor(drawing?.unmanagedConfigOverrides[CONSERVATION_MAX_COLOR_PATH])
+  || CONSERVATION_SAME_COLOR;
+
+/**
+ * A stored scheme index: an integer from 0, else `fallback` (the ring's place).
+ * @param {unknown} value
+ * @param {number} fallback
+ */
+export const readSchemeIndex = (value, fallback) => (
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback
+);
+
+/**
+ * The scheme index a new ring takes (D-05): the first that no ring of the series uses, so a ring added after a
+ * removal takes the freed colour.
+ * @param {readonly { schemeIndex?: unknown }[]} series
+ */
+const firstUnusedSchemeIndex = (series) => {
+  const used = new Set(series.map((entry) => entry.schemeIndex));
+  let index = 0;
+  while (used.has(index)) index += 1;
+  return index;
+};
+
+/**
+ * A track slot as the drawn order reads it: a Web stack row or a request's slot.
+ * @typedef {{ renderer?: unknown, enabled?: unknown, params?: { track_index?: unknown } | null }} RingSlot
+ */
+/**
+ * Each series place's drawn position (outermost first), as Python counts it for the scheme colours
+ * (`_drawn_ring_colors`): the enabled `sequence_conservation` slots in stack order, each naming its ring by
+ * `params.track_index` (the 1-based series place); without a stack (`slots` null), the series order. A ring no slot
+ * draws follows the drawn ones, in series order.
+ * @param {number} count The number of series entries.
+ * @param {readonly RingSlot[] | null} slots
+ * @returns {number[]}
+ */
+export const ringDrawnPositions = (count, slots) => {
+  /** @type {number[]} */
+  const drawn = [];
+  (slots || []).forEach((slot) => {
+    if (slot?.enabled === false || slot?.renderer !== 'sequence_conservation') return;
+    const place = Number(slot.params?.track_index ?? 0) - 1;
+    if (Number.isInteger(place) && place >= 0 && place < count && !drawn.includes(place)) drawn.push(place);
+  });
+  if (slots === null) drawn.splice(0, drawn.length, ...Array.from({ length: count }, (_, place) => place));
+  for (let place = 0; place < count; place += 1) if (!drawn.includes(place)) drawn.push(place);
+  /** @type {number[]} */
+  const positions = new Array(count).fill(0);
+  drawn.forEach((place, position) => { positions[place] = position; });
+  return positions;
+};
+
+/**
+ * A ring's own colour (hand-set, lowercase #rrggbb), or null when it takes the scheme's colour.
+ * @param {{ color?: unknown } | null | undefined} entry
+ */
+export const ringOwnColor = (entry) => normalizeOptionalHexColor(entry?.color);
+
+/**
+ * Re-assign the scheme colours to the current order (PD-OI-110): each ring without its own colour takes the scheme
+ * index of its drawn position (`positions`, by series place); a hand-set colour stays.
+ * @param {{ color?: unknown, schemeIndex?: unknown }[]} series
+ * @param {readonly number[]} positions
+ * @returns {boolean} Whether an index changed.
+ */
+export const reassignRingSchemeIndexes = (series, positions) => {
+  let changed = false;
+  series.forEach((entry, place) => {
+    if (ringOwnColor(entry) || entry.schemeIndex === positions[place]) return;
+    entry.schemeIndex = positions[place];
+    changed = true;
+  });
+  return changed;
+};
+
+/**
+ * What `reassignDrawnRingColors` reads of a drawing: its rings, their scheme, and its slot stack.
+ * @typedef {{
+ *   circularConservation: { series: { color?: unknown, schemeIndex?: unknown }[], colorScheme: unknown },
+ *   adv: { circular_track_slots_enabled?: unknown, circular_track_slots?: readonly RingSlot[] }
+ * }} RingColorDrawing
+ */
+/**
+ * Re-assign a drawing's scheme colours to the order its rings are drawn in (`ringDrawnPositions` over its stack
+ * while the custom stack is in use, else the series order): the button 「今の並びで色を振り直す」, and a reorder
+ * while 「トラックを並び替えたら色を振り直す」 is on. Under Same color both are disabled, and disabled has no
+ * effect (PD-OI-110 「同じ色のときはどちらも無効」): the indexes stay as they were.
+ * @param {RingColorDrawing} drawing
+ * @returns {boolean} Whether an index changed.
+ */
+export const reassignDrawnRingColors = (drawing) => {
+  const { series, colorScheme } = drawing.circularConservation;
+  if (readRingColorScheme(colorScheme) === 'same') return false;
+  const slots = drawing.adv.circular_track_slots_enabled === true ? drawing.adv.circular_track_slots ?? [] : null;
+  return reassignRingSchemeIndexes(series, ringDrawnPositions(series.length, slots));
+};
+
+/**
+ * After a reorder (the series arrows or the custom stack), re-assign the scheme colours while
+ * 「トラックを並び替えたら色を振り直す」 is on, in the move's own step (PD-OI-110).
+ * @param {RingColorDrawing & { circularConservation: { reassignOnReorder?: unknown } }} drawing
+ * @returns {boolean} Whether an index changed.
+ */
+export const reassignRingColorsOnReorder = (drawing) => (
+  drawing.circularConservation.reassignOnReorder === true && reassignDrawnRingColors(drawing)
+);
 
 /**
  * @template T
@@ -154,22 +316,6 @@ export const parseConservationLabelText = (value) =>
 
 /**
  * @param {unknown} value
- * @param {unknown} index
- * @returns {string}
- */
-export const normalizeConservationSeriesColor = (value, index) => {
-  const fallback = CONSERVATION_SERIES_COLORS[Number(index) % CONSERVATION_SERIES_COLORS.length];
-  const resolved = resolveColorToHex(String(value || fallback).trim());
-  const color = String(resolved || fallback).trim();
-  const shortMatch = color.match(/^#([0-9a-fA-F]{3})$/);
-  if (shortMatch) {
-    return `#${shortMatch[1].split('').map((char) => char + char).join('').toLowerCase()}`;
-  }
-  return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : fallback;
-};
-
-/**
- * @param {unknown} value
  * @param {number} [fallback]
  */
 const normalizePositiveInteger = (value, fallback = 1) => {
@@ -232,13 +378,29 @@ export const conservationSourceDescriptors = (sourceFiles) => {
 const filesOfSourceKey = (sourceKey) => sourceKey.replace(/\|\d+$/, '');
 
 /**
+ * The source key of each ring, in ring order: the `sourceKey` `conservationSourceDescriptors` gives the ring's file
+ * among the ring files (a BLAST table of a stored request; the file's name, size and date, copies of one file by their
+ * order). A ring whose file is not held has no key: no entry is guessed for it.
+ * @param {readonly (ConservationFile | null | undefined)[]} ringFiles The ring files, one place per ring, in ring
+ *   order.
+ * @returns {(string | null)[]}
+ */
+export const ringKeysOfFiles = (ringFiles) => {
+  const keys = conservationSourceDescriptors(ringFiles.filter(/** @returns {file is ConservationFile} */ (file) => Boolean(file)))
+    .map(({ sourceKey }) => sourceKey);
+  return ringFiles.map((file) => (file ? /** @type {string} */ (keys.shift()) : null));
+};
+
+/**
+ * A series entry of a source: a kept entry keeps its colour and scheme index (a missing index reads as its place),
+ * a new one (`previousEntry` null) has no colour of its own and the first scheme index the series leaves (D-05).
  * @param {ConservationSourceDescriptor} descriptor
  * @param {RawConservationSeriesEntry | null} previousEntry
- * @param {number} orderIndex
+ * @param {readonly { schemeIndex?: unknown }[]} series The entries before it.
  * @param {string | null} [legacyLabel]
  * @returns {ConservationSeriesEntry}
  */
-const mergeSeriesEntry = (descriptor, previousEntry, orderIndex, legacyLabel = null) => {
+const mergeSeriesEntry = (descriptor, previousEntry, series, legacyLabel = null) => {
   const rawLabel = previousEntry?.label ?? previousEntry?.name ?? legacyLabel ?? descriptor.defaultLabel;
   return {
     sourceKey: descriptor.sourceKey,
@@ -246,7 +408,8 @@ const mergeSeriesEntry = (descriptor, previousEntry, orderIndex, legacyLabel = n
     // The entry's stored place (`conservationSourcesOfSeries` reads it), which an empty place before it keeps.
     sourceIndex: descriptor.placeIndex,
     label: String(rawLabel || descriptor.defaultLabel).trim() || descriptor.defaultLabel,
-    color: normalizeConservationSeriesColor(previousEntry?.color, orderIndex),
+    color: normalizeOptionalHexColor(previousEntry?.color),
+    schemeIndex: previousEntry ? readSchemeIndex(previousEntry.schemeIndex, series.length) : firstUnusedSchemeIndex(series),
     losat_gencode: normalizePositiveInteger(previousEntry?.losat_gencode, 1)
   };
 };
@@ -330,12 +493,14 @@ const listLabelOfUnclaimedSource = (labels, sourceIndex, seriesLength) => (
  * @param {readonly ConservationSourceDescriptor[]} unclaimed
  * @param {readonly string[]} labels The stored label list, parsed (`parseConservationLabelText`).
  * @param {number} seriesLength The entries of the series the list was stored with.
- * @param {number} [orderStart] The colour order of the first gained entry: after the entries kept before it.
+ * @param {readonly { schemeIndex?: unknown }[]} kept The entries kept before them, whose scheme indexes a gained entry
+ *   does not take (D-05).
  * @returns {ConservationSeriesEntry[]}
  */
-export const seriesEntriesOfUnclaimedSources = (unclaimed, labels, seriesLength, orderStart = seriesLength) => unclaimed.map(
-  (descriptor, index) => mergeSeriesEntry(descriptor, null, orderStart + index,
-    listLabelOfUnclaimedSource(labels, descriptor.sourceIndex, seriesLength))
+export const seriesEntriesOfUnclaimedSources = (unclaimed, labels, seriesLength, kept) => unclaimed.reduce(
+  (/** @type {ConservationSeriesEntry[]} */ gained, descriptor) => [...gained, mergeSeriesEntry(descriptor, null, [...kept, ...gained],
+    listLabelOfUnclaimedSource(labels, descriptor.sourceIndex, seriesLength))],
+  []
 );
 
 /**
@@ -363,9 +528,9 @@ export const reconcileConservationSeries = ({
   const nextSeries = [];
   matched.forEach((descriptor, seriesIndex) => {
     if (!descriptor) return;
-    nextSeries.push(mergeSeriesEntry(descriptor, previous[seriesIndex], nextSeries.length, fallbackLabels[descriptor.sourceIndex]));
+    nextSeries.push(mergeSeriesEntry(descriptor, previous[seriesIndex], nextSeries, fallbackLabels[descriptor.sourceIndex]));
   });
-  nextSeries.push(...seriesEntriesOfUnclaimedSources(unclaimed, fallbackLabels, previous.length, nextSeries.length));
+  nextSeries.push(...seriesEntriesOfUnclaimedSources(unclaimed, fallbackLabels, previous.length, nextSeries));
   return { series: nextSeries, keyChanges: ringKeyChangesOf(previous, matched) };
 };
 
@@ -511,25 +676,35 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
   const { matched, unclaimed } = /** @type {ConservationSeriesMatch<F>} */ (conservationSourcesOfSeries(sourceFiles, circularConservation));
   const legacyLabels = parseConservationLabelText(circularConservation?.labels);
   const series = Array.isArray(circularConservation?.series) ? circularConservation.series : [];
+  const scheme = circularConservation?.colorScheme;
+  // Each entry's scheme index as `reconcileConservationSeries` reads it: a stored one, else its place; a source no
+  // entry claims takes the first one left (D-05).
   /** @type {OrderedConservationSource<F>[]} */
   const entries = [];
   matched.forEach((descriptor, seriesIndex) => {
     if (!descriptor) return;
     const entry = series[seriesIndex];
+    const schemeIndex = readSchemeIndex(entry.schemeIndex, entries.length);
+    const ownColor = normalizeOptionalHexColor(entry.color);
     entries.push({
       ...descriptor,
       label: String(entry.label || descriptor.defaultLabel).trim() || descriptor.defaultLabel,
-      color: normalizeConservationSeriesColor(entry.color, entries.length),
+      color: effectiveRingColor({ color: ownColor, schemeIndex }, scheme) ?? '',
+      ownColor,
+      schemeIndex,
       losat_gencode: normalizePositiveInteger(entry.losat_gencode, 1),
       orderIndex: entries.length
     });
   });
   unclaimed.forEach((descriptor) => {
     const fallbackLabel = listLabelOfUnclaimedSource(legacyLabels, descriptor.sourceIndex, series.length) || descriptor.defaultLabel;
+    const schemeIndex = firstUnusedSchemeIndex(entries);
     entries.push({
       ...descriptor,
       label: String(fallbackLabel || descriptor.defaultLabel).trim() || descriptor.defaultLabel,
-      color: normalizeConservationSeriesColor(null, entries.length),
+      color: effectiveRingColor({ schemeIndex }, scheme) ?? '',
+      ownColor: null,
+      schemeIndex,
       losat_gencode: 1,
       orderIndex: entries.length
     });

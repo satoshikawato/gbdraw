@@ -106,8 +106,12 @@ import {
 import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
 import {
   orderedConservationSources,
-  ringGenomeFilesInRingOrder
+  readRingColorScheme,
+  ringDrawnPositions,
+  ringGenomeFilesInRingOrder,
+  ringKeysOfFiles
 } from './conservation-series.js';
+import { CONSERVATION_COLOR_SCHEME_PATH } from '../utils/conservation-colors.generated.js';
 import {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
@@ -276,7 +280,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { ContractRepair, RepairPolicy } from '../utils/contract-repair.js' */
 /** @import { ContractShape } from '../utils/contract-shape.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
-/** @import { OrderedConservationSource } from './conservation-series.js' */
+/** @import { OrderedConservationSource, RingSlot } from './conservation-series.js' */
 /** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { LinearTrackSlot } from './linear-track-slot-model.js' */
 /** @import { DefinitionLineStyle } from './definition-line-style-state.js' */
@@ -807,6 +811,9 @@ export const managedConfigOverridePathsForMode = (mode) => {
   );
   paths.add(MODE_LABEL_SCOPE_PATHS[mode]);
   Object.values(MODE_ADV_CONFIG_PATHS[mode]).forEach((path) => paths.add(path));
+  // The Ring colors scheme of a CLI or Python Session: Load reads it into the drawing's rings
+  // (`projectCircularConservationConfig`) and the Web never sends it (each ring it sends has its colour).
+  if (mode === 'circular') paths.add(CONSERVATION_COLOR_SCHEME_PATH);
   // The Legend row edits and the canvas padding: the paint and canvas slices hold them (`requestLegendEditLeaves`).
   Object.values(LEGEND_EDIT_CONFIG_PATHS).forEach((path) => paths.add(path));
   for (const path of [
@@ -911,55 +918,163 @@ export const draftFieldsForConfigValues = (values, mode, adv, trackOptions = {})
  * before the GUI had its setting, and the draft field that holds it now. A
  * reader moves it into that field, so a preserved override is never a path
  * the GUI manages. `read` reads the stored value as the field holds it, with Python's readings of the stored
- * values Load asked for.
+ * values Load asked for. `modes` names the drafts that hold the field (a flat Session 27-44 draft holds both).
  * @typedef {object} PromotedPreservedOverride
  * @property {string} path
- * @property {'adv' | 'form'} container
+ * @property {PromotedContainer} container
  * @property {string} field
+ * @property {readonly ModeProfileName[]} modes
  * @property {(value: unknown, readings: StoredLeafReadings) => { value: unknown, lost: boolean }} read
+ * @property {(holder: Record<string, unknown>, request: PromotedRequestReading) => void} [settle] What else the
+ *   field's container reads once the stored value moved into the field.
  */
+/** @typedef {'adv' | 'form' | 'circularConservation'} PromotedContainer */
+/**
+ * What the draft's stored request says that a promoted setting reads.
+ * @typedef {object} PromotedRequestReading
+ * @property {readonly SchemeRing[] | null} schemeRings The comparison rings of the draft's stored Circular request,
+ *   in ring order, when it names no colour for a comparison ring, so each drew the scheme's colour of its drawn
+ *   position; null when the draft has no Circular request (what its rings drew is not known), when the request names
+ *   a ring colour, or when its slot stack cannot be read.
+ */
+/**
+ * A comparison ring of a stored request, by the identity its draft entry holds.
+ * @typedef {object} SchemeRing
+ * @property {string | null} sourceKey The key of the ring's file among the request's ring files (`ringKeysOfFiles`);
+ *   null when the request's resources do not hold the file.
+ * @property {string | null} fileName The file's name, null likewise.
+ * @property {number} index The ring's place in the request.
+ * @property {number} position The ring's drawn position (`ringDrawnPositions` over the request's stack).
+ */
+// OV-3054: the colour a 0.14.4 or 0.14.5 Web filled every ring of a CLI Session with when it opened one, which its Save
+// wrote as each ring's own colour though the request it kept drew the scheme's.
+const OV3054_RING_FILL = '#4e79a7';
+/**
+ * PD-OI-110 (D-38): the rings of a draft whose stored Circular request names no ring colour drew the scheme's colours,
+ * so a ring colour that is the OV-3054 fill is no colour of its own; such a ring takes the scheme colour of its ring's
+ * drawn position (`ringDrawnPositions` over the request's stack, as the CLI replay of the request reads it). A draft
+ * entry finds its ring by the key of the ring's file, else, as an entry a CLI Session's projection wrote holds no key,
+ * by the file's name, never by its place in the series, which the user may have changed since the request drew. Among
+ * rings of one file name, an entry takes the one at its `sourceIndex`, usually the request ring it was read from in
+ * those Sessions (after a Remove without a Generate, the kept entry's place; the pairing is then never worse than by
+ * series order). Without a Circular request, and for an entry with no ring, the colour stays.
+ * @param {Record<string, unknown>} holder The draft's `circularConservation`.
+ * @param {PromotedRequestReading} request
+ */
+const releaseOv3054RingFill = (holder, { schemeRings }) => {
+  if (schemeRings === null || !Array.isArray(holder.series)) return;
+  const series = /** @type {unknown[]} */ (holder.series);
+  /** @type {Map<number, SchemeRing>} */
+  const ringOf = new Map();
+  const free = new Set(schemeRings);
+  /** @param {(entry: Record<string, unknown>, ring: SchemeRing) => boolean} match */
+  const pair = (match) => series.forEach((entry, index) => {
+    if (ringOf.has(index) || !isPlainRecord(entry)) return;
+    const matching = [...free].filter((candidate) => match(entry, candidate));
+    const ring = matching.find((candidate) => candidate.index === Number(entry.sourceIndex)) ?? matching[0];
+    if (ring === undefined) return;
+    ringOf.set(index, ring);
+    free.delete(ring);
+  });
+  pair((entry, ring) => ring.sourceKey !== null && String(entry.sourceKey ?? '') === ring.sourceKey);
+  pair((entry, ring) => Boolean(ring.fileName) && String(entry.fileName ?? '') === ring.fileName);
+  holder.series = series.map((entry, index) => {
+    const ring = ringOf.get(index);
+    return ring && isPlainRecord(entry) && String(entry.color).toLowerCase() === OV3054_RING_FILL
+      ? { ...entry, color: null, schemeIndex: ring.position } : entry;
+  });
+};
 /** @type {readonly PromotedPreservedOverride[]} */
 const PROMOTED_PRESERVED_OVERRIDES = Object.freeze([
   // PD-OI-009: the font, before the GUI had a Font setting.
-  { path: CONFIG_OVERRIDE_PATHS.fontFamily, container: 'adv', field: 'font_family', read: (value) => ({ value, lost: false }) },
+  { path: CONFIG_OVERRIDE_PATHS.fontFamily, container: 'adv', field: 'font_family', modes: ['circular', 'linear'],
+    read: (value) => ({ value, lost: false }) },
   // PD-OI-113: the Linear wrap length a 0.14.5 Web Save kept, before the GUI had Wrap Rows.
-  { path: CONFIG_OVERRIDE_PATHS.linearWrapLength, container: 'form', field: 'linear_wrap_length', read: wrapFormValue }
+  { path: CONFIG_OVERRIDE_PATHS.linearWrapLength, container: 'form', field: 'linear_wrap_length', modes: ['circular', 'linear'],
+    read: wrapFormValue },
+  // PD-OI-110: the Ring colors scheme of a CLI Session that a 0.14.4 or 0.14.5 Web Save kept, before the GUI had
+  // Ring colors. Its rings stored a colour each: one its request names stays theirs; the OV-3054 fill does not (D-38).
+  { path: CONSERVATION_COLOR_SCHEME_PATH, container: 'circularConservation', field: 'colorScheme',
+    modes: ['circular'], read: (value) => ({ value, lost: readRingColorScheme(value) !== value }),
+    settle: releaseOv3054RingFill }
 ]);
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 const isPlainRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 /**
+ * What a stored request (unvalidated) says of its comparison rings' colours (`PromotedRequestReading`): a Circular
+ * request that names no ring colour (`diagramOptions.conservationColors`) gives its rings (`conservationBlastFiles`)
+ * with the files its resources hold for them and their drawn positions over its slot stack, as its projection reads
+ * it (`requestCircularTrackSlots`).
+ * @param {unknown} request
+ * @param {unknown} resources The Session's resources (unvalidated).
+ * @returns {PromotedRequestReading}
+ */
+const readPromotedRequest = (request, resources) => {
+  if (!isPlainRecord(request) || request.mode !== 'circular') return { schemeRings: null };
+  const options = isPlainRecord(request.diagramOptions) ? request.diagramOptions : {};
+  const colors = options.conservationColors;
+  if (Array.isArray(colors) && colors.some((color) => typeof color === 'string' && color.trim() !== '')) {
+    return { schemeRings: null };
+  }
+  /** @type {readonly RingSlot[] | null} */
+  let slots;
+  try {
+    // The preset places a slot; which ring a slot draws does not depend on it.
+    slots = requestCircularTrackSlots(options.tracks, String(options.dinucleotide || 'GC'), 'tuckin');
+  } catch {
+    // A stack the current projection cannot read: what the rings drew is not known.
+    return { schemeRings: null };
+  }
+  const files = (Array.isArray(options.conservationBlastFiles) ? options.conservationBlastFiles : []).map((ref) => {
+    const id = isPlainRecord(ref) ? String(ref.resourceId ?? '') : '';
+    const resource = id && isPlainRecord(resources) && Object.hasOwn(resources, id) ? resources[id] : null;
+    return isPlainRecord(resource)
+      ? { name: String(resource.name ?? ''), size: Number(resource.size), lastModified: Number(resource.lastModified) }
+      : null;
+  });
+  const keys = ringKeysOfFiles(files);
+  const positions = ringDrawnPositions(files.length, slots);
+  return { schemeRings: files.map((file, index) => ({ sourceKey: keys[index], fileName: file?.name ?? null, index, position: positions[index] })) };
+};
+
+/**
  * What adopting the promoted preserved overrides of one stored draft did.
  * @template T
  * @typedef {object} PromotedPreservedAdoption
  * @property {T} config The draft, with each promoted leaf moved into its field.
- * @property {ReadonlyArray<'adv' | 'form'>} containers The containers a leaf was moved into.
+ * @property {ReadonlyArray<PromotedContainer>} containers The containers a leaf was moved into.
  * @property {ReadonlyArray<{ at: string, stored: unknown }>} dropped The leaves its field cannot hold, by their
  *   place in the draft; they are dropped.
  */
 /**
  * A stored draft (`config` of a Session 27-44, of a Session 46-50 slice, or
- * of a Session 51 drawing) with each promoted preserved override moved into
+ * of a Session 51 drawing) with each promoted preserved override of its mode moved into
  * its field. A value the draft already holds wins; the preserved leaf is
  * dropped either way.
  * @template T
  * @param {T} config
- * @param {StoredLeafReadings} [readings] Python's readings of the stored leaves the form cannot hold as stored.
+ * @param {StoredLeafReadings} readings Python's readings of the stored leaves the form cannot hold as stored.
+ * @param {ModeProfileName | null} mode The draft's mode; null for a flat Session 27-44 draft, which holds both.
+ * @param {unknown} request The stored request of the draft's mode (unvalidated), or null when it has none.
+ * @param {unknown} resources The Session's resources (unvalidated), which hold the request's files.
  * @returns {PromotedPreservedAdoption<T>}
  */
-export const adoptPromotedPreservedOverrides = (config, readings = NO_STORED_READINGS) => {
+export const adoptPromotedPreservedOverrides = (config, readings, mode, request, resources) => {
   const preserved = isPlainRecord(config) ? config.unmanagedConfigOverrides : undefined;
-  const rows = isPlainRecord(preserved) ? PROMOTED_PRESERVED_OVERRIDES.filter(({ path }) => Object.hasOwn(preserved, path)) : [];
+  const rows = isPlainRecord(preserved) ? PROMOTED_PRESERVED_OVERRIDES.filter(({ path, modes }) => (
+    Object.hasOwn(preserved, path) && (mode === null || modes.includes(mode)))) : [];
   if (!isPlainRecord(config) || !isPlainRecord(preserved) || rows.length === 0) return { config, containers: [], dropped: [] };
   /** @type {Record<string, unknown>} */
   const adopted = { ...config, unmanagedConfigOverrides: { ...preserved } };
   const kept = /** @type {Record<string, unknown>} */ (adopted.unmanagedConfigOverrides);
-  /** @type {Array<'adv' | 'form'>} */
+  /** @type {PromotedContainer[]} */
   const containers = [];
   /** @type {Array<{ at: string, stored: unknown }>} */
   const dropped = [];
-  for (const { path, container, field, read } of rows) {
+  const requestReading = readPromotedRequest(request, resources);
+  for (const { path, container, field, read, settle } of rows) {
     const stored = kept[path];
     delete kept[path];
     if (!containers.includes(container)) {
@@ -969,7 +1084,10 @@ export const adoptPromotedPreservedOverrides = (config, readings = NO_STORED_REA
     const holder = /** @type {Record<string, unknown>} */ (adopted[container]);
     const reading = read(stored, readings);
     if (reading.lost) dropped.push({ at: `unmanagedConfigOverrides.${path}`, stored });
-    else holder[field] ??= reading.value;
+    else if (holder[field] === undefined || holder[field] === null) {
+      holder[field] = reading.value;
+      settle?.(holder, requestReading);
+    }
   }
   return { config: /** @type {T} */ (adopted), containers, dropped };
 };
@@ -4939,7 +5057,7 @@ const projectCanonicalRenderInput = ({
       Object.assign(diagramOptions, conservationDiagramOptions(drawing.circularConservation,
         searchedRings.map((entry, index) => ({
           label: entry.label || `Comparison ${index + 1}`,
-          color: entry.color || '#D9EAF7'
+          color: entry.color || ''
         })), 'subject'));
       webFiles.conservationBlastSource = 'losat-cache';
     }
@@ -6014,6 +6132,7 @@ const projectFullConfigOverrides = (config, mode) => {
   const labelFontPath = mode === 'linear' ? 'labels.font_size.linear' : 'labels.font_size';
   paths.add(`${labelFontPath}.short`);
   paths.add(`${labelFontPath}.long`);
+  if (mode === 'circular') paths.add(CONSERVATION_COLOR_SCHEME_PATH);
   Object.values(LINEAR_DEFINITION_STYLE_PATHS).forEach((prefix) => {
     LINEAR_DEFINITION_STYLE_FIELDS.forEach((field) => paths.add(`${prefix}.${field}`));
   });
@@ -6139,11 +6258,16 @@ const projectExplicitConfigOverrides = (overrides, mode) => {
 };
 
 /**
+ * The comparison rings of a request written without a Web draft (CLI, Python). A ring without a colour ('') takes
+ * the stored scheme's colour of its drawn position (`ringDrawnPositions` over the request's slots, as Python drew
+ * it): its colour is null and its scheme index that position (OV-3054, TEN-SAVED-FOLLOWS of PD-OI-110).
  * @param {NonNullable<UnvalidatedFields<'conservationLabels' | 'conservationColors' | 'conservationReference'
  *   | 'conservationRingWidth' | 'conservationRingGap'>>} options The request's `diagramOptions` (unvalidated), or `{}`.
  * @param {{ c_conservation_blasts?: FileLike[] }} files
+ * @param {{ scheme: unknown, slots: readonly RingSlot[] | null }} rings The stored Ring colors scheme
+ *   (`objects.conservation.color_scheme`), and the request's slot stack, null without one.
  */
-const projectCircularConservationConfig = (options, files) => {
+const projectCircularConservationConfig = (options, files, { scheme, slots }) => {
   const sourceFiles = Array.isArray(files.c_conservation_blasts)
     ? files.c_conservation_blasts
     : [];
@@ -6154,6 +6278,7 @@ const projectCircularConservationConfig = (options, files) => {
   const colors = Array.isArray(options.conservationColors)
     ? options.conservationColors.map((/** @type {unknown} */ value) => String(value || '').trim())
     : [];
+  const positions = ringDrawnPositions(sourceFiles.length, slots);
   const series = sourceFiles.map((file, index) => {
     const fileName = String(file?.name || `comparison-${index + 1}.tsv`);
     // A Session without stored labels predates D-03 and drew the full file name,
@@ -6165,7 +6290,8 @@ const projectCircularConservationConfig = (options, files) => {
       fileName,
       sourceIndex: index,
       label: labels[index] || defaultLabel,
-      color: colors[index] || '',
+      color: colors[index] || null,
+      schemeIndex: positions[index],
       losat_gencode: 1
     };
   });
@@ -6178,8 +6304,25 @@ const projectCircularConservationConfig = (options, files) => {
     labels: '',
     series,
     ring_width: projectOptionalNumber(options.conservationRingWidth, { field: 'conservation_ring_width' }),
-    ring_gap: projectOptionalNumber(options.conservationRingGap, { field: 'conservation_ring_gap' })
+    ring_gap: projectOptionalNumber(options.conservationRingGap, { field: 'conservation_ring_gap' }),
+    colorScheme: readRingColorScheme(scheme),
+    reassignOnReorder: false
   };
+};
+
+/**
+ * The Circular slot stack of a stored request as its projection reads it, or null when the request has none.
+ * @param {unknown} tracks The request's `diagramOptions.tracks` (unvalidated).
+ * @param {string} defaultNt
+ * @param {string} preset
+ */
+const requestCircularTrackSlots = (tracks, defaultNt, preset) => {
+  const slots = isPlainRecord(tracks) ? tracks.circularTrackSlots : undefined;
+  return Array.isArray(slots)
+    ? slots.map((/** @type {unknown} */ slot) => (isPlainRecord(slot)
+      ? projectCurrentCanonicalCircularSlot(slot)
+      : parseCircularTrackSlotSpecs([slot], defaultNt, preset)[0]))
+    : null;
 };
 
 /** @param {unknown} slot */
@@ -7046,17 +7189,7 @@ export const projectCanonicalSessionRequest = ({
   }
   const tracks = options.tracks || {};
   const projectedCircularTrackSlots = renderRequest.mode === 'circular'
-    ? (Array.isArray(tracks.circularTrackSlots)
-        ? tracks.circularTrackSlots.map((/** @type {unknown} */ slot) => (
-          slot && typeof slot === 'object' && !Array.isArray(slot)
-              ? projectCurrentCanonicalCircularSlot(slot)
-              : parseCircularTrackSlotSpecs(
-                  [slot],
-                  options.dinucleotide || 'GC',
-                  overrides.track_type || 'tuckin'
-                )[0]
-          ))
-        : [])
+    ? requestCircularTrackSlots(tracks, options.dinucleotide || 'GC', overrides.track_type || 'tuckin') ?? []
     : [];
   const projectedLinearTrackSlots = renderRequest.mode === 'linear'
     // An array of rows migrates to an array of rows.
@@ -7432,7 +7565,11 @@ export const projectCanonicalSessionRequest = ({
         options.featurePlacements || [], renderRequest.mode
       )),
       circularConservation: renderRequest.mode === 'circular'
-        ? projectCircularConservationConfig(options, files)
+        ? projectCircularConservationConfig(options, files, {
+            // Read as stored: the projection's own paths type the object; the scheme is any stored leaf.
+            scheme: /** @type {Readonly<Record<string, unknown>>} */ (canonicalOverrides)[CONSERVATION_COLOR_SCHEME_PATH],
+            slots: Array.isArray(tracks.circularTrackSlots) ? projectedCircularTrackSlots : null
+          })
         : undefined
     },
     semanticFeatureState: {

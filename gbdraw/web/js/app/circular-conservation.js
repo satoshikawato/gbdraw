@@ -24,12 +24,19 @@ import {
   normalizeFileList,
   orderedConservationSources,
   parseConservationLabelText,
+  readRingColorScheme,
+  reassignDrawnRingColors,
+  reassignRingColorsOnReorder,
   seriesEntriesOfUnclaimedSources,
   reconcileConservationSeries,
+  effectiveRingColor,
+  ringOwnColor,
+  ringSwatchColor,
   seriesNamingSources,
   thenRingKeyChanges,
   withoutConservationSeries
 } from '../services/conservation-series.js';
+import { normalizeOptionalHexColor } from '../utils/color-utils.js';
 import { shownAfterSourceChange } from '../services/depth-track-state.js';
 import { msg, t } from '../utils/i18n.js';
 import { askTrackSourceRemoval } from './track-slot-edits.js';
@@ -153,7 +160,8 @@ const changeRingSourceFiles = (state, drawing, change, write) => {
 
 /**
  * After a Generate's adoption of its LOSAT result, Generate's own rings (`ringAdoption`, OV-3195): adopted ring k is the
- * ring it searched at k, so it takes that ring's genetic code, which the request does not carry; and, while the draft's
+ * ring it searched at k, so it takes that ring's genetic code, and its own colour or none and its scheme index
+ * (PD-OI-110), which the request does not carry (it holds the colour each ring drew); and, while the draft's
  * rings are still those it searched (`builtFromDraft`), the stack row of the draft's ring at that ring's place (a ring's
  * genome files and, in a LOSAT-cache replay, its table sit at its place, `ringGenomePlaces`) moves to adopted ring k's
  * key. Every other ring row of the draft goes, so no row lands on another ring.
@@ -165,7 +173,11 @@ const changeRingSourceFiles = (state, drawing, change, write) => {
 const adoptedRingKeyChanges = (drawing, draftSources, ringAdoption) => {
   const { searched, builtFromDraft } = ringAdoption;
   drawing.circularConservation.series.forEach((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => {
-    entry.losat_gencode = searched[index] ? searched[index].losat_gencode : entry.losat_gencode;
+    const ring = searched[index];
+    if (!ring) return;
+    entry.losat_gencode = ring.losat_gencode;
+    entry.color = ring.ownColor;
+    entry.schemeIndex = ring.schemeIndex;
   });
   const { matched } = conservationSourcesOfSeries(circularRingSources(drawing), drawing.circularConservation);
   return new Map(draftSources.map((source) => {
@@ -228,8 +240,9 @@ const seriesOfRingFiles = (drawing, sourceFiles, series = drawing.circularConser
 const seriesOfReplayTables = (drawing, keyChanges) => {
   const { series, labels } = drawing.circularConservation;
   const { matched, unclaimed } = conservationSourcesOfSeries(circularRingSources(drawing), drawing.circularConservation);
-  const gained = seriesEntriesOfUnclaimedSources(unclaimed, parseConservationLabelText(labels), series.length);
-  return { series: [...seriesNamingSources(series, matched), ...gained], keyChanges };
+  const named = seriesNamingSources(series, matched);
+  const gained = seriesEntriesOfUnclaimedSources(unclaimed, parseConservationLabelText(labels), series.length, named);
+  return { series: [...named, ...gained], keyChanges };
 };
 
 /**
@@ -408,7 +421,7 @@ export const createCircularConservationSources = ({
 
 /**
  * The ring series panel of the shown Circular drawing: the uploaded ring files, the series rows and their order, and
- * the ring controls' transitions.
+ * the ring controls' transitions. It returns the panel's members under the names the template uses.
  * @param {CircularConservationSeriesPanelPorts} ports
  */
 export const createCircularConservationSeriesPanel = ({
@@ -451,7 +464,11 @@ export const createCircularConservationSeriesPanel = ({
       defaultLabel: defaultConservationSeriesLabel(
         { name: entry?.fileName },
         Number.isInteger(Number(entry?.sourceIndex)) ? Number(entry.sourceIndex) : index
-      )
+      ),
+      // The colour the ring draws (`effectiveRingColor`; the configured colour under Same color), and whether it is
+      // the ring's own (「方式の色に戻す」 shows on those rows only, D-03).
+      color: ringSwatchColor(effectiveRingColor(entry, drawing.circularConservation.colorScheme), drawing),
+      handSet: ringOwnColor(entry) !== null
     }));
   });
   /** @param {number} index @param {number} direction */
@@ -473,7 +490,37 @@ export const createCircularConservationSeriesPanel = ({
   const moveCircularConservationSeries = (index, direction) => shownAction('circular', (drawing) => {
     if (moveConservationSeriesEntry(drawing.circularConservation.series, index, direction)) {
       refreshCircularConservationSlots(drawing);
+      if (reassignRingColorsOnReorder(drawing)) refreshCircularConservationSlots(drawing);
     }
+  });
+  // Ring colors (PD-OI-110): the scheme, the re-assignment on reorder, the one-time re-assignment, a ring's own
+  // colour, and 「方式の色に戻す」 (D-03). Each is one History step of its control; the card applies on Generate.
+  /** @param {unknown} scheme */
+  const setCircularConservationColorScheme = (scheme) => shownAction('circular', (drawing) => {
+    drawing.circularConservation.colorScheme = readRingColorScheme(scheme);
+    refreshCircularConservationSlots(drawing);
+  });
+  /** @param {boolean} on */
+  const setCircularConservationReassignOnReorder = (on) => shownAction('circular', (drawing) => {
+    drawing.circularConservation.reassignOnReorder = on === true;
+  });
+  const reassignCircularConservationColors = () => shownAction('circular', (drawing) => {
+    if (reassignDrawnRingColors(drawing)) refreshCircularConservationSlots(drawing);
+  });
+  /** @param {number} index @param {unknown} value A colour picked for the ring: its own colour from now on. */
+  const setCircularConservationRingColor = (index, value) => shownAction('circular', (drawing) => {
+    const entry = drawing.circularConservation.series[Number(index)];
+    const color = normalizeOptionalHexColor(value);
+    if (!entry || !color) return;
+    entry.color = color;
+    refreshCircularConservationSlots(drawing);
+  });
+  /** @param {number} index */
+  const useCircularConservationSchemeColor = (index) => shownAction('circular', (drawing) => {
+    const entry = drawing.circularConservation.series[Number(index)];
+    if (!entry || ringOwnColor(entry) === null) return;
+    entry.color = null;
+    refreshCircularConservationSlots(drawing);
   });
   const openCircularConservationComparisonFilePicker = () => {
     circularConservationFastaInput.value?.click();
@@ -498,7 +545,9 @@ export const createCircularConservationSeriesPanel = ({
   return {
     setCircularConservationUploadFiles, circularConservationSeriesRows, canMoveCircularConservationSeries,
     moveCircularConservationSeries, openCircularConservationComparisonFilePicker, changeCircularConservationSource,
-    setCircularConservationShown, refreshShownCircularConservationSlots
+    setCircularConservationShown, refreshCircularConservationSlots: refreshShownCircularConservationSlots,
+    setCircularConservationColorScheme, setCircularConservationReassignOnReorder, reassignCircularConservationColors,
+    setCircularConservationRingColor, useCircularConservationSchemeColor
   };
 };
 

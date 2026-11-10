@@ -19,6 +19,7 @@ import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, labelStyleForMode, 
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { INPUT_TYPES } from './input-types.js';
+import { CONSERVATION_DEFAULT_COLOR_SCHEME } from '../utils/conservation-colors.generated.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
 /** @import { CircularRecordRange } from './record-options.js' */
 import { isUnsetValue } from '../utils/field-reading.js';
@@ -180,8 +181,11 @@ export const createDefaultLosat = () => ({
     collinearMaxConflictsInMergeGap: 1, collinearMaxParalogLinksPerOrthogroup: 2, collinearColorMode: 'orientation',
     collinearUnitMode: 'auto', collinearAnchorMode: DEFAULT_COLLINEAR_ANCHOR_MODE, collinearMergeOrientation: DEFAULT_MERGE_ORIENTATION, collinearSearchScope: 'adjacent' }
 });
+// `colorScheme` and `reassignOnReorder` are the Ring colors setting (PD-OI-110): the scheme of the rings without a
+// colour of their own, and whether a reorder re-assigns their scheme colours.
 export const createDefaultCircularConservation = () => ({ enabled: false, source: 'losat', losat_program: 'blastn',
-  subject_gencode: 1, reference: 'auto', labels: '', series: [], ring_width: null, ring_gap: null });
+  subject_gencode: 1, reference: 'auto', labels: '', series: [], ring_width: null, ring_gap: null,
+  colorScheme: CONSERVATION_DEFAULT_COLOR_SCHEME, reassignOnReorder: false });
 export const CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS = Object.freeze([
   'form', 'adv', 'losat', 'cliOptions', 'colors', 'palette', 'paletteInstantPreviewEnabled', 'rules',
   'qualifierPriorityRules', 'filterMode', 'whitelist', 'blacklistText', 'fileImports', 'losatProgram', 'circularConservation',

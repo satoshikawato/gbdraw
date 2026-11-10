@@ -7,9 +7,10 @@
     "tests/test_inputs/HmmtDNA.gbk": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
   },
   "values": "drawings[0].config.form: figure_width \"180mm\", figure_height \"180mm\"; drawings[0].renderRequest.diagramOptions.configOverrides: canvas.figure_width \"180mm\", canvas.figure_height \"180mm\"",
-  "decompressedSha256": "ae1b4987f22119fcde33c1aaacb9e0919a6df0916a720e5911e7875e6dcafe09",
+  "decompressedSha256": "d334d7aeb2065059fe184c36c54155ce15651d87a1ffc5a82b8d849a7153418c",
   "compression": "gzip -n -9",
   "sessionVersion": 51,
   "requestSchema": 10,
-  "rewritten": "circular-multi-file-20261108 PR-A (2026-11-09): the Circular drawing's c_gb, c_gff and c_fasta bindings replaced by circularSources (one File card, uid record-1) by scripts/rewrite_v51_circular_sources.py in that task folder, which applies gbdraw.session_drawings.circular_sources_of_mode_scoped; nothing else changed"
+  "rewritten": "circular-multi-file-20261108 PR-A (2026-11-09): the Circular drawing's c_gb, c_gff and c_fasta bindings replaced by circularSources (one File card, uid record-1) by scripts/rewrite_v51_circular_sources.py in that task folder, which applies gbdraw.session_drawings.circular_sources_of_mode_scoped; nothing else changed",
+  "rewrittenRingColors": "conservation-ring-colors-impl-20261028 PR-B fix round 1 (2026-11-10): each drawing's config.circularConservation gained colorScheme and reassignOnReorder with their defaults by scripts/rewrite_v51_ring_colors.py in that task folder; nothing else changed"
 }
