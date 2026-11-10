@@ -49,6 +49,9 @@ into the `[Unreleased]` list below.
   Comparison rings in SVG output now name each match's drawn span and each
   ring's radii (`data-display-start`, `data-display-end`,
   `data-ring-inner-radius`, `data-ring-outer-radius`).
+- Fixed: in the Web app, an SVG export made after a comparison match popup was
+  opened and closed no longer carries an empty `class` attribute on the
+  match.
 - Fixed: in the Python API, a new drawing from a region ignored a Circular
   track slot given as a string (`"depth:depth@width=20px"`): the slot's hand-set
   width was neither kept nor returned to Auto as the same slot given as a

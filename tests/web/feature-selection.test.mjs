@@ -149,8 +149,12 @@ const pairwise = previewMatchButton('ペアワイズマッチ1');
 // Hover and drag feedback that was removed leaves an empty inline style.
 const emptiedStyle = new FakeElement();
 emptiedStyle.setAttribute('style', '');
+// OV-3241: a match the popup marked and unmarked (`classList.toggle`) keeps an empty class attribute, which an
+// export must not carry.
+const emptiedClass = new FakeElement();
+emptiedClass.setAttribute('class', ' ');
 const previewRoot = fakeSvg(
-  [searchMatch, cursorStyle, layoutTarget, pairwise, emptiedStyle],
+  [searchMatch, cursorStyle, layoutTarget, pairwise, emptiedStyle, emptiedClass],
   'gbdraw-preview-feature-search-results-active gbdraw-preview-feature-search-updating keep-root'
 );
 stripTransientPreviewState(previewRoot);
@@ -159,6 +163,7 @@ assert.equal(layoutTarget.getAttribute('style'), null);
 assert.equal(searchMatch.getAttribute('class'), 'keep');
 assert.equal(cursorStyle.getAttribute('style'), 'opacity: 0.8');
 assert.equal(emptiedStyle.getAttribute('style'), null);
+assert.equal(emptiedClass.getAttribute('class'), null);
 assert.equal(previewRoot.getAttribute('class'), 'keep-root');
 assert.equal(pairwise.getAttribute('data-gbdraw-match-id'), 'comparison1_match1');
 for (const name of ['role', 'tabindex', 'aria-label', PREVIEW_MATCH_BUTTON_ATTRIBUTE]) assert.equal(pairwise.getAttribute(name), null);

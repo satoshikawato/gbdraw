@@ -120,6 +120,11 @@ export const stripTransientPreviewState = (svg, { stripCursor = true } = {}) => 
   stripClasses(svg);
   svg.querySelectorAll(TRANSIENT_PREVIEW_CLASSES.map((className) => `.${className}`).join(','))
     .forEach(stripClasses);
+  // A transient class that a gesture already removed (`classList.toggle`, the match popup's bands) leaves an empty
+  // attribute, which Python never draws (OV-3241).
+  svg.querySelectorAll('[class]').forEach((element) => {
+    if (!element.getAttribute('class')?.trim()) element.removeAttribute('class');
+  });
   if (stripCursor) {
     stripEditorOnlyCursorStyles(svg);
     svg.querySelectorAll(`[${PREVIEW_MATCH_BUTTON_ATTRIBUTE}]`).forEach((element) => {
