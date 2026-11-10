@@ -115,7 +115,7 @@
       "source": "webapp",
       "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
       "replayThrough": 2,
-      "cardTitle": "Input Genomes",
+      "selector": ".card[data-settings-section='input-genomes']",
       "cropPadding": 14,
       "actions": [
        {
@@ -147,7 +147,7 @@
       "source": "webapp",
       "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
       "replayThrough": 2,
-      "cardTitle": "Basic",
+      "selector": ".card[data-settings-section='basic']",
       "cropPadding": 14,
       "assertAppState": {
        "mode": "circular"

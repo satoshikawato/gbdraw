@@ -365,7 +365,7 @@
           },
           "capture": {
             "source": "webapp",
-            "cardTitle": "Layout",
+            "selector": ".card[data-settings-section='layout']",
             "openDetails": ["Layout"]
           }
         },

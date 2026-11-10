@@ -108,7 +108,7 @@
                 "script": "const app = window.__GBDRAW_APP__; app.form.prefix = 'lambda_basic_linear'; app.form.separate_strands = true; app.form.show_labels_linear = 'all'; app.form.scale_style = 'ruler'; app.form.legend = 'left'; app.adv.linear_track_slots_enabled = false;"
               }
             ],
-            "cardTitle": "Basic",
+            "selector": ".card[data-settings-section='basic']",
             "cropPadding": 14,
             "assertAppState": {
               "mode": "linear",
@@ -215,7 +215,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.form.separate_strands = true; app.form.show_labels_linear = 'all'; app.form.scale_style = 'ruler'; app.form.legend = 'left'; app.adv.linear_track_slots_enabled = false; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('[data-layout-options]'); if (!summary || !options) throw new Error('Linear layout controls were not found.'); summary.dataset.capture = 'lambda-layout-summary'; options.dataset.capture = 'lambda-layout-options'; options.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.form.separate_strands = true; app.form.show_labels_linear = 'all'; app.form.scale_style = 'ruler'; app.form.legend = 'left'; app.adv.linear_track_slots_enabled = false; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('[data-layout-options]'); if (!summary || !options) throw new Error('Linear layout controls were not found.'); summary.dataset.capture = 'lambda-layout-summary'; options.dataset.capture = 'lambda-layout-options'; options.scrollIntoView({ block: 'end' });"
               }
             ],
             "clipSelectors": [

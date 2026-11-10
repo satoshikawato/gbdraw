@@ -1211,6 +1211,7 @@ def test_no_tutorial_step_names_the_session_file_chooser_that_captures_hide() ->
         ("const track = content?.children?.[0];", "by position"),
         ("const row = card.children[1];", "by position"),
         ("async () => { await window.__GBDRAW_APP__.refreshLinearRecordSelectors(); }", "reads the records"),
+        ("document.querySelector('.settings-pane').style.visibility = 'hidden';", "Settings pane"),
     ],
 )
 def test_capture_scripts_find_elements_by_identity_and_leave_the_record_read_to_the_tool(
@@ -1237,3 +1238,21 @@ def test_capture_scripts_find_elements_by_identity_and_leave_the_record_read_to_
 
     assert [error.split(":")[0] for error in result.errors] == [_manual_context(2).label, _manual_context(3).label]
     assert reason in result.errors[0]
+
+
+def test_capture_finds_its_card_by_section_identity_not_by_text() -> None:
+    """A capture names its card by the section key, not by text: "Layout" matched the first card
+    that says "layout" anywhere, so majanivirus step 4 showed Advanced comparison and layout in
+    place of the Layout card its caption describes."""
+
+    def step(capture: dict[str, object]) -> dict[str, object]:
+        return {"title": "Layout", "body": "Open Layout.", "operations": [{"capture": capture}]}
+
+    result = ValidationResult(errors=[], warnings=[])
+    capture_tool.add_step_text_validation(result, _manual_context(2), step({"cardTitle": "Layout"}))
+    capture_tool.add_step_text_validation(
+        result, _manual_context(3), step({"selector": ".card[data-settings-section='layout']"})
+    )
+
+    assert [error.split(":")[0] for error in result.errors] == [_manual_context(2).label]
+    assert "cardTitle" in result.errors[0]

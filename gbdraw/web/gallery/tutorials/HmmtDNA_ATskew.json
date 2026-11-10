@@ -95,7 +95,7 @@
             "source": "webapp",
             "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
             "replayThrough": 2,
-            "cardTitle": "Input Genomes",
+            "selector": ".card[data-settings-section='input-genomes']",
             "cropPadding": 14,
             "actions": [
               {

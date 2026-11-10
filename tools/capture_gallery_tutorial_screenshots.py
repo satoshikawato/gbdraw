@@ -485,23 +485,34 @@ def add_step_text_validation(
     step: dict[str, Any],
 ) -> None:
     """No step tells the reader to use the uploader's Session file chooser, which captures hide;
-    no capture action finds an element by position or reads the records the tool reads."""
+    no capture finds its card by text or an element by position, or does what the tool does for
+    every capture: read the records, hide the Settings pane under a popup."""
 
     if SESSION_FILE_CHOOSER_NAME.lower() in json.dumps(step, ensure_ascii=False).lower():
         result.errors.append(
             f"{context.label}: names {SESSION_FILE_CHOOSER_NAME}, which tutorial captures hide: "
             "the reader uploads the files and has no Session."
         )
-    actions = [
-        json.dumps(action, ensure_ascii=False)
+    captures = [
+        operation["capture"]
         for operation in as_array(step.get("operations"))
         if isinstance(operation, dict) and isinstance(operation.get("capture"), dict)
-        for action in as_array(operation["capture"].get("actions"))
     ]
+    if any("cardTitle" in capture for capture in captures):
+        result.errors.append(
+            f"{context.label}: a capture finds its card by text (cardTitle), which matches the first card "
+            "that names it anywhere; give selector \".card[data-settings-section='<key>']\"."
+        )
+    actions = [json.dumps(action, ensure_ascii=False) for capture in captures for action in as_array(capture.get("actions"))]
     if any(CAPTURE_POSITION_PICK.search(action) for action in actions):
         result.errors.append(
             f"{context.label}: a capture action finds an element by position, which a new sibling "
             "shifts; find it by its id, data attribute or accessible name."
+        )
+    if any(".settings-pane" in action for action in actions):
+        result.errors.append(
+            f"{context.label}: a capture action changes the Settings pane; the tool hides it under "
+            "a popup for every capture (hide_settings_pane_under_popup)."
         )
     if any(read in action for action in actions for read in CAPTURE_RECORD_READS):
         result.errors.append(
@@ -1080,10 +1091,6 @@ def resolve_capture_target(page, capture: dict[str, Any]):
     if selector:
         return page.locator(selector).first
 
-    card_title = as_text(capture.get("cardTitle"))
-    if card_title:
-        return page.locator(".card").filter(has_text=re.compile(re.escape(card_title), re.IGNORECASE)).first
-
     return None
 
 
@@ -1499,6 +1506,21 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
         page.wait_for_timeout(100)
 
 
+def hide_settings_pane_under_popup(page) -> None:
+    """A popup a capture opens may sit over the Settings pane: hide the pane, so the crop
+    shows no settings around the popup. The pane keeps its place, so nothing moves."""
+
+    page.evaluate(
+        """
+        () => {
+          const popup = document.querySelector('.feature-popup');
+          if (!popup?.checkVisibility()) return;
+          document.querySelector('.settings-pane')?.style.setProperty('visibility', 'hidden', 'important');
+        }
+        """
+    )
+
+
 def wait_for_css_transitions(page) -> None:
     """Let running CSS transitions end, so a crop never shows a control mid-change.
 
@@ -1559,6 +1581,7 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
         }
         """
     )
+    hide_settings_pane_under_popup(page)
     apply_open_select_overlays(page, capture.get("openSelect"))
     wait_for_css_transitions(page)
 
@@ -1591,7 +1614,7 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
     else:
         box = capture.get("boundingBox")
         if not isinstance(box, dict):
-            raise RuntimeError("capture metadata needs selector, cardTitle, crop=openSelect, or boundingBox.")
+            raise RuntimeError("capture metadata needs selector, crop=openSelect, or boundingBox.")
         clip = {
             "x": float(box["x"]),
             "y": float(box["y"]),
