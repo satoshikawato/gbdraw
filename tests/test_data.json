@@ -176,11 +176,46 @@
       "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/f194b4146ca9-NC_007795.gb"
     },
     {
+      "path": "tests/test_inputs/Pandoravirus_salinus.gb",
+      "size": 4617035,
+      "sha256": "8313c610397885a5a21f8e3a050092f30c87096ec75e31b4331b92606e738fa5",
+      "gitBlob": "84a74316beeff13520e7a987831e002ae2105fd0",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/8313c6103978-Pandoravirus_salinus.gb"
+    },
+    {
       "path": "tests/test_inputs/Sakai.gbk",
       "size": 11935135,
       "sha256": "d41c8d33ea76c88bbf90763c7150e9b98f03fd7bd030b01d34dfb184bb17519c",
       "gitBlob": "a7be63b377bca2d14bd614d96723ed7cd41dfe13",
       "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/d41c8d33ea76-Sakai.gbk"
+    },
+    {
+      "path": "tests/test_inputs/Shigella_dysenteriae.gbk",
+      "size": 13562990,
+      "sha256": "d7c2af4bc420f9f5ce9ccd0a70513454199d6a7c5ee4de82e3cf6bc7fbe54008",
+      "gitBlob": "acc16c1d602fee46d266bfed238566d1782ea56a",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/d7c2af4bc420-Shigella_dysenteriae.gbk"
+    },
+    {
+      "path": "tests/test_inputs/Shigella_flexneri-Shigella_sonnei.blastn.out",
+      "size": 2486258,
+      "sha256": "4dedc4f98cedf4f89e52a154b7d2878141f460657092829bf2ddb7199a2963d2",
+      "gitBlob": "04b3b8a629eb66a338a376d1cba0b8c468a0ab79",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/4dedc4f98ced-Shigella_flexneri-Shigella_sonnei.blastn.out"
+    },
+    {
+      "path": "tests/test_inputs/Shigella_flexneri.gbk",
+      "size": 10063817,
+      "sha256": "d2ac9f941a5aacedbebf9af43cb058615b76d73a228c91a298abfe1a7879c07c",
+      "gitBlob": "9981af4a68bf0409ece51b45ae6bf0b638be1eff",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/d2ac9f941a5a-Shigella_flexneri.gbk"
+    },
+    {
+      "path": "tests/test_inputs/Shigella_sonnei.gbk",
+      "size": 12940473,
+      "sha256": "17dc1e62e2125016e3cfcdc8f889fb5d1c9ae5c44ac138250508c465e20fb396",
+      "gitBlob": "a16513d0bc4fdc811189a1c27f0f98a9a3bcab86",
+      "url": "https://github.com/satoshikawato/gbdraw/releases/download/test-data-2026-11/17dc1e62e212-Shigella_sonnei.gbk"
     }
   ]
 }

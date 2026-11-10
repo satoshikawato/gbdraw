@@ -31,7 +31,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from tools import test_data  # noqa: E402
 from tools.reproduce_examples_manifest import (  # noqa: E402
-    FIGURES_WITHOUT_INPUTS,
     BlastPreparation,
     CliRecipe,
     CompositePanel,
@@ -1140,7 +1139,6 @@ def check_outputs(
     same: list[str] = []
     stale: list[str] = []
     problems: list[str] = []
-    not_checked: list[str] = []
     for figure_id in figure_ids:
         spec = figures[figure_id]
         if figure_id in errors:
@@ -1151,15 +1149,7 @@ def check_outputs(
                 for filename, entry in reproducer.missing_inputs.items()
                 if figure_id in entry["figures"]
             )
-            if figure_id in FIGURES_WITHOUT_INPUTS:
-                not_checked.append(f"{figure_id}: {FIGURES_WITHOUT_INPUTS[figure_id]}")
-            else:
-                problems.append(f"{figure_id}: not rendered; missing inputs: {', '.join(missing) or 'none reported'}")
-        elif figure_id in FIGURES_WITHOUT_INPUTS:
-            problems.append(
-                f"{figure_id}: renders now; remove it from FIGURES_WITHOUT_INPUTS in "
-                "tools/reproduce_examples_manifest.py"
-            )
+            problems.append(f"{figure_id}: not rendered; missing inputs: {', '.join(missing) or 'none reported'}")
         else:
             tracked = tracked_root / spec.output_path
             generated = output_root / spec.output_path
@@ -1169,7 +1159,7 @@ def check_outputs(
                 stale.append(figure_id)
     print(
         f"\nExamples check: {len(same)} match, {len(stale)} differ, "
-        f"{len(problems)} failed, {len(not_checked)} not checked."
+        f"{len(problems)} failed."
     )
     if stale:
         print("\nThese tracked files differ from what the generator renders now:")
@@ -1184,10 +1174,6 @@ def check_outputs(
     if problems:
         print("\nThese figures could not be checked:")
         for line in problems:
-            print(f"  {line}")
-    if not_checked:
-        print("\nNot checked, because their inputs are not available (FIGURES_WITHOUT_INPUTS):")
-        for line in not_checked:
             print(f"  {line}")
     return not stale and not problems
 

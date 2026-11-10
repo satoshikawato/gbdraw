@@ -117,5 +117,10 @@ docs/internal/**/results/**
 /tests/test_inputs/NC_002951.gb
 /tests/test_inputs/NC_003923.gb
 /tests/test_inputs/NC_007795.gb
+/tests/test_inputs/Pandoravirus_salinus.gb
 /tests/test_inputs/Sakai.gbk
+/tests/test_inputs/Shigella_dysenteriae.gbk
+/tests/test_inputs/Shigella_flexneri-Shigella_sonnei.blastn.out
+/tests/test_inputs/Shigella_flexneri.gbk
+/tests/test_inputs/Shigella_sonnei.gbk
 # END test data

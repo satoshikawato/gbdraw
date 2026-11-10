@@ -169,10 +169,9 @@ the SVG bytes and sizing options gbdraw hands to CairoSVG's `svg2png`, recorded
 at that call (inside the gbdraw command for a CLI PNG) for each panel, the
 recipe, and, for a composite, the code that builds it. The check compares that digest, and a tracked PNG without one is
 stale, so a refresh on any machine passes. A failed run uploads what it
-rendered as the `examples-<run>` artifact. The figures in `FIGURES_WITHOUT_INPUTS`, whose source records are in
-neither the repository nor the test-data Release, are named as not checked;
-the check fails when any other figure cannot render, and when a listed figure
-renders. `dev` pushes do not run the job: the pull request that changes a
+rendered as the `examples-<run>` artifact. Every input a figure reads, BLAST
+results included, is in the repository or the test-data Release, so the check
+runs no BLAST+ and fails when a figure cannot render. `dev` pushes do not run the job: the pull request that changes a
 drawing refreshes its own figures.
 
 The 16 `@comparison-contract` Playwright cases run once per CI run. Their pytest
