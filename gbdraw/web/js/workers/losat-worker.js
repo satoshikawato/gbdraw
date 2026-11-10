@@ -1,6 +1,7 @@
 import {
   compileLosatWasm,
   hasDirectLosatApi,
+  isLosatTrapFailure,
   reportedLosatFailure,
   requireLosatProgram,
   runLosatPairDirect,
@@ -160,7 +161,8 @@ self.onmessage = async (event) => {
       type: type || 'run',
       ok: false,
       error: error?.message ? String(error.message) : String(error || 'Unknown LOSAT worker error'),
-      losatReported: reportedLosatFailure(error)
+      losatReported: reportedLosatFailure(error),
+      trap: isLosatTrapFailure(error)
     });
   }
 };

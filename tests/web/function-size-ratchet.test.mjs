@@ -135,8 +135,8 @@ const FUNCTION_STATEMENTS = {
   'services/history.js::createHistoryManager': 897,
   'services/history.js::createHistoryRouter': 449,
   'services/legend-layout.js::buildCircularLegendLayout': 97,
-  'services/losat.js::runLosatPairsThreaded': 137,
-  'services/losat.js::runLosatPairsThreaded.new Promise()': 117,
+  'services/losat.js::runLosatPairsThreaded': 136,
+  'services/losat.js::runLosatPairsThreaded.new Promise()': 116,
   'services/losat.js::runLosatPairsWithWorkers': 115,
   'services/match-sequences.js::analyzeCatalogSequenceSourceCoverage': 134,
   'services/match-sequences.js::createSequenceSourceRegistry': 91,
@@ -154,7 +154,7 @@ const FUNCTION_STATEMENTS = {
   'services/track-slot-validation.js::validateTrackSlotBindingInvariants': 98,
   'utils/contract-repair.js::repairPlace': 121,
   'workers/diagram-generation-worker.js::runGeneration': 97,
-  'workers/losat-threaded-worker.js::runThreadedLosat': 111
+  'workers/losat-threaded-worker.js::runThreadedLosat': 104
 };
 
 const COMPOSITION_ROOT_LOGIC_STATEMENTS = {

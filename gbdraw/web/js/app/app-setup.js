@@ -658,8 +658,11 @@ export const createAppSetup = () => {
   const settingsPaneActions = createSettingsPaneController({ state });
   const {
     openLinearComparisonDisclosure, focusLinearComparisonPair, focusLinearComparisonIssue, chooseLinearComparisonPairFile,
-    showLinearComparisonCause
-  } = createLinearComparisonFocus({ state, mode, errorLog, linearComparisonUi, revealSetting: settingsPaneActions.revealSetting });
+    comparisonCauseShown, showComparisonCause
+  } = createLinearComparisonFocus({
+    state, mode, errorLog, linearComparisonUi, revealSetting: settingsPaneActions.revealSetting,
+    revealSettingsSection: settingsPaneActions.revealSettingsSection
+  });
   const { shownLinearRecordRowFor, linearLayoutTokens, linearLosatCacheInfoByEdgeKey, linearLosatWindowPairs, linearWindowPairSide } = createLinearLayoutReaders({
     state, shownDrawingOfMode, losatCacheInfo
   });
@@ -3404,7 +3407,7 @@ export const createAppSetup = () => {
     missingBlastTsvDialog,
     missingBlastTsvRows,
     chooseLinearComparisonPairFile,
-    showLinearComparisonCause,
+    comparisonCauseShown, showComparisonCause,
     runLinearComparisonIssueAction,
     resolveMissingBlastTsv,
     labelFitDialog,

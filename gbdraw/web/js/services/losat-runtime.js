@@ -104,17 +104,36 @@ export const reportedLosatFailure = (error) => {
 };
 
 /**
- * The failure of a threaded LOSAT run whose host could not run LOSAT's threads: a thread worker that could not be made
- * or prepared, a thread that did not start in time, a thread worker that failed (OV-3316). The serial engine runs no
- * threads, so Auto continues with it and Threaded names it: `LOSAT_THREADING_UNAVAILABLE` with the reason
- * `THREADS_FAILED`.
- * @param {string} detail what failed in the host, kept as the message for the console; the normalizer words the failure
+ * A LOSAT failure that its context names (`code` and `reason`); `detail` is kept as the message for the console, and
+ * the normalizer words the failure.
+ * @param {'LOSAT_RUNTIME' | 'LOSAT_THREADING_UNAVAILABLE'} code
+ * @param {'TRAP' | 'THREADS_FAILED'} reason
+ * @param {string} detail
  * @returns {DiagnosticError}
  */
-export const losatThreadsFailure = (detail) => Object.assign(
-  diagnosticError('LOSAT_THREADING_UNAVAILABLE', { reason: 'THREADS_FAILED' }, { stage: 'losat' }),
-  detail ? { message: detail } : {}
+const namedLosatFailure = (code, reason, detail) => Object.assign(
+  diagnosticError(code, { reason }, { stage: 'losat' }), detail ? { message: detail } : {}
 );
+
+/**
+ * Whether `error` is the named LOSAT failure of `code` and `reason` (`namedLosatFailure`).
+ * @param {unknown} error
+ * @param {string} code
+ * @param {string} reason
+ * @returns {boolean}
+ */
+const isNamedLosatFailure = (error, code, reason) => error instanceof Error
+  && /** @type {Partial<DiagnosticError>} */ (error).code === code && /** @type {DiagnosticError} */ (error).context.reason === reason;
+
+/**
+ * The failure of a threaded LOSAT run whose host could not run LOSAT's threads: a thread worker that could not be made
+ * or prepared, a thread that did not start in time, a thread worker that failed, shared memory that could not be
+ * allocated (OV-3316). The serial engine runs no threads, so Auto continues with it and Threaded names it:
+ * `LOSAT_THREADING_UNAVAILABLE` with the reason `THREADS_FAILED`.
+ * @param {string} detail what failed in the host
+ * @returns {DiagnosticError}
+ */
+export const losatThreadsFailure = (detail) => namedLosatFailure('LOSAT_THREADING_UNAVAILABLE', 'THREADS_FAILED', detail);
 
 /**
  * Whether a failure is the threaded host failure (`losatThreadsFailure`), which the threaded job worker posts as
@@ -122,9 +141,41 @@ export const losatThreadsFailure = (detail) => Object.assign(
  * @param {unknown} error
  * @returns {boolean}
  */
-export const isLosatThreadsFailure = (error) => error instanceof Error
-  && /** @type {Partial<DiagnosticError>} */ (error).code === 'LOSAT_THREADING_UNAVAILABLE'
-  && /** @type {DiagnosticError} */ (error).context.reason === 'THREADS_FAILED';
+export const isLosatThreadsFailure = (error) => isNamedLosatFailure(error, 'LOSAT_THREADING_UNAVAILABLE', 'THREADS_FAILED');
+
+/**
+ * The failure of a LOSAT run whose code trapped (a LOSAT panic: WebAssembly "unreachable"), on every engine
+ * (OV-3327): `LOSAT_RUNTIME` with the reason `TRAP`. The same search traps the same way; bad input, such as a genetic
+ * code LOSAT does not know (OV-3326), is the realistic cause. A pool worker posts it as `trap` and the page raises it
+ * again here.
+ * @param {string} detail the trap's message
+ * @returns {DiagnosticError}
+ */
+export const losatTrapFailure = (detail) => namedLosatFailure('LOSAT_RUNTIME', 'TRAP', detail);
+
+/**
+ * Whether a failure is the LOSAT trap (`losatTrapFailure`).
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export const isLosatTrapFailure = (error) => isNamedLosatFailure(error, 'LOSAT_RUNTIME', 'TRAP');
+
+/**
+ * What a LOSAT run raises for a failure of LOSAT's code: a trap (`WebAssembly.RuntimeError`) as the LOSAT trap
+ * (`losatTrapFailure`), any other failure as it is.
+ * @param {unknown} error
+ * @returns {unknown}
+ */
+export const raisedLosatFailure = (error) => (error instanceof WebAssembly.RuntimeError
+  ? losatTrapFailure(String(error.message)) : error);
+
+/**
+ * Whether LOSAT itself failed (its error exit, `losatRunFailure`, or its trap, `losatTrapFailure`): the same engine
+ * fails the same way when it runs the search again.
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export const isLosatOwnFailure = (error) => reportedLosatFailure(error) !== null || isLosatTrapFailure(error);
 
 /** @type {Readonly<Record<string, string>>} */
 const SEARCH_FLAGS = LOSAT_SEARCH_FLAGS;
@@ -222,7 +273,12 @@ export const runLosatPairWasi = async ({
     wasi_snapshot_preview1: wasi.wasiImport
   });
   checkCanceled();
-  const exitCode = wasi.start(instance);
+  let exitCode;
+  try {
+    exitCode = wasi.start(instance);
+  } catch (error) {
+    throw raisedLosatFailure(error);
+  }
   checkCanceled();
 
   const stdoutText = new TextDecoder().decode(concatUint8Arrays(stdoutChunks));
@@ -311,7 +367,7 @@ export const runLosatPairDirect = async ({
     // A trap (LOSAT docs/web/abi_v1.md §9): the instance is never called again, not even to free or clear;
     // the next pair instantiates the module again.
     directInstancePromise = null;
-    throw error;
+    throw raisedLosatFailure(error);
   }
 
   try {

@@ -3633,7 +3633,6 @@
                                             :aria-label="t('LOSAT Mode')"
                                             aria-describedby="help-comparison-losat-mode"
                                             data-linear-comparison-losat-mode
-                                            data-comparison-focus="losat-options"
                                             class="linear-comparison-actions linear-losat-mode-actions"
                                         >
                                             <button
@@ -3641,6 +3640,7 @@
                                                 :key="modeOption.key"
                                                 type="button"
                                                 :data-linear-comparison-losat-mode-option="modeOption.key"
+                                                :data-comparison-focus="modeOption.active ? 'losat-options' : null"
                                                 :aria-pressed="modeOption.active"
                                                 :disabled="!semanticMutationAvailable || (!modeOption.selectable)"
                                                 @click="setLinearComparisonLosatMode(modeOption.key)"
@@ -6678,7 +6678,7 @@
                 :error="errorLog" :recovery="errorDisplay.operation === 'generate' || errorDisplay.operation === 'align' ? generationFailureRecovery : null"
                 class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
                 <div class="mt-2 flex flex-wrap gap-2">
-                    <button v-if="mode === 'linear' && errorDisplay.actions.includes('edit-comparison')" type="button" data-history-ignore @click="showLinearComparisonCause" class="btn btn-secondary btn-sm">{{ t('Show in Comparison') }}</button>
+                    <button v-if="comparisonCauseShown" type="button" data-history-ignore @click="showComparisonCause" class="btn btn-secondary btn-sm">{{ t('Show in Comparison') }}</button>
                     <button v-if="errorDisplay.operation === 'generate' && errorDisplay.actions.includes('retry')" type="button" @click="runAnalysis" :disabled="processing" class="btn btn-secondary btn-sm">{{ t('Retry Generate') }}</button>
                     <button v-if="canRetryAuxiliaryImportFailure" type="button" @click="retryAuxiliaryImportFailure" :disabled="!semanticMutationAvailable" class="btn btn-secondary btn-sm">{{ t('Retry table import') }}</button>
                     <button v-if="canRetryLabelImportFailure" type="button" @click="retryLabelImportFailure" class="btn btn-secondary btn-sm">{{ t('Retry Label TSV import') }}</button>
