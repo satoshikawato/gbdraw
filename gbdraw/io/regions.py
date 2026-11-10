@@ -118,14 +118,6 @@ class RecordWindow:
         """Whether the window runs across the origin of its (circular) record."""
         return self.start > self.end
 
-    def cropped_length(self, record_length: int) -> int:
-        """The bases this window crops from a record of ``record_length`` bases, as the crop reads them: an end past
-        the record's end stops at it, and a window across the origin joins its two parts."""
-
-        if self.crosses_origin:
-            return record_length - self.start + 1 + min(self.end, record_length)
-        return max(0, min(self.end, record_length) - self.start + 1)
-
     @classmethod
     def from_region(cls, spec: RegionSpec, *, column: int | None = None) -> RecordWindow:
         """The window ``spec`` crops; its record selector stays with the spec's reader."""

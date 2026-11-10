@@ -168,9 +168,10 @@ ON) searches the record alone. A record therefore never searches itself unless
 that search was requested. Settings shows the job count from the same plan that
 Generate runs.
 
-LOSATN and TLOSATX E-values use one scale for each pair of genomes. In a Linear
-diagram, files whose records share a row are one genome, and so is every file
-linked to them through other shared rows; a file that shares no row with
+In Linear diagrams, LOSATN and TLOSATX E-values use one scale for each pair of
+genomes. Circular comparison rings still compute E-values per searched file.
+In a Linear diagram, files whose records share a row are one genome, and so is
+every file linked to them through other shared rows; a file that shares no row with
 another file is a genome of its own. A genome's length is every record of its
 files, drawn or not and before any crop; for a GFF3 and FASTA pair, every
 sequence of the FASTA file. Every search between two genomes passes their
@@ -190,8 +191,8 @@ without `-searchsp` (v0.1.0, which `gbdraw setup-losat` installs) makes the CLI
 search with the scale of the searched sequences and say so in a warning; one
 scale per genome needs a newer LOSAT or NCBI BLAST+.
 
-LOSATP E-values (Pairwise, Similarity groups, and Collinear) use one scale for
-each subject genome. Every LOSATP search passes the letters of every protein of
+In Linear diagrams, LOSATP E-values (Pairwise, Similarity groups, and
+Collinear) use one scale for each subject genome. Every LOSATP search passes the letters of every protein of
 the subject genome as the database size (`-dbsize`): the CDS proteins of every
 record of its files, drawn or not and before any crop, taken by the same rules
 the search uses (the drawing's feature visibility and feature edits). The

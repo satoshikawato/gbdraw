@@ -224,9 +224,9 @@ def _genome_search_space(
         source_lengths=source_lengths,
     )
     names = genome_file_names(rows_by_record, source_ids, source_file_name)
-    for message in dict.fromkeys(space.per_file_warning(query, subject, names) for query, subject in pairs):
-        if message is not None:
-            logger.warning("%s", message)
+    for warning in dict.fromkeys(space.per_file_warning(query, subject, names) for query, subject in pairs):
+        if warning is not None:
+            logger.warning("%s", warning.message())
     if all(space(query, subject) is None for query, subject in pairs) or losat_takes_genome_scale(
         spec, losat_bin=search.runtime.losat_executable, ncbi_blast_bin=search.runtime.ncbi_blast_executable
     ):

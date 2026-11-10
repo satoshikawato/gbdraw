@@ -8,7 +8,8 @@
 // (tests/web/helpers/error-text-keys.mjs), the labels of the similarity group
 // member values that Python owns (`memberValueLabelKeys`, shown with `tmx()`),
 // the words of a label fit row that Python owns (`LABEL_FIT_WORDS`, shown with
-// `tm()`), the block kinds Python writes on a match (`COLLINEARITY_BLOCK_KINDS`,
+// `tm()`), the per-file E-value warning Python words (`GENOME_SCALE_WARNING_TEXT`,
+// shown with `tm()`), the block kinds Python writes on a match (`COLLINEARITY_BLOCK_KINDS`,
 // shown with `tmx()`), and the rail short names with a context key of their own
 // (`settingsShortKeys`). tests/web/i18n-catalogs.test.mjs, tools/i18n/sync.mjs
 // and tools/i18n/review-page-data.mjs read the keys from here.
@@ -22,6 +23,7 @@ import { SETTINGS_SECTIONS, settingsShortKeys } from '../../gbdraw/web/js/servic
 import { errorTextKeys } from '../../tests/web/helpers/error-text-keys.mjs';
 import { COLLINEARITY_BLOCK_KINDS } from './collinearity-words.generated.mjs';
 import { LABEL_FIT_WORDS } from './label-fit-words.generated.mjs';
+import { GENOME_SCALE_WARNING_TEXT } from '../../gbdraw/web/js/contracts/card-windows.generated.js';
 
 export const REPOSITORY_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 export const WEB_ROOT = join(REPOSITORY_ROOT, 'gbdraw', 'web');
@@ -482,6 +484,7 @@ export const sourceKeys = async () => {
     add(`collinearity block kind${CONTEXT_SEPARATOR}${word}`, word, 'collinearity block kind', { ...derivedSite('js/services/pairwise-match-popup.js', word), role: 'label' }, null);
   }
   for (const word of LABEL_FIT_WORDS) add(word, word, null, { ...derivedSite('js/app/label-fit-dialog.js', word), role: 'label' }, null);
+  add(GENOME_SCALE_WARNING_TEXT, GENOME_SCALE_WARNING_TEXT, null, { ...derivedSite('js/services/linear-units.js', GENOME_SCALE_WARNING_TEXT), role: 'notice' }, null);
   for (const { context, english } of settingsShortKeys()) {
     add(context + CONTEXT_SEPARATOR + english, english, context, { ...derivedSite('js/services/settings-sections.js', english), role: 'label' }, null);
   }

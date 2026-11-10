@@ -9,9 +9,11 @@
 /** @import { LinearSeq } from './drawing/inputs.js' */
 /** @import { LinearComparisonResolution, LinearComparisonResolvedEdge, WindowLosatFilenames } from './linear-comparisons.js' */
 /** @import { CanonicalRecordWindow } from '../contracts/request.generated.js' */
+/** @import { GenomeScaleWarning, GenomeScaleWarningParams, LinearGenomeScales } from '../contracts/card-windows.generated.js' */
 import { linearComparisonEdgeKey } from './linear-comparisons.js';
 import { linearSeqRecordKey } from './record-draw-selection.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { tm } from '../utils/i18n.js';
 
 const FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'planLinearUnits' });
 
@@ -127,15 +129,21 @@ export const readLinearUnitPlan = (result, asked) => {
  * for LOSAT's own (PD-OI-018 revision 6). Python sums and multiplies the genomes; the page never does. A scale is a
  * positive decimal string, passed to LOSAT unchanged: the product of two large genomes is past what a number holds.
  * `warnings` names the unit pairs searched per file, their genome pair's search space past what LOSAT reads, with the
- * warning the command line logs (Owner decision 2026-11-10).
- * @typedef {{ queryUnit: number, subjectUnit: number, message: string }} GenomeScaleWarning
- * @typedef {{ recordKeys: string[], scales: (string | null)[][], warnings: GenomeScaleWarning[] }} LinearGenomeScales
+ * warning the command line logs as its English text and parameters (Owner decision 2026-11-10). The types are
+ * Python's, generated (`GenomeScaleWarning`, `LinearGenomeScales`).
  */
 /** The E-value scale of a search between two drawn units. @typedef {(queryUnit: number, subjectUnit: number) => string | null} GenomeScaleOf */
 /**
  * The scales of one Generate's searches: `scaleOf` each pair's, `warningOf` the warning of a pair searched per file.
- * @typedef {{ scaleOf: GenomeScaleOf, warningOf: (queryUnit: number, subjectUnit: number) => string | null }} GenomeScales
+ * @typedef {{ scaleOf: GenomeScaleOf, warningOf: (queryUnit: number, subjectUnit: number) => GenomeScaleWarning | null }} GenomeScales
  */
+
+/** The parameters of a per-file warning (`GenomeScaleWarningParams`). */
+const WARNING_PARAMS = /** @type {const} */ (['first', 'second', 'space', 'limit']);
+
+/** @param {unknown} value @returns {value is GenomeScaleWarningParams} */
+const isWarningParams = (value) => isRecord(value)
+  && WARNING_PARAMS.every((name) => typeof (/** @type {Record<string, unknown>} */ (value))[name] === 'string');
 
 /** @param {unknown} value @returns {value is string | null} */
 const isScale = (value) => value === null || (typeof value === 'string' && /^[1-9]\d*$/.test(value));
@@ -158,11 +166,11 @@ export const readGenomeScales = (result, recordKeys) => {
     && result.scales.length === count
     && result.scales.every((row) => Array.isArray(row) && row.length === count && row.every(isScale))
     && Array.isArray(result.warnings) && result.warnings.every((warning) => isRecord(warning)
-      && isUnit(warning.queryUnit) && isUnit(warning.subjectUnit) && typeof warning.message === 'string'
-      && warning.message !== '');
+      && isUnit(warning.queryUnit) && isUnit(warning.subjectUnit) && typeof warning.text === 'string' && warning.text !== ''
+      && isWarningParams(warning.params));
   if (!valid) throw diagnosticError('RESULT_INVALID', {}, failure);
   const { scales, warnings } = /** @type {LinearGenomeScales} */ (/** @type {unknown} */ (result));
-  const messages = new Map(warnings.map(({ queryUnit, subjectUnit, message }) => [`${queryUnit}:${subjectUnit}`, message]));
+  const byPair = new Map(warnings.map((warning) => [`${warning.queryUnit}:${warning.subjectUnit}`, warning]));
   /** @param {number} queryUnit @param {number} subjectUnit */
   const checked = (queryUnit, subjectUnit) => {
     if (!isUnit(queryUnit) || !isUnit(subjectUnit)) throw diagnosticError('RESULT_INVALID', {}, failure);
@@ -174,8 +182,28 @@ export const readGenomeScales = (result, recordKeys) => {
     },
     warningOf: (queryUnit, subjectUnit) => {
       checked(queryUnit, subjectUnit);
-      return messages.get(`${queryUnit}:${subjectUnit}`) ?? null;
+      return byPair.get(`${queryUnit}:${subjectUnit}`) ?? null;
     }
+  };
+};
+
+/**
+ * The banner of one Generate's per-file warnings: `notice(warning)` for each search it builds shows the warnings so
+ * far, each once and translated (`tm(text, params)`: its English text is the one the command line logs), in the order
+ * the searches ask for them. Generate calls it only for the pairs it searches, so a pair of the reply that no search
+ * reads shows nothing.
+ * @param {(notice: { text: string, tone: 'warning' }) => void} show
+ * @returns {(warning: GenomeScaleWarning | null) => void}
+ */
+export const perFileWarningNotice = (show) => {
+  /** @type {Set<string>} */
+  const shown = new Set();
+  return (warning) => {
+    if (!warning) return;
+    const text = tm(warning.text, { ...warning.params });
+    if (shown.has(text)) return;
+    shown.add(text);
+    show({ text: [...shown].join(' '), tone: 'warning' });
   };
 };
 

@@ -271,6 +271,33 @@ def linked_genomes(rows: Sequence[Hashable], source_ids: Sequence[Hashable]) -> 
 # The largest search space LOSAT reads (``-searchsp``): a signed 64-bit integer, as NCBI BLAST+'s.
 LOSAT_SEARCH_SPACE_LIMIT = 2**63 - 1
 
+# The warning of a genome pair searched per file (Owner decision 2026-11-10), with its parameters: the command line
+# fills them with ``str.format``, the Web app with ``tm()``, which shows it translated (a catalog key, generated into
+# gbdraw/web/js/contracts/card-windows.generated.js by tools/generate_web_contracts.py).
+PER_FILE_WARNING_TEXT = (
+    "The search space of genomes {first} and {second} ({space}) is past the largest LOSAT reads ({limit}), "
+    "so their E-values are computed per file, not per genome."
+)
+
+
+@dataclass(frozen=True)
+class PerFileWarning:
+    """The warning of one genome pair searched per file (:data:`PER_FILE_WARNING_TEXT`): the two genomes' names,
+    in sorted order, and the pair's search space and LOSAT's limit, each written with thousands separators."""
+
+    first: str
+    second: str
+    space: str
+    limit: str
+
+    def params(self) -> dict[str, str]:
+        return {"first": self.first, "second": self.second, "space": self.space, "limit": self.limit}
+
+    def message(self) -> str:
+        """The English text the command line logs and the Web app shows untranslated."""
+
+        return PER_FILE_WARNING_TEXT.format(**self.params())
+
 
 @dataclass(frozen=True)
 class GenomeSearchSpaces:
@@ -297,19 +324,16 @@ class GenomeSearchSpaces:
         space = self._genome_space(query, subject)
         return None if space is None or space > LOSAT_SEARCH_SPACE_LIMIT else space
 
-    def per_file_warning(self, query: int, subject: int, genome_names: Sequence[str]) -> str | None:
+    def per_file_warning(self, query: int, subject: int, genome_names: Sequence[str]) -> PerFileWarning | None:
         """The warning of a pair searched per file because its genome pair's search space is past what LOSAT
         reads, or ``None``. ``genome_names[i]`` names record ``i``'s genome (:func:`genome_file_names`); the
-        message is one for the genome pair, whichever records and direction the search has."""
+        warning is one for the genome pair, whichever records and direction the search has."""
 
         space = self._genome_space(query, subject)
         if space is None or space <= LOSAT_SEARCH_SPACE_LIMIT:
             return None
         first, second = sorted((genome_names[query], genome_names[subject]))
-        return (
-            f"The search space of genomes {first} and {second} ({space:,}) is past the largest LOSAT reads "
-            f"({LOSAT_SEARCH_SPACE_LIMIT:,}), so their E-values are computed per file, not per genome."
-        )
+        return PerFileWarning(first, second, f"{space:,}", f"{LOSAT_SEARCH_SPACE_LIMIT:,}")
 
 
 def genome_search_spaces(
@@ -685,6 +709,8 @@ def nucleotide_losat_cache_key(
 __all__ = [
     "LOSAT_OUTFMT",
     "LOSAT_SEARCH_SPACE_LIMIT",
+    "PER_FILE_WARNING_TEXT",
+    "PerFileWarning",
     "GenomeSearchSpaces",
     "genome_file_names",
     "source_file_name",

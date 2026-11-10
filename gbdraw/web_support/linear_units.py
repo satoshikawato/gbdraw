@@ -43,6 +43,7 @@ from gbdraw.api.request_render import (
     linear_genome_scales,
 )
 from gbdraw.api.requests import InputPlace, LinearDiagramRequest, RecordPresentation, expanded_record_key
+from gbdraw.comparisons.losat_jobs import PER_FILE_WARNING_TEXT
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.regions import window_drawn_reverse
@@ -54,7 +55,7 @@ from gbdraw.session_request_codec import (
     _decode_windows,
     decode_canonical_request,
 )
-from gbdraw.web_support.request_render import _staged_source_names
+from gbdraw.web_support.request_render import staged_source_names
 
 
 class LinearUnitRecordInput(TypedDict):
@@ -203,13 +204,25 @@ def plan_linear_units_json(records_json: str, pairs_json: str) -> str:
     return json.dumps(plan_linear_units(json.loads(str(records_json)), json.loads(str(pairs_json))))
 
 
+class GenomeScaleWarningParams(TypedDict):
+    """The parameters of a per-file warning (:class:`gbdraw.comparisons.losat_jobs.PerFileWarning`)."""
+
+    first: str
+    second: str
+    space: str
+    limit: str
+
+
 class GenomeScaleWarning(TypedDict):
     """A unit pair searched per file, its genome pair's search space past what LOSAT reads, and the warning the
-    command line logs for it (Owner decision 2026-11-10)."""
+    command line logs for it (Owner decision 2026-11-10): ``text`` is its English text with ``{name}`` parameters
+    (:data:`gbdraw.comparisons.losat_jobs.PER_FILE_WARNING_TEXT`, a catalog key), which the page shows with
+    ``tm(text, params)``."""
 
     queryUnit: int
     subjectUnit: int
-    message: str
+    text: str
+    params: GenomeScaleWarningParams
 
 
 class LinearGenomeScales(TypedDict):
@@ -245,7 +258,7 @@ def plan_genome_scales(
     keys, scale, warning = linear_genome_scales(
         request,
         cast(GenomeScaleProgram, program),
-        _staged_source_names(resource_names, {key: Path(path) for key, path in resource_paths.items()}),
+        staged_source_names(resource_names, {key: Path(path) for key, path in resource_paths.items()}),
     )
     units = range(len(keys))
 
@@ -257,8 +270,10 @@ def plan_genome_scales(
         "recordKeys": list(keys),
         "scales": [[decimal(query, subject) for subject in units] for query in units],
         "warnings": [
-            {"queryUnit": query, "subjectUnit": subject, "message": message}
-            for query in units for subject in units if (message := warning(query, subject)) is not None
+            {"queryUnit": query, "subjectUnit": subject, "text": PER_FILE_WARNING_TEXT, "params": {
+                "first": found.first, "second": found.second, "space": found.space, "limit": found.limit,
+            }}
+            for query in units for subject in units if (found := warning(query, subject)) is not None
         ],
     }
 
@@ -484,8 +499,8 @@ def plan_record_places_json(records_json: str) -> str:
 
 
 def describe_card_window_plan() -> dict[str, dict[str, Shape]]:
-    """The requests and the answers of :func:`plan_card_windows_json` and :func:`plan_record_places_json` as named
-    shapes of :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py)."""
+    """The requests and the answers of :func:`plan_card_windows_json` and :func:`plan_record_places_json`, and the
+    answer of :func:`plan_genome_scales_json`, as named shapes of :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py)."""
 
     types_: dict[str, Shape] = {}
 
@@ -497,7 +512,7 @@ def describe_card_window_plan() -> dict[str, dict[str, Shape]]:
             return ref(hint.__name__)
         return None
 
-    for root in (CardWindowRecordInput, CardWindowPlan, RecordPlaceInput, RecordPlace):
+    for root in (CardWindowRecordInput, CardWindowPlan, RecordPlaceInput, RecordPlace, LinearGenomeScales):
         special(root)
     return {"types": types_}
 
@@ -510,6 +525,7 @@ __all__ = [
     "CardWindowRecordInput",
     "describe_card_window_plan",
     "GenomeScaleWarning",
+    "GenomeScaleWarningParams",
     "LinearGenomeScales",
     "plan_genome_scales",
     "plan_genome_scales_json",

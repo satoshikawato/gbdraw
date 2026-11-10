@@ -1584,9 +1584,8 @@ export const linearRecordSourceResources = (linearSeqs, inputType) => {
  */
 const linearRecordPlacements = (drawing, seqs, recordOf) => {
   const arranged = Boolean(drawing.linearRecordLayoutEnabled?.value);
-  const resolvedRows = /** @type {{ row: number, canonicalColumn?: number }[]} */ (resolveEffectiveLinearRecordRows(
-    seqs, drawing.linearRecordRows, { enabled: arranged }
-  ));
+  const resolvedRows = arrangedLinearRows(drawing, seqs);
+  const gridRows = linearRecordGridRows(drawing, seqs);
   // The places of the Record Layout's cells, when the stored ones cannot be written as they are: Python reads a place
   // for every record or for none, each its own (OV-3071). Stored places Python reads as they are stay as they are.
   const places = arranged ? linearLayoutPlaces(linearLayoutCells(
@@ -1602,7 +1601,7 @@ const linearRecordPlacements = (drawing, seqs, recordOf) => {
       : written;
     return {
       windows,
-      gridRow: arranged ? (resolvedRows[index]?.row ?? null) : null,
+      gridRow: gridRows[index],
       // A record drawn in several windows places each by its own column (D-14).
       gridColumn: !arranged || windows.length > 1 ? null
         : places ? (places.get(layoutCellKey(seq.uid, null)) ?? null)
@@ -1610,6 +1609,28 @@ const linearRecordPlacements = (drawing, seqs, recordOf) => {
       reverseComplement: linearPresentationReverse(seq, windows)
     };
   });
+};
+
+/**
+ * @param {{ linearRecordLayoutEnabled?: { value: unknown }, linearRecordRows?: LayoutEntry[] }} drawing
+ * @param {readonly { uid?: unknown }[]} seqs
+ */
+const arrangedLinearRows = (drawing, seqs) => /** @type {{ row: number, canonicalColumn?: number }[]} */ (
+  resolveEffectiveLinearRecordRows(seqs, drawing.linearRecordRows, { enabled: Boolean(drawing.linearRecordLayoutEnabled?.value) })
+);
+
+/**
+ * The row each drawn card's record is written in (`presentation.gridRow`): its Record Layout row when the drawing
+ * arranges records in rows, else null. The one owner of that value: the request (`linearRecordPlacements`) and the
+ * reuse check of stored LOSATP results (a genome is the files whose records share a row, PD-OI-018 revision 6) read it.
+ * @param {{ linearRecordLayoutEnabled?: { value: unknown }, linearRecordRows?: LayoutEntry[] }} drawing
+ * @param {readonly { uid?: unknown }[]} seqs The drawn cards, in request order.
+ * @returns {(number | null)[]}
+ */
+export const linearRecordGridRows = (drawing, seqs) => {
+  if (!drawing.linearRecordLayoutEnabled?.value) return seqs.map(() => null);
+  const rows = arrangedLinearRows(drawing, seqs);
+  return seqs.map((_, index) => rows[index]?.row ?? null);
 };
 
 /**

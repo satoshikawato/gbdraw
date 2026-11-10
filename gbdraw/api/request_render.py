@@ -90,6 +90,7 @@ from gbdraw.comparisons.linear_losat import (
 )
 from gbdraw.comparisons.losat_jobs import (
     GenomeDatabaseSizes,
+    PerFileWarning,
     genome_database_sizes,
     genome_file_names,
     losat_record_uids,
@@ -2322,7 +2323,7 @@ GENOME_SCALE_PROGRAMS: tuple[GenomeScaleProgram, ...] = ("losatn", "tlosatx", "l
 
 def linear_genome_scales(
     request: LinearDiagramRequest, program: GenomeScaleProgram, source_names: Mapping[str, str] | None = None
-) -> tuple[tuple[str, ...], Callable[[int, int], int | None], Callable[[int, int], str | None]]:
+) -> tuple[tuple[str, ...], Callable[[int, int], int | None], Callable[[int, int], PerFileWarning | None]]:
     """The E-value scale each record-pair search of a Linear request's ``program`` search passes LOSAT, by drawn
     record indexes (a record drawn in windows is a record per window), with the key of the record each draws and
     the warning of a pair searched per file.

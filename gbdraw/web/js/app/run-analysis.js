@@ -81,6 +81,7 @@ import {
   requireLinearComparisonPlanSnapshot,
   linearDrawingUnitPlaces,
   linearDrawingWindowsOf,
+  linearRecordGridRows,
   savedPipelineSearchDrawing
 } from '../services/session-request.js';
 /** @import { RawSessionResourceDescriptor } from '../services/session-resource-backing.js' */
@@ -120,7 +121,7 @@ import {
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import { windowLosatFilenamesOf } from '../services/linear-comparison-retained.js';
-import { catalogUnitPlaces, generateUnitSearch, readGenomeScales, searchUnitPlaces } from '../services/linear-units.js';
+import { catalogUnitPlaces, generateUnitSearch, perFileWarningNotice, readGenomeScales, searchUnitPlaces } from '../services/linear-units.js';
 import {
   movedIdentityValues,
   movedRecordEdits,
@@ -777,12 +778,16 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  * @param {CommittedCanonicalSession | null} options.committedSession The committed Session: its request is of the
  *   current schema (Load reads a stored one to the current schema; Generate and the rerender commit the one they built).
  * @param {readonly LinearSeq[]} options.sequences
+ * @param {readonly (number | null)[]} options.gridRows The row each card's record is written in now
+ *   (`linearRecordGridRows`): a LOSATP search's E-value scale is its subject genome's, and a genome is the files whose
+ *   records share a row, so a moved record declines reuse.
  * @param {ResolvedProteinReuseActive} options.active
  */
 const canReuseResolvedProteinArtifacts = ({
   canonicalComparisons,
   committedSession,
   sequences,
+  gridRows,
   active
 }) => {
   const committedRequest = committedSession?.renderRequest || null;
@@ -819,6 +824,7 @@ const canReuseResolvedProteinArtifacts = ({
     // request does (`createLinearSeq`).
     const [only] = windows.length === 1 ? windows : [null];
     return record.recordKey !== seq.uid
+      || (record.presentation?.gridRow ?? null) !== (gridRows[index] ?? null)
       || String((selector && 'value' in selector ? selector.value : '') || '') !== String(seq.region_record_id || '').trim()
       || (seq.windows.length > 0 || windows.length > 1
         ? seq.windows.map(spanText).join(',') !== windows.map(spanText).join(',')
@@ -3675,6 +3681,7 @@ export const createRunAnalysis = ({
           && canReuseResolvedProteinArtifacts({
             canonicalComparisons: drawing.files.linearCanonicalComparisons,
             sequences: linearSeqs,
+            gridRows: linearRecordGridRows(drawing, linearSeqs),
             committedSession: typeof getCommittedCanonicalSession === 'function'
               ? getCommittedCanonicalSession()
               : null,
@@ -4242,8 +4249,7 @@ export const createRunAnalysis = ({
           program: buildLosatSuffix(searchDrawing), linearRecordCatalog, recordDisplayRows: recordDisplayRows?.value || [],
           omittedAnnotationRecordKeys: requestDrawing.annotationSets.length > 0 ? (omittedAnnotationRecordKeys?.() || []) : []
         }), unitSearch.recordKeys) : null;
-        /** @type {Set<string>} */
-        const perFileWarnings = new Set();
+        const perFileNotice = perFileWarningNotice(showNotice);
 
         /**
          * A search's arguments, with the E-value scale Python plans for its genomes (`genomeScales`): the search space
@@ -4258,8 +4264,7 @@ export const createRunAnalysis = ({
           const program = searchDrawing.losatProgram.value;
           const scale = genomeScales ? genomeScales.scaleOf(queryIdx, drawnSubjectIdx) : null;
           // A genome pair past what LOSAT reads is searched per file: the banner shows Python's warning, as the CLI logs it.
-          const perFile = genomeScales ? genomeScales.warningOf(queryIdx, drawnSubjectIdx) : null;
-          if (perFile && !perFileWarnings.has(perFile)) showNotice({ text: [...perFileWarnings.add(perFile)].join(' '), tone: 'warning' });
+          perFileNotice(genomeScales ? genomeScales.warningOf(queryIdx, drawnSubjectIdx) : null);
           if (program === 'blastn' || program === 'tblastx') {
             return nucleotideLosatArgs({
               program,

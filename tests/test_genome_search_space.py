@@ -841,7 +841,10 @@ def test_a_genome_pair_past_the_largest_search_space_losat_reads_is_searched_per
     else:
         assert space(0, 1) is None and space(1, 0) is None
         assert warning == space.per_file_warning(1, 0, ["a.gb", "b.gb"])
-        assert warning is not None and "a.gb" in warning and "b.gb" in warning and "per file" in warning
+        assert warning is not None and warning.message() == (
+            "The search space of genomes a.gb and b.gb (9,223,372,036,854,775,808) is past the largest LOSAT reads "
+            "(9,223,372,036,854,775,807), so their E-values are computed per file, not per genome."
+        )
 
 
 def test_the_command_line_warns_once_for_a_genome_pair_searched_per_file(caplog: pytest.LogCaptureFixture) -> None:
@@ -881,7 +884,13 @@ def test_the_web_gets_the_per_file_warning_the_command_line_logs(
     reply = web_genome_scales(captured[0], tmp_path)
     assert reply["scales"][0][1] is None
     # The reply names every unit pair past the limit (DE3 against itself too); the page shows those it searches.
-    searched = {(item["queryUnit"], item["subjectUnit"]): item["message"] for item in reply["warnings"]}
+    # The page shows `tm(text, params)`: the English text with its parameters is byte for byte the logged one.
+    from gbdraw.comparisons.losat_jobs import PER_FILE_WARNING_TEXT
+
+    assert {item["text"] for item in reply["warnings"]} == {PER_FILE_WARNING_TEXT}
+    searched = {
+        (item["queryUnit"], item["subjectUnit"]): item["text"].format(**item["params"]) for item in reply["warnings"]
+    }
     assert {(0, 1), (1, 0), (1, 1)} == set(searched)
     assert {searched[(0, 1)], searched[(1, 0)]} == set(logged)
     assert "NC_001416.gb" in logged[0] and "NC_042057.1.gb" in logged[0]

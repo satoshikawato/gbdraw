@@ -691,15 +691,18 @@ test('the Web passes the E-value scale Python plans, as the command line does', 
 // or a unit the reply does not hold is a helper failure, never a search without its scale.
 test('a genome scale reply that does not fit the searched units is refused', async () => {
   const { readGenomeScales } = await import('../../gbdraw/web/js/services/linear-units.js');
-  const warning = { queryUnit: 0, subjectUnit: 1, message: 'searched per file' };
+  const params = { first: 'a.gb', second: 'b.gb', space: '9', limit: '8' };
+  const warning = { queryUnit: 0, subjectUnit: 1, text: 'Genomes {first} and {second}', params };
   const good = { recordKeys: ['a', 'b'], scales: [[null, '7'], ['5', null]], warnings: [warning] };
   assert.equal(readGenomeScales(good, ['a', 'b']).scaleOf(0, 1), '7');
   assert.equal(readGenomeScales(good, ['a', 'b']).scaleOf(1, 1), null);
-  assert.equal(readGenomeScales(good, ['a', 'b']).warningOf(0, 1), 'searched per file');
+  assert.deepEqual(readGenomeScales(good, ['a', 'b']).warningOf(0, 1), warning);
   assert.equal(readGenomeScales(good, ['a', 'b']).warningOf(1, 0), null);
   const refused = (result, keys = ['a', 'b']) => assert.throws(() => readGenomeScales(result, keys), { code: 'RESULT_INVALID' });
   refused({ ...good, warnings: [{ ...warning, subjectUnit: 2 }] });
-  refused({ ...good, warnings: [{ ...warning, message: '' }] });
+  refused({ ...good, warnings: [{ ...warning, text: '' }] });
+  refused({ ...good, warnings: [{ ...warning, params: { ...params, space: 9 } }] });
+  refused({ ...good, warnings: [{ queryUnit: 0, subjectUnit: 1, message: 'searched per file' }] });
   refused({ recordKeys: good.recordKeys, scales: good.scales });
   refused(good, ['b', 'a']);
   refused(good, ['a']);
@@ -711,6 +714,43 @@ test('a genome scale reply that does not fit the searched units is refused', asy
   refused({ recordKeys: ['a', 'b'] });
   refused(null);
   assert.throws(() => readGenomeScales(good, ['a', 'b']).scaleOf(2, 0), { code: 'RESULT_INVALID' });
+});
+
+// Owner decision 2026-11-10: a genome pair past what LOSAT reads is searched per file with one warning. The banner shows
+// the warnings of the pairs Generate searches, each once whatever the direction, translated from the English text
+// Python sends with its parameters (the text the command line logs); a pair of the reply no search reads shows none.
+test('the banner shows each per-file warning of the searched pairs once, translated', async () => {
+  const { readGenomeScales, perFileWarningNotice } = await import('../../gbdraw/web/js/services/linear-units.js');
+  const { GENOME_SCALE_WARNING_TEXT } = await import('../../gbdraw/web/js/contracts/card-windows.generated.js');
+  const params = (first, second) => ({ first, second, space: '9,223,372,036,854,775,808', limit: '9,223,372,036,854,775,807' });
+  const reply = {
+    recordKeys: ['a', 'b', 'c'],
+    scales: [[null, null, null], [null, null, null], [null, null, null]],
+    warnings: [
+      { queryUnit: 0, subjectUnit: 1, text: GENOME_SCALE_WARNING_TEXT, params: params('a.gb', 'b.gb') },
+      { queryUnit: 1, subjectUnit: 0, text: GENOME_SCALE_WARNING_TEXT, params: params('a.gb', 'b.gb') },
+      { queryUnit: 2, subjectUnit: 2, text: GENOME_SCALE_WARNING_TEXT, params: params('c.gb', 'c.gb') }
+    ]
+  };
+  const { warningOf } = readGenomeScales(reply, reply.recordKeys);
+  /** @type {{ text: string, tone: string }[]} */
+  const shown = [];
+  const notice = perFileWarningNotice((entry) => shown.push(entry));
+  for (const [query, subject] of [[0, 1], [1, 0], [0, 2], [1, 2]]) notice(warningOf(query, subject));
+  const english = 'The search space of genomes a.gb and b.gb (9,223,372,036,854,775,808) is past the largest LOSAT reads '
+    + '(9,223,372,036,854,775,807), so their E-values are computed per file, not per genome.';
+  assert.deepEqual(shown, [{ text: english, tone: 'warning' }]);
+
+  // The text is a catalog key: a locale that has it shows its translation with the same parameters.
+  const { setUiLocale, SOURCE_LOCALE } = await import('../../gbdraw/web/js/utils/i18n.js');
+  await setUiLocale('ja', async () => ({ default: { [GENOME_SCALE_WARNING_TEXT]: '{first} / {second}: per file' } }));
+  try {
+    const translated = [];
+    perFileWarningNotice((entry) => translated.push(entry.text))(warningOf(0, 1));
+    assert.deepEqual(translated, ['a.gb / b.gb: per file']);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });
 
 // Two genomes of 120 Mb and 95 Mb: their search space is past Number.MAX_SAFE_INTEGER, and reaches LOSAT digit for digit.
