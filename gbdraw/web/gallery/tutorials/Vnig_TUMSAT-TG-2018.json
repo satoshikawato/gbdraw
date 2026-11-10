@@ -64,21 +64,23 @@
           "capture": {
             "source": "webapp",
             "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "replayThrough": 2,
             "viewport": {
               "width": 1280,
               "height": 900
             },
             "clipSelectors": [
-              "[data-settings-section='input-genomes'] > .card-header",
-              "[data-settings-section='input-genomes'] [role='group'][aria-label='GenBank/DDBJ File selection']"
+              "[data-setting='inputs'] .card-header",
+              "section[aria-label='Source records']"
             ],
             "cropPadding": 14,
             "assertAppState": {
               "mode": "circular",
-              "files.c_gb.name": "GCF_015097735.1_ASM1509773v1_genomic.gbff"
+              "circularFileCards.cards.value.0.source.gb.name": "GCF_015097735.1_ASM1509773v1_genomic.gbff"
             },
             "visibleText": [
-              "GCF_015097735.1_ASM1509773v1_genomic.gbff"
+              "GCF_015097735.1_ASM1509773v1_genomic.gbff",
+              "6 source records inspected"
             ]
           }
         }

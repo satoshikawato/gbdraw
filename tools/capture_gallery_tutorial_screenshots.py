@@ -659,6 +659,55 @@ def load_web_app_session(page, session_path: Path) -> None:
     )
 
 
+# Whether the shown drawing's input records are read, as a reader's upload reads them: a
+# Circular drawing's Source records count, a Linear card's Record select. A drawing without
+# input files has nothing to read. A loaded Session defers the read ("Records not inspected").
+SHOWN_RECORDS_READ_SCRIPT = """
+() => {
+  const app = window.__GBDRAW_APP__;
+  if (app.mode === 'circular') {
+    const discovery = app.circularRecordDiscoveryState;
+    return !discovery.hasInput || discovery.status === 'ready';
+  }
+  return app.linearSeqs
+    .filter((seq) => app.shownInputComplete('linear', seq))
+    .every((seq) => !app.linearRecordSelectorDisabled(seq));
+}
+"""
+
+
+def inspect_shown_records(page) -> None:
+    """Read the shown drawing's records, as the reader's upload did (OV-3139).
+
+    A tutorial reader uploads the files, and an upload reads their records ("1 source record
+    inspected", the Record select naming the record). A loaded Session leaves them unread
+    until **Inspect source records** (a Linear card's **Inspect records**), which changes
+    neither the Result nor Undo history; this presses that action through the app.
+    """
+
+    page.evaluate(
+        """
+        async () => {
+          const app = window.__GBDRAW_APP__;
+          await (app.mode === 'circular' ? app.inspectCircularSourceRecords() : app.refreshLinearRecordSelectors());
+        }
+        """
+    )
+    try:
+        page.wait_for_function(SHOWN_RECORDS_READ_SCRIPT, timeout=DEFAULT_GENERATE_TIMEOUT_MS)
+    except Exception as error:
+        raise RuntimeError(f"Could not read the records of the capture session: {error}") from error
+
+
+def assert_capture_records_read(page) -> None:
+    """A webapp crop shows the records read, as the reader who uploaded the files sees them."""
+
+    if not page.evaluate(SHOWN_RECORDS_READ_SCRIPT):
+        raise RuntimeError(
+            "capture shows records not inspected: the reader who uploaded the files sees them read."
+        )
+
+
 def apply_capture_action(page, action: dict[str, Any]) -> None:
     action_type = as_text(action.get("type")) or as_text(action.get("action"))
     selector = as_text(action.get("selector"))
@@ -1358,6 +1407,11 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
         replay_through = capture.get("replayThrough")
         if isinstance(replay_through, int):
             replay_tutorial_steps(page, sample, replay_through)
+        # After the replay, so the read meets the settings of the reader's step, as an upload
+        # does: a read that finds one record opens the single-record panel only when those
+        # settings allow it.
+        if session_path is not None and session_path.exists():
+            inspect_shown_records(page)
     else:
         raise RuntimeError(f"Unsupported capture source: {source}")
 
@@ -1486,6 +1540,8 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
             "height": float(box["height"]),
         }
 
+    if as_text(capture.get("source")).lower() in {"webapp", "web-app", "app"}:
+        assert_capture_records_read(page)
     assert_capture_app_state(page, capture)
     assert_capture_visible_contract(page, capture, clip)
     png_bytes = page.screenshot(type="png", clip=clip)

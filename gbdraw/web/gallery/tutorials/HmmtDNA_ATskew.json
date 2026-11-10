@@ -112,8 +112,13 @@
               "circularFileCards.cards.value.0.source.gb.name": "HmmtDNA.gbk"
             },
             "visibleText": [
-              "HmmtDNA.gbk"
-            ]
+              "HmmtDNA.gbk",
+              "1 source record inspected"
+            ],
+            "viewport": {
+              "width": 1280,
+              "height": 1400
+            }
           }
         }
       ],

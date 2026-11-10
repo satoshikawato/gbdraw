@@ -107,6 +107,8 @@
           },
           "capture": {
             "source": "webapp",
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "replayThrough": 2,
             "cardTitle": "Input Genomes",
             "cropPadding": 14,
             "actions": [
@@ -118,7 +120,10 @@
             "assertAppState": {
               "mode": "circular",
               "circularFileCards.cards.value.0.source.gb.name": "NC_001879.gbk"
-            }
+            },
+            "visibleText": [
+              "1 source record inspected"
+            ]
           }
         },
         {

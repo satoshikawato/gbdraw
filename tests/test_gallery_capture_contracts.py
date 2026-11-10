@@ -674,8 +674,13 @@ def test_vnig_upload_capture_names_the_session_file_it_shows() -> None:
     capture = operation.get("capture", {})
     assert capture.get("source") == "webapp"
     assert capture.get("session") == sample["session"]
-    assert capture.get("assertAppState") == {"mode": "circular", "files.c_gb.name": filename}
-    assert capture.get("visibleText") == [filename]
+    # The file of the first Circular File card (OV-3328: `files.c_gb` is gone), and the six
+    # records the step says the app finds, read as the reader's upload reads them (OV-3139).
+    assert capture.get("assertAppState") == {
+        "mode": "circular",
+        "circularFileCards.cards.value.0.source.gb.name": filename,
+    }
+    assert capture.get("visibleText") == [filename, "6 source records inspected"]
 
 
 def test_ready_gallery_media_passes_capture_contract_validation() -> None:
@@ -1073,3 +1078,69 @@ def test_each_capture_action_lets_its_transitions_end_before_the_next() -> None:
 
     assert events[0] == "app.zoom = 1.15"
     assert len(events) == 2 and "CSSTransition" in events[1] and ".finished" in events[1]
+
+
+class _PreparePage:
+    """A page that records what prepare_capture_page does to it, in order."""
+
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+
+    def set_viewport_size(self, size: dict[str, int]) -> None:
+        pass
+
+    def goto(self, url: str, wait_until: str) -> None:
+        self.events.append("open page")
+
+    def evaluate(self, script: str, *args: object) -> None:
+        if "data-linear-source-fold" in script:
+            self.events.append("open Linear File cards")
+
+
+@pytest.mark.parametrize("fresh_page", [False, True])
+def test_session_capture_reads_the_records_as_the_readers_upload_did(
+    fresh_page: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-3139: a loaded Session leaves its records unread; the reader who uploaded the files sees them read."""
+
+    events: list[str] = []
+    monkeypatch.setattr(capture_tool, "wait_for_app_shell", lambda page: None)
+    monkeypatch.setattr(capture_tool, "load_web_app_session", lambda page, path: events.append("load session"))
+    monkeypatch.setattr(capture_tool, "inspect_shown_records", lambda page: events.append("read records"))
+    monkeypatch.setattr(capture_tool, "replay_tutorial_steps", lambda page, sample, through: events.append("replay"))
+    monkeypatch.setattr(capture_tool, "apply_capture_action", lambda page, action: events.append("action"))
+    sample = load_ready_examples("HmmtDNA_ATskew")[0]
+    capture: dict[str, object] = {"source": "webapp", "actions": [{"type": "wait"}]}
+    if fresh_page:
+        capture["freshPage"] = True
+    else:
+        capture.update(session=sample["session"], replayThrough=2)
+
+    capture_tool.prepare_capture_page(_PreparePage(events), "http://gallery", sample, capture)
+
+    if fresh_page:
+        assert events == ["open page", "action"]
+    else:
+        assert events == ["open page", "load session", "open Linear File cards", "replay", "read records", "action"]
+
+
+def test_webapp_crop_refuses_records_not_inspected() -> None:
+    """The guard reads the shown drawing's records in both modes and refuses a crop that shows them unread."""
+
+    class FakePage:
+        def __init__(self, read: bool) -> None:
+            self.read = read
+            self.scripts: list[str] = []
+
+        def evaluate(self, script: str) -> bool:
+            self.scripts.append(script)
+            return self.read
+
+    unread = FakePage(read=False)
+    with pytest.raises(RuntimeError, match="records not inspected"):
+        capture_tool.assert_capture_records_read(unread)
+    capture_tool.assert_capture_records_read(FakePage(read=True))
+
+    script = unread.scripts[0]
+    assert "circularRecordDiscoveryState" in script and "status === 'ready'" in script
+    assert "linearRecordSelectorDisabled" in script
