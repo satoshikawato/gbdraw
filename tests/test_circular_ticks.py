@@ -610,7 +610,11 @@ def test_the_tick_labels_keep_their_margin_from_a_feature_track_below_them() -> 
 
     cfg = apply_config_overrides(None, None)
     margin = circular_tick_label_margin_px(float(cfg.objects.ticks.tick_labels.font_size), float(cfg.objects.ticks.tick_width))
-    svg = _ring_below_the_ticks("heatmap", True, ("ticks:ticks", "features:features", "gc_content:dinucleotide_content"))
+    svg = _ring_below_the_ticks(
+        "heatmap",
+        True,
+        ("ticks:ticks@tick_label_layout=label_in_tick_out", "features:features", "gc_content:dinucleotide_content"),
+    )
 
     assert _tick_label_inner_edge_px(svg) - _slot_outer_edge_px(svg, "features") == pytest.approx(margin, abs=0.01)
 
