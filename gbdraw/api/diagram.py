@@ -628,6 +628,21 @@ def _build_circular_dinucleotide_dataframes(
     }
 
 
+def _circular_gc_frames(
+    record: SeqRecord,
+    *,
+    dinucleotide: str,
+    window: int,
+    step: int,
+    nts: set[str],
+    circular: bool,
+) -> tuple[DataFrame, dict[str, DataFrame]]:
+    """A record's ``skew_df`` frames (``_build_circular_dinucleotide_dataframes``) and, first, the frame of the
+    figure's ``dinucleotide``, the one the GC content track reads (empty when no slot reads it)."""
+    frames = _build_circular_dinucleotide_dataframes(record, window=window, step=step, nts=nts, circular=circular)
+    return frames.get(dinucleotide.upper(), DataFrame()), frames
+
+
 def _has_conservation_inputs(
     conservation_blast_files: Sequence[ConservationInput] | None,
     conservation_dataframes: Sequence[DataFrame] | None,
@@ -2684,7 +2699,6 @@ def assemble_circular_diagram_from_record(
             "a single-record circular diagram takes depth_table, depth_file, or depth_tracks."
         )
     context = CircularRecordContext() if _record_context is None else _record_context
-    one_circle_inputs = context.one_circle
     thresholds = ComparisonThresholds(
         evalue=inputs.evalue,
         bitscore=inputs.bitscore,
@@ -2904,16 +2918,16 @@ def assemble_circular_diagram_from_record(
     record_transform = bind_record_transforms(
         [gb_record], None if context.record_transform is None else [context.record_transform]
     )[0]
-    dinucleotide_dataframes = _build_circular_dinucleotide_dataframes(
+    gc_df, dinucleotide_dataframes = _circular_gc_frames(
         gb_record,
+        dinucleotide=str(inputs.dinucleotide),
         window=int(window),
         step=int(step),
         nts=requested_nts,
         circular=record_transform.is_circular,
     )
-    gc_df = dinucleotide_dataframes.get(str(inputs.dinucleotide).upper(), DataFrame())
-    one_circle = None if one_circle_inputs is None else _one_circle_drawing(
-        one_circle_inputs, str(inputs.dinucleotide), int(window), int(step), requested_nts, float(identity),
+    one_circle = _one_circle_drawing(
+        context.one_circle, str(inputs.dinucleotide), int(window), int(step), requested_nts, float(identity),
         inputs.feature_density_tracks,
     )
     if cfg.canvas.show_depth and depth_config is not None:
@@ -3144,18 +3158,20 @@ def _record_feature_density(
 
 
 def _one_circle_drawing(
-    one_circle_inputs: CircularOneCircleInputs,
+    one_circle_inputs: CircularOneCircleInputs | None,
     dinucleotide: str,
     window: int,
     step: int,
     nts: set[str],
     conservation_min_identity: float,
     feature_density_tracks: Sequence[FeatureDensityTrack] | None,
-) -> CircularOneCircle:
+) -> CircularOneCircle | None:
     """The records of one circle as the drawing reads them: each drawn record's GC frames at the circle's window
     and step, its feature density layers on the scale the drawn records share, and its transform placed on the
-    circle."""
+    circle. None when the record has its circle to itself (no ``one_circle_inputs``)."""
 
+    if one_circle_inputs is None:
+        return None
     drawn = [unit.record_index for unit, _place in one_circle_inputs.layout.placed]
     density = dict(zip(drawn, feature_density_record_layers(
         [one_circle_inputs.records[index] for index in drawn],
@@ -3166,13 +3182,13 @@ def _one_circle_drawing(
 
     def unit_data(record_index: int) -> CircularRecordData:
         unit_record = one_circle_inputs.records[record_index]
-        frames = _build_circular_dinucleotide_dataframes(
-            unit_record, window=window, step=step, nts=nts,
+        gc_df, frames = _circular_gc_frames(
+            unit_record, dinucleotide=dinucleotide, window=window, step=step, nts=nts,
             circular=one_circle_inputs.transforms[record_index].is_circular,
         )
         return CircularRecordData(
             gb_record=unit_record,
-            gc_df=frames.get(dinucleotide.upper(), DataFrame()),
+            gc_df=gc_df,
             dinucleotide_dataframes=frames,
             conservation_min_identity=conservation_min_identity,
             feature_density=density[record_index],

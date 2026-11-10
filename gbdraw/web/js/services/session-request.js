@@ -6310,12 +6310,32 @@ const projectedOutputPrefix = (
 };
 
 /**
+ * The GC content mode a stored request's draft holds.
+ * @param {Record<string, unknown>} overrides
+ */
+const projectGcContentMode = (overrides) => overrides.gc_content_mode || 'deviation';
+
+/**
+ * One circle's draft settings of a stored request (`oneCircleAdvOfLayout`): its Circular layout's, and what
+ * leaving one circle restores (`oneCircleLeftOfRequest`) from the GC content mode and Hide GC Skew it draws.
+ * @param {Partial<CanonicalCircularLayout> | null} circularLayout The request's layout when it is Circular.
+ * @param {Record<string, unknown>} overrides @param {boolean} suppressSkew
+ */
+const projectOneCircleDraft = (circularLayout, overrides, suppressSkew) => oneCircleAdvOfLayout(
+  circularLayout,
+  oneCircleLeftOfRequest(
+    { gc_content_mode: String(projectGcContentMode(overrides)), suppress_skew: suppressSkew },
+    { gc_content_mode: createDefaultAdv('circular').gc_content_mode, suppress_skew: createDefaultForm().suppress_skew }
+  )
+);
+
+/**
  * The GC content and depth tracks' draft settings of a stored request: the
  * reader of `quantitativeTrackOverrides`.
  * @param {Record<string, unknown>} overrides @param {unknown} depthColor
  */
 const projectQuantitativeTrackDraft = (overrides, depthColor) => ({
-  gc_content_mode: overrides.gc_content_mode || 'deviation',
+  gc_content_mode: projectGcContentMode(overrides),
   gc_content_min_percent: overrides.gc_content_min_percent ?? 0,
   gc_content_max_percent: overrides.gc_content_max_percent ?? 100,
   gc_content_show_axis: overrides.gc_content_show_axis !== false,
@@ -7201,7 +7221,6 @@ export const projectCanonicalSessionRequest = ({
     ...currentComparisonDefaults,
     alignmentLength: currentComparisonDefaults.alignment_length
   };
-  const quantitativeDraft = projectQuantitativeTrackDraft(overrides, projectedDepthColor);
   const adv = {
     features: options.selectedFeaturesSet ?? [...sparseFeatureTypes],
     feature_shapes: projectedFeatureShapes,
@@ -7255,10 +7274,7 @@ export const projectCanonicalSessionRequest = ({
     multi_record_min_radius_ratio: renderRequest.layout?.multiRecordMinRadiusRatio ?? 0.55,
     multi_record_column_gap_ratio: renderRequest.layout?.multiRecordColumnGapRatio ?? 0.10,
     multi_record_row_gap_ratio: renderRequest.layout?.multiRecordRowGapRatio ?? 0.05,
-    ...oneCircleAdvOfLayout(renderRequest.mode === 'circular' ? renderRequest.layout : null, oneCircleLeftOfRequest(
-      { gc_content_mode: String(quantitativeDraft.gc_content_mode), suppress_skew: form.suppress_skew },
-      { gc_content_mode: createDefaultAdv('circular').gc_content_mode, suppress_skew: createDefaultForm().suppress_skew }
-    )),
+    ...projectOneCircleDraft(renderRequest.mode === 'circular' ? renderRequest.layout : null, overrides, form.suppress_skew),
     center_reserved_radius: tracks.centerReservedRadius ?? null,
     resolve_overlaps: Boolean(overrides.resolve_overlaps),
     feature_overlap_tolerance_bp: overrides.feature_overlap_tolerance_bp ?? 0,
@@ -7277,7 +7293,7 @@ export const projectCanonicalSessionRequest = ({
       : overrides.linear_definition_show_length !== false ? 'show' : 'hide',
     keep_full_definition_with_plot_title: Boolean(options.keepFullDefinitionWithPlotTitle),
     show_definition: renderRequest.mode !== 'circular' || overrides.show_definition !== false,
-    ...quantitativeDraft,
+    ...projectQuantitativeTrackDraft(overrides, projectedDepthColor),
     depth_window_size: options.depthWindow ?? null,
     depth_step_size: options.depthStep ?? null,
     depth_tracks: projectedDepthTracks,

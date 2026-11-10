@@ -3973,6 +3973,68 @@ def _rename_unit_ids(elements: Sequence[object], used_ids: set[str], record_inde
                 attribs[name] = value
 
 
+class _CircleSlotPlan(NamedTuple):
+    """The slots a Circular canvas lays out round its circle, the slots its feature anchor prefers, and whether
+    they show a depth track."""
+
+    slots: list[CircularTrackSlot]
+    preferred_anchor_slot_ids: frozenset[str]
+    show_depth_track: bool
+
+
+def _circle_slot_plan(
+    canvas_config: CircularCanvasConfigurator,
+    configurators: DiagramConfigurators,
+    planned: CircularPlannedTracks,
+    *,
+    total_length: int,
+    circular_preset: str,
+    show_features: bool,
+    record_band: bool,
+) -> _CircleSlotPlan:
+    """The slots the circle lays out over ``total_length``: the planned slots in the preset's order, or the
+    preset's own when none were requested, with the tracks the slots or the configuration show; and the record
+    band's room outside them when several records share the circle and the band is on (``record_band``)."""
+
+    profile = canvas_config.profile
+    cfg = profile.config
+    requested = planned.slots
+    depth_enabled = bool(profile.show_depth and configurators.depth is not None)
+    if requested is not None:
+        renderers = {str(slot.renderer) for slot in requested if slot.enabled}
+        show_depth_track = bool("depth" in renderers and depth_enabled)
+        show_gc_track = bool("dinucleotide_content" in renderers)
+        show_skew_track = bool("dinucleotide_skew" in renderers)
+        show_ticks_track = bool("ticks" in renderers)
+    else:
+        show_depth_track = bool(depth_enabled)
+        show_gc_track = profile.show_gc
+        show_skew_track = profile.show_skew
+        show_ticks_track = bool(cfg.objects.scale.show)
+    context = CircularPresetContext(
+        cfg=cfg,
+        geometry=canvas_config.geometry(),
+        total_length=total_length,
+        strandedness=profile.strandedness,
+        show_features=show_features,
+        show_ticks=show_ticks_track,
+        show_depth=show_depth_track,
+        show_gc=show_gc_track,
+        show_skew=show_skew_track,
+        track_ids=tuple(canvas_config.track_ids.items()),
+        dinucleotide=str(getattr(configurators.gc, "dinucleotide", "GC")),
+    )
+    plan = (
+        circular_radial_plan_for_preset(circular_preset, context)
+        if requested is None
+        else circular_track_slots_from_preset_order(
+            list(requested), circular_preset, context, axis_index=planned.circular_track_axis_index
+        )
+    )
+    band = [_record_band_slot(cfg)] if record_band else []
+    return _CircleSlotPlan([*plan.slots, *band], plan.preferred_anchor_slot_ids, show_depth_track)
+
+
 def add_record_on_circular_canvas(
     canvas: Drawing,
     canvas_config: CircularCanvasConfigurator,
@@ -4009,72 +4071,16 @@ def add_record_on_circular_canvas(
     # A hidden definition is no definition (no band, no text to fit, no group) unless it draws a circle's count of the
     # records left out (``_CircleDrawing.definition_shown``). The plot title is drawn by the caller either way.
     definition_shown = drawing.definition_shown
-    depth_enabled = bool(profile.show_depth and configurators.depth is not None)
-    simple_show_ticks = bool(cfg.objects.scale.show)
     # The caller planned and laid out the annotation slots (_prepare_circular_annotation_tracks).
     effective_circular_track_slots = planned.slots
     resolved_annotations = planned.annotations
     user_slot_mode = effective_circular_track_slots is not None
-    user_active_slot_renderers = {
-        str(slot.renderer)
-        for slot in (effective_circular_track_slots or [])
-        if slot.enabled
-    }
-    if user_slot_mode:
-        show_depth_track = bool("depth" in user_active_slot_renderers and depth_enabled)
-        show_gc_track = bool("dinucleotide_content" in user_active_slot_renderers)
-        show_skew_track = bool("dinucleotide_skew" in user_active_slot_renderers)
-        show_ticks_track = bool("ticks" in user_active_slot_renderers)
-    else:
-        show_depth_track = bool(depth_enabled)
-        show_gc_track = profile.show_gc
-        show_skew_track = profile.show_skew
-        show_ticks_track = simple_show_ticks
     circular_preset = normalize_circular_track_preset(cfg.canvas.circular.track_type)
     show_features = slots_draw_features(effective_circular_track_slots)
-
-    if user_slot_mode:
-        radial_plan = circular_track_slots_from_preset_order(
-            list(effective_circular_track_slots or []),
-            circular_preset,
-            CircularPresetContext(
-                cfg=cfg,
-                geometry=canvas_config.geometry(),
-                total_length=display_length,
-                strandedness=profile.strandedness,
-                show_features=show_features,
-                show_ticks=show_ticks_track,
-                show_depth=show_depth_track,
-                show_gc=show_gc_track,
-                show_skew=show_skew_track,
-                track_ids=tuple(canvas_config.track_ids.items()),
-                dinucleotide=str(getattr(configurators.gc, "dinucleotide", "GC")),
-            ),
-            axis_index=planned.circular_track_axis_index,
-        )
-        layout_slots = list(radial_plan.slots)
-        preferred_anchor_slot_ids = radial_plan.preferred_anchor_slot_ids
-    else:
-        radial_plan = circular_radial_plan_for_preset(
-            circular_preset,
-            CircularPresetContext(
-                cfg=cfg,
-                geometry=canvas_config.geometry(),
-                total_length=display_length,
-                strandedness=profile.strandedness,
-                show_features=show_features,
-                show_ticks=show_ticks_track,
-                show_depth=show_depth_track,
-                show_gc=show_gc_track,
-                show_skew=show_skew_track,
-                track_ids=tuple(canvas_config.track_ids.items()),
-                dinucleotide=str(getattr(configurators.gc, "dinucleotide", "GC")),
-            ),
-        )
-        layout_slots = list(radial_plan.slots)
-        preferred_anchor_slot_ids = radial_plan.preferred_anchor_slot_ids
-    if one_circle is not None and one_circle.record_band:
-        layout_slots.append(_record_band_slot(cfg))
+    layout_slots, preferred_anchor_slot_ids, show_depth_track = _circle_slot_plan(
+        canvas_config, configurators, planned, total_length=display_length, circular_preset=circular_preset,
+        show_features=show_features, record_band=one_circle is not None and one_circle.record_band,
+    )
     feature_slot = next(
         (
             slot
