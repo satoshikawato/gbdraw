@@ -2804,6 +2804,33 @@ def _annotation_track_content(
     )
 
 
+def _draw_circular_tick_slot(
+    canvas: Drawing,
+    resolved_slot: CircularResolvedSlot,
+    *,
+    gb_record: SeqRecord,
+    canvas_config: CircularCanvasConfigurator,
+    precalculated_labels: list[CircularLabel] | None,
+    use_slot_tick_options: bool,
+    record_transform: RecordDisplayTransform | None,
+    record_key: str,
+) -> Drawing:
+    """Draw one record's ticks slot, clear of the feature labels' leader lines; a row error names the slot."""
+
+    tick_group = _tick_group_options(resolved_slot, use_slot_tick_options=use_slot_tick_options)
+    if tick_group is None:
+        return canvas
+    leaders = _feature_label_leaders(precalculated_labels or (), len(gb_record.seq))
+    key = GroupKey(record_key, GroupKind.TICKS, str(resolved_slot.id))
+    try:
+        return add_tick_group_on_canvas(
+            canvas, gb_record, canvas_config, group_key=key, **tick_group, record_transform=record_transform,
+            feature_leaders=leaders,
+        )
+    except ValidationError as error:
+        raise _with_slot_row(error, resolved_slot) from None
+
+
 def _draw_circular_annotation_slot(
     canvas: Drawing,
     resolved_slot: CircularResolvedSlot,
@@ -2949,18 +2976,16 @@ def _draw_resolved_circular_slot(
         )
 
     if renderer == "ticks":
-        tick_group = _tick_group_options(resolved_slot, use_slot_tick_options=use_slot_tick_options)
-        if tick_group is None:
-            return canvas
-        leaders = _feature_label_leaders(precalculated_labels or (), len(gb_record.seq))
-        key = GroupKey(record_key, GroupKind.TICKS, str(resolved_slot.id))
-        try:
-            return add_tick_group_on_canvas(
-                canvas, gb_record, canvas_config, group_key=key, **tick_group, record_transform=record_transform,
-                feature_leaders=leaders,
-            )
-        except ValidationError as error:
-            raise _with_slot_row(error, resolved_slot) from None
+        return _draw_circular_tick_slot(
+            canvas,
+            resolved_slot,
+            gb_record=gb_record,
+            canvas_config=canvas_config,
+            precalculated_labels=precalculated_labels,
+            use_slot_tick_options=use_slot_tick_options,
+            record_transform=record_transform,
+            record_key=record_key,
+        )
 
     if renderer == "depth":
         depth_source = _slot_depth_source(resolved_slot, depth_df, depth_config, depth_tracks_by_index)
