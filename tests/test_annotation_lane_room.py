@@ -372,6 +372,39 @@ def test_the_definition_scan_measures_each_label_room_once(monkeypatch: pytest.M
     assert distinct and len(measured) == len(distinct)
 
 
+def test_an_inside_slot_measures_no_room_in_a_gap_narrower_than_its_band(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Over the centre definition the gap between its reserve and the feature ring is narrower than the slot: no anchor
+    # holds the band there, so no label room is measured there (OV-2981). Dev measured every one of the figure's rooms
+    # in such gaps, one for each place its tries shifted the slot to, before drawing it in the gap from the centre.
+    import gbdraw.diagrams.circular.assemble as assemble_module
+    import gbdraw.diagrams.circular.radial_layout as radial_module
+
+    record, options = _inside_slot_over_the_definition()
+    trying: list[tuple[float, float, float]] = []  # (lower, upper, slot width) of the gaps being tried
+    measured_in: list[tuple[float, float, float] | None] = []
+    try_gap, measure_room = radial_module._try_measure_inside_interval, assemble_module.circular_annotation_label_room
+
+    def trying_gap(intent: object, *, interval: tuple[float, float], width_px: float, **kwargs: object) -> object:
+        trying.append((float(interval[0]), float(interval[1]), float(width_px)))
+        try:
+            return try_gap(intent, interval=interval, width_px=width_px, **kwargs)
+        finally:
+            trying.pop()
+
+    def measuring(track: object, **kwargs: object) -> object:
+        measured_in.append(trying[-1] if trying else None)
+        return measure_room(track, **kwargs)
+
+    monkeypatch.setattr(radial_module, "_try_measure_inside_interval", trying_gap)
+    monkeypatch.setattr(assemble_module, "circular_annotation_label_room", measuring)
+    with pytest.warns(UserWarning, match="definition lines"):
+        gbdraw.draw_circular(record, options=options)
+
+    # A gap from the centre holds any band (cut there); one off the centre holds a band only as wide as the gap.
+    narrower = [gap for gap in measured_in if gap is not None and gap[0] > 0 and gap[2] > gap[1] - gap[0]]
+    assert measured_in and not narrower, (len(narrower), len(measured_in), narrower[:2])
+
+
 def test_the_definition_scan_packs_and_places_each_slot_once_for_the_same_inputs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

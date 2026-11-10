@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Collection, Literal, Mapping, Protocol, Sequence, TypedDict, TypeVar
+from typing import Any, Callable, Collection, Literal, Mapping, NamedTuple, Protocol, Sequence, TypedDict, TypeVar
 
 from ...annotations.models import AnnotationTrackParams, overlay_labels_clear_anchor
 from ...auto_sizes import circular_track_width_px
@@ -876,6 +876,132 @@ def _bound_drops_labels(
     return None if room is None else lambda band: room.drops_labels(band, axis, slot.side, slot.params)
 
 
+class _SlotAt(NamedTuple):
+    """One slot asked for at an anchor radius and a width: what each renderer's band owner reads."""
+
+    intent: _RadialSlotIntent
+    anchor_offset_px: float
+    anchor_radius_px: float
+    width_px: float
+    axis_radius_px: float
+    feature_dict: Mapping[str, Any] | None
+    geometry: CircularCanvasGeometry
+    cfg: GbdrawConfig
+    total_length: int
+    scalar_axes: CircularScalarAxes | None
+
+
+class _SlotBands(NamedTuple):
+    """Where a slot asked for at an anchor stands: its anchor, the band it packs, draws and reserves."""
+
+    anchor_offset_px: float
+    anchor_radius_px: float
+    packing_band_px: RadialBand
+    draw_band_px: RadialBand | None
+    reserved_band_px: RadialBand
+    payload: CircularFeatureLayout | CircularTickLayout | None
+
+
+def _feature_lanes_bands(at: _SlotAt) -> _SlotBands:
+    """Feature lanes: their stack's layout places the lanes and may move the anchor to the stack's edge."""
+
+    intent = at.intent
+    feature_preset = intent.params.get("stack_preset", intent.params.get("preset"))
+    feature_layout = build_circular_feature_layout(
+        at.feature_dict,
+        axis_radius_px=float(at.axis_radius_px),
+        width_px=at.width_px,
+        track_type=str(feature_preset) if feature_preset is not None else None,
+        lane_direction=str(intent.params.get("lane_direction", "inside")),
+        strandedness=bool(at.cfg.canvas.strandedness),
+        anchor_radius_px=at.anchor_radius_px,
+        lane_spacing_px=float(intent.spacing_px),
+    )
+    if feature_layout is None:
+        band = RadialBand(at.anchor_radius_px, at.anchor_radius_px)
+        return _SlotBands(at.anchor_offset_px, at.anchor_radius_px, band, band, band, None)
+    anchor_radius_px = float(feature_layout.anchor_radius_px)
+    band = feature_layout.all_band_px
+    return _SlotBands(
+        float(anchor_radius_px) - float(at.axis_radius_px),
+        anchor_radius_px,
+        band,
+        feature_layout.primary_band_px,
+        band,
+        feature_layout,
+    )
+
+
+def _ticks_bands(at: _SlotAt) -> _SlotBands:
+    """A tick row: its layout measures the ticks' band and the labels' reserve past it."""
+
+    intent = at.intent
+    tick_params = dict(intent.params)
+    tick_params["_slot_side"] = intent.side
+    tick_layout = _tick_layout_from_params(
+        total_length=int(at.total_length),
+        geometry=at.geometry,
+        cfg=at.cfg,
+        params=tick_params,
+        anchor_radius_px=at.anchor_radius_px,
+        width_px=at.width_px,
+        explicit_width=bool(intent.explicit_width),
+        label_clearance_px=intent.label_clearance_px,
+    )
+    return _SlotBands(
+        at.anchor_offset_px,
+        at.anchor_radius_px,
+        tick_layout.tick_band_px,
+        tick_layout.tick_band_px,
+        tick_layout.reserved_band_px,
+        tick_layout,
+    )
+
+
+# The renderers whose layouts measure their own bands. Every other row packs ``_centred_bands``.
+_OWN_BANDS: Mapping[str, Callable[[_SlotAt], _SlotBands]] = {"features": _feature_lanes_bands, "ticks": _ticks_bands}
+
+
+def _centred_bands(at: _SlotAt) -> _SlotBands:
+    """Every row but those of ``_OWN_BANDS``: it packs a band of its width centred on its anchor
+    (``_band_from_center_width``, cut at the centre only), and reserves its labels' room or its axis past it."""
+
+    intent = at.intent
+    band = _band_from_center_width(at.anchor_radius_px, at.width_px)
+    reserved_band = band
+    if intent.label_room is not None:
+        # An annotation slot reserves its labels' room on their side, so other rings keep clear of the letters.
+        room = intent.label_room(band)
+        reserved_band = (
+            RadialBand(band.inner_px - room, band.outer_px)
+            if intent.side == "inside"
+            else RadialBand(band.inner_px, band.outer_px + room)
+        )
+    axis_footprint = (
+        None
+        if at.scalar_axes is None
+        else at.scalar_axes.footprint(intent.renderer, at.width_px, slot_id=intent.slot_id, params=intent.params)
+    )
+    if axis_footprint is not None:
+        # A scalar track's axis paints past its band (its numbered labels); other rings keep clear of it.
+        reserved_band = _band_with_axis_footprint(band, axis_footprint)
+    draw_band = None if intent.renderer == "spacer" else band
+    return _SlotBands(at.anchor_offset_px, at.anchor_radius_px, band, draw_band, reserved_band, None)
+
+
+def _centred_band_may_fit(intent: _RadialSlotIntent, width_px: float, lower: float, upper: float) -> bool:
+    """Whether some anchor may hold the slot's packing band within ``lower``..``upper`` (OV-2981).
+
+    A ``_centred_bands`` row packs a band of its width, cut at the centre only, so an interval that starts off the
+    centre holds it only when it is at least that wide, with the layout's slack at each end. A narrower one is not
+    tried: every place in it would be measured, labels' rooms and all, and left. Rows of ``_OWN_BANDS`` are tried.
+    """
+
+    if intent.renderer in _OWN_BANDS or lower <= LAYOUT_EPSILON:
+        return True
+    return max(0.0, float(width_px)) <= upper - lower + 3.0 * LAYOUT_EPSILON
+
+
 def _measure_radial_slot(
     intent: _RadialSlotIntent,
     *,
@@ -889,122 +1015,37 @@ def _measure_radial_slot(
     scalar_axes: CircularScalarAxes | None,
     compressed: bool = False,
 ) -> CircularResolvedSlot:
-    anchor_radius_px = float(axis_radius_px) + float(anchor_offset_px)
     resolved_width = max(0.0, float(intent.width_px if width_px is None else width_px))
-    renderer = intent.renderer
-
-    if renderer == "features":
-        feature_preset = intent.params.get("stack_preset", intent.params.get("preset"))
-        feature_layout = build_circular_feature_layout(
-            feature_dict,
-            axis_radius_px=float(axis_radius_px),
-            width_px=resolved_width,
-            track_type=str(feature_preset) if feature_preset is not None else None,
-            lane_direction=str(intent.params.get("lane_direction", "inside")),
-            strandedness=bool(cfg.canvas.strandedness),
-            anchor_radius_px=anchor_radius_px,
-            lane_spacing_px=float(intent.spacing_px),
-        )
-        if feature_layout is not None:
-            anchor_radius_px = float(feature_layout.anchor_radius_px)
-            anchor_offset_px = float(anchor_radius_px) - float(axis_radius_px)
-        band = feature_layout.all_band_px if feature_layout is not None else RadialBand(anchor_radius_px, anchor_radius_px)
-        draw_band: RadialBand | None = (
-            feature_layout.primary_band_px if feature_layout is not None else band
-        )
-        return _with_span_label_room(intent, CircularResolvedSlot(
-            slot_index=int(intent.slot_index),
-            id=intent.slot_id,
-            renderer=renderer,
-            side=intent.side,
-            z=intent.z,
-            anchor_radius_px=anchor_radius_px,
-            anchor_offset_px=float(anchor_offset_px),
-            requested_width_px=float(intent.width_px),
-            resolved_width_px=resolved_width,
-            packing_band_px=band,
-            draw_band_px=draw_band,
-            reserved_band_px=band,
-            inner_gap_px=float(intent.inner_gap_px),
-            outer_gap_px=float(intent.outer_gap_px),
-            params=dict(intent.params),
-            payload=feature_layout,
-            explicit_anchor=bool(intent.explicit_anchor),
-            explicit_width=bool(intent.explicit_width),
-            compressed=bool(compressed),
-        ))
-
-    if renderer == "ticks":
-        tick_params = dict(intent.params)
-        tick_params["_slot_side"] = intent.side
-        tick_layout = _tick_layout_from_params(
-            total_length=int(total_length),
-            geometry=geometry,
-            cfg=cfg,
-            params=tick_params,
-            anchor_radius_px=anchor_radius_px,
-            width_px=resolved_width,
-            explicit_width=bool(intent.explicit_width),
-            label_clearance_px=intent.label_clearance_px,
-        )
-        return _with_span_label_room(intent, CircularResolvedSlot(
-            slot_index=int(intent.slot_index),
-            id=intent.slot_id,
-            renderer=renderer,
-            side=intent.side,
-            z=intent.z,
-            anchor_radius_px=anchor_radius_px,
-            anchor_offset_px=float(anchor_offset_px),
-            requested_width_px=float(intent.width_px),
-            resolved_width_px=resolved_width,
-            packing_band_px=tick_layout.tick_band_px,
-            draw_band_px=tick_layout.tick_band_px,
-            reserved_band_px=tick_layout.reserved_band_px,
-            inner_gap_px=float(intent.inner_gap_px),
-            outer_gap_px=float(intent.outer_gap_px),
-            params=dict(intent.params),
-            payload=tick_layout,
-            explicit_anchor=bool(intent.explicit_anchor),
-            explicit_width=bool(intent.explicit_width),
-            compressed=bool(compressed),
-        ))
-
-    band = _band_from_center_width(anchor_radius_px, resolved_width)
-    draw_band = None if renderer == "spacer" else band
-    reserved_band = band
-    if intent.label_room is not None:
-        # An annotation slot reserves its labels' room on their side, so other rings keep clear of the letters.
-        room = intent.label_room(band)
-        reserved_band = (
-            RadialBand(band.inner_px - room, band.outer_px)
-            if intent.side == "inside"
-            else RadialBand(band.inner_px, band.outer_px + room)
-        )
-    axis_footprint = (
-        None
-        if scalar_axes is None
-        else scalar_axes.footprint(renderer, resolved_width, slot_id=intent.slot_id, params=intent.params)
+    at = _SlotAt(
+        intent,
+        float(anchor_offset_px),
+        float(axis_radius_px) + float(anchor_offset_px),
+        resolved_width,
+        float(axis_radius_px),
+        feature_dict,
+        geometry,
+        cfg,
+        total_length,
+        scalar_axes,
     )
-    if axis_footprint is not None:
-        # A scalar track's axis paints past its band (its numbered labels); other rings keep clear of it.
-        reserved_band = _band_with_axis_footprint(band, axis_footprint)
+    bands = _OWN_BANDS.get(intent.renderer, _centred_bands)(at)
     return _with_span_label_room(intent, CircularResolvedSlot(
         slot_index=int(intent.slot_index),
         id=intent.slot_id,
-        renderer=renderer,
+        renderer=intent.renderer,
         side=intent.side,
         z=intent.z,
-        anchor_radius_px=anchor_radius_px,
-        anchor_offset_px=float(anchor_offset_px),
+        anchor_radius_px=bands.anchor_radius_px,
+        anchor_offset_px=float(bands.anchor_offset_px),
         requested_width_px=float(intent.width_px),
         resolved_width_px=resolved_width,
-        packing_band_px=band,
-        draw_band_px=draw_band,
-        reserved_band_px=reserved_band,
+        packing_band_px=bands.packing_band_px,
+        draw_band_px=bands.draw_band_px,
+        reserved_band_px=bands.reserved_band_px,
         inner_gap_px=float(intent.inner_gap_px),
         outer_gap_px=float(intent.outer_gap_px),
         params=dict(intent.params),
-        payload=None,
+        payload=bands.payload,
         explicit_anchor=bool(intent.explicit_anchor),
         explicit_width=bool(intent.explicit_width),
         compressed=bool(compressed),
@@ -1190,6 +1231,8 @@ def _try_measure_inside_interval(
     packing_inner_px: float = 0.0,
 ) -> CircularResolvedSlot | None:
     lower, upper = float(interval[0]), float(interval[1])
+    if not _centred_band_may_fit(intent, width_px, lower, upper):
+        return None
     if intent.renderer == "features":
         seeds = [
             upper,
