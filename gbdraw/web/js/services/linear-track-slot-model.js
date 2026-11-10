@@ -253,7 +253,7 @@ export const createDefaultLinearTrackSlots = ({
  * @param {string} track
  * @returns {LinearTrackSlot}
  */
-const linearFeatureDensitySlot = (track) => defaultSlot('feature_density', {
+export const linearFeatureDensitySlot = (track) => defaultSlot('feature_density', {
   id: featureDensitySlotId(track), side: 'below', params: { track }
 });
 

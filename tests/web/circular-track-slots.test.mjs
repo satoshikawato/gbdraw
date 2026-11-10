@@ -688,6 +688,19 @@ test('Use custom stack adds the feature density rows the simple stack drew (OV-3
   assert.deepEqual(state.adv.circular_track_slots[ids.indexOf('density_genes')].params, { track: 'genes' });
 });
 
+// OV-3276: a new Circular drawing holds the default stack (`createDefaultCircularTrackSlots`), which no Session saved
+// either; Use custom stack builds it from the simple controls with a row per feature density track, as Linear does.
+test('Use custom stack on a new drawing\'s stack adds the feature density rows (OV-3276)', async () => {
+  const { createDefaultCircularTrackSlots } = await import(pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js')));
+  const state = createState({ slots: createDefaultCircularTrackSlots(), axisIndex: null });
+  state.adv.circular_track_slots_enabled = false;
+  state.adv.feature_density_tracks = [{ id: 'genes' }];
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  editor.setCircularTrackSlotsEnabled(true);
+  const ids = state.adv.circular_track_slots.map(({ id }) => id);
+  assert.equal(ids[ids.indexOf('features') + 1], 'density_genes', JSON.stringify(ids));
+});
+
 // D-51: the slot editor shows each row issue as one sentence in the UI language.
 test('Circular editor shows a row issue in the UI language (D-51)', async () => {
   const { setUiLocale } = await import(pathToFileURL(join(tempRoot, 'utils', 'i18n.js')));

@@ -186,9 +186,9 @@ into the `[Unreleased]` list below.
   eukaryotic chromosome or the share of each window in long terminal repeats.
   Give tracks with `--feature_density_track` or `--feature_density_table` in
   `gbdraw circular` and `gbdraw linear`, or as `FeatureDensityTrack` options in
-  the Python API; a saved Session keeps them and replays them in the CLI. The
-  Web app draws a loaded Session's tracks again at Generate and saves them; its
-  editor for them comes later.
+  the Python API; a saved Session keeps them and replays them in the CLI. In
+  the Web app, the Feature density section adds, changes, copies, reorders and
+  removes tracks, and a custom track stack gets a row for each track you add.
 - Changed: records of 100 Mbp or longer get an Auto GC content and GC skew
   window of 1 Mb and step of 100 kb (before: 100 kb and 10 kb), so a human
   chromosome draws about 2,500 samples per track instead of about 25,000.

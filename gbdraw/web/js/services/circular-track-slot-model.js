@@ -813,7 +813,7 @@ export const createDefaultCircularTrackSlots = ({
  * @param {string} track
  * @returns {CircularTrackSlot}
  */
-const circularFeatureDensitySlot = (track) => makeSlot({
+export const circularFeatureDensitySlot = (track) => makeSlot({
   id: featureDensitySlotId(track), renderer: 'feature_density', params: { track }
 });
 
@@ -1015,6 +1015,20 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
     params
   });
 };
+
+/**
+ * The stacks a Circular drawing holds when no Session saved one: a new drawing's (the default stack of
+ * services/session-active-config-contract.js), as stored and as the normalizer writes it, and the stack the Load
+ * reads from an empty list (Linear: `linearStacksNoSessionSaved`).
+ * @param {string} [nt]
+ * @param {string} [preset]
+ * @returns {CircularTrackSlot[][]}
+ */
+export const circularStacksNoSessionSaved = (nt, preset) => [
+  createDefaultCircularTrackSlots(),
+  normalizeCircularTrackSlots(createDefaultCircularTrackSlots(), nt, preset),
+  normalizeCircularTrackSlots([], nt, preset)
+];
 
 /**
  * @param {unknown} slots

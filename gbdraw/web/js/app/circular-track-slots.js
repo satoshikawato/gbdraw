@@ -72,6 +72,7 @@ import {
   clampCircularTrackAxisIndex,
   cloneParams,
   createDefaultCircularTrackSlots,
+  circularStacksNoSessionSaved,
   DEFAULT_SLOT_IDS,
   DEFAULT_TICK_LABEL_LAYOUT,
   effectiveSlotPlacement,
@@ -101,6 +102,7 @@ import {
   normalizeGapText
 } from '../services/circular-track-slot-model.js';
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
+/** @import { FeatureDensityRowEdit } from '../services/feature-density-tracks.js' */
 /** @import { OverlaySlotReference, TrackSlotRow } from '../services/track-slot-validation.js' */
 /**
  * What the slot helpers read of the Web state (`state.js`): the shown mode.
@@ -541,6 +543,20 @@ const presetTemplateSlots = (drawing, preset) => {
     }), circularGeometryShortcutsForState(drawing))
   ];
 };
+
+/**
+ * Changes a Circular drawing's stack rows for a feature density track (the Feature density section,
+ * app/feature-density-tracks.js) through the feature placement transition, as this editor's own edits go (R10):
+ * `edit` changes the rows, and `normalize` runs the editor's normalizer after it.
+ * @param {ChangeTrackLayout} changeTrackLayout
+ * @param {DrawingState} drawing
+ * @param {FeatureDensityRowEdit} edit
+ * @param {(drawing: DrawingState) => void} normalize
+ */
+export const editCircularFeatureDensityRows = (changeTrackLayout, drawing, edit, normalize) => changeTrackLayout(() => {
+  drawing.adv.circular_track_slots_axis_index = edit(drawing.adv.circular_track_slots, drawing.adv.circular_track_slots_axis_index);
+  normalize(drawing);
+});
 
 /**
  * @typedef {object} CircularTrackSlotEditorOptions
@@ -1155,7 +1171,7 @@ export const createCircularTrackSlotEditor = ({
     drawing.adv.circular_track_slots_enabled = Boolean(enabled);
     if (!drawing.adv.circular_track_slots_enabled) return;
     const rows = drawing.adv.circular_track_slots;
-    if (!Array.isArray(rows) || isUnsavedDefaultStack(rows, [normalizeCircularTrackSlots([], drawing.adv.nt, drawing.form.track_type)])) {
+    if (!Array.isArray(rows) || isUnsavedDefaultStack(rows, circularStacksNoSessionSaved(drawing.adv.nt, drawing.form.track_type))) {
       // A stack no Session saved is built from the simple controls, with the feature density rows (OV-3174).
       resetSlotsToPreset(drawing, drawing.form.track_type);
     } else {

@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `142`
+- Contract revision: `143`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -45,7 +45,7 @@ Status: active Product authority
   `PD-OI-112`, `PD-OI-113`, `PD-OI-114`, `PD-OI-115`,
   `PD-OI-116`, `PD-OI-117`,
   `PD-OI-118`, `PD-OI-119`, `PD-OI-120`, `PD-OI-121`, `PD-OI-122`,
-  `PD-OI-123`, `PD-OI-124`, and `PD-OI-125`
+  `PD-OI-123`, `PD-OI-124`, `PD-OI-125`, and `PD-OI-126`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -5349,6 +5349,46 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and
     the Review is `REQUIRED`.
+- Revision 143 changes: `PD-OI-126` is added (concern
+  `web.feature-density.track-editor`, scenario revision `1`; the outcome
+  `A FD-OWN-SECTION`). The Web gains a Feature density settings section
+  after Sequence search, in Circular and Linear, with its own entry in the
+  section index. It adds, edits, duplicates, reorders, and removes feature
+  density tracks. Each track has the query row of Feature Visibility
+  (feature type, `*` for every type, qualifier, value regex), a shortest and
+  a longest length, Heatmap or Histogram, Count or Coverage (%), a window and
+  step (blank: Auto, the GC content window and step), a color (Auto: the
+  Depth color), and a Legend name (blank: the name Python makes from the
+  query). The track id is shown and not edited. Add and Duplicate put a row
+  for the track into a custom track stack, or into a stack that a Session or
+  the user saved, and leave a stack that no Session saved alone; Use custom
+  stack builds that stack again with every track's row, in a new Circular
+  drawing too. Remove takes the track and its rows out in one step and asks
+  first when another row starts at or extends to one of them. Each edit is
+  one History step, applies on Generate, and leaves the value checks to
+  Python. A new document and Reset Settings have no tracks.
+  - The Product Decision Owner `satoshikawato` answered 「すべて推奨通り」 on
+    `2026-11-10` (`DECISIONS.md` `D-65`) to the questions of the campaign
+    `euk-feasibility-20261108`. Its Q1, option A, placed the editor in a
+    section of its own after Sequence search (option B: a card in the
+    Features section after Feature Visibility). Its Q3, option A, leaves
+    Legend editor rows for gradients to a separate change.
+  - On `2026-11-10` (`DECISIONS.md` `D-66`) the complete receipt below was
+    shown in a question, 「E4b（#1894、フィーチャー密度トラックの編集欄）の受領書です。Product Contract に web.feature-density.track-editor の revision 1（Choice A、Q1=A のとおり）として記録します。右の全文で承認しますか（Decision date は承認日 2026-11-10 を入れて記録します）。」, and the Owner answered 「この全文で承認（推奨）」.
+    The shown text's last line was the placeholder
+    「Decision date: （承認の日）」. The serialized receipt fills it with the
+    date of the approval, `2026-11-10`, and changes nothing else (shown text
+    SHA-256 `f84d447cafdcb975ddc0276a09c4a64ebe1a13a0a0cbc1e4816dc4da90a78c47`).
+  - The session drafted the receipt's fields; the Owner approved them as
+    written. The receipt and JSON reproduce the approved fields without
+    translation or additional terms.
+  - New receipt SHA-256: `PD-OI-126` scenario revision `1`
+    `a0331f6d42842bb40c5740c202ab834a3ea79de1e3d8e7fa5c86dab3fd89e0df`.
+  - No other record is amended or retired. `PD-OI-016`, `PD-OI-058`,
+    `PD-OI-090`, `PD-OI-103`, and `PD-OI-104` stay.
+  - This change is a static Product Contract co-change: the runtime and tests
+    that implement it are in the same pull request, and the Review is
+    `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -13685,6 +13725,62 @@ Decision date: 2026-11-09
   "acceptedResidualRisk": "ブラウザがタブや Worker ごと落とした場合（Python が MemoryError を出す前にメモリが尽きた場合）や、Python の外（Worker の JavaScript）でメモリが足りなくなった場合は、この文にならない。MemoryError を処理している途中で別の例外が起きた場合（明示の原因でない場合）や、診断を持つ例外がメモリ不足を原因に持つ場合も、この種別にならず、エンジンも取り替えない。MemoryError を知らせる処理そのものでメモリが足りなくなった場合は、メモリが原因と言わない失敗（Generate では UNKNOWN、ファイルの読み込みなどでは RESULT_INVALID）になる。そのとき Generate ではエンジンを取り替えるが、ファイルの読み込みなどほかの処理では取り替えない。一時的なメモリ不足でも、エンジンを取り替える。新しいエンジンは起動し直し、キャッシュのない状態で入力の読み込みからやり直すので、次の Generate は同じエンジンでの Generate より時間がかかる（PR #1810 のメモリ修正を入れた版のヒト 1 番染色体で、この PC では、同じエンジンでの Generate が 79〜163 秒、新しいエンジンでは 503〜575 秒だった）。取り替えたエンジンで待っていたほかの処理（ファイルの読み込みなど）は、原因を言わない失敗（UNKNOWN）になる。ファイルの読み込みなど Generate 以外の処理で足りなくなったときも同じ文で、文は Generate をもう一度と言う。Session の上限を超える入力では Save Session が理由を示して断られるので、そのときは入力ファイルを直接コマンドラインに渡す。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-09"
+}
+```
+
+### PD-OI-126: Feature density track editor
+
+- Concern key: `web.feature-density.track-editor`
+- Scenario revision: `1`
+- Supersedes: none. No earlier record decided how the Web adds, changes, or
+  removes feature density tracks. `PD-OI-016`, `PD-OI-058`, `PD-OI-090`,
+  `PD-OI-103`, and `PD-OI-104` stay.
+- Status: `ACCEPTED`
+- Selected outcome: `A FD-OWN-SECTION`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Product Decision Owner's choice and approval of
+  `2026-11-10` described in the Revision 143 entry above. The receipt and
+  JSON below reproduce all nine fields of the approved receipt without
+  translation or additional terms. The runtime that implements it merges with
+  it (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `a0331f6d42842bb40c5740c202ab834a3ea79de1e3d8e7fa5c86dab3fd89e0df`.
+
+```text
+PRODUCT_DECISION
+Concern: web.feature-density.track-editor（Web でフィーチャー密度トラックを追加、変更、削除する編集画面）
+Scenario revision: 1
+Choice: A FD-OWN-SECTION
+  - 設定の欄に "Feature density" の節を 1 つ加える。Sequence search の次に置き、節の一覧（アイコンの列）にも "Density" の名前で入る。Circular と Linear の両方にある。
+  - 節には "Add feature density track" のボタンと、図が描くトラックの一覧がある。トラックごとに、Feature Visibility の条件の行と同じ Feature Type（読み込んだ record の feature の種類と、すべての種類を数える *）、Qualifier、Value regex（大文字小文字を区別しない検索）、Shortest (bp) と Longest (bp)（feature の長さの範囲、空欄は制限なし）、Style（Heatmap か Histogram）、Value（Count か Coverage (%)）、Window (bp) と Step (bp)（空欄は Auto で、GC content の Window と Step と同じ値。欄にはその値を GC の欄と同じ形で示す）、Color（Auto は Depth の色、または色を選ぶ）、Legend name（空欄は Auto で、Python が条件から作る名前、例 "gene per 20 kbp"。track stack の行の Legend label があればその行ではそちらが優先）を編集する。トラックの id は画面に示すが編集しない（コマンドライン、Python、Session の id はそのまま残る）。選べる Style と Value、新しいトラックの既定は Python のものを生成したデータから読む。
+  - Add は、id が track、track_2、…（使われていない最初のもの）、Feature Type が図の Feature Types の一覧の最初の種類（既定では CDS。一覧が空ならすべての種類 *）、Count、Heatmap、Window と Step は Auto、色と Legend name は Auto のトラックを一覧の最後に加える。各トラックには上へ、下へ（簡易の track stack はこの順に描く）、複製（次の番号の id で元のトラックのすぐ後に置く。genes の複製は genes_2）、削除のボタンがある。
+  - Use custom stack が On の間、または Use custom stack が Off でも Session か利用者が track stack を保存した（Session を保存しなくても行を変えた）ときは、Add と複製でそのトラックの行を 1 つ、最後のフィーチャー密度の行の後（なければ Features の行の後）に加える。Use custom stack が Off で、どの Session も保存していない track stack は変えない。この track stack は Use custom stack を On にしたとき、すべてのトラックの行を含めて簡易の設定から作り直す。新しい Circular の図でも同じ（Linear は #1836 で既にそうしている）。
+  - 削除は、そのトラックと track stack の中のその行を 1 つの操作で取り除く（Use custom stack が On でも Off でも）。ほかの行がその行から始まる、またはその行まで伸びるときは、先に確認の画面を出す（「Remove feature density track <id> and turn off <行>」と Cancel）。選ぶとトラックを取り除き、その行を Off にする。Cancel では何も変えない。
+  - どの編集も 1 回の Undo で戻る 1 つの操作で、Undo と Redo はすぐ反映される。drawing の複製はトラックを写し、Reset Settings はトラックを取り除く（Region Annotation の set や色の規則と同じ）。Save Session はトラックを書き、Run info のコマンドは `--feature_density_track` でトラックを示す。
+  - トラックの変更は Generate で図に反映され、欄の横にそう示す。値の検査は Python が行う。コンパイルできない正規表現、Qualifier のない Value regex、Shortest より短い Longest、0 の Window などは、Generate が Python の文（トラックの id を含む）で断る。
+  - Legend の編集画面は、Histogram のトラックの行を、ほかのトラックの行と同じく一覧に示す。Heatmap のトラックの行は、identity の目盛りや Sequence search のグラデーションと同じグラデーションの欄に描かれ、それらと同じく一覧には入らない（グラデーションの行を一覧に入れるかは別の判断）。
+  - 新しい英語の語と文は英語で加え、ほかの言語へは翻訳の一括作業で訳す。
+Rationale: #1807 でコマンドライン、Python、Session にフィーチャー密度トラックが加わり、#1836 で Web は Session のトラックを読み込み、描き、保存するようになったが、Web だけではトラックを作ることも変えることもできない。#199（真核生物のゲノム）の図を Web で作れるように、トラックを独立した図の層として、Region Annotations や Sequence search と同じく自分の節で編集できるようにする。トラックの値と既定は Python が持ち、Web は写さない。
+Must preserve: 新しい文書と Reset Settings の既定（トラックなし）。読み込んだ Session のトラック、その id と track stack の行（#1836）。利用者が削除した行や Off にした行を Add が戻さないこと（PD-OI-058）。ほかの行が届く行を取り除く前の確認（PD-OI-104 scenario revision 6、7）。drawing の複製がすべての設定を写すこと（PD-OI-090）。設定は live の証拠の規則を満たすまで Generate で反映すること（PD-OI-103）。Generate が断られても直前の Result、request、draft、History が残ること（PD-OI-016）。
+May retire: なし
+Accepted residual risk: 利用者が track stack を、どの Session も保存していない track stack と行ごとに同じ形に戻すと、保存していないものとして扱い、Use custom stack を On にしたとき簡易の設定から作り直す（作り直した track stack は簡易の設定が描いていた図と同じ）。Legend の編集画面で Heatmap の行の名前を変えることはできない（Legend name の欄で変える）。
+Owner: satoshikawato
+Decision date: 2026-11-10
+```
+
+```json
+{
+  "concern": "web.feature-density.track-editor（Web でフィーチャー密度トラックを追加、変更、削除する編集画面）",
+  "scenarioRevision": 1,
+  "choice": "A FD-OWN-SECTION\n  - 設定の欄に \"Feature density\" の節を 1 つ加える。Sequence search の次に置き、節の一覧（アイコンの列）にも \"Density\" の名前で入る。Circular と Linear の両方にある。\n  - 節には \"Add feature density track\" のボタンと、図が描くトラックの一覧がある。トラックごとに、Feature Visibility の条件の行と同じ Feature Type（読み込んだ record の feature の種類と、すべての種類を数える *）、Qualifier、Value regex（大文字小文字を区別しない検索）、Shortest (bp) と Longest (bp)（feature の長さの範囲、空欄は制限なし）、Style（Heatmap か Histogram）、Value（Count か Coverage (%)）、Window (bp) と Step (bp)（空欄は Auto で、GC content の Window と Step と同じ値。欄にはその値を GC の欄と同じ形で示す）、Color（Auto は Depth の色、または色を選ぶ）、Legend name（空欄は Auto で、Python が条件から作る名前、例 \"gene per 20 kbp\"。track stack の行の Legend label があればその行ではそちらが優先）を編集する。トラックの id は画面に示すが編集しない（コマンドライン、Python、Session の id はそのまま残る）。選べる Style と Value、新しいトラックの既定は Python のものを生成したデータから読む。\n  - Add は、id が track、track_2、…（使われていない最初のもの）、Feature Type が図の Feature Types の一覧の最初の種類（既定では CDS。一覧が空ならすべての種類 *）、Count、Heatmap、Window と Step は Auto、色と Legend name は Auto のトラックを一覧の最後に加える。各トラックには上へ、下へ（簡易の track stack はこの順に描く）、複製（次の番号の id で元のトラックのすぐ後に置く。genes の複製は genes_2）、削除のボタンがある。\n  - Use custom stack が On の間、または Use custom stack が Off でも Session か利用者が track stack を保存した（Session を保存しなくても行を変えた）ときは、Add と複製でそのトラックの行を 1 つ、最後のフィーチャー密度の行の後（なければ Features の行の後）に加える。Use custom stack が Off で、どの Session も保存していない track stack は変えない。この track stack は Use custom stack を On にしたとき、すべてのトラックの行を含めて簡易の設定から作り直す。新しい Circular の図でも同じ（Linear は #1836 で既にそうしている）。\n  - 削除は、そのトラックと track stack の中のその行を 1 つの操作で取り除く（Use custom stack が On でも Off でも）。ほかの行がその行から始まる、またはその行まで伸びるときは、先に確認の画面を出す（「Remove feature density track <id> and turn off <行>」と Cancel）。選ぶとトラックを取り除き、その行を Off にする。Cancel では何も変えない。\n  - どの編集も 1 回の Undo で戻る 1 つの操作で、Undo と Redo はすぐ反映される。drawing の複製はトラックを写し、Reset Settings はトラックを取り除く（Region Annotation の set や色の規則と同じ）。Save Session はトラックを書き、Run info のコマンドは `--feature_density_track` でトラックを示す。\n  - トラックの変更は Generate で図に反映され、欄の横にそう示す。値の検査は Python が行う。コンパイルできない正規表現、Qualifier のない Value regex、Shortest より短い Longest、0 の Window などは、Generate が Python の文（トラックの id を含む）で断る。\n  - Legend の編集画面は、Histogram のトラックの行を、ほかのトラックの行と同じく一覧に示す。Heatmap のトラックの行は、identity の目盛りや Sequence search のグラデーションと同じグラデーションの欄に描かれ、それらと同じく一覧には入らない（グラデーションの行を一覧に入れるかは別の判断）。\n  - 新しい英語の語と文は英語で加え、ほかの言語へは翻訳の一括作業で訳す。",
+  "rationale": "#1807 でコマンドライン、Python、Session にフィーチャー密度トラックが加わり、#1836 で Web は Session のトラックを読み込み、描き、保存するようになったが、Web だけではトラックを作ることも変えることもできない。#199（真核生物のゲノム）の図を Web で作れるように、トラックを独立した図の層として、Region Annotations や Sequence search と同じく自分の節で編集できるようにする。トラックの値と既定は Python が持ち、Web は写さない。",
+  "mustPreserve": "新しい文書と Reset Settings の既定（トラックなし）。読み込んだ Session のトラック、その id と track stack の行（#1836）。利用者が削除した行や Off にした行を Add が戻さないこと（PD-OI-058）。ほかの行が届く行を取り除く前の確認（PD-OI-104 scenario revision 6、7）。drawing の複製がすべての設定を写すこと（PD-OI-090）。設定は live の証拠の規則を満たすまで Generate で反映すること（PD-OI-103）。Generate が断られても直前の Result、request、draft、History が残ること（PD-OI-016）。",
+  "mayRetire": "なし",
+  "acceptedResidualRisk": "利用者が track stack を、どの Session も保存していない track stack と行ごとに同じ形に戻すと、保存していないものとして扱い、Use custom stack を On にしたとき簡易の設定から作り直す（作り直した track stack は簡易の設定が描いていた図と同じ）。Legend の編集画面で Heatmap の行の名前を変えることはできない（Legend name の欄で変える）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-10"
 }
 ```
 
