@@ -212,7 +212,7 @@ test('the definition text over a track: the notice offers a smaller font and the
     'data-label-fit-status', 'not_found', { timeout: 300000 }
   );
   expect(await rowStatuses(dialog)).toEqual([['smaller_definition_font', 'found'], ['narrow_tracks', 'not_found']]);
-  await expect(row).toContainText('Default font size 17 pt');
+  await expect(row).toContainText('Default font size 17.5 pt');
   await shot(dialog.getByRole('dialog'), 'definition-dialog.png');
 
   // E-b: the name field of that record, found by its drawn record index; nothing is applied.
@@ -239,7 +239,7 @@ test('the definition text over a track: the notice offers a smaller font and the
     return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
   }), { timeout: 300000 }).toEqual({ key: key + 1, processing: false, error: null });
   await expect(notice).toHaveCount(0);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.def_font_size)).toBe(17);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.def_font_size)).toBe(17.5);
   // The row's setting is one step; the Generate that follows is its own.
   expect(await undoCount(page)).toBe(undo + 2);
   await pageShots(page, 'definition-fixed-page');

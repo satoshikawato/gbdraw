@@ -168,9 +168,10 @@ def test_cli_draws_mers_cov_with_the_warning_and_the_suggested_font_clears_it(
     """OV-1606, DF-D16, DF-D25, OV-1836, DF-D36: MERS-CoV's taxon line is drawn on one line (never wrapped) and
     warns. Its band (the farthest corner of the bold line's ink, OV-1854) is not cleared by narrowing the inside
     tracks to the floor, so they keep their widths, and no center_reserved_radius fits either: the warning offers
-    the font at which the line clears the tracks (17 pt, where the floor clears the smaller band) and a shorter
-    Species or Strain. With ``--no_track_narrowing`` the font must clear the tracks at their widths (14 pt; 13 pt
-    before the GC skew windows were centred, OV-2870, which moved the skew ring the line meets)."""
+    the font at which the line clears the tracks (17.5 pt, where the floor clears the smaller band) and a shorter
+    Species or Strain. With ``--no_track_narrowing`` the font must clear the tracks at their widths (14.5 pt). Both
+    sizes rose by half a point when labels inside the scale came to stand closer to the ticks and the inside tracks
+    moved outward (OV-3300; 17 and 14 pt before; 13 pt before the GC skew windows were centred, OV-2870)."""
 
     from gbdraw import cli
 
@@ -188,26 +189,26 @@ def test_cli_draws_mers_cov_with_the_warning_and_the_suggested_font_clears_it(
     assert draw("mers") == (
         "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). The figure is drawn.\n"
         "Run again with one of:\n"
-        "  --definition_font_size 17   (smaller definition font)\n"
+        "  --definition_font_size 17.5   (smaller definition font)\n"
         "Narrowing the inside tracks does not fit this map.\n"
         "Or shorten the definition text with --species or --strain (for example, an abbreviation).\n"
     )
-    assert draw("mers_font", "--definition_font_size", "17") == ""
+    assert draw("mers_font", "--definition_font_size", "17.5") == ""
     # The size above it does not clear the one line: the row offers the mildest size.
-    assert draw("mers_font_17_5", "--definition_font_size", "17.5").startswith(
-        "WARNING: NC_019843.3: 1 definition line does not fit at 17.5 pt (1 line overlaps a track). The figure is drawn.\n"
+    assert draw("mers_font_18", "--definition_font_size", "18").startswith(
+        "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). The figure is drawn.\n"
     )
 
     assert draw("mers_off", "--no_track_narrowing") == (
         "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). The figure is drawn.\n"
         "Run again with one of:\n"
-        "  --definition_font_size 14   (smaller definition font)\n"
+        "  --definition_font_size 14.5   (smaller definition font)\n"
         "Narrowing the inside tracks does not fit this map.\n"
         "Or shorten the definition text with --species or --strain (for example, an abbreviation).\n"
     )
-    assert draw("mers_off_font", "--no_track_narrowing", "--definition_font_size", "14") == ""
-    assert draw("mers_off_font_14_5", "--no_track_narrowing", "--definition_font_size", "14.5").startswith(
-        "WARNING: NC_019843.3: 1 definition line does not fit at 14.5 pt (1 line overlaps a track). The figure is drawn.\n"
+    assert draw("mers_off_font", "--no_track_narrowing", "--definition_font_size", "14.5") == ""
+    assert draw("mers_off_font_15", "--no_track_narrowing", "--definition_font_size", "15").startswith(
+        "WARNING: NC_019843.3: 1 definition line does not fit at 15 pt (1 line overlaps a track). The figure is drawn.\n"
     )
 
 
@@ -246,14 +247,14 @@ def test_python_warns_with_the_report_and_a_figure_without_the_overlap_does_not(
     assert report is not None and report.drawn
     assert [(item.label_kind, item.fit) for item in report.records] == [("circular_definition", DEFINITION)]
     row = label_fit_row(drawing, "smaller_definition_font")
-    assert row is not None and row.values == {DEFINITION_FONT_PATH: 17.0}
+    assert row is not None and row.values == {DEFINITION_FONT_PATH: 17.5}
 
     from gbdraw.config.models import GbdrawConfig
     from gbdraw.config.modify import with_config_overrides
     from gbdraw.config.toml import load_config_toml
 
     cfg = with_config_overrides(
-        GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")), {DEFINITION_FONT_PATH: 17.0}
+        GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")), {DEFINITION_FONT_PATH: 17.5}
     )
     with warnings.catch_warnings():
         warnings.simplefilter("error", LabelLeadersCrossWarning)
@@ -417,7 +418,7 @@ def test_mjenmv_full_name_is_drawn_on_one_line_and_warns_only_without_narrowing(
     assert capsys.readouterr().err.endswith(
         "WARNING: LC738868.1: 1 definition line does not fit at 18 pt (1 line overlaps a track). The figure is drawn.\n"
         "Run again with one of:\n"
-        "  --definition_font_size 14.5       (smaller definition font)\n"
+        "  --definition_font_size 15         (smaller definition font)\n"
         "  --center_reserved_radius 233.39   (narrow the inside tracks)\n"
         "Or shorten the definition text with --species or --strain (for example, an abbreviation).\n"
     )
@@ -624,6 +625,23 @@ def test_a_tick_track_counts_its_marks_and_labels_not_its_band(monkeypatch: pyte
     # A mark and a label are paint.
     assert _lines_at(inks, marks, large / length) == 1
     assert _lines_at(inks, labels, large / length) == 1
+
+
+@pytest.mark.parametrize("radius", [367.3796875, 367.38, 120.0])
+def test_a_box_narrower_than_one_ray_step_inside_paint_meets_it(radius: float) -> None:
+    """OV-3322: a box narrower than the ray step was sampled only by the two rays through its corners, which can
+    miss it by rounding; the ray through its middle always crosses it."""
+
+    import math
+
+    from gbdraw.layout.circular import RadialBand
+    from gbdraw.layout.circular_ink import CircularInkRing, box_meets_ink
+    from gbdraw.layout.spatial import Aabb
+
+    ring = CircularInkRing(RadialBand(radius - 8.0, radius + 8.0), 0.0528, 0.0679)
+    angle = 2.0 * math.pi * (1000 / 16569) - 0.5 * math.pi
+    x, y = radius * math.cos(angle), radius * math.sin(angle)
+    assert box_meets_ink(Aabb(x - 0.75, y - 0.75, x + 0.75, y + 0.75), [ring], threshold_px=0.5)
 
 
 @pytest.mark.circular
