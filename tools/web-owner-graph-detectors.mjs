@@ -1318,7 +1318,7 @@ export const summarizeWebOwnerGraph = (results) => Object.freeze({
   forwardClosures: results['owner-graph.forward-closure.v1'].subjects.length,
   wholeObjectPorts: results['owner-graph.whole-object-port.v1'].subjects.length,
   projectionShapes: Object.freeze({ ...results['projection.call-shape.v1'].shapesByDomain }),
-  triggerSites: results['heavy-derived.trigger-site.v1'].siteCount,
-  triggerModules: results['heavy-derived.trigger-site.v1'].subjects.length,
+  triggerSites: results['heavy-derived.trigger-site.v2'].siteCount,
+  triggerModules: results['heavy-derived.trigger-site.v2'].subjects.length,
   layerImports: results['layer.import-direction.v1'].subjects.length
 });
