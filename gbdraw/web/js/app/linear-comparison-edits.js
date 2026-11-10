@@ -62,20 +62,21 @@ import { effectiveLinearComparisonLayout } from './linear-comparison-panel.js';
 /** @typedef {(edgeKey: string) => LinearComparisonPair | null} LinearComparisonPairForEdgeKey */
 
 /**
- * @param {LinearComparisonEdge | undefined} left
- * @param {LinearComparisonEdge | undefined} right
+ * @param {LinearComparisonEdge} left
+ * @param {LinearComparisonEdge | undefined} right The edge at the same place in the other plan, if it has one.
  */
 const sameLinearComparisonEdge = (left, right) => (
-  left?.id === right?.id &&
-  left?.queryUid === right?.queryUid &&
-  left?.subjectUid === right?.subjectUid &&
-  left?.included === right?.included &&
-  left?.fileActive === right?.fileActive &&
-  left?.losatFilenameActive === right?.losatFilenameActive &&
-  left?.source === right?.source &&
-  left?.file === right?.file &&
-  left?.losatFilename === right?.losatFilename &&
-  JSON.stringify(left?.windowLosatFilenames ?? {}) === JSON.stringify(right?.windowLosatFilenames ?? {})
+  right !== undefined &&
+  left.id === right.id &&
+  left.queryUid === right.queryUid &&
+  left.subjectUid === right.subjectUid &&
+  left.included === right.included &&
+  left.fileActive === right.fileActive &&
+  left.losatFilenameActive === right.losatFilenameActive &&
+  left.source === right.source &&
+  left.file === right.file &&
+  left.losatFilename === right.losatFilename &&
+  JSON.stringify(windowLosatFilenamesOf(left)) === JSON.stringify(windowLosatFilenamesOf(right))
 );
 
 // OV-380: a pair set to a source that has no data yet (Upload BLAST TSV
