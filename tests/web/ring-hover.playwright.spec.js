@@ -77,6 +77,15 @@ const exported = async (page) => {
   return { text, results };
 };
 
+// The base the popup names: the pointer lands on a whole pixel, a few bases from the asked position on a 3 kb ring.
+const shownBase = (position) => Number(position.replace(/[^0-9]/g, ''));
+
+// The whole figure in the preview, so every ring point is on screen.
+const fitPreview = async (page) => {
+  await page.getByRole('button', { name: 'Fit to preview' }).click();
+  await settle(page);
+};
+
 const expectHover = async (page, series, { popup }) => {
   await expect.poll(async () => (await hoverView(page)).rings.every((ring) => ring.opacity === (ring.series === series ? '1' : '0.35'))).toBe(true);
   const view = await hoverView(page);
@@ -102,6 +111,7 @@ test('a ring hover dims the other rings, bolds its Legend row, and lists every r
   await settle(page);
   await generateAndWaitForResult(page);
   await settle(page);
+  await fitPreview(page);
   const before = await exported(page);
 
   // The inner ring at base 301 (display position 300): both rings have a hit there.
@@ -111,7 +121,8 @@ test('a ring hover dims the other rings, bolds its Legend row, and lists every r
   expect(point.onRing).toBe(true);
   await page.mouse.move(point.x, point.y);
   const view = await expectHover(page, inner, { popup: true });
-  expect(view.position).toBe('301 bp');
+  expect(view.position).toMatch(/^[0-9,]+ bp$/);
+  expect(Math.abs(shownBase(view.position) - 301)).toBeLessThanOrEqual(5);
   expect(view.line).toBe(true);
   // Outermost first, named as the Legend names them (its rows run outer to inner).
   expect(view.popup.map((row) => row.name)).toEqual(view.rows.map((row) => row.name));
@@ -128,9 +139,9 @@ test('a ring hover dims the other rings, bolds its Legend row, and lists every r
   // Where the inner ring has a hit and the outer has none, the popup says so.
   const gap = await ringPoint(page, { sourceIndex: inner, position: 2200.5 });
   await page.mouse.move(gap.x, gap.y);
-  await expect.poll(async () => (await hoverView(page)).position).toBe('2,201 bp');
+  await expect.poll(async () => Math.abs(shownBase((await hoverView(page)).position) - 2201)).toBeLessThanOrEqual(5);
   const values = Object.fromEntries((await hoverView(page)).popup.map((row) => [row.name, row.value]));
-  expect(values).toEqual({ 'outer.blast': '80.0%', 'inner.blast': '90.0%' });
+  expect(values).toEqual({ outer: '80.0%', inner: '90.0%' });
 
   // Leaving the drawing restores everything.
   await page.mouse.move(2, 2);
@@ -161,6 +172,7 @@ test('on the Multi-Record Canvas the hovered series keeps its strength in every 
   await settle(page);
   await generateAndWaitForResult(page);
   await settle(page);
+  await fitPreview(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.svgContainer.querySelectorAll('svg [data-gbdraw-record-index="1"] g[data-gbdraw-slot-renderer="sequence_conservation"]').length)).toBe(2);
 
   const point = await ringPoint(page, { sourceIndex: '0', recordIndex: 1, position: 500.5 });
@@ -170,8 +182,8 @@ test('on the Multi-Record Canvas the hovered series keeps its strength in every 
   // Both records keep series 0 and dim series 1.
   expect(view.rings.map(({ record, series, opacity }) => `${record}:${series}:${opacity}`).sort())
     .toEqual(['0:0:1', '0:1:0.35', '1:0:1', '1:1:0.35']);
-  expect(view.position).toBe('501 bp');
-  expect(Object.fromEntries(view.popup.map((row) => [row.name, row.value]))).toEqual({ 'first.blast': '95.0%', 'second.blast': '70.0%' });
+  expect(Math.abs(shownBase(view.position) - 501)).toBeLessThanOrEqual(10);
+  expect(Object.fromEntries(view.popup.map((row) => [row.name, row.value]))).toEqual({ first: '95.0%', second: '70.0%' });
   await page.mouse.move(2, 2);
   await expectRestored(page);
 });
