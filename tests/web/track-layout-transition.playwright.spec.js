@@ -564,7 +564,8 @@ const reachRowRemovalAfterLoad = async (page, mode) => {
 
 for (const mode of ['circular', 'linear']) {
   // Two journeys on one fixture: the choice writes only its own fields (other
-  // pending values are set first), then Undo, Redo and Generate.
+  // pending values are set first), then Undo, Redo and Generate. Generate draws
+  // the removal's own case: the other pending values go back first.
   test(`rev 7: ${mode} removing the last Depth file asks, writes only its own fields with other pending values, and its Undo restores the file and the row`, async ({ browser }) => {
     test.setTimeout(420000);
     const page = await openReachFixture(browser, mode);
@@ -579,12 +580,15 @@ for (const mode of ['circular', 'linear']) {
         const { depth_tracks: _series, [`${stackMode}_track_slots`]: _slots, [`${stackMode}_track_slots_axis_index`]: _axis, ...otherAdv } = adv;
         return JSON.stringify({ otherForm, otherAdv, untouched: adv[`${stackMode}_track_slots`].filter((row) => row.id !== 'depth' && row.id !== 'mark') });
       }, mode);
-      await page.evaluate(async () => {
+      const setPending = (values) => page.evaluate(async ({ fontSize, legend }) => {
         const { state } = await import('./js/state.js');
         const drawing = state.activeDrawing();
-        drawing.adv.label_font_size = 29;
-        drawing.form.legend = 'bottom';
-      });
+        const old = { fontSize: drawing.adv.label_font_size, legend: drawing.form.legend };
+        drawing.adv.label_font_size = fontSize;
+        drawing.form.legend = legend;
+        return old;
+      }, values);
+      const original = await setPending({ fontSize: 29, legend: 'bottom' });
       const before = await pending();
       const name = `Track row ${rowNumber(start, 'mark')}`;
       await exerciseAsk(page, mode, {
@@ -596,7 +600,8 @@ for (const mode of ['circular', 'linear']) {
           expect(after.depth).not.toContain('s1.tsv');
           expect(after.showDepth).toBe(false);
           expect(await pending(), 'rev 7: Depth file removal writes only its own fields, with other pending values').toBe(before);
-        }
+        },
+        beforeGenerate: async () => { await setPending(original); }
       });
     } finally { await page.context().close(); }
   });
@@ -1013,11 +1018,10 @@ const reachUndoTitle = (mode, route, after) => `rev 7: Undo and Redo of a chosen
 // committed request are back), and the file removal that ends removed runs
 // last. One Save of that drawing serves every after-Load step; each step loads
 // it into a page of its own.
-// The timeout is about twice the measured local time of the circular case.
-const MATRIX_TIMEOUT_MS = 600000;
+// The circular case took 80 s locally (2026-11-10); the timeout is five times that.
 for (const mode of ['circular', 'linear']) {
   test(`rev 7: reach matrix (${mode}): Depth file, series and row removals a row reaches, after Generate and after Load`, async ({ browser }, testInfo) => {
-    test.setTimeout(MATRIX_TIMEOUT_MS);
+    test.setTimeout(420000);
     const file = testInfo.outputPath(`saved-${mode}.gbdraw-session.json`);
     const page = await generatedWithReach(browser, mode);
     try {
@@ -1338,6 +1342,8 @@ test('rev 7: Linear File card Remove, the record list Remove File, and the prima
             expect(after.showDepth).toBe(false);
           }
         });
+        // Generate is a History step of its own: Undo it, then the removal.
+        await historyStep(page, 'undo');
         await historyStep(page, 'undo');
         await expectGenerates(page);
         await settleLive(page);
