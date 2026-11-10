@@ -58,7 +58,7 @@ from gbdraw.io.genome import (
 from gbdraw.io.record_select import (
     RecordSelector,
     drawn_record_units,
-    order_reversed_crop_features,
+    in_draw_order,
     parse_record_selector,
     reverse_records,
     select_record_units,
@@ -1636,7 +1636,7 @@ def _load_source_records(
             )
         elif isinstance(source, InMemoryRecordSource):
             # The caller keeps its record: a plan must not change with it.
-            records = [order_reversed_crop_features(copy.deepcopy(source.record))]
+            records = [in_draw_order(copy.deepcopy(source.record))]
         else:  # pragma: no cover - RecordInput validates this union.
             raise ValidationError("Unsupported record input source.")
         if not records:

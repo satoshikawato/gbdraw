@@ -299,7 +299,7 @@ def _origin_crossing_view(record: SeqRecord, spec: RegionSpec, *, circular: bool
             qualifiers=feature.qualifiers,
             id=feature.id,
         )
-        _copy_source_feature_identity(feature, copy, fallback_index=index, coord_base=1, coord_step=1)
+        _copy_source_feature_identity(feature, copy, index=index, coord_base=1, coord_step=1)
         source_indexes[id(copy)] = index
         turns.append(copy)
     view = SeqRecord(

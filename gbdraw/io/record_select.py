@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 import logging
 import re
@@ -162,32 +163,46 @@ def select_record_units(records: Sequence[SeqRecord], selector: RecordSelector |
 
 
 def _feature_start(feature: SeqFeature) -> float:
-    """The start a reverse complement orders features by; one with no numeric start sorts last."""
+    """The start a reverse complement orders features by; one with no location or no numeric start sorts last."""
     try:
         return int(feature.location.start)
-    except TypeError:
+    except (AttributeError, TypeError):
         return float("inf")
 
 
-def order_reversed_crop_features(record: SeqRecord) -> SeqRecord:
-    """List the features of a reverse-complemented crop edited since its cut by start, as ``reverse_records``
-    lists them, and return the record.
+def edited_crop_draw_order(crop: SeqRecord) -> list[SeqFeature]:
+    """The features of ``crop``, a crop edited since its cut, in the order its Session replay draws them.
 
-    A Session saves such a crop as the record it was cut from with the edits and replays it by cutting it again
-    (``session_request_codec._with_crop_edits``), which lists the features so; a feature added to or moved in the
-    crop takes its place by start here too, so the figure draws the features in the replay's order (OV-3229). A crop
-    as cut keeps its order.
+    The replay cuts again the record the crop was cut from, with the edits on it
+    (``session_request_codec._with_crop_edits``), where each feature takes its source feature index
+    (``_feature_source_index_map``) as its place: a forward cut lists the features by that index, a
+    reverse-complemented one by start, ties by that index, as ``reverse_records`` lists them (OV-3229).
+    """
+
+    indexes = _feature_source_index_map(crop.features)
+    if _read_coord_map(crop)[1] < 0:
+        return sorted(crop.features, key=lambda feature: (_feature_start(feature), indexes[id(feature)]))
+    return sorted(crop.features, key=lambda feature: indexes[id(feature)])
+
+
+def in_draw_order(record: SeqRecord) -> SeqRecord:
+    """``record`` with its features in the order a figure draws them and a Session writes them.
+
+    A crop edited since its cut is a shallow copy that lists its features in ``edited_crop_draw_order``, the order
+    its replay draws them in; a crop saved as its own bytes is written in that order too. Any other record, a crop
+    as cut too, is ``record`` itself, in its own order.
     """
 
     stored = record.annotations.get(WINDOW_SOURCE_ANNOTATION)
-    if (
+    if not (
         record.annotations.get("gbdraw_region_applied")
-        and _read_coord_map(record)[1] < 0
         and isinstance(stored, WindowSource)
         and not stored.holds_for(record)
     ):
-        record.features = sorted(record.features, key=_feature_start)
-    return record
+        return record
+    ordered = copy.copy(record)
+    ordered.features = edited_crop_draw_order(record)
+    return ordered
 
 
 def reverse_records(
@@ -212,7 +227,7 @@ def reverse_records(
             _copy_source_feature_identity(
                 feature,
                 reversed_feature,
-                fallback_index=source_indexes[id(feature)],
+                index=source_indexes[id(feature)],
                 coord_base=base,
                 coord_step=step,
             )

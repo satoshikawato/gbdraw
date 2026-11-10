@@ -434,12 +434,14 @@ def test_an_edited_crop_is_saved_with_only_its_edits_on_its_source(
     assert [(window["start"], window["end"]) for window in saved["windows"]] == [(20001, 40000)]
     source = _saved_source(tmp_path)
     original = copy.deepcopy(_flanked_source())
-    expected = {_locus(feature): (str(feature.location), feature.qualifiers.get("product")) for feature in original.features}
+    expected = [(_locus(feature), str(feature.location), feature.qualifiers.get("product"))
+                for feature in original.features]
     if edit == "product":
-        expected["I1"] = (expected["I1"][0], ["edited"])
+        expected = [(locus, location, ["edited"] if locus == "I1" else product) for locus, location, product in expected]
     if edit == "remove":
-        del expected["I1"]
-    assert {_locus(feature): (str(feature.location), feature.qualifiers.get("product")) for feature in source.features} \
+        expected = [item for item in expected if item[0] != "I1"]
+    # In the source's order: the order of the saved source gives each feature its source feature index on replay.
+    assert [(_locus(feature), str(feature.location), feature.qualifiers.get("product")) for feature in source.features] \
         == expected
     assert source.id == ("renamed" if edit == "rename" else "src")
 
@@ -532,14 +534,153 @@ def test_a_copy_of_a_cut_feature_takes_a_source_feature_index_of_its_own(tmp_pat
 
     import copy
 
-    from gbdraw.core.record_metadata import _feature_source_index_map
-
     crop = apply_region_specs([_flanked_source()], parse_region_specs(["src:20001-40000"]))[0]
     crop.features.append(copy.deepcopy(next(feature for feature in crop.features if _locus(feature) == "I1")))
-    assert list(_feature_source_index_map(crop.features).values()) == [0, 1, 3, 4]
     render_request(_request("linear", crop, tmp_path))
     # The two copies of I1 are drawn as two instances of one feature, named by their source feature indexes.
     assert sorted(set(re.findall(r'id="f[0-9a-f]+__instance_(\d+)_', (tmp_path / "live.svg").read_text()))) == ["3", "4"]
+
+
+def _twins_source() -> SeqRecord:
+    """A linear 60 kb record with a CDS X and two identical CDS B and C (same type and location) inside 20-40 kb."""
+
+    record = _record("src", "linear")
+    record.features = [
+        SeqFeature(FeatureLocation(0, 60_000, 1), type="source", qualifiers={"organism": ["test"]}),
+        SeqFeature(FeatureLocation(21_000, 22_000, 1), type="CDS", qualifiers={"locus_tag": ["X"], "product": ["x"]}),
+        SeqFeature(FeatureLocation(30_000, 31_000, 1), type="CDS", qualifiers={"locus_tag": ["B"], "product": ["b"]}),
+        SeqFeature(FeatureLocation(30_000, 31_000, 1), type="CDS", qualifiers={"locus_tag": ["C"], "product": ["c"]}),
+    ]
+    return record
+
+
+def _instances(svg: str) -> list[str]:
+    """The rendered IDs of identical features, named by their source feature indexes (``__instance_<index>``)."""
+    return sorted(set(re.findall(r'\bid="(f[0-9a-f]+__instance_\d+)_', svg)))
+
+
+_TWIN_EDITS = {
+    "rename": lambda crop: setattr(crop, "id", "renamed"),
+    # A CDS inserted before the crop's features.
+    "insert": lambda crop: crop.features.insert(
+        1, SeqFeature(FeatureLocation(1000, 2000, 1), type="CDS", qualifiers={"locus_tag": ["NEW"], "product": ["n"]})
+    ),
+    # Three CDS appended out of start order, two of them identical.
+    "append": lambda crop: crop.features.extend(
+        SeqFeature(FeatureLocation(start, start + 1000, 1), type="CDS", qualifiers={"locus_tag": [tag]})
+        for start, tag in ((5000, "P"), (1000, "Q1"), (1000, "Q2"))
+    ),
+}
+
+
+@pytest.mark.parametrize("spec", ["src:20001-40000", "src:20001-40000:rc"], ids=["forward", "reversed"])
+@pytest.mark.parametrize("edit", sorted(_TWIN_EDITS))
+def test_identical_features_of_an_edited_crop_keep_their_ids_on_replay(spec: str, edit: str, tmp_path: Path) -> None:
+    """Identical features are told apart by their source feature indexes; an edit that removes nothing keeps every
+    index on replay, so the replay names them as the live figure does (B1 of the review of #1851)."""
+
+    crop = apply_region_specs([_twins_source()], parse_region_specs([spec]))[0]
+    _TWIN_EDITS[edit](crop)
+    live, replay = _replayed(_request("linear", crop, tmp_path), tmp_path)
+    # B and C at least; in a forward crop a CDS added at 1,001-2,000 lies where X lies, so X and it are identical too.
+    assert len(_instances(live)) >= 2
+    assert _instances(replay) == _instances(live)
+    assert replay == live
+
+
+@pytest.mark.parametrize("spec", ["src:20001-40000", "src:20001-40000:rc"], ids=["forward", "reversed"])
+def test_a_feature_hidden_in_an_edited_crop_stays_hidden_after_save_and_load(spec: str, tmp_path: Path) -> None:
+    """A feature override names one of two identical features by its source feature index; the replay of the
+    saved Session hides the feature the live figure hid."""
+
+    from gbdraw.features.overrides import FeatureOverride
+
+    crop = apply_region_specs([_twins_source()], parse_region_specs([spec]))[0]
+    crop.id = "renamed"
+    probe = tmp_path / "probe"
+    probe.mkdir()
+    render_request(_request("linear", crop, probe))
+    [feature_hash] = {instance.split("__")[0] for instance in _instances((probe / "live.svg").read_text())}
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(crop), record_key="r"),),
+        options=LinearDiagramOptions(config_overrides=_TRACKS, feature_overrides=(FeatureOverride(
+            record_key="r", biological_feature_id=f"{feature_hash}~3", feature_visibility="off"),)),
+        output=_output(tmp_path),
+    )
+    live, replay = _replayed(request, tmp_path)
+    assert _instances(live) == [f"{feature_hash}__instance_2"]  # C, source feature 3, is hidden
+    assert replay == live
+
+
+@pytest.mark.parametrize("spec", ["src:20001-40000", "src:20001-40000:rc"], ids=["forward", "reversed"])
+@pytest.mark.parametrize("edited", [False, True], ids=["alone", "with-an-edit"])
+def test_a_cut_feature_given_an_equal_location_keeps_its_id(spec: str, edited: bool, tmp_path: Path) -> None:
+    """A feature whose location is replaced by an equal one has not moved, live as in a Session: the feature the crop
+    cut at its start keeps the ID of its whole source location in both, alone or beside an edit that makes the
+    Session write the crop's source with its edits (S1 of the review of #1851)."""
+
+    import copy
+
+    crop = apply_region_specs([_flanked_source()], parse_region_specs([spec]))[0]
+    first = tmp_path / "unedited"
+    first.mkdir()
+    unedited = _drawn_ids(_replayed(_request("linear", crop, first), first)[0])
+    cut = next(feature for feature in crop.features if _locus(feature) == "S1")
+    cut.location = copy.deepcopy(cut.location)
+    if edited:
+        next(feature for feature in crop.features if _locus(feature) == "I1").qualifiers["note"] = ["edited"]
+    live, replay = _replayed(_request("linear", crop, tmp_path), tmp_path)
+    assert _drawn_ids(live) == unedited
+    assert replay == live
+
+
+def test_the_web_view_parts_of_a_crop_read_the_source_feature_index_owner() -> None:
+    """The Web helper that indexes view location parts by source feature index reads the index owner, so a crop with
+    an added feature gives each feature its own parts (S2 of the review of #1851)."""
+
+    from gbdraw.core.record_metadata import _feature_source_index_map
+
+    helpers_js = (Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "app" / "python-helpers.js").read_text(
+        encoding="utf-8"
+    )
+    namespace: dict[str, object] = {}
+    exec(helpers_js.split("`", 1)[1].rsplit("`", 1)[0], namespace)
+    crop = apply_region_specs([_flanked_source()], parse_region_specs(["src:20001-40000"]))[0]
+    crop.features.insert(1, SeqFeature(FeatureLocation(1000, 2000, 1), type="CDS", qualifiers={"locus_tag": ["NEW"]}))
+    indexes = _feature_source_index_map(crop.features)
+    expected = {
+        indexes[id(feature)]: tuple((int(part.start), int(part.end), part.strand) for part in feature.location.parts)
+        for feature in crop.features
+    }
+    assert namespace["_web_feature_view_hash_parts_index"](crop) == expected  # type: ignore[operator]
+
+
+def test_an_edited_reverse_complemented_crop_draws_a_feature_with_no_location(tmp_path: Path) -> None:
+    """A feature with no location is left out of the drawing, as in any record; ordering an edited crop's features for
+    its replay does not stop the render on it (N2 of the review of #1851)."""
+
+    crop = apply_region_specs([_flanked_source()], parse_region_specs(["src:20001-40000:rc"]))[0]
+    crop.features.append(SeqFeature(None, type="misc_feature", qualifiers={"note": ["no place"]}))
+    render_request(_request("linear", crop, tmp_path))
+    assert len(_drawn_ids((tmp_path / "live.svg").read_text())) == 2
+
+
+def test_an_edited_crop_saved_as_its_own_bytes_lists_its_features_as_drawn(tmp_path: Path) -> None:
+    """A crop saved as its own bytes lists its features in the order the live figure draws them, so the replay paints
+    them in that order too."""
+
+    crop = apply_region_specs([_flanked_source()], parse_region_specs(["src:20001-40000"]))[0]
+    next(feature for feature in crop.features if _locus(feature) == "S1").location = FeatureLocation(100, 900, 1)
+    crop.features.insert(
+        1, SeqFeature(FeatureLocation(1000, 2000, 1), type="CDS", qualifiers={"locus_tag": ["NEW"], "product": ["n"]})
+    )
+    request = _request("linear", crop, tmp_path)
+    planned = resolve_request(request).records[0].source.record  # type: ignore[union-attr]
+    _replayed(request, tmp_path)
+    [saved] = _saved_records(tmp_path)
+    assert not saved.get("windows")
+    assert [_locus(feature) for feature in _saved_source(tmp_path).features] == \
+        [_locus(feature) for feature in planned.features]
 
 
 def test_a_session_saves_a_crop_that_moved_a_feature_cut_at_its_end_as_itself(tmp_path: Path) -> None:

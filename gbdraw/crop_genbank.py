@@ -178,7 +178,7 @@ def crop_and_shift_features(
         _copy_source_feature_identity(
             old_feature,
             new_feature,
-            fallback_index=source_indexes[id(old_feature)],
+            index=source_indexes[id(old_feature)],
             coord_base=coord_base,
             coord_step=coord_step,
         )

@@ -151,13 +151,21 @@ def _source_feature_index(feature: object) -> int | None:
     return index if index >= 0 else None
 
 
+def _same_location(location: object, other: object) -> bool:
+    """Whether two feature locations are one place, as a GenBank file writes it: the one rule for whether a feature
+    moved since its source facts were carried onto it (``_carried_source_location``), live and when a Session writes
+    an edited crop (``session_request_codec._with_crop_edits``). A location replaced by an equal one has not moved."""
+
+    return location is other or str(location) == str(other)
+
+
 def _carried_source_location(feature: object) -> _CarriedSourceLocation | None:
     """The source location facts carried onto ``feature``, while it is at the location they were carried onto."""
 
     carried = getattr(feature, _SOURCE_FEATURE_LOCATION_ATTR, None)
-    if isinstance(carried, _CarriedSourceLocation) and carried.location is getattr(feature, "location", None):
-        return carried
-    return None
+    if not isinstance(carried, _CarriedSourceLocation):
+        return None
+    return carried if _same_location(carried.location, getattr(feature, "location", None)) else None
 
 
 def _source_feature_location_parts(
@@ -312,21 +320,16 @@ def _copy_source_feature_identity(
     source: object,
     target: object,
     *,
-    fallback_index: int,
+    index: int,
     coord_base: int,
     coord_step: int,
 ) -> None:
-    """Carry source ordinal, biological parts and source hash across a transformation.
+    """Carry source feature index, biological parts and source hash across a transformation.
 
-    ``fallback_index`` is the source's index (``_feature_source_index_map``) for a source that carries none.
+    ``index`` is the source's source feature index, as ``_feature_source_index_map`` gives it.
     """
 
-    index = _source_feature_index(source)
-    setattr(
-        target,
-        _SOURCE_FEATURE_INDEX_ATTR,
-        int(fallback_index) if index is None else index,
-    )
+    setattr(target, _SOURCE_FEATURE_INDEX_ATTR, int(index))
     _carry_source_location(source, target, coord_base=coord_base, coord_step=coord_step)
     stamp = _feature_hash_stamp(source)
     if stamp is not None:
