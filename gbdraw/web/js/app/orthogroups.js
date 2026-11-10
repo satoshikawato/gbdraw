@@ -38,19 +38,7 @@ import { msg, t, tm } from '../utils/i18n.js';
 
 /** @import { FeatureIdentity } from '../services/feature-identity.js' */
 /** @import { FeatureSvgRoot } from '../services/feature-dom.js' */
-
-/**
- * One member of a Similarity group as the analysis rows hold it; Python owns the
- * fields (R7), so they are read as `unknown`.
- * @typedef {Record<string, unknown>} OrthogroupMember
- */
-/**
- * One Similarity group row. Its id is any of the alias keys `orthogroupIdStatus` reads.
- * @typedef {Record<string, unknown> & {
- *   members?: OrthogroupMember[],
- *   nameCandidates?: { text?: unknown, source?: unknown }[]
- * }} OrthogroupGroup
- */
+/** @import { OrthogroupGroup, OrthogroupMember } from '../services/orthogroup-feature-metadata.js' */
 /** @typedef {OrthogroupGroup | string | null | undefined} GroupOrId A group row, or the id of one. */
 
 export { resolveUniqueOrthogroupMemberForFeature } from '../services/feature-identity.js';
@@ -322,22 +310,12 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
 };
 
 /**
- * The reactive state fields the similarity-group editor reads and writes.
- * A `{ value }` field is a Vue ref; the override maps and `linearSeqs` are
- * reactive objects.
- * @typedef {object} OrthogroupEditorState
- * @property {{ value: OrthogroupGroup[] }} orthogroups
- * @property {() => OrthogroupEditorShownDrawing} activeDrawing The shown drawing. Similarity groups are the Linear drawing's (registry: `config.webEdits`, linear only), so every reader here uses it only when `mode` is `'linear'`.
- * @property {{ value: string }} selectedOrthogroupId
- * @property {{ value: string }} orthogroupSearch
- * @property {{ value: string }} orthogroupSortMode
- * @property {WebState['clickedFeature']} clickedFeature
- * @property {{ value: boolean }} showRightDrawer
- * @property {{ value: string }} rightDrawerTab
- * @property {{ value: HTMLElement | null }} svgContainer
- * @property {{ value: Record<string, any>[] }} extractedFeatures
- * @property {{ value: Record<string, any>[] }} biologicalFeatures
- * @property {() => { status: string, reason: string } | null} [sessionOperationAvailability]
+ * The app state the similarity-group editor reads and writes. `activeDrawing` is the shown drawing; Similarity groups
+ * are the Linear drawing's (registry: `config.webEdits`, linear only), so every reader here uses it only when `mode` is
+ * `'linear'`.
+ * @typedef {Pick<WebState, 'orthogroups' | 'activeDrawing' | 'selectedOrthogroupId' | 'orthogroupSearch'
+ *   | 'orthogroupSortMode' | 'clickedFeature' | 'showRightDrawer' | 'rightDrawerTab' | 'svgContainer'
+ *   | 'extractedFeatures' | 'biologicalFeatures' | 'sessionOperationAvailability'>} OrthogroupEditorState
  */
 
 /** @import { GroupNamesSlice, GroupNamesView } from '../services/drawing/group-names.js' */
@@ -474,7 +452,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
 
   if (typeof watch === 'function') {
     watch(
-      [orthogroups, selectedOrthogroupId, clickedFeature, showRightDrawer, rightDrawerTab].filter(Boolean),
+      [orthogroups, selectedOrthogroupId, clickedFeature, showRightDrawer, rightDrawerTab],
       clearCopyFeedback,
       { flush: 'sync' }
     );
@@ -482,7 +460,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     // selected it: a new alignment plan (OV-381), Show in editor, or the user.
     // The tab panel's v-show applies after post watchers, hence nextTick.
     watch(
-      () => [selectedOrthogroupId.value, showRightDrawer?.value && rightDrawerTab?.value === 'orthogroups'],
+      () => [selectedOrthogroupId.value, showRightDrawer.value && rightDrawerTab.value === 'orthogroups'],
       async (/** @type {[unknown, unknown]} */ [id, listShown]) => {
         if (!id || !listShown || typeof document === 'undefined') return;
         await nextTick();
@@ -650,7 +628,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
       // Only a scope other than the usual cross-record group is worth a word on the row.
       scopeLabel: orthogroupScope(group) === 'global' ? '' : orthogroupScopeLabel(group),
       countsLabel: [
-        counted(toDisplayString(group.member_count || (group.members ? group.members.length : 0)), 'gene'),
+        counted(toDisplayString(group.member_count || getGroupMembers(group).length), 'gene'),
         counted(toDisplayString(group.record_coverage_count || 0), 'record')
       ].join(' · '),
       renamed: isOrthogroupRenamed(group)
@@ -661,8 +639,8 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   // services/history-snapshot.js); it reads the rows through `toRaw`, as state.js does, so Vue records no dependency
   // on each alias key of every row that `featureIdentity` reads.
   const featureSequenceLookup = computed(() => {
-    const biological = toRaw(biologicalFeatures.value);
-    const extracted = Array.isArray(extractedFeatures.value) ? toRaw(extractedFeatures.value) : [];
+    const biological = /** @type {Record<string, unknown>[] | null} */ (toRaw(biologicalFeatures.value));
+    const extracted = /** @type {Record<string, unknown>[]} */ (Array.isArray(extractedFeatures.value) ? toRaw(extractedFeatures.value) : []);
     const hasBiologicalFeatures = Array.isArray(biological) && biological.length > 0;
     const features = hasBiologicalFeatures ? biological : extracted;
     const renderedIdentities = extracted
@@ -912,7 +890,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   const setOrthogroupNameOverride = (orthogroupId, value) => {
     const drawing = shownLinearDrawing();
     if (drawing === null) return;
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
     if (!id) return;
@@ -926,7 +904,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   const setOrthogroupDescriptionOverride = (orthogroupId, value) => {
     const drawing = shownLinearDrawing();
     if (drawing === null) return;
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
     if (!id) return;
@@ -940,7 +918,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   const resetOrthogroupRename = (orthogroupId = selectedOrthogroupId.value) => {
     const drawing = shownLinearDrawing();
     if (drawing === null) return;
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
     if (!id) return;
@@ -953,7 +931,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   const clearOrthogroupDormantOverrides = () => {
     const drawing = shownLinearDrawing();
     if (drawing === null) return;
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     clearDormantGroupNames(drawing.slices.groupNames);
   };
@@ -980,7 +958,7 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
     clearOrthogroupHighlight();
-    const renderedIndex = buildRenderedFeatureIndex(svg, extractedFeatures?.value);
+    const renderedIndex = buildRenderedFeatureIndex(svg, extractedFeatures.value);
     const featureIds = new Set(
       getGroupMembers(group)
         .map((member) => renderedFeatureIdForMember(member, renderedIndex))

@@ -281,7 +281,6 @@ import {
 /** @import { HistoryManagerOptions } from '../services/history.js' */
 /** @import { RulePreparationOptions } from './rule-matching.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { OrthogroupGroup } from './orthogroups.js' */
 /** @import { ReindexDepthSlotsOptions } from '../services/depth-track-state.js' */
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
@@ -1213,7 +1212,7 @@ export const createAppSetup = () => {
     isActiveResultReady: previewRuntime.isActiveResultReady,
     resolveOrthogroups: () => {
       const drawing = displayedLinearDrawing();
-      return orthogroups.value.map((/** @type {OrthogroupGroup} */ group) => ({
+      return orthogroups.value.map((group) => ({
         ...group,
         display_name: orthogroupActions.resolveOrthogroupName(group, drawing),
         description: orthogroupActions.resolveOrthogroupDescription(group, drawing)
