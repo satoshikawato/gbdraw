@@ -1055,6 +1055,24 @@ const linearCanonical = canonical({
   assert.match(sourceRecipe.unavailableReason, /batch|output/i);
 }
 
+test('a one-record Circular batch, as the CLI writes it, has the Source recipe of its one output (OV-3191)', async () => {
+  const batch = structuredClone(circularCanonical);
+  batch.renderRequest.grouping = 'batch';
+  batch.renderRequest.output = [{ ...batch.renderRequest.output, prefix: 'yeast_c' }];
+  const single = structuredClone(circularCanonical);
+  single.renderRequest.output.prefix = 'yeast_c';
+  const recipe = await buildSourceRecipe(batch);
+
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  assert.deepEqual(recipe.args, (await buildSourceRecipe(single)).args);
+  assert.ok(recipe.semanticCoverage.consumedPaths.includes('output[0].prefix'));
+  await assertCliParserAccepts(recipe);
+
+  const unknownOutputField = structuredClone(batch);
+  unknownOutputField.renderRequest.output[0].futureName = 'x';
+  assert.match((await buildSourceRecipe(unknownOutputField)).unavailableReason, /output\[0\]\.futureName/);
+});
+
 {
   const missingProvenance = structuredClone(circularCanonical);
   missingProvenance.format = 'gbdraw-session';

@@ -12,7 +12,7 @@ const { spawnSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
-const { BATCH_FIXTURE, openFresh, settle } = require('./helpers/audit-browser.cjs');
+const { BATCH_FIXTURE, loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
@@ -195,3 +195,32 @@ for (const mode of MODES) {
     }
   });
 }
+
+// The CLI writes a one-record Circular drawing as a batch of one output and its stack without an Axis index. Loaded
+// and Generated in the Web, it draws the CLI's SVG and has a Source recipe that the CLI replays to it (OV-3189,
+// OV-3191).
+test('a one-record Circular CLI Session draws the CLI SVG on Generate and its Source recipe replays to it', async ({ page }, testInfo) => {
+  test.setTimeout(900_000);
+  const input = testInfo.outputPath('testa.gb');
+  writeFileSync(input, TESTA);
+  const prefix = testInfo.outputPath('testa-cli');
+  const cli = spawnSync(process.env.GBDRAW_PYTHON || 'python', ['-m', 'gbdraw.cli', 'circular', '--gbk', input, '-o', prefix,
+    '-f', 'svg', '--labels', 'none', '--circular_track_slot', 'ticks:ticks', '--circular_track_slot', 'features:features',
+    '--circular_track_slot', 'gc_content:dinucleotide_content', '--save_session'], { encoding: 'utf8', env: replayEnv });
+  expect(cli.status, cli.stderr).toBe(0);
+  await openFresh(page);
+  await loadSessionFile(page, `${prefix}.gbdraw-session.json`);
+  const current = await generated(page, testInfo, 'cli session');
+  expect(current.recipe.available, current.recipe.reason).toBe(true);
+  const archive = await bundle(page, testInfo, 'cli session');
+  const nothing = testInfo.outputPath('nothing.svg');
+  writeFileSync(nothing, '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  // The recipe's SVG equals the Web Result, then the CLI's own SVG: so the Result equals the CLI's.
+  for (const [name, expected] of [['web', current.file], ['cli', `${prefix}.svg`]]) {
+    const replay = spawnSync(process.env.GBDRAW_PYTHON || 'python', [
+      path.resolve('tests/web/helpers/source-recipe-replay.py'), testInfo.outputPath(`replay-${name}`),
+      current.recipe.command, expected, nothing, archive, input
+    ], { encoding: 'utf8', env: replayEnv });
+    expect.soft(replay.status, `${name}: ${current.recipe.command}\n${replay.stdout}${replay.stderr}`).toBe(0);
+  }
+});

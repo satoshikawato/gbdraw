@@ -714,9 +714,14 @@ const validateCurrentSemanticCoverage = (request) => {
   coverObject(coverage, request, '', [
     'mode', 'grouping', 'records', 'diagramOptions', 'layout', 'comparisons', 'output'
   ], ['schema']);
-  const supportedGroupings = request.mode === 'circular' ? ['single', 'grid'] : ['single'];
-  if (!supportedGroupings.includes(request.grouping) || Array.isArray(request.output)) {
+  // A Circular batch of one record is what the CLI writes for `--gbk <file> -o <prefix>`: its one output is the
+  // recipe's `-o` (OV-3191). A batch of several outputs names each record's file, which no one `-o` gives.
+  const supportedGroupings = request.mode === 'circular' ? ['single', 'grid', 'batch'] : ['single'];
+  if (!supportedGroupings.includes(request.grouping)) {
     throw recipeUnavailable(msg('batch or multiple-output semantics have no single current CLI projection.'));
+  }
+  if (Array.isArray(request.output) && request.output.length !== 1) {
+    throw recipeUnavailable(msg('per-record batch output names have no single current CLI projection.'));
   }
 
   (Array.isArray(request.records) ? request.records : []).forEach((record, index) => {
@@ -849,10 +854,9 @@ const validateCurrentSemanticCoverage = (request) => {
       'kind', 'resourceId', 'queryRecordIndex', 'subjectRecordIndex'
     ]);
   });
-  coverObject(coverage, request.output, 'output', [
-    'prefix', 'formats', 'overwrite', 'interactiveMetadataPolicy'
-  ]);
-  if (request.output?.interactiveMetadataPolicy !== 'auto') {
+  const [output, outputPath] = Array.isArray(request.output) ? [request.output[0], 'output[0]'] : [request.output, 'output'];
+  coverObject(coverage, output, outputPath, ['prefix', 'formats', 'overwrite', 'interactiveMetadataPolicy']);
+  if (output.interactiveMetadataPolicy !== 'auto') {
     throw recipeUnavailable(msg('the interactive metadata policy has no current CLI projection.'));
   }
   return {
@@ -2031,9 +2035,7 @@ const appendComparisonOptions = (args, request, files, units) => {
  */
 const appendDiagramOptions = (args, request, files, colorTablePath, units) => {
   const options = request.diagramOptions || {};
-  if (Array.isArray(request.output) && request.output.length !== 1) {
-    throw recipeUnavailable(msg('per-record batch output names have no single current CLI projection.'));
-  }
+  // `validateCurrentSemanticCoverage` admitted one output.
   const output = Array.isArray(request.output) ? request.output[0] : request.output;
   appendOption(args, '-o', output?.prefix);
   if (Array.isArray(output?.formats) && output.formats.length > 0) {
