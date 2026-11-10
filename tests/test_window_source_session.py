@@ -669,8 +669,11 @@ def test_an_edited_crop_saved_as_its_own_bytes_lists_its_features_as_drawn(tmp_p
     """A crop saved as its own bytes lists its features in the order the live figure draws them, so the replay paints
     them in that order too."""
 
+    import copy
+
     crop = apply_region_specs([_flanked_source()], parse_region_specs(["src:20001-40000"]))[0]
-    next(feature for feature in crop.features if _locus(feature) == "S1").location = FeatureLocation(100, 900, 1)
+    # A crop that holds a cut feature twice is saved as its own bytes.
+    crop.features.append(copy.deepcopy(next(feature for feature in crop.features if _locus(feature) == "I1")))
     crop.features.insert(
         1, SeqFeature(FeatureLocation(1000, 2000, 1), type="CDS", qualifiers={"locus_tag": ["NEW"], "product": ["n"]})
     )
@@ -683,21 +686,28 @@ def test_an_edited_crop_saved_as_its_own_bytes_lists_its_features_as_drawn(tmp_p
         [_locus(feature) for feature in planned.features]
 
 
-def test_a_session_saves_a_crop_that_moved_a_feature_cut_at_its_end_as_itself(tmp_path: Path) -> None:
-    """A feature the crop cut at an end has no place on the source once moved; the crop is saved as its own bytes."""
+_END_CUT_EDITS = {
+    # S1, which the crop cut at its start, is moved inside the crop.
+    "moved": lambda feature: setattr(feature, "location", FeatureLocation(100, 900, feature.location.strand)),
+    # S1 changes its type only.
+    "retyped": lambda feature: setattr(feature, "type", "gene"),
+}
 
-    crop = apply_region_specs([_flanked_source()], parse_region_specs(["src:20001-40000"]))[0]
-    cut = next(feature for feature in crop.features if _locus(feature) == "S1")
-    cut.location = FeatureLocation(100, 900, 1)
-    request = LinearDiagramRequest(
-        records=(RecordInput(source=InMemoryRecordSource(crop), record_key="r"),),
-        options=LinearDiagramOptions(config_overrides=_TRACKS), output=_output(tmp_path),
-    )
-    _replayed(request, tmp_path)
+
+@pytest.mark.parametrize("spec", ["src:20001-40000", "src:20001-40000:rc"], ids=["forward", "reversed"])
+@pytest.mark.parametrize("edit", sorted(_END_CUT_EDITS))
+def test_a_session_redraws_an_edited_feature_the_crop_cut_at_its_end(spec: str, edit: str, tmp_path: Path) -> None:
+    """A feature the crop cut at an end, once moved, is a feature at its new place; once retyped, it keeps its whole
+    source location. Either way the crop is saved as its source with the edit, and the replay draws the live figure
+    with the same feature IDs (OV-3246)."""
+
+    crop = apply_region_specs([_flanked_source()], parse_region_specs([spec]))[0]
+    _END_CUT_EDITS[edit](next(feature for feature in crop.features if _locus(feature) == "S1"))
+    live, replay = _replayed(_request("linear", crop, tmp_path), tmp_path)
+    assert _drawn_ids(replay) == _drawn_ids(live)
+    assert replay == live
     [saved] = _saved_records(tmp_path)
-    assert not saved.get("windows")
-    assert [str(feature.location) for feature in _saved_source(tmp_path).features if _locus(feature) == "S1"] \
-        == ["[100:900](+)"]
+    assert [(window["start"], window["end"]) for window in saved["windows"]] == [(20001, 40000)]
 
 
 def test_a_session_saves_a_crop_whose_bases_were_edited_as_itself(tmp_path: Path) -> None:

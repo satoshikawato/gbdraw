@@ -1146,9 +1146,10 @@ def _with_crop_edits(source: SeqRecord, crop: SeqRecord, window: RecordWindow) -
 
     The crop is compared with the source cut through ``window`` again, feature by feature by the source feature
     each was cut from, and only what differs is written to the source: a changed qualifier of a feature (on the
-    whole source feature, so one the crop cut at an end keeps its full location), a moved feature
-    (``_same_location``), a feature the crop left out, a feature added to the crop (mapped back into the window,
-    reversed back for a reverse-complemented crop), and a changed name or annotation.
+    whole source feature, so one the crop cut at an end keeps its full location), a changed type (likewise), a
+    moved feature (``_same_location``; written at its new place, mapped back into the window and reversed back for a
+    reverse-complemented crop, as the figure places it), a feature the crop left out, a feature added to the crop
+    (mapped back likewise), and a changed name or annotation.
 
     A feature's place in the source is its source feature index on replay, so every feature the crop kept, and
     every feature outside the window (across the origin too), stays at its place. The added features follow the
@@ -1157,8 +1158,7 @@ def _with_crop_edits(source: SeqRecord, crop: SeqRecord, window: RecordWindow) -
     Cutting the result through the window again draws the edited crop with its flanks, each feature with the
     source feature index it has in the crop, unless the crop left out a feature that comes before others in the
     source (OV-3230). ``None`` (the crop is written as its own bytes) for a crop across the origin, one whose
-    bases are no longer the source's bases in the window, one that holds a cut feature twice, or one where a
-    feature that runs past the window's ends was moved.
+    bases are no longer the source's bases in the window, or one that holds a cut feature twice.
     """
 
     if window.start > window.end:
@@ -1200,12 +1200,11 @@ def _with_crop_edits(source: SeqRecord, crop: SeqRecord, window: RecordWindow) -
         index = positions[id(feature)]
         if index in kept:
             edited, original = kept[index], cut[index]
-            if edited.type != original.type or not _same_location(edited.location, original.location):
-                if not (start_0 <= feature.location.start and feature.location.end <= end_0):
-                    return None
+            if not _same_location(edited.location, original.location):
+                # A moved feature is a feature at its new place, live and on replay.
                 feature = in_source(edited)
-            elif edited.qualifiers != original.qualifiers or edited.id != original.id:
-                feature = SeqFeature(feature.location, type=feature.type, id=edited.id,
+            elif (edited.type, edited.qualifiers, edited.id) != (original.type, original.qualifiers, original.id):
+                feature = SeqFeature(feature.location, type=edited.type, id=edited.id,
                                      qualifiers=deepcopy(edited.qualifiers))
         elif index in cut:
             continue
