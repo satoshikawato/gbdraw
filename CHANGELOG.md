@@ -584,6 +584,13 @@ into the `[Unreleased]` list below.
   `A.B.losatn.tsv`) and the second's `A.B.losatn.w2.tsv` (was
   `A.B.losatn.2.tsv`), so a script that reads the old names needs updating
   (OV-2742).
+- Fixed: the **File name** field of a pair of Linear records now shows the
+  raw LOSAT file name that Generate and **Save Raw LOSAT TSV** give, built
+  from the records' IDs when the cards have no Definition (for example
+  `NC_000913.3.AP009048.1.losatn.tsv`); before, it showed
+  `seq_1.seq_2.losatn.tsv`. After Load, while the record selects say "Not
+  inspected", the field shows no name until the records are read (Generate
+  reads them) (OV-3227).
 - Fixed: a Linear record card's window numbers and the bp it reports between
   windows now come from the planner that draws the figure, so they match it
   (the card counted bp between two windows that a third window covers). An
