@@ -235,7 +235,8 @@ const appState = (svg, canvasPadding = {}) => {
     layoutRepositionMode: ref(true),
     zoom: ref(1),
     results: ref([{ id: 'r1' }]),
-    activeDrawing: () => ({ canvasPadding })
+    activeDrawing: () => ({ canvasPadding }),
+    sessionOperationAvailability: () => null
   });
   return state;
 };

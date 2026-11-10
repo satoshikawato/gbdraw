@@ -23,7 +23,7 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
   // keeps the canvas it was saved with (PD-OI-052).
   const applyCanvasPadding = () => {
     const drawing = state.activeDrawing();
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     const svg = currentSvg();
     if (!svg) return false;
@@ -34,7 +34,7 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
 
   const resetCanvasPadding = () => {
     const drawing = state.activeDrawing();
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     CANVAS_SLICE.reset(drawing.slices.canvas);
     return applyCanvasPadding();
@@ -46,7 +46,7 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
    * @param {unknown} value
    */
   const setCanvasPaddingSide = (side, value) => {
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     setDrawingCanvasPaddingSide(state.activeDrawing().slices.canvas, side, value);
     return applyCanvasPadding();
