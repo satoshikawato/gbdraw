@@ -176,7 +176,7 @@ export const createDefaultPriorityRule = () => ({
 export const createDefaultPaletteDraftState = () => ({
   paletteInstantPreviewEnabled: false,
   appliedPaletteName: 'default',
-  appliedPaletteColors: {}
+  appliedPaletteColors: /** @type {Record<string, string>} */ ({})
 });
 
 export const createDefaultEditorDraftState = () => ({
@@ -253,12 +253,12 @@ const linearFoldedSources = reactive(new Set());
 const loadedFonts = typedRef(/** @type {WebFontEntry[]} */ ([]));
 
 // Color & Filter State
-const paletteDefinitions = ref({});
-const paletteNames = ref(['default']);
+const paletteDefinitions = typedRef(/** @type {Record<string, Record<string, string>>} */ ({}));
+const paletteNames = typedRef(['default']);
 const defaultPaletteDraftState = createDefaultPaletteDraftState();
 const paletteInstantPreviewEnabled = ref(defaultPaletteDraftState.paletteInstantPreviewEnabled);
-const appliedPaletteName = ref(defaultPaletteDraftState.appliedPaletteName);
-const appliedPaletteColors = ref(defaultPaletteDraftState.appliedPaletteColors);
+const appliedPaletteName = typedRef(defaultPaletteDraftState.appliedPaletteName);
+const appliedPaletteColors = typedRef(defaultPaletteDraftState.appliedPaletteColors);
 const newSpecRule = reactive(createDefaultSpecificRule());
 /**
  * A built-in color table offered as a preset of the specific rules.
