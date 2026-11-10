@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -66,6 +67,32 @@ test('the index lists the tests that cite an id without a record, and the record
   assert.deepEqual(problems, []);
   const missing = text.slice(text.indexOf('### Cited ids without a record'));
   assert.match(missing, new RegExp(`^- \`${RECORD(999)}\`: no record\\. No record mentions it\\.\\n  - \`${spec}\`$`, 'm'));
+});
+
+test('pull requests that make tests cite two neighbouring records change the index without a merge conflict', () => {
+  const spec = 'tests/web/drawing-list.test.mjs';
+  const base = buildNormsIndex();
+  const number = (id) => Number(id.slice(RECORD('').length));
+  const ids = headingsOf(read('docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'))
+    .filter(({ level }) => level === 3)
+    .map(({ text }) => text.match(new RegExp(`^${RECORD('\\d+')}(?=: )`))?.[0])
+    .filter(Boolean).sort((left, right) => number(left) - number(right));
+  const cited = new Set(read(spec).match(new RegExp(RECORD('\\d+'), 'g')) ?? []);
+  const index = ids.findIndex((id, at) => at > 0 && !cited.has(id) && !cited.has(ids[at - 1]));
+  const citing = (id) => buildNormsIndex({ read: (file) => read(file) + (file === spec ? `\n// ${id}\n` : '') }).text;
+  const directory = mkdtempSync(join(tmpdir(), 'norms-index-'));
+  try {
+    const [ours, original, theirs] = ['ours', 'base', 'theirs'].map((name) => join(directory, name));
+    writeFileSync(ours, citing(ids[index - 1]));
+    writeFileSync(original, base.text);
+    writeFileSync(theirs, citing(ids[index]));
+    const merged = spawnSync('git', ['merge-file', '-p', ours, original, theirs], { encoding: 'utf8' });
+    assert.equal(merged.status, 0, `conflicting hunks: ${merged.status}`);
+    const listings = (text) => text.split(`\`${spec}\``).length - 1;
+    assert.equal(listings(merged.stdout), listings(base.text) + 2);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('heading anchors follow GitHub: rendered text, no punctuation, numbered repeats, no fenced code', () => {

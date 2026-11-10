@@ -160,143 +160,31 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
 Source: the `### PD-OI-nnn` records of `docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md`
 and the test files under `tests/` that name a record id.
 
-A record is revised in place: its Supersedes field names its own earlier scenario
-revision. A record replaced in full is removed, so the tests that still cite it
-are listed under "Cited ids without a record".
+Each record gives its title, status, concern key, scenario revision, and the
+revision it supersedes, followed by the test files that cite it. A record is
+revised in place: its Supersedes field names its own earlier scenario revision.
+A record replaced in full is removed, so the tests that still cite it are listed
+under "Cited ids without a record".
 
-| Record | Title | Status | Concern | Scenario revision | Supersedes | Test files |
-| --- | --- | --- | --- | --- | --- | --- |
-| [PD-OI-001](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-001-losatp-raw-search-limit-fresh-defaults) | LOSATP raw-search limit fresh defaults | ACCEPTED | diagram-generation.losatp-candidate-limit-default | 2 | scenario revision 1 | 0 |
-| [PD-OI-002](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-002-losatp-mode-specific-limit-retention-and-gui-placement) | LOSATP mode-specific limit retention and GUI placement | ACCEPTED | diagram-generation.losatp-candidate-limit-scope | 3 | scenario revision 2 | 2 |
-| [PD-OI-003](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-003-pairwise-display-max-hits) | Pairwise display max hits | ACCEPTED | diagram-generation.pairwise-display-max-hits | 1 | — | 0 |
-| [PD-OI-004](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-004-similaritycollinear-member-hits-per-protein) | Similarity/Collinear member hits per protein | ACCEPTED | diagram-generation.member-hits-per-protein | 4 | scenario revision 3 | 0 |
-| [PD-OI-005](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-005-supported-collinear-value-domains) | Supported Collinear value domains | ACCEPTED | diagram-generation.collinear-value-domains | 1 | — | 0 |
-| [PD-OI-006](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-006-collinear-search-scope-fresh-default) | Collinear search-scope fresh default | ACCEPTED | diagram-generation.collinear-search-scope-default | 1 | — | 0 |
-| [PD-OI-007](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-007-collinear-merge-conflict-fresh-default) | Collinear merge-conflict fresh default | ACCEPTED | diagram-generation.collinear-max-conflicts-default | 2 | scenario revision 1 | 0 |
-| [PD-OI-008](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-008-imported-comparison-reconstruction-and-resolution) | Imported comparison reconstruction and resolution | ACCEPTED | diagram-generation.imported-comparison-state | 1 | — | 0 |
-| [PD-OI-009](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-009-gui-unmanaged-configuration-overrides) | GUI-unmanaged configuration overrides | ACCEPTED | diagram-generation.gui-unmanaged-config-overrides | 1 | — | 7 |
-| [PD-OI-010](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-010-circular-record-selection-crop-and-reverse-display) | Circular record selection, crop, and reverse display | ACCEPTED | diagram-generation.circular-record-transforms | 1 | — | 0 |
-| [PD-OI-011](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-011-linear-scale-and-ruler-label-font-interaction) | Linear scale and ruler-label font interaction | ACCEPTED | diagram-generation.linear-scale-ruler-fonts | 1 | — | 0 |
-| [PD-OI-012](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-012-circular-record-label-and-subtitle) | Circular record label and subtitle | ACCEPTED | diagram-generation.circular-label-subtitle | 1 | — | 2 |
-| [PD-OI-013](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-013-web-compatibility-meaning-of-grid_column) | Web compatibility meaning of `grid_column` | ACCEPTED | diagram-generation.grid-column-compatibility | 1 | — | 0 |
-| [PD-OI-014](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-014-direct-non-adjacent-similarity-and-collinear-display-links) | Direct non-adjacent Similarity and Collinear display links | DEFERRED | diagram-generation.non-adjacent-grouping-topology | 1 | — | 0 |
-| [PD-OI-015](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-015-advanced-gui-exposure-policy) | Advanced GUI exposure policy | ACCEPTED | diagram-generation.gui-exposure-policy | 1 | — | 0 |
-| [PD-OI-016](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-016-generation-failure-cancellation-and-stale-result-isolation) | Generation failure, cancellation, and stale-result isolation | ACCEPTED | diagram-generation.failure-isolation | 1 | — | 0 |
-| [PD-OI-017](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-017-active-comparison-appearance-controls-remain-reachable) | Active comparison appearance controls remain reachable | ACCEPTED | diagram-generation.comparison-appearance-reachability | 1 | — | 0 |
-| [PD-OI-018](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-018-complete-linear-records-placement-and-comparison-scope) | Complete Linear records, placement, and comparison scope | ACCEPTED | diagram-generation.linear-record-universe-and-search-scope | 6 | scenario revision 5 | 8 |
-| [PD-OI-019](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-019-fresh-web-multi-record-layout-defaults) | Fresh Web multi-record layout defaults | ACCEPTED | diagram-generation.web-multi-record-layout-defaults | 1 | — | 0 |
-| [PD-OI-020](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-020-losat-total-thread-allocation-and-control-agreement) | LOSAT total-thread allocation and control agreement | ACCEPTED | diagram-generation.losat-total-thread-allocation | 1 | — | 0 |
-| [PD-OI-021](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-021-optional-collinear-self-search-and-orthogroup-inference) | Optional Collinear self-search and orthogroup inference | ACCEPTED | diagram-generation.collinear-optional-orthogroup-inference | 2 | scenario revision 1 | 0 |
-| [PD-OI-022](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-022-reuse-completed-losat-searches-after-cancellation) | Reuse completed LOSAT searches after cancellation | ACCEPTED | diagram-generation.completed-losat-search-retry | 1 | — | 1 |
-| [PD-OI-023](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-023-lossless-protein-paths-during-normal-generation-and-saving) | Lossless protein paths during normal generation and saving | ACCEPTED | protein-comparison.path-representation | 1 | — | 0 |
-| [PD-OI-024](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-024-linear-definition-alignment-and-automatic-replicon-visibility) | Linear Definition alignment and automatic Replicon visibility | ACCEPTED | linear.definition-display | 3 | scenario revision 2 | 1 |
-| [PD-OI-025](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-025-linear-depth-source-scope-and-discoverability) | Linear Depth source scope and discoverability | ACCEPTED | diagram-generation.linear-depth-source-scope-and-discoverability | 1 | — | 2 |
-| [PD-OI-026](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-026-deterministic-similarity-group-anchor-resolution-with-optional-review) | Deterministic Similarity Group anchor resolution with optional review | ACCEPTED | diagram-generation.similarity-alignment.anchor-resolution | 3 | scenario revision 2 | 0 |
-| [PD-OI-027](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-027-explicit-display-directions-with-record-owned-orientation) | Explicit display directions with record-owned orientation | ACCEPTED | diagram-generation.similarity-alignment.transform-semantics | 5 | scenario revision 4 | 1 |
-| [PD-OI-028](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-028-orientation-independent-active-alignment-plan) | Orientation-independent active alignment plan | ACCEPTED | diagram-generation.similarity-alignment.plan-lifecycle | 3 | scenario revision 2 | 1 |
-| [PD-OI-029](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-029-selectable-position-and-alignment-direction-reset-with-artifact-history) | Selectable position and alignment-direction Reset with artifact history | ACCEPTED | diagram-generation.similarity-alignment.reset-and-history | 3 | scenario revision 2 | 0 |
-| [PD-OI-030](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-030-reader-only-legacy-similarity-group-alignment-compatibility) | Reader-only legacy Similarity Group alignment compatibility | ACCEPTED | diagram-generation.similarity-alignment.session-compatibility | 1 | — | 0 |
-| [PD-OI-031](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-031-automatic-resolved-alignment-with-explicit-display-direction-review) | Automatic resolved alignment with explicit display-direction review | ACCEPTED | diagram-generation.similarity-alignment.surface-scope | 5 | scenario revision 4 | 0 |
-| [PD-OI-032](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-032-feature-popup-rotation-for-one-circular-record) | Feature-popup rotation for one circular record | ACCEPTED | diagram-generation.feature-popup-record-rotation | 1 | — | 1 |
-| [PD-OI-033](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-033-feature-popup-record-actions-presentation) | Feature-popup record-actions presentation | ACCEPTED | web.feature-popup.record-actions-presentation | 2 | scenario revision 1 | 0 |
-| [PD-OI-034](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-034-local-exclusive-display-direction-review-with-retry) | Local exclusive display-direction review with retry | ACCEPTED | web.similarity-alignment.choice-and-retry | 5 | scenario revision 4 | 0 |
-| [PD-OI-035](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-035-similarity-alignment-canvas-interaction) | Similarity-alignment canvas interaction | ACCEPTED | web.similarity-alignment.canvas-interaction | 3 | scenario revision 2 | 0 |
-| [PD-OI-036](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-036-linear-record-label-auto-visibility-and-disclosure) | Linear record-label Auto visibility and disclosure | ACCEPTED | linear.record-label-auto-visibility | 2 | — | 0 |
-| [PD-OI-037](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-037-operation-feedback-without-derived-application-status) | Operation feedback without derived application status | ACCEPTED | web.edit-application-feedback | 3 | scenario revision 2 | 11 |
-| [PD-OI-038](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-038-compact-editor-presentation) | Compact Editor presentation | ACCEPTED | web.editor.compact-presentation | 1 | — | 2 |
-| [PD-OI-039](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-039-compact-review-with-exclusive-alignment-directions) | Compact review with exclusive alignment directions | ACCEPTED | web.similarity-alignment.review-presentation | 5 | scenario revision 4 | 2 |
-| [PD-OI-040](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-040-annotation-tsv-auxiliary-columns) | Annotation TSV auxiliary columns | ACCEPTED | annotations.table-auxiliary-columns | 1 | — | 1 |
-| [PD-OI-041](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-041-unmatched-annotation-feature-selectors) | Unmatched annotation feature selectors | ACCEPTED | annotations.feature-selector-miss | 1 | — | 1 |
-| [PD-OI-042](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-042-specific-color-caption-disambiguation) | Specific-color caption disambiguation | ACCEPTED | styles.specific-color-caption-multiplicity | 2 | scenario revision 1 | 18 |
-| [PD-OI-043](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-043-pure-pixel-track-text-inputs) | Pure pixel track text inputs | ACCEPTED | tracks.pixel-text-input-domain | 1 | — | 0 |
-| [PD-OI-044](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-044-applicable-circular-controls-and-truthful-record-discovery) | Applicable Circular controls and truthful record discovery | ACCEPTED | diagram-generation.circular-transform-discoverability | 5 | scenario revision 4 | 12 |
-| [PD-OI-045](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-045-exclusive-semantic-session-operations-with-responsive-browsing) | Exclusive semantic Session operations with responsive browsing | ACCEPTED | web.session-operation-consistency | 1 | — | 2 |
-| [PD-OI-046](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-046-guidance-with-bounded-diagnostics) | Guidance with bounded diagnostics | ACCEPTED | web.errors.diagnostic-disclosure | 1 | — | 2 |
-| [PD-OI-047](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-047-rejected-color-rule-pattern-edit-recovery) | Rejected Color rule pattern edit recovery | ACCEPTED | web.rules.rejected-pattern-edit-recovery | 1 | — | 0 |
-| [PD-OI-048](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-048-circular-widthradius-input-representation) | Circular Width/Radius input representation | ACCEPTED | tracks.circular-measure-input-representation | 1 | — | 0 |
-| [PD-OI-049](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-049-circular-widthradius-unit-changes) | Circular Width/Radius unit changes | ACCEPTED | tracks.circular-measure-unit-change | 2 | scenario revision 1 | 0 |
-| [PD-OI-050](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-050-circular-auto-unit-preference-lifecycle) | Circular Auto unit preference lifecycle | ACCEPTED | tracks.circular-measure-auto-unit-lifecycle | 1 | — | 0 |
-| [PD-OI-051](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-051-in-flight-comparison-draft-changes) | In-flight comparison draft changes | ACCEPTED | diagram-generation.inflight-comparison-draft | 1 | — | 2 |
-| [PD-OI-052](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-052-matched-decoration-deltas-across-regeneration) | Matched decoration deltas across regeneration | ACCEPTED | web.composition-decoration-continuity | 2 | — | 7 |
-| [PD-OI-053](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-053-explicit-layout-edit-with-discoverable-targets) | Explicit Layout edit with discoverable targets | ACCEPTED | web.layout-edit-affordance | 2 | scenario revision 1 | 1 |
-| [PD-OI-054](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-054-docked-preview-search-and-controls) | Docked Preview search and controls | ACCEPTED | web.preview-search-placement | 2 | scenario revision 1 | 1 |
-| [PD-OI-055](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-055-valid-bindings-after-failed-generate) | Valid bindings after failed Generate | ACCEPTED | web.generate.failed-source-binding-continuation | 1 | — | 0 |
-| [PD-OI-056](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-056-feature-search-all-field-scope) | Feature search All-field scope | ACCEPTED | web.feature-search.all-field-scope | 1 | — | 0 |
-| [PD-OI-057](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-057-keyboard--and-touch-reachable-help-tips) | Keyboard- and touch-reachable help tips | ACCEPTED | web.help-tip.reachability | 1 | — | 2 |
-| [PD-OI-058](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-058-managed-depth-track-row-lifecycle) | Managed Depth track-row lifecycle | ACCEPTED | web.depth.managed-slot-lifecycle | 1 | — | 5 |
-| [PD-OI-059](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-059-when-the-definition-settings-apply) | When the definition settings apply | ACCEPTED | web.circular.definition-application | 3 | scenario revision 2 | 7 |
-| [PD-OI-060](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-060-when-the-diagram-wide-stroke-settings-apply) | When the diagram-wide stroke settings apply | ACCEPTED | web.stroke.application | 2 | scenario revision 1 | 2 |
-| [PD-OI-061](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-061-legend-rename-collisions-for-every-entry) | Legend rename collisions for every entry | ACCEPTED | web.legend.rename-collision | 5 | scenario revision 4 | 10 |
-| [PD-OI-062](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-062-batch-live-edits-projected-on-result-mount) | Batch live edits projected on Result mount | ACCEPTED | web.batch.live-edit-projection | 1 | — | 5 |
-| [PD-OI-063](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-063-legend-order-continuity-across-generate) | Legend order continuity across Generate | ACCEPTED | web.legend.order-continuity | 1 | — | 4 |
-| [PD-OI-064](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-064-canvas-padding-continuity-across-generate) | Canvas padding continuity across Generate | ACCEPTED | web.canvas.padding-continuity | 1 | — | 2 |
-| [PD-OI-065](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-065-label-edits-after-source-replacement) | Label edits after source replacement | ACCEPTED | web.labels.source-replacement-reconciliation | 1 | — | 0 |
-| [PD-OI-066](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-066-live-edit-and-regeneration-parity) | Live-edit and regeneration parity | ACCEPTED | web.live-edit.regeneration-parity | 3 | scenario revision 2 | 18 |
-| [PD-OI-067](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-067-per-record-inferred-linear-definitions) | Per-record inferred Linear definitions | ACCEPTED | web.linear.file-default-definition | 4 | scenario revision 1 | 2 |
-| [PD-OI-068](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-068-record-universe-of-fasta-and-gff3fasta-inputs) | Record universe of FASTA and GFF3+FASTA inputs | ACCEPTED | diagram-generation.gff-fasta-record-universe | 2 | scenario revision 1 | 8 |
-| [PD-OI-069](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-069-stable-hash-single-feature-colors-with-duplicate-record-ids) | Stable-hash single-feature colors with duplicate record IDs | ACCEPTED | web.feature-color.duplicate-record-instance | 2 | scenario revision 1 | 12 |
-| [PD-OI-070](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-070-reset-settings-scope-for-linear-record-display) | Reset Settings scope for Linear record display | ACCEPTED | web.reset.linear-record-display | 1 | — | 4 |
-| [PD-OI-071](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-071-location-only-feature-search-positions) | Location-only feature-search positions | ACCEPTED | web.feature-search.location-fields | 1 | — | 0 |
-| [PD-OI-072](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-072-web-pdf-physical-size) | Web PDF physical size | ACCEPTED | web.export.pdf-physical-size | 1 | — | 1 |
-| [PD-OI-073](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-073-comparison-table-coordinate-frame) | Comparison table coordinate frame | ACCEPTED | comparison.table-coordinate-frame | 1 | — | 8 |
-| [PD-OI-074](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-074-uploaded-comparison-table-record-binding) | Uploaded comparison table record binding | ACCEPTED | comparison.uploaded-table-record-binding | 1 | — | 6 |
-| [PD-OI-075](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-075-similarity-group-name-and-description-identity) | Similarity group name and description identity | ACCEPTED | web.similarity-group.override-identity | 1 | — | 0 |
-| [PD-OI-076](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-076-match-popup-coordinates) | Match popup coordinates | ACCEPTED | web.match-popup.coordinates | 1 | — | 1 |
-| [PD-OI-077](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-077-outfmt-6-tables-with-extra-columns) | outfmt 6 tables with extra columns | ACCEPTED | comparison.outfmt6-extra-columns | 1 | — | 1 |
-| [PD-OI-078](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-078-circular-definition-drawn-on-one-line-inside-tracks-move-outward-then-narrow-down-to-a-floor) | Circular definition drawn on one line; inside tracks move outward, then narrow down to a floor | ACCEPTED | diagram-generation.circular-definition-fit | 3 | scenario revision 2 | 5 |
-| [PD-OI-079](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-079-generate-before-saving-a-legacy-session) | Generate before saving a legacy Session | ACCEPTED | web.session.legacy-save | 1 | — | 3 |
-| [PD-OI-080](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-080-dinucleotide-alphabet) | Dinucleotide alphabet | ACCEPTED | options.dinucleotide-alphabet | 1 | — | 1 |
-| [PD-OI-081](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-081-validated-font-sizes-and-stroke-widths) | Validated font sizes and stroke widths | ACCEPTED | options.nonnegative-style-values | 1 | — | 3 |
-| [PD-OI-082](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-082-undo-and-redo-during-generate) | Undo and Redo during Generate | ACCEPTED | web.generation.in-flight-history | 1 | — | 1 |
-| [PD-OI-083](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-083-linear-depth-series-without-a-source) | Linear Depth series without a source | ACCEPTED | web.depth.linear-sourceless-series | 1 | — | 4 |
-| [PD-OI-084](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-084-linear-live-legend-side-moves) | Linear live legend side moves | ACCEPTED | web.legend.live-side-move | 1 | — | 3 |
-| [PD-OI-085](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-085-feature-popup-record-rotation-apply-on-generate) | Feature-popup record rotation Apply on Generate | ACCEPTED | web.feature-popup.record-rotation-apply-on-generate | 2 | scenario revision 1 | 2 |
-| [PD-OI-087](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-087-feature-based-display-start-only-in-the-feature-popup) | Feature-based display start only in the feature popup | ACCEPTED | web.record-display.feature-start-shortcuts | 1 | — | 1 |
-| [PD-OI-088](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-088-popup-dialog-busy-until-its-choice-commits) | Popup dialog busy until its choice commits | ACCEPTED | web.popup-dialog-choice-application | 1 | — | 8 |
-| [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette) | Default colors a user edits win over the palette | ACCEPTED | web.default-colors-over-palette | 2 | scenario revision 1 | 2 |
-| [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings) | Project with drawings | ACCEPTED | session.project-drawings | 10 | scenario revision 9 | 47 |
-| [PD-OI-091](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-091-per-record-draw-onoff) | Per-record draw ON/OFF | ACCEPTED | diagram-generation.record-draw-selection | 1 | — | 2 |
-| [PD-OI-092](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-092-settings-pane-section-index) | Settings pane section index | ACCEPTED | web.settings-pane.section-index | 3 | scenario revision 2 | 2 |
-| [PD-OI-093](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-093-settings-pane-display-switch-and-icon-rail) | Settings pane display switch and icon rail | ACCEPTED | web.settings-pane.display | 5 | scenario revision 4 | 2 |
-| [PD-OI-094](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-094-linear-file-cards-fold-to-one-line) | Linear File cards fold to one line | ACCEPTED | web.linear.file-card-fold | 1 | — | 0 |
-| [PD-OI-095](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-095-one-naming-rule-for-legend-rows-that-share-a-name) | One naming rule for Legend rows that share a name | ACCEPTED | legend.row-name-multiplicity | 1 | — | 5 |
-| [PD-OI-096](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-096-legend-position-of-a-diagram-mode-at-load) | Legend position of a diagram mode at Load | ACCEPTED | web.legend.position-of-mode | 3 | scenario revision 2 | 1 |
-| [PD-OI-097](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-097-labels-that-do-not-fit) | Labels that do not fit | ACCEPTED | product.circular-outer-label-fit | 27 | scenario revision 26 | 10 |
-| [PD-OI-098](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-098-font-of-the-diagram-text) | Font of the diagram text | ACCEPTED | diagram-generation.diagram-font | 2 | scenario revision 1 | 1 |
-| [PD-OI-099](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-099-confirm-what-load-cannot-restore-before-it-loads) | Confirm what Load cannot restore before it loads | ACCEPTED | web.session.load-repair-confirmation | 1 | — | 0 |
-| [PD-OI-100](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-100-rich-feature-popup-outside-undo) | Rich Feature Popup outside Undo | ACCEPTED | web.history.rich-feature-popup | 1 | — | 0 |
-| [PD-OI-101](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-101-task-yield-after-the-later-generate-statuses) | Task yield after the later Generate statuses | ACCEPTED | web.generate.later-status-paint-yields | 1 | — | 1 |
-| [PD-OI-102](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-102-live-settings-redraw-the-result-when-a-value-is-committed) | Live settings redraw the Result when a value is committed | ACCEPTED | web.settings.live-application | 1 | — | 8 |
-| [PD-OI-103](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-103-settings-sections-that-apply-live) | Settings sections that apply live | ACCEPTED | web.settings.live-sections | 2 | scenario revision 1 | 14 |
-| [PD-OI-104](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-104-when-the-gc-skew-and-depth-toggles-apply) | When the GC, skew and depth toggles apply | ACCEPTED | web.layout.track-toggle-application | 9 | scenario revision 8 | 17 |
-| [PD-OI-105](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-105-a-click-on-a-drawn-element-shows-its-settings-in-a-popup) | A click on a drawn element shows its settings in a popup | ACCEPTED | web.result.element-settings-entry | 1 | — | 0 |
-| [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language) | Web UI language | ACCEPTED | product.web-ui-language | 6 | scenario revision 5 | 2 |
-| [PD-OI-107](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-107-organism-name-lines-from-record-metadata) | Organism name lines from record metadata | ACCEPTED | diagram-generation.organism-name-lines | 1 | — | 0 |
-| [PD-OI-108](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-108-tutorials-of-the-interactive-gallery-from-the-app) | Tutorials of the Interactive Gallery from the app | ACCEPTED | web.gallery-tutorial-discoverability | 3 | scenario revision 2 | 5 |
-| [PD-OI-109](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-109-hide-the-circular-center-definition) | Hide the Circular center definition | ACCEPTED | diagram-generation.circular-definition-visibility | 1 | — | 7 |
-| [PD-OI-110](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-110-similarity-ring-colors-and-hover) | Similarity-ring colors and hover | ACCEPTED | tracks.circular-conservation-ring-colors | 3 | scenario revision 2 | 6 |
-| [PD-OI-111](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-111-partial-feature-ends-drawn-open) | Partial feature ends drawn open | ACCEPTED | features.partial-ends-open | 1 | — | 0 |
-| [PD-OI-112](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-112-history-step-list) | History step list | ACCEPTED | web.history.step-list | 1 | — | 4 |
-| [PD-OI-113](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-113-web-control-for-the-linear-wrap-length) | Web control for the Linear wrap length | ACCEPTED | web.linear.wrap-length | 3 | scenario revision 2 | 14 |
-| [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size) | Web control for the figure size | ACCEPTED | web.layout.figure-size | 3 | scenario revision 2 | 12 |
-| [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing) | Select region on the drawing | ACCEPTED | web.result.region-select | 1 | — | 7 |
-| [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap) | gzip input expansion cap | ACCEPTED | input.gzip-expansion-cap | 1 | — | 3 |
-| [PD-OI-117](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-117-sequence-search) | Sequence search | ACCEPTED | web.sequence-search | 1 | — | 9 |
-| [PD-OI-118](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-118-diagram-reply-too-large-for-the-page) | Diagram reply too large for the page | ACCEPTED | diagram-generation.reply-too-large-for-page | 1 | — | 3 |
-| [PD-OI-119](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-119-region-label-place) | Region label place | ACCEPTED | product.region-label-place | 7 | scenario revision 6 | 4 |
-| [PD-OI-120](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-120-input-file-changed-after-choosing) | Input file changed after choosing | ACCEPTED | input.file-changed-after-choosing | 1 | — | 2 |
-| [PD-OI-121](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-121-input-file-kept-in-a-browser-copy-after-choosing) | Input file kept in a browser copy after choosing | ACCEPTED | input.file-changed-after-choosing | 2 | PD-OI-120 scenario revision 1 | 9 |
-| [PD-OI-122](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-122-windows-in-a-linear-row) | Windows in a Linear row | ACCEPTED | diagram-generation.linear-row-windows | 2 | scenario revision 1 | 14 |
-| [PD-OI-123](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-123-find-in-other-files) | Find in other files | ACCEPTED | diagram-generation.locate-homologs | 1 | — | 7 |
-| [PD-OI-124](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-124-windows-in-the-record-card-and-record-layout) | Windows in the record card and Record Layout | ACCEPTED | web.linear.record-windows | 1 | — | 6 |
-| [PD-OI-125](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-125-diagram-engine-out-of-memory) | Diagram engine out of memory | ACCEPTED | diagram-generation.engine-out-of-memory | 1 | — | 5 |
+- [PD-OI-001](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-001-losatp-raw-search-limit-fresh-defaults): LOSATP raw-search limit fresh defaults. ACCEPTED, concern `diagram-generation.losatp-candidate-limit-default`, scenario revision 2, supersedes scenario revision 1.
 
-### Test files that cite each record
-
-- [PD-OI-002](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-002-losatp-mode-specific-limit-retention-and-gui-placement)
+- [PD-OI-002](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-002-losatp-mode-specific-limit-retention-and-gui-placement): LOSATP mode-specific limit retention and GUI placement. ACCEPTED, concern `diagram-generation.losatp-candidate-limit-scope`, scenario revision 3, supersedes scenario revision 2.
   - `tests/fixtures/sessions/mode-scoped-settings-registry-v46.tsv`
   - `tests/test_mode_scoped_settings.py`
-- [PD-OI-009](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-009-gui-unmanaged-configuration-overrides)
+
+- [PD-OI-003](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-003-pairwise-display-max-hits): Pairwise display max hits. ACCEPTED, concern `diagram-generation.pairwise-display-max-hits`, scenario revision 1.
+
+- [PD-OI-004](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-004-similaritycollinear-member-hits-per-protein): Similarity/Collinear member hits per protein. ACCEPTED, concern `diagram-generation.member-hits-per-protein`, scenario revision 4, supersedes scenario revision 3.
+
+- [PD-OI-005](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-005-supported-collinear-value-domains): Supported Collinear value domains. ACCEPTED, concern `diagram-generation.collinear-value-domains`, scenario revision 1.
+
+- [PD-OI-006](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-006-collinear-search-scope-fresh-default): Collinear search-scope fresh default. ACCEPTED, concern `diagram-generation.collinear-search-scope-default`, scenario revision 1.
+
+- [PD-OI-007](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-007-collinear-merge-conflict-fresh-default): Collinear merge-conflict fresh default. ACCEPTED, concern `diagram-generation.collinear-max-conflicts-default`, scenario revision 2, supersedes scenario revision 1.
+
+- [PD-OI-008](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-008-imported-comparison-reconstruction-and-resolution): Imported comparison reconstruction and resolution. ACCEPTED, concern `diagram-generation.imported-comparison-state`, scenario revision 1.
+
+- [PD-OI-009](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-009-gui-unmanaged-configuration-overrides): GUI-unmanaged configuration overrides. ACCEPTED, concern `diagram-generation.gui-unmanaged-config-overrides`, scenario revision 1.
   - `tests/fixtures/sessions/HmmtDNA-wrap-5kb.v50-web0145.provenance.json`
   - `tests/fixtures/sessions/font-family-preserved.provenance.json`
   - `tests/fixtures/sessions/web-linear-wrap-preserved.v50.provenance.json`
@@ -304,10 +192,26 @@ are listed under "Cited ids without a record".
   - `tests/web/session-admission-vectors.test.mjs`
   - `tests/web/session-cli-compatibility.test.mjs`
   - `tests/web/session-draft-authority.test.mjs`
-- [PD-OI-012](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-012-circular-record-label-and-subtitle)
+
+- [PD-OI-010](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-010-circular-record-selection-crop-and-reverse-display): Circular record selection, crop, and reverse display. ACCEPTED, concern `diagram-generation.circular-record-transforms`, scenario revision 1.
+
+- [PD-OI-011](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-011-linear-scale-and-ruler-label-font-interaction): Linear scale and ruler-label font interaction. ACCEPTED, concern `diagram-generation.linear-scale-ruler-fonts`, scenario revision 1.
+
+- [PD-OI-012](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-012-circular-record-label-and-subtitle): Circular record label and subtitle. ACCEPTED, concern `diagram-generation.circular-label-subtitle`, scenario revision 1.
   - `tests/test_circular_definition_bounds.py`
   - `tests/test_record_metadata.py`
-- [PD-OI-018](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-018-complete-linear-records-placement-and-comparison-scope)
+
+- [PD-OI-013](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-013-web-compatibility-meaning-of-grid_column): Web compatibility meaning of `grid_column`. ACCEPTED, concern `diagram-generation.grid-column-compatibility`, scenario revision 1.
+
+- [PD-OI-014](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-014-direct-non-adjacent-similarity-and-collinear-display-links): Direct non-adjacent Similarity and Collinear display links. DEFERRED, concern `diagram-generation.non-adjacent-grouping-topology`, scenario revision 1.
+
+- [PD-OI-015](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-015-advanced-gui-exposure-policy): Advanced GUI exposure policy. ACCEPTED, concern `diagram-generation.gui-exposure-policy`, scenario revision 1.
+
+- [PD-OI-016](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-016-generation-failure-cancellation-and-stale-result-isolation): Generation failure, cancellation, and stale-result isolation. ACCEPTED, concern `diagram-generation.failure-isolation`, scenario revision 1.
+
+- [PD-OI-017](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-017-active-comparison-appearance-controls-remain-reachable): Active comparison appearance controls remain reachable. ACCEPTED, concern `diagram-generation.comparison-appearance-reachability`, scenario revision 1.
+
+- [PD-OI-018](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-018-complete-linear-records-placement-and-comparison-scope): Complete Linear records, placement, and comparison scope. ACCEPTED, concern `diagram-generation.linear-record-universe-and-search-scope`, scenario revision 6, supersedes scenario revision 5.
   - `tests/web/contracts/vibrio-full-generation.serial.spec.js`
   - `tests/web/gallery-tutorial.playwright.spec.js`
   - `tests/web/linear-card-windows.test.mjs`
@@ -316,20 +220,51 @@ are listed under "Cited ids without a record".
   - `tests/web/losat-settings.test.mjs`
   - `tests/web/losat-thread-fault.test.mjs`
   - `tests/web/run-info.test.mjs`
-- [PD-OI-022](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-022-reuse-completed-losat-searches-after-cancellation)
+
+- [PD-OI-019](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-019-fresh-web-multi-record-layout-defaults): Fresh Web multi-record layout defaults. ACCEPTED, concern `diagram-generation.web-multi-record-layout-defaults`, scenario revision 1.
+
+- [PD-OI-020](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-020-losat-total-thread-allocation-and-control-agreement): LOSAT total-thread allocation and control agreement. ACCEPTED, concern `diagram-generation.losat-total-thread-allocation`, scenario revision 1.
+
+- [PD-OI-021](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-021-optional-collinear-self-search-and-orthogroup-inference): Optional Collinear self-search and orthogroup inference. ACCEPTED, concern `diagram-generation.collinear-optional-orthogroup-inference`, scenario revision 2, supersedes scenario revision 1.
+
+- [PD-OI-022](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-022-reuse-completed-losat-searches-after-cancellation): Reuse completed LOSAT searches after cancellation. ACCEPTED, concern `diagram-generation.completed-losat-search-retry`, scenario revision 1.
   - `tests/web/run-analysis-derived-cache.test.mjs`
-- [PD-OI-024](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-024-linear-definition-alignment-and-automatic-replicon-visibility)
+
+- [PD-OI-023](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-023-lossless-protein-paths-during-normal-generation-and-saving): Lossless protein paths during normal generation and saving. ACCEPTED, concern `protein-comparison.path-representation`, scenario revision 1.
+
+- [PD-OI-024](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-024-linear-definition-alignment-and-automatic-replicon-visibility): Linear Definition alignment and automatic Replicon visibility. ACCEPTED, concern `linear.definition-display`, scenario revision 3, supersedes scenario revision 2.
   - `tests/web/linear-multi-record.playwright.spec.js`
-- [PD-OI-025](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-025-linear-depth-source-scope-and-discoverability)
+
+- [PD-OI-025](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-025-linear-depth-source-scope-and-discoverability): Linear Depth source scope and discoverability. ACCEPTED, concern `diagram-generation.linear-depth-source-scope-and-discoverability`, scenario revision 1.
   - `tests/web/depth-slot-lifecycle.test.mjs`
   - `tests/web/gui-audit-20260930-options.playwright.spec.js`
-- [PD-OI-027](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-027-explicit-display-directions-with-record-owned-orientation)
+
+- [PD-OI-026](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-026-deterministic-similarity-group-anchor-resolution-with-optional-review): Deterministic Similarity Group anchor resolution with optional review. ACCEPTED, concern `diagram-generation.similarity-alignment.anchor-resolution`, scenario revision 3, supersedes scenario revision 2.
+
+- [PD-OI-027](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-027-explicit-display-directions-with-record-owned-orientation): Explicit display directions with record-owned orientation. ACCEPTED, concern `diagram-generation.similarity-alignment.transform-semantics`, scenario revision 5, supersedes scenario revision 4.
   - `tests/web/similarity-alignment-actions.test.mjs`
-- [PD-OI-028](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-028-orientation-independent-active-alignment-plan)
+
+- [PD-OI-028](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-028-orientation-independent-active-alignment-plan): Orientation-independent active alignment plan. ACCEPTED, concern `diagram-generation.similarity-alignment.plan-lifecycle`, scenario revision 3, supersedes scenario revision 2.
   - `tests/web/similarity-alignment-ui.playwright.spec.js`
-- [PD-OI-032](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-032-feature-popup-rotation-for-one-circular-record)
+
+- [PD-OI-029](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-029-selectable-position-and-alignment-direction-reset-with-artifact-history): Selectable position and alignment-direction Reset with artifact history. ACCEPTED, concern `diagram-generation.similarity-alignment.reset-and-history`, scenario revision 3, supersedes scenario revision 2.
+
+- [PD-OI-030](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-030-reader-only-legacy-similarity-group-alignment-compatibility): Reader-only legacy Similarity Group alignment compatibility. ACCEPTED, concern `diagram-generation.similarity-alignment.session-compatibility`, scenario revision 1.
+
+- [PD-OI-031](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-031-automatic-resolved-alignment-with-explicit-display-direction-review): Automatic resolved alignment with explicit display-direction review. ACCEPTED, concern `diagram-generation.similarity-alignment.surface-scope`, scenario revision 5, supersedes scenario revision 4.
+
+- [PD-OI-032](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-032-feature-popup-rotation-for-one-circular-record): Feature-popup rotation for one circular record. ACCEPTED, concern `diagram-generation.feature-popup-record-rotation`, scenario revision 1.
   - `tests/web/interactive-svg-v3.playwright.spec.js`
-- [PD-OI-037](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-037-operation-feedback-without-derived-application-status)
+
+- [PD-OI-033](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-033-feature-popup-record-actions-presentation): Feature-popup record-actions presentation. ACCEPTED, concern `web.feature-popup.record-actions-presentation`, scenario revision 2, supersedes scenario revision 1.
+
+- [PD-OI-034](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-034-local-exclusive-display-direction-review-with-retry): Local exclusive display-direction review with retry. ACCEPTED, concern `web.similarity-alignment.choice-and-retry`, scenario revision 5, supersedes scenario revision 4.
+
+- [PD-OI-035](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-035-similarity-alignment-canvas-interaction): Similarity-alignment canvas interaction. ACCEPTED, concern `web.similarity-alignment.canvas-interaction`, scenario revision 3, supersedes scenario revision 2.
+
+- [PD-OI-036](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-036-linear-record-label-auto-visibility-and-disclosure): Linear record-label Auto visibility and disclosure. ACCEPTED, concern `linear.record-label-auto-visibility`, scenario revision 2.
+
+- [PD-OI-037](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-037-operation-feedback-without-derived-application-status): Operation feedback without derived application status. ACCEPTED, concern `web.edit-application-feedback`, scenario revision 3, supersedes scenario revision 2.
   - `tests/web/accessibility.playwright.spec.js`
   - `tests/web/helpers/timing-notes.cjs`
   - `tests/web/history-generated-authority.playwright.spec.js`
@@ -341,17 +276,22 @@ are listed under "Cited ids without a record".
   - `tests/web/setting-application-notes.playwright.spec.js`
   - `tests/web/setting-application.test.mjs`
   - `tests/web/setting-note-clock.test.mjs`
-- [PD-OI-038](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-038-compact-editor-presentation)
+
+- [PD-OI-038](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-038-compact-editor-presentation): Compact Editor presentation. ACCEPTED, concern `web.editor.compact-presentation`, scenario revision 1.
   - `tests/web/drawing-bar.playwright.spec.js`
   - `tests/web/right-drawer.test.mjs`
-- [PD-OI-039](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-039-compact-review-with-exclusive-alignment-directions)
+
+- [PD-OI-039](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-039-compact-review-with-exclusive-alignment-directions): Compact review with exclusive alignment directions. ACCEPTED, concern `web.similarity-alignment.review-presentation`, scenario revision 5, supersedes scenario revision 4.
   - `tests/web/similarity-alignment-actions.test.mjs`
   - `tests/web/similarity-alignment-ui.playwright.spec.js`
-- [PD-OI-040](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-040-annotation-tsv-auxiliary-columns)
+
+- [PD-OI-040](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-040-annotation-tsv-auxiliary-columns): Annotation TSV auxiliary columns. ACCEPTED, concern `annotations.table-auxiliary-columns`, scenario revision 1.
   - `tests/web/annotations.test.mjs`
-- [PD-OI-041](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-041-unmatched-annotation-feature-selectors)
+
+- [PD-OI-041](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-041-unmatched-annotation-feature-selectors): Unmatched annotation feature selectors. ACCEPTED, concern `annotations.feature-selector-miss`, scenario revision 1.
   - `tests/web/annotations.test.mjs`
-- [PD-OI-042](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-042-specific-color-caption-disambiguation)
+
+- [PD-OI-042](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-042-specific-color-caption-disambiguation): Specific-color caption disambiguation. ACCEPTED, concern `styles.specific-color-caption-multiplicity`, scenario revision 2, supersedes scenario revision 1.
   - `tests/fixtures/legend_names.json`
   - `tests/fixtures/saved_rule_captions.json`
   - `tests/fixtures/sessions/README.md`
@@ -370,7 +310,10 @@ are listed under "Cited ids without a record".
   - `tests/web/rule-matching.test.mjs`
   - `tests/web/specific-color-actions.test.mjs`
   - `tests/web/svg-result-ingestion.test.mjs`
-- [PD-OI-044](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-044-applicable-circular-controls-and-truthful-record-discovery)
+
+- [PD-OI-043](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-043-pure-pixel-track-text-inputs): Pure pixel track text inputs. ACCEPTED, concern `tracks.pixel-text-input-domain`, scenario revision 1.
+
+- [PD-OI-044](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-044-applicable-circular-controls-and-truthful-record-discovery): Applicable Circular controls and truthful record discovery. ACCEPTED, concern `diagram-generation.circular-transform-discoverability`, scenario revision 5, supersedes scenario revision 4.
   - `tests/test_session_io.py`
   - `tests/test_window_source_session.py`
   - `tests/web/circular-file-cards.test.mjs`
@@ -383,16 +326,28 @@ are listed under "Cited ids without a record".
   - `tests/web/preview-fit.playwright.spec.js`
   - `tests/web/record-display-options.test.mjs`
   - `tests/web/record-draw-selection.playwright.spec.js`
-- [PD-OI-045](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-045-exclusive-semantic-session-operations-with-responsive-browsing)
+
+- [PD-OI-045](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-045-exclusive-semantic-session-operations-with-responsive-browsing): Exclusive semantic Session operations with responsive browsing. ACCEPTED, concern `web.session-operation-consistency`, scenario revision 1.
   - `tests/web/gui-audit-20260930-comparisons.playwright.spec.js`
   - `tests/web/per-mode-results.playwright.spec.js`
-- [PD-OI-046](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-046-guidance-with-bounded-diagnostics)
+
+- [PD-OI-046](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-046-guidance-with-bounded-diagnostics): Guidance with bounded diagnostics. ACCEPTED, concern `web.errors.diagnostic-disclosure`, scenario revision 1.
   - `tests/web/error-normalization.test.mjs`
   - `tests/web/load-repair-dialog.test.mjs`
-- [PD-OI-051](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-051-in-flight-comparison-draft-changes)
+
+- [PD-OI-047](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-047-rejected-color-rule-pattern-edit-recovery): Rejected Color rule pattern edit recovery. ACCEPTED, concern `web.rules.rejected-pattern-edit-recovery`, scenario revision 1.
+
+- [PD-OI-048](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-048-circular-widthradius-input-representation): Circular Width/Radius input representation. ACCEPTED, concern `tracks.circular-measure-input-representation`, scenario revision 1.
+
+- [PD-OI-049](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-049-circular-widthradius-unit-changes): Circular Width/Radius unit changes. ACCEPTED, concern `tracks.circular-measure-unit-change`, scenario revision 2, supersedes scenario revision 1.
+
+- [PD-OI-050](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-050-circular-auto-unit-preference-lifecycle): Circular Auto unit preference lifecycle. ACCEPTED, concern `tracks.circular-measure-auto-unit-lifecycle`, scenario revision 1.
+
+- [PD-OI-051](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-051-in-flight-comparison-draft-changes): In-flight comparison draft changes. ACCEPTED, concern `diagram-generation.inflight-comparison-draft`, scenario revision 1.
   - `tests/web/history-generated-authority.playwright.spec.js`
   - `tests/web/session-operation-consistency.test.mjs`
-- [PD-OI-052](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-052-matched-decoration-deltas-across-regeneration)
+
+- [PD-OI-052](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-052-matched-decoration-deltas-across-regeneration): Matched decoration deltas across regeneration. ACCEPTED, concern `web.composition-decoration-continuity`, scenario revision 2.
   - `tests/test_linear_composition.py`
   - `tests/web/artifact-slots.test.mjs`
   - `tests/web/composition-layout-real.playwright.spec.js`
@@ -400,20 +355,29 @@ are listed under "Cited ids without a record".
   - `tests/web/live-generate-parity-track-data.playwright.spec.js`
   - `tests/web/moved-decoration-canvas.test.mjs`
   - `tests/web/per-mode-results.playwright.spec.js`
-- [PD-OI-053](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-053-explicit-layout-edit-with-discoverable-targets)
+
+- [PD-OI-053](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-053-explicit-layout-edit-with-discoverable-targets): Explicit Layout edit with discoverable targets. ACCEPTED, concern `web.layout-edit-affordance`, scenario revision 2, supersedes scenario revision 1.
   - `tests/web/layout-edit-press.playwright.spec.js`
-- [PD-OI-054](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-054-docked-preview-search-and-controls)
+
+- [PD-OI-054](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-054-docked-preview-search-and-controls): Docked Preview search and controls. ACCEPTED, concern `web.preview-search-placement`, scenario revision 2, supersedes scenario revision 1.
   - `tests/web/right-drawer.playwright.spec.js`
-- [PD-OI-057](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-057-keyboard--and-touch-reachable-help-tips)
+
+- [PD-OI-055](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-055-valid-bindings-after-failed-generate): Valid bindings after failed Generate. ACCEPTED, concern `web.generate.failed-source-binding-continuation`, scenario revision 1.
+
+- [PD-OI-056](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-056-feature-search-all-field-scope): Feature search All-field scope. ACCEPTED, concern `web.feature-search.all-field-scope`, scenario revision 1.
+
+- [PD-OI-057](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-057-keyboard--and-touch-reachable-help-tips): Keyboard- and touch-reachable help tips. ACCEPTED, concern `web.help-tip.reachability`, scenario revision 1.
   - `tests/test_web_ux_profile.py`
   - `tests/web/accessibility.playwright.spec.js`
-- [PD-OI-058](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-058-managed-depth-track-row-lifecycle)
+
+- [PD-OI-058](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-058-managed-depth-track-row-lifecycle): Managed Depth track-row lifecycle. ACCEPTED, concern `web.depth.managed-slot-lifecycle`, scenario revision 1.
   - `tests/web/depth-slot-lifecycle.test.mjs`
   - `tests/web/depth-track-session.playwright.spec.js`
   - `tests/web/gui-audit-20260930-options.playwright.spec.js`
   - `tests/web/track-layout-transition.playwright.spec.js`
   - `tests/web/track-slot-row-edits.test.mjs`
-- [PD-OI-059](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-059-when-the-definition-settings-apply)
+
+- [PD-OI-059](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-059-when-the-definition-settings-apply): When the definition settings apply. ACCEPTED, concern `web.circular.definition-application`, scenario revision 3, supersedes scenario revision 2.
   - `tests/web/definition-replay-visual-state.playwright.spec.js`
   - `tests/web/history-generated-authority.playwright.spec.js`
   - `tests/web/live-edit-generate-equivalence.playwright.spec.js`
@@ -421,10 +385,12 @@ are listed under "Cited ids without a record".
   - `tests/web/live-setting-application-g2.test.mjs`
   - `tests/web/live-setting-application.test.mjs`
   - `tests/web/sequence-search.test.mjs`
-- [PD-OI-060](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-060-when-the-diagram-wide-stroke-settings-apply)
+
+- [PD-OI-060](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-060-when-the-diagram-wide-stroke-settings-apply): When the diagram-wide stroke settings apply. ACCEPTED, concern `web.stroke.application`, scenario revision 2, supersedes scenario revision 1.
   - `tests/web/history-generated-authority.playwright.spec.js`
   - `tests/web/preview-bind-coalescing.playwright.spec.js`
-- [PD-OI-061](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-061-legend-rename-collisions-for-every-entry)
+
+- [PD-OI-061](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-061-legend-rename-collisions-for-every-entry): Legend rename collisions for every entry. ACCEPTED, concern `web.legend.rename-collision`, scenario revision 5, supersedes scenario revision 4.
   - `tests/web/color-captions.playwright.spec.js`
   - `tests/web/feature-color-actions.test.mjs`
   - `tests/web/feature-identity-overrides.playwright.spec.js`
@@ -435,21 +401,27 @@ are listed under "Cited ids without a record".
   - `tests/web/preview-item-popup.test.mjs`
   - `tests/web/source-legend-reconciliation.playwright.spec.js`
   - `tests/web/svg-result-ingestion.test.mjs`
-- [PD-OI-062](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-062-batch-live-edits-projected-on-result-mount)
+
+- [PD-OI-062](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-062-batch-live-edits-projected-on-result-mount): Batch live edits projected on Result mount. ACCEPTED, concern `web.batch.live-edit-projection`, scenario revision 1.
   - `tests/web/gui-audit-20260930-editor.playwright.spec.js`
   - `tests/web/live-generate-parity.playwright.spec.js`
   - `tests/web/multi-result-edit-matrix.playwright.spec.js`
   - `tests/web/source-legend-reconciliation.playwright.spec.js`
   - `tests/web/svg-result-ingestion.test.mjs`
-- [PD-OI-063](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-063-legend-order-continuity-across-generate)
+
+- [PD-OI-063](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-063-legend-order-continuity-across-generate): Legend order continuity across Generate. ACCEPTED, concern `web.legend.order-continuity`, scenario revision 1.
   - `tests/web/legend-sync.test.mjs`
   - `tests/web/live-generate-parity-legend.playwright.spec.js`
   - `tests/web/source-legend-reconciliation.playwright.spec.js`
   - `tests/web/specific-color-actions.test.mjs`
-- [PD-OI-064](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-064-canvas-padding-continuity-across-generate)
+
+- [PD-OI-064](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-064-canvas-padding-continuity-across-generate): Canvas padding continuity across Generate. ACCEPTED, concern `web.canvas.padding-continuity`, scenario revision 1.
   - `tests/web/gui-audit-20260930-editor.playwright.spec.js`
   - `tests/web/legend-edit-leaves.test.mjs`
-- [PD-OI-066](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-066-live-edit-and-regeneration-parity)
+
+- [PD-OI-065](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-065-label-edits-after-source-replacement): Label edits after source replacement. ACCEPTED, concern `web.labels.source-replacement-reconciliation`, scenario revision 1.
+
+- [PD-OI-066](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-066-live-edit-and-regeneration-parity): Live-edit and regeneration parity. ACCEPTED, concern `web.live-edit.regeneration-parity`, scenario revision 3, supersedes scenario revision 2.
   - `tests/web/candidate-render.test.mjs`
   - `tests/web/contracts/live-generate-parity-allowed.json`
   - `tests/web/feature-visibility-actions.test.mjs`
@@ -468,10 +440,12 @@ are listed under "Cited ids without a record".
   - `tests/web/live-setting-application.playwright.spec.js`
   - `tests/web/per-mode-results.playwright.spec.js`
   - `tests/web/source-legend-reconciliation.playwright.spec.js`
-- [PD-OI-067](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-067-per-record-inferred-linear-definitions)
+
+- [PD-OI-067](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-067-per-record-inferred-linear-definitions): Per-record inferred Linear definitions. ACCEPTED, concern `web.linear.file-default-definition`, scenario revision 4, supersedes scenario revision 1.
   - `tests/web/linear-multi-record.playwright.spec.js`
   - `tests/web/linear-source-defaults.test.mjs`
-- [PD-OI-068](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-068-record-universe-of-fasta-and-gff3fasta-inputs)
+
+- [PD-OI-068](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-068-record-universe-of-fasta-and-gff3fasta-inputs): Record universe of FASTA and GFF3+FASTA inputs. ACCEPTED, concern `diagram-generation.gff-fasta-record-universe`, scenario revision 2, supersedes scenario revision 1.
   - `tests/fixtures/sessions/cli-circular-fasta.v51.provenance.json`
   - `tests/test_fasta_only_input.py`
   - `tests/test_session_request_codec.py`
@@ -480,7 +454,8 @@ are listed under "Cited ids without a record".
   - `tests/web/record-display-options.test.mjs`
   - `tests/web/run-info.test.mjs`
   - `tests/web/session-request.test.mjs`
-- [PD-OI-069](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-069-stable-hash-single-feature-colors-with-duplicate-record-ids)
+
+- [PD-OI-069](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-069-stable-hash-single-feature-colors-with-duplicate-record-ids): Stable-hash single-feature colors with duplicate record IDs. ACCEPTED, concern `web.feature-color.duplicate-record-instance`, scenario revision 2, supersedes scenario revision 1.
   - `tests/test_feature_instance_colors.py`
   - `tests/test_web_rule_synthesis.py`
   - `tests/web/feature-catalog.test.mjs`
@@ -493,14 +468,19 @@ are listed under "Cited ids without a record".
   - `tests/web/record-identity-moves.playwright.spec.js`
   - `tests/web/record-selection.test.mjs`
   - `tests/web/run-info.test.mjs`
-- [PD-OI-070](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-070-reset-settings-scope-for-linear-record-display)
+
+- [PD-OI-070](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-070-reset-settings-scope-for-linear-record-display): Reset Settings scope for Linear record display. ACCEPTED, concern `web.reset.linear-record-display`, scenario revision 1.
   - `tests/fixtures/sessions/mode-scoped-settings-registry-v46.tsv`
   - `tests/web/drawing-inputs.test.mjs`
   - `tests/web/drawing-slices.test.mjs`
   - `tests/web/mode-scoped-session.test.mjs`
-- [PD-OI-072](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-072-web-pdf-physical-size)
+
+- [PD-OI-071](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-071-location-only-feature-search-positions): Location-only feature-search positions. ACCEPTED, concern `web.feature-search.location-fields`, scenario revision 1.
+
+- [PD-OI-072](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-072-web-pdf-physical-size): Web PDF physical size. ACCEPTED, concern `web.export.pdf-physical-size`, scenario revision 1.
   - `tests/web/figure-size.playwright.spec.js`
-- [PD-OI-073](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-073-comparison-table-coordinate-frame)
+
+- [PD-OI-073](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-073-comparison-table-coordinate-frame): Comparison table coordinate frame. ACCEPTED, concern `comparison.table-coordinate-frame`, scenario revision 1.
   - `tests/test_circular_conservation.py`
   - `tests/test_comparison_table_frame.py`
   - `tests/test_linear_label_placement.py`
@@ -509,50 +489,65 @@ are listed under "Cited ids without a record".
   - `tests/test_record_display_interactive_browser.py`
   - `tests/web/run-analysis-simple-path.test.mjs`
   - `tests/web/session-losat-cache-validation.test.mjs`
-- [PD-OI-074](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-074-uploaded-comparison-table-record-binding)
+
+- [PD-OI-074](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-074-uploaded-comparison-table-record-binding): Uploaded comparison table record binding. ACCEPTED, concern `comparison.uploaded-table-record-binding`, scenario revision 1.
   - `tests/test_comparison_tables.py`
   - `tests/test_sequence_search_hits.py`
   - `tests/test_web_request_render.py`
   - `tests/web/comparison-ui.playwright.spec.js`
   - `tests/web/linear-multi-record.playwright.spec.js`
   - `tests/web/session-authority.test.mjs`
-- [PD-OI-076](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-076-match-popup-coordinates)
+
+- [PD-OI-075](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-075-similarity-group-name-and-description-identity): Similarity group name and description identity. ACCEPTED, concern `web.similarity-group.override-identity`, scenario revision 1.
+
+- [PD-OI-076](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-076-match-popup-coordinates): Match popup coordinates. ACCEPTED, concern `web.match-popup.coordinates`, scenario revision 1.
   - `tests/test_web_feature_catalog.py`
-- [PD-OI-077](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-077-outfmt-6-tables-with-extra-columns)
+
+- [PD-OI-077](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-077-outfmt-6-tables-with-extra-columns): outfmt 6 tables with extra columns. ACCEPTED, concern `comparison.outfmt6-extra-columns`, scenario revision 1.
   - `tests/test_comparison_tables.py`
-- [PD-OI-078](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-078-circular-definition-drawn-on-one-line-inside-tracks-move-outward-then-narrow-down-to-a-floor)
+
+- [PD-OI-078](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-078-circular-definition-drawn-on-one-line-inside-tracks-move-outward-then-narrow-down-to-a-floor): Circular definition drawn on one line; inside tracks move outward, then narrow down to a floor. ACCEPTED, concern `diagram-generation.circular-definition-fit`, scenario revision 3, supersedes scenario revision 2.
   - `tests/test_circular_definition_fit.py`
   - `tests/test_circular_track_narrowing.py`
   - `tests/test_session_resources.py`
   - `tests/web/run-info.test.mjs`
   - `tests/web/session-cli-compatibility.test.mjs`
-- [PD-OI-079](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-079-generate-before-saving-a-legacy-session)
+
+- [PD-OI-079](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-079-generate-before-saving-a-legacy-session): Generate before saving a legacy Session. ACCEPTED, concern `web.session.legacy-save`, scenario revision 1.
   - `tests/web/drawing-list.test.mjs`
   - `tests/web/per-mode-results.playwright.spec.js`
   - `tests/web/stored-request-read.test.mjs`
-- [PD-OI-080](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-080-dinucleotide-alphabet)
+
+- [PD-OI-080](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-080-dinucleotide-alphabet): Dinucleotide alphabet. ACCEPTED, concern `options.dinucleotide-alphabet`, scenario revision 1.
   - `tests/test_dinucleotide_domain.py`
-- [PD-OI-081](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-081-validated-font-sizes-and-stroke-widths)
+
+- [PD-OI-081](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-081-validated-font-sizes-and-stroke-widths): Validated font sizes and stroke widths. ACCEPTED, concern `options.nonnegative-style-values`, scenario revision 1.
   - `tests/test_stored_font_size.py`
   - `tests/web/definition-line-style-state.test.mjs`
   - `tests/web/linear-typography.playwright.spec.js`
-- [PD-OI-082](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-082-undo-and-redo-during-generate)
+
+- [PD-OI-082](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-082-undo-and-redo-during-generate): Undo and Redo during Generate. ACCEPTED, concern `web.generation.in-flight-history`, scenario revision 1.
   - `tests/web/history-generated-authority.playwright.spec.js`
-- [PD-OI-083](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-083-linear-depth-series-without-a-source)
+
+- [PD-OI-083](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-083-linear-depth-series-without-a-source): Linear Depth series without a source. ACCEPTED, concern `web.depth.linear-sourceless-series`, scenario revision 1.
   - `tests/web/depth-slot-lifecycle.test.mjs`
   - `tests/web/gui-audit-20260930-options.playwright.spec.js`
   - `tests/web/load-repair-dialog.test.mjs`
   - `tests/web/track-slot-validation.test.mjs`
-- [PD-OI-084](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-084-linear-live-legend-side-moves)
+
+- [PD-OI-084](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-084-linear-live-legend-side-moves): Linear live legend side moves. ACCEPTED, concern `web.legend.live-side-move`, scenario revision 1.
   - `tests/web/composition-layout-real.playwright.spec.js`
   - `tests/web/gui-audit-20260930-editor.playwright.spec.js`
   - `tests/web/live-edit-generate-equivalence.playwright.spec.js`
-- [PD-OI-085](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-085-feature-popup-record-rotation-apply-on-generate)
+
+- [PD-OI-085](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-085-feature-popup-record-rotation-apply-on-generate): Feature-popup record rotation Apply on Generate. ACCEPTED, concern `web.feature-popup.record-rotation-apply-on-generate`, scenario revision 2, supersedes scenario revision 1.
   - `tests/web/interactive-svg-v3.playwright.spec.js`
   - `tests/web/record-display-options.test.mjs`
-- [PD-OI-087](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-087-feature-based-display-start-only-in-the-feature-popup)
+
+- [PD-OI-087](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-087-feature-based-display-start-only-in-the-feature-popup): Feature-based display start only in the feature popup. ACCEPTED, concern `web.record-display.feature-start-shortcuts`, scenario revision 1.
   - `tests/web/record-display-discovery.playwright.spec.js`
-- [PD-OI-088](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-088-popup-dialog-busy-until-its-choice-commits)
+
+- [PD-OI-088](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-088-popup-dialog-busy-until-its-choice-commits): Popup dialog busy until its choice commits. ACCEPTED, concern `web.popup-dialog-choice-application`, scenario revision 1.
   - `tests/web/feature-fill-scope.playwright.spec.js`
   - `tests/web/label-fit.playwright.spec.js`
   - `tests/web/label-fit.test.mjs`
@@ -561,10 +556,12 @@ are listed under "Cited ids without a record".
   - `tests/web/palette-default-colors.test.mjs`
   - `tests/web/popup-color-work.test.mjs`
   - `tests/web/specific-color-actions.test.mjs`
-- [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette)
+
+- [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette): Default colors a user edits win over the palette. ACCEPTED, concern `web.default-colors-over-palette`, scenario revision 2, supersedes scenario revision 1.
   - `tests/web/palette-default-colors.playwright.spec.js`
   - `tests/web/palette-default-colors.test.mjs`
-- [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings)
+
+- [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings): Project with drawings. ACCEPTED, concern `session.project-drawings`, scenario revision 10, supersedes scenario revision 9.
   - `tests/test_session_compat.py`
   - `tests/test_session_drawings.py`
   - `tests/test_session_io.py`
@@ -612,24 +609,32 @@ are listed under "Cited ids without a record".
   - `tests/web/stored-request-read.test.mjs`
   - `tests/web/svg-style-completion.test.mjs`
   - `tests/web/track-layout-transition.playwright.spec.js`
-- [PD-OI-091](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-091-per-record-draw-onoff)
+
+- [PD-OI-091](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-091-per-record-draw-onoff): Per-record draw ON/OFF. ACCEPTED, concern `diagram-generation.record-draw-selection`, scenario revision 1.
   - `tests/web/mode-scoped-session.test.mjs`
   - `tests/web/record-draw-selection.playwright.spec.js`
-- [PD-OI-092](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-092-settings-pane-section-index)
+
+- [PD-OI-092](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-092-settings-pane-section-index): Settings pane section index. ACCEPTED, concern `web.settings-pane.section-index`, scenario revision 3, supersedes scenario revision 2.
   - `tests/web/settings-pane-rail.playwright.spec.js`
   - `tests/web/settings-section-index.playwright.spec.js`
-- [PD-OI-093](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-093-settings-pane-display-switch-and-icon-rail)
+
+- [PD-OI-093](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-093-settings-pane-display-switch-and-icon-rail): Settings pane display switch and icon rail. ACCEPTED, concern `web.settings-pane.display`, scenario revision 5, supersedes scenario revision 4.
   - `tests/web/browser-preferences.test.mjs`
   - `tests/web/settings-pane-rail.playwright.spec.js`
-- [PD-OI-095](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-095-one-naming-rule-for-legend-rows-that-share-a-name)
+
+- [PD-OI-094](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-094-linear-file-cards-fold-to-one-line): Linear File cards fold to one line. ACCEPTED, concern `web.linear.file-card-fold`, scenario revision 1.
+
+- [PD-OI-095](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-095-one-naming-rule-for-legend-rows-that-share-a-name): One naming rule for Legend rows that share a name. ACCEPTED, concern `legend.row-name-multiplicity`, scenario revision 1.
   - `tests/fixtures/legend_names.json`
   - `tests/test_legend_row_names.py`
   - `tests/web/legend-row-names.test.mjs`
   - `tests/web/live-generate-parity-legend.playwright.spec.js`
   - `tests/web/live-generate-parity-track-data.playwright.spec.js`
-- [PD-OI-096](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-096-legend-position-of-a-diagram-mode-at-load)
+
+- [PD-OI-096](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-096-legend-position-of-a-diagram-mode-at-load): Legend position of a diagram mode at Load. ACCEPTED, concern `web.legend.position-of-mode`, scenario revision 3, supersedes scenario revision 2.
   - `tests/web/legend-drawn-side.test.mjs`
-- [PD-OI-097](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-097-labels-that-do-not-fit)
+
+- [PD-OI-097](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-097-labels-that-do-not-fit): Labels that do not fit. ACCEPTED, concern `product.circular-outer-label-fit`, scenario revision 27, supersedes scenario revision 26.
   - `tests/test_annotation_lane_room.py`
   - `tests/test_circular_definition_over_track.py`
   - `tests/test_circular_label_capacity.py`
@@ -640,11 +645,18 @@ are listed under "Cited ids without a record".
   - `tests/web/label-fit.playwright.spec.js`
   - `tests/web/label-fit.test.mjs`
   - `tests/web/mode-scoped-session.test.mjs`
-- [PD-OI-098](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-098-font-of-the-diagram-text)
+
+- [PD-OI-098](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-098-font-of-the-diagram-text): Font of the diagram text. ACCEPTED, concern `diagram-generation.diagram-font`, scenario revision 2, supersedes scenario revision 1.
   - `tests/web/load-repair-dialog.test.mjs`
-- [PD-OI-101](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-101-task-yield-after-the-later-generate-statuses)
+
+- [PD-OI-099](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-099-confirm-what-load-cannot-restore-before-it-loads): Confirm what Load cannot restore before it loads. ACCEPTED, concern `web.session.load-repair-confirmation`, scenario revision 1.
+
+- [PD-OI-100](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-100-rich-feature-popup-outside-undo): Rich Feature Popup outside Undo. ACCEPTED, concern `web.history.rich-feature-popup`, scenario revision 1.
+
+- [PD-OI-101](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-101-task-yield-after-the-later-generate-statuses): Task yield after the later Generate statuses. ACCEPTED, concern `web.generate.later-status-paint-yields`, scenario revision 1.
   - `tests/web/generation-feedback.playwright.spec.js`
-- [PD-OI-102](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-102-live-settings-redraw-the-result-when-a-value-is-committed)
+
+- [PD-OI-102](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-102-live-settings-redraw-the-result-when-a-value-is-committed): Live settings redraw the Result when a value is committed. ACCEPTED, concern `web.settings.live-application`, scenario revision 1.
   - `tests/web/circular-track-measure-input.playwright.spec.js`
   - `tests/web/helpers/live-work-allowlist.mjs`
   - `tests/web/live-setting-application-gt.test.mjs`
@@ -653,7 +665,8 @@ are listed under "Cited ids without a record".
   - `tests/web/similarity-alignment-actions.test.mjs`
   - `tests/web/similarity-alignment-ui.playwright.spec.js`
   - `tests/web/specific-color-pattern-drafts.playwright.spec.js`
-- [PD-OI-103](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-103-settings-sections-that-apply-live)
+
+- [PD-OI-103](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-103-settings-sections-that-apply-live): Settings sections that apply live. ACCEPTED, concern `web.settings.live-sections`, scenario revision 2, supersedes scenario revision 1.
   - `tests/web/circular-track-measure-input.playwright.spec.js`
   - `tests/web/computation-ownership.playwright.spec.js`
   - `tests/web/contracts/session-regenerate-intent.playwright.spec.js`
@@ -668,7 +681,8 @@ are listed under "Cited ids without a record".
   - `tests/web/live-setting-application.playwright.spec.js`
   - `tests/web/live-setting-application.test.mjs`
   - `tests/web/sequence-search.test.mjs`
-- [PD-OI-104](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-104-when-the-gc-skew-and-depth-toggles-apply)
+
+- [PD-OI-104](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-104-when-the-gc-skew-and-depth-toggles-apply): When the GC, skew and depth toggles apply. ACCEPTED, concern `web.layout.track-toggle-application`, scenario revision 9, supersedes scenario revision 8.
   - `tests/web/annotation-style-integration.playwright.spec.js`
   - `tests/web/candidate-render.test.mjs`
   - `tests/web/circular-track-measure-input.playwright.spec.js`
@@ -686,16 +700,23 @@ are listed under "Cited ids without a record".
   - `tests/web/track-legend-row-colors.test.mjs`
   - `tests/web/track-slot-row-edits.test.mjs`
   - `tests/web/visual-state-regressions.playwright.spec.js`
-- [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language)
+
+- [PD-OI-105](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-105-a-click-on-a-drawn-element-shows-its-settings-in-a-popup): A click on a drawn element shows its settings in a popup. ACCEPTED, concern `web.result.element-settings-entry`, scenario revision 1.
+
+- [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language): Web UI language. ACCEPTED, concern `product.web-ui-language`, scenario revision 6, supersedes scenario revision 5.
   - `tests/web/browser-preferences.test.mjs`
   - `tests/web/ui-language.playwright.spec.js`
-- [PD-OI-108](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-108-tutorials-of-the-interactive-gallery-from-the-app)
+
+- [PD-OI-107](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-107-organism-name-lines-from-record-metadata): Organism name lines from record metadata. ACCEPTED, concern `diagram-generation.organism-name-lines`, scenario revision 1.
+
+- [PD-OI-108](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-108-tutorials-of-the-interactive-gallery-from-the-app): Tutorials of the Interactive Gallery from the app. ACCEPTED, concern `web.gallery-tutorial-discoverability`, scenario revision 3, supersedes scenario revision 2.
   - `tests/web/app-messages.test.mjs`
   - `tests/web/gallery-examples.test.mjs`
   - `tests/web/header-fit.test.mjs`
   - `tests/web/per-mode-results.playwright.spec.js`
   - `tests/web/session-loading-feedback.playwright.spec.js`
-- [PD-OI-109](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-109-hide-the-circular-center-definition)
+
+- [PD-OI-109](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-109-hide-the-circular-center-definition): Hide the Circular center definition. ACCEPTED, concern `diagram-generation.circular-definition-visibility`, scenario revision 1.
   - `tests/fixtures/sessions/README.md`
   - `tests/test_circular_hide_definition.py`
   - `tests/test_session_resources.py`
@@ -703,19 +724,24 @@ are listed under "Cited ids without a record".
   - `tests/web/run-info.test.mjs`
   - `tests/web/session-request.test.mjs`
   - `tests/web/session50-load-resave.test.mjs`
-- [PD-OI-110](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-110-similarity-ring-colors-and-hover)
+
+- [PD-OI-110](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-110-similarity-ring-colors-and-hover): Similarity-ring colors and hover. ACCEPTED, concern `tracks.circular-conservation-ring-colors`, scenario revision 3, supersedes scenario revision 2.
   - `tests/test_circular_conservation.py`
   - `tests/test_conservation_color_schemes.py`
   - `tests/test_session_resources.py`
   - `tests/web/legend-gradient-relayout.test.mjs`
   - `tests/web/live-generate-parity-legend.playwright.spec.js`
   - `tests/web/run-info.test.mjs`
-- [PD-OI-112](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-112-history-step-list)
+
+- [PD-OI-111](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-111-partial-feature-ends-drawn-open): Partial feature ends drawn open. ACCEPTED, concern `features.partial-ends-open`, scenario revision 1.
+
+- [PD-OI-112](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-112-history-step-list): History step list. ACCEPTED, concern `web.history.step-list`, scenario revision 1.
   - `tests/web/history-inputs.playwright.spec.js`
   - `tests/web/history-inputs.test.mjs`
   - `tests/web/history-per-drawing.test.mjs`
   - `tests/web/session-loading-feedback.playwright.spec.js`
-- [PD-OI-113](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-113-web-control-for-the-linear-wrap-length)
+
+- [PD-OI-113](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-113-web-control-for-the-linear-wrap-length): Web control for the Linear wrap length. ACCEPTED, concern `web.linear.wrap-length`, scenario revision 3, supersedes scenario revision 2.
   - `tests/fixtures/sessions/README.md`
   - `tests/fixtures/sessions/web-linear-wrap-preserved.v50.provenance.json`
   - `tests/test_linear_anchor_feature.py`
@@ -730,7 +756,8 @@ are listed under "Cited ids without a record".
   - `tests/web/record-position-reset.test.mjs`
   - `tests/web/session-request.test.mjs`
   - `tests/web/session50-load-resave.test.mjs`
-- [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size)
+
+- [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size): Web control for the figure size. ACCEPTED, concern `web.layout.figure-size`, scenario revision 3, supersedes scenario revision 2.
   - `tests/test_circular_label_fit.py`
   - `tests/test_figure_size.py`
   - `tests/test_web_label_fit.py`
@@ -743,7 +770,8 @@ are listed under "Cited ids without a record".
   - `tests/web/legend-edit-leaves.test.mjs`
   - `tests/web/legend-edit-refit.test.mjs`
   - `tests/web/live-generate-parity-legend.playwright.spec.js`
-- [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing)
+
+- [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing): Select region on the drawing. ACCEPTED, concern `web.result.region-select`, scenario revision 1.
   - `tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.provenance.json`
   - `tests/test_web_record_spans.py`
   - `tests/web/annotations.test.mjs`
@@ -751,11 +779,13 @@ are listed under "Cited ids without a record".
   - `tests/web/region-select.playwright.spec.js`
   - `tests/web/region-select.test.mjs`
   - `tests/web/sequence-search.test.mjs`
-- [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap)
+
+- [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap): gzip input expansion cap. ACCEPTED, concern `input.gzip-expansion-cap`, scenario revision 1.
   - `tests/test_gzip_inputs.py`
   - `tests/web/byte-utils-capped-stream.test.mjs`
   - `tests/web/gzip-inputs.playwright.spec.js`
-- [PD-OI-117](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-117-sequence-search)
+
+- [PD-OI-117](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-117-sequence-search): Sequence search. ACCEPTED, concern `web.sequence-search`, scenario revision 1.
   - `tests/test_sequence_search_hits.py`
   - `tests/web/helpers/live-work-allowlist.mjs`
   - `tests/web/helpers/sequence-search.cjs`
@@ -765,19 +795,23 @@ are listed under "Cited ids without a record".
   - `tests/web/sequence-search.playwright.spec.js`
   - `tests/web/sequence-search.test.mjs`
   - `tests/web/track-slot-row-edits.test.mjs`
-- [PD-OI-118](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-118-diagram-reply-too-large-for-the-page)
+
+- [PD-OI-118](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-118-diagram-reply-too-large-for-the-page): Diagram reply too large for the page. ACCEPTED, concern `diagram-generation.reply-too-large-for-page`, scenario revision 1.
   - `tests/web/diagram-reply-too-large.test.mjs`
   - `tests/web/error-boundary.playwright.spec.js`
   - `tests/web/error-normalization.test.mjs`
-- [PD-OI-119](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-119-region-label-place)
+
+- [PD-OI-119](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-119-region-label-place): Region label place. ACCEPTED, concern `product.region-label-place`, scenario revision 7, supersedes scenario revision 6.
   - `tests/test_annotation_label_origin.py`
   - `tests/test_annotation_lane_room.py`
   - `tests/test_linear_annotation_tracks.py`
   - `tests/test_linear_wrap_render.py`
-- [PD-OI-120](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-120-input-file-changed-after-choosing)
+
+- [PD-OI-120](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-120-input-file-changed-after-choosing): Input file changed after choosing. ACCEPTED, concern `input.file-changed-after-choosing`, scenario revision 1.
   - `tests/web/file-content-token.test.mjs`
   - `tests/web/session-export-validation.test.mjs`
-- [PD-OI-121](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-121-input-file-kept-in-a-browser-copy-after-choosing)
+
+- [PD-OI-121](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-121-input-file-kept-in-a-browser-copy-after-choosing): Input file kept in a browser copy after choosing. ACCEPTED, concern `input.file-changed-after-choosing`, scenario revision 2, supersedes PD-OI-120 scenario revision 1.
   - `tests/test_gui_server.py`
   - `tests/web/auxiliary-file-import-retry.test.mjs`
   - `tests/web/feature-label-visual-unit.test.mjs`
@@ -787,7 +821,8 @@ are listed under "Cited ids without a record".
   - `tests/web/linear-multi-record.playwright.spec.js`
   - `tests/web/session-export-validation.test.mjs`
   - `tests/web/session-resource-backing.test.mjs`
-- [PD-OI-122](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-122-windows-in-a-linear-row)
+
+- [PD-OI-122](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-122-windows-in-a-linear-row): Windows in a Linear row. ACCEPTED, concern `diagram-generation.linear-row-windows`, scenario revision 2, supersedes scenario revision 1.
   - `tests/test_linear_multi_record_comparisons.py`
   - `tests/test_linear_row_windows.py`
   - `tests/test_locate_command.py`
@@ -802,7 +837,8 @@ are listed under "Cited ids without a record".
   - `tests/web/run-info.test.mjs`
   - `tests/web/session-request.test.mjs`
   - `tests/web/size-class.test.mjs`
-- [PD-OI-123](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-123-find-in-other-files)
+
+- [PD-OI-123](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-123-find-in-other-files): Find in other files. ACCEPTED, concern `diagram-generation.locate-homologs`, scenario revision 1.
   - `tests/test_locate_command.py`
   - `tests/test_locate_plan.py`
   - `tests/test_locate_web.py`
@@ -810,14 +846,16 @@ are listed under "Cited ids without a record".
   - `tests/web/find-in-other-files.test.mjs`
   - `tests/web/losat-overlay-run.test.mjs`
   - `tests/web/region-drawing.test.mjs`
-- [PD-OI-124](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-124-windows-in-the-record-card-and-record-layout)
+
+- [PD-OI-124](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-124-windows-in-the-record-card-and-record-layout): Windows in the record card and Record Layout. ACCEPTED, concern `web.linear.record-windows`, scenario revision 1.
   - `tests/test_web_linear_units.py`
   - `tests/web/linear-card-windows-request.test.mjs`
   - `tests/web/linear-card-windows-state.test.mjs`
   - `tests/web/linear-card-windows.playwright.spec.js`
   - `tests/web/linear-card-windows.test.mjs`
   - `tests/web/region-drawing.playwright.spec.js`
-- [PD-OI-125](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-125-diagram-engine-out-of-memory)
+
+- [PD-OI-125](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-125-diagram-engine-out-of-memory): Diagram engine out of memory. ACCEPTED, concern `diagram-generation.engine-out-of-memory`, scenario revision 1.
   - `tests/test_web_error_adapter.py`
   - `tests/web/diagram-cancel-interrupt.test.mjs`
   - `tests/web/diagram-out-of-memory.test.mjs`
