@@ -37,6 +37,7 @@ at the edges of a span again.
 from __future__ import annotations
 
 import bisect
+import contextlib
 import copy
 import functools
 import itertools
@@ -48,7 +49,7 @@ import warnings
 import weakref
 from array import array
 from collections import OrderedDict, deque
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator
 from dataclasses import dataclass, field
 from os import PathLike, fspath
 from typing import IO, Literal, NamedTuple, TypeVar
@@ -405,7 +406,7 @@ class _SequenceFile:
         self._tables += 1
         return self._tables
 
-    def blocks(self) -> Iterator[bytes]:
+    def blocks(self) -> Generator[bytes, None, None]:
         """The file's bytes from its start, in order, from a handle of the parse pass's own.
 
         A gzip input is expanded as the pass reads it, under the cap of
@@ -1233,11 +1234,11 @@ class _Slot:
 class _Scan:
     """One pass over a sequence file: the lines for the parser, and each record's sequence table."""
 
-    def __init__(self, source: _SequenceFile, fmt: SequenceFormat, blocks: Iterator[bytes] | None = None) -> None:
+    def __init__(self, source: _SequenceFile, fmt: SequenceFormat, blocks: Iterator[bytes]) -> None:
         self.source = source
         self.fmt = fmt
         self.slots: list[_Slot] = []
-        self._lines = _Lines(source.blocks() if blocks is None else blocks)
+        self._lines = _Lines(blocks)
         self._first = True
 
     def _decode(self, line: bytes) -> str:
@@ -1358,12 +1359,17 @@ def _check_embl_first_line(text: str) -> None:
         raise ValueError(f"Unexpected content after SQ or CO line: {line!r}")
 
 
-def _with_encoding(source: _SequenceFile, read: Callable[[], _Read]) -> _Read:
-    """``read()`` with the file read in the encoding of every sequence file (:func:`in_sequence_encoding`)."""
+def _with_encoding(source: _SequenceFile, read: Callable[[Iterator[bytes]], _Read]) -> _Read:
+    """``read`` of one pass over the file's blocks, in the encoding of every sequence file (:func:`in_sequence_encoding`).
+
+    The pass is closed when ``read`` returns or raises, so a gzip expansion ahead of it stops then, not when the
+    blocks are collected (an error's traceback can hold them).
+    """
 
     def read_in(encoding: str) -> _Read:
         source.encoding = encoding
-        return read()
+        with contextlib.closing(source.blocks()) as blocks:
+            return read(blocks)
 
     return in_sequence_encoding(read_in)
 
@@ -1397,8 +1403,8 @@ def read_flat_records(
 
     source = _SequenceFile(path)
 
-    def read() -> list[SeqRecord]:
-        first, blocks = _first_text_line(source, source.blocks())
+    def read(pass_blocks: Iterator[bytes]) -> list[SeqRecord]:
+        first, blocks = _first_text_line(source, pass_blocks)
         fmt = fmt_of(first)
         scan = _Scan(source, fmt, blocks)
         return _attach(parse(scan.flat_lines(), fmt), scan.slots)
@@ -1432,8 +1438,8 @@ def read_fasta_records(
 
     source = _SequenceFile(path)
 
-    def read() -> list[SeqRecord] | None:
-        scan = _Scan(source, "fasta")
+    def read(blocks: Iterator[bytes]) -> list[SeqRecord] | None:
+        scan = _Scan(source, "fasta", blocks)
         lines = scan.fasta_lines()
         first = next(lines, None)
         if first is None:
@@ -1506,7 +1512,7 @@ def read_gff3_text(path: str | PathLike[str], read: Callable[[Iterator[str]], _R
     """
 
     source = _SequenceFile(path)
-    return _with_encoding(source, lambda: read(_Scan(source, "fasta").gff3_lines()))
+    return _with_encoding(source, lambda blocks: read(_Scan(source, "fasta", blocks).gff3_lines()))
 
 
 __all__ = [

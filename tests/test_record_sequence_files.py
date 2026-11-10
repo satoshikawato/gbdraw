@@ -342,6 +342,28 @@ def test_a_gzip_input_expands_ahead_of_its_parse_pass_and_stops_with_it(
     assert not [thread for thread in threading.enumerate() if thread.name == "gbdraw-gzip-ahead"]
 
 
+def test_a_parse_that_fails_stops_the_expansion_ahead_of_it_while_its_error_is_held(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A parser error ends the pass at once: the expansion ahead of it stops and lets the file go, even while the
+    error, and the frames its traceback holds, are kept."""
+
+    import threading
+
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    path, _ = _first_of_many(tmp_path)
+
+    def parse(lines, fmt):
+        for _ in zip(range(100), lines):
+            pass
+        raise ValueError("a record the parser refuses")
+
+    with pytest.raises(ValueError, match="parser refuses") as refused:
+        record_sequences.read_flat_records(str(path), parse, lambda first: "genbank")
+    assert refused.traceback
+    assert not [thread for thread in threading.enumerate() if thread.name == "gbdraw-gzip-ahead"]
+
+
 def test_the_cap_counts_what_a_reader_expanded_so_far(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A file past the cap whose first record lies within it gives that record to a reader that stops there."""
 
