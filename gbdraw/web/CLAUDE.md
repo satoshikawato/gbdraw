@@ -409,7 +409,7 @@ binding of a Result install or rebuild it outside these steps (Python's Legend
 rows and colors, the edits a source-replacing Generate prunes, and the feature
 strokes a Generate moves to a record's new key). The Legend
 name input also writes an unchanged copy of the list outside a step, so that it
-shows the row's name again after a refused or cancelled rename. No other code
+shows the row's name again after a cancelled rename. No other code
 calls the paint slice's writers; a new caller, or a caller that moves to
 another route, is an authority-only change.
 
