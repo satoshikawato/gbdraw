@@ -2235,13 +2235,16 @@ def _slot_gc_config_with_axis_font_size(
 def _edge_painting_slot_ids(
     slots: Sequence[CircularTrackSlot], configurators: DiagramConfigurators, record: CircularRecordData, cfg: GbdrawConfig
 ) -> Iterator[str]:
-    """The slots whose tracks paint their band's edges, each by its drawer's rule: the GC content band in percent
-    mode with its background or border, a conservation ring, a feature density heatmap."""
+    """The slots whose tracks paint their band's edges, each by its drawer's rule: a feature track (its blocks fill
+    the height of their lanes, OV-3192), the GC content band in percent mode with its background or border, a
+    conservation ring, a feature density heatmap."""
 
     gc_paints_edges = GcContentDrawer(configurators.gc).paints_percent_band_edges()
     for slot in slots:
         renderer = str(slot.renderer)
-        if renderer == "dinucleotide_content":
+        if renderer == "features":
+            paints = True
+        elif renderer == "dinucleotide_content":
             paints = gc_paints_edges
         elif renderer == "sequence_conservation":
             track = conservation_slot_track(slot.params, record.conservation_tracks)

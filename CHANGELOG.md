@@ -257,6 +257,15 @@ write-up of a release.
   facing outward keep the larger of the track gap and the margin, as before.
   Figures whose tick labels face no painted edge, such as GC content in the
   default deviation mode, are unchanged (OV-3116, OV-3149, OV-3150).
+- Fixed: in a Circular figure whose custom track stack puts the scale above
+  the feature track (for example `--circular_track_slot ticks:ticks
+  --circular_track_slot features:features`), the tick labels inside the ticks
+  stood on the outer edge of the feature track, so letters such as the "p" of
+  "kbp" touched the CDS arrows. A feature track now counts as a track that
+  paints the edge facing the labels: the labels keep their margin from it
+  (3.1 px at the default 14 pt), and the feature track and the tracks inside it
+  move inward by that much. Figures whose tick labels do not face a feature
+  track, such as the default stacks, are unchanged (OV-3192).
 - Fixed: a custom track stack (**Use custom stack** in the Web app,
   `--circular_track_slot` or `--linear_track_slot` on the command line) with no
   Annotations row for a Region Annotation set left the set out of the figure

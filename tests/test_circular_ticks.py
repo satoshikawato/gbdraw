@@ -602,6 +602,40 @@ def test_the_tick_labels_keep_the_band_edge_of_a_density_histogram() -> None:
     assert _tick_label_inner_edge_px(svg) - _slot_outer_edge_px(svg, "ring") == pytest.approx(0.0, abs=0.05)
 
 
+@pytest.mark.circular
+def test_the_tick_labels_keep_their_margin_from_a_feature_track_below_them() -> None:
+    """OV-3192: with the scale stacked above the feature track, its labels inside the ticks stood on the feature
+    track's outer edge, where the feature blocks end (the "p" of "kbp" touched the arrows). A feature track paints the
+    edges of its band, as a Percent GC band does (OV-3116)."""
+
+    cfg = apply_config_overrides(None, None)
+    margin = circular_tick_label_margin_px(float(cfg.objects.ticks.tick_labels.font_size), float(cfg.objects.ticks.tick_width))
+    svg = _ring_below_the_ticks("heatmap", True, ("ticks:ticks", "features:features", "gc_content:dinucleotide_content"))
+
+    assert _tick_label_inner_edge_px(svg) - _slot_outer_edge_px(svg, "features") == pytest.approx(margin, abs=0.01)
+
+
+@pytest.mark.circular
+def test_outward_tick_labels_keep_their_margin_from_a_feature_track_above_them() -> None:
+    """OV-3192 on the other side of the axis: labels outside their ticks keep the larger of the slot gap and their
+    margin from a feature track stacked outside them (OV-3150)."""
+
+    cfg = apply_config_overrides(None, None)
+    margin = circular_tick_label_margin_px(float(cfg.objects.ticks.tick_labels.font_size), float(cfg.objects.ticks.tick_width))
+    svg = _ring_below_the_ticks(
+        "heatmap",
+        True,
+        (
+            "features:features@lane_direction=outside,side=outside",
+            "ticks:ticks@side=outside,tick_label_layout=label_out_tick_in",
+            "gc_content:dinucleotide_content",
+        ),
+    )
+
+    # The packing keeps the slot gap (3.9 px at this radius) between the labels and a row packed outside them.
+    assert min(_slot_arc_radii(svg, "features")) - _tick_label_outer_edge_px(svg) == pytest.approx(max(3.9, margin), abs=0.01)
+
+
 def _tick_label_outer_edge_px(svg: str) -> float:
     """Where the scale's tick labels end outward when they stand outside the ticks: their paths plus a line box."""
 
