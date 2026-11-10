@@ -423,8 +423,8 @@ test('a region label drawn in front of the leader lines selects its annotation',
 });
 
 // CIR-RGN-FRONT (OV-3156): on lambda with labels Out, only leader lines run behind "Replication" and
-// "Lysis", so they are drawn in front of them on a white backing, outside their annotations' groups, as
-// in Linear, and the notice counts no region label. A click on one selects its annotation's row, a
+// "Lysis", so they are drawn in front of them on a white rounded backing, outside their annotations'
+// groups, as in Linear, and the notice counts no region label. A click on one selects its annotation's row, a
 // colour edit redraws it at once, and Generate then draws the same figure.
 test('a Circular region label drawn in front of the leader lines selects its annotation', async ({ page }) => {
   test.setTimeout(600000);
@@ -444,8 +444,9 @@ test('a Circular region label drawn in front of the leader lines selects its ann
   expect(await front.evaluateAll((items) => items.map((item) => [
     item.closest('svg').querySelector(`[id="${item.getAttribute('data-gbdraw-region-label-for')}"]`)
       ?.getAttribute('data-gbdraw-annotation-id'),
-    item.querySelector('path')?.getAttribute('fill-opacity'), item.querySelector('text')?.textContent
-  ]))).toEqual([['repl', '0.7', 'Replication'], ['lysis', '0.7', 'Lysis']]);
+    item.firstElementChild.tagName, item.firstElementChild.getAttribute('fill-opacity'),
+    item.firstElementChild.getAttribute('rx'), item.querySelector('text')?.textContent
+  ]))).toEqual([['repl', 'rect', '0.7', '2.52', 'Replication'], ['lysis', 'rect', '0.7', '2.52', 'Lysis']]);
   // The letters on top of the backing are what the pointer meets over the label.
   const replication = front.filter({ hasText: 'Replication' }).locator('text');
   const box = await replication.boundingBox();

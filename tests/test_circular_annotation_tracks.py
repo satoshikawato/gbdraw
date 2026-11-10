@@ -1703,8 +1703,8 @@ def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
     way (side and order kept): no drawn region label's letters meet a feature label's letters, and no region label
     overlaps a label it did not overlap before the feature labels made way. OV-3156, CIR-RGN-FRONT: a region label with
     only leader lines behind its letters is drawn in front of them on a backing, as in Linear, unless the backing would
-    cover a feature label's letters; a backed label is not warned (lambda --labels out 10 -> 0, --labels both 8 -> 0).
-    The receipt of CIR-RGN-FRONT quotes these figures."""
+    cover a feature label's letters; a backed label is not warned, so lambda warns of no region label overlap with
+    either --labels out or --labels both."""
 
     from gbdraw.layout.text_geometry import convex_polygons_intersect
 
@@ -1728,8 +1728,8 @@ def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
         {"repl", "lysis"} if labels == "out" else {"head", "repl", "lysis"}
     )
     assert not any(convex_polygons_intersect(a, b) for label in slot_labels for a in label.backing for b in letters)
-    # A backed label is drawn once, in front of the leader lines on its backing, in a group that names its annotation's
-    # item group (as in Linear); its item group keeps the mark only.
+    # A backed label is drawn once, in front of the leader lines on its backing (Linear's rounded box, turned with the
+    # letters), in a group that names its annotation's item group (as in Linear); its item group keeps the mark only.
     svg = ElementTree.parse(tmp_path / "lambda.svg").getroot()
     ns = "{http://www.w3.org/2000/svg}"
     groups = {group.get("id"): group for group in svg.iter(f"{ns}g") if group.get("id")}
@@ -1739,8 +1739,9 @@ def test_circular_feature_labels_make_way_for_region_labels_over_their_letters(
         id_ for id_, label in drawn.items() if label.backed
     }
     for item_id, item in fronted.items():
-        assert [child.tag for child in item] == [f"{ns}path", f"{ns}text"]
+        assert [child.tag for child in item] == [f"{ns}rect", f"{ns}text"]
         assert item[0].get("fill-opacity") == "0.7"
+        assert float(item[0].get("rx")) == float(item[0].get("ry")) == pytest.approx(0.18 * font_size)
         assert groups[item_id].find(f"{ns}text") is None
     # Making way adds no label to what a region label overlaps, the region labels not drawn over feature letters
     # included. (With --labels out, "Replication" still meets the two labels whose letters left its letters, by
@@ -1762,10 +1763,12 @@ def test_circular_region_label_backing_pads_the_letters_and_stops_before_the_mar
 ) -> None:
     """CIR-RGN-FRONT (OV-3156): a backed Circular region label's backing covers its letters, padded 0.18 em beyond
     them as Linear's, but never reaches past the gap the letters keep from their mark: a turned box for straight text,
-    an annular sector for curved text. With a gap of 1 px the far corners of a long straight box on an inside slot
-    would reach the mark with their padding along the circle; that padding gives way too."""
+    an annular sector for curved text. A straight box is Linear's, rounded and turned with the letters. With a gap
+    of 1 px the far corners of a long straight box on an inside slot would reach the mark with their padding along
+    the circle; that padding gives way too."""
 
     from gbdraw.layout.text_geometry import annular_sector_parts, convex_polygons_intersect
+    from gbdraw.render.drawers.label_backing import SectorBacking, TurnedBacking
     from gbdraw.render.drawers.circular.annotations import (
         CircularAnnotationLabel,
         CircularLabelArc,
@@ -1795,7 +1798,7 @@ def test_circular_region_label_backing_pads_the_letters_and_stops_before_the_mar
         gap, far - near, arc,
     )
     backed = _backed(label, outward=outward)
-    assert backed.backed and backed.backing_path.startswith("M ") and backed.backing_path.endswith(" Z")
+    assert isinstance(backed.backing_shape, SectorBacking if curved else TurnedBacking)
     # How near the centre the drawn backing comes and how far from it: a straight box's nearest edge, or the radii of
     # a sector's arcs (its parts' corners lie on them).
     nearest = (

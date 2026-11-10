@@ -6,9 +6,10 @@ side and as the corner radius, which may stop at an edge on one side (a region
 label's mark, a feature label's own leader end or underline) so it never
 covers what it belongs to. A region label is drawn on it at
 ``BACKING_OPACITY`` (LP-D82 ``RGN-FRONT``), in front of the leader lines
-(``region_label_front``, one builder for both modes; a Circular label's
-backing is a turned box or an annular sector, ``backing_path``); a feature
-label with
+(``region_label_front``, one builder for both modes). A straight Circular
+region label's backing is the same rounded box turned with its letters
+(``turned_backing``), a curved one's an annular sector (``sector_backing``,
+square-cornered); each stops before its mark. A feature label with
 ``protection = box`` at ``label_style.BOX_OPACITY``, bound to its label and
 taking no pointer events.
 
@@ -31,7 +32,7 @@ casings, so the casing never cuts its joint and no ink is drawn twice.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import NamedTuple
 
@@ -45,9 +46,10 @@ from gbdraw.labels.label_style import (
     leader_width_px,
 )
 from gbdraw.layout.spatial import Aabb
-from gbdraw.layout.text_geometry import Point
+from gbdraw.layout.text_geometry import Point, annular_sector_parts
 from gbdraw.render.label_binding import bind_label_part
 from gbdraw.svg.elements import Group, Line, Path, Rect, Text, Use
+from gbdraw.svg.path_data import path_number
 
 BACKING_PADDING_EM = 0.18
 BACKING_FILL = "#ffffff"
@@ -161,15 +163,131 @@ def backing_rect(box: Aabb, font_size: float, *, opacity: float = BACKING_OPACIT
     )
 
 
-def backing_path(d: str) -> Path:
-    """The drawn backing whose outline is the path data ``d`` (a Circular region label's, OV-3156)."""
+class TurnedBacking(NamedTuple):
+    """A straight label's backing turned with its letters: ``box`` in the frame of the letters before they are
+    turned ``rotation`` degrees clockwise about ``center``, drawn as ``backing_rect`` (rounded as every box)."""
 
-    return Path(d=d, fill=BACKING_FILL, fill_opacity=BACKING_OPACITY, stroke="none")
+    box: Aabb
+    font_size: float
+    rotation: float
+    center: Point
+
+    @property
+    def parts(self) -> tuple[tuple[Point, ...], ...]:
+        """The box as one convex polygon in the drawing frame (its rounded corners lie within it)."""
+
+        return (_turned(_corners(self.box), self.rotation, self.center),)
+
+    def element(self) -> Rect:
+        rect = backing_rect(self.box, self.font_size)
+        if self.rotation != 0.0:
+            rect.rotate(self.rotation, center=self.center)
+        return rect
+
+
+class SectorBacking(NamedTuple):
+    """A curved label's backing: the annular sector from ``inner`` to ``outer`` radius around the origin, from
+    ``low`` to ``high`` radians clockwise from 3 o'clock, with square corners."""
+
+    inner: float
+    outer: float
+    low: float
+    high: float
+
+    @property
+    def parts(self) -> tuple[tuple[Point, ...], ...]:
+        centre, half = math.degrees(0.5 * (self.low + self.high)), math.degrees(0.5 * (self.high - self.low))
+        return tuple(tuple(part) for part in annular_sector_parts(self.inner, self.outer, centre, min(180.0, half)))
+
+    def element(self) -> Path:
+        large = 1 if self.high - self.low > math.pi else 0
+
+        def at(radius: float, turn: float) -> str:
+            return f"{path_number(radius * math.cos(turn))},{path_number(radius * math.sin(turn))}"
+
+        outer, inner = path_number(self.outer), path_number(self.inner)
+        d = (
+            f"M {at(self.outer, self.low)} A {outer},{outer} 0 {large} 1 {at(self.outer, self.high)} "
+            f"L {at(self.inner, self.high)} A {inner},{inner} 0 {large} 0 {at(self.inner, self.low)} Z"
+        )
+        return Path(d=d, fill=BACKING_FILL, fill_opacity=BACKING_OPACITY, stroke="none")
+
+
+def _turned(points: Sequence[Point], rotation: float, center: Point) -> tuple[Point, ...]:
+    turn = math.radians(rotation)
+    cos, sin = math.cos(turn), math.sin(turn)
+    cx, cy = center
+    return tuple((cx + (x - cx) * cos - (y - cy) * sin, cy + (x - cx) * sin + (y - cy) * cos) for x, y in points)
+
+
+def turned_backing(
+    ink: Aabb,
+    font_size: float,
+    *,
+    rotation: float,
+    center: Point,
+    toward: Point,
+    clear: Callable[[tuple[Point, ...]], bool],
+) -> TurnedBacking:
+    """The backing of straight letters whose ``ink`` (in their own frame) is turned ``rotation`` degrees about
+    ``center``, when what they belong to lies in direction ``toward`` (in that frame) at no set edge (a Circular
+    region label's mark): padded as ``backing_box`` where ``clear`` accepts the turned box; else the sides that face
+    ``toward`` give way first, then the others, to the largest box ``clear`` accepts (found by halving)."""
+
+    pad = BACKING_PADDING_EM * font_size
+
+    def box(facing: float, beside: float) -> TurnedBacking:
+        def side(faces: bool) -> float:
+            return pad * (facing if faces else beside)
+
+        return TurnedBacking(
+            Aabb(
+                ink.min_x - side(toward[0] < 0.0),
+                ink.min_y - side(toward[1] < 0.0),
+                ink.max_x + side(toward[0] > 0.0),
+                ink.max_y + side(toward[1] > 0.0),
+            ),
+            font_size,
+            rotation,
+            center,
+        )
+
+    def accepted(backing: TurnedBacking) -> bool:
+        return clear(backing.parts[0])
+
+    def largest(scaled: Callable[[float], TurnedBacking]) -> TurnedBacking:
+        low, high = 0.0, 1.0
+        for _ in range(24):
+            middle = 0.5 * (low + high)
+            low, high = (middle, high) if accepted(scaled(middle)) else (low, middle)
+        return scaled(low)
+
+    if accepted(full := box(1.0, 1.0)):
+        return full
+    if accepted(box(0.0, 1.0)):
+        return largest(lambda scale: box(scale, 1.0))
+    return largest(lambda scale: box(0.0, scale))
+
+
+def sector_backing(near: float, far: float, low: float, high: float, font_size: float, *, edge: float) -> SectorBacking:
+    """The backing of curved letters from ``near`` to ``far`` radius and ``low`` to ``high`` radians: padded
+    ``BACKING_PADDING_EM`` font sizes on every side (along the circle at the inner radius), stopped at the radius
+    ``edge`` on the side of the letters where that edge lies, as ``backing_box``."""
+
+    pad = BACKING_PADDING_EM * font_size
+    inner, outer = near - pad, far + pad
+    if far <= edge:
+        outer = min(outer, edge)
+    else:
+        inner = max(inner, edge)
+    along = pad / max(inner, 1e-6)
+    return SectorBacking(inner, outer, low - along, high + along)
 
 
 class BackedRegionLabel(NamedTuple):
     """One region label drawn in front of the leader lines (``RGN-FRONT``): the id of its annotation's item
-    group, which the Web selects, its drawn backing (``backing_rect`` or ``backing_path``) and its letters."""
+    group, which the Web selects, its drawn backing (``backing_rect``, ``TurnedBacking.element`` or
+    ``SectorBacking.element``) and its letters."""
 
     item_id: str
     backing: Rect | Path
@@ -277,13 +395,16 @@ __all__ = [
     "BACKING_PADDING_EM",
     "BackedRegionLabel",
     "backing_box",
-    "backing_path",
     "backing_rect",
     "feature_label_backing",
     "feature_label_box",
     "feature_label_drawn_parts",
     "label_halo",
     "region_label_front",
+    "sector_backing",
+    "SectorBacking",
+    "turned_backing",
+    "TurnedBacking",
     "underline_casing",
     "UnderlineCasing",
 ]

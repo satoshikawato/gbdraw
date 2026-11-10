@@ -59,7 +59,14 @@ from gbdraw.render.drawers.annotation_marks import (
     mark_reach,
     past_span_edge,
 )
-from gbdraw.render.drawers.label_backing import BACKING_PADDING_EM, BackedRegionLabel, backing_path, region_label_front
+from gbdraw.render.drawers.label_backing import (
+    BackedRegionLabel,
+    SectorBacking,
+    TurnedBacking,
+    region_label_front,
+    sector_backing,
+    turned_backing,
+)
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
@@ -145,9 +152,9 @@ class CircularAnnotationLabel:
     text longer than its circle, drawn as the start of its runs and an ellipsis;
     one cut so far that no letter is left keeps no letter (``keeps_no_letter``).
     A ``backed`` label is drawn in front of the leader lines behind its letters
-    on its ``backing`` (``CIR-RGN-FRONT``, as Linear's ``RGN-FRONT``; OV-3156):
-    a turned box for straight text, an annular sector for curved text, as
-    convex parts and as the path data it is drawn with (``backing_path``).
+    on its ``backing_shape`` (``CIR-RGN-FRONT``, as Linear's ``RGN-FRONT``;
+    OV-3156): Linear's rounded box turned with straight text, an annular
+    sector for curved text (``label_backing``); ``backing`` is its convex parts.
     """
 
     annotation_id: str
@@ -163,12 +170,15 @@ class CircularAnnotationLabel:
     height: float
     arc: CircularLabelArc | None = None
     cut: bool = False
-    backing: tuple[Polygon, ...] = ()
-    backing_path: str = ""
+    backing_shape: TurnedBacking | SectorBacking | None = None
 
     @property
     def backed(self) -> bool:
-        return bool(self.backing)
+        return self.backing_shape is not None
+
+    @property
+    def backing(self) -> tuple[Polygon, ...]:
+        return () if self.backing_shape is None else self.backing_shape.parts
 
     @property
     def footprint(self) -> tuple[Polygon, ...]:
@@ -546,95 +556,39 @@ def _origin_distance(polygon: Sequence[Point]) -> float:
     return min(to_segment(polygon[at], polygon[(at + 1) % len(polygon)]) for at in range(len(polygon)))
 
 
-def _curved_backing(label: CircularAnnotationLabel, pad: float, toward_mark: float, outward: bool) -> CircularAnnotationLabel:
-    """``label`` (curved) on its annular sector: its letters' turn and radii padded ``pad``, toward its mark only
-    ``toward_mark``."""
-
-    assert label.arc is not None
-    near, far = label.ink_radii
-    anchor = math.atan2(label.y, label.x)
-    turns = [anchor + (math.atan2(y, x) - anchor + math.pi) % (2.0 * math.pi) - math.pi for part in label.parts for x, y in part]
-    inner = near - (toward_mark if outward else pad)
-    outer = far + (pad if outward else toward_mark)
-    low, high = min(turns) - pad / max(inner, 1e-6), max(turns) + pad / max(inner, 1e-6)
-    centre, half = math.degrees(0.5 * (low + high)), math.degrees(0.5 * (high - low))
-    parts = tuple(tuple(part) for part in annular_sector_parts(inner, outer, centre, min(180.0, half)))
-    large = 1 if high - low > math.pi else 0
-
-    def at(radius: float, turn: float) -> str:
-        return f"{path_number(radius * math.cos(turn))},{path_number(radius * math.sin(turn))}"
-
-    path = (
-        f"M {at(outer, low)} A {path_number(outer)},{path_number(outer)} 0 {large} 1 {at(outer, high)} "
-        f"L {at(inner, high)} A {path_number(inner)},{path_number(inner)} 0 {large} 0 {at(inner, low)} Z"
-    )
-    return replace(label, backing=parts, backing_path=path)
-
-
 def _backed(label: CircularAnnotationLabel, *, outward: bool) -> CircularAnnotationLabel:
-    """``label`` on its backing (CIR-RGN-FRONT): its letters padded ``BACKING_PADDING_EM`` font sizes on every side,
-    as Linear's, but toward its mark no further than ``label_offset`` (the gap the letters keep from the mark), so it
-    never covers its mark."""
+    """``label`` on its backing (CIR-RGN-FRONT, ``label_backing``): its letters padded as Linear's, but toward its
+    mark no further than ``label_offset`` (the gap the letters keep from the mark), so it never covers its mark."""
 
-    pad = BACKING_PADDING_EM * label.font_size
     near, far = label.ink_radii
-    toward_mark = min(pad, label.label_offset)
     if label.arc is not None:
-        return _curved_backing(label, pad, toward_mark, outward)
-    # Straight text: its ink box in its own frame, padded, the sides that face the mark less where the box would
-    # reach it.
+        anchor = math.atan2(label.y, label.x)
+        turns = [
+            anchor + (math.atan2(y, x) - anchor + math.pi) % (2.0 * math.pi) - math.pi for part in label.parts for x, y in part
+        ]
+        edge = near - label.label_offset if outward else far + label.label_offset
+        return replace(label, backing_shape=sector_backing(near, far, min(turns), max(turns), label.font_size, edge=edge))
+    # Straight text: its ink box in its own frame (turned back about its centre), and the direction of the centre
+    # in that frame (toward the mark when outward).
     turn = math.radians(label.rotation)
     cos, sin = math.cos(turn), math.sin(turn)
-    local = [
-        ((x - label.x) * cos + (y - label.y) * sin, -(x - label.x) * sin + (y - label.y) * cos) for x, y in label.parts[0]
-    ]
-    left, right = min(x for x, _ in local), max(x for x, _ in local)
-    top, bottom = min(y for _, y in local), max(y for _, y in local)
-    # The direction from the label to the centre, in the text's frame (toward the mark when outward).
-    mark_x, mark_y = -label.x * cos - label.y * sin, label.x * sin - label.y * cos
+    ink = _box([
+        (label.x + (x - label.x) * cos + (y - label.y) * sin, label.y - (x - label.x) * sin + (y - label.y) * cos)
+        for x, y in label.parts[0]
+    ])
+    toward = (-label.x * cos - label.y * sin, label.x * sin - label.y * cos)
     if not outward:
-        mark_x, mark_y = -mark_x, -mark_y
-
-    def corners(toward: float, beside: float) -> tuple[Point, ...]:
-        """The box padded ``toward`` times the padding on the sides that face the mark, ``beside`` times on the
-        others."""
-
-        to_left = pad * (toward if mark_x < 0.0 else beside)
-        to_right = pad * (toward if mark_x > 0.0 else beside)
-        to_top = pad * (toward if mark_y < 0.0 else beside)
-        to_bottom = pad * (toward if mark_y > 0.0 else beside)
-        box = (
-            (left - to_left, top - to_top),
-            (right + to_right, top - to_top),
-            (right + to_right, bottom + to_bottom),
-            (left - to_left, bottom + to_bottom),
-        )
-        return tuple((label.x + cx * cos - cy * sin, label.y + cx * sin + cy * cos) for cx, cy in box)
+        toward = (-toward[0], -toward[1])
 
     def clear_of_mark(polygon: Sequence[Point]) -> bool:
         if outward:
             return _origin_distance(polygon) >= near - label.label_offset - 1e-6
         return max(math.hypot(x, y) for x, y in polygon) <= far + label.label_offset + 1e-6
 
-    def largest(box: Callable[[float], tuple[Point, ...]]) -> tuple[Point, ...]:
-        """``box`` at the largest scale in [0, 1] that keeps it off the mark, found by halving."""
-
-        low, high = 0.0, 1.0
-        for _ in range(24):
-            middle = 0.5 * (low + high)
-            low, high = (middle, high) if clear_of_mark(box(middle)) else (low, middle)
-        return box(low)
-
-    # The sides that face the mark give way first; where the other sides' padding still reaches the mark (the far
-    # corners of a long box on an inside slot), they give way too. The letters alone keep ``label_offset``.
-    if clear_of_mark(polygon := corners(1.0, 1.0)):
-        pass
-    elif clear_of_mark(corners(0.0, 1.0)):
-        polygon = largest(lambda scale: corners(scale, 1.0))
-    else:
-        polygon = largest(lambda scale: corners(0.0, scale))
-    path = "M " + " L ".join(f"{path_number(x)},{path_number(y)}" for x, y in polygon) + " Z"
-    return replace(label, backing=(polygon,), backing_path=path)
+    shape = turned_backing(
+        ink, label.font_size, rotation=label.rotation, center=(label.x, label.y), toward=toward, clear=clear_of_mark
+    )
+    return replace(label, backing_shape=shape)
 
 
 def _reach(label: CircularAnnotationLabel, inner_radius_px: float, outer_radius_px: float, outward: bool) -> float:
@@ -1638,19 +1592,19 @@ def circular_region_label_front_content(
     dom_group_id: str,
 ) -> GroupContent | None:
     """The track's backed labels in front of the record's leader lines (CIR-RGN-FRONT, OV-3156), around the circle
-    centre; ``None`` when it has none. Each label is drawn on its ``backing``, white at 70 % opacity
+    centre; ``None`` when it has none. Each label is drawn on its ``backing_shape``, white at 70 % opacity
     (``region_label_front``, as in Linear); a curved label's path goes into the content's definitions."""
 
     definitions: dict[str, BaseElement] = {}
     backed: list[BackedRegionLabel] = []
     for label in labels:
-        if not label.backed:
+        if label.backing_shape is None:
             continue
         item_id = annotation_dom_id(
             record_index=record_index, slot_id=track.slot_id, set_id=track.set_id, annotation_id=label.annotation_id
         )
         backed.append(
-            BackedRegionLabel(item_id, backing_path(label.backing_path), _label_text(label, font_family, definitions, item_id))
+            BackedRegionLabel(item_id, label.backing_shape.element(), _label_text(label, font_family, definitions, item_id))
         )
     group = region_label_front(dom_group_id, backed)
     return None if group is None else GroupContent.of(group, tuple(definitions.values()))
