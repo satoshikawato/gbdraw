@@ -11,6 +11,7 @@ import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-edito
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 import { groupColorRulesOver, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
+import { ruleOwnerPorts } from './helpers/rule-preparation-ports.mjs';
 
 // The Legend owner's writer of a row's own color (app/feature-editor.js wires it); these tests record its calls.
 const legendRowColorWrites = [];
@@ -143,7 +144,7 @@ test('the Legend item of K features, whose K hash rules name a row of another co
     assert.equal(await preparation.prepare(rules), true);
     Object.assign(state, { results: ref([]), files: { t_color: null }, originalLegendOrder: ref(['CDS']) });
     const actions = createFeatureRuleActions({
-      ref, computed: (get) => ({ get value() { return get(); } }), watch() {}, state, rulePreparation: preparation,
+      ref, computed: (get) => ({ get value() { return get(); } }), watch() {}, state, ...ruleOwnerPorts(preparation),
       runUndoable: async (_, commit) => commit(), runUndoableCheckpoint: async (_, commit) => commit(),
       prepareFileLegendEntries: async () => false, projectPaletteAndRules: () => true,
       ports: { requestAutomaticRerender: () => true }, getCommittedRequest: () => null, isPatternEditAvailable: () => true

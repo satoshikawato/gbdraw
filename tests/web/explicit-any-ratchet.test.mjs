@@ -43,7 +43,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/feature-editor/placement-actions.js': 9,
   'app/feature-editor/rule-actions.js': 27,
   'app/feature-editor/svg-actions.js': 11,
-  'app/feature-editor/visibility-actions.js': 5,
+  'app/feature-editor/visibility-actions.js': 4,
   'app/feature-search/preview-actions.js': 8,
   'app/feature-search/preview-svg.js': 2,
   'app/history-inputs.js': 2,

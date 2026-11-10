@@ -18,6 +18,7 @@ import { isLegendOrderEdited } from '../../gbdraw/web/js/services/legend-svg.js'
 import { evaluatePythonRules, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
+import { ruleOwnerPorts } from './helpers/rule-preparation-ports.mjs';
 // A feature-edits slice over a draft map, so a writer writes the map.
 const editsOf = (featureOverrides, featurePlacementOverrides) => FEATURE_EDITS_SLICE.create({ featureOverrides, featurePlacementOverrides }).handle;
 
@@ -75,7 +76,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
     }
   };
   const history = createHistory?.(state);
-  const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state: view, rulePreparation:preparation,
+  const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state: view, ...ruleOwnerPorts(preparation),
     runUndoableCheckpoint: history?.runUndoableCheckpoint || transact('checkpoint'),
     runUndoable: history?.runUndoable || transact('intent'),
     prepareFileLegendEntries: async (intents, {isCurrent,previousFileIntents,rekeyed}) => {
@@ -954,7 +955,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   const orders = [];
   const actions = createFeatureRuleActions({
     ref: value => ({ value }), computed: get => ({ get value() { return get(); } }), state: drawingState,
-    rulePreparation: createRulePreparation({ state: drawingState, evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules }),
+    ...ruleOwnerPorts(createRulePreparation({ state: drawingState, evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules })),
     runUndoableCheckpoint: async (_label, commit) => commit(), runUndoable: async (_label, commit) => commit(),
     prepareFileLegendEntries: async (intents, options = {}) => {
       orders.push(options.legendOrder ?? null);

@@ -147,8 +147,8 @@ export const createFeatureEditor = ({
   // created before it call them through this object only.
   const editorPorts = /** @type {FeatureEditorPorts} */ ({});
   const ruleActions = createFeatureRuleActions({
-    state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
-    ports: editorPorts, editDefaultColors, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice, revealSetting
+    state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
+    isRuleInputCurrent: rulePreparation.isCurrent, snapshotRuleInputs: rulePreparation.snapshot, isRulePrepared: rulePreparation.isPrepared, prepareRuleCandidate: rulePreparation.prepareCandidate, synthesizeGroupRules: rulePreparation.synthesizeGroup, ports: editorPorts, editDefaultColors, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice, revealSetting
   });
   const { commitSpecificRules, countFeaturesMatchingRule, findExistingColorForCaption, findFeaturesWithSameDisplayedLabel, findFeaturesWithSameIndividualLabel, findFeaturesWithSameLegendItem,
     findMatchingRegexRule, getDisplayedFeatureLabel, effectiveLegendCaptions, getIndividualFeatureLabel, getFeatureQualifier, getLegendRowRules, groupColorRules, reviseColorRules, runWithRuleMatches } = ruleActions;
@@ -193,12 +193,12 @@ export const createFeatureEditor = ({
     showEditorIntent,
     ports: editorPorts,
     selectResult,
-    rulePreparation,
+    prepareDrawnRuleMatches: rulePreparation.prepareDrawn,
     getCommittedRequest,
     showNotice
   });
   const labelActions = createFeatureLabelActions({
-    state, commitActiveResultEdit, currentResults, getResultIdentity, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest, showNotice,
+    state, commitActiveResultEdit, currentResults, getResultIdentity, isRuleInputCurrent: rulePreparation.isCurrent, snapshotRuleInputs: rulePreparation.snapshot, ref, computed, watch, nextTick, getCommittedRequest, showNotice,
     setFeatureVisibility: visibilityActions.setFeatureVisibility,
     prepareDrawnFeatureMatches: visibilityActions.prepareDrawnFeatureMatches,
     evaluateLabelRules
