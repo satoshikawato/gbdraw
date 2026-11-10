@@ -32,7 +32,7 @@
     },
     "gallery/examples/Vnig_TUMSAT-TG-2018.svg": {
       "bytes": 27274528,
-      "sha256": "52182603fc9952c96c2e55efcfea0d3e7c57e93b513f39b12610dcc1daeca82b"
+      "sha256": "cd1b5f18aeecbd001ab94b581ab585c50991bbba58e87a24fb5e3e68b914d98d"
     },
     "gallery/examples/ecoli_o157_sakai_rings.svg": {
       "bytes": 25893768,
@@ -44,11 +44,11 @@
     },
     "gallery/examples/hepatoplasmataceae_collinear.svg": {
       "bytes": 14674430,
-      "sha256": "8ad5739101649750354f1c35aa3b9d1d9d09d7483139ce3dc55e9202d17c0239"
+      "sha256": "bda13f5c61f25078aafde599ee7d7033ee75ea21999280ed8c16cfb8dc3854fd"
     },
     "gallery/examples/hepatoplasmataceae_orthogroup.svg": {
       "bytes": 16668420,
-      "sha256": "f07e45a5949e51d9a6d8c74ab9bf087196587ba63e6c92a2035b6c3f84055410"
+      "sha256": "cd477d0abfbcb7322e181ccbdf682854e62a86b0f53f00a26696ff10da4fccea"
     },
     "gallery/examples/lambda_basic_linear.svg": {
       "bytes": 870006,
@@ -79,8 +79,8 @@
       "sha256": "9dadef7c6234c1d78b5f8896c0e70e0c934339476b03fef345f578fadf9c1719"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
-      "bytes": 11841802,
-      "sha256": "bb17938c25a903b10a6a217c6e41080c3d7f68f7042c0abbb88d936a25444236"
+      "bytes": 11841808,
+      "sha256": "a0623c5b6c980235ff0bc4166d30d34dc999a1f0f82ab12d27f74a44d68091a3"
     },
     "gallery/sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz": {
       "bytes": 21203678,
@@ -91,12 +91,12 @@
       "sha256": "44e9832637c2290aa97cda4dc31aec35def1d11e16b701693839124265d1751e"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
-      "bytes": 11556616,
-      "sha256": "37052736cc83bc83e177d26d5085394ec01440959f0105e1a9c20749ecd5b0e0"
+      "bytes": 11557064,
+      "sha256": "f906293abbe8a350f808ebd1869fc3b858d3719a48485e36bf80ad0799d079fc"
     },
     "gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz": {
-      "bytes": 15102265,
-      "sha256": "81740873ad68a50d9682cb1d96b360b8dbdf4ff608ccd3124ddab574595fadaf"
+      "bytes": 15101631,
+      "sha256": "9bc42b00f69bb8ad3e6f1036cb0f7a3af54219924650a851f86ceea8a0839c00"
     },
     "gallery/sessions/lambda_basic_linear.gbdraw-session.json": {
       "bytes": 852409,
@@ -128,7 +128,7 @@
     },
     "gallery/sources/Vnig_TUMSAT-TG-2018.svg": {
       "bytes": 2627174,
-      "sha256": "cc82bd42bc28be7aedc80c74413d14a3b57016d226389849cbc4b7498b8ba273"
+      "sha256": "b34fb755d59a090e0f30e4b3f410b61bfd3fad737a3540e9ad5d44ac95bf22ec"
     },
     "gallery/sources/ecoli_o157_sakai_rings.svg": {
       "bytes": 13458545,
@@ -140,11 +140,11 @@
     },
     "gallery/sources/hepatoplasmataceae_collinear.svg": {
       "bytes": 3719031,
-      "sha256": "cde35f256ca9d30f805d692c70de2bd1c0af8467d8adb29348d890ff20d30466"
+      "sha256": "5c280dcbe5f27ad8846aa1be73a3ff2840d19236820960d0c648ca1f1f14b1da"
     },
     "gallery/sources/hepatoplasmataceae_orthogroup.svg": {
       "bytes": 5551246,
-      "sha256": "2973ae7d87fac6f9ab1bd59d04bc244e90a0738948a5e4b6aaca4eabb01921e4"
+      "sha256": "61309702dfbd5a7f36f2cc697e7759deca05a2d85d5b6b3b41b679484a224898"
     },
     "gallery/sources/lambda_basic_linear.svg": {
       "bytes": 129602,
@@ -175,8 +175,8 @@
       "sha256": "6d0e80497af9eead731760507d38f9b5456aea8e2ec7c5768a73d9d77330e04e"
     },
     "gallery/thumbnails/Vnig_TUMSAT-TG-2018.webp": {
-      "bytes": 28366,
-      "sha256": "13f8d55639dfd34b52881f9c4fa348757b4be48686190fbf77a4f150569a60d6"
+      "bytes": 28352,
+      "sha256": "683a47c8479f2c0e3985a44d9950c429abf3c79160e12df2ff13071063dfedd2"
     },
     "gallery/thumbnails/ecoli_o157_sakai_rings.webp": {
       "bytes": 25402,
@@ -188,11 +188,11 @@
     },
     "gallery/thumbnails/hepatoplasmataceae_collinear.webp": {
       "bytes": 19732,
-      "sha256": "668cf358057385530bdae45117c9f6dc24a9675f980ecce08222e1f990845867"
+      "sha256": "02cbc9a8769efc78d9254ad0275964ff173e001947302fcff391a38f23eec78a"
     },
     "gallery/thumbnails/hepatoplasmataceae_orthogroup.webp": {
-      "bytes": 21258,
-      "sha256": "e8191db774d7d877d4f598d97d2c6793a573e10cfbb4008c9a0881047f6afe61"
+      "bytes": 21252,
+      "sha256": "366aa3fc721ef0c70e462885eb5841bad587fa11a270b3b6b93242a17d4e335c"
     },
     "gallery/thumbnails/lambda_basic_linear.webp": {
       "bytes": 24090,

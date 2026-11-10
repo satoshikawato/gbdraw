@@ -399,10 +399,19 @@ write-up of a release.
   several rows with the same swatch and the map did not tell them apart. In each of
   those palettes `misc_feature` is now a sand tone and the unlisted types a
   blue-gray tone derived from the palette's own `repeat_region` color, which is
-  unchanged (`default`: `#e3cfab` and `#aebccb`). `earthtones` and `psyche` already
-  differed. A figure draws the new colors where it has a `misc_feature` or an
-  unlisted type such as `ncRNA`; every other figure is unchanged. A test now
-  requires the three to differ in every palette (OV-3114).
+  unchanged (in the `default` palette: `#e3cfab` and `#aebccb`). `earthtones` and
+  `psyche` already differed. The features of an unlisted type (`ncRNA` in most
+  palettes, `D-loop`, `rep_origin`) are now drawn in the palette's `default`
+  color, the color their Legend row shows; they were drawn in `#d3d3d3` whatever
+  the palette, so in a palette whose `default` was not `#d3d3d3` the map and the
+  Legend disagreed. The Web's live preview and the feature popup use the same
+  color. A figure changes only where it draws a `misc_feature` or an unlisted
+  type. To keep the earlier colors, give a Default colors table that sets
+  `misc_feature` and `default` to `#d3d3d3` (`-d/--default_colors colors.tsv`,
+  with the two rows `misc_feature<TAB>#d3d3d3` and `default<TAB>#d3d3d3`; in
+  the Web, Default colors). A Session whose Default colors table sets those rows
+  keeps its colors. A test now requires the three to differ in every palette
+  (OV-3114).
 - Fixed: a Circular Legend on the left or right centred the feature rows and
   the whole block of similarity rings and gradient bars each on its own, with
   the ring names at that block's left edge, so the blocks sat apart. Every
