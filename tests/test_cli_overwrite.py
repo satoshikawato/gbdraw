@@ -827,6 +827,7 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
                 protein_identity_manifest=None,
                 migration_report=SessionMigrationReport(),
                 feature_identity_notices=(),
+                annotation_warnings=(),
             )
         }
 
