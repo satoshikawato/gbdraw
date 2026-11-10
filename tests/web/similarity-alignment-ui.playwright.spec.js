@@ -57,6 +57,18 @@ const artifactSnapshot = (page) => page.evaluate(async () => {
   };
 });
 
+// What a Load leaves and a later step reads: the committed Session, the plan, the Reset receipt
+// and the Result. A step that starts after an Undo instead of a Load checks these first.
+const loadedState = async (page) => {
+  const { session, plan, receipt, results } = await artifactSnapshot(page);
+  return { session, plan, receipt, results };
+};
+// The plan and the Reset receipt only, for a step after a live setting that the Undo keeps.
+const loadedPlan = async (page) => {
+  const { plan, receipt } = await artifactSnapshot(page);
+  return { plan, receipt };
+};
+
 // The review is docked in the Result. Rings mark the candidates on the figure, and a
 // card lists its candidates in figure order (left to right, undrawn ones last).
 const reviewCard = (page, recordKey) => page.evaluate((key) => {
@@ -92,6 +104,12 @@ const figureFit = (page) => page.evaluate(() => {
   };
 });
 // A change of the canvas size has reached its observers once two frames have been drawn.
+// A Load leaves the Editor closed: a step that starts after another step closes it the same way.
+const closeEditor = async (page) => {
+  if (await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
+  await expect.poll(async () => (await editorDrawer(page)).open, { message: 'the Editor is closed, as after a Load' })
+    .toBe(false);
+};
 const roomSettled = (page) => evaluateWithRetainedPromise(page, () => new Promise((resolve) => {
   requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
 }));
@@ -401,10 +419,11 @@ test('alignment rings and the reference line stay transient and share the panel 
     // The review was opened from the Editor, which is open again with the focus on its button.
     await expect(page.locator('.right-drawer').getByRole('button', { name: 'Align…', exact: true })).toBeFocused();
   });
-  await page.setViewportSize({ width: 1600, height: 900 });
+  // The former case loaded at 1600x1000.
+  await page.setViewportSize({ width: 1600, height: 1000 });
   // OV-1255: Apply's new Result leaves the Similarity groups tab without groups for a while; the
   // review still gives back the tab it closed, as Cancel does.
-  await test.step('a successful Apply of a review opened from the Editor reopens the Similarity groups tab', async () => {
+  await test.step('a successful Apply of a review opened from the Editor reopens the Similarity groups tab (OV-1255)', async () => {
     await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
     const drawer = page.locator('.right-drawer');
     await drawer.locator('[data-similarity-group-row="og_1"]').click();
@@ -422,11 +441,9 @@ test('alignment rings and the reference line stay transient and share the panel 
   });
   // The Undo of that Apply gives back the loaded plan and Result the rest of this case reviews.
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
-  await expect.poll(async () => {
-    const { session, plan, receipt, results } = await artifactSnapshot(page);
-    return { session, plan, receipt, results };
-  }, { message: 'the Undo of the OV-1255 Apply gives back the loaded state' })
+  await expect.poll(() => loadedState(page), { message: 'the Undo of the OV-1255 Apply gives back the loaded state' })
     .toEqual({ session: before.session, plan: before.plan, receipt: before.receipt, results: before.results });
+  await page.setViewportSize({ width: 1600, height: 900 });
   await align.click();
   await expect(dialog).toBeVisible({ timeout: 180000 });
   // Another Result under the open review, as a Generate or a Session load draws it: it commits
@@ -1556,7 +1573,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await expect.poll(recordState).toEqual(before);
   console.log('S02 Gallery: Undo restored baseline');
   // From the loaded plan: its Apply is undone below, so the receipt journey starts from it again.
-  await test.step('exclusive directions include the minority reference and keep Custom Select/Skip local', async () => {
+  await test.step('exclusive directions include the minority reference and keep Custom Select/Skip local (D-11)', async () => {
     const featureId = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
       .find(feature => feature.protein_id === 'CAG38712.1' || feature.sourceProteinId === 'CAG38712.1').svg_id);
     await page.locator(`[data-gbdraw-feature-id="${featureId}"]`).first()
@@ -2164,13 +2181,14 @@ test('Review alignment places a record drawn in one window across the origin', a
 test('Review alignment moves and flips a record drawn in two windows as one', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   await loadDirectionSession(page, testInfo, ['windows']);
+  const loaded = await loadedState(page);
   const windowShifts = async () => page.evaluate(() => {
     const svg = new DOMParser().parseFromString(window.__GBDRAW_APP__.currentResults()[0].content, 'image/svg+xml');
     return ['record-2~w1', 'record-2~w2'].map((key) => Number(
       svg.querySelector(`g[data-record-key="${key}"]`).getAttribute('data-record-translation-x')));
   });
   // D-50: a record drawn in several windows moves as one, anchored in the window that holds its anchor.
-  await test.step('Review alignment moves a record drawn in two windows as one', async () => {
+  await test.step('Review alignment moves a record drawn in two windows as one (D-50)', async () => {
     // Both windows draw the record's own translation before the Align.
     expect(await windowShifts()).toEqual([48, 48]);
     const dialog = await openDirectionReview(page);
@@ -2185,9 +2203,11 @@ test('Review alignment moves and flips a record drawn in two windows as one', as
   });
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await expect.poll(windowShifts, { message: 'the Undo of the Align gives back the loaded windows' }).toEqual([48, 48]);
+  await expect.poll(() => loadedState(page), { message: 'the Undo of the Align gives back the loaded Session, plan and receipt' })
+    .toEqual(loaded);
   // OV-2883: Align's flip of a record drawn in windows is written on the File card's windows, the orientation Generate
   // reads for such a card, so the next Generate draws the record flipped too.
-  await test.step('Review alignment flips a record drawn in two windows and the next Generate keeps it flipped', async () => {
+  await test.step('Review alignment flips a record drawn in two windows and the next Generate keeps it flipped (OV-2883)', async () => {
     const record2 = () => page.evaluate(async () => {
       const { state } = await import('./js/state.js');
       const { getCommittedCanonicalSession } = await import('./js/services/config.js');
@@ -2686,7 +2706,7 @@ test('the drawer list, the docked review panel and the popup it hides follow the
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
   // First, while the Session is just loaded: its notice still changes the Result card's margins.
-  await test.step('the drawer list scrolls to the group a new alignment plan selects', async () => {
+  await test.step('the drawer list scrolls to the group a new alignment plan selects (OV-1022)', async () => {
     const groupId = await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
       return state.similarityAlignmentPlan.value?.groupId || '';
@@ -2728,6 +2748,7 @@ test('the drawer list, the docked review panel and the popup it hides follow the
   // The search row's Open is a command, not a gesture on the figure: it moves the view and
   // retargets the hidden popup, which is shown at its feature when the review ends.
   await test.step('Open in the feature search row retargets the hidden popup, shown at its feature when the review ends', async () => {
+    await closeEditor(page);
     // The whole figure is in the view the review will give back.
     await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
     await expect.poll(async () => (await previewView(page)).zoom).toBeLessThan(1);
@@ -2774,9 +2795,12 @@ test('the drawer list, the docked review panel and the popup it hides follow the
   // popup back with focus on Review alignment options…, beside the figure and below it.
   for (const [width, height] of [[1280, 800], [390, 844]]) {
     await test.step(`a failed Apply in a review opened by keyboard from a feature popup, then Cancel (${width}x${height})`, async () => {
+      // The former case loaded the Session at this size, with no popup and the Editor closed.
       await page.setViewportSize({ width, height });
-      // As after a Load, no popup is open: a click on the feature of an open popup closes it.
       await page.evaluate(() => window.__GBDRAW_APP__.closeFeaturePopup());
+      await closeEditor(page);
+      await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+      await closeEditor(page);
       // A phone user taps Preview to reach the figure (a Load keeps the shown pane).
       await showPhonePane(page, 'preview');
       const featureId = await page.evaluate(featureByProteinId, 'CAG38712.1');
@@ -2828,10 +2852,10 @@ test('the drawer list, the docked review panel and the popup it hides follow the
   // OV-498 found the floating panel ending under the window bottom. The docked panel
   // is a part of the Result instead: beside the figure when the Result is wide, below
   // it when narrow, and never over it.
-  await test.step('the Review alignment panel is docked beside or below the figure with Cancel and Apply in the window', async () => {
+  await test.step('the Review alignment panel is docked beside or below the figure with Cancel and Apply in the window (OV-498)', async () => {
     // The feature is clicked on the figure: the popup and the Editor the earlier steps left open go.
     await page.evaluate(() => window.__GBDRAW_APP__.closeFeaturePopup());
-    if (await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
+    await closeEditor(page);
     await page.setViewportSize({ width: 1600, height: 1000 });
     await page.locator('[data-gbdraw-feature-id="f94b7f30b_record_2"]').click({ force: true });
     await page.locator('.feature-popup [data-similarity-alignment-popup-review]').click();
@@ -2893,7 +2917,7 @@ test('a review over a zoomed and panned view survives a mode switch, an end in C
   // OV-622: a mode switch brings no view of its own. After Circular and back, the review still
   // holds the view from before it and gives it back; the figure is not fitted again (the draft no
   // longer shows on it, as before).
-  await test.step('a mode switch and back under an open review leaves the view the review gives back', async () => {
+  await test.step('a mode switch and back under an open review leaves the view the review gives back (OV-622, OV-1255)', async () => {
     for (const target of ['circular', 'linear']) {
       await page.evaluate((next) => window.__GBDRAW_APP__.selectDrawing(next), ids[target]);
       await expect.poll(shownMode).toBe(target);
@@ -2916,7 +2940,7 @@ test('a review over a zoomed and panned view survives a mode switch, an end in C
   // OV-1089: the held view is the Linear review's. Escape while Circular is shown ends the
   // review there and gives back the Editor (PD-OI-039 rev 4), but not Linear's view from before
   // the review: the Circular figure keeps its own.
-  await test.step('a Linear review ended in Circular gives the Linear view back to no other figure (OV-1089)', async () => {
+  await test.step('a Linear review ended in Circular gives the Linear view back to no other figure (OV-1089, PD-OI-039)', async () => {
     const { before, dialog } = await reviewOverOwnView(page);
     await page.evaluate((drawingId) => window.__GBDRAW_APP__.selectDrawing(drawingId), ids.circular);
     await expect.poll(shownMode).toBe('circular');
@@ -2937,7 +2961,7 @@ test('a review over a zoomed and panned view survives a mode switch, an end in C
   // A Session loaded while the other mode is shown replaces the review's figure: the review gives
   // back neither the view nor the Editor (OV-622). This pins the outcome; the load shows the
   // review's mode again, so it does not tell which mode the replacement test reads.
-  await test.step('a Session loaded while the other mode is shown under a review keeps its own view', async () => {
+  await test.step('a Session loaded while the other mode is shown under a review keeps its own view (OV-622, R17-25)', async () => {
     await page.evaluate((drawingId) => window.__GBDRAW_APP__.selectDrawing(drawingId), ids.linear);
     await expect.poll(shownMode).toBe('linear');
     const { dialog } = await reviewOverOwnView(page);
@@ -2953,7 +2977,7 @@ test('a review over a zoomed and panned view survives a mode switch, an end in C
     expect((await editorDrawer(page)).open).toBe(false);
   });
   // A4: what the review took is given back only while the Result is still the review's.
-  await test.step('a Session loaded under an open review keeps its own view and Editor when the review closes', async () => {
+  await test.step('a Session loaded under an open review keeps its own view and Editor when the review closes (A4, R17-25)', async () => {
     await page.setViewportSize({ width: 1600, height: 1000 });
     await page.evaluate(() => window.__GBDRAW_APP__.closeFeaturePopup());
     const session = JSON.parse(readFileSync(galleryAlignmentSession, 'utf8'));
@@ -3002,6 +3026,8 @@ test('the docked review fits the figure to the room of the Result and gives the 
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  const loaded = await loadedState(page);
+  const loadedPaneWidth = await page.evaluate(() => window.__GBDRAW_APP__.sidebarWidth);
   await test.step('the docked review takes the popup, the Editor and the view, and gives them back after Cancel and Apply', async () => {
     // The user's own view and Editor tab.
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
@@ -3100,9 +3126,12 @@ test('the docked review fits the figure to the room of the Result and gives the 
   // OV-536: while the review shows the fitted figure, the figure follows the room of the Result,
   // whatever changed that room: the window, the settings pane's display, a docked section, the
   // pane's width.
-  await test.step('the figure is fitted again whenever the room of the Result changes while Review alignment is open', async () => {
-    // The popup the review gave back may cover the preview buttons.
+  await test.step('the figure is fitted again whenever the room of the Result changes while Review alignment is open (OV-536, OV-620)', async () => {
+    await expect.poll(() => loadedState(page), { message: 'the Undo of the Apply gives back the loaded Session, plan and receipt' })
+      .toEqual(loaded);
+    // The popup the review gave back may cover the preview buttons; the Editor is closed as after a Load.
     await page.evaluate(() => window.__GBDRAW_APP__.closeFeaturePopup());
+    await closeEditor(page);
     // The user's own view.
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
     await page.evaluate(() => { window.__GBDRAW_APP__.canvasPan.x += 37; });
@@ -3209,8 +3238,13 @@ test('the docked review fits the figure to the room of the Result and gives the 
     expect(pageErrors).toEqual([]);
   });
   await test.step('outside Review alignment a change of the room of the Result keeps the zoom and the position', async () => {
+    // The window, the popup and the settings pane's width as the Load left them (the step before
+    // dragged the pane 100 px wider).
     await page.setViewportSize({ width: 1600, height: 1000 });
     await page.evaluate(() => window.__GBDRAW_APP__.closeFeaturePopup());
+    await page.evaluate((width) => { window.__GBDRAW_APP__.sidebarWidth = width; }, loadedPaneWidth);
+    await roomSettled(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.sidebarWidth)).toBe(loadedPaneWidth);
     await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
     await page.evaluate(() => { window.__GBDRAW_APP__.canvasPan.x += 37; });
@@ -3301,8 +3335,9 @@ test('live settings before and under an open review are drawn by Apply and keep 
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
   const loaded = await recordOrientations(page);
+  const loadedAlignment = await loadedPlan(page);
   // OV-1083: a live color changed before the review is drawn by Apply too.
-  await test.step('Apply of a review draws a live color changed before the review; the strips of reversed records agree with the figure after Apply in order and side', async () => {
+  await test.step('Apply of a review draws a live color changed before the review; the strips of reversed records agree with the figure after Apply in order and side (OV-1083, C2)', async () => {
     await recolorCds(page, '#264653');
     const { dialog } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
     await chooseUnresolved(page, dialog);
@@ -3318,11 +3353,12 @@ test('live settings before and under an open review are drawn by Apply and keep 
     await expectCdsColorDrawn(page, '#264653');
   });
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
-  await expect.poll(() => recordOrientations(page), { message: 'the Undo of the Apply gives back the loaded plan' }).toEqual(loaded);
+  await expect.poll(() => recordOrientations(page), { message: 'the Undo of the Apply gives back the loaded orientations' }).toEqual(loaded);
+  expect(await loadedPlan(page), 'the Undo of the Apply gives back the loaded plan and receipt').toEqual(loadedAlignment);
   // OV-1082: a live setting change redraws the Result of the same records (PD-OI-102). The review
   // still shows its draft on it: the rings are drawn again, the figure follows the room, and the
   // end (Cancel, Apply) gives back the view and the Editor. Apply draws the change (OV-1083).
-  await test.step('a live setting change under an open review keeps its rings, its fit and the view it gives back', async () => {
+  await test.step('a live setting change under an open review keeps its rings, its fit and the view it gives back (OV-1082, PD-OI-102)', async () => {
     const { before, dialog } = await reviewOverOwnView(page);
     const rings = page.locator('button.gbdraw-alignment-ring');
     const ringCount = await rings.count();
@@ -3369,7 +3405,9 @@ test('live settings before and under an open review are drawn by Apply and keep 
   // OV-1120: the automatic rerender draws a live setting (here the Legend font size) as a new
   // Result with a new feature catalog of the same features (PD-OI-102). The review keeps its
   // draft, as after a live color, and Apply commits onto the Session that names the new value.
-  await test.step('a live setting drawn by the automatic rerender under an open review keeps its rings and the view it gives back', async () => {
+  expect(await recordOrientations(page), 'the Undo of the OV-1082 Apply gives back the loaded orientations').toEqual(loaded);
+  expect(await loadedPlan(page), 'the Undo of the OV-1082 Apply gives back the loaded plan and receipt').toEqual(loadedAlignment);
+  await test.step('a live setting drawn by the automatic rerender under an open review keeps its rings and the view it gives back (OV-1120, PD-OI-102, D-44)', async () => {
     const { before, dialog } = await reviewOverOwnView(page);
     const rings = page.locator('button.gbdraw-alignment-ring');
     const ringCount = await rings.count();
@@ -3597,7 +3635,7 @@ test('majanivirus reviews order the records that need a choice and draw genes in
     await expect(dialog).toBeHidden();
   });
   // OV-541: a gene with introns is drawn as several blocks, and Apply centres its whole span.
-  await test.step('a reference and candidates drawn in several parts get the line, rings and strip boxes around their whole span', async () => {
+  await test.step('a reference and candidates drawn in several parts get the line, rings and strip boxes around their whole span (OV-541)', async () => {
     const { dialog } = await openPopupReview(page, (groupId) => window.__GBDRAW_APP__.extractedFeatures
       .find((item) => (item.orthogroup_id || item.orthogroupId || item.similarityGroupId) === groupId)?.svg_id, 'og_3');
     const review = await page.evaluate(() => {
