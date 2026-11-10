@@ -103,3 +103,19 @@ test('a failed boot file download is dropped without an unhandled rejection', as
   }
   assert.deepEqual(rejections, []);
 });
+
+// A body read as a stream leaves each chunk as a new ArrayBuffer in the page, garbage that stays until the page
+// is next collected (about 33 MiB after a Session Load, OV-3343). Read as a Blob, a large body stays in the
+// browser's blob storage, and the HTTP cache is filled all the same.
+test('a prefetched body is read as a Blob, never as chunks in the page', async () => {
+  let blobs = 0;
+  let streamed = 0;
+  const response = () => ({
+    blob: async () => { blobs += 1; return new Blob([]); },
+    get body() { streamed += 1; return new Response('bytes').body; }
+  });
+  const requests = await prefetchWith({ respond: response });
+  assert.ok(requests.length > 0);
+  assert.equal(blobs, requests.length, 'every body is read whole, as a Blob');
+  assert.equal(streamed, 0, 'no body is read as a stream');
+});
