@@ -15,7 +15,8 @@ import {
 import { settingsEntryIn, settingsScrollOwner, settingsSectionElement, settingsView } from '../services/settings-sections.js';
 import { placePopupNearPoint } from '../utils/popup-bounds.js';
 
-/** @import { DiagramMode, SettingsPaneDisplay, SettingsPaneRefs } from '../services/settings-pane-state.js' */
+/** @import { DiagramMode, SettingsPaneDisplay } from '../services/settings-pane-state.js' */
+/** @import { WebState } from '../state.js' */
 /** @import { DrawnElementSectionKey, SettingsSectionKey } from '../services/settings-sections.js' */
 /** @import { PopupAnchor, PopupBounds, PopupPlacement } from '../utils/popup-bounds.js' */
 
@@ -83,14 +84,14 @@ const POPUP_EXPECTED_HEIGHT = 360;
  */
 
 /**
- * @typedef {object} SettingsPaneState The refs of `state.js` the pane reads and, through its transitions, writes.
- * @property {{ value: DiagramMode }} mode
- * @property {{ readonly value: unknown }} svgContent The shown Result; none before the first Generate.
- * @property {{ value: string }} resultPanelTab The tab of the Result panel; `preview` shows the Result.
- * @property {{ readonly value: boolean }} layoutRepositionMode Layout edit: a press on the figure drags its items.
+ * The members of `state.js` the pane reads and, through its transitions, writes: the shown mode, the shown Result
+ * (none before the first Generate), the Result panel's tab (`preview` shows the Result), Layout edit (a press on the
+ * figure drags its items), and the three pane refs that services/settings-pane-state.js transitions.
+ * @typedef {Pick<WebState, 'mode' | 'svgContent' | 'resultPanelTab' | 'layoutRepositionMode' | 'settingsPaneDisplay'
+ *   | 'settingsPaneDocked' | 'settingsPopup'>} SettingsPaneState
  */
 
-/** @param {{ state: SettingsPaneRefs & SettingsPaneState }} options */
+/** @param {{ state: SettingsPaneState }} options */
 export const createSettingsPaneController = ({ state }) => {
   // The phone layout is read from the layout itself (the settings do not
   // scroll there), so its breakpoint stays in the stylesheet.
