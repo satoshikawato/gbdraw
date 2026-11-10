@@ -95,9 +95,8 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFAC
 export const resultSetInventory = (results, inventory) => (results.length > 0 ? [...inventory] : []);
 
 /**
- * The shown Result set's generated Legend inventory and colors, as an
- * artifact install (a drawing switch, a Session Load, its rollback, a History
- * step) leaves them.
+ * The shown Result set's generated Legend inventory and colors, as a restore
+ * (a Session Load, its rollback, a History step) brings them.
  * @typedef {object} ShownSetLegend
  * @property {PythonLegendKey[]} originalOrder The inventory the set was drawn with.
  * @property {Record<string, string>} originalColors Python's color of each generated row, by its key.
@@ -111,17 +110,29 @@ export const resultSetInventory = (results, inventory) => (results.length > 0 ? 
  */
 
 /**
- * The one writer of the displayed inventory and colors after an artifact
- * install, after the install wrote the shown Results: it writes `legend` by
- * the rule of `resultSetInventory`. The Legend owner calls it after a switch
- * and a Load (`adoptShownSetInventory`); the config service calls it for the
- * set a Load, its rollback and a History step restore.
+ * The one writer of the displayed inventory after an artifact install, after
+ * the install wrote the shown Results: `inventory` by the rule of
+ * `resultSetInventory`. The Legend owner calls it after a switch and a Load
+ * (`adoptShownSetInventory`), and `installShownSetLegend` for a restore.
+ * @param {Pick<ShownSetLegendRefs, 'results' | 'originalLegendOrder'>} refs
+ * @param {readonly PythonLegendKey[]} inventory
+ */
+export const writeShownSetInventory = (refs, inventory) => {
+  refs.originalLegendOrder.value = resultSetInventory(refs.results.value, inventory);
+};
+
+/**
+ * A restore's install of the shown set's inventory and colors (a Session
+ * Load, its rollback, a History step), after it wrote the Results. The colors
+ * have one more install: an artifact slot install writes them as a slot key
+ * (`installArtifactSlot` in `history-snapshot.js`), while the slot's
+ * inventory goes beside its values (`legendInventory`).
  * @param {ShownSetLegendRefs} refs
  * @param {ShownSetLegend} legend
  */
 export const installShownSetLegend = (refs, { originalOrder, originalColors }) => {
   refs.originalLegendColors.value = originalColors;
-  refs.originalLegendOrder.value = resultSetInventory(refs.results.value, originalOrder);
+  writeShownSetInventory(refs, originalOrder);
 };
 
 /**
