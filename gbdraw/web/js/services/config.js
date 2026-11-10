@@ -4090,11 +4090,11 @@ const restoredLosatCacheValue = (entry, adoptCurrent) => {
  * ring entries are its Circular part's (`ringDrawingId`); an entry that no
  * drawing of its kind holds keeps one row, its first holder's.
  * @param {readonly {
- *   drawing: DrawingState, entries: unknown, manifest?: unknown, places?: ReadonlyMap<string, LinearUnitPlace>,
+ *   drawing: DrawingState, entries: unknown, manifest: unknown, places?: ReadonlyMap<string, LinearUnitPlace>,
  *   ringDrawingId?: DrawingId | null
  * }[]} sources
  *   Each drawing's saved entries, with the units of the Result it shows (`catalogUnitPlaces`; none when not shown), and
- *   the manifest Load's preflight validated them with: the drawing's own (D-197; none: no current Session's).
+ *   the manifest Load's preflight validated them with: the drawing's own (D-197; a Session 27-50's, the file's one).
  * @param {unknown} [legacyEnvelope]
  * @param {{ adoptCurrent?: boolean }} [options]
  */
@@ -7807,9 +7807,9 @@ const importSessionDocument = async (e, options = {}) => {
      * drawing, by drawing ID (unvalidated): a Session 51's own, the projected
      * drawing's from its view; a Session 27-50's one list, `partDrawingId`'s
      * (none when the file has no drawing of that part; its Circular part's ring entries), each with the manifest Load's
-     * preflight validated it with, the drawing's own (D-197): the projected drawing's from its view (`projectedManifest`).
-     * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field @param {DrawingId | null} partDrawingId @param {unknown} [projectedManifest]
-     * @returns {{ id: DrawingId, entries: unknown, manifest?: unknown, ringDrawingId?: DrawingId | null }[]}
+     * preflight validated it with, the drawing's own (D-197): the projected drawing's or the one list's is the file view's (`projectedManifest`).
+     * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field @param {DrawingId | null} partDrawingId @param {unknown} projectedManifest
+     * @returns {{ id: DrawingId, entries: unknown, manifest: unknown, ringDrawingId?: DrawingId | null }[]}
      */
     const fileLosatEntriesOf = (projectedEntries, field, partDrawingId, projectedManifest) => (projectedDrawingId !== null && upgraded
       ? [{ id: projectedDrawingId, entries: projectedEntries, manifest: projectedManifest },
@@ -7818,14 +7818,14 @@ const importSessionDocument = async (e, options = {}) => {
             entries: /** @type {UnvalidatedFields<'entries'>} */ (/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (entry))[field])?.entries,
             manifest: entry.proteinIdentityManifest
           }))]
-      : partDrawingId === null ? [] : [{ id: partDrawingId, entries: projectedEntries, ringDrawingId: fileDrawingIdOf('circular') }]);
+      : partDrawingId === null ? [] : [{ id: partDrawingId, entries: projectedEntries, manifest: projectedManifest, ringDrawingId: fileDrawingIdOf('circular') }]);
     // The conservation hash pairs each loaded request names (D-15-124): those
     // of the conservation entries the file wrote into its drawing (a Session
     // 27-50's one list is its one Circular part's). A drawing without a
     // request installs none.
     /** @type {ReadonlyMap<DrawingId, ConservationPairs>} */
     const loadedConservationPairs = new Map(projectionResult
-      ? fileLosatEntriesOf(projectionResult.artifactState.losatCache?.entries, 'losatCache', fileDrawingIdOf('circular'))
+      ? fileLosatEntriesOf(projectionResult.artifactState.losatCache?.entries, 'losatCache', fileDrawingIdOf('circular'), projectionResult.artifactState.proteinIdentityManifest)
         .map(({ id, entries }) => [id, conservationPairsOfEntries(entries)])
       : []);
     /** @param {DrawingId} drawingId @returns {ConservationPairs} */
@@ -8560,7 +8560,7 @@ const importSessionDocument = async (e, options = {}) => {
     } else {
       const legacyArtifacts = /** @type {UnvalidatedFields<'proteinRawCandidates' | 'proteinDerivedEvidence'>} */ (data.legacyArtifacts);
       applyLosatCache(
-        [{ drawing: state.drawingOf(losatPartDrawingId), entries: /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries, ringDrawingId: fileDrawingIdOf('circular') }],
+        [{ drawing: state.drawingOf(losatPartDrawingId), entries: /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries, manifest: loadedProteinManifest, ringDrawingId: fileDrawingIdOf('circular') }],
         legacyArtifacts?.proteinRawCandidates
       );
       applyLosatDerivedCache(

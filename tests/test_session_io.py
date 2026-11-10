@@ -422,21 +422,18 @@ def test_current_session_materializes_manifest_once_for_multiple_protein_entries
     assert validation_calls == 1
 
 
-_COPY_CROP_SESSIONS = (
-    "BGC0000708-BGC0000709-copy-crop.v51-web",
-    "BGC0000708-BGC0000709-copy-crop-resaved.v51-web",
+_COPY_CROP_SESSION = (
+    Path(__file__).parent / "fixtures" / "sessions" / "BGC0000708-BGC0000709-copy-crop.v51-web.gbdraw-session.json.gz"
 )
 
 
-@pytest.mark.parametrize("name", _COPY_CROP_SESSIONS)
-def test_web_session_with_colliding_record_instance_keys_loads(name: str) -> None:
+def test_web_session_with_colliding_record_instance_keys_loads() -> None:
     """OV-3273: a copied Linear drawing whose region changed keeps the card uids of
     the original, so one record instance key names other proteins in each drawing's
-    manifest. The Web Save and its Load-then-Save (the "resaved" fixture, written by
-    tests/web/mode-scoped-session.test.mjs's OV-3273 route) write into each drawing
-    only the protein entries its own manifest resolves, and the CLI admits both."""
-    path = Path(__file__).parent / "fixtures" / "sessions" / f"{name}.gbdraw-session.json.gz"
-    session = json.loads(gzip.decompress(path.read_bytes()))
+    manifest. The Web Save writes into each drawing only the protein entries its own
+    manifest resolves, and the CLI admits it. tests/web/mode-scoped-session.test.mjs
+    checks that a Load-then-Save of this Session stays so."""
+    session = json.loads(gzip.decompress(_COPY_CROP_SESSION.read_bytes()))
     for drawing in session["drawings"]:
         proteins = [
             entry for entry in drawing["losatCache"]["entries"] if "queryRecordInstanceKey" in entry
@@ -447,14 +444,13 @@ def test_web_session_with_colliding_record_instance_keys_loads(name: str) -> Non
                 drawing["id"],
                 entry["key"],
             )
-    load_session(path)
+    load_session(_COPY_CROP_SESSION)
 
 
 def test_web_session_refuses_a_drawing_with_another_drawings_protein_entries(tmp_path: Path) -> None:
     """The refusal OV-3273's Save ran into: a drawing that holds the other drawing's
     protein entries, which its own manifest does not resolve."""
-    source = Path(__file__).parent / "fixtures" / "sessions" / f"{_COPY_CROP_SESSIONS[1]}.gbdraw-session.json.gz"
-    session = json.loads(gzip.decompress(source.read_bytes()))
+    session = json.loads(gzip.decompress(_COPY_CROP_SESSION.read_bytes()))
     drawings = {drawing["id"]: drawing for drawing in session["drawings"]}
     drawings["linear-2"]["losatCache"] = copy.deepcopy(drawings["linear"]["losatCache"])
     path = tmp_path / "mixed.gbdraw-session.json"

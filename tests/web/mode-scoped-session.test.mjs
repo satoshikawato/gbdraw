@@ -1545,12 +1545,51 @@ finally:
     assert.deepEqual(proteinKeysOf(session), proteinKeysOf(fixture), `save ${round}: each drawing keeps its own entries`);
     assert.equal(await pythonAdmits(session), 'admitted', `save ${round}: the CLI admits it`);
   }
-  // tests/test_session_io.py reads this route's second Save as the "resaved" fixture.
-  const resaved = fixtureSession('BGC0000708-BGC0000709-copy-crop-resaved.v51-web');
+  // Each Save keeps each drawing's manifest as the Web wrote it.
   for (const entry of session.drawings) {
-    const stored = resaved.drawings.find((candidate) => candidate.id === entry.id);
-    assert.deepEqual(entry.losatCache.entries.map(({ key }) => key), stored.losatCache.entries.map(({ key }) => key), entry.id);
-    assert.deepEqual(entry.proteinIdentityManifest, stored.proteinIdentityManifest, entry.id);
+    assert.deepEqual(entry.proteinIdentityManifest, fixture.drawings.find(({ id }) => id === entry.id).proteinIdentityManifest, entry.id);
+  }
+});
+
+// #1777 round 19 (OV-3277, D-201): a Session 40-50 (what 0.14.5 writes) holds one LOSAT list and one manifest, the
+// file's; Load validates the list with it and marks each adopted entry with it, so the first Save checks none again.
+// A manifest Load did not check (a new object, as a Generate installs) is never trusted: Save checks every entry.
+// The stub converter returns no resource: these Sessions' reversed protein Results need Python's frame conversion,
+// which the LOSAT cache entries do not pass through.
+test('a Session 47 Load then Save reuses Load\'s check of each protein LOSAT entry, and only with the manifest Load checked (OV-3277)', async () => {
+  const { setStoredProteinResultFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
+  setStoredProteinResultFrameConverter(async () => ({ result: { resources: {} } }));
+  try {
+    for (const [name, proteins] of [['BGC0000708-BGC0000713.v47', 25], ['majanivirus_collinear-rc.v47', 4]]) {
+      resetDrawings();
+      const loaded = await loadKeepingSlots(fixtureSession(name));
+      assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+      const saveCounting = async (title) => {
+        const counts = { reused: 0, validated: 0 };
+        globalThis.__GBDRAW_TEST_HOOKS__ = {
+          onStructuralMetric: ({ name: metric }) => {
+            if (metric === 'sessionSaveProteinRawTextValidationReuseCount') counts.reused += 1;
+            if (metric === 'sessionSaveProteinRawTextValidationCount') counts.validated += 1;
+          }
+        };
+        let result;
+        try {
+          result = await exportSession(title, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+        } finally {
+          delete globalThis.__GBDRAW_TEST_HOOKS__;
+        }
+        assert.equal(result.status, 'saved', result.error?.message);
+        const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+        const savedProteins = saved.drawings.flatMap((entry) => entry.losatCache?.entries ?? [])
+          .filter((entry) => entry.queryRecordInstanceKey !== undefined);
+        return [savedProteins.length, counts.reused, counts.validated];
+      };
+      assert.deepEqual(await saveCounting(`reuse-${name}`), [proteins, proteins, 0], `${name}: Load's manifest`);
+      state.proteinIdentityManifest.value = JSON.parse(JSON.stringify(state.proteinIdentityManifest.value));
+      assert.deepEqual(await saveCounting(`recheck-${name}`), [proteins, 0, proteins], `${name}: a manifest Load did not check`);
+    }
+  } finally {
+    setStoredProteinResultFrameConverter(null);
   }
 });
 
