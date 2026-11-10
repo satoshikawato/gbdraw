@@ -2874,7 +2874,6 @@ def _draw_circular_annotation_slot(
     *,
     gb_record: SeqRecord,
     record_length: int,
-    cfg: GbdrawConfig,
     canvas_config: CircularCanvasConfigurator,
     annotation_layout: ResolvedAnnotationTrack | None,
     annotation_labels: Sequence[CircularAnnotationLabel],
@@ -2887,7 +2886,7 @@ def _draw_circular_annotation_slot(
     if annotation_layout is None:
         return canvas
     dom_group_id = track_slot_svg_id(resolved_slot.id, renderer="annotations")
-    font_family = str(cfg.objects.text.font_family)
+    font_family = str(canvas_config.profile.config.objects.text.font_family)
     content = render_stage(
         "annotation_content",
         _annotation_track_content,
@@ -2963,7 +2962,6 @@ def _draw_resolved_circular_slot(
             resolved_slot,
             gb_record=gb_record,
             record_length=circular_display_length(gb_record, record_transform),
-            cfg=cfg,
             canvas_config=canvas_config,
             annotation_layout=(annotation_track_layouts or {}).get(resolved_slot.id),
             annotation_labels=annotation_labels.get(resolved_slot.id, ()),
