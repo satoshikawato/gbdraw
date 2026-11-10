@@ -113,7 +113,64 @@ def test_more_inputs_than_open_files_allowed(tmp_path: Path) -> None:
     assert result.stdout.split() == ["ok", "120"]
 
 
-def test_a_gzip_input_is_expanded_once_into_a_file_removed_with_its_records(tmp_path: Path) -> None:
+def test_records_released_while_the_reader_is_locked_do_not_wait_on_it(tmp_path: Path) -> None:
+    """Records may be freed at any allocation, inside the reader's locked sections too (by a cyclic collection).
+
+    Their release (closing the file, dropping its cached blocks, removing a gzip
+    copy) must not wait on those locks. The records of two inputs are released
+    here while every lock of the reader is held, once by reference count and once
+    by a collection run from inside a read. A subprocess with a timeout turns a
+    hang into a failure.
+    """
+
+    script = textwrap.dedent(
+        f"""
+        import gc, gzip, os
+        from gbdraw.io import record_sequences
+        from gbdraw.io.genome import read_flat_file_records
+        source = {str(GENBANK)!r}
+        expected = None
+        def records_of(name, compressed):
+            path = os.path.join({str(tmp_path)!r}, name)
+            data = open(source, "rb").read()
+            open(path, "wb").write(gzip.compress(data) if compressed else data)
+            records = read_flat_file_records(path)
+            assert str(records[0].seq)  # its file is open, its blocks cached
+            return records
+        locks = [record_sequences._OPEN._lock, record_sequences._CACHE._lock, record_sequences._EXPANSIONS_LOCK]
+        for compressed in (False, True):
+            records = records_of(f"held{{compressed}}.gb", compressed)
+            for lock in locks:
+                lock.acquire()
+            del records  # released by reference count, under every lock
+            for lock in locks:
+                lock.release()
+        held = [records_of("cycle.gb.gz", True)]
+        held.append(held)
+        real_open = record_sequences.open_input_bytes
+        def collecting_open(path):
+            held.clear()
+            gc.collect()  # the cycle goes inside the read that opens the next file
+            return real_open(path)
+        record_sequences.open_input_bytes = collecting_open
+        records = read_flat_file_records(source)
+        record_sequences._OPEN.read(records[0].seq._data._table.source, 0, 10)
+        assert str(records[0].seq) == str(read_flat_file_records(source)[0].seq)
+        record_sequences._OPEN.read(records[0].seq._data._table.source, 0, 10)  # releases what is queued
+        assert os.listdir(record_sequences._expansion_directory()) == []  # every gzip copy removed
+        print("ok")
+        """
+    )
+    environment = dict(os.environ, PYTHONPATH=str(ROOT))
+    try:
+        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, env=environment, timeout=60)
+    except subprocess.TimeoutExpired:
+        pytest.fail("releasing records waited on a lock the reader held")
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert result.stdout.split() == ["ok"]
+
+
+def test_a_gzip_input_is_expanded_once_into_a_file_removed_after_its_records(tmp_path: Path) -> None:
     path = tmp_path / "a.gb.gz"
     path.write_bytes(gzip.compress(GENBANK.read_bytes()))
     records = read_flat_file_records(str(path))
@@ -122,7 +179,8 @@ def test_a_gzip_input_is_expanded_once_into_a_file_removed_with_its_records(tmp_
     assert copies[0].exists() and copies[0] != path
     assert str(records[0].seq) == _sequence(GENBANK)
     del records
-    gc.collect()
+    gc.collect()  # the copy is queued for removal; the next read of any input removes it
+    read_flat_file_records(str(GENBANK))
     assert not copies[0].exists()
 
 

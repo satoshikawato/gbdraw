@@ -36,7 +36,7 @@ import threading
 import warnings
 import weakref
 from array import array
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from os import PathLike, fspath
@@ -91,27 +91,31 @@ class _BlockCache:
         self._bytes = 0
 
     def get(self, key: tuple[int, int, int], build: Callable[[], bytes]) -> bytes:
+        _release_pending()
         with self._lock:
             hit = self._blocks.get(key)
             if hit is not None:
                 self._blocks.move_to_end(key)
                 return hit
         value = build()
+        dropped: list[bytes] = []  # freed after the lock is let go
         with self._lock:
             if key not in self._blocks:
                 self._blocks[key] = value
                 self._bytes += len(value)
                 while self._bytes > _CACHE_BYTES and len(self._blocks) > 1:
-                    _, dropped = self._blocks.popitem(last=False)
-                    self._bytes -= len(dropped)
+                    dropped.append(self._blocks.popitem(last=False)[1])
+                    self._bytes -= len(dropped[-1])
         return value
 
     def drop_file(self, file_key: int) -> None:
         """Forget the blocks of a file no record sequence reads any more."""
 
+        dropped: list[bytes] = []
         with self._lock:
             for key in [key for key in self._blocks if key[0] == file_key]:
-                self._bytes -= len(self._blocks.pop(key))
+                dropped.append(self._blocks.pop(key))
+                self._bytes -= len(dropped[-1])
 
 
 _CACHE = _BlockCache()
@@ -131,7 +135,9 @@ class _OpenFiles:
 
     A file is opened by its path when a read needs it, so the number of inputs is
     not bounded by the number of files a process may hold open. Every read checks
-    that the file still holds the bytes its records were indexed from.
+    that the file still holds the bytes its records were indexed from. The lock
+    guards only the set of handles: a handle is taken out of it while it is read,
+    and opening, reading and closing happen outside the lock.
     """
 
     def __init__(self) -> None:
@@ -139,27 +145,35 @@ class _OpenFiles:
         self._handles: OrderedDict[int, IO[bytes]] = OrderedDict()
 
     def read(self, source: _SequenceFile, offset: int, size: int) -> bytes:
+        _release_pending()
         with self._lock:
             handle = self._handles.pop(source.key, None)
-            try:
-                if handle is None:
-                    handle = open_input_bytes(source.path)
-            except OSError as error:
-                raise source.changed() from error
-            try:
-                if _stamp(handle) != source.stamp:
-                    raise source.changed()
-                handle.seek(offset)
-                data = handle.read(size)
-            except InputFileError:
-                handle.close()
-                raise
-            except OSError as error:
-                handle.close()
-                raise source.changed() from error
+        try:
+            if handle is None:
+                handle = open_input_bytes(source.path)
+        except OSError as error:
+            raise source.changed() from error
+        try:
+            if _stamp(handle) != source.stamp:
+                raise source.changed()
+            handle.seek(offset)
+            data = handle.read(size)
+        except InputFileError:
+            handle.close()
+            raise
+        except OSError as error:
+            handle.close()
+            raise source.changed() from error
+        closing: list[IO[bytes]] = []
+        with self._lock:
+            other = self._handles.pop(source.key, None)  # another thread's handle of the same file
+            if other is not None:
+                closing.append(other)
             self._handles[source.key] = handle
             while len(self._handles) > _OPEN_FILES:
-                self._handles.popitem(last=False)[1].close()
+                closing.append(self._handles.popitem(last=False)[1])
+        for stale in closing:
+            stale.close()
         if len(data) != size:
             raise source.changed()
         return data
@@ -185,14 +199,34 @@ def _expansion_directory() -> str:
         return _EXPANSIONS[0].name
 
 
+# Inputs whose last record sequence has gone: (file key, gzip copy). A finalizer runs at any
+# allocation, also inside the readers' locked sections, so it only queues the input here
+# (deque.append takes no lock); the readers release the queue before they take their locks.
+_RELEASED: deque[tuple[int, str | None]] = deque()
+
+
 def _release(file_key: int, copy: str | None) -> None:
-    _OPEN.close(file_key)
-    _CACHE.drop_file(file_key)
-    if copy is not None:
+    _RELEASED.append((file_key, copy))
+
+
+def _release_pending() -> None:
+    """Close the files of the queued inputs, forget their blocks and remove their gzip copies.
+
+    Called outside every lock of this module.
+    """
+
+    while True:
         try:
-            os.unlink(copy)
-        except OSError:
-            pass  # removed with its directory already
+            file_key, copy = _RELEASED.popleft()
+        except IndexError:
+            return
+        _OPEN.close(file_key)
+        _CACHE.drop_file(file_key)
+        if copy is not None:
+            try:
+                os.unlink(copy)
+            except OSError:
+                pass  # removed with its directory already
 
 
 class _SequenceFile:
@@ -206,6 +240,7 @@ class _SequenceFile:
     """
 
     def __init__(self, path: str | PathLike[str]) -> None:
+        _release_pending()
         self.name = fspath(path)
         self.encoding = "utf-8"
         self.key = next(_FILE_KEYS)
