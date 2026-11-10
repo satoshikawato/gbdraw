@@ -48,6 +48,8 @@ from gbdraw.session_io import (
 )
 
 if TYPE_CHECKING:
+    from Bio.SeqRecord import SeqRecord
+
     from gbdraw.web_support.feature_metadata import FeatureSequences
 
 # Schema 4 added source-anchor profiles; schema 5 adds each rendered feature's
@@ -2293,6 +2295,17 @@ def _reference_reconstructible_nucleotide_sequences(
             break
 
 
+def _source_record_sequence(record: SeqRecord) -> str:
+    """A match source record's bases. A record with none (a CONTIG line) stops with the input's reason
+    (``SEQUENCE_UNDEFINED``), not as an invalid catalog."""
+
+    from gbdraw.io.genome import record_sequence_text, require_record_sequence
+
+    annotations = getattr(record, "annotations", None) or {}
+    require_record_sequence(record, str(annotations.get("gbdraw_source_file") or "the record input"))
+    return record_sequence_text(record) or ""
+
+
 def match_sequence_sources(records: CatalogSequenceRecords) -> list[dict[str, object]]:
     """The whole-record sequences that match spans are read from (D5): each drawn unit (``linear:record:N`` or
     ``circular:record:N``, N its place in ``records``) and every comparison FASTA record
@@ -2300,7 +2313,6 @@ def match_sequence_sources(records: CatalogSequenceRecords) -> list[dict[str, ob
     it, and an exported Interactive SVG embeds the sources its matches read."""
 
     from gbdraw.api.prepared import cancel_checkpoint
-    from gbdraw.io.genome import record_sequence_text
 
     sources: list[dict[str, object]] = []
     for record_index, record in enumerate(records.records):
@@ -2315,7 +2327,7 @@ def match_sequence_sources(records: CatalogSequenceRecords) -> list[dict[str, ob
             "key": f"{records.mode}:record:{record_index}",
             "recordId": str(record.id),
             "aliases": sorted(value for value in aliases if value),
-            "sequence": record_sequence_text(record) or "",
+            "sequence": _source_record_sequence(record),
             "origin": "linear-record" if records.mode == "linear" else "circular-reference",
             "recordIndex": record_index,
         })
@@ -2325,7 +2337,7 @@ def match_sequence_sources(records: CatalogSequenceRecords) -> list[dict[str, ob
                 "key": f"homology:comparison:{source_index}:{record.id}",
                 "recordId": str(record.id),
                 "aliases": [str(record.id), str(record.name)],
-                "sequence": record_sequence_text(record) or "",
+                "sequence": _source_record_sequence(record),
                 "origin": "homology-comparison",
                 "sourceIndex": source_index,
             })
@@ -2801,18 +2813,22 @@ def _keyed_sequence_sources(value: object) -> Sequence[object]:
     return sequence_sources
 
 
-def _require_catalog_sequence_fields(item: Mapping[str, Any], catalog_schema: object) -> None:
+def _require_catalog_sequence_fields(item: Mapping[str, object], catalog_schema: object) -> None:
     """The item's sequence fields as its schema allows them: ``sequenceSources`` is an array where there is one, and
     the stored schema holds no sequence at all (Python reads them on demand)."""
 
     sources = item.get("sequenceSources")
     if "sequenceSources" in item and (not isinstance(sources, Sequence) or isinstance(sources, (str, bytes))):
         raise GbdrawError("Feature catalog sequenceSources must be an array.")
+    features = item["biologicalFeatures"]
     if catalog_schema == FEATURE_CATALOG_SCHEMA and (
         "sequenceSources" in item
-        or any(
-            isinstance(feature, Mapping) and not STORED_SEQUENCE_KEYS.isdisjoint(feature)
-            for feature in item["biologicalFeatures"]
+        or (
+            isinstance(features, Sequence)
+            and any(
+                isinstance(feature, Mapping) and not STORED_SEQUENCE_KEYS.isdisjoint(feature)
+                for feature in features
+            )
         )
     ):
         raise GbdrawError(

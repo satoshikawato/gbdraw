@@ -627,3 +627,18 @@ def test_the_export_of_a_record_drawn_in_windows_embeds_the_sequence_the_popup_r
     ]
     assert differences == []
     assert len(rows) == 25 and all(row["nucleotideSequence"] for row in read)
+
+
+def test_a_match_source_record_without_sequence_stops_with_the_input_reason():
+    # A record with no bases (a CONTIG line) gives the input's reason, as str(record.seq) did, not "invalid catalog".
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    contig = SeqRecord(Seq(None, 10), id="con1", name="con1")
+    for records in (
+        CatalogSequenceRecords(mode="linear", records=(contig,), unit_keys=("linear:record:0",)),
+        CatalogSequenceRecords(mode="circular", records=(), comparison_records=((contig,),)),
+    ):
+        with pytest.raises(ValidationError) as caught:
+            match_sequence_sources(records)
+        model = serialize_web_error(caught.value, operation="readMatchSequences", stage="render")
+        assert (model["code"], model["context"]) == ("INPUT_UNREADABLE", {"reason": "SEQUENCE_UNDEFINED"})
