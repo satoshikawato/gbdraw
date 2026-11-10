@@ -165,9 +165,9 @@ lists every figure that differs, and prints the command that refreshes them (`py
 <id> ...`). An SVG is compared byte for byte. A PNG's pixels depend on the
 machine's FreeType and fonts, so each PNG the tool writes carries, in its
 `gbdraw-example-source` text chunk, the sha256 of what it was rasterized from:
-the SVG bytes gbdraw hands to CairoSVG (`prepare_svg_for_cairosvg`) for each
-panel, the export parameters and recipe, and, for a composite, the code that
-builds it. The check compares that digest, and a tracked PNG without one is
+the SVG bytes and sizing options gbdraw hands to CairoSVG's `svg2png`, recorded
+at that call (inside the gbdraw command for a CLI PNG) for each panel, the
+recipe, and, for a composite, the code that builds it. The check compares that digest, and a tracked PNG without one is
 stale, so a refresh on any machine passes. A failed run uploads what it
 rendered as the `examples-<run>` artifact. The figures in `FIGURES_WITHOUT_INPUTS`, whose source records are in
 neither the repository nor the test-data Release, are named as not checked;
