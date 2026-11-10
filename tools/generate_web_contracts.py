@@ -1000,7 +1000,11 @@ def render_drawn_attributes_module() -> str:
     """The attribute names Python writes on drawn groups that the Web reads in a Result."""
     from gbdraw.legend.metrics import GRADIENT_SCALE_NAME_ATTRIBUTES
     from gbdraw.render.drawers.annotation_marks import ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SET_ID_ATTRIBUTE
-    from gbdraw.render.drawers.circular.conservation import HIT_DISPLAY_SPAN_ATTRIBUTES, RING_RADIUS_ATTRIBUTES
+    from gbdraw.render.drawers.circular.conservation import (
+        HIT_DISPLAY_SPAN_ATTRIBUTES,
+        RING_LEGEND_NAME_ATTRIBUTE,
+        RING_RADIUS_ATTRIBUTES,
+    )
     from gbdraw.render.drawers.linear.wrap_rows import WRAP_ROW_ATTRIBUTE
 
     minimum, maximum = GRADIENT_SCALE_NAME_ATTRIBUTES
@@ -1024,6 +1028,8 @@ def render_drawn_attributes_module() -> str:
         f"export const HIT_DISPLAY_SPAN_ATTRIBUTES = Object.freeze({{ start: {_scalar(span_start)}, end: {_scalar(span_end)} }});\n"
         "/** A similarity ring's drawn radii (px, in its record's frame). */\n"
         f"export const RING_RADIUS_ATTRIBUTES = Object.freeze({{ inner: {_scalar(inner_radius)}, outer: {_scalar(outer_radius)} }});\n"
+        "/** A similarity ring's name as its Legend row draws it, written also when no Legend is drawn. */\n"
+        f"export const RING_LEGEND_NAME_ATTRIBUTE = {_scalar(RING_LEGEND_NAME_ATTRIBUTE)};\n"
     )
 
 

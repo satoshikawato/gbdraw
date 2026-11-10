@@ -30,7 +30,7 @@ from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.legend.circular_layout import build_circular_legend_layout
 from gbdraw.legend.metrics import legend_caption_box
 from gbdraw.render.groups.circular.legend import LegendGroup as CircularLegendGroup
-from gbdraw.render.drawers.circular.conservation import ConservationDrawer
+from gbdraw.render.drawers.circular.conservation import RING_LEGEND_NAME_ATTRIBUTE, ConservationDrawer
 from gbdraw.comparisons.identity_scale import identity_color_domain
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.tracks import CircularTrackSlot, normalize_circular_track_slots
@@ -541,6 +541,110 @@ def test_rotated_ring_hit_across_the_drawn_origin_names_each_fragment_span() -> 
         for path in group.elements
     ]
     assert spans == [("109", "120", "0"), ("0", "10", "1")]
+
+
+def _ring_name_inputs(labels: list[str], *, legend: str, overrides: dict[str, object] | None = None,
+                      slot_order: tuple[int, ...] | None = None) -> CircularAssemblyInputs:
+    """Rings with ``labels`` (track indexes 1, 2, ...) drawn in ``slot_order`` (outermost first) when given."""
+
+    return CircularAssemblyInputs(
+        cfg=apply_config_overrides(None, overrides),
+        conservation_dataframes=[
+            _comparison_frame([_hit(subject="rec1", sstart=11, send=60, identity=95.0)]) for _ in labels
+        ],
+        conservation_reference="subject",
+        conservation_labels=labels,
+        circular_track_slots=None if slot_order is None else [
+            CircularTrackSlot(id="features", renderer="features"),
+            *[
+                CircularTrackSlot(id=f"ring{index}", renderer="sequence_conservation", params={"track_index": index})
+                for index in slot_order
+            ],
+        ],
+        legend=legend,
+    )
+
+
+def _ring_group_names(svg: str) -> list[tuple[str | None, str | None]]:
+    """Each drawn ring's track index and the Legend name Python wrote on its group, in document order."""
+
+    return [
+        (element.get("data-track-index"), element.get(RING_LEGEND_NAME_ATTRIBUTE))
+        for element in ET.fromstring(svg).iter()
+        if element.tag.rsplit("}", 1)[-1] == "g" and element.get("data-gbdraw-slot-renderer") == "sequence_conservation"
+    ]
+
+
+def _ring_legend_texts(svg: str) -> dict[str | None, str]:
+    """The text each ring's Legend row draws, by track index."""
+
+    legend = next(
+        element for element in ET.fromstring(svg).iter() if element.get("id") == "conservation_identity_legend"
+    )
+    return {
+        row.get("data-track-index"): "".join(next(child for child in row if child.tag.endswith("text")).itertext())
+        for row in legend.iter()
+        if row.tag.endswith("g") and row.get("data-source-index") is not None
+    }
+
+
+@pytest.mark.parametrize(
+    ("labels", "overrides", "slot_order", "expected"),
+    [
+        # Two rings of one label, their slots in the other order: numbered in the drawn order, outermost first.
+        (["WSSV", "WSSV"], None, (2, 1), {"2": "WSSV (1)", "1": "WSSV (2)"}),
+        # A ring named like a feature row: the Legend numbers the two rows together, solid rows first.
+        (["GC content"], None, None, {"1": "GC content (2)"}),
+        # A feature row renamed to the ring's name: the rename reaches the ring's drawn name.
+        (["Genes"], {"objects.legends.row_names": [["GC content", "Genes"]]}, None, {"1": "Genes (2)"}),
+    ],
+    ids=["same-label-reordered-slots", "feature-row-name", "renamed-feature-row"],
+)
+@pytest.mark.parametrize("legend", ["right", "none"])
+def test_ring_groups_name_the_ring_as_its_legend_row_draws_it(
+    labels: list[str],
+    overrides: dict[str, object] | None,
+    slot_order: tuple[int, ...] | None,
+    expected: dict[str, str],
+    legend: str,
+) -> None:
+    """PD-OI-110 (hover): each ring's group carries the name its Legend row draws (``LegendTable.names``), also
+    when no Legend is drawn, so the Web's ring popup names the rings as the Legend does."""
+
+    shown = assemble_circular_diagram_from_record(
+        _record(), _ring_name_inputs(labels, legend="right", overrides=overrides, slot_order=slot_order)
+    ).tostring()
+    assert _ring_legend_texts(shown) == expected
+    svg = shown if legend == "right" else assemble_circular_diagram_from_record(
+        _record(), _ring_name_inputs(labels, legend=legend, overrides=overrides, slot_order=slot_order)
+    ).tostring()
+    assert sorted(_ring_group_names(svg)) == sorted(expected.items())
+
+
+def test_multi_record_ring_groups_name_the_ring_as_the_shared_legend_draws_it() -> None:
+    """On the Multi-Record Canvas the Legend is shared: every record's copy of a ring carries that Legend's name."""
+
+    records = [_record("rec1"), _record("rec2")]
+    frames = [
+        _comparison_frame([_hit(subject="rec1", sstart=11, send=60), _hit(subject="rec2", sstart=11, send=60)])
+        for _ in range(2)
+    ]
+    names = {}
+    for legend in ("right", "none"):
+        svg = assemble_circular_diagram_from_records(
+            records,
+            CircularAssemblyInputs(
+                cfg=apply_config_overrides(None, None),
+                conservation_dataframes=frames,
+                conservation_reference="subject",
+                conservation_labels=["WSSV", "GC content"],
+                legend=legend,
+            ),
+        ).tostring()
+        names[legend] = sorted(_ring_group_names(svg))
+        if legend == "right":
+            assert _ring_legend_texts(svg) == {"1": "WSSV", "2": "GC content (2)"}
+    assert names["right"] == names["none"] == sorted([("1", "WSSV"), ("2", "GC content (2)")] * 2)
 
 
 def test_circular_api_renders_source_colored_conservation_ring() -> None:

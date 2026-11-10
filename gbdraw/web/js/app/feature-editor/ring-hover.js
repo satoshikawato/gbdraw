@@ -1,8 +1,8 @@
 // @ts-check
 // Hover on the similarity rings of the shown Result (PD-OI-110 scenario
 // revision 3): over a ring, that ring keeps its strength and every other ring
-// is drawn at 35%, its Legend row is bold, a radial line marks the pointer's
-// angle from the innermost ring out across the features, and a popup gives the
+// is drawn at 35%, its Legend row is bold, a radial line at the pointer's angle
+// spans all the rings and reaches the outer edge of the features, a popup gives the
 // position (bp) and every ring's identity there, outermost first; over a ring's
 // Legend name, the same rings and row without the line and the popup. Leaving
 // restores everything; a click pins nothing.
@@ -16,12 +16,11 @@
 // drew: the ring groups, their hits' drawn spans, identities and paint, their
 // radii (`drawn-attributes.generated.js`), the record's axis
 // (`services/region-axis.js`) for the position, and each ring's name as its
-// Legend row draws it (`services/legend-svg.js`).
+// Legend row draws it (`services/legend-svg.js`, else the name Python wrote on
+// the ring).
 /** @import { CircularAxisGeometry, RegionAxisRecord } from '../../services/region-axis.js' */
-/** @import { LegendRowName } from '../../services/legend-row-names.js' */
-import { HIT_DISPLAY_SPAN_ATTRIBUTES, RING_RADIUS_ATTRIBUTES } from '../../services/drawn-attributes.generated.js';
+import { HIT_DISPLAY_SPAN_ATTRIBUTES, RING_LEGEND_NAME_ATTRIBUTE, RING_RADIUS_ATTRIBUTES } from '../../services/drawn-attributes.generated.js';
 import { legendCaptionRuns } from '../../services/legend-layout.js';
-import { drawnLegendNames, legendSwatch } from '../../services/legend-row-names.js';
 import { drawnLegendRowName } from '../../services/legend-svg.js';
 import { axisPosition, framePoint, regionAxisFrame, sourceBaseAt } from '../../services/region-axis.js';
 import { formatGroupedNumber } from '../../services/record-options.js';
@@ -82,25 +81,24 @@ export const ringHoverStyle = (sourceIndex) => {
 };
 
 /**
- * Each ring's name as the Legend draws it: its row's drawn name (numbered when rings share a label, renamed when the
- * row is); when the Result draws no Legend for the rings, the name the Legend's naming rule gives their labels.
+ * Each ring's name as the Legend draws it: its Legend row's text where the Result draws one (it follows a rename
+ * made in the Web), else the name Python wrote on the ring (`LegendTable.ring_names`, written also when no Legend is
+ * drawn); null for a ring with neither.
  * @param {ParentNode} root @param {Element[]} rings
- * @returns {string[]}
+ * @returns {(string | null)[]}
  */
 const ringNames = (root, rings) => {
   const rows = new Map(Array.from(root.querySelectorAll(RING_LEGEND_ROW_SELECTOR))
-    .map((row) => [row.getAttribute('data-source-index'), row]));
-  const drawn = rings.map((ring) => rows.get(ring.getAttribute('data-source-index')));
-  if (drawn.every((row) => row !== undefined)) return drawn.map((row) => drawnLegendRowName(/** @type {Element} */ (row)));
-  return drawnLegendNames(rings.map((ring) => ({
-    name: /** @type {LegendRowName} */ (ring.getAttribute('data-track-label') ?? ''),
-    swatch: legendSwatch({ type: 'ring', trackIndex: Number(ring.getAttribute('data-track-index')) })
-  })));
+    .map((row) => [row.getAttribute('data-track-index'), row]));
+  return rings.map((ring) => {
+    const row = rows.get(ring.getAttribute('data-track-index'));
+    return row ? drawnLegendRowName(row) : ring.getAttribute(RING_LEGEND_NAME_ATTRIBUTE);
+  });
 };
 
 /**
  * The rings a record draws, outermost first by the radii Python wrote; null for a Result drawn before Python wrote
- * them (gbdraw 0.14.5 or earlier).
+ * them and the rings' names (gbdraw 0.14.5 or earlier).
  * @param {ParentNode} root The mounted root, which holds the Legend.
  * @param {ParentNode} record The record's group, or the root of a Result with one record.
  * @returns {DrawnRing[] | null}
@@ -109,12 +107,12 @@ export const ringsOfRecord = (root, record) => {
   const elements = Array.from(record.querySelectorAll(RING_SELECTOR));
   const radii = elements.map((element) => [RING_RADIUS_ATTRIBUTES.inner, RING_RADIUS_ATTRIBUTES.outer]
     .map((name) => numberOrNull(element.getAttribute(name))));
-  if (radii.some((pair) => pair.includes(null))) return null;
   const names = ringNames(root, elements);
+  if (radii.some((pair) => pair.includes(null)) || names.includes(null)) return null;
   return elements.map((element, index) => ({
     element,
     sourceIndex: element.getAttribute('data-source-index') ?? '',
-    name: names[index],
+    name: String(names[index]),
     inner: Number(radii[index][0]),
     outer: Number(radii[index][1])
   })).sort((a, b) => b.outer - a.outer);
@@ -193,8 +191,8 @@ export const ringPopupShows = (root, element, axisRecords) => ringPopupSource(ro
 
 /**
  * Where the pointer is on a hovered ring's record: the source base (R5), the drawn position, and the radial line's
- * ends in overlay coordinates, from the innermost ring's inner edge to the outer edge of the feature band (or of the
- * outermost ring when that lies further out). Null when the frame is not on screen.
+ * ends in overlay coordinates: from the smallest to the largest of the rings' radii and the outer edge of the feature
+ * band, so the line spans all the rings and reaches that edge. Null when the frame is not on screen.
  * @param {{ source: RingPopupSource, clientX: number, clientY: number, host: DOMRect | { left: number, top: number } }} input
  */
 export const ringPointAt = ({ source: { axis, frame, rings }, clientX, clientY, host }) => {

@@ -165,6 +165,8 @@ class ConservationTrack:
     track_color: str | None
     reference_side: ConservationReferenceSide | None
     hits: DataFrame
+    # The name the ring's Legend row draws (``LegendTable.ring_names``); None until the assembly names the ring.
+    legend_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -187,6 +189,18 @@ def conservation_legend_sources(
     """The legend's rings: the resolved drawn tracks (``resolve_conservation_track_colors``), outermost first."""
 
     return tuple(ConservationLegendSource.of(track, track.track_color) for track in tracks or ())
+
+
+def named_conservation_tracks(
+    tracks: Sequence[ConservationTrack], names: Mapping[int, str]
+) -> tuple[ConservationTrack, ...]:
+    """The tracks, each with the name its Legend row draws (``LegendTable.ring_names``, by ``track_index``); a track
+    already named keeps its name (a Multi-Record Canvas names its records' rings from its shared Legend)."""
+
+    return tuple(
+        track if track.legend_name is not None else replace(track, legend_name=names.get(int(track.track_index)))
+        for track in tracks
+    )
 
 
 @dataclass(frozen=True)
@@ -694,6 +708,7 @@ __all__ = [
     "ConservationTrack",
     "NORMALIZED_CONSERVATION_COLUMNS",
     "conservation_legend_sources",
+    "named_conservation_tracks",
     "conservation_slot_track",
     "conservation_track_gradient_colors",
     "empty_normalized_conservation_hits",

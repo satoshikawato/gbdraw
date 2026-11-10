@@ -257,6 +257,16 @@ class LegendTable(Mapping[LegendRowKey, LegendEntry]):
         texts = {key: text for (key, _), text in zip(solid_first, drawn)}
         return {key: LegendRowNames(self._name(key), texts[key]) for key, _ in shown}
 
+    def ring_names(self) -> dict[int, DrawnLegendName]:
+        """Each similarity ring's drawn name (``names``) by its ring (``track_index``), for its ring group."""
+
+        names = self.names()
+        return {
+            int(str(row.entry["track_index"])): names[key].drawn
+            for key, row in self._rows.items()
+            if row.swatch[0] == "ring" and key in names
+        }
+
     def drawn_keys(self) -> tuple[LegendRowKey, ...]:
         """The keys of every row the legend draws, the hidden ones included, in the order it draws them."""
 

@@ -21,6 +21,9 @@ HIT_DISPLAY_SPAN_ATTRIBUTES = ("data-display-start", "data-display-end")
 # A ring group's drawn radii (px, inner then outer, in the frame its record is drawn in): the order of the rings and
 # the radial line of the hover.
 RING_RADIUS_ATTRIBUTES = ("data-ring-inner-radius", "data-ring-outer-radius")
+# A ring group's name as its Legend row draws it (``LegendTable.ring_names``), written also when no Legend is drawn:
+# the ring's name in the hover's list.
+RING_LEGEND_NAME_ATTRIBUTE = "data-ring-legend-name"
 
 
 def _row_float(row: object, name: str, default: float = 0.0) -> float:
@@ -186,4 +189,4 @@ class ConservationDrawer:
         return tuple(inks)
 
 
-__all__ = ["HIT_DISPLAY_SPAN_ATTRIBUTES", "RING_RADIUS_ATTRIBUTES", "ConservationDrawer"]
+__all__ = ["HIT_DISPLAY_SPAN_ATTRIBUTES", "RING_LEGEND_NAME_ATTRIBUTE", "RING_RADIUS_ATTRIBUTES", "ConservationDrawer"]

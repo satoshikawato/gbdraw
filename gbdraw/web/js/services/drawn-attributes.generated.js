@@ -15,3 +15,5 @@ export const GRADIENT_SCALE_NAME_ATTRIBUTES = Object.freeze({ min: 'data-legend-
 export const HIT_DISPLAY_SPAN_ATTRIBUTES = Object.freeze({ start: 'data-display-start', end: 'data-display-end' });
 /** A similarity ring's drawn radii (px, in its record's frame). */
 export const RING_RADIUS_ATTRIBUTES = Object.freeze({ inner: 'data-ring-inner-radius', outer: 'data-ring-outer-radius' });
+/** A similarity ring's name as its Legend row draws it, written also when no Legend is drawn. */
+export const RING_LEGEND_NAME_ATTRIBUTE = 'data-ring-legend-name';

@@ -9,7 +9,11 @@ from ....comparisons.identity_scale import identity_color_domain
 from ....config.models import GbdrawConfig
 from ....layout.circular import RadialBand
 from ....layout.circular_ink import CircularInk, CircularInkRing, paint_shows
-from ....render.drawers.circular.conservation import RING_RADIUS_ATTRIBUTES, ConservationDrawer
+from ....render.drawers.circular.conservation import (
+    RING_LEGEND_NAME_ATTRIBUTE,
+    RING_RADIUS_ATTRIBUTES,
+    ConservationDrawer,
+)
 from ....svg.circular_conservation import generate_full_annulus_path_desc
 from ....svg.path_data import path_number
 from ....layout.record_coordinates import RecordDisplayTransform
@@ -98,6 +102,8 @@ class ConservationGroup:
         self.group.attribs["data-track-label"] = str(track_label)
         if track_color:
             self.group.attribs["data-track-color"] = str(track_color)
+        if track.legend_name is not None:
+            self.group.attribs[RING_LEGEND_NAME_ATTRIBUTE] = track.legend_name
         self.hits = track.hits
         self.record_transform = record_transform
         self.record_index = record_index

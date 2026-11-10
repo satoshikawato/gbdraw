@@ -72,12 +72,16 @@ const hit = (start, end, identity, fill = '#8b9cc1', opacity = null) => new Fake
   'data-match-kind': 'homology', 'data-identity': identity, 'data-display-start': start, 'data-display-end': end, fill,
   ...(opacity === null ? {} : { 'fill-opacity': opacity })
 }, { tag: 'path' });
-const ring = (sourceIndex, label, radii, hits, trackIndex = Number(sourceIndex) + 1) => new FakeElement({
+/** A ring as Python draws it: with its radii unless null, and the name its Legend row draws (`legendName`) unless null. */
+const ring = (sourceIndex, label, radii, hits, trackIndex = Number(sourceIndex) + 1, legendName = label) => new FakeElement({
   'data-gbdraw-slot-renderer': 'sequence_conservation', 'data-source-index': sourceIndex, 'data-track-index': trackIndex,
-  'data-track-label': label, ...(radii ? { 'data-ring-inner-radius': radii[0], 'data-ring-outer-radius': radii[1] } : {})
+  'data-track-label': label, ...(radii ? { 'data-ring-inner-radius': radii[0], 'data-ring-outer-radius': radii[1] } : {}),
+  ...(legendName === null ? {} : { 'data-ring-legend-name': legendName })
 }, { children: hits });
-/** A ring's Legend row: its drawn name (a `<text>` with that box) after its identity ramp. */
-const legendRow = (sourceIndex, drawnName, box = null) => new FakeElement({ legendRow: true, 'data-source-index': sourceIndex }, {
+/** A ring's Legend row (track index: its series' + 1, as `ring`): its drawn name (a `<text>` with that box) after its identity ramp. */
+const legendRow = (sourceIndex, drawnName, box = null) => new FakeElement({
+  legendRow: true, 'data-source-index': sourceIndex, 'data-track-index': Number(sourceIndex) + 1
+}, {
   children: [new FakeElement({}, { tag: 'path' }), new FakeElement({}, { tag: 'text', text: drawnName, box })]
 });
 const legend = (...rows) => new FakeElement({ id: 'conservation_identity_legend' }, { children: rows });
@@ -114,13 +118,21 @@ test('the rings of a record are listed outermost first by the radii Python wrote
   assert.deepEqual(ringsOfRecord(root, record).map((entry) => [entry.name, entry.sourceIndex, entry.inner, entry.outer]), [
     ['WSSV (1)', '1', 130, 140], ['Renamed <i>E. coli</i>', '2', 115, 125], ['WSSV (2)', '0', 100, 110]
   ]);
-  // Without a Legend for the rings, the Legend's naming rule over their labels, in the Legend's order (outer first).
-  const outerFirst = [ring('1', 'WSSV', [130, 140], []), ring('0', 'WSSV', [100, 110], [])];
-  const bare = recordGroup(0, outerFirst);
-  assert.deepEqual(ringsOfRecord(result([bare]), bare).map((entry) => entry.name), ['WSSV (1)', 'WSSV (2)']);
-  // A Result drawn before Python wrote the radii has no rings to list.
-  const old = recordGroup(0, [ring('0', 'a', null, []), ring('1', 'b', null, [])]);
+  // Without a Legend, the name Python wrote on each ring (LegendTable.ring_names), never one the Web derives from the
+  // labels: the Legend numbers rings in their drawn order and together with the feature rows ('GC content (2)').
+  const bare = recordGroup(0, [
+    ring('0', 'WSSV', [130, 140], [], 1, 'WSSV (2)'), ring('1', 'WSSV', [115, 125], [], 2, 'WSSV (1)'),
+    ring('2', 'GC content', [100, 110], [], 3, 'GC content (2)')
+  ]);
+  assert.deepEqual(ringsOfRecord(result([bare]), bare).map((entry) => entry.name), ['WSSV (2)', 'WSSV (1)', 'GC content (2)']);
+  // A drawn Legend row wins over the written name: it follows a rename made in the Web.
+  assert.deepEqual(ringsOfRecord(result([bare], [legendRow('0', 'Renamed')]), bare).map((entry) => entry.name),
+    ['Renamed', 'WSSV (1)', 'GC content (2)']);
+  // A Result drawn before Python wrote the radii and the names has no rings to list.
+  const old = recordGroup(0, [ring('0', 'a', null, [], 1, null), ring('1', 'b', null, [], 2, null)]);
   assert.equal(ringsOfRecord(result([old]), old), null);
+  const unnamed = recordGroup(0, [ring('0', 'a', [100, 110], [], 1, null)]);
+  assert.equal(ringsOfRecord(result([unnamed]), unnamed), null);
 });
 
 test('a ring reads its identity and drawn colour at a position from its hits\' drawn spans, the last drawn on top', () => {
