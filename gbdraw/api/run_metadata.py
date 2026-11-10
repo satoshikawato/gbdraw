@@ -3,10 +3,9 @@
 This module is the one producer of it for every surface. The Web Worker sends
 :func:`build_run_metadata` with its Results (and adds the fields a Session does
 not keep); the Session writers of the gbdraw command, for a run and for a
-re-save of a Session, store its saved form
-(:func:`gbdraw.session_io.saved_run_metadata`), so a Load of
-either Session reads what a Web Save of the same figure holds (OV-3240,
-OV-3244). The Web reads each row by ``resultIndex`` and checks ``resultName``
+re-save of a Session, store it as it is, and a Web Save writes the values the
+Worker sent, so both Sessions hold the same ``runMetadata`` for the same run
+(OV-3240, OV-3244). The Web reads each row by ``resultIndex`` and checks ``resultName``
 against the Result's name, so each Result is named here as its surface names
 it.
 """

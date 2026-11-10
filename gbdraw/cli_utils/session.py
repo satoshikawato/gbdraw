@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
@@ -40,7 +40,6 @@ from gbdraw.session_io import (
     _write_validated_session_json,
     build_session_json,
     safe_embedded_filename,
-    saved_run_metadata,
     serialize_file_entry,
 )
 from gbdraw.session_contract import SessionRunMetadata
@@ -81,7 +80,7 @@ class DiagramRunResult:
     protein_identity_manifest: Mapping[str, Any] | None = None
     legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] | None = None
     legacy_protein_derived_evidence: tuple[Mapping[str, Any], ...] | None = None
-    run_metadata: SessionRunMetadata = field(default_factory=lambda: SessionRunMetadata())
+    run_metadata: SessionRunMetadata | None = None
     canonical_request: DiagramRequest | None = None
     biological_feature_metadata: tuple[Mapping[str, Any], ...] = ()
     interactive_contexts: tuple[InteractiveSvgContext | None, ...] = ()
@@ -734,14 +733,10 @@ def _rendered_drawing_build(
             interactive_contexts,
         ),
     )
-    run_metadata = saved_run_metadata(build_run_metadata(
+    state["runMetadata"] = build_run_metadata(
         plan.drawing.mode,
         [RenderedResult(item, str(name)) for item, name in zip(items, result_names, strict=True)],
-    ))
-    if run_metadata:
-        state["runMetadata"] = run_metadata
-    else:
-        state.pop("runMetadata", None)
+    )
     build = _DrawingBuild(
         mode=plan.drawing.mode,
         # The Session stores the protein results this render computed (OV-1068).

@@ -824,10 +824,23 @@ const nextGenerate = async () => {
   return candidate;
 };
 
+// The run metadata a Session holds: the shown drawing's `runMetadata`, parsed, nothing stripped.
+const runMetadataOf = (bytes) => {
+  const session = JSON.parse(bytes);
+  return savedDrawingView(session, session.ui.activeDrawingId).runMetadata;
+};
+// A Web Save of the loaded Session.
+const webSaveRunMetadata = async (title) => {
+  const saved = await exportSession(title);
+  assert.equal(saved.status, 'saved', saved.error?.message);
+  return runMetadataOf(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())));
+};
+
 // OV-3244: a Session the gbdraw command saved holds the run notices a Web Save holds (an annotation that draws no
 // feature, an edit of a feature outside the crop, comparison rows whose IDs name no drawn record), so a Load shows
-// them without Generate. A CLI re-save of it holds them too.
-await test('a CLI Session and its CLI re-save show the run notices at Load without Generate', async () => {
+// them without Generate. A CLI re-save of it holds them too, and a Web Save of either writes the same `runMetadata`
+// (one shape, `gbdraw.api.run_metadata.build_run_metadata`).
+await test('a CLI Session and its CLI re-save show the run notices at Load without Generate, and a Web Save writes the same runMetadata', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-notices-'));
   try {
     const table = async (name, text) => {
@@ -848,8 +861,10 @@ await test('a CLI Session and its CLI re-save show the run notices at Load witho
       execFileSync('python', ['-m', 'gbdraw.cli', 'linear', ...input, '-o', output, '--session_output', file], {
         cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
       });
-      const result = await load(gunzipSync(await readFile(file)));
+      const bytes = gunzipSync(await readFile(file));
+      const result = await load(bytes);
       assert.equal(result.status, 'ok', result.error?.stack);
+      assert.deepEqual(await webSaveRunMetadata(`notices-${phase}`), runMetadataOf(bytes), phase);
       assert.deepEqual(state.annotationWarnings.value.map(({ code, recordId, resultIndex }) => [code, recordId, resultIndex]),
         [['feature_selector_unmatched', 'NC_001416.1', 0]], phase);
       assert.deepEqual(state.featureIdentityNotices.value.map(({ recordKey, status, kinds }) => [recordKey, status, kinds]),
@@ -858,6 +873,35 @@ await test('a CLI Session and its CLI re-save show the run notices at Load witho
         [['comparison_record_id_unmatched', ['contig_A', 'contig_B']]], phase);
       input = ['--session', file];
     }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// With no notice, the gbdraw command and a Web Save both write the three notice lists empty. A Session that omits
+// them (a Web Save before both wrote one shape) loads them as empty lists, and its Web Save writes them.
+await test('a CLI Session without notices and its Web Save write the same runMetadata; a Session that omits the lists loads them empty', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-no-notices-'));
+  try {
+    const file = path.join(directory, 'plain.gbdraw-session.json.gz');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', mito, '-o', path.join(directory, 'plain'),
+      '--session_output', file], { cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000 });
+    const bytes = gunzipSync(await readFile(file));
+    const cli = runMetadataOf(bytes);
+    assert.deepEqual(Object.keys(cli).sort(), ['annotationWarnings', 'comparisonWarnings', 'featureIdentityNotices', 'trackSlotGeometry']);
+    assert.deepEqual([cli.annotationWarnings, cli.featureIdentityNotices, cli.comparisonWarnings], [[], [], []]);
+    assert.equal((await load(bytes)).status, 'ok');
+    assert.deepEqual(await webSaveRunMetadata('no-notices'), cli);
+
+    const older = JSON.parse(bytes);
+    const olderRun = older.drawings.find(entry => entry.id === older.ui.activeDrawingId).runMetadata;
+    delete olderRun.featureIdentityNotices;
+    delete olderRun.comparisonWarnings;
+    delete olderRun.annotationWarnings;
+    assert.equal((await load(Buffer.from(JSON.stringify(older)))).status, 'ok');
+    assert.deepEqual([state.annotationWarnings.value, state.featureIdentityNotices.value, state.comparisonWarnings.value], [[], [], []]);
+    assert.ok(readRegionAxisRecords(state.trackSlotResolvedGeometry.value, 0).length > 0);
+    assert.deepEqual(await webSaveRunMetadata('omitted-lists'), cli);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

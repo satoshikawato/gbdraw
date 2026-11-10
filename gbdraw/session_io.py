@@ -300,25 +300,9 @@ class SessionBuildContext:
     cli_invocation_args: tuple[str, ...] = ()
     file_bindings: tuple[SessionFileBinding | Mapping[str, Any], ...] = ()
     # What the run reported beside its Results (``gbdraw.api.run_metadata``,
-    # the producer of what a Web Save writes); the Session keeps its saved
-    # form in place of any ``runMetadata`` a source Session held.
+    # the producer of what a Web Save writes); the Session keeps it as it is,
+    # in place of any ``runMetadata`` a source Session held.
     run_metadata: SessionRunMetadata | None = None
-
-
-def saved_run_metadata(metadata: SessionRunMetadata) -> SessionRunMetadata:
-    """What a Session written by gbdraw keeps of the run metadata: the fields
-    that hold something. A Load reads a missing notice list as an empty one."""
-
-    saved: SessionRunMetadata = {}
-    if "trackSlotGeometry" in metadata:
-        saved["trackSlotGeometry"] = metadata["trackSlotGeometry"]
-    if metadata.get("annotationWarnings"):
-        saved["annotationWarnings"] = metadata["annotationWarnings"]
-    if metadata.get("featureIdentityNotices"):
-        saved["featureIdentityNotices"] = metadata["featureIdentityNotices"]
-    if metadata.get("comparisonWarnings"):
-        saved["comparisonWarnings"] = metadata["comparisonWarnings"]
-    return saved
 
 
 def _feature_catalog_key(feature: Mapping[str, Any]) -> tuple[int, str] | None:
@@ -5908,9 +5892,8 @@ def build_session_json(
         {"name": name or f"Result {index + 1}", "content": content}
         for index, (name, content) in enumerate(svg_results)
     ]
-    saved = saved_run_metadata(context.run_metadata) if context.run_metadata is not None else None
-    if saved:
-        payload["runMetadata"] = _json_clone(saved)
+    if context.run_metadata is not None:
+        payload["runMetadata"] = _json_clone(context.run_metadata)
     else:
         payload.pop("runMetadata", None)
     editor_state = payload.get("editorState")
@@ -7860,7 +7843,6 @@ __all__ = [
     "normalize_current_session_artifacts",
     "legend_edits_by_row_key",
     "safe_embedded_filename",
-    "saved_run_metadata",
     "session_legend_edits_by_row_key",
     "serialize_file_entry",
     "session_depth_source_widths",

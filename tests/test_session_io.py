@@ -3681,12 +3681,12 @@ def _run_notice_inputs(tmp_path: Path) -> dict[str, Path]:
 def test_cli_session_saves_the_run_metadata_the_worker_reports(tmp_path: Path, case: str) -> None:
     """OV-3240, OV-3244: a CLI-saved Session holds each record's axis and the
     run notices, so the Web can select a region on the loaded Result and shows
-    the notices before any Generate. They are the saved form of what the Web
-    Worker reports for the same request (one producer,
-    ``gbdraw.api.run_metadata``), and each row names its Result as the Session
-    names it, also in a Circular batch whose second Result has its own rows."""
+    the notices before any Generate. They are what the Web Worker reports for
+    the same request (one producer, ``gbdraw.api.run_metadata``), which a Web
+    Save writes back as it is (``session-cli-compatibility.test.mjs``), and
+    each row names its Result as the Session names it, also in a Circular
+    batch whose second Result has its own rows."""
 
-    from gbdraw.session_io import saved_run_metadata
     from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 
     root = Path(__file__).resolve().parents[1]
@@ -3726,10 +3726,10 @@ def test_cli_session_saves_the_run_metadata_the_worker_reports(tmp_path: Path, c
                 row["resultName"] = names[row["resultIndex"]]
 
     saved = payload["runMetadata"]
-    assert saved == saved_run_metadata(reported)
-    expected_fields = ["trackSlotGeometry", "annotationWarnings"] + (
-        ["featureIdentityNotices", "comparisonWarnings"] if case == "linear" else [])
-    assert list(saved) == expected_fields
+    assert saved == reported
+    assert list(saved) == list(_RUN_METADATA_FIELDS)
+    assert all(saved[field] for field in ("annotationWarnings", *(
+        ("featureIdentityNotices", "comparisonWarnings") if case == "linear" else ())))
     assert saved["trackSlotGeometry"]["mode"] == case.split("-")[0]
     assert {row["resultIndex"] for row in rows(saved, "trackSlotGeometry")} == set(range(len(names)))
     # Each row names its Result as the Session does, as in a Web Save (OV-3243).
@@ -3740,7 +3740,7 @@ def test_cli_session_saves_the_run_metadata_the_worker_reports(tmp_path: Path, c
 
 def test_cli_resave_of_a_session_30_replaces_its_run_metadata(tmp_path: Path) -> None:
     """A re-save of an older Session (27-30, migrated on the way) keeps the
-    new run's metadata in place of the source's, never beside it."""
+    new run's metadata as it is, in place of the source's, never beside it."""
 
     source = json.loads(gzip.decompress(
         (Path(__file__).parent / "fixtures/sessions/scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz").read_bytes()
@@ -3758,7 +3758,7 @@ def test_cli_resave_of_a_session_30_replaces_its_run_metadata(tmp_path: Path) ->
     geometry = {"schema": 1, "mode": "circular", "source": "resolved",
                 "records": [{"resultIndex": 0, "resultName": "again", "recordIndex": 0}]}
 
-    def resave(run_metadata: dict) -> dict:
+    def resave(run_metadata: dict | None) -> dict:
         document = build_session_json(
             SessionBuildContext(mode="circular", output_prefix="again", render_formats=("svg",),
                                 source_session=source, run_metadata=run_metadata),
@@ -3771,9 +3771,11 @@ def test_cli_resave_of_a_session_30_replaces_its_run_metadata(tmp_path: Path) ->
         return drawing_view(document, mode="circular")
 
     empty_notices = {"annotationWarnings": [], "featureIdentityNotices": [], "comparisonWarnings": []}
-    assert resave({"trackSlotGeometry": geometry, **empty_notices})["runMetadata"] == {"trackSlotGeometry": geometry}
-    # A run that reports nothing leaves no runMetadata of the source behind.
-    assert "runMetadata" not in resave(empty_notices)
+    fresh = {"trackSlotGeometry": geometry, **empty_notices}
+    assert resave(fresh)["runMetadata"] == fresh
+    assert resave(empty_notices)["runMetadata"] == empty_notices
+    # A save with no run metadata leaves none of the source behind.
+    assert "runMetadata" not in resave(None)
 
 
 def _circular_genbank(*records: tuple[str, str, str]) -> str:

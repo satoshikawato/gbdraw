@@ -6386,15 +6386,16 @@ const admitSavedFeatureCatalog = (featureCatalog, logicalResults, saved, activeD
     throw requiresGenerate();
   }
 };
+// The run metadata as Generate received it, the shape the gbdraw command's
+// Session writers store (`gbdraw.api.run_metadata.build_run_metadata`): every
+// notice list, and the geometry when a Result has one.
 /** @param {SessionArtifactView} view */
 const artifactRunMetadata = (view) => ({
   ...(view.trackSlotResolvedGeometry
     ? { trackSlotGeometry: cloneJsonData(view.trackSlotResolvedGeometry) } : {}),
   annotationWarnings: cloneJsonData(view.annotationWarnings),
-  ...(view.featureIdentityNotices?.length
-    ? { featureIdentityNotices: cloneJsonData(view.featureIdentityNotices) } : {}),
-  ...(view.comparisonWarnings?.length
-    ? { comparisonWarnings: cloneJsonData(view.comparisonWarnings) } : {})
+  featureIdentityNotices: cloneJsonData(view.featureIdentityNotices),
+  comparisonWarnings: cloneJsonData(view.comparisonWarnings)
 });
 /** @param {SessionArtifactView} view */
 const artifactCliInvocation = (view) => {
