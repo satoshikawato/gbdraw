@@ -4329,8 +4329,9 @@
                      A track is found by its id; its stack rows follow it. -->
                 <div v-settings-section="'feature-density'" data-setting="feature-density" class="card">
                     <details>
-                        <summary :aria-label="t('Feature density')"><settings-section-title section="feature-density"></settings-section-title> <setting-note setting="feature-density"></setting-note> <help-tip :text="t('Each track counts the features one query finds in each window of every record, as a heatmap or a histogram. The query is a feature type (* for every type), with an optional qualifier, value regex and length range.')"></help-tip></summary>
+                        <summary :aria-label="t('Feature density')"><settings-section-title section="feature-density"></settings-section-title></summary>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200" data-feature-density-tracks>
+                            <span class="input-label text-[10px]">{{ t('Feature density tracks') }} <setting-note id="feature-density-timing" setting="feature-density"></setting-note> <help-tip id="help-feature-density-tracks" :text="t('Each track counts the features one query finds in each window of every record, as a heatmap or a histogram. The query is a feature type (* for every type), with an optional qualifier, value regex and length range.')"></help-tip></span>
                             <button type="button" class="btn btn-secondary text-[10px] w-full px-2" @click="addFeatureDensityTrack()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add feature density track') }}</button>
                             <div
                                 v-for="(track, i) in adv.feature_density_tracks"
