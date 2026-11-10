@@ -269,10 +269,14 @@ def drawn_unit_rows(grid_rows: Sequence[int | None], unit_records: Sequence[obje
     A request places every record or none (``InputPlace``); a partial placement is refused."""
 
     if len(grid_rows) != len(unit_records):
-        raise ValidationError("Each drawn unit needs its grid row and its record.")
+        raise ValidationError(
+            "Each drawn unit needs its grid row and its record.", diagnostic={"code": "INPUT_INVALID"}
+        )
     placed = [row for row in grid_rows if row is not None]
     if placed and len(placed) != len(grid_rows):
-        raise ValidationError("If one Linear record has grid_row, every record must have it.")
+        raise ValidationError(
+            "If one Linear record has grid_row, every record must have it.", diagnostic={"code": "INPUT_INVALID"}
+        )
     if placed:
         numbers = {row: index for index, row in enumerate(sorted(set(placed)))}
         return tuple(numbers[row] for row in placed)
