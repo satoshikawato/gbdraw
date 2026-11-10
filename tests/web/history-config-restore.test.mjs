@@ -44,6 +44,32 @@ for (const [domain, key, first, second] of [
   assert.equal(state.activeDrawing()[domain][key], first, `${domain}.${key}: Redo explicit value`);
 }
 
+// OV-3351: an emptied number field holds '' (v-model.number). Undo of the
+// emptying restores the number, and Redo empties the field again, whether the
+// field's default is Auto (null) or a number, in every settings container.
+for (const [domain, key, value] of [
+  ['adv', 'legend_font_size', 21],
+  ['adv', 'legend_box_size', 14],
+  ['adv', 'plot_title_font_size', 30],
+  ['adv', 'gc_content_tick_interval', 50],
+  ['form', 'circular_region_start', 1000],
+  ['circularConservation', 'ring_width', 12]
+]) {
+  const container = () => state.activeDrawing()[domain];
+  const original = container()[key];
+  await history.initializeIntentBaseline();
+  await history.runUndoable('Set value', () => { container()[key] = value; });
+  await history.runUndoable('Empty the field', () => { container()[key] = ''; });
+  await history.undo();
+  assert.equal(container()[key], value, `${domain}.${key}: Undo of the emptying`);
+  await history.redo();
+  // A field with a row reads its blank as Auto (null); both show an empty field.
+  assert.ok(['', null].includes(container()[key]), `${domain}.${key}: Redo of the emptying, ${JSON.stringify(container()[key])}`);
+  await history.undo();
+  await history.undo();
+  assert.equal(container()[key], original, `${domain}.${key}: Undo of the value`);
+}
+
 // R11, TK-12: a Width the row shows as invalid is a draft the app wrote, so
 // Undo and Redo install it as captured; only Load reads a file's stack.
 {
@@ -190,9 +216,15 @@ console.log('History restores nullable config values and preserves key guards.')
 
 // SE-01, N-19, N-20: History checkpoints and the Session rollback hold the
 // admitted feature catalog by reference; state admits no other catalog.
+// OV-3285: a checkpoint restore installs the catalog's own features, as
+// Generate and Load do, so the rule matches recorded on them reach the
+// features each Result draws.
 {
   const { FEATURE_CATALOG_SCHEMA, admitFeatureCatalog, featureStateFromCatalog } = await import('../../gbdraw/web/js/services/feature-catalog.js');
-  const { buildEditorStateData, applyEditorStateData } = await import('../../gbdraw/web/js/services/config.js');
+  const {
+    buildEditorStateData, applyEditorStateData, buildFeatureStateData, applyFeatureStateData,
+    buildOrthogroupStateData, applyOrthogroupStateData
+  } = await import('../../gbdraw/web/js/services/config.js');
   const marker = 'se01-catalog-payload';
   const catalog = admitFeatureCatalog({
     schema: FEATURE_CATALOG_SCHEMA,
@@ -214,12 +246,17 @@ console.log('History restores nullable config values and preserves key guards.')
   installShownDrawing('circular');
   state.results.value = [{ name: 'diagram.svg', content: '<svg />' }];
   state.featureCatalog.value = catalog;
+  const generated = featureStateFromCatalog(catalog, { mode: 'circular' });
+  state.extractedFeatures.value = generated.extractedFeatures;
+  state.biologicalFeatures.value = generated.biologicalFeatures;
+  state.featureRecordIds.value = generated.featureRecordIds;
   const liveCatalog = () => window.Vue.toRaw?.(state.featureCatalog.value) ?? state.featureCatalog.value;
   assert.strictEqual(liveCatalog(), catalog);
 
   const artifactSnapshots = createHistorySnapshotService({
     state, fileStore: createInputFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData,
-    buildEditorStateData, applyEditorStateData
+    buildEditorStateData, applyEditorStateData, buildFeatureStateData, applyFeatureStateData,
+    buildOrthogroupStateData, applyOrthogroupStateData
   });
   const artifactHistory = createHistoryManager({
     ...artifactSnapshots.drawingHistory(state.activeDrawing().id),
@@ -234,6 +271,12 @@ console.log('History restores nullable config values and preserves key guards.')
     await artifactHistory[direction]();
     assert.strictEqual(liveCatalog(), catalog, `${direction} keeps the admitted catalog object`);
     assert.equal(featureStateFromCatalog(liveCatalog(), { mode: 'circular' }).extractedFeatures.length, 1);
+    for (const field of ['extractedFeatures', 'biologicalFeatures']) {
+      assert.equal(state[field].value.length, generated[field].length);
+      state[field].value.forEach((feature, index) => assert.strictEqual(
+        feature, generated[field][index], `${direction} installs the catalog's own ${field}, not copies`
+      ));
+    }
   }
 
   applyEditorStateData(state.activeDrawing(), buildEditorStateData(state.activeDrawing()));
@@ -241,6 +284,9 @@ console.log('History restores nullable config values and preserves key guards.')
   applyEditorStateData(state.activeDrawing(), { featureCatalog: structuredClone(catalog) });
   assert.equal(state.featureCatalog.value, null, 'an unadmitted catalog never enters state');
   state.featureCatalog.value = null;
+  state.extractedFeatures.value = [];
+  state.biologicalFeatures.value = [];
+  state.featureRecordIds.value = [];
   state.results.value = [];
   state.activeDrawing().legendEntries.value = [];
   console.log('History and Session rollback keep the admitted feature catalog by reference.');

@@ -392,9 +392,10 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The snapshot service's restore of an intent; History awaits it.
  * @property {() => HistoryCheckpoint | Promise<HistoryCheckpoint>} buildCheckpoint
  *   The snapshot service's capture of an artifact checkpoint.
- * @property {(checkpoint: HistoryCheckpoint, restored: { drawn: boolean }) => unknown} applyCheckpoint
+ * @property {(checkpoint: HistoryCheckpoint, restored: { drawn: boolean | undefined }) => unknown} applyCheckpoint
  *   The snapshot service's restore of an artifact checkpoint; History awaits it. `restored.drawn`:
- *   whether its figure is the one its state draws.
+ *   whether its figure is the one its state draws; `false`: it is not, and History asks for its one
+ *   redraw once it is restored (`figureRestored`, D-174); `undefined`: not known.
  * @property {(() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>) | null} [captureGeneratedArtifactHandle]
  *   The snapshot service's capture of the generated artifact for a replacement step.
  * @property {((handle: HistoryArtifactHandle, options: { clearFailedGeneratePresentation: boolean }) => unknown) | null} [restoreGeneratedArtifactHandle]
@@ -1993,7 +1994,7 @@ export const createHistoryManager = ({
     await restoreReported({ figureDrawn, figureRestored }, record.drawn, async () => {
       restoring.value = true;
       try {
-        await applyCheckpoint(record.checkpoint, { drawn: record.drawn === true });
+        await applyCheckpoint(record.checkpoint, { drawn: record.drawn });
       } finally {
         restoring.value = false;
       }

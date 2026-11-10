@@ -810,28 +810,11 @@ def promote_legacy_losatp_cache_candidates(
         if scan.promotion is None:
             return json.dumps({"status": "no-match", "rejections": rejections})
         promotion = scan.promotion
-        protein_id_map = {}
-        old_rows = [
-            line.split("\t")
-            for line in str(entries[promotion.candidate_index].get("text") or "").splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ]
-        new_rows = [
-            line.split("\t")
-            for line in promotion.rewritten_tsv.splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ]
-        for old_row, new_row in zip(old_rows, new_rows):
-            if len(old_row) < 2 or len(new_row) < 2:
-                continue
-            protein_id_map[old_row[0]] = new_row[0]
-            protein_id_map[old_row[1]] = new_row[1]
         return json.dumps({
             "status": "promoted",
             "candidateIndex": candidate_indexes[promotion.candidate_index],
             "entry": promotion.entry,
             "text": promotion.rewritten_tsv,
-            "proteinIdMap": protein_id_map,
             "rejections": rejections,
         })
     except Exception as error:

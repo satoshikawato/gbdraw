@@ -310,7 +310,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // when the restored Legend lacks the type's default row (OV-169): Undo of
   // an Apply to all returns the row it recolored, so it needs no Python run.
   // The composition root does not call this for a figure History recorded as
-  // drawn (D-24 (OV-731)).
+  // drawn (D-24 (OV-731)), nor for one recorded as not drawn: History asks for
+  // that one redraw itself (D-174).
   /** @param {Partial<SpecificColorRule>[]} previousRules */
   const followRestoredRules = (previousRules) => {
     const drawing = state.activeDrawing();

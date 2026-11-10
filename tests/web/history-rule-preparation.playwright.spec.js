@@ -1,8 +1,11 @@
 const { test, expect } = require('@playwright/test');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
-const { openApp, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
-const { expectLiveEqualsGenerate } = require('./helpers/live-generate-parity.cjs');
-const { appAction, history } = require('./helpers/live-generate-parity-steps.cjs');
+const { gunzipSync } = require('node:zlib');
+const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
+const { openBatch } = require('./helpers/audit-browser.cjs');
+const { appAction, addColorRule, history } = require('./helpers/live-generate-parity-steps.cjs');
 
 const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
 
@@ -129,4 +132,91 @@ test('Redo of a rule predicate change shows what Generate draws', async ({ page 
   await history(page, 'redo');
   await history(page, 'redo');
   await expectLiveEqualsGenerate(page, { label: 'Redo of a rule predicate change' });
+});
+
+// OV-3285: a feature color edit and a product-scope hide, both undone, end
+// in the restore of a History checkpoint. A rule added after it shows live
+// what Generate draws: the restore installs the catalog's own features, on
+// which the rule matches are recorded, not copies of them.
+const undoneFeatureEdits = async (page) => {
+  await openBatch(page);
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const colored = app.extractedFeatures.find((item) => item.locus_tag === 'TESTA_0001');
+    await app.openFeatureEditorFromList(colored, null);
+    await app.requestFeatureColorChange(colored, '#ff0000');
+    await app.handleFeatureStyleScopeChoice('annotationLabel');
+    const hidden = app.extractedFeatures.find((item) => item.locus_tag === 'TESTA_0004');
+    await app.openFeatureEditorFromList(hidden, null);
+    await app.updateClickedFeatureVisibility('off');
+    await app.handleFeatureVisibilityScopeChoice('product');
+    app.clickedFeature = null;
+  });
+  await settleLive(page);
+  await history(page, 'undo');
+  await history(page, 'undo');
+};
+
+test('A visibility rule added after the Undo of feature edits shows what Generate draws', async ({ page }) => {
+  test.setTimeout(240_000);
+  await undoneFeatureEdits(page);
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.addFeatureVisibilityRule();
+    const index = app.featureVisibilityManualRules.length - 1;
+    const rule = { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '_0004$', action: 'off' };
+    for (const [field, value] of Object.entries(rule)) await app.setFeatureVisibilityRuleField(index, field, value);
+  });
+  await expectLiveEqualsGenerate(page, { label: 'Visibility rule after the Undo of feature edits' });
+});
+
+test('A color rule added after the Undo of feature edits shows what Generate draws', async ({ page }) => {
+  test.setTimeout(240_000);
+  await undoneFeatureEdits(page);
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0004$', color: '#ff00ff', cap: 'fourth' });
+  await expectLiveEqualsGenerate(page, { label: 'Color rule after the Undo of feature edits' });
+});
+
+// OV-3352: a Generate that promotes legacy protein cache entries installs the
+// catalog's own features, as every other Generate does, so a rule added after
+// it shows live what Generate draws. The v33 Session's Web draft says Pairwise
+// while its stored result is an Orthogroup run, as when a user changed the
+// mode after Generate and saved: the Load promotes only the cache entries of
+// the adjacent pairs, and the Orthogroup Generate promotes the others.
+test('A visibility rule added after a Generate that migrates legacy protein caches shows what Generate draws', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const session = JSON.parse(gunzipSync(readFileSync(
+    resolve('tests/fixtures/sessions/BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz')
+  )).toString('utf8'));
+  session.config.losat.blastp.mode = 'pairwise';
+  const pairwiseDraft = testInfo.outputPath('BGC0000708-BGC0000713.v33-pairwise-draft.gbdraw-session.json');
+  writeFileSync(pairwiseDraft, JSON.stringify(session));
+  page.on('dialog', dialog => dialog.accept());
+  await openApp(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(pairwiseDraft);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
+  await page.evaluate(() => { window.__GBDRAW_APP__.losat.blastp.mode = 'orthogroup'; });
+  await generateAndWaitForResult(page, { timeout: 300_000 });
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const { featureStateFromCatalog } = await import('./js/services/feature-catalog.js');
+    const raw = (value) => window.Vue.toRaw(value);
+    const catalog = featureStateFromCatalog(raw(state.featureCatalog.value), { mode: 'linear' });
+    return {
+      promoted: state.legacyProteinRawCandidates.value.entries.filter((entry) => entry.state === 'promoted').length > 0,
+      catalogFeaturesInstalled: raw(state.extractedFeatures.value).every((feature, index) => feature === catalog.extractedFeatures[index]),
+      // The Generate draws from current protein handles only: no legacy `p_r_` protein ID is left to rewrite.
+      legacyProteinIds: JSON.stringify([
+        state.orthogroups.value, state.selectedOrthogroupAlignmentFeature.value, state.extractedFeatures.value
+      ]).match(/p_r_[0-9a-f]+_\d+_\d+_/g)?.length ?? 0
+    };
+  })).toEqual({ promoted: true, catalogFeaturesInstalled: true, legacyProteinIds: 0 });
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.addFeatureVisibilityRule();
+    const index = app.featureVisibilityManualRules.length - 1;
+    const rule = { recordId: '*', featureType: 'CDS', qualifier: 'protein_id', value: '^CAG38690\\.1$', action: 'off' };
+    for (const [field, value] of Object.entries(rule)) await app.setFeatureVisibilityRuleField(index, field, value);
+  });
+  await expectLiveEqualsGenerate(page, { label: 'Visibility rule after a migrating Generate' });
 });
