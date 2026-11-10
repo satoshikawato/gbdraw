@@ -112,6 +112,25 @@ def test_circular_scalar_area_draws_the_outer_line_and_an_arc_baseline() -> None
     assert desc.count("A") == 2
 
 
+@pytest.mark.parametrize("nudged", [2, 3], ids=["first-middle-point", "second-middle-point"])
+def test_points_tied_for_farthest_keep_the_same_point_whatever_their_last_bits(nudged: int) -> None:
+    """OV-3190: on an arc of equal radius (a GC line across a run of N, a baseline), the two middle points of a
+    stretch lie equally far from its chord. Which one the path kept followed the last bits of their cos and sin,
+    which differ between CPython and Pyodide: the Web drew one GC point 0.4 px from where the CLI drew it."""
+
+    angles = np.radians(np.linspace(25.0, 27.0, 6))
+    xs, ys = 296.17 * np.sin(angles), -296.17 * np.cos(angles)
+    keep = kept_track_points(xs, ys)
+    # A few ulps outward: what another platform's cos and sin give for the same angle.
+    xs_other, ys_other = xs.copy(), ys.copy()
+    xs_other[nudged] *= 1.0 + 4e-16
+    ys_other[nudged] *= 1.0 + 4e-16
+
+    assert keep[[2, 3]].sum() == 1
+    assert np.array_equal(kept_track_points(xs_other, ys_other), keep)
+    assert keep[2]
+
+
 def test_index_arrays_are_platform_integers(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pyodide's NumPy is 32-bit (intp is int32) and refuses int64 indices in ``ufunc.reduceat``; every index
     array the simplification builds must be ``np.intp`` so the Web build draws the same path."""

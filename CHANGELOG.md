@@ -219,6 +219,14 @@ into the `[Unreleased]` list below.
   polygon instead of a ring. The rings now follow the circle between samples,
   in the CLI, the Python API, and the Web app. Longer records draw as before
   (OV-2863).
+- Fixed: the Web app and the CLI could draw a GC content, GC skew or Depth
+  line through a different point where two points of the line lay equally far
+  from the straight piece the path simplifies it to: one point of the GC line
+  across the gap of human chromosome 21 sat 0.4 px apart. Which of the two the
+  path kept followed the last bits of the platform's sine and cosine. The path
+  now keeps the first of them on every platform, so the Web app and the CLI
+  draw the same line. Figures that had such a tie move by at most 0.02 px,
+  the path's own tolerance (OV-3190).
 - Fixed: on a Circular Multi-Record Canvas whose `--multi_record_position`
   (Web: Record Order) draws the records in another order than they were given,
   a moved record took another record's feature edits, display start or crop,

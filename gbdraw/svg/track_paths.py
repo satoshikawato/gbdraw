@@ -17,6 +17,11 @@ from numpy.typing import ArrayLike, NDArray
 from .path_data import path_line_to, path_number
 
 TRACK_PATH_TOLERANCE_PX = 0.02
+# Distances from a chord closer than this to the farthest one count as tied. Points of an arc of equal radius (a GC
+# line across a run of N, a baseline) lie equally far from the chord on either side of its middle, and the cos and
+# sin of their coordinates differ in their last bits between CPython and Pyodide (about 1e-13 px here), so the first
+# of the tied points is kept on every platform (OV-3190).
+_FARTHEST_TIE_PX = 1e-9
 
 
 def kept_track_points(xs: NDArray[np.float64], ys: NDArray[np.float64], segment_starts: Sequence[int] = ()) -> NDArray[np.bool_]:
@@ -24,9 +29,9 @@ def kept_track_points(xs: NDArray[np.float64], ys: NDArray[np.float64], segment_
 
     The ends of the line and of each drawn segment (``segment_starts`` are the indices where a segment after
     the first begins) are always kept. Between two kept points, the point farthest from the straight
-    segment joining them is kept while that distance exceeds ``TRACK_PATH_TOLERANCE_PX``; every pending
-    stretch is split in the same round (level-synchronous, vectorized). A NaN or infinite coordinate raises
-    ``ValueError``.
+    segment joining them is kept while that distance exceeds ``TRACK_PATH_TOLERANCE_PX``, the first of them
+    where several are within ``_FARTHEST_TIE_PX`` of the farthest; every pending stretch is split in the same
+    round (level-synchronous, vectorized). A NaN or infinite coordinate raises ``ValueError``.
     """
 
     if not (np.isfinite(xs).all() and np.isfinite(ys).all()):
@@ -58,7 +63,7 @@ def kept_track_points(xs: NDArray[np.float64], ys: NDArray[np.float64], segment_
         along = np.clip(np.divide(px * dx + py * dy, squared, out=np.zeros_like(squared), where=squared > 0), 0.0, 1.0)
         distance = np.hypot(px - along * dx, py - along * dy)
         farthest = np.maximum.reduceat(distance, first_offsets)
-        at_farthest = np.flatnonzero(distance == farthest[stretch])
+        at_farthest = np.flatnonzero(distance >= farthest[stretch] - _FARTHEST_TIE_PX)
         first_of_stretch = np.r_[True, stretch[at_farthest][1:] != stretch[at_farthest][:-1]]
         split_points = points[at_farthest[first_of_stretch]]
         split = farthest > TRACK_PATH_TOLERANCE_PX
