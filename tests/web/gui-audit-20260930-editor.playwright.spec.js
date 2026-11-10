@@ -2,13 +2,14 @@
 // A test marked test.fail(true, '<ID>') asserts the correct behavior of a
 // current defect; the PR that fixes the audit ID removes the mark.
 const { test, expect } = require('@playwright/test');
-const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const {
+  evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, generateAndWaitForResult
+} = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   HMMT_SESSION,
   featurePresentation,
   legendCaptions,
-  loadSessionFile,
   openBatch,
   openFresh,
   openWithGenBank,
@@ -18,7 +19,7 @@ const {
 } = require('./helpers/audit-browser.cjs');
 const fs = require('node:fs/promises');
 const { download, generate, load } = require('./helpers/mode-transition.cjs');
-const { expectLiveEqualsGenerate } = require('./helpers/live-generate-parity.cjs');
+const { expectLiveEqualsGenerate, sameStepStart } = require('./helpers/live-generate-parity.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -28,348 +29,512 @@ test.describe.configure({ retries: 0 });
 // feature catalog (no presentation), as Generate does.
 const notDrawn = (value) => value == null || /\|hidden$/.test(value);
 
-test('batch drawer lists and edits the features of the displayed Result', async ({ page }) => {
-  test.setTimeout(300_000);
-  await openBatch(page);
-  await selectResult(page, 1);
-  await page.locator('.drawer-toggle').click();
-  const rows = await page.evaluate(() => window.__GBDRAW_APP__.visibleFeatureRows.map((row) => row.record_id));
-  expect(rows.length).toBeGreaterThan(0);
-  expect([...new Set(rows)]).toEqual(['TESTB']);
-  await page.locator('.right-drawer').getByRole('button', { name: 'Edit', exact: true }).first().click();
-  await expect(page.locator('.feature-popup')).toBeVisible();
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature?.feat?.record_id)).toBe('TESTB');
-});
-
-test('batch record-wide color and visibility scopes reach the other Result when it is displayed', async ({ page }) => {
-  test.setTimeout(300_000);
-  await openBatch(page);
-  await evaluateWithRetainedPromise(page, async () => {
-    const app = window.__GBDRAW_APP__;
-    const colored = app.extractedFeatures.find((feature) => feature.locus_tag === 'TESTA_0001');
-    await app.openFeatureEditorFromList(colored, null);
-    await app.requestFeatureColorChange(colored, '#ff0000');
-    await app.handleFeatureStyleScopeChoice('annotationLabel');
-    const hidden = app.extractedFeatures.find((feature) => feature.locus_tag === 'TESTA_0004');
-    await app.openFeatureEditorFromList(hidden, null);
-    await app.updateClickedFeatureVisibility('off');
-    await app.handleFeatureVisibilityScopeChoice('product');
-    app.clickedFeature = null;
-  });
-  await settle(page);
-  const edited = await featurePresentation(page, ['TESTA_0001', 'TESTA_0004']);
-  expect(edited.TESTA_0001.mounted).toBe('#ff0000|shown');
-  expect(notDrawn(edited.TESTA_0004.mounted)).toBe(true);
-  await selectResult(page, 1);
-  const displayed = await featurePresentation(page, ['TESTB_0001', 'TESTB_0002', 'TESTB_0004']);
-  expect(displayed.TESTB_0001.mounted).toBe('#ff0000|shown');
-  expect(displayed.TESTB_0002.mounted).toBe('#ff0000|shown');
-  expect(notDrawn(displayed.TESTB_0004.mounted)).toBe(true);
-});
-
-test('batch live legend deletion reaches the other Result when it is displayed', async ({ page }) => {
-  test.setTimeout(300_000);
-  await openBatch(page);
-  expect(await legendCaptions(page)).toContain('GC content');
-  await evaluateWithRetainedPromise(page, async () => {
-    const app = window.__GBDRAW_APP__;
-    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'));
-  });
-  await settle(page);
-  expect(await legendCaptions(page)).not.toContain('GC content');
-  await selectResult(page, 1);
-  expect(await legendCaptions(page)).not.toContain('GC content');
-});
-
-// D-07 (PD-OI-062) Must preserve: the displayed Result's export, Save -> Load
-// -> Result selection, and Undo reaching every Result.
-test('batch edits shown on another Result reach its export, its Session, and Undo', async ({ page, browser }, testInfo) => {
+// The batch fixture's two Results on one page; its cases run as steps. Each
+// step reads its own start, and a step that needs Result 1 shown shows it. The
+// edits of the record-wide and legend steps are the three History actions of
+// D-07, which then undoes them back to the Generate.
+test('batch Results: the drawer, edits that reach the other Result, its export, Session and Undo, then annotations, padding and a failed live edit', async ({ page, browser }, testInfo) => {
   test.setTimeout(600_000);
   await openBatch(page);
+  const showFirstResult = async () => {
+    if (await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await selectResult(page, 0);
+  };
+
+  await test.step('batch drawer lists and edits the features of the displayed Result', async () => {
+    await selectResult(page, 1);
+    await page.locator('.drawer-toggle').click();
+    const rows = await page.evaluate(() => window.__GBDRAW_APP__.visibleFeatureRows.map((row) => row.record_id));
+    expect(rows.length).toBeGreaterThan(0);
+    expect([...new Set(rows)]).toEqual(['TESTB']);
+    await page.locator('.right-drawer').getByRole('button', { name: 'Edit', exact: true }).first().click();
+    await expect(page.locator('.feature-popup')).toBeVisible();
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature?.feat?.record_id)).toBe('TESTB');
+    // The next steps start with no popup, the drawer closed and Result 1 shown.
+    await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+    await page.locator('.drawer-toggle').click();
+    await expect(page.locator('.right-drawer')).toBeHidden();
+    await selectResult(page, 0);
+  });
+
+  // D-07's start: the History and the look of each Result after the Generate.
   const undoCountBefore = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   const original = await featurePresentation(page, ['TESTA_0001', 'TESTA_0004', 'TESTB_0001', 'TESTB_0004']);
-  await evaluateWithRetainedPromise(page, async () => {
-    const app = window.__GBDRAW_APP__;
-    const colored = app.extractedFeatures.find((feature) => feature.locus_tag === 'TESTA_0001');
-    await app.openFeatureEditorFromList(colored, null);
-    await app.requestFeatureColorChange(colored, '#ff0000');
-    await app.handleFeatureStyleScopeChoice('annotationLabel');
-    const hidden = app.extractedFeatures.find((feature) => feature.locus_tag === 'TESTA_0004');
-    await app.openFeatureEditorFromList(hidden, null);
-    await app.updateClickedFeatureVisibility('off');
-    await app.handleFeatureVisibilityScopeChoice('product');
-    app.clickedFeature = null;
-    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'));
-  });
-  await settle(page);
-  await selectResult(page, 1);
-  const shown = await featurePresentation(page, ['TESTB_0001', 'TESTB_0004']);
-  expect(shown.TESTB_0001.results[1]).toBe('#ff0000|shown');
-  expect(notDrawn(shown.TESTB_0004.mounted)).toBe(true);
-  expect(notDrawn(shown.TESTB_0004.results[1])).toBe(true);
-  expect(await legendCaptions(page, { source: 'result' })).not.toContain('GC content');
 
-  const [exportDownload] = await Promise.all([
-    page.waitForEvent('download'),
-    evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.downloadSVG())
-  ]);
-  const exported = await fs.readFile(await exportDownload.path(), 'utf8');
-  expect(exported).not.toContain('data-legend-key="GC content"');
-  expect(exported).toContain('#ff0000');
-
-  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'batch-edits'; });
-  const sessionFile = testInfo.outputPath('batch-edits.gbdraw-session.json.gz');
-  await download(page, 'Save Session', sessionFile);
-  const fresh = await load(browser, sessionFile);
-  try {
-    await fresh.locator('h2 select').selectOption({ index: 1 });
-    await expect.poll(async () => (await featurePresentation(fresh, ['TESTB_0001'])).TESTB_0001.mounted, {
-      timeout: 60_000
-    }).toBe('#ff0000|shown');
-    await settle(fresh);
-    expect(notDrawn((await featurePresentation(fresh, ['TESTB_0004'])).TESTB_0004.mounted)).toBe(true);
-    expect(await legendCaptions(fresh)).not.toContain('GC content');
-  } finally {
-    await fresh.context().close();
-  }
-
-  // Undo back to the Generate also restores the Result selection of that
-  // step; each Result then shows its original look when displayed.
-  while (await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()) > undoCountBefore) {
-    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
-    await settle(page);
-  }
-  const displayed = await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex);
-  for (const index of [displayed, 1 - displayed]) {
-    if (index !== displayed) await selectResult(page, index);
-    const tags = index === 0 ? ['TESTA_0001', 'TESTA_0004'] : ['TESTB_0001', 'TESTB_0004'];
-    const undone = await featurePresentation(page, tags);
-    tags.forEach((tag) => {
-      expect(undone[tag].mounted, `${tag} on Result ${index + 1}`).toBe(original[tag].results[index]);
-      expect(undone[tag].results[index], `${tag} in Result ${index + 1}`).toBe(original[tag].results[index]);
+  await test.step('batch record-wide color and visibility scopes reach the other Result when it is displayed', async () => {
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      const colored = app.extractedFeatures.find((feature) => feature.locus_tag === 'TESTA_0001');
+      await app.openFeatureEditorFromList(colored, null);
+      await app.requestFeatureColorChange(colored, '#ff0000');
+      await app.handleFeatureStyleScopeChoice('annotationLabel');
+      const hidden = app.extractedFeatures.find((feature) => feature.locus_tag === 'TESTA_0004');
+      await app.openFeatureEditorFromList(hidden, null);
+      await app.updateClickedFeatureVisibility('off');
+      await app.handleFeatureVisibilityScopeChoice('product');
+      app.clickedFeature = null;
     });
+    await settle(page);
+    const edited = await featurePresentation(page, ['TESTA_0001', 'TESTA_0004']);
+    expect(edited.TESTA_0001.mounted).toBe('#ff0000|shown');
+    expect(notDrawn(edited.TESTA_0004.mounted)).toBe(true);
+    await selectResult(page, 1);
+    const displayed = await featurePresentation(page, ['TESTB_0001', 'TESTB_0002', 'TESTB_0004']);
+    expect(displayed.TESTB_0001.mounted).toBe('#ff0000|shown');
+    expect(displayed.TESTB_0002.mounted).toBe('#ff0000|shown');
+    expect(notDrawn(displayed.TESTB_0004.mounted)).toBe(true);
+  });
+
+  await test.step('batch live legend deletion reaches the other Result when it is displayed', async () => {
+    await selectResult(page, 0);
     expect(await legendCaptions(page)).toContain('GC content');
-    expect(await legendCaptions(page, { source: 'result' })).toContain('GC content');
-  }
-});
-
-test('Selected features annotations generate for a Circular multi-record batch', async ({ page }) => {
-  test.setTimeout(300_000);
-  await openBatch(page);
-  await evaluateWithRetainedPromise(page, async () => {
-    const app = window.__GBDRAW_APP__;
-    app.selectedFeatureIds = app.extractedFeatures.filter((feature) => feature.type === 'CDS')
-      .slice(0, 2).map((feature) => feature.svg_id);
-    await window.Vue.nextTick();
-    app.addAnnotationSet();
-    await app.addSelectedFeatureAnnotations(app.annotationSets[app.annotationSets.length - 1]);
-    await window.Vue.nextTick();
-  });
-  await generateAndWaitForResult(page);
-  // Python binds each explicit target to its own record's output only.
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => (
-    new DOMParser().parseFromString(result.content || '', 'image/svg+xml')
-      .querySelectorAll('[data-gbdraw-annotation-id]').length > 0
-  )))).toEqual([true, false]);
-});
-
-test('Reset fill after a canceled reset dialog uses the reset feature type default', async ({ page }) => {
-  test.setTimeout(300_000);
-  await openFresh(page);
-  await loadSessionFile(page, HMMT_SESSION);
-  const fill = (product) => page.evaluate((name) => {
-    const app = window.__GBDRAW_APP__;
-    const feature = app.extractedFeatures.find((item) => item.product === name);
-    return [...app.svgContainer.querySelector('svg').querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(feature.svg_id)}"]`)]
-      .map((element) => element.getAttribute('fill')).find((value) => value && value !== 'none');
-  }, product);
-  const openAndReset = (product) => evaluateWithRetainedPromise(page, async (name) => {
-    const app = window.__GBDRAW_APP__;
-    await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.product === name), null);
-    await app.resetClickedFeatureFillColor();
-  }, product);
-  await evaluateWithRetainedPromise(page, async () => {
-    const app = window.__GBDRAW_APP__;
-    Object.assign(app.newSpecRule, { feat: 'rRNA', qual: 'product', val: '^s-rRNA$', color: '#ff00ff', cap: 'small rRNA' });
-    await app.addSpecificRule();
-  });
-  await settle(page);
-  await expect.poll(() => fill('s-rRNA')).toBe('#ff00ff');
-  await openAndReset('tRNA-Leu');
-  await settle(page);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.resetColorDialog.show)).toBe(true);
-  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.handleResetColorChoice('cancel'));
-  await settle(page);
-  await openAndReset('s-rRNA');
-  await settle(page);
-  const rrnaDefault = await page.evaluate(() => window.__GBDRAW_APP__.appliedPaletteColors.rRNA);
-  await expect.poll(() => fill('s-rRNA'), { timeout: 10_000 }).toBe(rrnaDefault);
-});
-
-test('Redo of an Exact product hide hides the feature again', async ({ page }) => {
-  test.setTimeout(300_000);
-  await openFresh(page);
-  await loadSessionFile(page, HMMT_SESSION);
-  const id = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
-    .find((feature) => feature.product === 'NADH dehydrogenase subunit 1').svg_id);
-  const display = () => page.evaluate((featureId) => [...window.__GBDRAW_APP__.svgContainer.querySelector('svg')
-    .querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(featureId)}"]`)]
-    .some((element) => element.getAttribute('display') === 'none'), id);
-  await evaluateWithRetainedPromise(page, async (featureId) => {
-    const app = window.__GBDRAW_APP__;
-    await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.svg_id === featureId), null);
-    await app.updateClickedFeatureVisibility('off');
-  }, id);
-  await page.getByRole('button', { name: /Exact product/ }).click();
-  await settle(page);
-  expect(await display()).toBe(true);
-  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
-  await settle(page);
-  expect(await display()).toBe(false);
-  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
-  await settle(page);
-  expect(await display()).toBe(true);
-});
-
-test('a rename of a legend entry without features survives Generate', async ({ browser }) => {
-  test.setTimeout(600_000);
-  const page = await load(browser, HMMT_SESSION);
-  try {
-    await generate(page);
     await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
-      await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'), 'GC percent');
+      await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'));
     });
     await settle(page);
-    expect(await legendCaptions(page)).toContain('GC percent');
-    await generate(page);
-    expect(await legendCaptions(page, { source: 'result' })).toContain('GC percent');
+    expect(await legendCaptions(page)).not.toContain('GC content');
+    await selectResult(page, 1);
+    expect(await legendCaptions(page)).not.toContain('GC content');
+  });
+
+  // D-07 (PD-OI-062) Must preserve: the displayed Result's export, Save -> Load
+  // -> Result selection, and Undo reaching every Result. Its edits (color with
+  // the annotationLabel scope, hide with the product scope, the GC content
+  // legend deletion) are those of the two steps before, made on Result 1;
+  // Result 2 is shown.
+  await test.step('batch edits shown on another Result reach its export, its Session, and Undo', async () => {
+    const shown = await featurePresentation(page, ['TESTB_0001', 'TESTB_0004']);
+    expect(shown.TESTB_0001.results[1]).toBe('#ff0000|shown');
+    expect(notDrawn(shown.TESTB_0004.mounted)).toBe(true);
+    expect(notDrawn(shown.TESTB_0004.results[1])).toBe(true);
     expect(await legendCaptions(page, { source: 'result' })).not.toContain('GC content');
-  } finally {
-    await page.context().close();
-  }
-});
 
-test('legend order survives Generate', async ({ browser }) => {
-  test.setTimeout(600_000);
-  const page = await load(browser, HMMT_SESSION);
-  try {
-    await generate(page);
-    if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
-    await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
-    await page.locator('.right-drawer').getByTitle('Sort Z-A', { exact: true }).click();
-    await settle(page);
-    const sorted = await legendCaptions(page);
-    expect(sorted).toEqual([...sorted].sort((left, right) => right.localeCompare(left)));
-    await generate(page);
-    expect(await legendCaptions(page, { source: 'result' })).toEqual(sorted);
-  } finally {
-    await page.context().close();
-  }
-});
+    const [exportDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.downloadSVG())
+    ]);
+    const exported = await fs.readFile(await exportDownload.path(), 'utf8');
+    expect(exported).not.toContain('data-legend-key="GC content"');
+    expect(exported).toContain('#ff0000');
 
-test('renaming a feature legend entry to an existing caption offers the conflict dialog', async ({ browser }) => {
-  test.setTimeout(600_000);
-  const page = await load(browser, HMMT_SESSION);
-  try {
-    await generate(page);
+    await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'batch-edits'; });
+    const sessionFile = testInfo.outputPath('batch-edits.gbdraw-session.json.gz');
+    await download(page, 'Save Session', sessionFile);
+    const fresh = await load(browser, sessionFile);
+    try {
+      await fresh.locator('h2 select').selectOption({ index: 1 });
+      await expect.poll(async () => (await featurePresentation(fresh, ['TESTB_0001'])).TESTB_0001.mounted, {
+        timeout: 60_000
+      }).toBe('#ff0000|shown');
+      await settle(fresh);
+      expect(notDrawn((await featurePresentation(fresh, ['TESTB_0004'])).TESTB_0004.mounted)).toBe(true);
+      expect(await legendCaptions(fresh)).not.toContain('GC content');
+    } finally {
+      await fresh.context().close();
+    }
+
+    // Undo back to the Generate also restores the Result selection of that
+    // step; each Result then shows its original look when displayed.
+    while (await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()) > undoCountBefore) {
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+      await settle(page);
+    }
+    const displayed = await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex);
+    for (const index of [displayed, 1 - displayed]) {
+      if (index !== displayed) await selectResult(page, index);
+      const tags = index === 0 ? ['TESTA_0001', 'TESTA_0004'] : ['TESTB_0001', 'TESTB_0004'];
+      const undone = await featurePresentation(page, tags);
+      tags.forEach((tag) => {
+        expect(undone[tag].mounted, `${tag} on Result ${index + 1}`).toBe(original[tag].results[index]);
+        expect(undone[tag].results[index], `${tag} in Result ${index + 1}`).toBe(original[tag].results[index]);
+      });
+      expect(await legendCaptions(page)).toContain('GC content');
+      expect(await legendCaptions(page, { source: 'result' })).toContain('GC content');
+    }
+  });
+
+  await test.step('Selected features annotations generate for a Circular multi-record batch', async () => {
+    await showFirstResult();
     await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
-      await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'tRNA'), 'rRNA')
-        .catch(() => {});
+      app.selectedFeatureIds = app.extractedFeatures.filter((feature) => feature.type === 'CDS')
+        .slice(0, 2).map((feature) => feature.svg_id);
+      await window.Vue.nextTick();
+      app.addAnnotationSet();
+      await app.addSelectedFeatureAnnotations(app.annotationSets[app.annotationSets.length - 1]);
+      await window.Vue.nextTick();
     });
+    await generateAndWaitForResult(page);
+    // Python binds each explicit target to its own record's output only.
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => (
+      new DOMParser().parseFromString(result.content || '', 'image/svg+xml')
+        .querySelectorAll('[data-gbdraw-annotation-id]').length > 0
+    )))).toEqual([true, false]);
+  });
+
+  // D-09 (PD-OI-064): one canvas padding reaches every batch Result, once.
+  await test.step('canvas padding reaches every batch Result through Generate and applies once', async () => {
     await settle(page);
-    const outcome = await page.evaluate(() => ({
-      errorCode: window.__GBDRAW_APP__.errorLog?.code ?? null,
-      dialog: Boolean(window.__GBDRAW_APP__.legendRenameDialog?.show)
+    await showFirstResult();
+    const canvases = () => page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => {
+      const svg = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
+      return svg.getAttribute('viewBox').trim().split(/[\s,]+/).map(Number);
     }));
-    expect(outcome.errorCode).not.toBe('UNKNOWN');
-    expect(outcome.dialog).toBe(true);
+    // Python draws the padded width as one sum and the Web's Reset subtracts the padding from it again, so a width can
+    // differ from the unpadded one in the last bit of a double. Padding applied twice would differ by 150 px.
+    /** @param {number[]} widths @param {number[]} expected */
+    const expectWidths = (widths, expected) => {
+      expect(widths).toHaveLength(expected.length);
+      widths.forEach((width, index) => expect(width).toBeCloseTo(expected[index], 6));
+    };
+    const base = await canvases();
+    await page.getByRole('button', { name: 'Toggle canvas padding controls' }).click();
+    const right = page.locator('.preview-canvas-padding input[type=number]').nth(2);
+    await right.fill('150');
+    await right.press('Tab');
+    await settle(page);
+    for (let run = 0; run < 2; run += 1) {
+      await generateAndWaitForResult(page);
+      await settle(page);
+      expectWidths((await canvases()).map((box) => box[2]), base.map((box) => box[2] + 150));
+    }
+    await selectResult(page, 1);
+    expectWidths([await page.evaluate(() => Number(window.__GBDRAW_APP__.svgContainer.querySelector('svg')
+      .getAttribute('viewBox').trim().split(/[\s,]+/)[2]))], [base[1][2] + 150]);
+    await page.locator('.preview-canvas-padding').getByRole('button', { name: 'Reset', exact: true }).click();
+    await settle(page);
+    await selectResult(page, 0);
+    expectWidths((await canvases()).map((box) => box[2]), base.map((box) => box[2]));
+  });
+
+  // OV-36 (R1(c), Owner-delegated recommended choice): a successful Generate
+  // draws every edit, so it clears the note of an earlier failed live edit. A
+  // failed Generate leaves the Result as it was, so the note stays.
+  await test.step('a successful Generate clears the note of a failed live edit, and a failed Generate keeps it', async () => {
+    const note = page.locator('[data-live-application-feedback]');
+    const resultContents = () => page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => result.content));
+    const reflowFailed = () => page.evaluate(() => Boolean(window.__GBDRAW_APP__.labelReflowLastError));
+    await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {
+        throw new Error('OV-36 forced failure');
+      };
+      state.labelReflowForceRequestSeq.value += 1;
+    });
+    await expect.poll(reflowFailed, { timeout: 120_000 }).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(false);
+    await expect(note).toContainText('Live edit failed');
+    const shown = await resultContents();
+    expect(await evaluateWithRetainedPromise(page, async () => (
+      (await window.__GBDRAW_APP__.runAnalysis())?.status
+    ))).toBe('error');
+    await settle(page);
+    expect(await resultContents()).toEqual(shown);
+    expect(await reflowFailed()).toBe(true);
+    await expect(note).toContainText('Live edit failed');
+    await page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
+    await generateAndWaitForResult(page);
+    await settle(page);
+    expect(await reflowFailed()).toBe(false);
+    await expect(note).toHaveCount(0);
+  });
+});
+
+// OV-35 on Result display (R3): a rule edited while one batch Result is shown
+// hides the feature and its label on the other Result when it is displayed.
+test('a Feature Visibility rule hides the label on the other batch Result when it is displayed', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openBatch(page);
+  const ids = await page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.extractedFeatures
+    .filter((feature) => /_000[14]$/.test(feature.locus_tag || ''))
+    .map((feature) => [feature.locus_tag, feature.svg_id])));
+  const shownOn = async (tags) => {
+    const featureIds = tags.map((tag) => ids[tag]);
+    return { drawn: await drawnFeatureIds(page, featureIds), labeled: await labeledFeatureIds(page, featureIds) };
+  };
+  expect(await shownOn(['TESTA_0001', 'TESTA_0004'])).toEqual({
+    drawn: [ids.TESTA_0001, ids.TESTA_0004], labeled: [ids.TESTA_0001, ids.TESTA_0004]
+  });
+  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '_0004$', action: 'off' });
+  expect(await shownOn(['TESTA_0001', 'TESTA_0004'])).toEqual({ drawn: [ids.TESTA_0001], labeled: [ids.TESTA_0001] });
+  await selectResult(page, 1);
+  expect(await shownOn(['TESTB_0001', 'TESTB_0004'])).toEqual({ drawn: [ids.TESTB_0001], labeled: [ids.TESTB_0001] });
+});
+
+// The HMMT Gallery Session on one page; its cases run as steps. The steps
+// before the first Generate run on the loaded Session, as their cases did; the
+// steps after it each read their own start. The label reflow step runs last:
+// it starts with its own Generate and leaves draft settings that apply on
+// Generate.
+test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, legend order, rename and conflict, and a label reflow', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, HMMT_SESSION);
+  try {
+    await test.step('the Load ends without the Load repair dialog or an error', () => expectSessionLoadedWithoutWarnings(page));
+
+    await test.step('Escape that closes the Editor returns focus to the Editor toggle', async () => {
+      const toggle = page.locator('.drawer-toggle');
+      await toggle.click();
+      await expect(page.locator('.right-drawer')).toBeVisible();
+      await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
+      await page.keyboard.press('Escape');
+      await expect(page.locator('.right-drawer')).toBeHidden();
+      expect(await toggle.evaluate((element) => element === document.activeElement)).toBe(true);
+    });
+
+    await test.step('Redo of an Exact product hide hides the feature again', async () => {
+      const id = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
+        .find((feature) => feature.product === 'NADH dehydrogenase subunit 1').svg_id);
+      const display = () => page.evaluate((featureId) => [...window.__GBDRAW_APP__.svgContainer.querySelector('svg')
+        .querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(featureId)}"]`)]
+        .some((element) => element.getAttribute('display') === 'none'), id);
+      await evaluateWithRetainedPromise(page, async (featureId) => {
+        const app = window.__GBDRAW_APP__;
+        await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.svg_id === featureId), null);
+        await app.updateClickedFeatureVisibility('off');
+      }, id);
+      await page.getByRole('button', { name: /Exact product/ }).click();
+      await settle(page);
+      expect(await display()).toBe(true);
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+      await settle(page);
+      expect(await display()).toBe(false);
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+      await settle(page);
+      expect(await display()).toBe(true);
+      await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+    });
+
+    await test.step('an Undo of a checkpoint edit keeps the feature catalog across a mode round trip', async () => {
+      const pageErrors = [];
+      page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+      const featureCount = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.length);
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
+        await app.setFeatureColorValue(feature, '#123456');
+      });
+      await settle(page);
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+      await settle(page);
+      await switchMode(page, 'linear');
+      await switchMode(page, 'circular');
+      expect(pageErrors).toEqual([]);
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.length)).toBe(featureCount);
+    });
+
+    await generate(page);
+
+    await test.step('legend order survives Generate', async () => {
+      if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
+      await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
+      await page.locator('.right-drawer').getByTitle('Sort Z-A', { exact: true }).click();
+      await settle(page);
+      const sorted = await legendCaptions(page);
+      expect(sorted).toEqual([...sorted].sort((left, right) => right.localeCompare(left)));
+      await generate(page);
+      expect(await legendCaptions(page, { source: 'result' })).toEqual(sorted);
+    });
+
+    await test.step('a rename of a legend entry without features survives Generate', async () => {
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'), 'GC percent');
+      });
+      await settle(page);
+      expect(await legendCaptions(page)).toContain('GC percent');
+      await generate(page);
+      expect(await legendCaptions(page, { source: 'result' })).toContain('GC percent');
+      expect(await legendCaptions(page, { source: 'result' })).not.toContain('GC content');
+    });
+
+    await test.step('renaming a feature legend entry to an existing caption offers the conflict dialog', async () => {
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'tRNA'), 'rRNA')
+          .catch(() => {});
+      });
+      await settle(page);
+      const outcome = await page.evaluate(() => ({
+        errorCode: window.__GBDRAW_APP__.errorLog?.code ?? null,
+        dialog: Boolean(window.__GBDRAW_APP__.legendRenameDialog?.show)
+      }));
+      expect(outcome.errorCode).not.toBe('UNKNOWN');
+      expect(outcome.dialog).toBe(true);
+      // The next step starts with the dialog answered: Cancel keeps the legend.
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.handleLegendRenameChoice('cancel'));
+      await settle(page);
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show)).toBe(false);
+    });
+
+    // Its color rule makes the rRNA legend entry "other rRNAs", so it runs after the
+    // conflict step, which renames tRNA to the rRNA caption of the loaded Session.
+    await test.step('Reset fill after a canceled reset dialog uses the reset feature type default', async () => {
+      const fill = (product) => page.evaluate((name) => {
+        const app = window.__GBDRAW_APP__;
+        const feature = app.extractedFeatures.find((item) => item.product === name);
+        return [...app.svgContainer.querySelector('svg').querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(feature.svg_id)}"]`)]
+          .map((element) => element.getAttribute('fill')).find((value) => value && value !== 'none');
+      }, product);
+      const openAndReset = (product) => evaluateWithRetainedPromise(page, async (name) => {
+        const app = window.__GBDRAW_APP__;
+        await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.product === name), null);
+        await app.resetClickedFeatureFillColor();
+      }, product);
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        Object.assign(app.newSpecRule, { feat: 'rRNA', qual: 'product', val: '^s-rRNA$', color: '#ff00ff', cap: 'small rRNA' });
+        await app.addSpecificRule();
+      });
+      await settle(page);
+      await expect.poll(() => fill('s-rRNA')).toBe('#ff00ff');
+      await openAndReset('tRNA-Leu');
+      await settle(page);
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.resetColorDialog.show)).toBe(true);
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.handleResetColorChoice('cancel'));
+      await settle(page);
+      await openAndReset('s-rRNA');
+      await settle(page);
+      const rrnaDefault = await page.evaluate(() => window.__GBDRAW_APP__.appliedPaletteColors.rRNA);
+      await expect.poll(() => fill('s-rRNA'), { timeout: 10_000 }).toBe(rrnaDefault);
+      await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+    });
+
+    // N-16 (D-11, PD-OI-066): a label reflow renders the committed Session with
+    // the current editor edits. Draft settings that apply on Generate must not
+    // reach the Result through it.
+    await test.step('a label reflow leaves Applies on Generate draft settings out of the Result', async () => {
+      await generate(page);
+      const resultFacts = () => page.evaluate(async () => {
+        const { state } = await import('./js/state.js');
+        const ingestion = await import('./js/services/svg-result-ingestion.js');
+        const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+        const result = window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value];
+        const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
+        return {
+          identity: ingestion.getCommittedSvgResultRuntimeIdentity(result),
+          processing: state.labelReflowProcessing.value,
+          error: state.labelReflowLastError.value,
+          labelFontSizes: [...new Set([...root.querySelectorAll('text')]
+            .map((node) => Number(node.getAttribute('font-size'))))].sort((a, b) => a - b),
+          blockPaths: [...root.querySelectorAll('[data-gbdraw-feature-part="block"]')]
+            .map((node) => node.getAttribute('d')),
+          blockStrokeWidths: [...new Set([...root.querySelectorAll('[data-gbdraw-feature-part="block"]')]
+            .map((node) => Number(node.getAttribute('stroke-width'))))],
+          labels: [...root.querySelectorAll('text')].map((node) => node.textContent),
+          request: JSON.stringify(getCommittedCanonicalRenderRequest())
+        };
+      });
+      const before = await resultFacts();
+      // The drawing loaded: its text includes the record's species name.
+      expect(before.labels.join(' ')).toContain('Homo sapiens');
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        Object.assign(app.form, { track_type: 'tuckin' });
+        Object.assign(app.adv, { label_font_size: 31, block_stroke_width: 7 });
+        app.autoLabelReflowEnabled = true;
+        await window.Vue.nextTick();
+        const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
+        await app.openFeatureEditorFromList(feature, null);
+        app.clickedFeature.labelText = 'REFLOWED_LABEL';
+        await app.updateClickedFeatureLabelText();
+        app.clickedFeature = null;
+      });
+      await expect.poll(async () => {
+        const facts = await resultFacts();
+        return facts.identity !== before.identity && !facts.processing && facts.labels.includes('REFLOWED_LABEL');
+      }, { timeout: 300_000 }).toBe(true);
+      const after = await resultFacts();
+      expect(after.error).toBeNull();
+      expect(after.labels).toContain('REFLOWED_LABEL');
+      expect(after.labelFontSizes).toEqual(before.labelFontSizes);
+      expect(after.blockPaths).toEqual(before.blockPaths);
+      expect(after.blockStrokeWidths).toEqual(before.blockStrokeWidths);
+      expect(after.request).toBe(before.request);
+    });
   } finally {
     await page.context().close();
   }
 });
 
-test('changing the Linear legend position after a legend-free Generate raises no page error', async ({ browser }) => {
+// The Linear LAMBDA Gallery Session on one page. A page error anywhere in the
+// case fails the legend-free step.
+test('lambda: a Linear legend side change applies on Generate or at once, and a position change after a legend-free Generate raises no page error', async ({ browser }) => {
   test.setTimeout(600_000);
   const page = await load(browser, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
   try {
-    const position = page.getByLabel('Legend position', { exact: true });
-    for (const details of await position.locator('xpath=ancestor::details').all()) {
-      if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
-    }
-    await position.selectOption('none');
-    await generate(page);
-    await position.selectOption('left');
-    await settle(page);
-    expect(pageErrors).toEqual([]);
-    // Reset Settings also restores a legend side on the legend-free Result.
-    await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
-    await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
-    await settle(page);
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.legend)).not.toBe('left');
-    expect(pageErrors).toEqual([]);
-  } finally {
-    await page.context().close();
-  }
-});
-
-// PD-OI-084 A (D-30, PARITY-OR-APPLY-ON-GENERATE): a Linear legend side move
-// either applies on Generate, with the note beside the control, and leaves the
-// Result unchanged until then, or shows at once as Generate draws it. The note
-// (OIC-024) tells which applies.
-test('a Linear legend side change applies on Generate with the note, or at once as Generate draws it', async ({ browser }) => {
-  test.setTimeout(600_000);
-  const page = await load(browser, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
-  try {
-    await generate(page);
-    // The side, the canvas and where each legend row is drawn, in SVG units.
-    const read = () => page.evaluate(() => {
-      const app = window.__GBDRAW_APP__;
-      const mounted = app.svgContainer.querySelector('svg');
-      const toRoot = mounted.getScreenCTM().inverse();
-      return {
-        result: app.currentResults()[app.selectedResultIndex].content,
-        mountedSide: JSON.parse(mounted.getAttribute('data-gbdraw-composition')).legendSide,
-        viewBox: mounted.getAttribute('viewBox'),
-        legendRows: [...mounted.querySelectorAll('g[data-legend-key]')].map((row) => {
-          const box = row.getBBox();
-          const { a, b, c, d, e, f } = toRoot.multiply(row.getScreenCTM());
-          return [row.getAttribute('data-legend-key'),
-            (a * box.x + c * box.y + e).toFixed(1), (b * box.x + d * box.y + f).toFixed(1)];
-        })
-      };
-    });
-    const placement = ({ mountedSide, viewBox, legendRows }) => ({ mountedSide, viewBox, legendRows });
-    const before = await read();
-    expect(before.legendRows.length).toBeGreaterThan(0);
-    const position = page.locator('#legend-position');
-    for (const details of await position.locator('xpath=ancestor::details').all()) {
-      if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
-    }
-    const note = page.locator('[data-setting="legend"] [data-applies-on-generate="legend"]');
-    const noted = await note.count() > 0;
-    let settled;
-    if (noted) {
-      await expect(note).toBeVisible();
-      await position.selectOption('top');
-      await settle(page);
-      settled = await read();
-      expect(settled).toEqual(before);
+    // PD-OI-084 A (D-30, PARITY-OR-APPLY-ON-GENERATE): a Linear legend side move
+    // either applies on Generate, with the note beside the control, and leaves the
+    // Result unchanged until then, or shows at once as Generate draws it. The note
+    // (OIC-024) tells which applies.
+    await test.step('a Linear legend side change applies on Generate with the note, or at once as Generate draws it', async () => {
       await generate(page);
-    } else {
-      await position.selectOption('top');
-      await expect.poll(async () => (await read()).mountedSide).toBe('top');
+      // The side, the canvas and where each legend row is drawn, in SVG units.
+      const read = () => page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        const mounted = app.svgContainer.querySelector('svg');
+        const toRoot = mounted.getScreenCTM().inverse();
+        return {
+          result: app.currentResults()[app.selectedResultIndex].content,
+          mountedSide: JSON.parse(mounted.getAttribute('data-gbdraw-composition')).legendSide,
+          viewBox: mounted.getAttribute('viewBox'),
+          legendRows: [...mounted.querySelectorAll('g[data-legend-key]')].map((row) => {
+            const box = row.getBBox();
+            const { a, b, c, d, e, f } = toRoot.multiply(row.getScreenCTM());
+            return [row.getAttribute('data-legend-key'),
+              (a * box.x + c * box.y + e).toFixed(1), (b * box.x + d * box.y + f).toFixed(1)];
+          })
+        };
+      });
+      const placement = ({ mountedSide, viewBox, legendRows }) => ({ mountedSide, viewBox, legendRows });
+      const before = await read();
+      expect(before.legendRows.length).toBeGreaterThan(0);
+      const position = page.locator('#legend-position');
+      for (const details of await position.locator('xpath=ancestor::details').all()) {
+        if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
+      }
+      const note = page.locator('[data-setting="legend"] [data-applies-on-generate="legend"]');
+      const noted = await note.count() > 0;
+      let settled;
+      if (noted) {
+        await expect(note).toBeVisible();
+        await position.selectOption('top');
+        await settle(page);
+        settled = await read();
+        expect(settled).toEqual(before);
+        await generate(page);
+      } else {
+        await position.selectOption('top');
+        await expect.poll(async () => (await read()).mountedSide).toBe('top');
+        await settle(page);
+        settled = await read();
+        await expectLiveEqualsGenerate(page, { label: 'a Linear legend side change' });
+      }
+      const after = await read();
+      expect(after.mountedSide).toBe('top');
+      expect(after.viewBox).not.toBe(before.viewBox);
+      if (!noted) expect(placement(settled)).toEqual(placement(after));
+    });
+
+    await test.step('changing the Linear legend position after a legend-free Generate raises no page error', async () => {
+      const position = page.getByLabel('Legend position', { exact: true });
+      for (const details of await position.locator('xpath=ancestor::details').all()) {
+        if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
+      }
+      await position.selectOption('none');
+      await generate(page);
+      await position.selectOption('left');
       await settle(page);
-      settled = await read();
-      await expectLiveEqualsGenerate(page, { label: 'a Linear legend side change' });
-    }
-    const after = await read();
-    expect(after.mountedSide).toBe('top');
-    expect(after.viewBox).not.toBe(before.viewBox);
-    if (!noted) expect(placement(settled)).toEqual(placement(after));
+      expect(pageErrors).toEqual([]);
+      // Reset Settings also restores a legend side on the legend-free Result.
+      await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+      await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
+      await settle(page);
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.form.legend)).not.toBe('left');
+      expect(pageErrors).toEqual([]);
+    });
   } finally {
     await page.context().close();
   }
@@ -411,174 +576,6 @@ test('a horizontal legend keeps a sort and a featureless rename through Generate
   } finally {
     await page.context().close();
   }
-});
-
-// D-09 (PD-OI-064): one canvas padding reaches every batch Result, once.
-test('canvas padding reaches every batch Result through Generate and applies once', async ({ page }) => {
-  test.setTimeout(600_000);
-  await openBatch(page);
-  const canvases = () => page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => {
-    const svg = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
-    return svg.getAttribute('viewBox').trim().split(/[\s,]+/).map(Number);
-  }));
-  // Python draws the padded width as one sum and the Web's Reset subtracts the padding from it again, so a width can
-  // differ from the unpadded one in the last bit of a double. Padding applied twice would differ by 150 px.
-  /** @param {number[]} widths @param {number[]} expected */
-  const expectWidths = (widths, expected) => {
-    expect(widths).toHaveLength(expected.length);
-    widths.forEach((width, index) => expect(width).toBeCloseTo(expected[index], 6));
-  };
-  const base = await canvases();
-  await page.getByRole('button', { name: 'Toggle canvas padding controls' }).click();
-  const right = page.locator('.preview-canvas-padding input[type=number]').nth(2);
-  await right.fill('150');
-  await right.press('Tab');
-  await settle(page);
-  for (let run = 0; run < 2; run += 1) {
-    await generateAndWaitForResult(page);
-    await settle(page);
-    expectWidths((await canvases()).map((box) => box[2]), base.map((box) => box[2] + 150));
-  }
-  await selectResult(page, 1);
-  expectWidths([await page.evaluate(() => Number(window.__GBDRAW_APP__.svgContainer.querySelector('svg')
-    .getAttribute('viewBox').trim().split(/[\s,]+/)[2]))], [base[1][2] + 150]);
-  await page.locator('.preview-canvas-padding').getByRole('button', { name: 'Reset', exact: true }).click();
-  await settle(page);
-  await selectResult(page, 0);
-  expectWidths((await canvases()).map((box) => box[2]), base.map((box) => box[2]));
-});
-
-test('Escape that closes the Editor returns focus to the Editor toggle', async ({ browser }) => {
-  test.setTimeout(600_000);
-  const page = await load(browser, HMMT_SESSION);
-  try {
-    const toggle = page.locator('.drawer-toggle');
-    await toggle.click();
-    await expect(page.locator('.right-drawer')).toBeVisible();
-    await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
-    await page.keyboard.press('Escape');
-    await expect(page.locator('.right-drawer')).toBeHidden();
-    expect(await toggle.evaluate((element) => element === document.activeElement)).toBe(true);
-  } finally {
-    await page.context().close();
-  }
-});
-
-test('an Undo of a checkpoint edit keeps the feature catalog across a mode round trip', async ({ browser }) => {
-  test.setTimeout(600_000);
-  const page = await load(browser, HMMT_SESSION);
-  const pageErrors = [];
-  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
-  try {
-    const featureCount = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.length);
-    await evaluateWithRetainedPromise(page, async () => {
-      const app = window.__GBDRAW_APP__;
-      const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
-      await app.setFeatureColorValue(feature, '#123456');
-    });
-    await settle(page);
-    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
-    await settle(page);
-    await switchMode(page, 'linear');
-    await switchMode(page, 'circular');
-    expect(pageErrors).toEqual([]);
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.length)).toBe(featureCount);
-  } finally {
-    await page.context().close();
-  }
-});
-
-// N-16 (D-11, PD-OI-066): a label reflow renders the committed Session with
-// the current editor edits. Draft settings that apply on Generate must not
-// reach the Result through it.
-test('a label reflow leaves Applies on Generate draft settings out of the Result', async ({ browser }) => {
-  test.setTimeout(600_000);
-  const page = await load(browser, HMMT_SESSION);
-  const resultFacts = () => page.evaluate(async () => {
-    const { state } = await import('./js/state.js');
-    const ingestion = await import('./js/services/svg-result-ingestion.js');
-    const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-    const result = window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value];
-    const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
-    return {
-      identity: ingestion.getCommittedSvgResultRuntimeIdentity(result),
-      processing: state.labelReflowProcessing.value,
-      error: state.labelReflowLastError.value,
-      labelFontSizes: [...new Set([...root.querySelectorAll('text')]
-        .map((node) => Number(node.getAttribute('font-size'))))].sort((a, b) => a - b),
-      blockPaths: [...root.querySelectorAll('[data-gbdraw-feature-part="block"]')]
-        .map((node) => node.getAttribute('d')),
-      blockStrokeWidths: [...new Set([...root.querySelectorAll('[data-gbdraw-feature-part="block"]')]
-        .map((node) => Number(node.getAttribute('stroke-width'))))],
-      labels: [...root.querySelectorAll('text')].map((node) => node.textContent),
-      request: JSON.stringify(getCommittedCanonicalRenderRequest())
-    };
-  });
-  try {
-    await generate(page);
-    const before = await resultFacts();
-    // The drawing loaded: its text includes the record's species name.
-    expect(before.labels.join(' ')).toContain('Homo sapiens');
-    await evaluateWithRetainedPromise(page, async () => {
-      const app = window.__GBDRAW_APP__;
-      Object.assign(app.form, { track_type: 'tuckin' });
-      Object.assign(app.adv, { label_font_size: 31, block_stroke_width: 7 });
-      app.autoLabelReflowEnabled = true;
-      await window.Vue.nextTick();
-      const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
-      await app.openFeatureEditorFromList(feature, null);
-      app.clickedFeature.labelText = 'REFLOWED_LABEL';
-      await app.updateClickedFeatureLabelText();
-      app.clickedFeature = null;
-    });
-    await expect.poll(async () => {
-      const facts = await resultFacts();
-      return facts.identity !== before.identity && !facts.processing && facts.labels.includes('REFLOWED_LABEL');
-    }, { timeout: 300_000 }).toBe(true);
-    const after = await resultFacts();
-    expect(after.error).toBeNull();
-    expect(after.labels).toContain('REFLOWED_LABEL');
-    expect(after.labelFontSizes).toEqual(before.labelFontSizes);
-    expect(after.blockPaths).toEqual(before.blockPaths);
-    expect(after.blockStrokeWidths).toEqual(before.blockStrokeWidths);
-    expect(after.request).toBe(before.request);
-  } finally {
-    await page.context().close();
-  }
-});
-
-// OV-36 (R1(c), Owner-delegated recommended choice): a successful Generate
-// draws every edit, so it clears the note of an earlier failed live edit. A
-// failed Generate leaves the Result as it was, so the note stays.
-test('a successful Generate clears the note of a failed live edit, and a failed Generate keeps it', async ({ page }) => {
-  test.setTimeout(300_000);
-  await openBatch(page);
-  const note = page.locator('[data-live-application-feedback]');
-  const resultContents = () => page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => result.content));
-  const reflowFailed = () => page.evaluate(() => Boolean(window.__GBDRAW_APP__.labelReflowLastError));
-  await page.evaluate(async () => {
-    const { state } = await import('./js/state.js');
-    window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {
-      throw new Error('OV-36 forced failure');
-    };
-    state.labelReflowForceRequestSeq.value += 1;
-  });
-  await expect.poll(reflowFailed, { timeout: 120_000 }).toBe(true);
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(false);
-  await expect(note).toContainText('Live edit failed');
-  const shown = await resultContents();
-  expect(await evaluateWithRetainedPromise(page, async () => (
-    (await window.__GBDRAW_APP__.runAnalysis())?.status
-  ))).toBe('error');
-  await settle(page);
-  expect(await resultContents()).toEqual(shown);
-  expect(await reflowFailed()).toBe(true);
-  await expect(note).toContainText('Live edit failed');
-  await page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
-  await generateAndWaitForResult(page);
-  await settle(page);
-  expect(await reflowFailed()).toBe(false);
-  await expect(note).toHaveCount(0);
 });
 
 // Owner request (2026-10-04): a Label visibility choice in the feature popup
@@ -1213,141 +1210,6 @@ const labeledFeatureIds = (page, featureIds) => page.evaluate((ids) => {
 }, featureIds);
 const autoReflowOff = (page) => page.evaluate(() => window.__GBDRAW_APP__.autoLabelReflowEnabled === false);
 
-// OV-35 (Owner 2026-10-05): a feature that a Feature Visibility rule hides
-// takes its label with it, as Generate draws it, also with Auto Reflow off and
-// before the editor has bound the labels. The rule edit, Undo and Redo (History
-// apply), and Generate show the same features and labels.
-test('a Feature Visibility rule that hides a feature hides its label too', async ({ page }) => {
-  test.setTimeout(600_000);
-  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
-    window.__GBDRAW_APP__.form.labels_mode = 'out';
-  });
-  await generate(page);
-  expect(await autoReflowOff(page)).toBe(true);
-  const { fl1, fl2 } = await featureIdsByLocator(page);
-  const shown = async () => ({
-    drawn: await drawnFeatureIds(page, [fl1, fl2]),
-    labeled: await labeledFeatureIds(page, [fl1, fl2])
-  });
-  const all = { drawn: [fl1, fl2], labeled: [fl1, fl2] };
-  const withoutFl1 = { drawn: [fl2], labeled: [fl2] };
-  expect(await shown()).toEqual(all);
-
-  await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
-  expect(await shown()).toEqual(withoutFl1);
-  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
-  expect(await shown()).toEqual(all);
-  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
-  expect(await shown()).toEqual(withoutFl1);
-  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.setFeatureVisibilityRuleField(0, 'action', 'show'));
-  expect(await shown()).toEqual(all);
-  // The rerender this edit asks for draws the feature too.
-  await waitForLabelReflow(page);
-  expect(await shown()).toEqual(all);
-  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.setFeatureVisibilityRuleField(0, 'action', 'off'));
-  expect(await shown()).toEqual(withoutFl1);
-  await generate(page);
-  expect(await shown()).toEqual(withoutFl1);
-});
-
-// OV-48: Generate always wins over the automatic rerender. An edit that asks
-// for a rerender while Generate runs waits for it (the rerender would take the
-// newer generation token and end Generate with no Result and no message), and
-// the rerender then runs once, so the edit is drawn.
-test('an automatic rerender requested during Generate waits for it and then runs once', async ({ page }) => {
-  test.setTimeout(600_000);
-  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
-    window.__GBDRAW_APP__.form.labels_mode = 'out';
-  });
-  await generate(page);
-  const { fl1, fl2 } = await featureIdsByLocator(page);
-  const glyphPresent = (id) => page.evaluate((featureId) => Boolean(window.__GBDRAW_APP__.svgContainer
-    .querySelector(`[data-gbdraw-feature-id="${CSS.escape(featureId)}"]`)), id);
-  expect(await glyphPresent(fl1)).toBe(true);
-
-  // Hold the first Python response (Generate's); count every response.
-  await page.evaluate(() => {
-    window.__OV48_RESPONSES__ = 0;
-    window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {
-      window.__OV48_RESPONSES__ += 1;
-      if (window.__OV48_RESPONSES__ > 1) return undefined;
-      return new Promise((resolve) => { window.__OV48_RELEASE__ = resolve; });
-    };
-  });
-  const key = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
-  await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => typeof window.__OV48_RELEASE__), { timeout: 180_000 }).toBe('function');
-  expect(await page.evaluate(async () => (await import('./js/state.js')).state.processing.value)).toBe(true);
-
-  // An edit during Generate asks for the rerender; it must not start now.
-  await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
-  await page.evaluate(async () => { await window.Vue.nextTick(); });
-  expect(await page.evaluate(() => window.__OV48_RESPONSES__)).toBe(1);
-
-  await page.evaluate(() => window.__OV48_RELEASE__());
-  await expect.poll(() => page.evaluate(async () => {
-    const { state } = await import('./js/state.js');
-    return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
-  }), { timeout: 180_000 }).toEqual({ key: key + 1, processing: false, error: null });
-  await waitForLabelReflow(page);
-  await expect.poll(() => page.evaluate(() => window.__OV48_RESPONSES__), { timeout: 180_000 }).toBe(2);
-  expect(await glyphPresent(fl1)).toBe(false);
-  expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([fl2]);
-  expect(await labeledFeatureIds(page, [fl1, fl2])).toEqual([fl2]);
-  expect((await labelEditorState(page, 'labels.circular.scope')).reflowError).toBeNull();
-  expect(await page.evaluate(() => window.__OV48_RESPONSES__)).toBe(2);
-});
-
-// OV-34: with Auto Reflow off, deleting the rule that hid a feature at Generate
-// draws the feature and its label live (the automatic rerender), as Generate
-// draws them.
-test('deleting a Feature Visibility rule draws the feature it hid at Generate', async ({ page }) => {
-  test.setTimeout(600_000);
-  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
-    window.__GBDRAW_APP__.form.labels_mode = 'out';
-  });
-  await generate(page);
-  expect(await autoReflowOff(page)).toBe(true);
-  const { fl1, fl2 } = await featureIdsByLocator(page);
-  await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
-  await generate(page);
-  const shown = async () => ({
-    drawn: await drawnFeatureIds(page, [fl1, fl2]),
-    labeled: await labeledFeatureIds(page, [fl1, fl2])
-  });
-  expect(await shown()).toEqual({ drawn: [fl2], labeled: [fl2] });
-  expect(await page.evaluate((id) => Boolean(window.__GBDRAW_APP__.svgContainer
-    .querySelector(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)), fl1)).toBe(false);
-
-  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.removeFeatureVisibilityRule(0));
-  await expect.poll(shown, { timeout: 300_000 }).toEqual({ drawn: [fl1, fl2], labeled: [fl1, fl2] });
-  await waitForLabelReflow(page);
-  expect((await labelEditorState(page, 'labels.circular.scope')).reflowError).toBeNull();
-  await generate(page);
-  expect(await shown()).toEqual({ drawn: [fl1, fl2], labeled: [fl1, fl2] });
-});
-
-// OV-35 on Result display (R3): a rule edited while one batch Result is shown
-// hides the feature and its label on the other Result when it is displayed.
-test('a Feature Visibility rule hides the label on the other batch Result when it is displayed', async ({ page }) => {
-  test.setTimeout(600_000);
-  await openBatch(page);
-  const ids = await page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.extractedFeatures
-    .filter((feature) => /_000[14]$/.test(feature.locus_tag || ''))
-    .map((feature) => [feature.locus_tag, feature.svg_id])));
-  const shownOn = async (tags) => {
-    const featureIds = tags.map((tag) => ids[tag]);
-    return { drawn: await drawnFeatureIds(page, featureIds), labeled: await labeledFeatureIds(page, featureIds) };
-  };
-  expect(await shownOn(['TESTA_0001', 'TESTA_0004'])).toEqual({
-    drawn: [ids.TESTA_0001, ids.TESTA_0004], labeled: [ids.TESTA_0001, ids.TESTA_0004]
-  });
-  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '_0004$', action: 'off' });
-  expect(await shownOn(['TESTA_0001', 'TESTA_0004'])).toEqual({ drawn: [ids.TESTA_0001], labeled: [ids.TESTA_0001] });
-  await selectResult(page, 1);
-  expect(await shownOn(['TESTB_0001', 'TESTB_0004'])).toEqual({ drawn: [ids.TESTB_0001], labeled: [ids.TESTB_0001] });
-});
-
 test('Label visibility On for an underlay feature is kept without a label until the rendering changes', async ({ page }) => {
   test.setTimeout(600_000);
   await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
@@ -1453,18 +1315,135 @@ const editTextOnly = (page, locator, text) => evaluateWithRetainedPromise(page, 
   return { note, dialog };
 }, { locator, text });
 
-for (const [name, mode, locator, sentence, cause] of [
-  ['a feature drawn as Underlay', 'out', 'repeat_region', 'Labels are not drawn for features drawn as "Underlay".', 'drawn as Underlay'],
-  ['Show Labels None', 'none', 'FL1', 'Labels are set to "None"', 'Show Labels = None']
-]) {
-  test(`the Label Not Shown dialog names the reason: ${name}`, async ({ page }) => {
-    test.setTimeout(300_000);
-    await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {});
-    await page.evaluate((labelsMode) => { window.__GBDRAW_APP__.form.labels_mode = labelsMode; }, mode);
+const expectLabelNotShownReason = async (page, locator, sentence, cause) => {
+  const { note, dialog } = await editTextOnly(page, locator, 'EDITED_TEXT');
+  expect(note).toContain(`No label shown (${cause})`);
+  expect(dialog).toContain(`This feature has no label in the current Result. ${sentence}`);
+  expect(dialog).not.toContain('With the current Show Labels and label filter settings');
+};
+
+// The forced-label fixture on one page; its cases run as steps. The Show
+// Labels None step is undone back to its Generate; the steps after it run with
+// Show Labels Out and Auto Reflow off. The OV-35 step ends with the rule
+// FORCEDLBL / ^fl1$ / off drawn by a Generate, the start of the OV-34 step,
+// which deletes it again: no rule, both features and labels drawn, as the
+// Underlay and OV-48 steps start.
+test('forced-label fixture: the Label Not Shown reasons, and Feature Visibility rules that hide a label, are deleted, or are edited during Generate', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {});
+  const sameStart = sameStepStart(page);
+
+  await test.step('the Label Not Shown dialog names the reason: Show Labels None', async () => {
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'none'; });
     await generate(page);
-    const { note, dialog } = await editTextOnly(page, locator, 'EDITED_TEXT');
-    expect(note).toContain(`No label shown (${cause})`);
-    expect(dialog).toContain(`This feature has no label in the current Result. ${sentence}`);
-    expect(dialog).not.toContain('With the current Show Labels and label filter settings');
+    await sameStart('the Label Not Shown dialog names the reason: Show Labels None');
+    await expectLabelNotShownReason(page, 'FL1', 'Labels are set to "None"', 'Show Labels = None');
+    // Undo of the text edit returns to the Generate.
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+    await waitForLabelReflow(page);
+    await sameStart('Undo of the Show Labels None text edit');
   });
-}
+
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  const shown = async () => ({
+    drawn: await drawnFeatureIds(page, [fl1, fl2]),
+    labeled: await labeledFeatureIds(page, [fl1, fl2])
+  });
+  const all = { drawn: [fl1, fl2], labeled: [fl1, fl2] };
+  const withoutFl1 = { drawn: [fl2], labeled: [fl2] };
+  const glyphPresent = (id) => page.evaluate((featureId) => Boolean(window.__GBDRAW_APP__.svgContainer
+    .querySelector(`[data-gbdraw-feature-id="${CSS.escape(featureId)}"]`)), id);
+
+  // OV-35 (Owner 2026-10-05): a feature that a Feature Visibility rule hides
+  // takes its label with it, as Generate draws it, also with Auto Reflow off and
+  // before the editor has bound the labels. The rule edit, Undo and Redo (History
+  // apply), and Generate show the same features and labels.
+  await test.step('a Feature Visibility rule that hides a feature hides its label too', async () => {
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });
+    await generate(page);
+    expect(await autoReflowOff(page)).toBe(true);
+    expect(await shown()).toEqual(all);
+
+    await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+    expect(await shown()).toEqual(withoutFl1);
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+    expect(await shown()).toEqual(all);
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+    expect(await shown()).toEqual(withoutFl1);
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.setFeatureVisibilityRuleField(0, 'action', 'show'));
+    expect(await shown()).toEqual(all);
+    // The rerender this edit asks for draws the feature too.
+    await waitForLabelReflow(page);
+    expect(await shown()).toEqual(all);
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.setFeatureVisibilityRuleField(0, 'action', 'off'));
+    expect(await shown()).toEqual(withoutFl1);
+    await generate(page);
+    expect(await shown()).toEqual(withoutFl1);
+  });
+
+  // OV-34: with Auto Reflow off, deleting the rule that hid a feature at Generate
+  // draws the feature and its label live (the automatic rerender), as Generate
+  // draws them.
+  await test.step('deleting a Feature Visibility rule draws the feature it hid at Generate', async () => {
+    expect(await autoReflowOff(page)).toBe(true);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.featureVisibilityManualRules
+      .map(({ recordId, featureType, qualifier, value, action }) => ({ recordId, featureType, qualifier, value, action }))),
+    'OV-34: the one rule the Generate drew').toEqual([
+      { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' }
+    ]);
+    expect(await shown()).toEqual({ drawn: [fl2], labeled: [fl2] });
+    expect(await glyphPresent(fl1)).toBe(false);
+
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.removeFeatureVisibilityRule(0));
+    await expect.poll(shown, { timeout: 300_000 }).toEqual({ drawn: [fl1, fl2], labeled: [fl1, fl2] });
+    await waitForLabelReflow(page);
+    expect((await labelEditorState(page, 'labels.circular.scope')).reflowError).toBeNull();
+    await generate(page);
+    expect(await shown()).toEqual({ drawn: [fl1, fl2], labeled: [fl1, fl2] });
+  });
+
+  await test.step('the Label Not Shown dialog names the reason: a feature drawn as Underlay', async () => {
+    await expectLabelNotShownReason(page, 'repeat_region', 'Labels are not drawn for features drawn as "Underlay".', 'drawn as Underlay');
+    await waitForLabelReflow(page);
+  });
+
+  // OV-48: Generate always wins over the automatic rerender. An edit that asks
+  // for a rerender while Generate runs waits for it (the rerender would take the
+  // newer generation token and end Generate with no Result and no message), and
+  // the rerender then runs once, so the edit is drawn.
+  await test.step('an automatic rerender requested during Generate waits for it and then runs once', async () => {
+    expect(await glyphPresent(fl1)).toBe(true);
+
+    // Hold the first Python response (Generate's); count every response.
+    await page.evaluate(() => {
+      window.__OV48_RESPONSES__ = 0;
+      window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {
+        window.__OV48_RESPONSES__ += 1;
+        if (window.__OV48_RESPONSES__ > 1) return undefined;
+        return new Promise((resolve) => { window.__OV48_RELEASE__ = resolve; });
+      };
+    });
+    const key = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
+    await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => typeof window.__OV48_RELEASE__), { timeout: 180_000 }).toBe('function');
+    expect(await page.evaluate(async () => (await import('./js/state.js')).state.processing.value)).toBe(true);
+
+    // An edit during Generate asks for the rerender; it must not start now.
+    await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+    await page.evaluate(async () => { await window.Vue.nextTick(); });
+    expect(await page.evaluate(() => window.__OV48_RESPONSES__)).toBe(1);
+
+    await page.evaluate(() => window.__OV48_RELEASE__());
+    await expect.poll(() => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
+    }), { timeout: 180_000 }).toEqual({ key: key + 1, processing: false, error: null });
+    await waitForLabelReflow(page);
+    await expect.poll(() => page.evaluate(() => window.__OV48_RESPONSES__), { timeout: 180_000 }).toBe(2);
+    expect(await glyphPresent(fl1)).toBe(false);
+    expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([fl2]);
+    expect(await labeledFeatureIds(page, [fl1, fl2])).toEqual([fl2]);
+    expect((await labelEditorState(page, 'labels.circular.scope')).reflowError).toBeNull();
+    expect(await page.evaluate(() => window.__OV48_RESPONSES__)).toBe(2);
+  });
+});
