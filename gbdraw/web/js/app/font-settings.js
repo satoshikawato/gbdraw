@@ -2,6 +2,7 @@
 /** @import { WebFontEntry, WebFontSource, RegisterFontsInWorker } from '../services/font-store.js' */
 /** @import { FontFamilyList, FontFamilyName } from '../services/font-families.js' */
 /** @import { AskChoice } from './app-messages.js' */
+/** @import { WebState } from '../state.js' */
 import { loadWebFonts, mergeWebFonts, standardInstalledFaces, webFontFamilies, webFontFamilyNames } from '../services/font-store.js';
 import {
   bundledFacePrefix,
@@ -57,15 +58,8 @@ const BUNDLED_CHOICES = Object.freeze([
  */
 
 /**
- * What the Font section reads and writes of the app state.
- * @typedef {object} FontSettingsState
- * @property {{ value: WebFontEntry[] }} loadedFonts
- * @property {() => { adv: Record<string, unknown> }} activeDrawing
- */
-
-/**
  * @typedef {object} FontSettingsOptions
- * @property {FontSettingsState} state App state (state.js): `loadedFonts` and the active drawing's `adv`.
+ * @property {Pick<WebState, 'loadedFonts' | 'activeDrawing'>} state App state (state.js): `loadedFonts` and the active drawing's `adv`.
  * @property {(label: string, fn: () => unknown) => Promise<unknown>} runUndoable History's one step (R11).
  * @property {RegisterFontsInWorker} registerFontsInWorker The Worker's `registerFonts` helper.
  * @property {AskChoice} askChoice The app's choice dialog (the Session font question).
