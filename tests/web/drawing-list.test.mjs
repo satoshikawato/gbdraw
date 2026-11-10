@@ -1126,7 +1126,7 @@ test('Delete holds a drawing\'s LOSAT rows; New and Duplicate under its ID neith
 
 // #1777 round 14 (OV-3210): Linear's per-pair readers read the shown drawing's rows, so a Linear drawing and its copy
 // each list a window pair once, and a raw file name typed in the copy names only the copy's row.
-test('a Linear drawing and its copy each list a window pair once; a name typed in the copy stays in the copy', async () => {
+test('a Linear drawing and its copy each list a window pair once, from their own rows', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
   const shownBefore = state.activeDrawingId.value;
@@ -1140,14 +1140,13 @@ test('a Linear drawing and its copy each list a window pair once; a name typed i
     }));
     state.losatCache.value = new Map(['w1', 'w2'].map((key) => [key, { key }]));
     const { drawingId: copy } = app.drawingList.duplicateDrawing(linear);
-    const listed = () => Object.values(app.linearLosatWindowPairs.value).flat().map(({ edgeKey, filename }) => [edgeKey, filename]);
+    const listed = () => Object.values(app.linearLosatWindowPairs.value).flat().map(({ edgeKey }) => edgeKey);
     const byEdge = () => Object.values(app.linearLosatCacheInfoByEdgeKey.value).map(({ edgeKey, drawingId }) => [edgeKey, drawingId]);
-    assert.deepEqual(listed(), [['e1', 'w1.tsv'], ['e2', 'w2.tsv']], 'the copy lists each window pair once');
+    assert.deepEqual(listed(), ['e1', 'e2'], 'the copy lists each window pair once');
     assert.deepEqual(byEdge(), [['e1', copy], ['e2', copy]], 'from its own rows');
-    app.setLosatPairFilename('e1', 'renamed.tsv');
-    assert.deepEqual(listed(), [['e1', 'renamed.tsv'], ['e2', 'w2.tsv']]);
+    // A name typed on a window pair lives in the drawing's comparison plan (#1845), not in these rows.
     app.selectDrawing(linear);
-    assert.deepEqual(listed(), [['e1', 'w1.tsv'], ['e2', 'w2.tsv']], 'the source keeps its name and lists each pair once');
+    assert.deepEqual(listed(), ['e1', 'e2'], 'the source lists each pair once');
     assert.deepEqual(byEdge(), [['e1', linear], ['e2', linear]]);
     await history.undo();
     await history.undo();
