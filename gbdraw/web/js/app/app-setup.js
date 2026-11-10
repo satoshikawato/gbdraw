@@ -455,9 +455,15 @@ const shownResultFeatures = (recordKey) => {
   });
 };
 
-export const createAppSetup = () => {
+// The two setting-note readers that the Live setting notes inject: whether a note applies and whether the pending
+// layout change is to One circle.
+const provideSettingNoteReaders = () => {
   provide(SETTING_NOTE_APPLIES, committedSettingNotePredicate);
   provide(SETTING_NOTE_ONE_CIRCLE_CHANGE, committedOneCircleChange);
+};
+
+export const createAppSetup = () => {
+  provideSettingNoteReaders();
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES,
     payload
