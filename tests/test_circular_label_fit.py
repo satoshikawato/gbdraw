@@ -720,9 +720,11 @@ def test_a_drawn_figure_offers_only_rows_that_fit() -> None:
     assert checked[1].row("labels_out").status == "not_found"
 
 
-def _region_case(*, drawn: bool) -> tuple[CircularLabelLayout, Callable[[Mapping[str, object]], LabelFit]]:
+def _region_case(
+    *, drawn: bool, region_clear_y: float = 3.0
+) -> tuple[CircularLabelLayout, Callable[[Mapping[str, object]], LabelFit]]:
     """Outer labels at 17 pt whose leaders cross (or overlap, when nothing was drawn) until Y 1.025, X 1.075 or 15 pt,
-    and one region label over them that only the smaller font clears: no label row moves region labels."""
+    and one region label over them that the smaller font clears, and from ``region_clear_y`` the Y offset."""
 
     def outer(values: Mapping[str, object]) -> LabelFit:
         x, y = values.get(X_OFFSET_PATH, 1.0), values.get(Y_OFFSET_PATH, 1.0)
@@ -733,8 +735,9 @@ def _region_case(*, drawn: bool) -> tuple[CircularLabelLayout, Callable[[Mapping
         return LabelFit(0 if drawn else 2, 10)
 
     def full(values: Mapping[str, object]) -> LabelFit:
-        font = values.get(FONT_SIZE_PATHS[0], 17.0)
-        region = 0 if isinstance(font, float) and font <= 15.0 else 1
+        font, y = values.get(FONT_SIZE_PATHS[0], 17.0), values.get(Y_OFFSET_PATH, 1.0)
+        assert isinstance(font, float) and isinstance(y, float)
+        region = 0 if font <= 15.0 or y >= region_clear_y - 1e-9 else 1
         return dataclasses.replace(outer(values), region_overlaps=region)
 
     layout = dataclasses.replace(
@@ -776,8 +779,9 @@ def test_label_rows_answer_for_the_labels_they_move_and_say_which_region_warning
     assert row_note(rows["smaller_font"]) is None
     statuses = [row.status for row in checked[0].rows]
     assert statuses == sorted(statuses, key=lambda status: status == "found_with_notice")
-    # One assembly per value found (dev walked each outward row to offset 2: about 120 on lambda).
-    assert len(calls) <= 6, calls
+    # The first value of each row, and for a row whose figure keeps the region warning the next two values of that
+    # row (OV-3110): 3 + 3 + 3 outward, 1 font, 3 combination (dev walked each outward row to offset 2).
+    assert len(calls) == 13, calls
     lines = [" ".join(line.split()) for line in str(caught[0].message).splitlines()]
     assert lines[1:4] == [
         "Run again with one of:",
@@ -796,7 +800,48 @@ def test_label_rows_answer_for_the_labels_they_move_and_say_which_region_warning
     )
     assert row_note(rows["outward_vertical"]) == REGION_NOTE
     assert rows["smaller_font"].status == "found"
-    assert len(calls) <= 6, calls
+    assert len(calls) <= 13, calls
+
+
+def test_a_label_row_takes_one_of_its_next_two_values_when_that_whole_figure_fits() -> None:
+    """OV-3110 (D-109): a label row whose first value keeps a region label warning verifies at most the next two
+    values of the same row; the first whose whole figure fits is the row, else the first value with the note."""
+
+    layout, full = _region_case(drawn=True, region_clear_y=1.05)
+    verify, calls = _fit_assembly(full)
+    with pytest.warns(LabelLeadersCrossWarning):
+        checked = check_circular_label_fit([layout], verify, warn_search_seconds=600.0)
+    assert checked is not None
+    rows = {row.kind: row for row in checked[0].rows}
+    assert (rows["outward_vertical"].status, rows["outward_vertical"].values) == ("found", {Y_OFFSET_PATH: 1.05})
+    assert (rows["outward_both"].status, rows["outward_both"].values) == (
+        "found", {X_OFFSET_PATH: 1.05, Y_OFFSET_PATH: 1.05}
+    )
+    assert rows["combination"].status == "found"
+    assert rows["combination"].values is not None and rows["combination"].values[Y_OFFSET_PATH] == 1.05
+    # X never clears the region label: 1.075, then 1.1 and 1.125 only, and the first value with the note.
+    assert (rows["outward_horizontal"].status, rows["outward_horizontal"].values) == (
+        "found_with_notice", {X_OFFSET_PATH: 1.075}
+    )
+    assert row_note(rows["outward_horizontal"]) == REGION_NOTE
+    assert [values for values in calls if set(values) == {X_OFFSET_PATH}] == [
+        {X_OFFSET_PATH: 1.075}, {X_OFFSET_PATH: 1.1}, {X_OFFSET_PATH: 1.125}
+    ]
+    assert len(calls) == 2 + 2 + 3 + 1 + 2, calls
+
+    # Two values on, the region warning still stays: the first value with the note, two more assemblies at most.
+    layout, full = _region_case(drawn=True, region_clear_y=1.1)
+    verify, calls = _fit_assembly(full)
+    with pytest.warns(LabelLeadersCrossWarning):
+        checked = check_circular_label_fit([layout], verify, warn_search_seconds=600.0)
+    assert checked is not None
+    rows = {row.kind: row for row in checked[0].rows}
+    assert (rows["outward_vertical"].status, rows["outward_vertical"].values) == (
+        "found_with_notice", {Y_OFFSET_PATH: 1.025}
+    )
+    assert [values for values in calls if set(values) == {Y_OFFSET_PATH}] == [
+        {Y_OFFSET_PATH: 1.025}, {Y_OFFSET_PATH: 1.05}, {Y_OFFSET_PATH: 1.075}
+    ]
 
 
 def test_labels_count_once_by_kind_and_leaders_count_against_the_definition_text() -> None:
@@ -1014,8 +1059,9 @@ def test_a_region_label_among_outer_labels_leaves_the_outer_rows_with_its_note(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """OV-3105 (D-108): lambda at 17 pt with a region label among the outer labels. The outer rows clear the
-    crossings at their first values and draw with the region notice; the font row fits; five full assemblies
-    (about 120 when the label rows answered for the region label and walked to offset 2)."""
+    crossings at their first values and draw with the region notice, after trying their next two values (OV-3110);
+    the font row fits; 11 full assemblies (120 when the label rows answered for the region label and walked to
+    offset 2)."""
 
     from gbdraw.annotations import AnnotationOptions
     from gbdraw.api.diagram import build_circular_diagram, label_fit_report
@@ -1064,7 +1110,8 @@ def test_a_region_label_among_outer_labels_leaves_the_outer_rows_with_its_note(
     assert rows["outward_horizontal"] == ("found_with_notice", {X_OFFSET_PATH: 1.075}, REGION_NOTE)
     assert rows["smaller_font"] == ("found", {path: 14.0 for path in FONT_SIZE_PATHS}, None)
     assert rows["tighter_rows"][0] == "not_found"
-    assert len(assemblies) <= 6, len(assemblies)
+    # The five rows' first values, and two more values for each outward row whose figure keeps the region warning.
+    assert len(assemblies) == 5 + 3 * 2, assemblies
     text = str(next(item.message for item in caught if issubclass(item.category, LabelLeadersCrossWarning)))
     # The CLI lists the rows that fit first, then the outer rows with the note (dev: "Not searched within 5 s").
     assert [" ".join(line.split()) for line in text.splitlines()[1:]] == [

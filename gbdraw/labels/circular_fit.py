@@ -88,6 +88,8 @@ OFFSET_STEP = 0.025
 OFFSET_LIMIT = 2.0
 FONT_STEP_PT = 0.5
 TIGHTER_ROW_GRID_PX = (2.5, 2.0, 1.5, 1.0, 0.5, 0.25, 0.1)
+# How many values past its first a label row tries when the first one's figure keeps a region label warning (OV-3110).
+REGION_CLEAR_STEPS = 2
 
 # The dialog order of the rows; a report has the rows that apply to its records.
 ROW_KINDS: tuple[LabelFitRowKind, ...] = (
@@ -536,16 +538,44 @@ class CircularLabelFitSearch:
             self._rows[kind] = computed
         return computed
 
-    def _with_region_notice(self, row: LabelFitRow) -> LabelFitRow:
-        """A label row that fits the labels it moves draws with the notice when its figure keeps a region label
-        warning, which no label row moves (OV-3105); its grid value still bounds the rows that start from it."""
+    def _region_warned(self, row: LabelFitRow) -> LabelFit | None:
+        """The figure's fit when a label row fits the labels it moves but its figure keeps a region label warning,
+        which no label row moves (OV-3105); otherwise None."""
 
         if row.status != "found" or row.kind in DEFINITION_ROW_KINDS or row.values is None:
-            return row
+            return None
         fit = self._verifications[_settings_key(row.values)].fit
-        if fit is None or not fit.region_warnings:
-            return row
-        return replace(row, status="found_with_notice", remaining=fit)
+        return fit if fit is not None and fit.region_warnings else None
+
+    def _with_region_notice(self, row: LabelFitRow) -> LabelFitRow:
+        """A row whose figure keeps a region label warning draws with the notice; its grid value still bounds the
+        rows that start from it."""
+
+        fit = self._region_warned(row)
+        return row if fit is None else replace(row, status="found_with_notice", remaining=fit)
+
+    def _clear_of_regions(
+        self,
+        kind: LabelFitRowKind,
+        found: tuple[LabelFitRow, float],
+        later_values: Sequence[float],
+        values_for: Callable[[float], dict[str, LabelFitValue]],
+    ) -> tuple[LabelFitRow, float]:
+        """A row whose first value keeps a region label warning takes the first of the next ``REGION_CLEAR_STEPS``
+        values of its lever whose whole figure fits; otherwise its first value stays (OV-3110). At the deadline the
+        first value is the row, kept out of the cache so a later ask tries on."""
+
+        if self._region_warned(found[0]) is None:
+            return found
+        try:
+            for value in later_values[:REGION_CLEAR_STEPS]:
+                values = values_for(value)
+                row = verified_row(kind, values, self._verify(kind, values), offer_notice=False)
+                if row is not None and self._region_warned(row) is None:
+                    return row, value
+        except _SearchStopped:
+            self._unfinished = True
+        return found
 
     def _compute(self, kind: LabelFitRowKind) -> tuple[LabelFitRow, float | None]:
         if kind in _SWITCH_VALUES:
@@ -571,13 +601,14 @@ class CircularLabelFitSearch:
         """
 
         notice: LabelFitRow | None = None
-        for value in _font_grid(self._font_size):
+        grid = _font_grid(self._font_size)
+        for index, value in enumerate(grid):
             values = _font_values(value)
             row = verified_row(
                 "smaller_font", values, self._verify("smaller_font", values), offer_notice=self._offer_notice_rows
             )
             if row is not None and row.status == "found":
-                return row, value
+                return self._clear_of_regions("smaller_font", (row, value), grid[index + 1 :], _font_values)
             notice = notice or row
         if notice is not None:
             return notice, None
@@ -745,11 +776,11 @@ class CircularLabelFitSearch:
             if mildest is None:
                 return None
             strongest = max(strongest, mildest)
-        for value in grid[strongest:]:
-            values = lever.values_for(value)
+        for index in range(strongest, len(grid)):
+            values = lever.values_for(grid[index])
             row = verified_row(kind, values, self._verify(kind, values), offer_notice=offer_notice)
             if row is not None:
-                return row, value
+                return self._clear_of_regions(kind, (row, grid[index]), grid[index + 1 :], lever.values_for)
         return None
 
 
