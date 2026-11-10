@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 
 FeatureVisibilityMode = Literal["on", "off", "exclude_matching"]
 LabelVisibilityMode = Literal["on", "off"]
+# The kinds of an identity-addressed feature edit, in the order a notice lists them.
+FeatureEditKind = Literal["placement", "feature_visibility", "label_visibility", "label_text"]
+# Why a ``FeatureIdentityNotice``'s feature is not drawn.
+FeatureIdentityNoticeStatus = Literal["crop_excluded", "absent", "unresolved"]
 _ROW_FIELDS = frozenset(
     {"recordKey", "biologicalFeatureId", "featureVisibility", "labelVisibility", "labelText"}
 )
@@ -85,17 +89,14 @@ class FeatureOverride:
         return FeatureIdentity(self.record_key, self.biological_feature_id)
 
     @property
-    def edits(self) -> tuple[str, ...]:
+    def edits(self) -> tuple[FeatureEditKind, ...]:
         """The edit kinds this row sets, in a fixed order."""
-        return tuple(
-            kind
-            for kind, value in (
-                ("feature_visibility", self.feature_visibility),
-                ("label_visibility", self.label_visibility),
-                ("label_text", self.label_text),
-            )
-            if value is not None
+        values: tuple[tuple[FeatureEditKind, object], ...] = (
+            ("feature_visibility", self.feature_visibility),
+            ("label_visibility", self.label_visibility),
+            ("label_text", self.label_text),
         )
+        return tuple(kind for kind, value in values if value is not None)
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, object]) -> FeatureOverride:
@@ -232,8 +233,8 @@ class FeatureIdentityNotice:
 
     record_key: str
     biological_feature_id: str
-    status: Literal["crop_excluded", "absent", "unresolved"]
-    kinds: tuple[str, ...]
+    status: FeatureIdentityNoticeStatus
+    kinds: tuple[FeatureEditKind, ...]
     record_index: int
 
     @property
@@ -311,7 +312,9 @@ def feature_override_lookup(
 
 __all__ = [
     "FEATURE_OVERRIDE_TABLE_COLUMNS",
+    "FeatureEditKind",
     "FeatureIdentityNotice",
+    "FeatureIdentityNoticeStatus",
     "FeatureOverride",
     "ResolvedFeatureOverride",
     "bind_feature_overrides",

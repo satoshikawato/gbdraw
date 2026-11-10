@@ -52,7 +52,7 @@
  */
 /**
  * @typedef {object} SessionAnnotationWarning
- * @property {string} code
+ * @property {'feature_selector_unmatched' | 'empty_span' | 'out_of_bounds_skipped' | 'out_of_bounds_clipped'} code
  * @property {string} setId
  * @property {string} annotationId
  * @property {string} recordId
@@ -67,12 +67,12 @@
  * @property {string} recordKey
  * @property {string} biologicalFeatureId
  * @property {'crop_excluded' | 'absent' | 'unresolved'} status
- * @property {string[]} kinds
+ * @property {('placement' | 'feature_visibility' | 'label_visibility' | 'label_text')[]} kinds
  * @property {number} resultIndex
  */
 /**
  * @typedef {object} SessionComparisonWarning
- * @property {string} code
+ * @property {'comparison_record_id_unmatched'} code
  * @property {number} queryRecordIndex
  * @property {number} subjectRecordIndex
  * @property {string} queryRecordId

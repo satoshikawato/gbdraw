@@ -57,6 +57,19 @@ class Spellings(TypedDict, total=False):
     blank: str  # the name an empty or unset value reads as
 
 
+class ResolvedTrackSlotGeometry(TypedDict):
+    """A render's resolved track-slot geometry: one entry per drawn record of each Result.
+
+    The render layer builds it (``gbdraw.render.track_slot_metadata``) and a Session stores it at
+    ``runMetadata.trackSlotGeometry`` (``gbdraw.session_contract``); it is declared here, below both.
+    """
+
+    schema: Literal[1]
+    mode: Literal["circular", "linear"]
+    source: Literal["resolved"]
+    records: list[dict[str, object]]
+
+
 def read_spelling(value: object, names: SequenceABC[str], spellings: Spellings) -> str | None:
     """The name of ``names`` that ``value`` spells, or None.
 

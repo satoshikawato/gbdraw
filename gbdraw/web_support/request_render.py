@@ -9,7 +9,7 @@ import shutil
 from time import perf_counter
 from typing import AbstractSet, Any, Iterator, Literal, Mapping, MutableMapping, TypedDict, cast
 
-from gbdraw.api.input_summary import input_summary_payload, with_source_names
+from gbdraw.api.input_summary import InputSummaryPayload, input_summary_payload, with_source_names
 from gbdraw.api.run_metadata import RenderedResult, build_run_metadata
 from gbdraw.api.request_render import (
     CircularBatchRenderResult,
@@ -27,19 +27,24 @@ from gbdraw.api.prepared import (
 from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.io.colors import rule_captions_as_written
 from gbdraw.web_support.error_adapter import WebErrorAttributes, web_error_stage
-from gbdraw.legend.row_facts import collect_legend_row_facts
+from gbdraw.legend.row_facts import LegendRowFactsPayload, collect_legend_row_facts
 from gbdraw.render.document import ContentPiece, DocumentParts, document_parts
 from gbdraw.render.formats import SVG_FORMAT, resolve_format_output_path
 from gbdraw.render_stages import render_stage_revision
 from gbdraw.session import with_request_output
-from gbdraw.session_contract import SESSION_ID_RE
+from gbdraw.session_contract import SESSION_ID_RE, SessionRunMetadata
 from gbdraw.session_request_codec import decode_canonical_request
 from gbdraw.session_io import materialize_embedded_file, safe_embedded_filename
 from gbdraw.web_support.feature_catalog import (
     build_feature_catalog,
     build_feature_catalog_item,
 )
-from gbdraw.web_support.label_fit import LabelFitMode, LabelFitRowSearches, label_fit_report_payload
+from gbdraw.web_support.label_fit import (
+    LabelFitMode,
+    LabelFitReportPayload,
+    LabelFitRowSearches,
+    label_fit_report_payload,
+)
 
 # OD-F14: Generate on the Web draws crossing label leaders with their counts
 # only; the dialog computes the rows when the user asks for them.
@@ -83,6 +88,27 @@ class WebRenderResult(TypedDict):
     document: WebDocument
 
 
+class WebLabelFitReport(TypedDict):
+    """The label fit report of one Result, and the token of its rows the dialog computes later (OD-F14)."""
+
+    resultIndex: int
+    resultName: str
+    report: LabelFitReportPayload
+    rowToken: str | None
+
+
+class WebRunMetadata(SessionRunMetadata):
+    """The run metadata of one Web render: what a Session saves (:func:`gbdraw.api.run_metadata.build_run_metadata`)
+    and, beside it, what only the page reads."""
+
+    # Per Result: the Legend rows drawn and the feature rows the draft removed (OV-63).
+    legendRows: list[LegendRowFactsPayload]
+    # The CLI logs the same summary and warnings (gbdraw.api.input_summary).
+    inputSummaries: list[InputSummaryPayload]
+    # Crossing label leaders drawn anyway.
+    labelFitReports: list[WebLabelFitReport]
+
+
 class WebRenderReply(TypedDict):
     """One Web render: the SVG Results, the run metadata, and the feature catalog beside them.
 
@@ -93,7 +119,7 @@ class WebRenderReply(TypedDict):
     """
 
     results: list[WebRenderResult]
-    metadata: dict[str, Any]
+    metadata: WebRunMetadata
     featureCatalog: dict[str, object] | None
     featureCatalogRevision: str | None
 
@@ -306,7 +332,7 @@ def _render_canonical_web_request(
 
     results: list[WebRenderResult] = []
     feature_catalog_items: list[dict[str, Any]] = []
-    legend_rows: list[dict[str, Any]] = []
+    legend_rows: list[LegendRowFactsPayload] = []
     for result_index, item in enumerate(items):
         path = _base_svg_path(item)
         result_name = path.name
@@ -339,10 +365,10 @@ def _render_canonical_web_request(
         with web_error_stage("result-admission"):
             raise ValidationError("The canonical Web request did not produce an SVG.")
     with _web_render_diagnostic_phase(diagnostics, "geometryMetadata"):
-        metadata: dict[str, Any] = dict(build_run_metadata(
+        run_metadata = build_run_metadata(
             rendered.mode,
             [RenderedResult(item, result["name"]) for item, result in zip(items, results, strict=True)],
-        ))
+        )
     with _web_render_diagnostic_phase(diagnostics, "featureCatalog"):
         # The page keeps the catalog it holds when this render reused the same
         # item builds in this cache (gbdraw/web/CLAUDE.md, Runtime data flow).
@@ -352,10 +378,7 @@ def _render_canonical_web_request(
             if catalog_revision is not None and catalog_revision == held_feature_catalog_revision
             else build_feature_catalog(feature_catalog_items)
         )
-    # Per Result: the Legend rows drawn and the feature rows the draft removed (OV-63).
-    metadata["legendRows"] = legend_rows
-    # The CLI logs the same summary and warnings (gbdraw.api.input_summary); not saved in a Session.
-    metadata["inputSummaries"] = [
+    input_summaries = [
         input_summary_payload(
             with_source_names(item.input_summary, source_names) if source_names else item.input_summary,
             result_index=result_index,
@@ -371,7 +394,7 @@ def _render_canonical_web_request(
         if label_fit_searches is not None
         else [None] * len(items)
     )
-    metadata["labelFitReports"] = [
+    label_fit_reports: list[WebLabelFitReport] = [
         {
             "resultIndex": result_index,
             "resultName": results[result_index]["name"],
@@ -383,7 +406,12 @@ def _render_canonical_web_request(
     ]
     return {
         "results": results,
-        "metadata": metadata,
+        "metadata": {
+            **run_metadata,
+            "legendRows": legend_rows,
+            "inputSummaries": input_summaries,
+            "labelFitReports": label_fit_reports,
+        },
         "featureCatalog": feature_catalog,
         "featureCatalogRevision": catalog_revision,
     }

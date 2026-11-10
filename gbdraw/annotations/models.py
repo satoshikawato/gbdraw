@@ -791,9 +791,15 @@ def mark_parts(annotation: ResolvedRegionAnnotation, *, join_origin: bool) -> tu
     return tuple(parts)
 
 
+# Why a region annotation is not drawn whole; a Session stores it in ``runMetadata.annotationWarnings``.
+AnnotationWarningCode = Literal[
+    "feature_selector_unmatched", "empty_span", "out_of_bounds_skipped", "out_of_bounds_clipped"
+]
+
+
 @dataclass(frozen=True)
 class ResolutionWarning:
-    code: str
+    code: AnnotationWarningCode
     set_id: str
     annotation_id: str
     message: str
@@ -854,6 +860,7 @@ __all__ = [
     "RegionTarget",
     "ResolvedAnnotationBundle",
     "ResolvedRegionAnnotation",
+    "AnnotationWarningCode",
     "ResolutionWarning",
     "annotation_label_font_size",
     "annotation_solid_fill",

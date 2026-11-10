@@ -505,7 +505,9 @@ def reverse_endpoint_table_text(
     return converted.to_csv(sep="\t", header=False, index=False, lineterminator="\n")
 
 
-COMPARISON_RECORD_ID_UNMATCHED = "comparison_record_id_unmatched"
+# The one code of a ``ComparisonRecordIdWarning``; a Session stores it in ``runMetadata.comparisonWarnings``.
+ComparisonWarningCode = Literal["comparison_record_id_unmatched"]
+COMPARISON_RECORD_ID_UNMATCHED: ComparisonWarningCode = "comparison_record_id_unmatched"
 
 
 @dataclass(frozen=True)
@@ -542,7 +544,7 @@ class ComparisonRecordIdWarning:
     row_count: int
     example_ids: tuple[str, ...]
     message: str
-    code: str = COMPARISON_RECORD_ID_UNMATCHED
+    code: ComparisonWarningCode = COMPARISON_RECORD_ID_UNMATCHED
 
 
 def validate_linear_comparison_record_ids(
@@ -639,6 +641,7 @@ __all__ = [
     "table_id_index",
     "table_id_matches",
     "COMPARISON_RECORD_ID_UNMATCHED",
+    "ComparisonWarningCode",
     "ComparisonRecordIdWarning",
     "ComparisonTableTally",
     "LinearComparison",

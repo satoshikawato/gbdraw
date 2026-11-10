@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from functools import cached_property
-from typing import Any
+from typing import TypedDict
 
 from Bio.SeqRecord import SeqRecord
 
@@ -125,12 +125,22 @@ def attach_legend_row_facts(canvas: object, facts: LegendRowFacts) -> None:
     setattr(canvas, LEGEND_ROW_FACTS_ATTR, facts)
 
 
+class LegendRowFactsPayload(TypedDict):
+    """One Result's Legend row facts in a Web render's run metadata (``metadata.legendRows``); not saved in a
+    Session."""
+
+    resultIndex: int
+    resultName: str
+    drawn: list[LegendRowKey]
+    suppressed: list[LegendRowKey]
+
+
 def collect_legend_row_facts(
     canvas: object,
     *,
     result_index: int,
     result_name: str,
-) -> dict[str, Any]:
+) -> LegendRowFactsPayload:
     """Serialize one Result's Legend row facts for the browser run metadata."""
 
     facts = getattr(canvas, LEGEND_ROW_FACTS_ATTR, None)
@@ -144,6 +154,7 @@ def collect_legend_row_facts(
 
 __all__ = [
     "LegendRowFacts",
+    "LegendRowFactsPayload",
     "attach_legend_row_facts",
     "collect_legend_row_facts",
     "producible_legend_rows",

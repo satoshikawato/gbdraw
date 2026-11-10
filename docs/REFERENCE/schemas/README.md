@@ -192,7 +192,7 @@ classDiagram
     +records list of map of any
   }
   class SessionAnnotationWarning {
-    +code string
+    +code one of 4 values
     +setId string
     +annotationId string
     +recordId string
@@ -206,11 +206,11 @@ classDiagram
     +recordKey string
     +biologicalFeatureId string
     +status 'crop_excluded' or 'absent' or 'unresolved'
-    +kinds list of string
+    +kinds list of one of 4 values
     +resultIndex integer
   }
   class SessionComparisonWarning {
-    +code string
+    +code 'comparison_record_id_unmatched'
     +queryRecordIndex integer
     +subjectRecordIndex integer
     +queryRecordId string

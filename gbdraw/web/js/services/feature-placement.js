@@ -3,6 +3,11 @@ import { getFeatureCaption } from './feature-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { featureEditsOf, setFeatureOverrideRow } from './drawing/feature-edits.js';
 import { recordKeyExpansion } from './record-draw-selection.js';
+import {
+  FEATURE_IDENTITY_NOTICE_FIELDS,
+  FEATURE_IDENTITY_NOTICE_KINDS,
+  FEATURE_IDENTITY_NOTICE_STATUSES
+} from '../contracts/schema.generated.js';
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
 
 // Drafts keyed by original-source feature identity: Feature placement rows and
@@ -389,9 +394,11 @@ export const updateFeatureOverride = (slice, feature, patch) => {
   return true;
 };
 
-const FEATURE_IDENTITY_NOTICE_STATUSES = new Set(['crop_excluded', 'absent', 'unresolved']);
-/** @type {Set<unknown>} */
-const FEATURE_IDENTITY_NOTICE_KINDS = new Set(['placement', 'feature_visibility', 'label_visibility', 'label_text']);
+/** @type {ReadonlySet<unknown>} */
+const NOTICE_STATUSES = new Set(FEATURE_IDENTITY_NOTICE_STATUSES);
+/** @type {ReadonlySet<unknown>} */
+const NOTICE_KINDS = new Set(FEATURE_IDENTITY_NOTICE_KINDS);
+const NOTICE_FIELDS = [...FEATURE_IDENTITY_NOTICE_FIELDS].sort().join(',');
 // Python's featureIdentityNotices metadata, as Generate admitted it (design Q4 3.4).
 /**
  * @param {unknown} notices
@@ -404,12 +411,12 @@ export const validateFeatureIdentityNotices = (notices, results) => {
   const resultCount = Array.isArray(results) ? results.length : 0;
   notices.forEach((notice) => {
     if (!notice || typeof notice !== 'object' || Array.isArray(notice)
-      || Object.keys(notice).sort().join(',') !== 'biologicalFeatureId,kinds,recordKey,resultIndex,status'
+      || Object.keys(notice).sort().join(',') !== NOTICE_FIELDS
       || typeof notice.recordKey !== 'string' || !notice.recordKey
       || typeof notice.biologicalFeatureId !== 'string' || !notice.biologicalFeatureId
-      || !FEATURE_IDENTITY_NOTICE_STATUSES.has(notice.status)
+      || !NOTICE_STATUSES.has(notice.status)
       || !Array.isArray(notice.kinds) || notice.kinds.length === 0
-      || notice.kinds.some((/** @type {unknown} */ kind) => !FEATURE_IDENTITY_NOTICE_KINDS.has(kind))
+      || notice.kinds.some((/** @type {unknown} */ kind) => !NOTICE_KINDS.has(kind))
       || !Number.isInteger(notice.resultIndex) || notice.resultIndex < 0 || notice.resultIndex >= resultCount) {
       throw new Error('runMetadata.featureIdentityNotices contains an invalid notice.');
     }

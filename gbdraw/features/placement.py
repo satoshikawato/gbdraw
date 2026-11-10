@@ -15,7 +15,9 @@ from pandas import DataFrame
 
 from gbdraw.exceptions import ValidationError
 from .overrides import (
+    FeatureEditKind,
     FeatureIdentityNotice,
+    FeatureIdentityNoticeStatus,
     FeatureOverride,
     ResolvedFeatureOverride,
     bind_feature_overrides,
@@ -322,7 +324,7 @@ def resolve_record_feature_inputs(
                 placement_index,
             )
         )
-    kinds: dict[FeatureIdentity, list[str]] = {}
+    kinds: dict[FeatureIdentity, list[FeatureEditKind]] = {}
     for item in exact:
         kinds.setdefault(item.identity, []).append("placement")
     for row in rows:
@@ -331,7 +333,7 @@ def resolve_record_feature_inputs(
         FeatureIdentityNotice(
             identity.record_key, identity.biological_feature_id,
             # Present identities are filtered out below.
-            cast("Literal['crop_excluded', 'absent', 'unresolved']", bindings[identity][0].status),
+            cast(FeatureIdentityNoticeStatus, bindings[identity][0].status),
             tuple(edit_kinds),
             bindings[identity][0].record_index,
         )

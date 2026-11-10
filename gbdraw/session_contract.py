@@ -20,10 +20,17 @@ them is importable at run time.
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, NewType, TypedDict, get_type_hints
+from typing import Any, Literal, NewType, TypedDict, get_args, get_origin, get_type_hints
 
-from .features.overrides import FeatureVisibilityMode, LabelVisibilityMode
-from .render.track_slot_metadata import ResolvedTrackSlotGeometry
+from .annotations.models import AnnotationWarningCode
+from .contract_shapes import ResolvedTrackSlotGeometry
+from .features.overrides import (
+    FeatureEditKind,
+    FeatureIdentityNoticeStatus,
+    FeatureVisibilityMode,
+    LabelVisibilityMode,
+)
+from .linear_comparison import ComparisonWarningCode
 from .web_support.mode_scoped_settings import (
     DIAGRAM_MODES,
     LOSAT_EXECUTION_FIELDS,
@@ -51,7 +58,7 @@ class SessionResult(TypedDict):
 class SessionAnnotationWarning(TypedDict):
     """A region annotation that a Result does not draw whole (``ResolutionWarning``)."""
 
-    code: str
+    code: AnnotationWarningCode
     setId: str
     annotationId: str
     recordId: str
@@ -67,15 +74,15 @@ class SessionFeatureIdentityNotice(TypedDict):
 
     recordKey: str
     biologicalFeatureId: str
-    status: Literal["crop_excluded", "absent", "unresolved"]
-    kinds: list[str]
+    status: FeatureIdentityNoticeStatus
+    kinds: list[FeatureEditKind]
     resultIndex: int
 
 
 class SessionComparisonWarning(TypedDict):
     """Comparison table rows whose sequence IDs name no drawn record (``ComparisonRecordIdWarning``)."""
 
-    code: str
+    code: ComparisonWarningCode
     queryRecordIndex: int
     subjectRecordIndex: int
     queryRecordId: str
@@ -371,6 +378,19 @@ def keys_of(cls: type) -> frozenset[str]:
     return frozenset(get_type_hints(cls))
 
 
+def literal_values(cls: type, key: str) -> tuple[str, ...]:
+    """The values a declared key takes, in their declared order: those of its ``Literal`` type, or of its items'
+    when it is a list."""
+
+    hint = get_type_hints(cls)[key]
+    if get_origin(hint) is list:
+        (hint,) = get_args(hint)
+    values = get_args(hint) if get_origin(hint) is Literal else ()
+    if not values or not all(isinstance(value, str) for value in values):
+        raise TypeError(f"{cls.__name__}.{key} is not typed by a string Literal.")
+    return values
+
+
 def describe_session_document() -> dict[str, Any]:
     """Describe the JSON of a current Session as neutral data.
 
@@ -649,4 +669,5 @@ __all__ = [
     "describe_session_admission",
     "describe_session_document",
     "keys_of",
+    "literal_values",
 ]

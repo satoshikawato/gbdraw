@@ -18,6 +18,7 @@ from typing import Literal, Mapping, Sequence, TypedDict
 
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.contract_shapes import ResolvedTrackSlotGeometry
 from gbdraw.features.placement import FeaturePlacementSlot
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import spans_may_cross_origin
@@ -276,15 +277,6 @@ def collect_track_slot_geometry_records(
     return copied_records
 
 
-class ResolvedTrackSlotGeometry(TypedDict):
-    """A render's resolved track-slot geometry: one entry per drawn record of each Result."""
-
-    schema: Literal[1]
-    mode: Literal["circular", "linear"]
-    source: Literal["resolved"]
-    records: list[dict[str, object]]
-
-
 def resolved_track_slot_geometry(
     *,
     mode: Literal["circular", "linear"],
@@ -309,7 +301,6 @@ __all__ = [
     "LinearAxisRow",
     "RadialExtent",
     "RecordAxisInput",
-    "ResolvedTrackSlotGeometry",
     "circular_axis_geometry",
     "linear_axis_geometry",
     "collect_track_slot_geometry_records",
