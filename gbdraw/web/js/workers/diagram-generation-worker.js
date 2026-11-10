@@ -702,21 +702,25 @@ const stageRenderResources = async (
         resourceId,
         bytes: size
       });
-      const cachePath = `${RENDER_RESOURCE_CACHE}/${cacheToken}.bin`;
-      if (pyodide.FS.analyzePath(cachePath).exists) pyodide.FS.unlink(cachePath);
-      if (typeof pyodide.FS.createDataFile !== 'function') {
-        throw new Error('Pyodide render resource ownership transfer is unavailable.');
+      // The token names the bytes, so a file cached under it at this size already holds them. It
+      // stays: records read from it keep reading it, and Python refuses a file replaced under them.
+      if (!cached || cached.size !== size || !pyodide.FS.analyzePath(cached.path).exists) {
+        const cachePath = `${RENDER_RESOURCE_CACHE}/${cacheToken}.bin`;
+        if (pyodide.FS.analyzePath(cachePath).exists) pyodide.FS.unlink(cachePath);
+        if (typeof pyodide.FS.createDataFile !== 'function') {
+          throw new Error('Pyodide render resource ownership transfer is unavailable.');
+        }
+        pyodide.FS.createDataFile(
+          RENDER_RESOURCE_CACHE,
+          `${cacheToken}.bin`,
+          new Uint8Array(staged.bytes),
+          true,
+          true,
+          true
+        );
+        cached = { path: cachePath, size };
+        cachedRenderResources.set(cacheToken, cached);
       }
-      pyodide.FS.createDataFile(
-        RENDER_RESOURCE_CACHE,
-        `${cacheToken}.bin`,
-        new Uint8Array(staged.bytes),
-        true,
-        true,
-        true
-      );
-      cached = { path: cachePath, size };
-      cachedRenderResources.set(cacheToken, cached);
       staged.bytes = null;
       stagedByToken.delete(cacheToken);
       emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-stage-end', {
