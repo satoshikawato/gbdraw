@@ -481,7 +481,8 @@ directions: every `tests/` path that `gbdraw/web/CLAUDE.md` names is
 registered, every registered path is named by its rule, every guard is
 selected by the job it declares, and every node test under `tests/web` is
 selected by a pull-request job. It reads the selection from the workflow's
-commands, `tests/ci/functional-shards.json`, and the pytest markers.
+commands, the ignore list of `tests/web/playwright/functional.config.js`, and the
+pytest markers.
 
 ### Product Impact separation
 

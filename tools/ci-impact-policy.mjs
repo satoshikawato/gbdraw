@@ -210,6 +210,7 @@ export const classifyPath = (path) => {
     return classified('metadata', 'METADATA_DIRECTORY_ALLOWLIST');
   }
   if (ROOT_MARKDOWN.test(path)) return classified('documentation', 'ROOT_MARKDOWN');
+  if (path.startsWith('changelog.d/')) return classified('documentation', 'CHANGELOG_FRAGMENT');
   if (path.startsWith('docs/')) return classified('documentation', 'DOCUMENTATION_TREE');
   if (['pyproject.toml', 'setup.py', 'MANIFEST.in', 'package.json', 'package-lock.json',
     'wrangler.toml', 'gbdraw/_build_support.py'].includes(path)
@@ -274,7 +275,7 @@ const LEAF_KIND_JOBS = freeze({
 });
 
 // The runner kind of a path that may be a leaf test, from its path alone. A functional spec
-// must also be listed in tests/ci/functional-shards.json, and no other file may name it.
+// must also be measured in tests/ci/functional-shards.json, and no other file may name it.
 export const leafTestKind = (path) => {
   if (!isValidRepositoryPath(path) || classifyPath(path).impact === 'ci-only') return null;
   if (/^tests\/test_[^/]+\.py$/.test(path)) return 'python';

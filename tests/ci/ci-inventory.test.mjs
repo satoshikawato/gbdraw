@@ -61,17 +61,23 @@ const shardReport = (cases, durationMinutes) => ({
   }]
 });
 
-test('functional shards flag a rebalance for a slow shard or an unrecorded spec file', () => {
+// Recorded measurements from minutes per spec file; every fixture file has one case.
+const measured = (minutes, shardCount = 2) => ({
+  shardCount,
+  secondsPerCase: new Map(Object.entries(minutes).map(([file, value]) => [`tests/web/${file}`, value * 60]))
+});
+
+test('functional shards ask for fresh measurements for a slow shard or an unmeasured spec file', () => {
   const input = (minutes) => ({
     reports: [
       { shard: 2, report: shardReport([['b.spec.js', 2]], 1.5) },
       { shard: 1, report: shardReport([['a.spec.js', 8], ['c.spec.js', 2]], 6) }
     ],
-    shardsFile: { minutes, shards: [['tests/web/a.spec.js', 'tests/web/c.spec.js'], ['tests/web/b.spec.js']] },
+    measurements: measured(minutes),
     casesPerFile: new Map([['tests/web/a.spec.js', 1], ['tests/web/b.spec.js', 1], ['tests/web/c.spec.js', 1]]),
     testDir: 'tests/web'
   });
-  const functional = summarizeFunctional(input({ 'tests/web/a.spec.js': 8, 'tests/web/b.spec.js': 2 }));
+  const functional = summarizeFunctional(input({ 'a.spec.js': 8, 'b.spec.js': 2 }));
   assert.deepEqual(functional.shards, [
     { shard: 1, testMinutes: 10, wallMinutes: 6 },
     { shard: 2, testMinutes: 2, wallMinutes: 1.5 }
@@ -80,38 +86,40 @@ test('functional shards flag a rebalance for a slow shard or an unrecorded spec 
   assert.equal(functional.testMinutes, 12);
   assert.equal(functional.slowestToMean, 1.67);
   assert.deepEqual(functional.unmeasured, ['tests/web/c.spec.js']);
-  assert.equal(functional.rebalance, true);
-  // The balance tool would move c.spec.js next to b.spec.js.
-  assert.equal(functional.planChanges, true);
+  assert.equal(functional.refresh, true);
+  // c.spec.js is estimated at the mean case (5 minutes), which already puts it next to b.spec.js.
+  assert.equal(functional.planChanges, false);
   assert.deepEqual(functional.plannedTestMinutes, [8, 4]);
   assert.deepEqual(functional.topSpecs.map((spec) => spec.file), [
     'tests/web/a.spec.js', 'tests/web/b.spec.js', 'tests/web/c.spec.js'
   ]);
 
+  const evenReports = [
+    { shard: 1, report: shardReport([['a.spec.js', 5]], 3) },
+    { shard: 2, report: shardReport([['b.spec.js', 4], ['c.spec.js', 1]], 3) }
+  ];
   const even = summarizeFunctional({
-    ...input({}),
-    reports: [
-      { shard: 1, report: shardReport([['a.spec.js', 5]], 3) },
-      { shard: 2, report: shardReport([['b.spec.js', 4], ['c.spec.js', 1]], 3) }
-    ],
-    shardsFile: {
-      minutes: { 'tests/web/a.spec.js': 5, 'tests/web/b.spec.js': 4, 'tests/web/c.spec.js': 1 },
-      shards: [['tests/web/a.spec.js'], ['tests/web/b.spec.js', 'tests/web/c.spec.js']]
-    }
+    ...input({ 'a.spec.js': 5, 'b.spec.js': 4, 'c.spec.js': 1 }), reports: evenReports
   });
-  assert.equal(even.rebalance, false);
+  assert.equal(even.refresh, false);
   assert.equal(even.planChanges, false);
+  // Stale measurements (a 3, b 3, c 2 minutes) plan [a, c] and [b]; this run's plan [a] and [b, c].
+  const stale = summarizeFunctional({
+    ...input({ 'a.spec.js': 3, 'b.spec.js': 3, 'c.spec.js': 2 }), reports: evenReports
+  });
+  assert.equal(stale.planChanges, true);
+  assert.deepEqual(stale.plannedTestMinutes, [5, 5]);
 
   // The flag and the printed ratio are the same rounded number: 1.2004 is 1.2, not above it.
   const edge = summarizeFunctional({
-    ...input({ 'tests/web/a.spec.js': 6.002, 'tests/web/b.spec.js': 2.5, 'tests/web/c.spec.js': 1.5 }),
+    ...input({ 'a.spec.js': 6.002, 'b.spec.js': 2.5, 'c.spec.js': 1.5 }),
     reports: [
       { shard: 1, report: shardReport([['a.spec.js', 6.002]], 3) },
       { shard: 2, report: shardReport([['b.spec.js', 2.5], ['c.spec.js', 1.5]], 2) }
     ]
   });
   assert.equal(edge.slowestToMean, 1.2);
-  assert.equal(edge.rebalance, false);
+  assert.equal(edge.refresh, false);
 });
 
 test('a re-run counts each shard once, from its latest attempt, and a missing report is left out', () => {
@@ -125,8 +133,7 @@ test('a re-run counts each shard once, from its latest attempt, and a missing re
 
   const functional = summarizeFunctional({
     reports: [{ shard: 2, report: shardReport([['b.spec.js', 4]], 2) }],
-    shardsFile: { minutes: { 'tests/web/a.spec.js': 4, 'tests/web/b.spec.js': 4 },
-      shards: [['tests/web/a.spec.js'], ['tests/web/b.spec.js']] },
+    measurements: measured({ 'a.spec.js': 4, 'b.spec.js': 4 }),
     casesPerFile: new Map([['tests/web/a.spec.js', 1], ['tests/web/b.spec.js', 1]]),
     testDir: 'tests/web'
   });
@@ -146,7 +153,7 @@ test('a re-run counts each shard once, from its latest attempt, and a missing re
 test('the report shows week-over-week changes and carries its numbers for next week', () => {
   const functional = {
     shards: [{ shard: 1, testMinutes: 10, wallMinutes: 6 }], missingShards: [], cases: 3, testMinutes: 12,
-    slowestToMean: 1.67, unmeasured: ['tests/web/c.spec.js'], rebalance: true, planChanges: true,
+    slowestToMean: 1.67, unmeasured: ['tests/web/c.spec.js'], refresh: true, planChanges: true,
     plannedTestMinutes: [8], topSpecs: [{ file: 'tests/web/a.spec.js', cases: 1, minutes: 8 }]
   };
   const runs = summarizeRuns({ runs: [], jobsByRun: new Map() });
@@ -157,7 +164,7 @@ test('the report shows week-over-week changes and carries its numbers for next w
     previous: { week: '2026-W41', cases: 1000, functionalTestMinutes: 20, runnerMinutes: 0, testJobs: 22 },
     serverUrl: 'https://github.com', repository: 'satoshikawato/gbdraw'
   });
-  assert.match(markdown, /\*\*Rebalance the functional shards\*\*: slowest shard 1\.67x the mean \(limit 1\.2x\); 1 spec file\(s\) without recorded minutes: `tests\/web\/c\.spec\.js`\./);
+  assert.match(markdown, /\*\*Refresh the functional shard measurements\*\*: slowest shard 1\.67x the mean \(limit 1\.2x\); 1 spec file\(s\) without measurements: `tests\/web\/c\.spec\.js`\./);
   assert.match(markdown, /\| Functional cases \| 3 \| 1000 \| -997 \|/);
   assert.match(markdown, /\| Jobs in `test\.yml` \| 24 \| 22 \| \+2 \|/);
   assert.match(markdown, /\[38490146362\]\(https:\/\/github\.com\/satoshikawato\/gbdraw\/actions\/runs\/38490146362\)/);
@@ -201,7 +208,7 @@ test('pull request feedback time splits by functional Playwright, takes the medi
     week: '2026-W42', since: new Date(at(0)), until: new Date(at(60)),
     runs: summarizeRuns({ runs: [], jobsByRun: new Map() }), pullRequests,
     functional: summarizeFunctional({
-      reports: [], shardsFile: { minutes: {}, shards: [] }, casesPerFile: new Map(), testDir: 'tests/web'
+      reports: [], measurements: measured({}, 0), casesPerFile: new Map(), testDir: 'tests/web'
     }),
     functionalRun: { id: 1, head_sha: '0e66fd7bbfe17adc' }, testJobs: 24, previous: null,
     serverUrl: 'https://github.com', repository: 'satoshikawato/gbdraw'

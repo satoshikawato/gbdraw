@@ -753,6 +753,9 @@ test('carry-forward verdicts follow the allowed path sets', () => {
   // A SESSION_LOG-only move carries everything.
   assert.deepEqual(verdictsFor(['docs/internal/web-gui-audit-20260930/SESSION_LOG.md']), all);
   assert.deepEqual(verdictsFor(['.gitignore', 'docs/internal/SELECTIVE_CI.md', 'CHANGELOG.md']), all);
+  // A changelog fragment is documentation, like CHANGELOG.md.
+  assert.equal(classifyPath('changelog.d/x.md').impact, 'documentation');
+  assert.deepEqual(verdictsFor(['changelog.d/x.md']), all);
   // T13: the release-only Vibrio spec does not carry release evidence.
   assert.deepEqual(verdictsFor([{ path: VIBRIO_FULL_GENERATION_SPEC, leaf: { kind: 'release-only', markers: null } }]), {
     releaseEvidenceCarries: false, generatedArtifactChecksCarry: true, localTestEvidenceCarries: true

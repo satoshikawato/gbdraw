@@ -1164,6 +1164,12 @@ const TEST_SHARDS = Object.freeze([
   [], [], [], [], [], []
 ]);
 
+// The head's measurements name every spec of TEST_SHARDS.
+const TEST_MEASUREMENTS = JSON.stringify({
+  shardCount: TEST_SHARDS.length,
+  secondsPerCase: Object.fromEntries(TEST_SHARDS.flat().map((path) => [path, 10]))
+});
+
 const emptyResult = (status = 0) => ({ status, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) });
 
 const gitRouter = ({
@@ -1192,7 +1198,7 @@ const gitRouter = ({
   if (args[0] === 'cat-file') {
     const spec = args.at(-1);
     const path = spec.slice(spec.indexOf(':') + 1);
-    const source = { 'tests/ci/functional-shards.json': JSON.stringify({ minutes: {}, shards: TEST_SHARDS }), ...blobs }[path];
+    const source = { 'tests/ci/functional-shards.json': TEST_MEASUREMENTS, ...blobs }[path];
     return source === undefined
       ? { status: 128, stdout: Buffer.alloc(0), stderr: Buffer.from(`missing ${path}`) }
       : { status: 0, stdout: Buffer.from(source), stderr: Buffer.alloc(0) };
@@ -1348,10 +1354,11 @@ test('test files that another file uses, shared test code, and unrouted specs ke
     }],
     ['shared helper', { diff: ['M', 'tests/web/helpers/app-lifecycle.cjs'] }],
     ['shared input', { diff: ['M', 'tests/test_inputs/example.gbk'] }],
-    ['spec missing from the shard map', { diff: ['A', 'tests/web/new-feature.playwright.spec.js'] }],
-    ['renamed spec without a shard map change', {
+    ['spec without measurements', { diff: ['A', 'tests/web/new-feature.playwright.spec.js'] }],
+    ['renamed spec without new measurements', {
       diff: ['R100', 'tests/web/right-drawer.playwright.spec.js', 'tests/web/right-drawer-renamed.playwright.spec.js']
     }],
+    ['deleted spec that keeps its measurements', { diff: ['D', 'tests/web/right-drawer.playwright.spec.js'] }],
     ['unrouted contract spec', { diff: ['M', 'tests/web/contracts/unknown.serial.spec.js'] }],
     ['reference scan failure', { diff: ['M', 'tests/web/label-editor.test.mjs'], grepStatus: 2 }],
     ['leaf test with runtime source', {
@@ -1449,6 +1456,9 @@ test('functional shards intersect their assigned specs with the changed leaf spe
   assert.deepEqual(functionalShardFiles({ plan, shards: TEST_SHARDS, shard: 2 }), []);
   assert.deepEqual(functionalShardFiles({ plan: fullDevPlan(), shards: TEST_SHARDS, shard: 1 }), TEST_SHARDS[0]);
   assert.deepEqual(functionalShardFiles({ plan: fullDevPlan(), shards: TEST_SHARDS, shard: 2 }), TEST_SHARDS[1]);
+  // A changed spec in no planned shard would run nowhere, so the shard fails instead of passing empty.
+  const unplanned = TEST_SHARDS.map((files) => files.filter((path) => path !== 'tests/web/right-drawer.playwright.spec.js'));
+  assert.throws(() => functionalShardFiles({ plan, shards: unplanned, shard: 2 }), { code: 'UNPLANNED_LEAF_SPEC' });
   for (const shard of [0, 9, 1.5]) {
     assert.throws(() => functionalShardFiles({ plan, shards: TEST_SHARDS, shard }), { code: 'INVALID_SHARD' });
   }
@@ -1468,29 +1478,32 @@ test('functional shards intersect their assigned specs with the changed leaf spe
     { code: 'FUNCTIONAL_NOT_REQUIRED' });
 });
 
-test('shard-files writes the changed specs of one shard from the real shard map', async () => {
-  const shards = JSON.parse(readFileSync(resolve(REPOSITORY_ROOT, 'tests/ci/functional-shards.json'), 'utf8')).shards;
-  // devLeafPlan declares the web-runtime capability, so the leaf spec must be
-  // one of shard 1's web-runtime specs; the shard order changes on rebalancing.
-  const spec = shards[0].find((path) => classifyPath(path).impact === 'web-runtime');
-  assert.ok(spec, 'shard 1 holds a web-runtime functional spec');
+test('shard-files writes the changed specs of one shard from the planned lists', async () => {
+  const spec = 'tests/web/right-drawer.playwright.spec.js';
   const plan = devLeafPlan([{ path: spec, kind: 'functional', jobs: ['playwright-functional'] }]);
-  for (const shard of [1, 2]) {
+  const run = async (shard, env) => {
     const writes = new Map();
-    const stdout = textWriter();
     const stderr = textWriter();
     const status = await runCiImpactCli({
       argv: ['shard-files', String(shard)],
-      env: { CI_IMPACT_PLAN_JSON: JSON.stringify(plan), GITHUB_OUTPUT: '/tmp/shard-output' },
+      env: { CI_IMPACT_PLAN_JSON: JSON.stringify(plan), GITHUB_OUTPUT: '/tmp/shard-output', ...env },
       cwd: REPOSITORY_ROOT,
-      stdout: stdout.stream,
+      stdout: textWriter().stream,
       stderr: stderr.stream,
       appendFileImpl: (path, content) => writes.set(path, (writes.get(path) || '') + content)
     });
-    assert.equal(status, 0, stderr.value());
-    const files = shard === 1 ? spec : '';
-    assert.equal(writes.get('/tmp/shard-output'), `files=${files}\n`);
+    return { status, output: writes.get('/tmp/shard-output'), stderr: stderr.value() };
+  };
+  for (const shard of [1, 2]) {
+    const result = await run(shard, { CI_IMPACT_FUNCTIONAL_SHARDS_JSON: JSON.stringify(TEST_SHARDS) });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.output, `files=${shard === 1 ? spec : ''}\n`);
   }
+  // The lists come only from the run's plan job; the checked-in file is never a fallback.
+  const missing = await run(1, {});
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /MISSING_ENVIRONMENT/);
+  assert.equal(missing.output, undefined);
 });
 
 const classifyOutcome = async (gitOptions, argv = ['classify', '--base', SHA.base, '--head', SHA.head]) => {
@@ -1564,6 +1577,7 @@ test('functional shards skip setup when no changed spec is assigned to them', ()
   const select = step('Select the changed specs of this shard');
   assert.match(select, /id: shard/);
   assert.match(select, /CI_IMPACT_PLAN_JSON: \$\{\{ needs\.ci-impact\.outputs\.plan \}\}/);
+  assert.match(select, /CI_IMPACT_FUNCTIONAL_SHARDS_JSON: \$\{\{ needs\.ci-impact\.outputs\.functional-shards \}\}/);
   // A pull request plan comes from the trusted base, so the trusted base's helper reads it, as in
   // PR / gate: the plan's job list then matches the policy that reads it even when the pull
   // request adds a job. Other events read their own plan with their own helper.

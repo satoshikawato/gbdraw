@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+
+import { SHARDS_FILE, casesPerFileOf, planShards, readMeasurements } from '../../tools/balance-functional-shards.mjs';
 
 const require = createRequire(import.meta.url);
 const cli = require.resolve('@playwright/test/cli');
@@ -76,7 +78,6 @@ test('comparison browser contracts run in the required PR contract job and full 
   assert.match(workflow.split('  pr-gate:\n')[1], /- web-contracts-pr/);
 });
 
-const SHARDS_FILE = 'tests/ci/functional-shards.json';
 // Lists why `shards` does not assign each functional spec file to exactly one shard.
 const assignmentProblems = (specFiles, shards) => {
   const owners = new Map();
@@ -93,6 +94,21 @@ const assignmentProblems = (specFiles, shards) => {
   ];
 };
 
+// A measured spec file that exists but that the functional suite does not list (ignored, or
+// left without cases) would be a measured leaf test that no planned shard runs. The change that
+// ignores or empties it removes its measurement.
+const unlistedMeasurements = (measuredFiles, listedFiles, exists) => measuredFiles
+  .filter((file) => exists(file) && !listedFiles.includes(file))
+  .map((file) => `${file} is measured but not a listed functional spec; remove its measurement`);
+
+test('a measured spec file that exists must be listed by the functional suite', () => {
+  const [a, b, gone] = ['tests/web/a.playwright.spec.js', 'tests/web/b.playwright.spec.js', 'tests/web/gone.playwright.spec.js'];
+  const exists = (file) => file !== gone;
+  assert.deepEqual(unlistedMeasurements([a, gone], [a, b], exists), []);
+  assert.deepEqual(unlistedMeasurements([a, b], [a], exists),
+    [`${b} is measured but not a listed functional spec; remove its measurement`]);
+});
+
 test('the shard assignment check rejects unassigned, duplicated, and unknown spec files', () => {
   const [a, b] = ['tests/web/a.playwright.spec.js', 'tests/web/b.playwright.spec.js'];
   assert.deepEqual(assignmentProblems([a, b], [[a], [b]]), []);
@@ -104,15 +120,21 @@ test('the shard assignment check rejects unassigned, duplicated, and unknown spe
   );
 });
 
-test('functional CI shards run the checked-in spec file lists and every acceptance case once', () => {
+test('functional CI shards run the planned spec file lists and every acceptance case once', () => {
   const workflow = readFileSync('.github/workflows/test.yml', 'utf8');
+  const planner = workflow.split('  ci-impact:\n')[1].split('  web-change-budget:\n')[0];
   const job = workflow.split('  playwright-functional:\n')[1]
     .split('  playwright-performance:\n')[0];
-  const { shards } = JSON.parse(readFileSync(SHARDS_FILE, 'utf8'));
+  const { shardCount, secondsPerCase } = readMeasurements();
   const matrix = JSON.parse(job.match(/shard: (\[[\d, ]+\])/)[1]);
-  assert.deepEqual(matrix, shards.map((_, index) => index + 1));
-  // tools/ci-impact.mjs shard-files (the trusted base's on a pull request) reads this shard map
+  assert.deepEqual(matrix, Array.from({ length: shardCount }, (_, index) => index + 1));
+  // The plan job lists the cases once (after npm ci) and plans the shards for the whole run.
+  assert.match(planner, /functional-shards: \$\{\{ steps\.functional_shards\.outputs\.shards \}\}\n/);
+  assert.match(planner, /id: functional_shards\n\s+run: node tools\/balance-functional-shards\.mjs plan\n/);
+  assert.ok(planner.indexOf('run: npm ci') < planner.indexOf('balance-functional-shards.mjs plan'));
+  // tools/ci-impact.mjs shard-files (the trusted base's on a pull request) reads the planned lists
   // and keeps only changed specs for a leaf-test plan; every other plan runs the shard's whole list.
+  assert.match(job, /CI_IMPACT_FUNCTIONAL_SHARDS_JSON: \$\{\{ needs\.ci-impact\.outputs\.functional-shards \}\}\n/);
   assert.match(job, /run: node \$\{\{ github\.event_name == 'pull_request' && '\.ci-trusted-base\/' \|\| '' \}\}tools\/ci-impact\.mjs shard-files \$\{\{ matrix\.shard \}\}\n/);
   assert.match(job, /files="\$FUNCTIONAL_SPECS"\n/);
   assert.match(job, /npm run test:web:functional-full -- --reporter=line,github,json \$files\n/);
@@ -120,13 +142,20 @@ test('functional CI shards run the checked-in spec file lists and every acceptan
 
   const full = list('test', '--config=tests/web/playwright/functional.config.js');
   // Spec files as the workflow names them: relative to the repository root.
-  const root = process.cwd();
-  const specFiles = [...new Set(specsOf(full).map((spec) => path
-    .relative(root, path.join(full.config.rootDir, spec.file)).split(path.sep).join('/')))];
-  assert.deepEqual(
-    assignmentProblems(specFiles, shards), [],
-    'run tools/balance-functional-shards.mjs; see docs/internal/SELECTIVE_CI.md'
-  );
+  const testDir = path.relative(process.cwd(), full.config.rootDir).split(path.sep).join('/');
+  const casesPerFile = casesPerFileOf([full], testDir);
+  const specFiles = [...casesPerFile.keys()];
+  const { shards } = planShards({ casesPerFile, secondsPerCase, shardCount });
+  assert.deepEqual(assignmentProblems(specFiles, shards), []);
+  assert.deepEqual(unlistedMeasurements([...secondsPerCase.keys()], specFiles, existsSync), []);
+  // Until the next pull request removes them, the old `shards` lists are what the trusted base
+  // before the planned lists runs on a pull request. They must cover every functional spec once;
+  // their balance may lag the plan as case counts change on dev.
+  const { shards: transitional } = JSON.parse(readFileSync(SHARDS_FILE, 'utf8'));
+  if (transitional !== undefined) {
+    assert.deepEqual(assignmentProblems(specFiles, transitional), [],
+      'the shards key of tests/ci/functional-shards.json must list every functional spec once');
+  }
   // Playwright file filters are regular expressions, so list each shard to prove
   // that no filter also selects another shard's file.
   const partition = shards.flatMap((files) => collect(

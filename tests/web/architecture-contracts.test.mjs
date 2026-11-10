@@ -85,6 +85,21 @@ const FUNCTIONAL_PLAYWRIGHT_CONFIG = readFileSync(
   join(REPOSITORY_ROOT, 'tests/web/playwright/functional.config.js'),
   'utf8'
 );
+// The functional shards run every spec under tests/web that the functional configuration does
+// not ignore (docs/internal/SELECTIVE_CI.md "Functional shards"). This job has no
+// @playwright/test, so the ignore patterns are read from the configuration's source.
+// Every entry must be a regular-expression literal without flags, one per line: an entry this
+// reader cannot parse fails instead of being dropped, so no ignored spec counts as run.
+const functionalTestIgnore = (source) => {
+  const list = source.match(/\n {2}testIgnore: \[\n([\s\S]*?)\n {2}\]/)?.[1];
+  assert.ok(list !== undefined, 'cannot find testIgnore in tests/web/playwright/functional.config.js');
+  const entries = list.split('\n').filter((line) => line.trim());
+  const sources = entries.map((line) => line.match(/^\s*\/(.+)\/,?$/)?.[1]);
+  assert.ok(entries.length && sources.every(Boolean),
+    `cannot read every testIgnore entry of tests/web/playwright/functional.config.js: ${entries.join(' ')}`);
+  return sources.map((pattern) => new RegExp(pattern));
+};
+const FUNCTIONAL_TEST_IGNORE = functionalTestIgnore(FUNCTIONAL_PLAYWRIGHT_CONFIG);
 const PR_SMOKE_PLAYWRIGHT_CONFIG = readFileSync(
   join(REPOSITORY_ROOT, 'tests/web/playwright/pr-smoke.config.js'),
   'utf8'
@@ -8105,6 +8120,14 @@ const pytestSelectors = (commands) => commands.filter((command) => /\bpython -m 
   return (path, markerSets) => (target.endsWith('/') ? path.startsWith(target) : path === target)
     && markerSets.some((markers) => selects(markers));
 });
+test('the functional ignore list is read entry by entry or not at all', () => {
+  const config = (entries) => `module.exports = {\n  testIgnore: [\n${entries.map((entry) => `    ${entry}`).join('\n')}\n  ]\n};\n`;
+  assert.deepEqual(functionalTestIgnore(config(['/a\\.js/,', '/b\\.js/'])).map(String), ['/a\\.js/', '/b\\.js/']);
+  for (const entries of [['/a/,', "'**/b.js'"], ['/a/i,'], ['/a/,', '// note'], []]) {
+    assert.throws(() => functionalTestIgnore(config(entries)), /testIgnore/, entries.join(' '));
+  }
+});
+
 const guardRegistryProblems = (registry, {
   read = (path) => readFileSync(join(REPOSITORY_ROOT, path), 'utf8'),
   workflow = TEST_WORKFLOW,
@@ -8121,7 +8144,6 @@ const guardRegistryProblems = (registry, {
   const jobCommands = new Map();
   const commandsOf = (job) => jobCommands.get(job)
     ?? jobCommands.set(job, workflowCommands(workflowJob(job, workflow))).get(job);
-  const shards = new Set(JSON.parse(read('tests/ci/functional-shards.json')).shards.flat());
   // true or false when the job's commands decide it; undefined when the path is not a test of a form they run.
   const selectedBy = (job, path) => {
     const commands = commandsOf(job);
@@ -8131,7 +8153,7 @@ const guardRegistryProblems = (registry, {
       return pytestSelectors(commands).some((selects) => selects(path, markerSets));
     }
     if (path.endsWith('.playwright.spec.js') && commands.some((command) => /\bci-impact\.mjs shard-files\b/.test(command))) {
-      return shards.has(path);
+      return path.startsWith('tests/web/') && !FUNCTIONAL_TEST_IGNORE.some((pattern) => pattern.test(path));
     }
     return undefined;
   };
