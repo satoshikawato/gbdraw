@@ -11,8 +11,9 @@ Biopython builds from the same lines: a flat file's sequence in upper case, with
 the coordinate column and the spaces; a FASTA sequence as written, without
 whitespace.
 
-A gzip input is expanded once into a temporary file, because gzip cannot be read
-at an offset; the expansion keeps the cap of :mod:`gbdraw.io.input_text`. The pass
+A gzip input is expanded into a temporary file as the pass reads it, because gzip
+cannot be read at an offset; a pass that stops early expands no more, and the
+expansion keeps the cap of :mod:`gbdraw.io.input_text`. The pass
 counts bytes itself and never asks the file for its position, and every read below
 a record sequence goes through ``_SequenceFile.read_at``, the one reader, so the
 Web can put its own range reader there.
@@ -46,8 +47,9 @@ from Bio import BiopythonParserWarning
 from Bio.Seq import MutableSeq, Seq, SequenceDataAbstractBaseClass, _dna_complement_table, _rna_complement_table
 from Bio.SeqRecord import SeqRecord
 
+from ..core.sequence_spans import sequence_spans
 from ..exceptions import InputFileError
-from .input_text import FlatFileFormat, expand_input_copy, in_sequence_encoding, is_gzip_file, open_input_bytes
+from .input_text import FlatFileFormat, in_sequence_encoding, is_gzip_file, open_expanded_input, open_input_bytes
 
 SequenceFormat = Literal["genbank", "embl", "fasta"]
 
@@ -235,8 +237,9 @@ def _release_pending() -> None:
 class _SequenceFile:
     """One input file's bytes: read in order by the parse pass, and at offsets by its record sequences.
 
-    A gzip input is expanded once into a file of its own (gzip cannot be read at
-    an offset), removed when the last record sequence of the input goes. A link
+    A gzip input is expanded into a file of its own (gzip cannot be read at an
+    offset) as the parse pass reads it, removed when the last record sequence of
+    the input goes. A link
     is followed once: the records read the file it names, so they keep reading
     after the link goes (the Web Worker links each input into the folder of one
     request and removes the folder when the request ends).
@@ -251,8 +254,15 @@ class _SequenceFile:
         self.encoding = "utf-8"
         self.key = next(_FILE_KEYS)
         self.stamp: _Stamp = (-1, -1, -1)
-        copy = expand_input_copy(self.name, _expansion_directory()) if is_gzip_file(self.name) else None
+        copy = None
+        if is_gzip_file(self.name):
+            handle, copy = tempfile.mkstemp(dir=_expansion_directory(), prefix="input-")
+            self.stamp = _stamp_of(os.fstat(handle))
+            os.close(handle)
         self.path = copy or os.path.realpath(self.name)
+        # Bytes of a gzip input written to its copy so far, and whether that is all of them (None: a plain file).
+        self.expanded: int | None = None if copy is None else 0
+        self.expanded_all = copy is None
         weakref.finalize(self, _release, self.key, copy)
         self._tables = 0
 
@@ -263,14 +273,39 @@ class _SequenceFile:
         return self._tables
 
     def blocks(self) -> Iterator[bytes]:
-        """The file's bytes from its start, in order, from a handle of the parse pass's own."""
+        """The file's bytes from its start, in order, from a handle of the parse pass's own.
+
+        A gzip input's copy is read as far as it is written, then expanded on: each
+        block is in the copy before the pass sees it.
+        """
 
         with open_input_bytes(self.path) as handle:
-            self.stamp = _stamp(handle)
+            if self.expanded is None:
+                self.stamp = _stamp(handle)
             while block := handle.read(_BLOCK_BYTES):
                 yield block
             if _stamp(handle) != self.stamp:
                 raise self.changed()
+        if not self.expanded_all:
+            yield from self._expand()
+
+    def _expand(self) -> Iterator[bytes]:
+        """A gzip input's bytes past its copy, each written to the copy before it is handed on."""
+
+        assert self.expanded is not None
+        with open_expanded_input(self.name) as expanded, open(self.path, "ab") as copy:
+            skip = self.expanded  # in the copy already: expanded again (the cap counts them) and passed over
+            while skip:
+                if not (passed := len(expanded.read(min(skip, _BLOCK_BYTES)))):
+                    raise self.changed()
+                skip -= passed
+            while block := expanded.read(_BLOCK_BYTES):
+                copy.write(block)
+                copy.flush()
+                self.expanded += len(block)
+                self.stamp = _stamp(copy)
+                yield block
+        self.expanded_all = True
 
     def read_at(self, offset: int, size: int) -> bytes:
         """``size`` bytes from ``offset``, all within the file as it was indexed."""
@@ -385,8 +420,6 @@ class _SequenceTable:
 
 # What a record sequence reads: the sequence table of a record in its input file, or bases held in memory.
 _Bases = _SequenceTable | bytes
-# The bases a whole-sequence reader (a count, a digest, a comparison) takes at a time.
-_SPAN_BASES = 1 << 20
 
 
 class RecordSequence(SequenceDataAbstractBaseClass):
@@ -549,13 +582,6 @@ def two_turns(seq: Seq | MutableSeq) -> Seq:
         turns = seq + seq
         return turns if isinstance(turns, Seq) else Seq(turns)
     return Seq(RecordSequence(data._bases, data._pieces * 2, reverse=data._reverse, translate=data._translate))
-
-
-def sequence_spans(seq: Seq | MutableSeq | bytes, size: int = _SPAN_BASES) -> Iterator[bytes]:
-    """``seq``'s bases ``size`` at a time, in order: a reader of a whole sequence holds one span at a time."""
-
-    for start in range(0, len(seq), size):
-        yield bytes(seq[start:start + size])
 
 
 def same_bases(left: Seq | MutableSeq, right: Seq | MutableSeq) -> bool:
@@ -1168,7 +1194,6 @@ __all__ = [
     "read_gff3_text",
     "same_bases",
     "sequence_files_unchanged",
-    "sequence_spans",
     "sequence_view",
     "two_turns",
 ]
