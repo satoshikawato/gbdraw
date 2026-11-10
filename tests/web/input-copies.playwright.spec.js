@@ -8,10 +8,11 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs');
 const path = require('node:path');
 const { gzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { generate } = require('./helpers/mode-transition.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { readSessionFileEntries } = require('./helpers/session-file.cjs');
 
 const SOURCE = path.resolve('tests/test_inputs/NC_001416.gb');
@@ -173,4 +174,26 @@ test('a gzip input\'s copy holds its gzip bytes, Save stores them as they are, a
   await generate(later);
   expect(await later.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
   await later.close();
+});
+
+// OV-3364: a LOSATP search stages a card's file under the id the Generate's request names. A gzip input staged with
+// another size than the request counts fails the Generate (a cache miss in the Worker).
+test('a Linear LOSATP Generate draws with a gzip GenBank input', async ({ page }, info) => {
+  test.setTimeout(480_000);
+  const gzipped = info.outputPath('NC_001416.gb.gz');
+  fs.writeFileSync(gzipped, gzipSync(fs.readFileSync(SOURCE)));
+  await routeCrossOriginIsolated(page.context());
+  await openFresh(page);
+  await showDrawing(page, { kind: 'linear' });
+  await page.getByTestId('linear-genbank-1').setInputFiles(SOURCE);
+  await page.evaluate(() => window.__GBDRAW_APP__.addLinearSeq());
+  await page.getByTestId('linear-genbank-2').setInputFiles(gzipped);
+  await page.getByRole('button', { name: 'Run LOSAT for all adjacent pairs', exact: true }).click();
+  await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatMode('blastp'));
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
+    const result = await window.__GBDRAW_APP__.runAnalysis();
+    return { status: result?.status, code: result?.error?.code ?? null };
+  });
+  expect(outcome).toEqual({ status: 'ok', code: null });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
 });
