@@ -9,6 +9,7 @@ import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
 import { ensureSvgDefs } from './svg-serialization.js';
 import { ANNOTATION_SELECTOR } from './drawn-groups.js';
+import { MATCH_FRAGMENT_OWN_ATTRIBUTES, STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT } from './drawn-attributes.generated.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
@@ -2102,7 +2103,10 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   const script = document.createElementNS(SVG_NS, 'script');
   script.setAttribute('id', INTERACTIVE_SCRIPT_ID);
   script.setAttribute('type', 'application/ecmascript');
-  script.textContent = STANDALONE_INTERACTIVE_SCRIPT;
+  // The script checks the fragments of a match with Python's list of the attributes a fragment holds on its own.
+  const scriptParts = STANDALONE_INTERACTIVE_SCRIPT.split(STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT);
+  if (scriptParts.length !== 2) throw new Error('Malformed standalone interactive SVG asset: STANDALONE_INTERACTIVE_SCRIPT');
+  script.textContent = scriptParts.join(JSON.stringify(MATCH_FRAGMENT_OWN_ATTRIBUTES));
 
   ensureStandaloneFeatureGlowFilter(svg);
   svg.appendChild(metadata);
