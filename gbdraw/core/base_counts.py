@@ -79,50 +79,64 @@ class CountedRows(NamedTuple):
 
 
 @functools.lru_cache(maxsize=8)
-def _deletion(deleted: bytes) -> tuple[NDArray[np.bool_], int]:
+def _deletion(deleted: bytes) -> tuple[NDArray[np.bool_], int, NDArray[np.bool_]]:
+    """The deletion table, the highest deleted value, and the values up to it that are bases."""
+
     table = np.zeros(256, dtype=bool)
     table[list(deleted)] = True
-    return table, max(deleted, default=-1)
+    top = max(deleted, default=-1)
+    low_bases = ~table
+    low_bases[top + 1:] = False
+    return table, top, low_bases
+
+
+def _slice_rows(
+    values: NDArray[np.uint8], gone: NDArray[np.intp], phase: int,
+) -> tuple[NDArray[np.intp], NDArray[np.int64], NDArray[np.int64]]:
+    """The offsets of the rows that begin in a slice whose deleted bytes are at ``gone``, ``phase`` bases into a
+    row, the letters of each row the slice touches (the first continues a row), and the slice's histogram."""
+
+    firsts = np.arange(-phase % ROW_BASES, len(values) - len(gone), ROW_BASES)
+    # The ``b``-th base of the slice is byte ``b`` plus the deleted bytes before it.
+    begins = firsts + np.searchsorted(gone - np.arange(len(gone)), firsts, side="right") if len(gone) else firsts
+    cuts = np.concatenate(([0], begins)) if not len(begins) or begins[0] else begins
+    key = np.uint16 if len(cuts) <= 256 else np.intp  # a key: a byte's row in the slice, then its value
+    keys = np.repeat(np.arange(0, len(cuts) * 256, 256, dtype=key), np.diff(cuts, append=len(values)))
+    keys += values
+    pieces = np.bincount(keys, minlength=len(cuts) * 256).reshape(len(cuts), 256)
+    letters = np.add.reduceat(pieces[:, _LETTER_BYTES], _LETTER_COLUMNS, axis=1)
+    if len(cuts) > len(begins):
+        return begins, letters, pieces.sum(axis=0)
+    return begins, np.concatenate((np.zeros((1, 4), dtype=np.int64), letters)), pieces.sum(axis=0)
 
 
 def count_rows(data: bytes | memoryview, before: int, deleted: bytes = b"") -> CountedRows:
     """Count the bases of ``data`` in rows of ``ROW_BASES``, ``before`` bases of the sequence before it.
 
     The one producer of count rows. A byte in ``deleted`` is not a base. Each slice is one histogram call whose
-    keys say the row of each byte: a row's first byte is found from the positions of the few bytes that may be
-    deleted (the bytes up to the highest deleted value, then the deletion table), and a row's counts are read
-    from its letters' columns, so the work does not grow with the number of rows.
+    keys say the row of each byte: a row's first byte is found from the positions of the bytes up to the highest
+    deleted value, taken as deleted; when the slice's histogram shows one of them is a base, the slice is counted
+    again with the deletion table. A row's counts are read from its letters' columns, so the work does not grow
+    with the number of rows.
     """
 
-    table, top = _deletion(deleted)
+    table, top, low_bases = _deletion(deleted)
     rows = [np.zeros((1, 4), dtype=np.int64)]
     starts: list[NDArray[np.int64]] = []
     histograms: list[NDArray[np.int64]] = []
     bases = before
     for low in range(0, len(data), SLICE_BYTES):
         values = np.frombuffer(data, dtype=np.uint8, count=min(SLICE_BYTES, len(data) - low), offset=low)
-        if top >= 0:
-            maybe = np.flatnonzero(values <= top)
-            gone = maybe[table[values[maybe]]]
-        else:
-            gone = maybe = np.zeros(0, dtype=np.intp)
-        firsts = np.arange(-bases % ROW_BASES, len(values) - len(gone), ROW_BASES)
-        # The ``b``-th base of the slice is byte ``b`` plus the deleted bytes before it.
-        begins = firsts + np.searchsorted(gone - np.arange(len(gone)), firsts, side="right") if len(gone) else firsts
-        whole = len(begins) > 0 and begins[0] == 0  # the slice begins a row
-        cuts = begins if whole else np.concatenate(([0], begins))
-        key = np.uint16 if len(cuts) <= 256 else np.intp  # a key: a byte's row in the slice, then its value
-        keys = np.repeat(np.arange(0, len(cuts) * 256, 256, dtype=key), np.diff(cuts, append=len(values)))
-        keys += values
-        pieces = np.bincount(keys, minlength=len(cuts) * 256).reshape(len(cuts), 256)
-        letters = np.add.reduceat(pieces[:, _LETTER_BYTES], _LETTER_COLUMNS, axis=1)
-        if not whole:
-            rows[-1][-1] += letters[0]
-            letters = letters[1:]
-        if len(letters):
-            rows.append(letters)
+        gone = np.flatnonzero(values <= top) if top >= 0 else np.zeros(0, dtype=np.intp)
+        begins, letters, histogram = _slice_rows(values, gone, bases)
+        if histogram[low_bases].any():  # a byte taken as deleted is a base
+            gone = gone[table[values[gone]]]
+            begins, letters, histogram = _slice_rows(values, gone, bases)
+        rows[-1][-1] += letters[0]
+        if len(letters) > 1:
+            rows.append(letters[1:])
         starts.append(begins + low)
-        histograms.append(pieces.sum(axis=0))
+        histograms.append(histogram)
         bases += len(values) - len(gone)
     return CountedRows(
         np.concatenate(rows) if len(rows) > 1 else rows[0],
