@@ -433,7 +433,7 @@ const state = {
     depth_large_tick_interval: 25,
     pairwise_match_style: 'ribbon', multi_record_size_mode: 'auto',
     multi_record_min_radius_ratio: 0.55, multi_record_column_gap_ratio: 0.10,
-    multi_record_row_gap_ratio: 0.05, multi_record_positions: [], depth_tracks: [],
+    multi_record_row_gap_ratio: 0.05, multi_record_positions: [], depth_tracks: [], feature_density_tracks: [],
     circular_track_slots_enabled: false, circular_track_slots_axis_index: null,
     circular_track_slots: [], linear_track_slots_enabled: false,
     linear_track_slots_axis_index: null, linear_track_slots: []
@@ -4695,6 +4695,7 @@ const linearCombinationRegressionState = ({
     features,
     feature_shapes: featureShapes,
     depth_tracks: [],
+    feature_density_tracks: [],
     linear_track_slots_enabled: slotsEnabled,
     linear_track_slots_axis_index: axisIndex,
     linear_track_slots: structuredClone(slots)
@@ -4817,6 +4818,7 @@ const circularRequestState = ({
     circular_track_slots: [],
     linear_track_slots_enabled: false,
     depth_tracks: [],
+    feature_density_tracks: [],
     feature_width_circular: null,
     depth_width_circular: null,
     gc_content_width_circular: null,
