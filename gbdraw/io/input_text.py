@@ -101,7 +101,10 @@ class _CappedExpansion(io.RawIOBase):
         return True
 
     def readinto(self, buffer: WriteableBuffer) -> int:
-        count = self._gzip.readinto(buffer)
+        # Bytes up to the limit are read; a read at the limit asks for one more byte and refuses when it exists.
+        room = self._limit - self._expanded
+        view = memoryview(buffer).cast("B")
+        count = self._gzip.readinto(view[:room] if room > 0 else view[:1])
         self._expanded += count
         if self._expanded > self._limit:
             raise InputFileError(

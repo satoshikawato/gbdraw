@@ -270,7 +270,11 @@ def test_sequences_a_view_cannot_read_take_biopython_s_own_operations() -> None:
 def test_same_bases_reads_a_span_at_a_time(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sequence_spans_module, "SPAN_BASES", 3)
     assert list(sequence_spans_module.sequence_spans(b"ACGTACG")) == [b"ACG", b"TAC", b"G"]
+    reads: list[int] = []
+    real = RecordSequence._read
+    monkeypatch.setattr(RecordSequence, "_read", lambda self, start, stop: reads.append(stop - start) or real(self, start, stop))
     assert same_bases(Seq("ACGTACGTA"), sequence_view(Seq("TACGTACGTAC"), 1, 10))
+    assert [size for size in reads if size] == [3, 3, 3]  # the view read three bases at a time, never whole
     assert not same_bases(Seq("ACGTACGTA"), Seq("ACGTACGTT"))
     assert not same_bases(Seq("ACGT"), Seq("ACGTA"))
 

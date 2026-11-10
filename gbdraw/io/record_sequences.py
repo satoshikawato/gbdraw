@@ -74,6 +74,7 @@ from ..core.base_counts import (
 )
 from ..core.sequence_spans import sequence_spans
 from ..exceptions import InputFileError
+from . import input_text
 from .input_text import FlatFileFormat, in_sequence_encoding, is_gzip_file, open_expanded_input, open_input_bytes
 
 SequenceFormat = Literal["genbank", "embl", "fasta"]
@@ -313,6 +314,7 @@ class _SequenceFile:
         # Bytes of a gzip input written to its copy so far, and whether that is all of them (None: a plain file).
         self.expanded: int | None = None if copy is None else 0
         self.expanded_all = copy is None
+        self.original: _Stamp | None = None  # a gzip input's own stamp when its first pass expanded it
         weakref.finalize(self, _release, self.key, copy)
         self._tables = 0
 
@@ -340,21 +342,40 @@ class _SequenceFile:
             yield from self._expand()
 
     def _expand(self) -> Iterator[bytes]:
-        """A gzip input's bytes past its copy, each written to the copy before it is handed on."""
+        """A gzip input's bytes past its copy, each written to the copy before it is handed on.
+
+        A later pass (the encoding retry) expands the input again and passes over what the copy holds, so the
+        input must be the file the first pass expanded. A read stops at the cap (its last block is cut there), so
+        the cap refuses only a byte past it that a reader asks for. A pass refused while it expands leaves no byte
+        of its copy behind.
+        """
 
         assert self.expanded is not None
-        with open_expanded_input(self.name) as expanded, open(self.path, "ab") as copy:
-            skip = self.expanded  # in the copy already: expanded again (the cap counts them) and passed over
-            while skip:
-                if not (passed := len(expanded.read(min(skip, _BLOCK_BYTES)))):
-                    raise self.changed()
-                skip -= passed
-            while block := expanded.read(_BLOCK_BYTES):
-                copy.write(block)
-                copy.flush()
-                self.expanded += len(block)
-                self.stamp = _stamp(copy)
-                yield block
+        try:
+            original = _stamp_of(os.stat(self.name))
+            if self.original is not None and original != self.original:
+                raise self.changed()
+            self.original = original
+            with open_expanded_input(self.name) as expanded, open(self.path, "ab") as copy:
+                skip = self.expanded  # in the copy already: expanded again (the cap counts them) and passed over
+                while skip:
+                    if not (passed := len(expanded.read(min(skip, _BLOCK_BYTES)))):
+                        raise self.changed()
+                    skip -= passed
+                while block := expanded.read(max(1, min(_BLOCK_BYTES, input_text.MAX_EXPANDED_INPUT_BYTES - self.expanded))):
+                    copy.write(block)
+                    copy.flush()
+                    self.expanded += len(block)
+                    self.stamp = _stamp(copy)
+                    yield block
+        except GeneratorExit:
+            raise
+        except BaseException:
+            with open(self.path, "wb"):
+                pass  # the copy of a refused pass: emptied, so a later pass expands the input again
+            self.expanded = 0
+            self.stamp = _stamp_of(os.stat(self.path))
+            raise
         self.expanded_all = True
 
     def read_at(self, offset: int, size: int) -> bytes:
