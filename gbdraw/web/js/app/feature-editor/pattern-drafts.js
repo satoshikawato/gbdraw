@@ -10,7 +10,7 @@ const specificRuleRevision = (rule) => JSON.stringify([
 
 /**
  * @typedef {object} SpecificRulePatternDraftsOptions
- * @property {() => SpecificColorRule[]} rules The canonical Color-rule rows of the shown mode's drawing
+ * @property {() => readonly SpecificColorRule[]} rules The canonical Color-rule rows of the shown mode's drawing
  *   (their owner is rule-actions).
  * @property {(value: Map<SpecificColorRule, PatternDraft>) => { value: Map<SpecificColorRule, PatternDraft> }} ref Vue `ref`
  * @property {() => void} changed Tells the rule owner a draft changed, after the change, so the

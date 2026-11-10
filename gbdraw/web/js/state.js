@@ -262,7 +262,7 @@ const defaultPaletteDraftState = createDefaultPaletteDraftState();
 const paletteInstantPreviewEnabled = ref(defaultPaletteDraftState.paletteInstantPreviewEnabled);
 const appliedPaletteName = typedRef(defaultPaletteDraftState.appliedPaletteName);
 const appliedPaletteColors = typedRef(defaultPaletteDraftState.appliedPaletteColors);
-const newSpecRule = reactive(createDefaultSpecificRule());
+const newSpecRule = typedReactive(createDefaultSpecificRule());
 /**
  * A built-in color table offered as a preset of the specific rules.
  * @typedef {{ id: string, label: string, rules: readonly Readonly<ParsedSpecificRule>[] }} SpecificRulePreset
@@ -275,8 +275,8 @@ const specificRulePresets = Object.freeze(Object.entries(BUILTIN_COLOR_TABLES).m
   label: table.title,
   rules: Object.freeze(table.rows.map(([feat, qual, val, color, cap]) => Object.freeze({ feat, qual, val, color, cap })))
 })));
-const selectedSpecificPreset = ref(defaultEditorDraftState.selectedSpecificPreset);
-const specificRulePresetLoading = ref(defaultEditorDraftState.specificRulePresetLoading);
+const selectedSpecificPreset = typedRef(defaultEditorDraftState.selectedSpecificPreset);
+const specificRulePresetLoading = typedRef(defaultEditorDraftState.specificRulePresetLoading);
 const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 // A choice of the PNG download, as the DPI beside it, kept for the page only:
 // off, the PNG keeps the drawing's transparent background (as the CLI's PNG
@@ -687,12 +687,12 @@ const featureKeys = [
 
 const defaultColorKeys = [...featureKeys, 'default', 'skew_high', 'skew_low', 'gc_content', ...COMPARISON_COLOR_KEYS];
 
-const newColorFeat = ref(defaultEditorDraftState.newColorFeat);
-const newColorVal = ref(defaultEditorDraftState.newColorVal);
+const newColorFeat = typedRef(defaultEditorDraftState.newColorFeat);
+const newColorVal = typedRef(defaultEditorDraftState.newColorVal);
 
-const newPriorityRule = reactive(createDefaultPriorityRule());
+const newPriorityRule = typedReactive(createDefaultPriorityRule());
 
-const newFeatureToAdd = ref(defaultEditorDraftState.newFeatureToAdd);
+const newFeatureToAdd = typedRef(defaultEditorDraftState.newFeatureToAdd);
 
 // The committed metadata of the displayed Result (svg-result-ingestion.js).
 const displayedResultMetadata = () => getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]));
