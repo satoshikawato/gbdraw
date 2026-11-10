@@ -4115,8 +4115,7 @@ test('@comparison-contract real LOSAT Wasm searches two multi-record sources in 
   expect(snapshot.svgPairs).toEqual(pairs.map((pair) => pair.join('->')).sort());
 });
 
-// Both engines pass the genome pair's -searchsp. The serial engine (losat.wasm, LOSAT web ABI) refuses
-// -searchsp until the vendored losat.wasm is rebuilt from a LOSAT commit whose web ABI reads it.
+// Both engines pass the genome pair's -searchsp (the serial engine reads it through LOSAT's web ABI).
 for (const engine of ['threaded', 'serial']) test(`@comparison-contract a cropped LOSATN pair searches with the search space of its two whole genomes (${engine})`, async ({ page }) => {
   test.setTimeout(300000);
   await routeCrossOriginIsolated(page.context());
@@ -4169,7 +4168,8 @@ for (const engine of ['threaded', 'serial']) test(`@comparison-contract a croppe
 
 // LOSATP passes the proteins of the subject genome as -dbsize (PD-OI-018 revision 6), which Python plans for the
 // drawing's request. Threaded only: the serial engine refuses -dbsize until the vendored losat.wasm reads it (OV-3251).
-test('@comparison-contract a cropped LOSATP pair searches with the proteins of its subject genome (threaded)', async ({ page }) => {
+// Both engines pass the subject genome's -dbsize.
+for (const engine of ['threaded', 'serial']) test(`@comparison-contract a cropped LOSATP pair searches with the proteins of its subject genome (${engine})`, async ({ page }) => {
   test.setTimeout(300000);
   await routeCrossOriginIsolated(page.context());
   await page.addInitScript(() => {
@@ -4184,7 +4184,7 @@ test('@comparison-contract a cropped LOSATP pair searches with the proteins of i
   await openApp(page);
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
   await showDrawing(page, { kind: 'linear' });
-  await page.evaluate(async ({ contents }) => {
+  await page.evaluate(async ({ contents, engine }) => {
     const app = window.__GBDRAW_APP__;
     app.setLinearInputType('gb');
     for (const [index, text] of contents.entries()) {
@@ -4194,11 +4194,11 @@ test('@comparison-contract a cropped LOSATP pair searches with the proteins of i
     }
     Object.assign(app.form, { show_gc: false, show_skew: false, show_depth: false, show_labels_linear: 'none' });
     Object.assign(app.adv, { min_bitscore: 0, evalue: 1, identity: 0, alignment_length: 0 });
-    app.losatExecution.executionMode = 'threaded';
+    app.losatExecution.executionMode = engine;
     await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('pairwise');
-  }, { contents });
+  }, { contents, engine });
   const run = async () => {
     const result = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
     expect(result, JSON.stringify(await page.evaluate(() => window.__GBDRAW_APP__.errorLog))).toEqual({ status: 'ok' });
