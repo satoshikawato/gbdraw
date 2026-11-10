@@ -103,7 +103,6 @@ from .web_support.mode_scoped_settings import (
 )
 
 if TYPE_CHECKING:
-    from .api.run_metadata import RunMetadata
     from .analysis.protein_colinearity import ProteinIdentityManifest
     from .api.requests import DiagramRequest
 
@@ -303,7 +302,23 @@ class SessionBuildContext:
     # What the run reported beside its Results (``gbdraw.api.run_metadata``,
     # the producer of what a Web Save writes); the Session keeps its saved
     # form in place of any ``runMetadata`` a source Session held.
-    run_metadata: RunMetadata | None = None
+    run_metadata: SessionRunMetadata | None = None
+
+
+def saved_run_metadata(metadata: SessionRunMetadata) -> SessionRunMetadata:
+    """What a Session written by gbdraw keeps of the run metadata: the fields
+    that hold something. A Load reads a missing notice list as an empty one."""
+
+    saved: SessionRunMetadata = {}
+    if "trackSlotGeometry" in metadata:
+        saved["trackSlotGeometry"] = metadata["trackSlotGeometry"]
+    if metadata.get("annotationWarnings"):
+        saved["annotationWarnings"] = metadata["annotationWarnings"]
+    if metadata.get("featureIdentityNotices"):
+        saved["featureIdentityNotices"] = metadata["featureIdentityNotices"]
+    if metadata.get("comparisonWarnings"):
+        saved["comparisonWarnings"] = metadata["comparisonWarnings"]
+    return saved
 
 
 def _feature_catalog_key(feature: Mapping[str, Any]) -> tuple[int, str] | None:
@@ -5843,7 +5858,6 @@ def build_session_json(
     _canonical_request_is_resolved: bool = False,
 ) -> dict[str, Any]:
     """Build a GUI-loadable session JSON payload from a CLI run."""
-    from gbdraw.api.run_metadata import saved_run_metadata
 
     source_version: int | None = None
     if context.source_session is not None:
@@ -7846,6 +7860,7 @@ __all__ = [
     "normalize_current_session_artifacts",
     "legend_edits_by_row_key",
     "safe_embedded_filename",
+    "saved_run_metadata",
     "session_legend_edits_by_row_key",
     "serialize_file_entry",
     "session_depth_source_widths",

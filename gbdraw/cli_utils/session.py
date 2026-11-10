@@ -31,7 +31,7 @@ from gbdraw.render.formats import (
     resolve_output_paths,
 )
 from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
-from gbdraw.api.run_metadata import RenderedResult, RunMetadata, build_run_metadata, saved_run_metadata
+from gbdraw.api.run_metadata import RenderedResult, build_run_metadata
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     CircularSourceCard,
@@ -40,8 +40,10 @@ from gbdraw.session_io import (
     _write_validated_session_json,
     build_session_json,
     safe_embedded_filename,
+    saved_run_metadata,
     serialize_file_entry,
 )
+from gbdraw.session_contract import SessionRunMetadata
 from gbdraw.session_migration import (
     project_session_adjunct_for_current_write,
     replace_current_derived_feature_state,
@@ -79,7 +81,7 @@ class DiagramRunResult:
     protein_identity_manifest: Mapping[str, Any] | None = None
     legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] | None = None
     legacy_protein_derived_evidence: tuple[Mapping[str, Any], ...] | None = None
-    run_metadata: RunMetadata = field(default_factory=lambda: RunMetadata())
+    run_metadata: SessionRunMetadata = field(default_factory=lambda: SessionRunMetadata())
     canonical_request: DiagramRequest | None = None
     biological_feature_metadata: tuple[Mapping[str, Any], ...] = ()
     interactive_contexts: tuple[InteractiveSvgContext | None, ...] = ()

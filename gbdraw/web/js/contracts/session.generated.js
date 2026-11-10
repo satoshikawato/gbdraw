@@ -38,10 +38,50 @@
  */
 /**
  * @typedef {object} SessionRunMetadata
- * @property {unknown} [trackSlotGeometry]
- * @property {unknown[]} [annotationWarnings]
- * @property {unknown[]} [featureIdentityNotices]
- * @property {unknown[]} [comparisonWarnings]
+ * @property {ResolvedTrackSlotGeometry} [trackSlotGeometry]
+ * @property {SessionAnnotationWarning[]} [annotationWarnings]
+ * @property {SessionFeatureIdentityNotice[]} [featureIdentityNotices]
+ * @property {SessionComparisonWarning[]} [comparisonWarnings]
+ */
+/**
+ * @typedef {object} ResolvedTrackSlotGeometry
+ * @property {1} schema
+ * @property {'circular' | 'linear'} mode
+ * @property {'resolved'} source
+ * @property {Record<string, unknown>[]} records
+ */
+/**
+ * @typedef {object} SessionAnnotationWarning
+ * @property {string} code
+ * @property {string} setId
+ * @property {string} annotationId
+ * @property {string} recordId
+ * @property {number} recordIndex
+ * @property {number} missingCount
+ * @property {string} message
+ * @property {number} resultIndex
+ * @property {string} resultName
+ */
+/**
+ * @typedef {object} SessionFeatureIdentityNotice
+ * @property {string} recordKey
+ * @property {string} biologicalFeatureId
+ * @property {'crop_excluded' | 'absent' | 'unresolved'} status
+ * @property {string[]} kinds
+ * @property {number} resultIndex
+ */
+/**
+ * @typedef {object} SessionComparisonWarning
+ * @property {string} code
+ * @property {number} queryRecordIndex
+ * @property {number} subjectRecordIndex
+ * @property {string} queryRecordId
+ * @property {string} subjectRecordId
+ * @property {number} rowCount
+ * @property {string[]} exampleIds
+ * @property {string} message
+ * @property {number} resultIndex
+ * @property {string} resultName
  */
 /**
  * @typedef {object} SessionCliInvocation

@@ -173,6 +173,23 @@ def test_an_unknown_key_in_each_closed_object_is_a_violation() -> None:
             "addedCaptions": {}, "colorOverrides": {}, "deletedEntries": [], "entries": [], "strokeOverrides": {},
         },
     }
+    # One run notice of each kind, so that each row type is reached; no stored Session holds one.
+    result = {"resultIndex": 0, "resultName": edited["results"][0]["name"]}
+    edited["runMetadata"] |= {
+        "annotationWarnings": [{
+            "code": "feature_selector_unmatched", "setId": "s", "annotationId": "a", "recordId": "NC_012920.1",
+            "recordIndex": 0, "missingCount": 1, "message": "No feature matches.", **result,
+        }],
+        "featureIdentityNotices": [{
+            "recordKey": "record-1", "biologicalFeatureId": "feature-1", "status": "absent", "kinds": ["label"],
+            "resultIndex": 0,
+        }],
+        "comparisonWarnings": [{
+            "code": "comparison_record_id_unmatched", "queryRecordIndex": 0, "subjectRecordIndex": 1,
+            "queryRecordId": "a", "subjectRecordId": "b", "rowCount": 1, "exampleIds": ["a"],
+            "message": "No drawn record.", **result,
+        }],
+    }
     validate_session(edited)
     sessions = [edited, *(
         _with_current_request(session)

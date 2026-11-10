@@ -3677,58 +3677,103 @@ def _run_notice_inputs(tmp_path: Path) -> dict[str, Path]:
     return paths
 
 
-@pytest.mark.parametrize("mode", ["circular", "linear"])
-def test_cli_session_carries_the_run_metadata_the_web_save_writes(tmp_path: Path, mode: str) -> None:
+@pytest.mark.parametrize("case", ["circular", "circular-batch", "linear"])
+def test_cli_session_saves_the_run_metadata_the_worker_reports(tmp_path: Path, case: str) -> None:
     """OV-3240, OV-3244: a CLI-saved Session holds each record's axis and the
     run notices, so the Web can select a region on the loaded Result and shows
-    the notices before any Generate. They are what the Worker reports for the
-    same request, which a Web Save writes; a notice list without a notice is
-    left out (Load reads it as empty)."""
+    the notices before any Generate. They are the saved form of what the Web
+    Worker reports for the same request (one producer,
+    ``gbdraw.api.run_metadata``), and each row names its Result as the Session
+    names it, also in a Circular batch whose second Result has its own rows."""
 
+    from gbdraw.session_io import saved_run_metadata
     from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 
     root = Path(__file__).resolve().parents[1]
     lambda_gb = root / "tests/test_inputs/NC_001416.gb"
+    mito_gb = root / "tests/fixtures/sessions/cli-web-mito.gb"
     tables = _run_notice_inputs(tmp_path)
     session_path = tmp_path / "cli.gbdraw-session.json"
     common = ["-o", str(tmp_path / "cli"), "-f", "svg", "--session_output", str(session_path),
               "--annotation_table", str(tables["annotations"])]
-    if mode == "circular":
+    if case == "circular":
         circular_main(["--gbk", str(lambda_gb), *common])
+    elif case == "circular-batch":
+        circular_main(["--gbk", str(lambda_gb), str(mito_gb), *common])
     else:
         linear_main([
-            "--gbk", str(lambda_gb), str(root / "tests/fixtures/sessions/cli-web-mito.gb"), *common,
+            "--gbk", str(lambda_gb), str(mito_gb), *common,
             "-b", str(tables["blast"]), "--feature_override_table", str(tables["overrides"]),
             "--region", "NC_001416.1:20000-30000",
         ])
     payload = drawing_view(load_session(session_path))
-    web = render_embedded_canonical_web_request(
+    reply = render_embedded_canonical_web_request(
         payload["renderRequest"], resources=payload["resources"], workspace=tmp_path / "web"
     )["metadata"]
+    names = [result["name"] for result in payload["results"]]
+    assert len(names) == (2 if case == "circular-batch" else 1)
 
     def rows(metadata: dict, field: str) -> list[dict]:
-        return metadata["records"] if field == "trackSlotGeometry" else metadata
+        return metadata[field]["records"] if field == "trackSlotGeometry" else metadata[field]
 
-    def without_result_name(metadata: dict) -> dict:
-        # A Result's name follows its surface: its output prefix on the CLI, its file name on the Web.
-        normalized = {}
-        for field in _RUN_METADATA_FIELDS:
-            if not metadata.get(field):
-                continue
-            items = [{key: value for key, value in row.items() if key != "resultName"} for row in rows(metadata[field], field)]
-            normalized[field] = {**metadata[field], "records": items} if field == "trackSlotGeometry" else items
-        return normalized
+    # The Worker names a Result by its file name, a Session by its output
+    # prefix; every other byte of a row is the Worker's.
+    reported = copy.deepcopy({field: reply[field] for field in _RUN_METADATA_FIELDS if field in reply})
+    assert set(_RUN_METADATA_FIELDS) - {"trackSlotGeometry"} <= set(reported)
+    for field in reported:
+        for row in rows(reported, field):
+            if "resultName" in row:
+                row["resultName"] = names[row["resultIndex"]]
 
     saved = payload["runMetadata"]
+    assert saved == saved_run_metadata(reported)
     expected_fields = ["trackSlotGeometry", "annotationWarnings"] + (
-        ["featureIdentityNotices", "comparisonWarnings"] if mode == "linear" else [])
+        ["featureIdentityNotices", "comparisonWarnings"] if case == "linear" else [])
     assert list(saved) == expected_fields
-    assert saved["trackSlotGeometry"]["mode"] == mode
-    assert without_result_name(saved) == without_result_name(web)
+    assert saved["trackSlotGeometry"]["mode"] == case.split("-")[0]
+    assert {row["resultIndex"] for row in rows(saved, "trackSlotGeometry")} == set(range(len(names)))
     # Each row names its Result as the Session does, as in a Web Save (OV-3243).
-    result_name = payload["results"][0]["name"]
-    assert {row["resultName"] for field in saved for row in rows(saved[field], field) if "resultName" in row} == {
-        result_name}
+    for field in saved:
+        for row in rows(saved, field):
+            assert row.get("resultName", names[row["resultIndex"]]) == names[row["resultIndex"]]
+
+
+def test_cli_resave_of_a_session_30_replaces_its_run_metadata(tmp_path: Path) -> None:
+    """A re-save of an older Session (27-30, migrated on the way) keeps the
+    new run's metadata in place of the source's, never beside it."""
+
+    source = json.loads(gzip.decompress(
+        (Path(__file__).parent / "fixtures/sessions/scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz").read_bytes()
+    ))
+    assert source["version"] == 30
+    source["runMetadata"] = {
+        "trackSlotGeometry": {"schema": 1, "mode": "circular", "source": "resolved",
+                              "records": [{"resultIndex": 0, "resultName": "stale", "recordIndex": 0}]},
+        "annotationWarnings": [{
+            "code": "feature_selector_unmatched", "setId": "s", "annotationId": "stale", "recordId": "r",
+            "recordIndex": 0, "missingCount": 1, "message": "stale", "resultIndex": 0, "resultName": "stale",
+        }],
+    }
+    validate_session(source)
+    geometry = {"schema": 1, "mode": "circular", "source": "resolved",
+                "records": [{"resultIndex": 0, "resultName": "again", "recordIndex": 0}]}
+
+    def resave(run_metadata: dict) -> dict:
+        document = build_session_json(
+            SessionBuildContext(mode="circular", output_prefix="again", render_formats=("svg",),
+                                source_session=source, run_metadata=run_metadata),
+            svg_results=(("again", "<svg></svg>"),),
+            embedded_files=source["files"],
+            generated_at=datetime(2026, 11, 10),
+            canonical_request=_canonical_request("circular"),
+        )
+        assert "stale" not in json.dumps(document)
+        return drawing_view(document, mode="circular")
+
+    empty_notices = {"annotationWarnings": [], "featureIdentityNotices": [], "comparisonWarnings": []}
+    assert resave({"trackSlotGeometry": geometry, **empty_notices})["runMetadata"] == {"trackSlotGeometry": geometry}
+    # A run that reports nothing leaves no runMetadata of the source behind.
+    assert "runMetadata" not in resave(empty_notices)
 
 
 def _circular_genbank(*records: tuple[str, str, str]) -> str:

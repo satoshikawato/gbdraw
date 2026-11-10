@@ -276,7 +276,7 @@ def collect_track_slot_geometry_records(
     return copied_records
 
 
-class TrackSlotGeometry(TypedDict):
+class ResolvedTrackSlotGeometry(TypedDict):
     """A render's resolved track-slot geometry: one entry per drawn record of each Result."""
 
     schema: Literal[1]
@@ -289,7 +289,7 @@ def resolved_track_slot_geometry(
     *,
     mode: Literal["circular", "linear"],
     records: Sequence[Mapping[str, object]],
-) -> TrackSlotGeometry | None:
+) -> ResolvedTrackSlotGeometry | None:
     """The geometry of the collected records; ``None`` when no Result has any."""
 
     if not records:
@@ -309,7 +309,7 @@ __all__ = [
     "LinearAxisRow",
     "RadialExtent",
     "RecordAxisInput",
-    "TrackSlotGeometry",
+    "ResolvedTrackSlotGeometry",
     "circular_axis_geometry",
     "linear_axis_geometry",
     "collect_track_slot_geometry_records",

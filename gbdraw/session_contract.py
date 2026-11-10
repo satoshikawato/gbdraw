@@ -23,6 +23,7 @@ import re
 from typing import Any, Literal, NewType, TypedDict, get_type_hints
 
 from .features.overrides import FeatureVisibilityMode, LabelVisibilityMode
+from .render.track_slot_metadata import ResolvedTrackSlotGeometry
 from .web_support.mode_scoped_settings import (
     DIAGRAM_MODES,
     LOSAT_EXECUTION_FIELDS,
@@ -47,17 +48,58 @@ class SessionResult(TypedDict):
     content: str
 
 
+class SessionAnnotationWarning(TypedDict):
+    """A region annotation that a Result does not draw whole (``ResolutionWarning``)."""
+
+    code: str
+    setId: str
+    annotationId: str
+    recordId: str
+    recordIndex: int
+    missingCount: int
+    message: str
+    resultIndex: int
+    resultName: str
+
+
+class SessionFeatureIdentityNotice(TypedDict):
+    """An identity-addressed feature edit that a Result does not draw (``FeatureIdentityNotice``)."""
+
+    recordKey: str
+    biologicalFeatureId: str
+    status: Literal["crop_excluded", "absent", "unresolved"]
+    kinds: list[str]
+    resultIndex: int
+
+
+class SessionComparisonWarning(TypedDict):
+    """Comparison table rows whose sequence IDs name no drawn record (``ComparisonRecordIdWarning``)."""
+
+    code: str
+    queryRecordIndex: int
+    subjectRecordIndex: int
+    queryRecordId: str
+    subjectRecordId: str
+    rowCount: int
+    exampleIds: list[str]
+    message: str
+    resultIndex: int
+    resultName: str
+
+
 class SessionRunMetadata(TypedDict, total=False):
-    """What a Generate reported beside its Results.
+    """What a render reported beside its Results, as
+    :func:`gbdraw.api.run_metadata.build_run_metadata` builds it for every
+    surface.
 
     The rows are checked by ``_validate_other_mode_run_metadata`` and by the
     Web's warning and notice validators.
     """
 
-    trackSlotGeometry: object
-    annotationWarnings: list[object]
-    featureIdentityNotices: list[object]
-    comparisonWarnings: list[object]
+    trackSlotGeometry: ResolvedTrackSlotGeometry
+    annotationWarnings: list[SessionAnnotationWarning]
+    featureIdentityNotices: list[SessionFeatureIdentityNotice]
+    comparisonWarnings: list[SessionComparisonWarning]
 
 
 class _CliInvocationRequired(TypedDict):
@@ -600,6 +642,9 @@ __all__ = [
     "SessionOtherModeLegend",
     "SessionOtherModeResult",
     "SessionOtherModeUi",
+    "SessionAnnotationWarning",
+    "SessionComparisonWarning",
+    "SessionFeatureIdentityNotice",
     "SessionRunMetadata",
     "describe_session_admission",
     "describe_session_document",

@@ -114,11 +114,15 @@ classDiagram
     +content string
   }
   class SessionRunMetadata {
-    +trackSlotGeometry? any
-    +annotationWarnings? list of any
-    +featureIdentityNotices? list of any
-    +comparisonWarnings? list of any
+    +trackSlotGeometry? ResolvedTrackSlotGeometry
+    +annotationWarnings? list of SessionAnnotationWarning
+    +featureIdentityNotices? list of SessionFeatureIdentityNotice
+    +comparisonWarnings? list of SessionComparisonWarning
   }
+  SessionRunMetadata --> ResolvedTrackSlotGeometry : trackSlotGeometry
+  SessionRunMetadata --> SessionAnnotationWarning : annotationWarnings
+  SessionRunMetadata --> SessionFeatureIdentityNotice : featureIdentityNotices
+  SessionRunMetadata --> SessionComparisonWarning : comparisonWarnings
   class SessionCliInvocation {
     +schema integer
     +mode string
@@ -181,6 +185,42 @@ classDiagram
   SessionOtherModeResult --> CanonicalRenderRequest : renderRequest
   SessionOtherModeResult --> SessionOtherModeEditorState : editorState
   SessionOtherModeResult --> SessionOtherModeUi : ui
+  class ResolvedTrackSlotGeometry {
+    +schema 1
+    +mode 'circular' or 'linear'
+    +source 'resolved'
+    +records list of map of any
+  }
+  class SessionAnnotationWarning {
+    +code string
+    +setId string
+    +annotationId string
+    +recordId string
+    +recordIndex integer
+    +missingCount integer
+    +message string
+    +resultIndex integer
+    +resultName string
+  }
+  class SessionFeatureIdentityNotice {
+    +recordKey string
+    +biologicalFeatureId string
+    +status 'crop_excluded' or 'absent' or 'unresolved'
+    +kinds list of string
+    +resultIndex integer
+  }
+  class SessionComparisonWarning {
+    +code string
+    +queryRecordIndex integer
+    +subjectRecordIndex integer
+    +queryRecordId string
+    +subjectRecordId string
+    +rowCount integer
+    +exampleIds list of string
+    +message string
+    +resultIndex integer
+    +resultName string
+  }
   class SessionOtherModeLegend {
     +originalOrder? list of string
     +originalColors? map of string
