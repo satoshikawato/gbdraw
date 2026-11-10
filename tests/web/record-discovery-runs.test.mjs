@@ -80,6 +80,9 @@ test('Generate splits the automatic cards when it draws the current controls\' c
   const replaced = `${IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED}:${IMPORTED_COMPARISON_ACTIONS.REPLACE}`;
   await prepareLinearGenerate(drawing(replaced, IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED,
     IMPORTED_COMPARISON_ACTIONS.REPLACE));
+  const readOnlyReplaced = `${IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY}:${IMPORTED_COMPARISON_ACTIONS.REPLACE}`;
+  await prepareLinearGenerate(drawing(readOnlyReplaced, IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY,
+    IMPORTED_COMPARISON_ACTIONS.REPLACE));
   const kept = [IMPORTED_COMPARISON_ACTIONS.INHERIT, IMPORTED_COMPARISON_ACTIONS.CLEAR];
   for (const action of kept) {
     await prepareLinearGenerate(drawing(action, IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY, action));
@@ -88,6 +91,7 @@ test('Generate splits the automatic cards when it draws the current controls\' c
     ['editable', [['whole', true]]],
     ...others.map((disposition) => [disposition, []]),
     [replaced, [['whole', true]]],
+    [readOnlyReplaced, [['whole', true]]],
     ...kept.map((action) => [action, []])
   ]);
 });

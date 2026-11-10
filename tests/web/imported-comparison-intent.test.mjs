@@ -475,4 +475,22 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
   assert.deepEqual(large.source.records, flippedRecords.map(({ recordKey, windows }) => ({ recordKey, windows })));
 }
 
+// The draft branch accepts exactly what the former rule accepted (an editable comparison, or a draft with an
+// edge), over every disposition, action and draft pair.
+for (const disposition of Object.values(IMPORTED_COMPARISON_DISPOSITIONS)) {
+  for (const action of [null, ...Object.values(IMPORTED_COMPARISON_ACTIONS)]) {
+    for (const hasComparisonIntent of [false, true]) {
+      const intent = { disposition, action };
+      if (disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE && action === IMPORTED_COMPARISON_ACTIONS.REPLACE) {
+        continue; // resolveImportedComparisonAction refuses Replace on an editable comparison
+      }
+      const execution = importedComparisonExecution({ intent, draftResolution: { hasComparisonIntent } });
+      if (comparisonFollowsCurrentControls(intent)) {
+        const former = disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE || hasComparisonIntent;
+        assert.equal(execution.ok, former, `${disposition}/${action}/${hasComparisonIntent}`);
+      }
+    }
+  }
+}
+
 console.log('imported comparison intent tests passed');
