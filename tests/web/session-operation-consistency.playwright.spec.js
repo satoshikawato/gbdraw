@@ -153,7 +153,10 @@ for (const operation of ['save', 'load']) {
       await download.saveAs(path);
       const saved = JSON.parse(gunzipSync(readFileSync(path)));
       expect(saved.ui.zoom).not.toBe(browsedZoom);
-      expect(shownSavedDrawing(saved).config).toEqual(JSON.parse(await page.evaluate(() => window.beforeSession.config)));
+      // The drawing changed none of its palette's colors, so Save leaves its colors out (OV-3257).
+      const { colors: _paletteColors, ...beforeConfig } = JSON.parse(await page.evaluate(() => window.beforeSession.config));
+      expect(shownSavedDrawing(saved).config).toEqual(beforeConfig);
+      expect(shownSavedDrawing(saved).config).not.toHaveProperty('colors');
     }
     await expectIntact(page);
     await expect(page.getByRole('button', { name: 'Load Session', exact: true })).toBeEnabled();
