@@ -362,7 +362,7 @@ when it was edited by hand. Vectors: `requestTypes` in `tests/fixtures/contract_
 U+FEFF as a `recordKey` and around an annotation color), run by `tests/test_contract_shape_vectors.py` and
 `tests/web/contract-shape.test.mjs`.
 
-## Unreleased: a Circular track gap below zero reads as Auto at Web Load
+## Unreleased: a Circular track gap below zero, or a number that is not finite, reads as its default at Web Load
 
 No Session or request version changes, and no writer changes. A Circular track slot's `innerGapPx` and `outerGapPx`
 now have the bound `minimum: 0` in `describe_canonical_request()` (`gbdraw/session_request_codec.py`): the domain that
@@ -372,11 +372,27 @@ now have the bound `minimum: 0` in `describe_canonical_request()` (`gbdraw/sessi
 `docs/REFERENCE/schemas/gbdraw-render-request.schema.json`. Before this change, the Web Load
 (`readStoredRenderRequest`) checked only that a gap was a number, and a gap below zero reached the request projection,
 which refused the whole Session with an unrecognized error (OV-3237). The Load now replaces such a gap by its default,
-`null` (Auto), with a `setting-replaced` row, as it does for a gap that is no number. Python, the CLI and
-`gbdraw render --session` still refuse such a request. No gbdraw writer writes a gap below zero; a file holds one
-only when it was edited by hand. Vectors: `circular-slot-gap-below-zero` and `circular-slot-gap-of-zero` in
-`requestTypes` of `tests/fixtures/contract_shape_vectors.json`, run by `tests/test_contract_shape_vectors.py` and
-`tests/web/contract-shape.test.mjs`; Load test: `tests/web/stored-request-read.test.mjs`.
+`null` (Auto), with a `setting-replaced` row, as it does for a gap that is no number.
+
+The two structural checkers (`shape_violations` in `gbdraw/contract_shapes.py`, `shapeViolations` in
+`gbdraw/web/js/utils/contract-shape.js`) also no longer take a number that is not finite at a `number` field. JSON has
+none, but Python's json reads `1e400` as inf (and `NaN`, `Infinity`), and `JSON.parse` reads `1e400` as Infinity. An
+`integer` field refused it already. For every `number` field of the request description, Python's reader already
+refused such a value (its typed check reads a `float` as a finite number, and each option's `__post_init__` checks its
+own); the Web Load kept it, so `1e400` in a gap also ended in the unrecognized error. The Load now repairs it like any
+other value outside the description, with a row. No writer writes such a number: the Python request encoder runs the
+same typed check before it writes, the typed-resource and derived-result writers use `allow_nan=False`, and the Web
+writer's `JSON.stringify` writes none; no stored Session, fixture, Gallery or documentation JSON in the repository
+holds one. The published JSON Schemas take `1e400` as a number, as JSON Schema reads any number text
+(`tests/test_contract_json_schema.py` lists the vector).
+
+Python, the CLI and `gbdraw render --session` still refuse such a request; a region annotation coordinate or lane of
+`1e400` is now their decoding error, not an `OverflowError` (OV-3390, `gbdraw/annotations/models.py`). No gbdraw
+writer writes a gap below zero; a file holds one only when it was edited by hand. Vectors: `circular-slot-gap-below-zero`
+and `circular-slot-gap-of-zero` in `requestTypes`, and the three `1e400` cases in `jsonDifferences`, of
+`tests/fixtures/contract_shape_vectors.json`, run by `tests/test_contract_shape_vectors.py`,
+`tests/web/contract-shape.test.mjs` and `tests/test_contract_json_schema.py`; Load test:
+`tests/web/stored-request-read.test.mjs`.
 
 ## Unreleased: a `#+N` record selector reads as record N
 

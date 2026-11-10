@@ -28,6 +28,7 @@ from __future__ import annotations
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from enum import Enum
 import json
+import math
 import re
 import types
 from typing import Any, Callable, Literal, Mapping, NamedTuple, TypedDict, Union, get_args, get_origin, get_type_hints
@@ -259,7 +260,11 @@ _SCALAR_CHECKS: dict[str, Callable[[object], bool]] = {
     "string": lambda value: isinstance(value, str),
     "boolean": lambda value: isinstance(value, bool),
     "integer": lambda value: isinstance(value, int) and not isinstance(value, bool),
-    "number": lambda value: isinstance(value, (int, float)) and not isinstance(value, bool),
+    # JSON has no NaN or infinity; Python's json reads `1e400` as inf, `JSON.parse` as Infinity.
+    "number": lambda value: (
+        isinstance(value, (int, float)) and not isinstance(value, bool)
+        and not (isinstance(value, float) and not math.isfinite(value))
+    ),
     "null": lambda value: value is None,
 }
 

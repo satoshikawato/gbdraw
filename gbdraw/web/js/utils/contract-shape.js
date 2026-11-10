@@ -71,7 +71,9 @@ export const SHAPE_VIOLATION_REASONS = Object.freeze(/** @type {const} */ ([
 const isScalarOfKind = (value, kind) => {
   if (kind === 'null') return value === null;
   if (kind === 'integer') return Number.isInteger(value);
-  return typeof value === (kind === 'number' ? 'number' : kind);
+  // JSON has no NaN or infinity; `JSON.parse` reads `1e400` as Infinity, Python's json as inf.
+  if (kind === 'number') return Number.isFinite(value);
+  return typeof value === kind;
 };
 
 /**

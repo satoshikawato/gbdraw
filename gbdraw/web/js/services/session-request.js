@@ -6346,13 +6346,9 @@ const projectCurrentCanonicalCircularSlot = (slot) => {
     ))
   ) throw new Error('Current canonical circular track slot uses an obsolete shape.');
   for (const field of ['innerGapPx', 'outerGapPx']) {
-    const value = slot[field] ?? null;
     // The gap's domain is the request description's; the stored-request reader repaired a gap outside it
-    // (OV-3237), so one here is a defect.
-    if (
-      (value !== null && !Number.isFinite(value)) ||
-      shapeViolations(value, CIRCULAR_SLOT_FIELDS[field], CANONICAL_REQUEST_DESCRIPTION.types, field).length
-    ) {
+    // (OV-3237).
+    if (shapeViolations(slot[field] ?? null, CIRCULAR_SLOT_FIELDS[field], CANONICAL_REQUEST_DESCRIPTION.types, field).length) {
       throw new Error(`Canonical Circular track ${field} must be a nonnegative finite number or null.`);
     }
   }
