@@ -366,13 +366,15 @@ export const inspectLeafTests = ({ runGitImpl, repositoryRoot, headSha, changes 
   const facts = new Map();
   if (candidates.size === 0) return facts;
   const referenced = referencedCandidates({ runGitImpl, repositoryRoot, headSha, paths: [...candidates.keys()] });
-  let shardSpecs = null;
+  // A functional spec is a leaf only when the head measures it: an added, renamed, or
+  // unmeasured spec keeps the complete tier until its measurements are refreshed.
+  let measuredSpecs = null;
   if ([...candidates.keys()].some((path) => leafTestKind(path) === 'functional')) {
     try {
-      const shards = JSON.parse(readBlob({ runGitImpl, repositoryRoot, sha: headSha, path: FUNCTIONAL_SHARDS_PATH }));
-      shardSpecs = new Set(shards.shards.flat());
+      const measurements = JSON.parse(readBlob({ runGitImpl, repositoryRoot, sha: headSha, path: FUNCTIONAL_SHARDS_PATH }));
+      measuredSpecs = new Set(Object.keys(measurements.secondsPerCase));
     } catch (_error) {
-      shardSpecs = null;
+      measuredSpecs = null;
     }
   }
   for (const [path, present] of candidates) {
@@ -381,7 +383,7 @@ export const inspectLeafTests = ({ runGitImpl, repositoryRoot, headSha, changes 
       ? pythonMarkers(readBlob({ runGitImpl, repositoryRoot, sha: headSha, path }))
       : null;
     const leaf = referenced !== null && !referenced.has(path)
-      && (kind !== 'functional' || Boolean(shardSpecs?.has(path)));
+      && (kind !== 'functional' || (present && Boolean(measuredSpecs?.has(path))));
     facts.set(path, Object.freeze({ kind, markers, leaf }));
   }
   return facts;
@@ -639,7 +641,8 @@ const validShards = (shards) => Array.isArray(shards) && shards.length > 0
   && shards.every((paths) => Array.isArray(paths) && paths.every((path) => typeof path === 'string' && /^\S+$/.test(path)));
 
 // SELECTIVE_CI.md "Jobs for changed leaf tests": a leaf-test plan runs only the changed specs
-// assigned to the shard; every other plan runs the whole shard. The helper whose policy made the
+// assigned to the shard; every other plan runs the whole shard. `shards` are the lists that
+// tools/balance-functional-shards.mjs planned for the run. The helper whose policy made the
 // plan reads it: on a pull request, the trusted base's, as in PR / gate.
 export const functionalShardFiles = ({ plan, shards, shard }) => {
   validateImpactPlan(plan);
@@ -653,6 +656,11 @@ export const functionalShardFiles = ({ plan, shards, shard }) => {
   const assigned = shards[shard - 1];
   if (plan.leafTests === null) return Object.freeze([...assigned]);
   const changed = new Set(plan.leafTests.filter(({ kind }) => kind === 'functional').map(({ path }) => path));
+  const planned = new Set(shards.flat());
+  const unplanned = [...changed].filter((path) => !planned.has(path));
+  if (unplanned.length) {
+    fail('UNPLANNED_LEAF_SPEC', 'A changed functional spec is in no planned shard.', { paths: unplanned });
+  }
   return Object.freeze(assigned.filter((path) => changed.has(path)));
 };
 
@@ -950,18 +958,12 @@ const optionValues = (argv, names) => {
   return names.every((name) => Object.hasOwn(values, name)) ? values : null;
 };
 
-const runShardFilesCommand = ({ argv, env, cwd, stdout, appendFileImpl }) => {
+const runShardFilesCommand = ({ argv, env, stdout, appendFileImpl }) => {
   if (argv.length !== 2 || !/^[1-9][0-9]*$/.test(argv[1])) {
     fail('INVALID_ARGUMENTS', 'Usage: shard-files <shard number>.');
   }
   const plan = parseJsonEnvironment(env, 'CI_IMPACT_PLAN_JSON');
-  const repositoryRoot = resolve(env.CI_IMPACT_REPOSITORY_ROOT || cwd);
-  let shards;
-  try {
-    shards = JSON.parse(readFileSync(resolve(repositoryRoot, FUNCTIONAL_SHARDS_PATH), 'utf8')).shards;
-  } catch (_error) {
-    fail('INVALID_SHARD_MAP', 'The functional shard map could not be read.');
-  }
+  const shards = parseJsonEnvironment(env, 'CI_IMPACT_FUNCTIONAL_SHARDS_JSON');
   const files = functionalShardFiles({ plan, shards, shard: Number(argv[1]) }).join(' ');
   stdout.write(`${files}\n`);
   if (env.GITHUB_OUTPUT) appendOutput(env.GITHUB_OUTPUT, `files=${files}\n`, appendFileImpl);
@@ -999,7 +1001,7 @@ export const runCiImpactCli = async ({
       });
     }
     if (command === 'shard-files') {
-      runShardFilesCommand({ argv, env, cwd, stdout, appendFileImpl });
+      runShardFilesCommand({ argv, env, stdout, appendFileImpl });
     } else if (command === 'classify') {
       runClassifyCommand({ argv, env, cwd, stdout, runGitImpl });
     } else if (command === 'plan') {

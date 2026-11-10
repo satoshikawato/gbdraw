@@ -274,7 +274,7 @@ const LEAF_KIND_JOBS = freeze({
 });
 
 // The runner kind of a path that may be a leaf test, from its path alone. A functional spec
-// must also be listed in tests/ci/functional-shards.json, and no other file may name it.
+// must also be measured in tests/ci/functional-shards.json, and no other file may name it.
 export const leafTestKind = (path) => {
   if (!isValidRepositoryPath(path) || classifyPath(path).impact === 'ci-only') return null;
   if (/^tests\/test_[^/]+\.py$/.test(path)) return 'python';

@@ -85,6 +85,15 @@ const FUNCTIONAL_PLAYWRIGHT_CONFIG = readFileSync(
   join(REPOSITORY_ROOT, 'tests/web/playwright/functional.config.js'),
   'utf8'
 );
+// The functional shards run every spec under tests/web that the functional configuration does
+// not ignore (docs/internal/SELECTIVE_CI.md "Functional shards"). This job has no
+// @playwright/test, so the ignore patterns are read from the configuration's source.
+const FUNCTIONAL_TEST_IGNORE = (() => {
+  const list = FUNCTIONAL_PLAYWRIGHT_CONFIG.match(/\n {2}testIgnore: \[\n([\s\S]*?)\n {2}\]/)?.[1];
+  const patterns = [...(list ?? '').matchAll(/^\s*\/(.+)\/,?$/gm)].map(([, source]) => new RegExp(source));
+  assert.ok(patterns.length, 'cannot read testIgnore of tests/web/playwright/functional.config.js');
+  return patterns;
+})();
 const PR_SMOKE_PLAYWRIGHT_CONFIG = readFileSync(
   join(REPOSITORY_ROOT, 'tests/web/playwright/pr-smoke.config.js'),
   'utf8'
@@ -8121,7 +8130,6 @@ const guardRegistryProblems = (registry, {
   const jobCommands = new Map();
   const commandsOf = (job) => jobCommands.get(job)
     ?? jobCommands.set(job, workflowCommands(workflowJob(job, workflow))).get(job);
-  const shards = new Set(JSON.parse(read('tests/ci/functional-shards.json')).shards.flat());
   // true or false when the job's commands decide it; undefined when the path is not a test of a form they run.
   const selectedBy = (job, path) => {
     const commands = commandsOf(job);
@@ -8131,7 +8139,7 @@ const guardRegistryProblems = (registry, {
       return pytestSelectors(commands).some((selects) => selects(path, markerSets));
     }
     if (path.endsWith('.playwright.spec.js') && commands.some((command) => /\bci-impact\.mjs shard-files\b/.test(command))) {
-      return shards.has(path);
+      return path.startsWith('tests/web/') && !FUNCTIONAL_TEST_IGNORE.some((pattern) => pattern.test(path));
     }
     return undefined;
   };

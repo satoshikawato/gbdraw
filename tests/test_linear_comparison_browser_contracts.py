@@ -2,7 +2,8 @@
 
 The `web-contracts-pr` CI job runs this wrapper only for PR plans that do not
 require the `playwright-functional` shards. Otherwise, and on every `dev` push,
-the cases run in the functional shards (`tests/ci/functional-shards.json`), and
+the cases run in the functional shards (docs/internal/SELECTIVE_CI.md, "Functional
+shards"), and
 CI deselects this wrapper so they do not run twice.
 """
 

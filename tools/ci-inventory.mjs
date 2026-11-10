@@ -6,8 +6,8 @@
 // Reports the last 7 days of GitHub Actions use: runner-minutes by workflow and event
 // and by job, the wall and queue time of `Tests` runs, the pull request feedback time
 // against its targets, and the functional Playwright shards of the latest green dev
-// `Tests` run with the plan that tools/balance-functional-shards.mjs would write. It
-// prints Markdown; with --post it
+// `Tests` run with the plan that tools/balance-functional-shards.mjs would compute from
+// that run's measurements. It prints Markdown; with --post it
 // also adds the report as this week's comment on the open issue labelled
 // `ci-inventory` (creating the label and issue when missing). Week-over-week changes
 // come from the data block of the workflow's own previous comment. Job lists are read
@@ -15,7 +15,7 @@
 //
 // Reads GITHUB_TOKEN (or GH_TOKEN), GITHUB_REPOSITORY, GITHUB_API_URL, and
 // GITHUB_SERVER_URL. Run it from the repository root: it lists the functional cases
-// with @playwright/test and reads tests/ci/functional-shards.json and
+// with @playwright/test and reads the measurements in tests/ci/functional-shards.json and
 // .github/workflows/test.yml.
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -24,7 +24,8 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import {
-  SHARDS_FILE, WORKERS_PER_SHARD, casesPerFileOf, listFunctionalCases, measureMinutes, planShards
+  WORKERS_PER_SHARD, casesPerFileOf, listFunctionalCases, measureMinutes, measureSecondsPerCase, planShards,
+  readMeasurements
 } from './balance-functional-shards.mjs';
 
 const LABEL = 'ci-inventory';
@@ -36,7 +37,7 @@ const TESTS_WORKFLOW = '.github/workflows/test.yml';
 const JOB_LIST_WORKFLOWS = new Set([TESTS_WORKFLOW, '.github/workflows/gallery-publication.yml']);
 const RUN_DURATION = ' (run duration)';
 const DAY_MS = 24 * 60 * 60 * 1000;
-const REBALANCE_RATIO = 1.2;
+const REFRESH_RATIO = 1.2;
 const TOP = 15;
 // Requests kept for the artifact, issue, and comment calls once the job lists stop.
 const RATE_RESERVE = 100;
@@ -175,10 +176,11 @@ export const latestShardArtifacts = (artifacts) => {
 };
 
 // The functional shards of one green run. `reports` are the shard reports with their
-// shard numbers (a shard without a report is listed as missing); `shardsFile` is
-// tests/ci/functional-shards.json; `casesPerFile` and `testDir` come from listing the
-// functional suite.
-export const summarizeFunctional = ({ reports, shardsFile, casesPerFile, testDir }) => {
+// shard numbers (a shard without a report is listed as missing); `measurements` are the
+// recorded ones (readMeasurements); `casesPerFile` and `testDir` come from listing the
+// functional suite. CI plans the shards from the recorded measurements and the current case
+// counts, so an uneven run means that seconds per case moved: refresh the measurements.
+export const summarizeFunctional = ({ reports, measurements, casesPerFile, testDir }) => {
   const shardTestMinutes = (report) => sum([...measureMinutes([report], testDir).values()]);
   const shards = reports
     .map(({ shard, report }) => ({
@@ -189,23 +191,26 @@ export const summarizeFunctional = ({ reports, shardsFile, casesPerFile, testDir
     .sort((a, b) => a.shard - b.shard);
   const fileMinutes = measureMinutes(reports.map(({ report }) => report), testDir);
   const casesRun = casesPerFileOf(reports.map(({ report }) => report), testDir);
-  const plan = planShards({ casesPerFile, fileMinutes, shardCount: shardsFile.shards.length });
+  const { shardCount } = measurements;
+  const current = planShards({ casesPerFile, secondsPerCase: measurements.secondsPerCase, shardCount });
+  const plan = planShards({
+    casesPerFile, secondsPerCase: measureSecondsPerCase(reports.map(({ report }) => report), testDir), shardCount
+  });
   const testMinutes = sum(shards.map((shard) => shard.testMinutes));
   const mean = testMinutes / (shards.length || 1);
   const slowest = Math.max(0, ...shards.map((shard) => shard.testMinutes));
-  const unmeasured = [...casesPerFile.keys()].filter((file) => !(file in shardsFile.minutes)).sort();
   // One rounded ratio decides the flag and is the number the report prints.
   const slowestToMean = mean ? Math.round((slowest / mean) * 100) / 100 : 0;
   return {
     shards,
-    missingShards: shardsFile.shards.map((_, index) => index + 1)
+    missingShards: Array.from({ length: shardCount }, (_, index) => index + 1)
       .filter((number) => !shards.some((shard) => shard.shard === number)),
     cases: sum([...casesRun.values()]),
     testMinutes: round1(testMinutes),
     slowestToMean,
-    unmeasured,
-    rebalance: slowestToMean > REBALANCE_RATIO || unmeasured.length > 0,
-    planChanges: JSON.stringify(plan.shards) !== JSON.stringify(shardsFile.shards),
+    unmeasured: current.unmeasured,
+    refresh: slowestToMean > REFRESH_RATIO || current.unmeasured.length > 0,
+    planChanges: JSON.stringify(plan.shards) !== JSON.stringify(current.shards),
     plannedTestMinutes: plan.shardMinutes,
     topSpecs: [...fileMinutes].map(([file, minutes]) => ({ file, cases: casesRun.get(file) || 0, minutes: round1(minutes) }))
       .sort((a, b) => b.minutes - a.minutes || (a.file < b.file ? -1 : 1))
@@ -274,10 +279,10 @@ export const renderReport = ({
     testJobs
   };
   const reasons = [
-    functional.slowestToMean > REBALANCE_RATIO
-      ? `slowest shard ${functional.slowestToMean}x the mean (limit ${REBALANCE_RATIO}x)` : null,
+    functional.slowestToMean > REFRESH_RATIO
+      ? `slowest shard ${functional.slowestToMean}x the mean (limit ${REFRESH_RATIO}x)` : null,
     functional.unmeasured.length
-      ? `${functional.unmeasured.length} spec file(s) without recorded minutes: ${functional.unmeasured.map((file) => `\`${file}\``).join(', ')}`
+      ? `${functional.unmeasured.length} spec file(s) without measurements: ${functional.unmeasured.map((file) => `\`${file}\``).join(', ')}`
       : null
   ].filter(Boolean);
   const overTarget = pullRequests.kinds.filter((kind) => kind.over);
@@ -290,8 +295,8 @@ export const renderReport = ({
       + ` What to do with a flagged report: docs/internal/SELECTIVE_CI.md, "Weekly CI inventory".`,
     ...(partial ? ['', `**Partial report**: ${partial}`] : []),
     '',
-    functional.rebalance
-      ? `**Rebalance the functional shards**: ${reasons.join('; ')}.`
+    functional.refresh
+      ? `**Refresh the functional shard measurements**: ${reasons.join('; ')}.`
       : `Functional shards are balanced (slowest ${functional.slowestToMean}x the mean).`,
     '',
     overTarget.length
@@ -346,8 +351,8 @@ export const renderReport = ({
     '',
     `Test-minutes add up case durations; a shard runs ${WORKERS_PER_SHARD} workers. `
       + (functional.planChanges
-        ? 'The planned column is what `tools/balance-functional-shards.mjs` would assign from this run.'
-        : '`tools/balance-functional-shards.mjs` would keep the current plan.')
+        ? 'The planned column is the plan that measurements refreshed from this run would give.'
+        : 'Measurements refreshed from this run would keep the current plan.')
       + (functional.missingShards.length
         ? ` No functional report for shard ${functional.missingShards.join(', ')}; the totals leave it out.` : ''),
     '',
@@ -535,11 +540,11 @@ const main = async (argv) => {
   const since = new Date(until.getTime() - 7 * DAY_MS);
   const week = isoWeek(until);
 
-  const shardsFile = JSON.parse(readFileSync(SHARDS_FILE, 'utf8'));
+  const measurements = readMeasurements();
   const { testDir, casesPerFile } = listFunctionalCases();
-  const { run: functionalRun, shards } = await latestFunctionalRun(client, shardsFile.shards.length);
+  const { run: functionalRun, shards } = await latestFunctionalRun(client, measurements.shardCount);
   const functional = summarizeFunctional({
-    reports: await readShardReports(client, shards), shardsFile, casesPerFile, testDir
+    reports: await readShardReports(client, shards), measurements, casesPerFile, testDir
   });
   // Before the job lists, which use the request budget until RATE_RESERVE is left.
   const pullRequests = summarizePullRequests(await listPullRequestRuns(client));

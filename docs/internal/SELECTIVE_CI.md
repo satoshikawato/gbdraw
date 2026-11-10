@@ -312,31 +312,33 @@ An added, deleted, or renamed leaf test (both endpoints of a rename) is a leaf
 change only when no runner list changes with it. pytest collects
 `tests/test_*.py`, the `browser` job finds `tests/web/*.test.mjs`, and the
 performance configuration matches `*performance.playwright.spec.js`, so these
-files can be added or removed as leaf changes. `tests/ci/functional-shards.json`
-lists every functional spec, and a Playwright configuration names the Gallery
-parity and Vibrio specs. Changing such a list is a `ci-only` change, so adding,
-deleting, or renaming one of those specs keeps the complete tier. A stale shard
-list fails `tests/ci/playwright-inventory.test.mjs`, which every plan job runs
-first. A deleted leaf test selects the job that ran it, so a runner list that
-still names it fails in that job.
+files can be added or removed as leaf changes. A changed functional spec is a
+leaf only when it exists in the head and `tests/ci/functional-shards.json`
+measures it, so adding, deleting, or renaming a functional spec keeps the
+complete tier until a refresh measures it. A Playwright configuration names the
+Gallery parity and Vibrio specs; changing it is a `ci-only` change. A deleted
+leaf test selects the job that ran it, so a runner list that still names it
+fails in that job.
 
 #### Jobs for changed leaf tests
 
 | Changed leaf test | Runs in | `Tests` job on `dev` |
 | --- | --- | --- |
 | `tests/web/**/*.test.mjs` | `node --test` steps of `browser` | `browser` |
-| A spec listed in `tests/ci/functional-shards.json` | Functional Playwright shards | `playwright-functional`, restricted to the changed specs |
+| A spec measured in `tests/ci/functional-shards.json` | Functional Playwright shards | `playwright-functional`, restricted to the changed specs |
 | `tests/web/*performance.playwright.spec.js` | `npm run test:web:perf-smoke` | `playwright-performance` |
 | `tests/web/contracts/gallery-publication-parity.serial.spec.js` | Gallery publication `browser`, pull request `gallery`, `deploy_web.yml` | None; Gallery publication runs `browser` |
 | `tests/web/contracts/vibrio-full-generation.serial.spec.js` | Release-only `vibrio-generate-release`, `deploy_web.yml` | None; the plan records it as release-only |
 | `tests/test_*.py` | pytest jobs, selected by marker | `core`, plus `recipes-standard`, `gallery`, and `browser` for each of the `recipe`, `gallery`, and `browser` markers named in the file; all four when the markers cannot be read from the file |
 
-For a restricted functional run, each of the eight shards runs
-`node tools/ci-impact.mjs shard-files <shard>`, which intersects its list in
-`tests/ci/functional-shards.json` with the changed specs, and passes only those
-files to Playwright. A shard with no changed spec skips its setup and succeeds,
-so the shard matrix and its aggregate stay unchanged. Every other plan runs the
-whole shard list. On a pull request the shard runs the trusted base's
+Each of the eight shards runs `node tools/ci-impact.mjs shard-files <shard>`
+before its setup. It reads the run's planned lists
+([Functional shards](#functional-shards)) and, for a restricted functional run,
+intersects its list with the changed specs and passes only those files to
+Playwright. A shard with no changed spec skips its setup and succeeds, so the
+shard matrix and its aggregate stay unchanged. Every other plan runs the whole
+shard list. A changed spec in no planned list fails the shard instead of
+running nowhere. On a pull request the shard runs the trusted base's
 `tools/ci-impact.mjs`, the helper whose policy made the plan, as `PR / gate`
 does. The plan then matches the policy that checks it, even when the pull
 request adds a job or changes the plan schema.
@@ -363,7 +365,7 @@ that run's evidence for the jobs both tiers run with the same command:
 | --- | --- |
 | `recipes-standard`, `lint` | Same steps on both events |
 | `gallery` | Same pytest step; the pull request job may add the Gallery parity steps |
-| `playwright-functional` | Same eight shard lists; a pull request plan has no leaf tests, so each shard runs its whole list |
+| `playwright-functional` | The same tree gives the same eight planned lists; a pull request plan has no leaf tests, so each shard runs its whole list |
 
 The other dev jobs always run: `core` (Python 3.10 to 3.14; pull requests
 run `core-pr` on 3.10, and `core` only for version-dependent changes),
@@ -460,16 +462,31 @@ collects 19 cases, so a new `@pr-smoke` case requires raising that bound.
 The smoke config retains one worker and zero retries. Three local two-worker
 repetitions passed, but these are not repeated GitHub runner evidence. One worker
 already meets the projected target, so CI does not adopt unverified parallelism.
+
+### Functional shards
+
 Full functional CI runs eight shards with two retries and two workers per shard,
 on pull requests and in `dev` staging alike. Playwright's `--shard` splits by
 case count in spec file order; it cannot split by duration. With equal counts,
 four hosted shards took 13 to 34 minutes on `52be34a7` and `a5deed4a`, because
 the heaviest composite and Session cases sit in a few files. Each matrix entry
 therefore runs its own list of spec files, passed as Playwright CLI file
-filters, from `tests/ci/functional-shards.json`. The file records the measured
-minutes of each spec file and the eight lists.
-`tools/balance-functional-shards.mjs` fills the lists longest file first into
-the shard with the least work; within a shard, the two workers split the cases.
+filters. `tests/ci/functional-shards.json` records the shard count and the
+measured seconds per case of each spec file; it holds no lists. The `CI impact
+plan` job plans the lists once per run, after `npm ci`, with
+`node tools/balance-functional-shards.mjs plan`: it lists the head's functional
+cases, weighs each spec file by its current case count times its seconds per
+case (a file without a measurement by the mean of the measured cases), and
+fills the lists longest file first into the shard with the least work. Within a
+shard, the two workers split the cases. The lists are the job's
+`functional-shards` output, so all eight shard jobs of a run, and a rerun of
+one of them, read the same lists. A new spec file or a spec file that gains
+cases therefore moves to a lighter shard on its own; no pull request edits the
+measurements for it.
+
+The lists are head data, as the spec files are: the head's tool plans them on
+pull requests too, and the trusted base's `shard-files` only applies the plan's
+leaf-test filter to them (see [Trust and aggregate checks](#trust-and-aggregate-checks)).
 
 The lists replaced Playwright's undocumented `PWTEST_SHARD_WEIGHTS` case-count
 weights. In the green runs 37010713759, 37025041812, 37026343792, 37027373572
@@ -491,15 +508,15 @@ recorded minutes fell by about 55 percent in total, the largest file
 previous lists would have given a slowest shard of 10.6 minutes against a mean of
 9.1 (ratio 1.18); the new lists give 9.1 minutes in every shard.
 
-Rebalance when shard times drift apart, or when the inventory check reports a
-new spec file. Download the shard artifacts of a green run with
+Refresh the measurements when the weekly inventory asks for it (below), that is,
+when the seconds per case have moved or spec files have none. Download the shard
+artifacts of two green `dev` runs with
 `gh run download <run-id> -p 'playwright-functional-shard-*' -D <dir>`, then run
-`node tools/balance-functional-shards.mjs <dir>/*/functional-report.json`.
-Without arguments, the tool keeps the recorded minutes and estimates a new file
-from its case count. The inventory check fails when a spec file is unassigned,
-assigned twice, or no longer exists. It also lists every shard with its file
-filters to prove that the matrix partitions the full suite without omissions or
-duplicate execution.
+`node tools/balance-functional-shards.mjs refresh <dir>/*/*/functional-report.json`,
+which rewrites the measurements from the median of each case and prints the plan
+they give. `tests/ci/playwright-inventory.test.mjs` plans the lists the same way
+and lists every shard with its file filters to prove that the matrix partitions
+the full suite without omissions or duplicate execution.
 
 The job limit is 45 minutes; case timeouts are unchanged. Hosted
 shard 1 still exceeded 30 minutes with two workers on `9dd6359c`: its composite
@@ -604,7 +621,7 @@ item names its own window:
 - the functional shards of the latest green `dev` push `Tests` run that kept
   every shard report: test-minutes per shard, the slowest shard against the
   mean, the case count, the 15 spec files with the most test-minutes, and the
-  plan `tools/balance-functional-shards.mjs` would write from that run;
+  plan that measurements refreshed from that run would give;
 - changes since the previous week in functional cases, functional
   test-minutes, runner-minutes, and jobs in `test.yml`.
 
@@ -621,11 +638,15 @@ own duration in rows marked "(run duration)". When the API refuses the run
 listing (HTTP 403 or 429), the report covers the runs read so far and says it
 is partial.
 
-A report asks for a rebalance when the slowest shard has more than 1.2 times
-the mean test-minutes, or when a functional spec file has no recorded minutes
-in `tests/ci/functional-shards.json`. A session that reads a flagged report:
+CI plans the shards from the recorded seconds per case and the current case
+counts, so new spec files and new cases never unbalance them. A report asks for
+fresh measurements when the slowest shard has more than 1.2 times the mean
+test-minutes (the seconds per case have moved), or when a functional spec file
+has no measurement in `tests/ci/functional-shards.json` (it is planned at the
+mean case). A session that reads a flagged report:
 
-1. Rebalances the shards with the reports of two green `dev` runs (above).
+1. Refreshes the measurements with the reports of two green `dev` runs
+   ([Functional shards](#functional-shards)).
 2. Reviews the spec files and jobs that grew most: merges cases that repeat a
    journey another case already proves, moves checks that need no browser to
    node or pytest, and removes cases and jobs whose behaviour is covered
@@ -648,6 +669,10 @@ there is no candidate fallback. `Web base policy (trusted base)` remains a separ
 
 The redesign PR therefore receives the old base's complete PR route. New selective
 routing can take effect only after reviewed integration into protected `dev`.
+The planned functional shard lists follow the same order: the pull request that
+introduces them keeps the hand-kept `shards` lists in
+`tests/ci/functional-shards.json` for its own run, whose trusted base still reads
+them. No tool reads them once it merges, and the next pull request removes them.
 Additional contract failures also block the old gate's unknown-job validation.
 No branch protection or required external status name changes.
 
