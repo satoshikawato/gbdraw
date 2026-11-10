@@ -2985,10 +2985,10 @@ export const createRunAnalysis = ({
     const manualRunStartedAtIso = new Date().toISOString();
     /** @type {Record<string, any> | null} */
     let structuredLosatTelemetry = null;
-    /** @type {{ cacheMap: Map<string, RawLosatCacheEntry>, cacheKey: string, candidateIndex: number, proteinIdMap: Record<string, unknown> }[]} */
+    /** @type {{ cacheMap: Map<string, RawLosatCacheEntry>, cacheKey: string, candidateIndex: number }[]} */
     const legacyPromotionTransaction = [];
     let legacyPromotionCommitted = false;
-    /** @type {((candidateOwnerSet: Record<string, any>) => { ownerSet: Record<string, any>, selectedOrthogroupAlignmentFeature: any }) | null} */
+    /** @type {((candidateOwnerSet: Record<string, any>) => Record<string, any>) | null} */
     let commitProteinMigration = null;
     /** @type {{ cacheInfo: any[], cacheMap: Map<any, any>, derivedCacheMap: Map<any, any> | null } | null} */
     let pendingLosatCacheCommit = null;
@@ -4208,8 +4208,7 @@ export const createRunAnalysis = ({
           legacyPromotionTransaction.push({
             cacheMap,
             cacheKey,
-            candidateIndex,
-            proteinIdMap: result.proteinIdMap || {}
+            candidateIndex
           });
           // `getCurrentRawLosatCacheEntry` returns the `cacheKey` it was given (its `unknown` parameter widens the type).
           return /** @type {TextKeyedLosatCacheMatch} */ (verified);
@@ -4885,6 +4884,10 @@ export const createRunAnalysis = ({
           }
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
           if (legacyPromotionTransaction.length > 0) {
+            // A promotion changes only the cache entries and their candidate records. The features and orthogroups
+            // of this Generate come from its own catalog and results, which name proteins by current handles, and the
+            // selected alignment feature was resolved before the run: the candidate keeps the catalog's own feature
+            // objects, on which the rule matches are recorded (OV-3352).
             commitProteinMigration = (candidateOwnerSet) => {
               const written = writtenLegacyProteinArtifacts({
                 candidates: candidateOwnerSet.legacyProteinRawCandidates,
@@ -4892,52 +4895,11 @@ export const createRunAnalysis = ({
                 promoted: legacyPromotionTransaction.map(({ candidateIndex }) => candidateIndex),
                 hasCurrentDerived: false
               });
-              /** @type {Record<string, unknown>} */
-              const promotedProteinIdMap = {};
-              legacyPromotionTransaction.forEach(({ proteinIdMap }) => {
-                Object.entries(proteinIdMap || {}).forEach(([oldId, runtimeHandle]) => {
-                  const previous = promotedProteinIdMap[oldId];
-                  if (previous && previous !== runtimeHandle) {
-                    throw new Error(`Protein reference '${oldId}' migrated ambiguously.`);
-                  }
-                  promotedProteinIdMap[oldId] = runtimeHandle;
-                });
-              });
-              let nextOrthogroups = candidateOwnerSet.orthogroups;
-              let nextExtractedFeatures = candidateOwnerSet.extractedFeatures;
-              let nextBiologicalFeatures = candidateOwnerSet.biologicalFeatures;
-              let nextSelectedAlignmentFeature = workingSelectedOrthogroupAlignmentFeature;
-              if (Object.keys(promotedProteinIdMap).length > 0) {
-                nextOrthogroups = rewriteMappedProteinReferences(
-                  nextOrthogroups,
-                  promotedProteinIdMap
-                );
-                nextSelectedAlignmentFeature = rewriteMappedProteinReferences(
-                  nextSelectedAlignmentFeature,
-                  promotedProteinIdMap
-                );
-                nextExtractedFeatures = rewriteMappedProteinReferences(
-                  nextExtractedFeatures,
-                  promotedProteinIdMap
-                );
-                if (nextBiologicalFeatures) {
-                  nextBiologicalFeatures = rewriteMappedProteinReferences(
-                    nextBiologicalFeatures,
-                    promotedProteinIdMap
-                  );
-                }
-              }
               legacyPromotionCommitted = true;
               return {
-                ownerSet: {
-                  ...candidateOwnerSet,
-                  legacyProteinRawCandidates: written.candidates,
-                  legacyProteinDerivedEvidence: written.evidence,
-                  orthogroups: nextOrthogroups,
-                  extractedFeatures: nextExtractedFeatures,
-                  biologicalFeatures: nextBiologicalFeatures
-                },
-                selectedOrthogroupAlignmentFeature: nextSelectedAlignmentFeature
+                ...candidateOwnerSet,
+                legacyProteinRawCandidates: written.candidates,
+                legacyProteinDerivedEvidence: written.evidence
               };
             };
           }
@@ -5355,12 +5317,7 @@ export const createRunAnalysis = ({
         pendingPaletteName: '',
         pendingPaletteColors: {}
       };
-      let migratedSelectedAlignmentFeature = workingSelectedOrthogroupAlignmentFeature;
-      if (commitProteinMigration) {
-        const migrated = commitProteinMigration(candidateOwnerSet);
-        candidateOwnerSet = migrated.ownerSet;
-        migratedSelectedAlignmentFeature = migrated.selectedOrthogroupAlignmentFeature;
-      }
+      if (commitProteinMigration) candidateOwnerSet = commitProteinMigration(candidateOwnerSet);
       const generatedArtifactCandidate = generatedArtifactTransactionOwner.build(
         candidateOwnerSet,
         {
@@ -5417,7 +5374,7 @@ export const createRunAnalysis = ({
       });
       if (resultGenerationKey) resultGenerationKey.value += 1;
       selectedFeatureRecordIdx.value = 0;
-      selectedOrthogroupAlignmentFeature.value = migratedSelectedAlignmentFeature;
+      selectedOrthogroupAlignmentFeature.value = workingSelectedOrthogroupAlignmentFeature;
       const candidateGroupIds = candidateGroups
         .map((group) => String(group?.id || '').trim())
         .filter(Boolean);
