@@ -81,7 +81,7 @@ const actionState = {
 };
 const actions = createFeatureVisibilityActions({
   state: withDrawings(actionState),
-  rulePreparation: rulePreparationFor(actionState),
+  prepareDrawnRuleMatches: rulePreparationFor(actionState).prepareDrawn,
   getCommittedRequest: committedRequest(['CDS']),
   showEditorIntent: visibilityPort(actionState, committedRequest(['CDS']), (modes) => {
     appliedPreviewChanges.push(modes);
@@ -321,7 +321,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   const productPreparation = rulePreparationFor(productState);
   const productActions = createFeatureVisibilityActions({
     state: withDrawings(productState),
-    rulePreparation: productPreparation,
+    prepareDrawnRuleMatches: productPreparation.prepareDrawn,
     getCommittedRequest: committedRequest(['CDS', 'tRNA']),
     showEditorIntent: visibilityPort(productState, committedRequest(['CDS', 'tRNA']), (modes) => {
       reconciled.push(modes);
@@ -378,7 +378,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   };
   const panel = createFeatureVisibilityActions({
     state: withDrawings(panelState),
-    rulePreparation: rulePreparationFor(panelState),
+    prepareDrawnRuleMatches: rulePreparationFor(panelState).prepareDrawn,
     getCommittedRequest: committedRequest(['CDS']),
     showEditorIntent: visibilityPort(panelState, committedRequest(['CDS']), (modes) => Object.entries(modes)
       .reduce((changed, [featureId, mode]) => {
@@ -476,7 +476,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   const ports = {};
   const owner = createFeatureVisibilityActions({
     state: withDrawings(portState),
-    rulePreparation: rulePreparationFor(portState),
+    prepareDrawnRuleMatches: rulePreparationFor(portState).prepareDrawn,
     getCommittedRequest: committedRequest(['CDS']),
     showEditorIntent: visibilityPort(portState, committedRequest(['CDS']), (modes) => {
       projections += 1;
@@ -580,7 +580,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   };
   const owner = createFeatureVisibilityActions({
     state: withDrawings(rerenderState),
-    rulePreparation: rulePreparationFor(rerenderState),
+    prepareDrawnRuleMatches: rulePreparationFor(rerenderState).prepareDrawn,
     getCommittedRequest: committedRequest(['CDS']),
     showEditorIntent: visibilityPort(rerenderState, committedRequest(['CDS']), () => false,
       () => admitFeatureCatalog(catalog, rerenderState.results.value, { mode: 'circular' })),
@@ -684,7 +684,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   };
   const owner = createFeatureVisibilityActions({
     state: withDrawings(displayState),
-    rulePreparation: gatedPreparation,
+    prepareDrawnRuleMatches: gatedPreparation.prepareDrawn,
     getCommittedRequest: committedRequest(['CDS']),
     showEditorIntent: visibilityPort(displayState, committedRequest(['CDS']), () => false,
       () => admitFeatureCatalog(catalog, displayState.results.value, { mode: 'circular' })),

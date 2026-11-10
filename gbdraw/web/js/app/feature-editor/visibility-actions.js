@@ -69,7 +69,8 @@ import { msg, t } from '../../utils/i18n.js';
  *   compiles Feature visibility with `resolveFeatureDrawn`, as Generate draws it.
  * @property {VisibilityActionsPorts} ports
  * @property {(index: number) => any} selectResult The preview owner's selection of the Result a History command targets.
- * @property {import('../rule-matching.js').RulePreparation | null} [rulePreparation]
+ * @property {import('../rule-matching.js').RulePreparation['prepareDrawn']} prepareDrawnRuleMatches
+ *   The rule preparation's preparation of what `resolveFeatureDrawn` reads (R13).
  * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
  *   The committed canonical request (Python owns the option fields, R7).
  * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there.
@@ -87,7 +88,7 @@ export const createFeatureVisibilityActions = ({
   // the label owner exists; this owner only calls it.
   ports,
   selectResult,
-  rulePreparation = null,
+  prepareDrawnRuleMatches,
   getCommittedRequest = () => null,
   showNotice = () => {}
 }) => {
@@ -343,7 +344,7 @@ export const createFeatureVisibilityActions = ({
    * @param {{ strict?: boolean, view?: boolean }} [options]
    * @returns {boolean | Promise<boolean | { error: any }>}
    */
-  const prepareDrawn = (options) => rulePreparation?.prepareDrawn?.(options) ?? true;
+  const prepareDrawn = (options) => prepareDrawnRuleMatches(options);
 
   /**
    * @param {DrawingState} drawing

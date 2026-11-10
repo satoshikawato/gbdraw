@@ -627,7 +627,10 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  * @property {CurrentResultsPort} currentResults
  * @property {ResultIdentityPort} getResultIdentity
- * @property {import('../rule-matching.js').RulePreparation} rulePreparation
+ * @property {import('../rule-matching.js').RulePreparation['isCurrent']} isRuleInputCurrent
+ *   Whether a snapshot of the rule inputs is still the current inputs.
+ * @property {import('../rule-matching.js').RulePreparation['snapshot']} snapshotRuleInputs
+ *   The inputs the rule matches depend on.
  * @property {(value?: any) => { value: any }} ref Vue `ref`
  * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
  * @property {((source: any, callback: (...args: any[]) => void, options?: Record<string, any>) => () => void) | null} [watch] Vue `watch`
@@ -658,7 +661,7 @@ export const createFeatureLabelActions = ({
   commitActiveResultEdit = null,
   currentResults,
   getResultIdentity,
-  rulePreparation,
+  isRuleInputCurrent, snapshotRuleInputs,
   ref,
   computed,
   watch = null,
@@ -1531,7 +1534,7 @@ export const createFeatureLabelActions = ({
     const draft = normalizeVisibilityMode(clicked.labelVisibility);
     if (draft === 'off') return '';
     void results.value; // The committed request changes with the displayed Results.
-    void rulePreparation?.pending?.value; // Python's rule matches arrive when an evaluation ends.
+    void state.ruleMatchingPending.value; // Python's rule matches arrive when an evaluation ends.
     const featureId = clickedFeatureId();
     const feature = featureById(drawing, featureId);
     const diagramOptions = getCommittedRequest()?.diagramOptions;
@@ -1702,7 +1705,7 @@ export const createFeatureLabelActions = ({
     return Boolean(labelImportFailure.value
       && state.errorLog?.value === labelImportFailure.value.error
       && labelImportFailure.value.revision === labelImportRevision
-      && rulePreparation.isCurrent(labelImportFailure.value.snapshot)
+      && isRuleInputCurrent(labelImportFailure.value.snapshot)
       && labelImportFailure.value.intent === labelIntentSignature(drawing));
   });
   const retryLabelImportFailure = () => canRetryLabelImportFailure.value ? labelImportFailure.value.retry() : false;
@@ -1718,7 +1721,7 @@ export const createFeatureLabelActions = ({
     const file = input?.files?.[0];
     if (!file) return;
     const sourceSvg = svgContainer.value?.querySelector('svg') || null;
-    const before = rulePreparation.snapshot();
+    const before = snapshotRuleInputs();
     const labelIntent = labelIntentSignature(drawing);
     const revision = ++labelImportRevision;
     const previousError = state.errorLog?.value;
@@ -1749,7 +1752,7 @@ export const createFeatureLabelActions = ({
         ? t('Not applied: label text, label visibility, or feature visibility changed while the table loaded. The changes were kept. Load the table again.')
         : (svgContainer.value?.querySelector('svg') || null) !== sourceSvg
           ? t('Not applied: the displayed diagram changed while the table loaded. Load the table again.')
-          : !rulePreparation.isCurrent(before)
+          : !isRuleInputCurrent(before)
             ? t('Not applied: {inputs} changed while the table loaded. Load the table again.', { inputs: tm(RULE_INPUT_CHANGE_WORDS) }) : '';
       if (changed) {
         showNotice({ text: joinSentences(loadedRowsText, changed), tone: 'warning' });
@@ -1828,7 +1831,7 @@ export const createFeatureLabelActions = ({
       const notice = showNotice({ text: message, items: skipped });
       labelImportNotice = notice ? { drawing, notice } : null;
     } catch (error) {
-      if (revision !== labelImportRevision || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
+      if (revision !== labelImportRevision || input.files?.[0] !== file || !isRuleInputCurrent(before)
         || state.errorLog?.value !== previousError) return;
       const model = normalizeUserFacingError(error, { operation: 'evaluateRules', stage: 'resource-staging' });
       if (state.errorLog) state.errorLog.value = model;

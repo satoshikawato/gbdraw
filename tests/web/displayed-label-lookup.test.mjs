@@ -11,7 +11,7 @@ const setup = (features, entries) => {
   const never = () => { throw new Error('unused'); };
   return createFeatureRuleActions({
     ref: (value) => ({ value }), computed: (get) => ({ get value() { return get(); } }),
-    state: withDrawings(state), rulePreparation: {}, runUndoable: never, runUndoableCheckpoint: never,
+    state: withDrawings(state), runUndoable: never, runUndoableCheckpoint: never,
     prepareFileLegendEntries: never, projectPaletteAndRules: never, ports: {}, nextTick: async () => {}
   });
 };

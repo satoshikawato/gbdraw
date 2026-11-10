@@ -21,7 +21,7 @@ const create = (features) => {
   };
   const actions = createFeatureRuleActions({
     state, ref, computed, nextTick: async () => {},
-    rulePreparation: { isCurrent: () => true },
+    isRuleInputCurrent: () => true,
     projectPaletteAndRules: () => true
   });
   return { actions, extractedFeatures };
