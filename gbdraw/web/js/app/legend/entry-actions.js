@@ -550,14 +550,12 @@ export const createLegendEntryActions = ({
     };
   };
 
-  // Moves the drawing's Legend records, the generated inventory and colors,
-  // the open Stroke options, and the list identity (`rekeyLegendRowIds`) of
-  // each re-keyed row to its new key (`rekeyLegendRecords`, OV-660); returns `entries`, the list being
-  // written, moved. With `takenBack` (Delete settings takes back the rule
-  // rows that name a feature instance of a turned-off record, which no Result
-  // draws), the records of the `removed` rows go too, with the Legend colors
-  // that copy them (`legendColorCopies`), the moved list is written here, and
-  // the inventory, colors, and Stroke options, which are the Result's, stay.
+  // Moves the drawing's Legend records, the generated inventory and colors, the open Stroke options, and the list
+  // identity (`rekeyLegendRowIds`) of each re-keyed row to its new key (`rekeyLegendRecords`, OV-660); returns
+  // `entries`, the list being written, moved. With `takenBack` (Delete settings takes back the rule rows that name a
+  // feature instance of a turned-off record, which no Result draws), the records of the `removed` rows go too, with
+  // the Legend colors that copy them (`legendColorCopies`), the moved list is written here, and the inventory, colors,
+  // and Stroke options, which are the Result's, stay.
   /**
    * @param {DrawingState} drawing
    * @param {readonly EntryRecord[]} entries
