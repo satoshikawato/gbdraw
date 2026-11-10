@@ -113,7 +113,7 @@ _FORM_ROWS = _rows(
     ("show_scale", "both", "copy"),
     ("scale_style", "linear", "own"),
     ("linear_ruler_on_axis", "linear", "own"),
-    ("linear_wrap_length", "linear", "own"),
+    ("linear_wrap_length", "linear", "own", 50),
     ("labels_mode", "circular", "own"),
     ("show_labels_linear", "linear", "own"),
     ("multi_record_canvas", "circular", "own"),
@@ -146,7 +146,7 @@ _ADV_ROWS = _rows(
     ("feature_shapes", "both", "copy"),
     ("arrow_head_length_ratio", "both", "copy"),
     ("arrow_shaft_width_ratio", "both", "copy"),
-    ("font_family", "both", "copy"),
+    ("font_family", "both", "copy", 47),
     ("window_size", "both", "copy"),
     ("step_size", "both", "copy"),
     ("nt", "both", "copy"),
@@ -156,9 +156,9 @@ _ADV_ROWS = _rows(
     ("circular_label_spacing", "circular", "own"),
     ("linear_label_spacing", "linear", "own"),
     ("label_rendering", "both", "copy"),
-    ("label_line", "both", "copy"),
-    ("label_protection", "both", "copy"),
-    ("italic_gene_labels", "both", "copy"),
+    ("label_line", "both", "copy", 48),
+    ("label_protection", "both", "copy", 48),
+    ("italic_gene_labels", "both", "copy", 50),
     ("circular_label_placement", "circular", "own"),
     ("label_placement", "linear", "own"),
     ("label_rotation", "linear", "own"),
@@ -228,7 +228,7 @@ _ADV_ROWS = _rows(
     ("tick_label_font_size", "circular", "own"),
     ("plot_title_font_size", "both", "profile"),
     ("keep_full_definition_with_plot_title", "circular", "own"),
-    ("show_definition", "circular", "own"),
+    ("show_definition", "circular", "own", 49),
     ("center_reserved_radius", "circular", "own"),
     ("feature_width_circular", "circular", "own"),
     ("depth_width_circular", "circular", "own"),
@@ -247,7 +247,7 @@ _ADV_ROWS = _rows(
     ("min_bitscore", "both", "profile"),
     ("evalue", "both", "profile"),
     ("identity", "both", "profile"),
-    ("identity_scale", "both", "copy"),
+    ("identity_scale", "both", "copy", 50),
     ("alignment_length", "both", "profile"),
 )
 
@@ -273,7 +273,7 @@ _CONFIG_ROWS = (
         # What the Default colors and Blacklist files set, for Remove on their
         # cards (Session 48, OV-1280); the rows of the lists carry
         # ``importedFrom`` themselves.
-        ("fileImports", "both", "copy"),
+        ("fileImports", "both", "copy", 48),
         ("losatProgram", "linear", "own"),
         ("circularConservation", "circular", "own"),
         ("unmanagedConfigOverrides", "both", "by-leaf"),
