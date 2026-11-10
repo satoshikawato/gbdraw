@@ -12,6 +12,7 @@ import { DERIVED_RESULT_DESCRIPTION } from '../contracts/derived-result-shape.ge
 import { shapeViolations } from '../utils/contract-shape.js';
 import { LOSAT_WASM_BUILD } from './losat-build.generated.js';
 /** @import { CardRecordFacts } from './linear-card-windows.js' */
+/** @import { DrawingId } from './drawing-view.js' */
 
 // Membership is tested on unvalidated Session values, hence `ReadonlySet<unknown>`.
 /** @type {ReadonlySet<unknown>} */
@@ -59,6 +60,116 @@ const MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS = [
 // The `flow` of a raw entry a Circular conservation ring's search wrote,
 // generated from the CLI's owner: Generate writes it, Save reads it.
 export { CIRCULAR_CONSERVATION_FLOW };
+
+/**
+ * The kind of drawing a raw entry's search is for: a ring search (`flow` circular-conservation) is a Circular
+ * drawing's, any other a Linear drawing's (its pairs, or an older Session's search without record ids). Save writes an
+ * entry only into drawings of its kind that name it (an entry without record ids into every drawing with a request);
+ * Load gives its cache-info row to a drawing of its kind.
+ * @param {{ flow?: unknown }} entry
+ * @returns {'circular' | 'linear'}
+ */
+export const losatEntryDrawingKind = ({ flow }) => (flow === CIRCULAR_CONSERVATION_FLOW ? 'circular' : 'linear');
+
+/**
+ * Cache-info rows one per raw cache key, each its key's first row: rows that share a key (two rings of one genome,
+ * two drawings that hold one entry) name one LOSAT result, with the first row's file name, as the CLI raw cache keeps
+ * one file per key. Save writes one entry for each, and a drawing's results show each once (`losatResultRowsOfDrawing`).
+ * @template {{ key: unknown }} Row
+ * @param {readonly Row[]} rows
+ * @returns {Row[]}
+ */
+export const losatRowsOnePerKey = (rows) => {
+  const seen = new Set();
+  return rows.filter(({ key }) => {
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+/**
+ * A drawing's cache-info rows, as its Generate or a Load wrote them: Linear's per-pair readers find a pair's row among
+ * them by its edge (OV-3210; two pairs of identical sequences share one key), and a Duplicate copies them (OV-3205).
+ * @template {{ drawingId: DrawingId }} Row
+ * @param {readonly Row[]} rows @param {DrawingId} drawingId
+ * @returns {Row[]}
+ */
+export const losatRowsOfDrawing = (rows, drawingId) => rows.filter((row) => row.drawingId === drawingId);
+
+/**
+ * The LOSAT results of a drawing: its cache-info rows, one per raw key. **Save Raw LOSAT TSV** saves them and Run
+ * Info lists their runtimes (OV-3203, OV-3204).
+ * @template {{ key: unknown, drawingId: DrawingId }} Row
+ * @param {readonly Row[]} rows @param {DrawingId} drawingId
+ * @returns {Row[]}
+ */
+export const losatResultRowsOfDrawing = (rows, drawingId) => losatRowsOnePerKey(losatRowsOfDrawing(rows, drawingId));
+
+/**
+ * The cache-info rows of the other drawings: what a drawing's Generate or ring edit leaves.
+ * @template {{ drawingId: DrawingId }} Row
+ * @param {readonly Row[]} rows @param {DrawingId} drawingId
+ * @returns {Row[]}
+ */
+export const losatRowsOfOtherDrawings = (rows, drawingId) => rows.filter((row) => row.drawingId !== drawingId);
+
+/**
+ * The cache-info rows with a drawing's rows replaced by `drawingRows` under its ID, and the rows it held: a drawing
+ * that leaves the store (Delete, the Undo of New or Duplicate) hands its rows over, and one that comes back or is
+ * made takes its own (a copy its source's), so a drawing's rows are in the state only while it is (OV-3205, OV-3209).
+ * The cached searches are shared by key, so none is copied or dropped.
+ * @template {{ drawingId: DrawingId }} Row
+ * @param {readonly Row[]} rows @param {DrawingId} drawingId @param {readonly Row[]} drawingRows
+ * @returns {{ rows: Row[], held: Row[] }}
+ */
+export const losatRowsWithDrawing = (rows, drawingId, drawingRows) => ({
+  rows: [...losatRowsOfOtherDrawings(rows, drawingId), ...drawingRows.map((row) => ({ ...row, drawingId }))],
+  held: losatRowsOfDrawing(rows, drawingId)
+});
+
+/**
+ * The project's rows after a Generate or a History step of `drawingId` installs the rows it holds (`stepRows`, the
+ * project's rows when it was captured): the drawing's rows are the step's, the other drawings' stay (OV-3207, OV-3212).
+ * The step's array itself when it is the whole result, so an unchanged owner set keeps its array (OV-2210).
+ * @template {{ key: unknown, drawingId: DrawingId }} Row
+ * @param {readonly Row[]} rows @param {DrawingId} drawingId @param {readonly Row[]} stepRows
+ * @returns {readonly Row[]}
+ */
+export const losatRowsAfterStep = (rows, drawingId, stepRows) => {
+  const others = losatRowsOfOtherDrawings(rows, drawingId);
+  const own = losatRowsOfDrawing(stepRows, drawingId);
+  return others.length === 0 && own.length === stepRows.length ? stepRows : [...others, ...own];
+};
+
+/**
+ * The LOSAT caches an install leaves (D-200). No install removes a cached search or converted payload: only Clear does,
+ * for the whole project, as on dev. A Generate's commit installs its caches whole: they are the cache it started from
+ * and what it searched or converted (as on dev). An Undo, a Redo or a rollback keeps the current caches and puts back
+ * from the step only the evidence of the drawing it restores: the searches its rows name, the protein searches that
+ * resolve in its protein identity manifest (the all-against-all searches of Similarity groups and Collinear have no
+ * row), and the converted payloads all of whose searches (`rawKeys`) are then cached. So a Clear's searches come back
+ * only with a row or a manifest that names them (PD-OI-022: no History replacement revives unrelated retry data,
+ * OV-3215), and a search no row names any more stays for a later Generate to reuse (OV-3260). The current Maps
+ * themselves when nothing comes back, so a rollback keeps the retry of the searches its run completed.
+ * @template Entry
+ * @template {{ rawKeys?: readonly unknown[] }} Derived
+ * @param {{ commit: boolean, rows: readonly { key: unknown }[], manifest: unknown }} restored A Generate's commit, or
+ *   the rows and manifest of the drawing an Undo, a Redo or a rollback restores.
+ * @param {{ cache: ReadonlyMap<unknown, Entry>, derived: ReadonlyMap<unknown, Derived> }} step The caches the step holds.
+ * @param {{ cache: ReadonlyMap<unknown, Entry>, derived: ReadonlyMap<unknown, Derived> }} current The current caches.
+ * @returns {{ cache: ReadonlyMap<unknown, Entry>, derived: ReadonlyMap<unknown, Derived> }}
+ */
+export const losatEvidenceAfterStep = ({ commit, rows, manifest }, step, current) => {
+  if (commit) return step;
+  const keys = new Set(rows.map(({ key }) => key));
+  const searches = [...step.cache].filter(([key, entry]) => !current.cache.has(key)
+    && (keys.has(key) || proteinSearchResolvesIn(entry, manifest)));
+  const cache = searches.length ? new Map([...current.cache, ...searches]) : current.cache;
+  const payloads = [...step.derived].filter(([key, { rawKeys }]) => !current.derived.has(key)
+    && Array.isArray(rawKeys) && rawKeys.every((rawKey) => cache.has(rawKey)));
+  return { cache, derived: payloads.length ? new Map([...current.derived, ...payloads]) : current.derived };
+};
 
 // The runtime identity the Web stores beside each raw entry it searches
 // (design D9/D10, the CLI's losat_runtime_record). It is never part of a raw
@@ -276,8 +387,11 @@ export const isCurrentRawLosatCacheEntry = (entry) => {
 };
 
 /**
- * A derived cache entry: what `isLosatDerivedCacheEntry` has checked. `mode` is stored unchecked.
- * @typedef {{ schema: number, kind: 'derived-losatp-payload', key: string, payload: Record<string, unknown>, idEncoding?: unknown, mode?: unknown }} LosatDerivedCacheEntry
+ * A derived cache entry: what `isLosatDerivedCacheEntry` has checked. `mode` is stored unchecked. `rawKeys`, in memory
+ * only (Save writes no derived entry), are the keys of the raw searches it was converted from, which name it
+ * (`losatEvidenceAfterStep`); an entry without them (a Session's) never comes back with a step.
+ * @typedef {{ schema: number, kind: 'derived-losatp-payload', key: string, payload: Record<string, unknown>, idEncoding?: unknown, mode?: unknown,
+ *   rawKeys?: readonly string[] }} LosatDerivedCacheEntry
  */
 
 /**
@@ -669,17 +783,9 @@ export const validateProteinRawEntryReferences = (
   }
   const indexedIdentity = indexedProteinIdentity(manifest, identityIndex);
   if (!indexedIdentity && !validateProteinIdentityManifest(manifest)) return false;
+  if (!proteinSearchResolvesIn(entry, manifest)) return false;
   const queryInstance = manifest.recordInstances[entry.queryRecordInstanceKey];
   const subjectInstance = manifest.recordInstances[entry.subjectRecordInstanceKey];
-  if (!queryInstance || !subjectInstance) return false;
-  if (queryInstance.runtimeBindingHash !== entry.queryRuntimeBindingHash) return false;
-  if (subjectInstance.runtimeBindingHash !== entry.subjectRuntimeBindingHash) return false;
-  const queryAnalysis = manifest.recordAnalyses[queryInstance.recordAnalysisId];
-  const subjectAnalysis = manifest.recordAnalyses[subjectInstance.recordAnalysisId];
-  if (
-    queryAnalysis?.proteinSetHash !== entry.queryProteinSetHash ||
-    subjectAnalysis?.proteinSetHash !== entry.subjectProteinSetHash
-  ) return false;
   const queryIds = indexedIdentity?.runtimeIdsByInstance.get(entry.queryRecordInstanceKey)
     || new Set(Object.values(queryInstance.runtimeIds));
   const subjectIds = indexedIdentity?.runtimeIdsByInstance.get(entry.subjectRecordInstanceKey)
@@ -696,6 +802,28 @@ export const validateProteinRawEntryReferences = (
     verifiedRawProteinTexts.set(entry, { text: entry.text, queryIds, subjectIds });
   }
   return true;
+};
+
+/**
+ * Whether a protein raw search's two record instances are those of a manifest: the same instance keys, runtime
+ * bindings and protein sets (the references `validateProteinRawEntryReferences` checks before the search's text).
+ * @param {unknown} entry
+ * @param {unknown} manifest A validated manifest, or anything else (which resolves nothing).
+ * @returns {boolean}
+ */
+const proteinSearchResolvesIn = (entry, manifest) => {
+  if (!isProteinRawLosatCacheEntry(entry) || !isPlainObject(entry) || !isPlainObject(manifest)) return false;
+  const { recordInstances, recordAnalyses } = manifest;
+  if (!isPlainObject(recordInstances) || !isPlainObject(recordAnalyses)) return false;
+  /** @param {unknown} instanceKey @param {unknown} bindingHash @param {unknown} proteinSetHash */
+  const resolves = (instanceKey, bindingHash, proteinSetHash) => {
+    const instance = recordInstances[String(instanceKey)];
+    if (!isPlainObject(instance) || instance.runtimeBindingHash !== bindingHash) return false;
+    const analysis = recordAnalyses[String(instance.recordAnalysisId)];
+    return isPlainObject(analysis) && analysis.proteinSetHash === proteinSetHash;
+  };
+  return resolves(entry.queryRecordInstanceKey, entry.queryRuntimeBindingHash, entry.queryProteinSetHash)
+    && resolves(entry.subjectRecordInstanceKey, entry.subjectRuntimeBindingHash, entry.subjectProteinSetHash);
 };
 
 /**

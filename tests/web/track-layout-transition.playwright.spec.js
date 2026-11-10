@@ -1663,7 +1663,9 @@ test('a Rotate after a ring reorder leaves each ring its own row, width, and anc
     expect(drawn.map((ring) => ring.row)).toEqual(before.map((row) => row.id));
     await page.evaluate(() => window.__GBDRAW_APP__.moveCircularConservationSeries(0, 1));
     await rotateByTrna(page);
-    expect(await ringRows(page), 'the Rotate adopts the committed rings, and each row stays on its own').toEqual(before);
+    // A rerender of the committed request leaves the draft's rings as the move left them (R1 (c), #1777 review 7).
+    expect(await ringLabels(page), 'the Rotate leaves the moved rings in the draft').toEqual(['ringb', 'ringa', 'ringc']);
+    expect(await ringRows(page), 'each row stays on its own ring').toEqual(before);
     await expectGenerates(page);
     await settleLive(page);
     const after = await ringRows(page);
@@ -1674,7 +1676,7 @@ test('a Rotate after a ring reorder leaves each ring its own row, width, and anc
   } finally { await page.context().close(); }
 });
 
-test('a Rotate after a Remove and an Add Seq puts no edit on another ring', async ({ browser }) => {
+test('a Rotate after a Remove and an Add Seq leaves the draft\'s rings and their edits', async ({ browser }) => {
   test.setTimeout(420000);
   const page = await loadAddedRings(browser);
   try {
@@ -1684,10 +1686,14 @@ test('a Rotate after a Remove and an Add Seq puts no edit on another ring', asyn
     await addRing(page, 'ringz');
     const added = (await ringRows(page)).find((row) => row.file === 'ringz');
     await setRingWidth(page, added.id, '7px');
-    await rotateByTrna(page);
-    expect((await ringRows(page)).map((row) => [row.file, row.label, row.width]), 'the edit of ringz is not on a committed ring').toEqual([
-      ['ringa', 'ringa', null], ['ringb', 'ringb', null], ['ringc', 'ringc', null]
+    const edited = await ringRows(page);
+    expect(edited.map((row) => [row.file, row.label, row.width]).sort()).toEqual([
+      ['ringb', 'ringb', null], ['ringc', 'ringc', null], ['ringz', 'ringz', '7px']
     ]);
+    await rotateByTrna(page);
+    // A rerender of the committed request leaves the draft's rings and rows as the edits left them (R1 (c), #1777 review 7).
+    expect(await ringRows(page), 'the edit of ringz stays on ringz, and no committed ring comes back').toEqual(edited);
+    expect(await ringLabels(page)).toEqual(['ringb', 'ringc', 'ringz']);
   } finally { await page.context().close(); }
 });
 
@@ -1834,9 +1840,10 @@ test('Rotate Apply now reached by keyboard while a Generate runs is disabled and
 });
 
 // A change through the hook, not a control: the compare at adoption replaces the rows instead of moving them to the
-// other ring's key. This checks the state right after that Generate only; the series it adopts still takes the draft's
-// entry at the same place (`adoptCanonicalRenderArtifacts`). The controls named above are disabled while a Generate
-// runs, and Reset Settings and the Rotate, Align, and Align at feature runs are refused; these tests check no other.
+// other ring's key. This checks the state right after that Generate only; the series it adopts is the request's rings,
+// each with the genetic code of the draft's ring at its place (`adoptCircularRingResult`). The controls named above are
+// disabled while a Generate runs, and Reset Settings and the Rotate, Align, and Align at feature runs are refused;
+// these tests check no other.
 test('a ring reorder after the request is built puts no row on another ring', async ({ browser }) => {
   test.setTimeout(420000);
   const page = await loadAddedRings(browser);

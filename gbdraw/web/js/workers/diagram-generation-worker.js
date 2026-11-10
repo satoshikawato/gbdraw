@@ -606,24 +606,30 @@ const withRequestWorkspace = async (pyodide, requestId, kind, callback) => {
   }
 };
 
+// A role named `<role>[]` takes several files in order (the files of one
+// comparison genome); its paths are a list under `<role>`.
 const stageHelperFiles = (pyodide, workspace, files, allowedRoles) => {
   const allowed = new Set(allowedRoles);
   const paths = new Map();
   const entries = Array.isArray(files) ? files : [];
   entries.forEach((file) => {
     const role = String(file?.role || '').trim();
-    if (!allowed.has(role)) {
+    const listed = allowed.has(`${role}[]`);
+    if (!allowed.has(role) && !listed) {
       throw new TypeError(`Unexpected diagram helper file role '${role || '(blank)'}'.`);
     }
-    if (paths.has(role)) {
+    if (!listed && paths.has(role)) {
       throw new TypeError(`Duplicate diagram helper file role '${role}'.`);
     }
     if (!(file?.bytes instanceof ArrayBuffer)) {
       throw new TypeError(`Diagram helper file '${role}' requires an ArrayBuffer.`);
     }
-    const path = `${workspace}/${HELPER_FILE_NAMES[role]}`;
+    const placed = listed ? (paths.get(role) || []) : null;
+    const path = placed
+      ? `${workspace}/${placed.length + 1}-${HELPER_FILE_NAMES[role]}`
+      : `${workspace}/${HELPER_FILE_NAMES[role]}`;
     pyodide.FS.writeFile(path, new Uint8Array(file.bytes));
-    paths.set(role, path);
+    paths.set(role, placed ? [...placed, path] : path);
   });
   return paths;
 };
@@ -782,6 +788,15 @@ const requireHelperFile = (paths, role, operation) => {
   const path = paths.get(role);
   if (!path) throw new TypeError(`Diagram helper '${operation}' requires the '${role}' file.`);
   return path;
+};
+
+// The files of a `<role>[]` role, at least one.
+const requireHelperFiles = (paths, role, operation) => {
+  const list = paths.get(role);
+  if (!Array.isArray(list) || list.length === 0) {
+    throw new TypeError(`Diagram helper '${operation}' requires the '${role}' files.`);
+  }
+  return list;
 };
 
 export const callJsonHelper = (pyodide, helperName, args) => {
@@ -1302,11 +1317,11 @@ const HELPER_OPERATION_SPECS = Object.freeze({
   },
   [DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE]: {
     keys: ['files'],
-    fileRoles: ['source'],
+    fileRoles: ['source[]'],
     run: (pyodide, _payload, paths, operation) => callJsonHelper(
       pyodide,
       'read_comparison_sequence_json',
-      [requireHelperFile(paths, 'source', operation)]
+      requireHelperFiles(paths, 'source', operation)
     )
   },
   [DIAGRAM_HELPER_OPERATIONS.LIST_GFF_FASTA_RECORDS]: {

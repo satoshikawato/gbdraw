@@ -3,6 +3,7 @@
 // drawing ID, while another drawing is shown. The History snapshot service
 // captures and installs it (`captureArtifactSlot`, `installArtifactSlot`);
 // Session Save writes it and Session Load builds it (`services/config.js`).
+import { emptyProteinIdentityManifest } from './losat-cache.js';
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 /** @import { PythonLegendKey } from './legend-svg.js' */
 
@@ -21,10 +22,11 @@ export const FEATURE_EDITOR_STATUS_IDLE = Object.freeze({ status: 'idle', error:
  * another is shown. The state ref of every key and the value an empty slot
  * installs, given the mode of the slot's drawing and the current value: the displayed-Result
  * part of the owner set, the selected Result, the feature-editor status, the generated Legend colors and
- * stroke defaults, and the alignment Reset receipt (it binds the
- * committed Linear Session). Draft and project state stays shared: the specific
+ * stroke defaults, the alignment Reset receipt (it binds the
+ * committed Linear Session), and the protein identity manifest its LOSAT
+ * protein rows resolve in (D-197). Draft and project state stays shared: the specific
  * color rules, the file Legend captions, the Linear record orientations, the
- * pending palette, the LOSAT caches and manifests, the alignment plan and
+ * pending palette, the LOSAT caches and legacy protein candidates, the alignment plan and
  * record translations, and every editor intent (R2).
  * @satisfies {Readonly<Record<string, (mode: 'circular' | 'linear', current: any) => any>>}
  */
@@ -57,7 +59,8 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   appliedPaletteColors: (_mode, current) => current,
   similarityAlignmentResetReceipt: () => null,
   originalLegendColors: () => ({}),
-  originalSvgStroke: () => ({ color: null, width: null })
+  originalSvgStroke: () => ({ color: null, width: null }),
+  proteinIdentityManifest: () => emptyProteinIdentityManifest()
 });
 // The cast: `ARTIFACT_SLOT_EMPTY` is the frozen literal above, so its own keys are exactly the keys of its type.
 export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFACT_SLOT_EMPTY)[]} */ (Object.keys(ARTIFACT_SLOT_EMPTY)));

@@ -447,6 +447,32 @@ into the `[Unreleased]` list below.
   with comparison rings ("semantic field ... params.managed has no current CLI
   projection"). The recipe now leaves out the ring rows' own bookkeeping, which
   does not change the figure, and the command draws the same figure (OV-3009).
+- Fixed (Web app): a Rotate, an Align or another change that redraws the
+  Result without a new search undid the edits made to the similarity rings
+  since the last Generate (a removed or moved ring, a new label, color,
+  genetic code or stack row width). Those edits now stay until the next
+  Generate draws them (OV-3194).
+- Fixed (Web app): **Remove series**, Session Load and **Add Seq** could give
+  a similarity ring another ring's name, color, stack row or genetic code, for
+  example after removing a ring above it or loading a Session whose ring
+  genome file was missing. Each ring now keeps its own (OV-3089, OV-3091,
+  OV-3152, OV-3166, OV-3167, OV-3195, OV-3197, OV-3200).
+- Fixed (Web app): editing a Circular drawing's similarity rings, a Generate
+  of a drawing, or the Undo or Redo of a drawing's Generate removed another
+  drawing's results from its LOSAT results list and from **Save Raw LOSAT
+  TSV**, and a Session saved afterwards lost their file names. Those results
+  now stay listed with their names. After another Linear drawing's protein
+  (LOSATP) Generate, a Linear drawing's protein pairs also still download,
+  and a Session saved then keeps them (OV-3196, OV-3201, OV-3207, OV-3213).
+- Fixed (Web app): **Save Raw LOSAT TSV** of a drawing also saved the LOSAT
+  results of the project's other drawings, and **Clear N LOSAT results** and
+  **Save Raw LOSAT TSV** counted and saved twice a table that two similarity
+  rings of one genome share. **Save Raw LOSAT TSV** now saves the shown
+  drawing's own results, each table once. **Clear N LOSAT results** counts
+  each of the project's searches once and, as before, clears the results of
+  every drawing. Generating again after an Undo or Redo reuses the LOSAT
+  searches the project already ran, and **Clear N LOSAT results** counts them
+  (OV-3203, OV-3204, OV-3260).
 - Changed: when the Circular similarity rings are not all one color, each
   Legend row now shows the ring's name with that ring's own identity ramp
   (white to its color), with one scale line under the last ramp, instead of a
@@ -979,6 +1005,27 @@ into the `[Unreleased]` list below.
   that DPI (300 when none is given), as the web app's PNG does.
   `gbdraw.api.with_request_output()` gained an optional `dpi` argument (additive)
   (#1663).
+- Added: a Circular similarity ring can compare a genome split over several
+  files, such as a chromosome and plasmids downloaded separately (E. coli
+  O157:H7 Sakai is BA000007.3, AB011548.2 and AB011549.2), without joining the
+  files first. `gbdraw circular --conservation_genome FILE [FILE ...]`, given
+  once per ring, a `comparison_sequence` cell of `--conservation_table` that
+  lists the files separated by `;`, and a list of paths in
+  `CircularDiagramOptions.conservation_sequence_files`, a list of paths in
+  `ComparisonRingTrackOptions.comparison_sequence_source`, and **Add file** on
+  a Web app ring row (which also removes the ring's files) give
+  one ring every record of those files, file after file: the ring of one file
+  that holds them all. The ring is labelled after its first file. `--losat_output_dir` writes
+  the `;` list, so its `conservation.tsv` still reads back unchanged. Two files
+  of one genome that hold the same record ID are refused
+  (`UNIQUE_IDS`). `--conservation_sequence` keeps one file per ring.
+  A comparison file whose own records repeat a record ID still draws as
+  before, and gbdraw now warns (the command line on stderr, the Web app after
+  Generate), naming the file and the ID, that the hover popup and the span
+  export show the first record with that ID.
+  A request now writes each ring's `conservationFastaFiles` entry, and a
+  Session its ring file bindings, as a list of files; a request or Session
+  saved by gbdraw 0.14.5 or earlier reads each ring's one file as before.
 - Added (Web app): a Circular **Show Comparison Rings** setting, beside
   **Show Depth**. Generate draws the comparison rings and runs their LOSAT
   searches or reads their BLAST tables only while it is on. Like **Show

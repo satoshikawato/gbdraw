@@ -135,6 +135,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     # The first Session whose comparison-plan edges hold window-pair names; Load drops them from an older file.
     ("WINDOW_LOSAT_FILENAMES_SESSION_VERSION", "gbdraw.session_io", "WINDOW_LOSAT_FILENAMES_SESSION_VERSION"),
     ("AUTOMATIC_ANNOTATION_LANE_SIDES", "gbdraw.annotations.planning", "AUTOMATIC_ANNOTATION_LANE_SIDES"),
+    # Input summary warnings of an input drawn in full (OV-2954): no "not drawn" heading.
+    ("INPUT_WARNINGS_OF_DRAWN_INPUT", "gbdraw.api.input_summary", "INPUT_WARNINGS_OF_DRAWN_INPUT"),
 )
 # (Web name, Python module, function): values a Python function derives from
 # its owner, written in this order after the constants.

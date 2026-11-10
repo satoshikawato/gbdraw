@@ -719,7 +719,7 @@ def test_comparison_fasta_cache_reuses_only_nonempty_sources(tmp_path: Path) -> 
         diagnostics=diagnostics,
     ):
         assert request_render_module._ComparisonSequenceSources(
-            (str(fasta_path),)
+            ((str(fasta_path),),)
         ).load()[0][0].id == "comparison"
     warm_diagnostics: dict[str, object] = {"metrics": {}}
     with cache.transaction(
@@ -727,7 +727,7 @@ def test_comparison_fasta_cache_reuses_only_nonempty_sources(tmp_path: Path) -> 
         diagnostics=warm_diagnostics,
     ):
         assert request_render_module._ComparisonSequenceSources(
-            (str(fasta_path),)
+            ((str(fasta_path),),)
         ).load()[0][0].id == "comparison"
     assert _metrics(warm_diagnostics)["parsedSourceCacheHitCount"] == 1
     assert _metrics(warm_diagnostics)["parsedSourceParseCount"] == 0
@@ -746,7 +746,7 @@ def test_comparison_fasta_cache_reuses_only_nonempty_sources(tmp_path: Path) -> 
             diagnostics=empty_diagnostics,
         ):
             assert request_render_module._ComparisonSequenceSources(
-                (str(empty_path),)
+                ((str(empty_path),),)
             ).load() == ((),)
         assert _metrics(empty_diagnostics)["parsedSourceCacheMissCount"] == 1
         assert _metrics(empty_diagnostics)["parsedSourceParseCount"] == 1

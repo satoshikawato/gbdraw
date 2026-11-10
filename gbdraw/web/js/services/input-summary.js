@@ -1,7 +1,8 @@
 // @ts-check
 // The input summary Python sends beside each Result (`metadata.inputSummaries`,
 // gbdraw/api/input_summary.py): what the Result read and drew, and the warnings
-// for a record or a comparison table it draws nothing of. The CLI logs the same
+// for a record or a comparison table it draws nothing of, or for a comparison
+// file whose record IDs repeat (drawn in full, named ambiguously). The CLI logs the same
 // lines and warnings; Python owns every count and word, so the Web shows them
 // as sent. Not saved in a Session.
 //
@@ -10,6 +11,7 @@
 // entry keeps the Feature visibility of the render that sent it
 // (`drawnVisibility`, `visibilityPaintState`); while the drawing's differs, the
 // page says the summary describes the last render and keeps its warnings back.
+import { INPUT_WARNINGS_OF_DRAWN_INPUT } from '../contracts/schema.generated.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
 /**
@@ -45,8 +47,11 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {LinearWrapSummary | null} linearWrap `null` when the Result cut no record.
  */
 /**
- * @typedef {InputSummary & { readonly drawnVisibility: string }} DrawnInputSummary
- *   A Result's summary with the Feature visibility of the render that sent it (Web-owned).
+ * @typedef {InputSummary & {
+ *   readonly drawnVisibility: string, readonly leftOutWarnings: readonly InputWarning[], readonly drawnInWarnings: readonly InputWarning[]
+ * }} DrawnInputSummary
+ *   A Result's summary with the Feature visibility of the render that sent it (Web-owned), and its warnings in two
+ *   groups: those that say part of the input was not drawn, and those of an input drawn in full.
  */
 
 const SUMMARY_FIELDS = ['resultIndex', 'resultName', 'lines', 'warnings', 'records', 'linearWrap'];
@@ -119,7 +124,13 @@ export const validateInputSummaries = (value, results) => {
  * @returns {readonly DrawnInputSummary[]}
  */
 export const drawnInputSummaries = (summaries, drawnVisibility) => Object.freeze(
-  summaries.map((entry) => Object.freeze({ ...entry, drawnVisibility }))
+  summaries.map((entry) => Object.freeze({
+    ...entry,
+    drawnVisibility,
+    // A warning of an input drawn in full (Python's `INPUT_WARNINGS_OF_DRAWN_INPUT`) leaves nothing out.
+    leftOutWarnings: Object.freeze(entry.warnings.filter((warning) => !INPUT_WARNINGS_OF_DRAWN_INPUT.includes(warning.code))),
+    drawnInWarnings: Object.freeze(entry.warnings.filter((warning) => INPUT_WARNINGS_OF_DRAWN_INPUT.includes(warning.code)))
+  }))
 );
 
 /**

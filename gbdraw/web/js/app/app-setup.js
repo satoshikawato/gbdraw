@@ -1635,14 +1635,14 @@ export const createAppSetup = () => {
     }) ?? removeLinearDepthTrack(drawing, index);
   });
   const {
-    clearDerivedCircularConservationBlasts, setCircularConservationSourceFiles, replaceCircularConservationBlasts,
+    setRingGenomeLists, setCircularConservationSourceFiles, replaceCircularConservationBlasts, adoptCircularRingResult,
     askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
     refreshCircularConservationSlots
   } = createCircularConservationSources({
-    state, writeLosatCacheInfo,
+    state, writeLosatCacheInfo, askingStackPorts,
     syncCircularConservationSlots: circularTrackSlotEditor.syncCircularConservationSlots,
-    circularConservationRowsLeaving: circularTrackSlotEditor.circularConservationRowsLeaving,
-    askingStackPorts
+    rekeyCircularConservationRows: circularTrackSlotEditor.rekeyCircularConservationRows,
+    circularConservationRowsLeaving: circularTrackSlotEditor.circularConservationRowsLeaving
   });
   const {
     setCircularConservationUploadFiles, circularConservationSeriesRows, canMoveCircularConservationSeries,
@@ -1653,10 +1653,10 @@ export const createAppSetup = () => {
     reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
   });
   const {
-    settleComparisonRecordLabels, addCircularConservationComparisonFile, setCircularConservationCompanionFile,
-    removeCircularConservationSource
+    settleComparisonRecordLabels, addCircularConservationComparisonFile, addRingRowFiles,
+    removeRingRowFile, removeCircularConservationSource
   } = createCircularConservationComparisonFiles({
-    state, shownAction, writeLosatCacheInfo, runUndoable: history.runUndoable, clearDerivedCircularConservationBlasts,
+    state, shownAction, writeLosatCacheInfo, runUndoable: history.runUndoable, setRingGenomeLists,
     setCircularConservationSourceFiles, reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
   });
   // The auxiliary file imports still applying: the watchers add them, Save and
@@ -1754,7 +1754,8 @@ export const createAppSetup = () => {
     readDrawingRecordIdentities,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
-    downloadLosatCache,
+    losatResultRowsOf, clearableLosatResultCount, swapLosatResultRows, losatRowsOf,
+    downloadLosatCache: downloadLosatCacheOfDrawing,
     downloadLosatPair: downloadLosatPairOfDrawing,
     clearLosatCache,
     getLosatPairDefaultName: losatPairDefaultNameOfDrawing,
@@ -1790,18 +1791,13 @@ export const createAppSetup = () => {
     moveDrawnLabelVisibility: featureActions.moveDrawnLabelVisibility,
     askChoice,
     showNotice,
-    // A Generate that adopts a Circular LOSAT result reconciles its drawing's
-    // rings; a Linear Generate and a Circular one without such a result leave
-    // them. The ring rows move to its keys only if the draft's rings are those
-    // the request was built from (`keepCircularConservationRowsThrough` states why).
-    adoptCanonicalRenderArtifacts: (canonical, { builtFromDraft = false, ...options }) => {
-      const { drawing } = options;
-      const adopt = () => adoptCanonicalRenderArtifacts(canonical, options);
-      const adopted = builtFromDraft
-        ? circularTrackSlotEditor.keepCircularConservationRowsThrough(drawing, adopt)
-        : adopt();
-      if (adopted) reconcileCircularConservation(drawing);
-    },
+    // Only a Generate that searched its drawing's rings installs them, and the
+    // rings' reconcile pairs them with the rings it searched
+    // (`adoptCircularRingResult`); a Linear Generate, a Generate that searched no
+    // ring and a candidate of the committed request leave them.
+    adoptCanonicalRenderArtifacts: (canonical, { ringAdoption = null, ...options }) => adoptCircularRingResult(
+      options.drawing, (installRings) => adoptCanonicalRenderArtifacts(canonical, { ...options, installRings }), ringAdoption
+    ),
     getCommittedCanonicalSession,
     readCommittedCanonicalRevision,
     commitLiveSettingValues,
@@ -1813,10 +1809,9 @@ export const createAppSetup = () => {
     installGeneratedArtifactOwnerSet: historySnapshots.installGeneratedArtifactOwnerSet,
     installRedrawnArtifact: historySnapshots.installRedrawnArtifact,
     restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
+    emptyKeptProteinIdentityManifests: historySnapshots.emptyKeptProteinIdentityManifests,
     setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
-    runGeneratedArtifactReplacement: (...args) => (
-      history.runUndoableArtifactReplacement(...args)
-    ),
+    runGeneratedArtifactReplacement: (...args) => history.runUndoableArtifactReplacement(...args),
     previewRuntime,
     nextTick,
     onGeneratedArtifactCheckpointCapture: ({ phase, diagnostics } = {}) => {
@@ -1863,6 +1858,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} edgeKey @param {unknown} customName */
   const downloadLosatPair = (edgeKey, customName) => downloadLosatPairOfDrawing(state.activeDrawing(), edgeKey, customName);
+  const losatResultRows = computed(() => losatResultRowsOf(state.activeDrawing()));
+  const downloadLosatCache = () => downloadLosatCacheOfDrawing(state.activeDrawing());
   /** @param {string} edgeKey */
   const getLosatPairDefaultName = (edgeKey) => losatPairDefaultNameOfDrawing(state.activeDrawing(), edgeKey);
   // R1 (c), PD-OI-102: a History step, a checkpoint (Reset Settings, a rule
@@ -2555,25 +2552,26 @@ export const createAppSetup = () => {
       return applyDrawingStyle(withNewDrawingDefaults(state, createDrawingState(drawingId, mode)), source,
         resultsManager.paletteColorsOf(source));
     },
-    // The copy's Result is its source's slot under the copy's ID: the shown
-    // drawing's through `captureArtifactSlot` (it reads `currentResults`, R1).
+    // The copy's Result is its source's slot under its ID (the shown drawing's through `captureArtifactSlot`, R1).
     copyDrawing: (sourceId, copyId) => {
       const drawing = duplicateDrawingState(state.drawingOf(sourceId), copyId);
       const slot = artifactSlots.readOfDrawing(sourceId, state.activeDrawingId.value,
         () => historySnapshots.captureArtifactSlot(), (kept) => kept);
-      return { drawing, slot: slot ? artifactSlotAs(slot, drawing) : null };
+      return { drawing, held: { slot: slot ? artifactSlotAs(slot, drawing) : null, losatRows: losatRowsOf(sourceId), losatClears: historySnapshots.losatClearCount() } };
     },
     // A region drawing is read as Load reads a stored drawing, then made under its new ID.
     regionDrawing: makeRegionDrawing,
     addDrawing: state.addDrawing,
-    // An error that names a drawing leaves with it (R17-29), as it leaves on
-    // a switch away (OV-372): every Delete, its Redo, and the Undo of New and
-    // Duplicate remove a drawing here.
-    removeDrawing: (drawingId) => {
+    // An error that names a drawing leaves with it (R17-29), as on a switch away (OV-372): every Delete, its Redo,
+    // and the Undo of New and Duplicate remove a drawing here, which hands over its slot and LOSAT rows (OV-3209).
+    removeDrawing: (drawingId, left = []) => {
       if (errorDrawingId() === drawingId) errorLog.value = null;
-      return state.removeDrawing(drawingId, artifactSlots);
+      return { slot: state.removeDrawing(drawingId, artifactSlots), losatRows: swapLosatResultRows(drawingId, left), losatClears: historySnapshots.losatClearCount() };
     },
-    putSlot: artifactSlots.putSlot,
+    putHeld: (drawingId, { slot, losatRows, losatClears }) => {
+      const cleared = historySnapshots.putHeldSlot(drawingId, slot, losatClears);
+      return swapLosatResultRows(drawingId, cleared ? [] : losatRows);
+    },
     renameDrawing: state.renameDrawing,
     moveDrawing: state.moveDrawing,
     addDrawingHistory: history.addMember,
@@ -3544,7 +3542,7 @@ export const createAppSetup = () => {
     circularConservationFastaInput,
     circularConservationSeriesRows,
     setCircularConservationUploadFiles,
-    setCircularConservationCompanionFile,
+    addRingRowFiles, removeRingRowFile,
     canMoveCircularConservationSeries,
     moveCircularConservationSeries,
     openCircularConservationComparisonFilePicker,
@@ -3972,6 +3970,7 @@ export const createAppSetup = () => {
     requestPaletteChange,
     selectPalette,
     requestResetColors,
+    losatResultRows, clearableLosatResultCount: computed(clearableLosatResultCount),
     downloadLosatCache,
     downloadLosatPair,
     clearLosatCache,

@@ -79,6 +79,17 @@ twin is `circularSourcesOfModeScoped`). Session 51 and binding schema 2 keep
 their numbers. Fixtures: the `v51` files that hold a Circular drawing in
 `tests/fixtures/sessions/`.
 
+Session 51 also stores each similarity ring's comparison genome as a list of files. A Circular drawing's
+`webFiles.bindings.c_conservation_fastas` and `c_conservation_sequence_sources` hold one list of bindings per ring, in
+the ring's file order (an empty list for a ring without files), and `webFiles.conservationLosatFastaSources` and
+`conservationSequenceSources` one list of resource IDs per ring (`conservation-losat-fasta-files-<i>-<n>`). A Session 50
+or older wrote one binding or resource ID, or null, per ring; the Web app reads it as a list of that one file or an
+empty list (`ringGenomeFileLists` in `gbdraw/web/js/services/drawing/inputs.js`), and Python keeps the stored
+shape (`drawing_resource_ids` in `gbdraw/session_resources.py` reads both). The ring of one file keeps its series key,
+so a Session 50 ring cache entry stays valid. Fixtures: `tests/fixtures/sessions/synthetic_conservation.*` (a Session
+40, read by `tests/web/load-silent-rows.test.mjs`) and the schema-5 request in
+`tests/web/session-losat-cache-validation.test.mjs`. Session 51 has not reached `main`, so the version does not change.
+
 Session 51 also adds two keys to each record of a drawing's `runMetadata.trackSlotGeometry` (PD-OI-115):
 `recordKey`, the request's record key, and `axis`, where the record's axis lies in the frame of its drawn group
 (Circular: `radiusPx`, the feature band `bandInnerPx` to `bandOuterPx`, `startAngleDeg`, `degreesPerBp`; Linear: one
@@ -187,6 +198,15 @@ Web reads from `schema.generated.js`; Python refuses any other key, and so does 
 requests are written at schema 10: the fixtures `tests/fixtures/sessions/*.v51*` and the documentation and Gallery
 Sessions of Session 51 carry it, and Sessions 50 and older keep their schema 9 requests. `main`'s build (0.14.5)
 refuses every Session 51 file by its version.
+
+Request schema 10 also writes `diagramOptions.conservationFastaFiles` as one list of file references per similarity
+ring: the files of the ring's comparison genome, in the listed order (a genome split over several files, such as a
+chromosome and its plasmids), and an empty list for a ring without one. Schemas 1 to 9 wrote one file reference or
+null per ring; the decoder (`_decode_option_value` in `gbdraw/session_request_codec.py`) and the Web promotion
+(`promoteRingFilesToLists` in `gbdraw/web/js/services/session-request.js`) read it as a list of that one file or an
+empty list (`tests/fixtures/ring-genome-files-vectors.json`, read by both). The file references of ring `i` are
+allocated as `conservation-fasta-files-<i>-<n>`. This change entered schema 10 before schema 10 reached `main`, so
+the schema does not change again.
 
 A Circular drawing of Session 51 keeps the window of its record that its Start/End fields cannot hold, one window
 across the origin of a circular record (start after end, PD-OI-122), in `config.form.circular_windows`: a list of

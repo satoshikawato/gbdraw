@@ -218,11 +218,12 @@ def test_a_request_reference_must_resolve() -> None:
 # the italic gene label leaves; the identity colour scale leaves; the figure size leaves, #1427;
 # the unused Linear leaf canvas.linear.canvas_padding, removed; the scalar axis label
 # style leaves, which a stored full config or configOverrides without them reads as
-# numbered; request schema 10 writing record windows; the file metadata gbdraw writes,
-# a media type by resource kind and lastModified 0, OV-2964).
+# numbered; request schema 10 writing record windows and each similarity ring's comparison
+# genome as a list of files, so that fixture's three rings are lists of one file each; the file
+# metadata gbdraw writes, a media type by resource kind and lastModified 0, OV-2964).
 _SINGLE_REQUEST_DIGESTS = {
     "synthetic_conservation.gbdraw-session.json.gz":
-        "bfb40b381adb4548e024d0dc08b668202819dde8f984b5520c8a2cd9307218de",
+        "300759bb064f75d913f97bef3ee67f4ffcd5e43e2ed9d553bb9e2edd6fa98472",
     "q-frame-main-web-upload.v42.gbdraw-session.json.gz":
         "b359ca523356fa2de78495c140f8dfbc512641b78c391f1d3a9470592dd5f50d",
     "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz":

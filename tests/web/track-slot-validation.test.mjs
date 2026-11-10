@@ -24,6 +24,10 @@ await cp(
   join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'conservation-series.js'),
   join(tempRoot, 'services', 'conservation-series.js')
 );
+// conservation-series.js reads a ring's files through the drawing inputs slice.
+for (const file of ['drawing/inputs.js', 'drawing/slice-handle.js', 'history-files.js']) {
+  await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', file), join(tempRoot, 'services', file));
+}
 // linear-track-slots.js reads the current option values, which read the
 // Linear label visibilities and the comparison settings.
 for (const leaf of ['current-option-values.js', 'linear-label-visibility.js', 'losat-normalization.js']) {

@@ -125,7 +125,10 @@ from gbdraw.features.visibility import (
 )
 from gbdraw.io.colors import read_color_table, read_default_color_overrides
 from gbdraw.io.comparison_sequences import (
+    ComparisonGenome,
     ComparisonSequenceFile,
+    RepeatedRecordIds,
+    comparison_genome,
     read_comparison_sequence_file,
 )
 from gbdraw.io.comparisons import COMPARISON_COLUMNS, read_comparison_resource
@@ -198,7 +201,6 @@ from .options import (
 from .prepared import (
     RECORD_IDENTITY_TAG,
     ParsedRecordInputs,
-    PreparedResourceIdentity,
     ResolvedFeatureInputs,
     get_or_build_parsed_source,
     get_or_build_resolved_records,
@@ -460,74 +462,57 @@ def _resolve_request_option_tables(
 
 @dataclass
 class _ComparisonSequenceSources:
-    """Memoized Circular comparison-genome records shared by a request batch."""
+    """Memoized Circular comparison-genome records shared by a request batch.
 
-    paths: tuple[str | None, ...]
-    _files: tuple[ComparisonSequenceFile | None, ...] | None = None
+    ``genomes`` are the files of each ring (``conservation_genome_files``);
+    each file is parsed once, through the prepared parsed-source cache.
+    """
+
+    genomes: tuple[tuple[str, ...], ...]
+    _genomes: tuple[ComparisonGenome | None, ...] | None = None
     _records: tuple[tuple[SeqRecord, ...], ...] | None = None
-
-    def cache_specs(
-        self,
-    ) -> tuple[
-        tuple[Hashable, frozenset[PreparedResourceIdentity]] | None,
-        ...,
-    ]:
-        specs: list[
-            tuple[Hashable, frozenset[PreparedResourceIdentity]] | None
-        ] = []
-        for path in self.paths:
-            if path is None:
-                specs.append(None)
-                continue
-            identity = prepared_resource_identity(path)
-            specs.append(
-                None
-                if identity is None
-                else (
-                    ("parsed-source-v1", "comparison-sequence", identity),
-                    frozenset({identity}),
-                )
-            )
-        return tuple(specs)
 
     def load(self) -> tuple[tuple[SeqRecord, ...], ...]:
         if self._records is None:
             self._records = tuple(
-                file.records if file is not None else () for file in self.files()
+                genome.records if genome is not None else () for genome in self.files()
             )
         return self._records
 
-    def files(self) -> tuple[ComparisonSequenceFile | None, ...]:
-        """Each comparison genome read once by the one reader (design D12)."""
+    @staticmethod
+    def _read(path: str) -> ComparisonSequenceFile:
+        identity = prepared_resource_identity(path)
+        if identity is None:
+            return read_comparison_sequence_file(path)
+        return get_or_build_parsed_source(
+            ("parsed-source-v1", "comparison-sequence", identity),
+            frozenset({identity}),
+            lambda: read_comparison_sequence_file(path),
+            publish=lambda value: bool(value.records),
+        )
 
-        if self._files is None:
-            loaded: list[ComparisonSequenceFile | None] = []
-            for path, cache_spec in zip(
-                self.paths,
-                self.cache_specs(),
-                strict=True,
-            ):
-                if not path:
-                    loaded.append(None)
-                    continue
+    def files(self) -> tuple[ComparisonGenome | None, ...]:
+        """Each comparison genome read once by the one reader (design D12); ``None`` for a ring without one."""
 
-                def parse(path: str = path) -> ComparisonSequenceFile:
-                    return read_comparison_sequence_file(path)
+        if self._genomes is None:
+            self._genomes = tuple(
+                comparison_genome(tuple(self._read(path) for path in paths)) if paths else None
+                for paths in self.genomes
+            )
+        return self._genomes
 
-                if cache_spec is None:
-                    loaded.append(parse())
-                    continue
-                key, identities = cache_spec
-                loaded.append(
-                    get_or_build_parsed_source(
-                        key,
-                        identities,
-                        parse,
-                        publish=lambda value: bool(value.records),
-                    )
-                )
-            self._files = tuple(loaded)
-        return self._files
+    def repeated_record_ids(self) -> tuple[RepeatedRecordIds, ...]:
+        """The repeated record IDs of the genomes this render read (OV-2954), each file once.
+
+        Only a genome the render read (for the LOSAT query or the interactive
+        span export) is reported: a ring that reads no file names no record.
+        """
+
+        found: dict[RepeatedRecordIds, None] = {}
+        for genome in self._genomes or ():
+            if genome is not None:
+                found.update(dict.fromkeys(genome.repeated_record_ids))
+        return tuple(found)
 
 
 @dataclass(frozen=True)
@@ -1335,9 +1320,7 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
         else (set(options.selected_features_set or DEFAULT_SELECTED_FEATURES), False)
     )
     comparison_sequences = (
-        _ComparisonSequenceSources(
-            tuple(options.conservation_sequence_files or ())
-        )
+        _ComparisonSequenceSources(options.conservation_genome_files)
         if isinstance(options, CircularDiagramOptions)
         and options.conservation_sequence_files
         else None
@@ -1996,11 +1979,11 @@ def _resolve_ring_losat(
         return (parsed if parsed is not None else load_render_source_records(source)).records
 
     sources = inputs.comparison_sequences or _ComparisonSequenceSources(
-        tuple(options.conservation_sequence_files or ())
+        options.conservation_genome_files
     )
 
-    def load_sequences() -> tuple[ComparisonSequenceFile, ...]:
-        return tuple(file for file in sources.files() if file is not None)
+    def load_sequences() -> tuple[ComparisonGenome, ...]:
+        return tuple(genome for genome in sources.files() if genome is not None)
 
     return resolve_circular_conservation_losat(
         options,
@@ -3735,6 +3718,8 @@ def _render_request_diagram(
             prepared,
             include_feature_catalog=include_feature_catalog,
         )
+    sources = prepared.inputs.comparison_sequences if prepared.inputs is not None else None
+    repeated_ids = sources.repeated_record_ids() if sources is not None else ()
     if isinstance(prepared, PreparedCircularBatchRequest):
         return CircularBatchRenderResult(
             request=prepared.request,
@@ -3744,6 +3729,7 @@ def _render_request_diagram(
                     item,
                     comparison_sequence_records=comparison_sequence_records,
                     include_feature_catalog=include_feature_catalog,
+                    repeated_comparison_ids=repeated_ids,
                 )
                 for item in prepared.items
             ),
@@ -3754,6 +3740,7 @@ def _render_request_diagram(
         prepared,
         comparison_sequence_records=comparison_sequence_records,
         include_feature_catalog=include_feature_catalog,
+        repeated_comparison_ids=repeated_ids,
     )
 
 
@@ -3783,13 +3770,9 @@ def _comparison_sequence_records(
     if inputs is not None and inputs.comparison_sequences is not None:
         return require_interactive_svg_metadata(inputs.comparison_sequences.load)
 
-    def load_unprepared() -> tuple[tuple[SeqRecord, ...], ...]:
-        return tuple(
-            read_comparison_sequence_file(path).records if path else ()
-            for path in options.conservation_sequence_files or ()
-        )
-
-    return require_interactive_svg_metadata(load_unprepared)
+    return require_interactive_svg_metadata(
+        _ComparisonSequenceSources(options.conservation_genome_files).load
+    )
 
 
 def _render_output_paths(output: RenderOutputRequest) -> tuple[Path, ...]:
@@ -3871,8 +3854,13 @@ def _render_prepared_request(
     *,
     comparison_sequence_records: Sequence[Sequence[SeqRecord]] = (),
     include_feature_catalog: bool = False,
+    repeated_comparison_ids: tuple[RepeatedRecordIds, ...] = (),
 ) -> RequestRenderResult:
-    """Write one already-planned diagram using its canonical output request."""
+    """Write one already-planned diagram using its canonical output request.
+
+    Its input summary adds the repeated record IDs of the comparison genomes the
+    render read (OV-2954), known only once they are read.
+    """
 
     output = prepared.request.output
     with _request_render_diagnostic_phase("interactivePreparation"):
@@ -3912,7 +3900,7 @@ def _render_prepared_request(
         output_paths=tuple(Path(path) for path in paths),
         annotation_warnings=prepared.annotation_warnings,
         feature_identity_notices=prepared.feature_identity_notices,
-        input_summary=prepared.input_summary,
+        input_summary=replace(prepared.input_summary, repeated_comparison_ids=repeated_comparison_ids),
         interactive_context=interactive_context,
         linear_metadata=prepared.linear_metadata,
         losat_cache_entries=prepared.losat_cache_entries,

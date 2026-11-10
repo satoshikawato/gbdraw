@@ -362,9 +362,10 @@ test('R1-B1: a dropped comparison sequence binding keeps its place, so no later 
     'file-entry-dropped webFiles.bindings.c_conservation_fastas[1]',
     'file-entry-dropped webFiles.bindings.c_conservation_sequence_sources[1]'
   ]);
-  const names = (files) => files.map((file) => file?.name ?? null);
-  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_fastas), ['comparison-b.fasta', null, 'comparison-d.fasta']);
-  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), ['comparison-b.fasta', null, 'comparison-d.fasta']);
+  // Each ring place is its genome's file list; the dropped one is empty.
+  const ringNames = (rings) => rings.map((files) => files.map((file) => file.name));
+  assert.deepEqual(ringNames(modeDrawing(state, 'circular').files.c_conservation_fastas), [['comparison-b.fasta'], [], ['comparison-d.fasta']]);
+  assert.deepEqual(ringNames(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), [['comparison-b.fasta'], [], ['comparison-d.fasta']]);
 });
 
 // OV-893 (E-OD30): a comparison series reads its BLAST table by place too, and
@@ -385,15 +386,52 @@ test('OV-893: a dropped comparison table binding drops its series with its files
   const names = (files) => files.map((file) => file?.name ?? null);
   assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_blasts),
     ['comparison-b.circular_conservation.losatn.tsv', 'comparison-d.circular_conservation.losatn.tsv']);
-  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_fastas), ['comparison-b.fasta', 'comparison-d.fasta']);
-  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), ['comparison-b.fasta', 'comparison-d.fasta']);
+  const ringNames = (rings) => rings.map((files) => files.map((file) => file.name));
+  assert.deepEqual(ringNames(modeDrawing(state, 'circular').files.c_conservation_fastas), [['comparison-b.fasta'], ['comparison-d.fasta']]);
+  assert.deepEqual(ringNames(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), [['comparison-b.fasta'], ['comparison-d.fasta']]);
   const conservation = modeDrawing(state, 'circular').circularConservation;
   assert.deepEqual(conservation.series.map(({ label, sourceIndex }) => [label, sourceIndex]), [['comparison-b', 0], ['comparison-d', 1]]);
   assert.deepEqual(orderedConservationSources(modeDrawing(state, 'circular').files.c_conservation_blasts, conservation)
-    .map(({ label, file, sourceIndex }) => [label, file.name, modeDrawing(state, 'circular').files.c_conservation_sequence_sources[sourceIndex]?.name]), [
+    .map(({ label, file, sourceIndex }) => [label, file.name, modeDrawing(state, 'circular').files.c_conservation_sequence_sources[sourceIndex][0].name]), [
     ['comparison-b', 'comparison-b.circular_conservation.losatn.tsv', 'comparison-b.fasta'],
     ['comparison-d', 'comparison-d.circular_conservation.losatn.tsv', 'comparison-d.fasta']
   ]);
+});
+
+// #1777 review 3, finding 2: Load's repair of a lost table matches the series to the tables as Generate does
+// (`conservationSourcesOfSeries`), so two tables of one name (two rings whose FASTA files are both NCBI's
+// `sequence.fasta`) are told apart by their stored places: the ring whose table was lost is the one listed, in a
+// Session 40 and in a Session 51, and each other ring keeps its own table and genome.
+test('a lost table of two of one name drops its own series; the other rings keep their tables and genomes', async () => {
+  const shared = 'sequence.circular_conservation.losatn.tsv';
+  /** @param {{ c_conservation_blasts: { name: string, resourceId: string }[] }} bindings @param {{ fileName: string }[]} series */
+  const loseFirstOfTwoOfOneName = (bindings, series) => {
+    [0, 1].forEach((index) => { bindings.c_conservation_blasts[index].name = shared; series[index].fileName = shared; });
+    bindings.c_conservation_blasts[0].resourceId = 'zz';
+  };
+  const drawn = () => {
+    const drawing = modeDrawing(state, 'circular');
+    return orderedConservationSources(drawing.files.c_conservation_blasts, drawing.circularConservation)
+      .map(({ label, color, file, placeIndex }) => [label, color, file.name, drawing.files.c_conservation_fastas[placeIndex].map(({ name }) => name)]);
+  };
+  const kept = [
+    ['comparison-c', '#e15759', shared, ['comparison-c.fasta']],
+    ['comparison-d', '#59a14f', 'comparison-d.circular_conservation.losatn.tsv', ['comparison-d.fasta']]
+  ];
+  const droppedSeries = (result) => result.repairs.filter(({ code }) => code === 'comparison-series-dropped').map(({ path, label }) => [path, label]);
+  const legacy = fixture('synthetic_conservation.gbdraw-session.json.gz');
+  loseFirstOfTwoOfOneName(legacy.webFiles.bindings, legacy.config.circularConservation.series);
+  assert.deepEqual(droppedSeries(await importSession(input(legacy), { transformLegacyResultSvg, confirmLoadRepairs: async () => true })),
+    [['config.circularConservation.series[0]', 'comparison-b']], 'Session 40');
+  assert.deepEqual(drawn(), kept, 'Session 40');
+
+  await load(fixture('synthetic_conservation.gbdraw-session.json.gz'));
+  const current = await saved();
+  const at = current.drawings.findIndex((drawing) => drawing.mode === 'circular');
+  loseFirstOfTwoOfOneName(current.drawings[at].webFiles.bindings, current.drawings[at].config.circularConservation.series);
+  assert.deepEqual(droppedSeries(await importSession(input(current), { transformLegacyResultSvg, confirmLoadRepairs: async () => true })),
+    [[`drawings[${at}].config.circularConservation.series[0]`, 'comparison-b']], 'Session 51');
+  assert.deepEqual(drawn(), kept, 'Session 51');
 });
 
 // An older Session (27-30) keeps its comparison files in `files` lists: an
@@ -407,7 +445,7 @@ test('a comparison file entry of an older Session that cannot be read is listed'
     'file-entry-dropped files.c_conservation_fastas[0]',
     'file-entry-dropped files.c_conservation_sequence_sources[0]'
   ]);
-  assert.deepEqual(modeDrawing(state, 'circular').files.c_conservation_fastas, [null, null]);
+  assert.deepEqual(modeDrawing(state, 'circular').files.c_conservation_fastas, [[], []]);
 });
 
 // OV-898 (E-OD35): a 27-30 draft without series names its rings by `labels`,
@@ -447,6 +485,10 @@ test('OV-898: a dropped table of a draft without series leaves out its label; la
   assert.deepEqual(pastRows.filter(({ code }) => code === 'comparison-series-dropped').map(({ path, label }) => [path, label]),
     [['files.c_conservation_blasts[1]', 'b']]);
   assert.deepEqual(drawn(), [['A', first.name], ['c', 'second.tsv']]);
+  // A series label with a comma does not shift the labels past the series (#1777 round 10, OV-3197).
+  past.config.circularConservation.series = [{ label: 'A, x', fileName: first.name }];
+  await importSession(input(past), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.deepEqual(drawn(), [['A, x', first.name], ['c', 'second.tsv']]);
 });
 
 // OV-896: with no series left, the comparison is off, as Remove leaves it.

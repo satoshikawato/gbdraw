@@ -13,7 +13,10 @@ from tempfile import TemporaryDirectory
 from typing import Any, Literal, Mapping, Optional, Sequence, cast
 from .labels.label_style import DEFAULT_LABEL_LINE, DEFAULT_LABEL_PROTECTION, LABEL_LINES, LABEL_PROTECTIONS
 from .io.cli_tables import (
+    ConservationTableEntry,
+    conservation_table_text,
     read_circular_track_table,
+    require_listable_comparison_sequences,
 )
 from .config.models.objects import CONSERVATION_COLOR_SCHEME_NAMES
 from .config.toml import load_config_toml
@@ -28,6 +31,8 @@ from .api.options import (
     CircularOutputOptions,
     CircularRequestTrackOptions,
     ColorOptions,
+    RingGenomeFiles,
+    _ring_genome_files,
 )
 from .api.request_render import (
     CircularBatchRenderResult,
@@ -52,7 +57,7 @@ from .api.requests import (
 )
 from .config.modify import modify_config_dict
 from .layout.record_placement import parse_record_row_position
-from .api.input_summary import log_input_summary
+from .api.input_summary import InputWarningKey, log_input_summary
 from .features.overrides import log_feature_identity_notices
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
@@ -198,6 +203,75 @@ def conservation_colors_from_cli(values: Sequence[str] | None) -> list[str] | No
     return ['' if color.strip().lower() == 'auto' else color for color in values or ()] or None
 
 
+def _add_conservation_input_args(parser: argparse.ArgumentParser) -> None:
+    """The similarity ring inputs: BLAST tables, the ring manifest and the comparison genomes."""
+
+    parser.add_argument(
+        '--conservation_blast',
+        metavar='BLAST',
+        help='Precomputed BLAST outfmt 6/7 file(s) for circular similarity rings.',
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--conservation_table',
+        metavar='TSV',
+        help=(
+            'TSV manifest of the similarity rings: BLAST files, comparison genomes (the files of '
+            'one genome separated by ";"), labels, and colors.'
+        ),
+        type=str)
+    parser.add_argument(
+        '--conservation_sequence',
+        metavar='FILE',
+        help=(
+            'Comparison genome sequence file(s) (FASTA, GenBank, or DDBJ; one file is one '
+            'genome): the ring queries with --losat, otherwise one per --conservation_blast '
+            'for interactive span export. For a genome in several files use --conservation_genome.'
+        ),
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--conservation_genome',
+        metavar='FILE',
+        help=(
+            'The files of one comparison genome (FASTA, GenBank, or DDBJ), such as a chromosome '
+            'and its plasmids; repeat the option once per ring. The ring reads every file whole, '
+            'in the given order, as one genome. Labels, colors, genetic codes, and '
+            '--conservation_blast files align by occurrence. Cannot be combined with '
+            '--conservation_sequence or --conservation_table.'
+        ),
+        type=str,
+        action='append',
+        nargs='+')
+
+
+def _validate_conservation_input_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Refuse similarity ring inputs that cannot be given together, and empty ``--conservation_genome`` files."""
+
+    if args.conservation_genome and args.conservation_sequence:
+        parser.error("--conservation_genome cannot be combined with --conservation_sequence")
+    if args.conservation_genome and args.conservation_table:
+        parser.error("--conservation_genome cannot be combined with --conservation_table")
+    if any("" in genome and genome != [""] for genome in args.conservation_genome or ()):
+        parser.error("--conservation_genome files must not be empty; give '' alone for a ring without a genome")
+    if args.conservation_table and args.conservation_blast:
+        parser.error("--conservation_table cannot be combined with --conservation_blast")
+    if args.conservation_table and args.conservation_sequence:
+        parser.error("--conservation_table cannot be combined with --conservation_sequence")
+    if args.conservation_table and args.conservation_labels:
+        parser.error("--conservation_table cannot be combined with --conservation_labels")
+    if args.conservation_table and args.conservation_colors:
+        parser.error("--conservation_table cannot be combined with --conservation_colors")
+
+
+def _cli_conservation_genomes(args: argparse.Namespace) -> list[str | list[str] | None] | None:
+    """Each ring's comparison genome: one ``--conservation_genome`` occurrence ('' alone: none) or one file."""
+
+    if args.conservation_genome:
+        return [genome if genome != [""] else None for genome in args.conservation_genome]
+    return list(args.conservation_sequence or []) or None
+
+
 def _get_args(
     args,
     *,
@@ -337,27 +411,7 @@ def _get_args(
     _add_depth_track_source_args(parser, mode="circular")
     _add_depth_track_tick_args(parser)
     add_feature_density_args(parser)
-    parser.add_argument(
-        '--conservation_blast',
-        metavar='BLAST',
-        help='Precomputed BLAST outfmt 6/7 file(s) for circular similarity rings.',
-        type=str,
-        nargs='+')
-    parser.add_argument(
-        '--conservation_table',
-        metavar='TSV',
-        help='TSV manifest with BLAST files for similarity rings, labels, and colors.',
-        type=str)
-    parser.add_argument(
-        '--conservation_sequence',
-        metavar='FILE',
-        help=(
-            'Comparison genome sequence file(s) (FASTA, GenBank, or DDBJ; one file is one '
-            'genome): the ring queries with --losat, otherwise one per --conservation_blast '
-            'for interactive span export.'
-        ),
-        type=str,
-        nargs='+')
+    _add_conservation_input_args(parser)
     _add_retired_option_args(parser, mode="circular")
     parser.add_argument(
         '--conservation_reference',
@@ -404,8 +458,9 @@ def _get_args(
         help=(
             'Build the similarity rings with LOSAT: losatn compares nucleotide '
             'sequences (LOSAT blastn) and tlosatx their translations (LOSAT tblastx). '
-            'Each --conservation_sequence genome is the query and every record of '
-            'the reference file (uncropped, also records not drawn) is the subject. '
+            'Each --conservation_sequence or --conservation_genome genome is the query and '
+            'every record of the reference file (uncropped, also records not drawn) is the '
+            'subject. '
             'Cannot be combined with --conservation_blast (default: no LOSAT search).'
         ),
     )
@@ -433,7 +488,7 @@ def _get_args(
         default=None,
         help=(
             'TLOSATX genetic code of each comparison genome with --losat tlosatx: one '
-            'for every ring or one per --conservation_sequence, in the same order; the '
+            'for every ring or one per comparison genome, in the same order; the '
             '--conservation_table losat_gencode column sets it per row (default: 1).'
         ),
     )
@@ -659,14 +714,7 @@ def _get_args(
         validate_output_choice_args(args)
     if args.records_table and args.multi_record_position:
         parser.error("--records_table cannot be combined with --multi_record_position; use row and column table columns instead.")
-    if args.conservation_table and args.conservation_blast:
-        parser.error("--conservation_table cannot be combined with --conservation_blast")
-    if args.conservation_table and args.conservation_sequence:
-        parser.error("--conservation_table cannot be combined with --conservation_sequence")
-    if args.conservation_table and args.conservation_labels:
-        parser.error("--conservation_table cannot be combined with --conservation_labels")
-    if args.conservation_table and args.conservation_colors:
-        parser.error("--conservation_table cannot be combined with --conservation_colors")
+    _validate_conservation_input_args(parser, args)
     if args.circular_track_table and args.circular_track_order:
         parser.error("--circular_track_table cannot be combined with --circular_track_order")
     if args.circular_track_table and args.circular_track_slot:
@@ -731,17 +779,23 @@ def _get_args(
         )
     if args.losat_output_dir and not args.losat:
         parser.error("--losat_output_dir requires --losat")
-    ring_sources = args.conservation_blast if not args.losat else args.conservation_sequence
-    ring_source_flag = "--conservation_blast" if not args.losat else "--conservation_sequence"
+    ring_genomes = args.conservation_genome or args.conservation_sequence
+    genome_flag = "--conservation_genome" if args.conservation_genome else "--conservation_sequence"
+    ring_sources = args.conservation_blast if not args.losat else ring_genomes
+    ring_source_flag = "--conservation_blast" if not args.losat else genome_flag
     if args.conservation_labels and not ring_sources and not args.conservation_table:
         parser.error(f"--conservation_labels requires {ring_source_flag}")
     if args.conservation_colors and not ring_sources and not args.conservation_table:
         parser.error(f"--conservation_colors requires {ring_source_flag}")
     if not args.losat:
-        if args.conservation_sequence and not args.conservation_blast:
-            parser.error("--conservation_sequence requires --conservation_blast or --losat")
-        if args.conservation_sequence and len(args.conservation_sequence) != len(args.conservation_blast):
-            parser.error("--conservation_sequence must provide one source per --conservation_blast")
+        if ring_genomes and not args.conservation_blast:
+            parser.error(f"{genome_flag} requires --conservation_blast or --losat")
+        if ring_genomes and len(ring_genomes) != len(args.conservation_blast):
+            parser.error(
+                "--conservation_genome must give one genome per --conservation_blast"
+                if args.conservation_genome
+                else "--conservation_sequence must provide one source per --conservation_blast"
+            )
     if args.depth_min is not None and args.depth_min < 0:
         parser.error("--depth_min must be >= 0")
     if args.depth_max is not None and args.depth_max < 0:
@@ -905,6 +959,10 @@ def circular_main(cmd_args) -> None:
             (Path(args.losat_output_dir) / LOSAT_CONSERVATION_OUTPUT_NAME,),
             overwrite=bool(args.overwrite),
         )
+        # Before the search: a ring whose files the manifest cannot list stops the run here (D-123).
+        _conservation_table_genomes(
+            _ring_genome_files(_cli_conservation_genomes(args)) or (), Path(args.losat_output_dir)
+        )
     run_result = run_circular_from_namespace(args)
     if args.losat_output_dir:
         write_losat_output_files(
@@ -944,7 +1002,11 @@ def _cli_ring_error(exc: ValidationError, args: argparse.Namespace) -> Validatio
     """Name the CLI flag in a typed ring diagnostic (the typed layer validates)."""
 
     diagnostic = dict(exc.diagnostic or {})
-    flag = _CLI_RING_FIELD_FLAGS.get(str(diagnostic.get("field")))
+    flags = {
+        **_CLI_RING_FIELD_FLAGS,
+        **({"conservation_sequence_files": "--conservation_genome"} if args.conservation_genome else {}),
+    }
+    flag = flags.get(str(diagnostic.get("field")))
     reason = diagnostic.get("reason")
     if flag is None or reason not in {"LOSAT_OPTION_PROGRAM", "RING_LOSAT_INPUT"}:
         return exc
@@ -963,7 +1025,7 @@ def _cli_ring_error(exc: ValidationError, args: argparse.Namespace) -> Validatio
         )
     else:
         message = str(exc)
-        for typed_name, cli_flag in _CLI_RING_FIELD_FLAGS.items():
+        for typed_name, cli_flag in flags.items():
             message = message.replace(typed_name, cli_flag)
     return ValidationError(message, diagnostic=diagnostic)
 
@@ -976,6 +1038,30 @@ def _cli_ring_options(*, _args: argparse.Namespace, **values) -> CircularDiagram
         if rewritten is exc:
             raise
         raise rewritten from exc
+
+
+def _conservation_table_genomes(
+    genomes: Sequence[RingGenomeFiles], output_dir: Path
+) -> tuple[RingGenomeFiles, ...]:
+    """Each ring's files as the ``--losat_output_dir`` manifest names them, refused when it could not list them.
+
+    A path is relative when next to the output directory, so both can move together.
+    """
+
+    resolved_dir = output_dir.resolve()
+
+    def table_path(path: str) -> str:
+        absolute = str(Path(path).resolve())
+        try:
+            relative = os.path.relpath(absolute, resolved_dir)
+        except ValueError:
+            relative = absolute
+        return relative if relative.split(os.sep).count("..") <= 1 else absolute
+
+    written = tuple(tuple(table_path(path) for path in genome) for genome in genomes)
+    for genome in written:
+        require_listable_comparison_sequences(genome)
+    return written
 
 
 def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[tuple[str, str]]:
@@ -992,38 +1078,42 @@ def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[t
             "LOSAT output requested, but no ring table was produced.",
             diagnostic={"code": "LOSAT_RUNTIME", "reason": "OUTPUT"},
         )
-    sequences = tuple(options.conservation_sequence_files or ())
+    genomes = _conservation_table_genomes(options.conservation_genome_files, output_dir)
     labels = tuple(options.conservation_labels or ())
     colors = tuple(options.conservation_colors or ())
     files: list[tuple[str, str]] = []
-    rows = ["blast\tcomparison_sequence\tlabel\tcolor"]
-    resolved_dir = output_dir.resolve()
     names = unique_losat_filenames(
         [ring.name for ring in rings], reserved=(LOSAT_CONSERVATION_OUTPUT_NAME,)
     )
+    entries: list[ConservationTableEntry] = []
     for index, (ring, candidate) in enumerate(zip(rings, names)):
         files.append((candidate, ring.text))
-        sequence = str(sequences[index]) if index < len(sequences) else ""
-        if sequence:
-            # Relative when next to the output directory, so both can move together.
-            absolute = str(Path(sequence).resolve())
-            try:
-                relative = os.path.relpath(absolute, resolved_dir)
-            except ValueError:
-                relative = absolute
-            sequence = relative if relative.split(os.sep).count("..") <= 1 else absolute
-        rows.append(
-            "\t".join(
-                (
-                    candidate,
-                    sequence,
-                    labels[index] if index < len(labels) else "",
-                    colors[index] if index < len(colors) else "",
-                )
+        entries.append(
+            ConservationTableEntry(
+                blast=candidate,
+                comparison_sequences=genomes[index] if index < len(genomes) else (),
+                label=labels[index] if index < len(labels) else "",
+                color=colors[index] if index < len(colors) else "",
             )
         )
-    files.append((LOSAT_CONSERVATION_OUTPUT_NAME, "\n".join(rows) + "\n"))
+    files.append((LOSAT_CONSERVATION_OUTPUT_NAME, conservation_table_text(entries)))
     return files
+
+
+def _log_render_notices(rendered_items: Sequence[RequestRenderResult]) -> None:
+    """Log each Result's annotation warnings, feature notices and input summary.
+
+    A warning of an input the Results of a batch share (one comparison file every Result reads) is logged once.
+    """
+
+    warned: set[InputWarningKey] = set()
+    for rendered_item in rendered_items:
+        for warning in rendered_item.annotation_warnings:
+            logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
+                warning.set_id, warning.annotation_id, warning.record_index + 1,
+                warning.record_id, warning.message)
+        log_feature_identity_notices(rendered_item.feature_identity_notices)
+        log_input_summary(rendered_item.input_summary, warned=warned)
 
 
 def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
@@ -1086,7 +1176,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
     depth_tick_font_size: Optional[float] = args.depth_tick_font_size
     conservation_blast_files = list(args.conservation_blast or []) or None
-    conservation_sequence_sources = list(args.conservation_sequence or []) or None
+    conservation_sequence_sources = _cli_conservation_genomes(args)
     conservation_reference: str = args.conservation_reference
     conservation_labels = list(args.conservation_labels or []) or None
     conservation_colors = conservation_colors_from_cli(args.conservation_colors)
@@ -1546,13 +1636,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     session_feature_metadata: list[Mapping[str, Any]] = []
     session_biological_feature_metadata: list[Mapping[str, Any]] = []
     session_interactive_contexts = []
+    _log_render_notices(rendered_items)
     for result_index, rendered_item in enumerate(rendered_items):
-        for warning in rendered_item.annotation_warnings:
-            logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
-                warning.set_id, warning.annotation_id, warning.record_index + 1,
-                warning.record_id, warning.message)
-        log_feature_identity_notices(rendered_item.feature_identity_notices)
-        log_input_summary(rendered_item.input_summary)
         if not rendered_item.output_paths:
             raise ValidationError("Circular request renderer did not produce an SVG output.")
         svg_path = Path(rendered_item.output_paths[0])

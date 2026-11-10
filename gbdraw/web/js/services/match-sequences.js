@@ -2,10 +2,8 @@
 import { inputSequenceSource } from './input-types.js';
 import { formatFastaEntry } from './feature-sequence-fasta.js';
 import { recordSourceInterval } from './record-source-coordinates.js';
-import {
-  orderedConservationSources,
-  orderedOptionalConservationFiles
-} from './conservation-series.js';
+import { normalizeFileList, ringGenomeFilesInRingOrder } from './conservation-series.js';
+import { ringGenomeFileLists } from './drawing/inputs.js';
 import {
   gffFastaReaderSelector,
   readAllSequenceRecords,
@@ -554,22 +552,22 @@ export const resolveCircularComparisonSequenceAvailability = ({
   const sourceMode = text(circularConservation?.source).toLowerCase();
   if (!['upload', 'losat'].includes(sourceMode)) return [];
 
-  const comparisonFiles = sourceMode === 'upload'
-    ? (files?.c_conservation_sequence_sources || [])
-    : (files?.c_conservation_fastas || []);
-  const orderedComparisonFiles = sourceMode === 'upload'
-    ? orderedConservationSources(
-        files?.c_conservation_blasts || [],
-        circularConservation
-      ).map((entry) => comparisonFiles[entry.sourceIndex] || null)
-    : orderedOptionalConservationFiles(
-        comparisonFiles,
-        circularConservation
-      );
-  return orderedComparisonFiles.map((file, sourceIndex) => ({
+  // Each ring's comparison genome files, in the order Generate draws the rings (`ringGenomeFilesInRingOrder`).
+  /** @type {import('./conservation-series.js').RingGenomeDrawing<FileLike>} */
+  const drawing = {
+    files: {
+      c_conservation_blasts: normalizeFileList(files?.c_conservation_blasts),
+      c_conservation_blasts_source: files?.c_conservation_blasts_source ?? null,
+      c_conservation_fastas: ringGenomeFileLists(files?.c_conservation_fastas),
+      c_conservation_sequence_sources: ringGenomeFileLists(files?.c_conservation_sequence_sources)
+    },
+    circularConservation: circularConservation || {}
+  };
+  const orderedComparisonFiles = ringGenomeFilesInRingOrder(drawing);
+  return orderedComparisonFiles.map((ringFiles, sourceIndex) => ({
     sourceIndex,
-    file: file || null,
-    availability: file ? 'recoverable' : 'never-supplied'
+    files: ringFiles || [],
+    availability: ringFiles?.length ? 'recoverable' : 'never-supplied'
   }));
 };
 
@@ -612,7 +610,7 @@ const comparisonSourceAvailabilityAt = (inventory, sourceIndex) => {
       reason: `The Circular comparison source availability is unknown for source index ${sourceIndex}.`
     };
   }
-  const hasFile = Boolean(entry.file);
+  const hasFile = Array.isArray(entry.files) && entry.files.length > 0;
   if (
     (availability === 'recoverable' && !hasFile)
     || (availability === 'never-supplied' && hasFile)
@@ -1242,8 +1240,9 @@ export const buildRestoredMatchSequenceSources = async ({
     files,
     circularConservation
   });
-  for (const { sourceIndex: displayIndex, file } of comparisonSourceAvailability) {
-    const records = await readComparisonRecords(file);
+  for (const { sourceIndex: displayIndex, files: ringFiles } of comparisonSourceAvailability) {
+    // Every file of the ring's genome, in its order, as the ring search read them.
+    const records = (await Promise.all(ringFiles.map((file) => readComparisonRecords(file)))).flat();
     records.forEach((record) => {
       if (!record.sequence) return;
       sources.push({

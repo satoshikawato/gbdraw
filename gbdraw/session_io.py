@@ -67,6 +67,7 @@ from .io.input_text import GZIP_ERRORS, open_input_text
 from .io.rsyncable_gzip import RsyncableGzipWriter
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
+from .io.cli_tables import COMPARISON_SEQUENCE_SEPARATOR
 from .io.colors import current_palette_name, is_user_color, named_color_hex, packaged_color_palettes
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .io.regions import region_text
@@ -6641,7 +6642,9 @@ def _restore_cli_table_paths(
         dependencies = table_entry.get("dependencies")
         if not isinstance(dependencies, list) or not dependencies:
             continue
-        replacements: dict[tuple[int, str], str] = {}
+        # A cell's files in the order the writer listed them: one, or the
+        # ``;`` separated files of a ring's comparison genome.
+        replacements: dict[tuple[int, str], list[str]] = {}
         for dependency in dependencies:
             if not isinstance(dependency, Mapping):
                 continue
@@ -6659,9 +6662,8 @@ def _restore_cli_table_paths(
                 temp_dir=temp_dir,
                 role=slot.replace(".", "_").replace("[", "_").replace("]", ""),
             )
-            replacements[(row_index, column)] = _relative_path_for_table(
-                materialized,
-                table_path.parent,
+            replacements.setdefault((row_index, column), []).append(
+                _relative_path_for_table(materialized, table_path.parent)
             )
         if replacements:
             _rewrite_tsv_path_cells(table_path, replacements)
@@ -6676,7 +6678,7 @@ def _relative_path_for_table(path: Path, table_dir: Path) -> str:
 
 def _rewrite_tsv_path_cells(
     table_path: Path,
-    replacements: Mapping[tuple[int, str], str],
+    replacements: Mapping[tuple[int, str], Sequence[str]],
 ) -> None:
     try:
         with table_path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -6700,7 +6702,7 @@ def _rewrite_tsv_path_cells(
         for (target_row_index, column), replacement in replacements.items():
             if target_row_index != data_row_index or column not in header:
                 continue
-            values[header.index(column)] = replacement
+            values[header.index(column)] = COMPARISON_SEQUENCE_SEPARATOR.join(replacement)
         output_rows.append(values[: len(header)])
         data_row_index += 1
 

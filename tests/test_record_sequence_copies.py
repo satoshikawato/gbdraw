@@ -49,7 +49,6 @@ SITES: dict[str, int] = {
     "gbdraw/core/record_metadata.py::record_content_digest::bytes()": 1,
     "gbdraw/crop_genbank.py::gbk_to_seqrecord::SeqIO.parse": 1,
     "gbdraw/crop_genbank.py::write_cropped_genbank::SeqIO.write": 1,
-    "gbdraw/interface.py::_ring_losat_values::str()": 1,
     "gbdraw/io/comparison_sequences.py::_sequence_text::str()": 1,
     "gbdraw/io/comparison_sequences.py::read_comparison_sequence_file::SeqIO.parse": 1,
     "gbdraw/io/genome.py::record_sequence_text::str()": 1,

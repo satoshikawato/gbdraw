@@ -409,10 +409,13 @@ test('History shortcuts work on a focused select, and a text field keeps native 
 // An Add Seq step commits after the ring reader answers (B22); the first read
 // starts the diagram worker.
 const ringReadTimeout = { timeout: 120_000 };
+// A drawing holds each ring's genome files as one list per ring.
 const ringRows = (page) => page.evaluate(() => ({
-  files: (window.__GBDRAW_APP__.files.c_conservation_fastas || []).map((file) => file?.name || null),
+  files: (window.__GBDRAW_APP__.files.c_conservation_fastas || []).map((ring) => (ring || []).map((file) => file?.name || null)),
   rows: window.__GBDRAW_APP__.circularConservation.series.map((entry) => entry.label)
 }));
+// The Add Seq input sits just before its button; each ring row has an Add file input of its own.
+const addSeqInput = (addSeq) => addSeq.locator('xpath=preceding-sibling::input[@type="file"][1]');
 const fastaFile = (testInfo, name) => {
   const path = testInfo.outputPath(name);
   writeFileSync(path, `>${name}\nACGTACGTACGTACGTACGTACGTACGTACGT\n`);
@@ -427,10 +430,10 @@ test('each Circular LOSAT ring file added through Add Seq is one Undo step', asy
   const initial = await ringRows(page);
   const addSeq = page.locator('button', { hasText: 'Add comparison sequence' });
   await reveal(addSeq);
-  const ringInput = page.locator('input[type="file"][accept^=".fa,.fas,.fasta,.fna,.ffn,.gb"]');
+  const ringInput = addSeqInput(addSeq);
   const states = [initial];
   const expectAdded = async (name) => {
-    states.push({ files: [...states.at(-1).files, name], rows: [...states.at(-1).rows, name.replace(/\.fasta$/, '')] });
+    states.push({ files: [...states.at(-1).files, [name]], rows: [...states.at(-1).rows, name.replace(/\.fasta$/, '')] });
     await expect.poll(() => ringRows(page), { message: name }).toEqual(states.at(-1));
     await expectHistory(page, baseline + states.length - 1, 0, 'Change uploaded file', ringReadTimeout);
   };
@@ -456,7 +459,7 @@ test('each Circular LOSAT ring file added through Add Seq is one Undo step', asy
   await expectHistory(page, baseline + 1, 2, 'Change uploaded file');
 });
 
-test('an uploaded BLAST row comparison sequence chosen through its label is one Undo step', async ({ page }, testInfo) => {
+test('an uploaded BLAST row comparison sequence chosen through its Add file is one Undo step', async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   await preparePage(page);
   const upload = page.locator('input[type="radio"][value="upload"]');
@@ -467,9 +470,8 @@ test('an uploaded BLAST row comparison sequence chosen through its label is one 
   await page.locator('input[type="file"][aria-label="BLAST outfmt 6/7 files"]').setInputFiles(blast);
   const sequenceSources = () => page.evaluate(() => (
     window.__GBDRAW_APP__.files.c_conservation_sequence_sources || []
-  ).map((file) => file?.name || null));
-  const companion = page.locator('label', { hasText: 'Comparison sequence' })
-    .locator('input[type="file"]');
+  ).flatMap((ring) => (ring || []).map((file) => file?.name || null)));
+  const companion = page.locator('[data-ring-row-files] input[type="file"]');
   await expect(companion).toHaveCount(1);
   await expect.poll(sequenceSources).toEqual([]);
   const [baseline] = await historyCounts(page);
@@ -518,9 +520,10 @@ test('a GenBank or DDBJ ring added through Add Seq keeps its record label throug
   await loadSession(page, conservationSession);
   const [baseline] = await historyCounts(page);
   const initial = await ringRows(page);
-  await reveal(page.locator('button', { hasText: 'Add comparison sequence' }));
-  const ringInput = page.locator('input[type="file"][accept^=".fa,.fas,.fasta,.fna,.ffn,.gb"]');
-  const added = (state, name, label) => ({ files: [...state.files, name], rows: [...state.rows, label] });
+  const addSeq = page.locator('button', { hasText: 'Add comparison sequence' });
+  await reveal(addSeq);
+  const ringInput = addSeqInput(addSeq);
+  const added = (state, name, label) => ({ files: [...state.files, [name]], rows: [...state.rows, label] });
   const expectState = async (state, undo, redo, message) => {
     await expect.poll(() => ringRows(page), { message, ...ringReadTimeout }).toEqual(state);
     await expect.poll(() => historyCounts(page), { message, ...ringReadTimeout }).toEqual([baseline + undo, redo]);
@@ -571,11 +574,13 @@ test('a GenBank or DDBJ ring added through Add Seq keeps its record label throug
 const replayState = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   const names = (files) => (files || []).map((file) => file?.name || null);
+  // One list of genome files per ring.
+  const ringNames = (rings) => (rings || []).map(names);
   return {
     source: app.files.c_conservation_blasts_source,
     blasts: names(app.files.c_conservation_blasts),
-    fastas: names(app.files.c_conservation_fastas),
-    sequenceSources: names(app.files.c_conservation_sequence_sources),
+    fastas: ringNames(app.files.c_conservation_fastas),
+    sequenceSources: ringNames(app.files.c_conservation_sequence_sources),
     rows: app.circularConservation.series.map((entry) => [entry.label, entry.fileName]),
     slots: (app.adv.circular_track_slots || [])
       .filter((slot) => slot?.renderer === 'sequence_conservation')
@@ -608,7 +613,7 @@ test('Undo of a ring change in a LOSAT-cache replay restores its rows and Genera
     await undo.click();
     await expect.poll(() => replayState(page), { message: `Undo Remove series ${index}` }).toEqual(loaded);
   }
-  await page.locator('input[type="file"][accept^=".fa,.fas,.fasta,.fna,.ffn,.gb"]')
+  await addSeqInput(page.locator('button', { hasText: 'Add comparison sequence' }))
     .setInputFiles(fastaFile(testInfo, 'ring-e.fasta'));
   await expectHistory(page, steps + 1, 0, 'Change uploaded file', ringReadTimeout);
   await undo.click();
@@ -641,7 +646,7 @@ test('Reset Settings after a LOSAT ring search keeps the ring rows with their fi
     ...loaded,
     source: null,
     blasts: [],
-    rows: loaded.fastas.map((name) => [name.replace(/\.fasta$/, ''), name])
+    rows: loaded.fastas.map(([name]) => [name.replace(/\.fasta$/, ''), name])
   });
   await expect(showRings).not.toBeChecked();
   await expect(showRings).toBeEnabled();

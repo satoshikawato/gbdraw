@@ -1311,8 +1311,7 @@
       "vector": "tests/fixtures/ring-genome-files-vectors.json",
       "reason": "Python decodes the stored request directly; the Web promotes the JSON before its one stored-request reader so Load needs no Worker",
       "retireWhen": "the Web reads stored requests through the Python decoder, or stops reading request schema 9 and older",
-      "source": "twin.unregistered.v1 on feat/ring-genome-files (OV-2956)",
-      "pending": true
+      "source": "twin.unregistered.v1 on feat/ring-genome-files (OV-2956)"
     },
     {
       "id": "vector:tests/fixtures/record-region-windows-vectors.json",

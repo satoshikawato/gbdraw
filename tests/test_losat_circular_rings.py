@@ -341,7 +341,7 @@ def test_conservation_table_drives_ring_searches(tmp_path: Path) -> None:
         (["--losat", "losatn", "--conservation_sequence", str(FASTAS[0]), "--losat_gencode", "2"],
          "LOSAT_OPTION_PROGRAM", "--losat_gencode does not apply to --losat losatn"),
         (["--losat", "tlosatx"],
-         "RING_LOSAT_INPUT", "one comparison sequence file per ring"),
+         "RING_LOSAT_INPUT", "needs a comparison genome .one or more sequence files. for every ring"),
     ],
 )
 def test_ring_losat_rejections(tmp_path: Path, argv: list[str], reason: str, message: str) -> None:

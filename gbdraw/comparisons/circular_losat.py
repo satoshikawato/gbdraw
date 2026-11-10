@@ -4,8 +4,8 @@
 """Resolve Circular LOSATN / TLOSATX ring intent into ring rows and raw cache entries.
 
 The Circular planners call :func:`resolve_circular_conservation_losat` once the
-records are loaded. Each comparison genome (all records of one file, the
-query) is searched against the subject database: every record of the
+records are loaded. Each comparison genome (all records of its files, each
+file whole in the listed order: the query) is searched against the subject database: every record of the
 subject-side source files, whole (:func:`ring_subject_records`, Owner D-25), as
 the Web searches it. Records that are not drawn, a single presentation and a
 crop do not change it, so every ring has the reference genome as its E-value
@@ -25,7 +25,7 @@ from dataclasses import replace
 import logging
 import os
 import re
-from typing import Any, Callable, Hashable, Iterable, Mapping, Sequence, cast
+from typing import Any, Callable, Hashable, Iterable, Mapping, Sequence
 
 from Bio.SeqRecord import SeqRecord
 
@@ -50,7 +50,7 @@ from gbdraw.comparisons.losat_runtime import (
 )
 from gbdraw.core.record_metadata import _read_coord_map, _record_source_start
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.comparison_sequences import ComparisonSequenceFile, comparison_file_stem
+from gbdraw.io.comparison_sequences import ComparisonGenome, comparison_file_stem
 from gbdraw.io.genome import read_sequence_file_records, record_sequence_text
 
 logger = logging.getLogger(__name__)
@@ -95,8 +95,8 @@ def _validated_rows(text: str, *, query_ids: set[str], subject_ids: set[str]) ->
     return text
 
 
-def comparison_query_fasta(comparison: ComparisonSequenceFile, *, ordinal: int) -> str:
-    """LOSAT query FASTA of one comparison genome: every record, Web FASTA layout.
+def comparison_query_fasta(comparison: ComparisonGenome, *, ordinal: int) -> str:
+    """LOSAT query FASTA of one comparison genome: every record of every file, Web FASTA layout.
 
     The CLI ring search and the Web worker helper
     (``gbdraw.web_support.comparison_sequences``) hash this text, so one
@@ -105,8 +105,8 @@ def comparison_query_fasta(comparison: ComparisonSequenceFile, *, ordinal: int) 
 
     if not comparison.records:
         raise ValidationError(
-            f"Comparison sequence file #{ordinal} "
-            f"({os.path.basename(comparison.path)}) has no sequence record.",
+            f"Comparison genome #{ordinal} "
+            f"({', '.join(os.path.basename(file.path) for file in comparison.files)}) has no sequence record.",
             diagnostic={
                 "code": "INPUT_UNREADABLE",
                 "reason": "SEQUENCE_MISSING",
@@ -270,7 +270,7 @@ def resolve_circular_conservation_losat(
     *,
     subject_records: Sequence[SeqRecord],
     drawn_records: Sequence[SeqRecord],
-    load_sequences: Callable[[], Sequence[ComparisonSequenceFile]],
+    load_sequences: Callable[[], Sequence[ComparisonGenome]],
 ) -> tuple[CircularDiagramOptions, tuple[Mapping[str, Any], ...]]:
     """Run the ring searches and return resolved options and raw cache entries.
 
@@ -287,7 +287,6 @@ def resolve_circular_conservation_losat(
     spec = LOSAT_PROGRAMS[search.program]
     runtime = search.runtime
     comparison_files = tuple(load_sequences())
-    paths = tuple(options.conservation_sequence_files or ())
     query_fastas = [
         comparison_query_fasta(comparison, ordinal=index)
         for index, comparison in enumerate(comparison_files, start=1)
@@ -331,11 +330,8 @@ def resolve_circular_conservation_losat(
             subject_hash=subject_hash,
             flow=CIRCULAR_CONSERVATION_FLOW,
         )
-        filename = ring_losat_filename(
-            # Ring LOSAT validation rejects an empty comparison sequence entry.
-            cast(str, paths[index]) if index < len(paths) else comparison.path,
-            search.program,
-        )
+        # The raw TSV is named after the genome's first file.
+        filename = ring_losat_filename(comparison.path, search.program)
         cached = cache.cached_entry(key)
         if cached is not None:
             text = str(cached["text"])
@@ -343,7 +339,7 @@ def resolve_circular_conservation_losat(
             logger.info(
                 "%s ring %d/%d (%s against %d record(s) of the reference file(s)).",
                 search.program.upper(), index + 1, len(comparison_files),
-                os.path.basename(comparison.path), len(subject_ids),
+                ", ".join(os.path.basename(file.path) for file in comparison.files), len(subject_ids),
             )
             runtime_records: list[LosatRuntimeRecord] = []
             text = _validated_rows(

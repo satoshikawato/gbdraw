@@ -273,6 +273,10 @@ export const AUTOMATIC_ANNOTATION_LANE_SIDES = Object.freeze({
   linear: 'above'
 });
 
+// gbdraw/api/input_summary.py: INPUT_WARNINGS_OF_DRAWN_INPUT
+/** @type {readonly string[]} */
+export const INPUT_WARNINGS_OF_DRAWN_INPUT = Object.freeze(['comparison_record_id_repeated']);
+
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,

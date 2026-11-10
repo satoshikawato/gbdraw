@@ -561,6 +561,15 @@ const schema8Canonical = structuredClone(canonical.renderRequest);
 schema8Canonical.schema = 8;
 delete schema8Canonical.diagramOptions.featureOverrides;
 assert.deepEqual(promoteCanonicalRenderRequestToCurrent(schema8Canonical), canonical.renderRequest);
+// Schema 9 wrote one file reference or null per similarity ring; schema 10 a list of the
+// ring's genome files, read as Python's decoder reads it (tests/test_ring_genome_files.py).
+{
+  const vectors = JSON.parse(await readFile(join(repoRoot, 'tests', 'fixtures', 'ring-genome-files-vectors.json'), 'utf8'));
+  for (const { name, schema9, schema10 } of vectors.cases) {
+    const stored = { schema: 9, mode: 'circular', records: [], diagramOptions: { conservationFastaFiles: schema9 } };
+    assert.deepEqual(promoteCanonicalRenderRequestToCurrent(stored).diagramOptions.conservationFastaFiles, schema10, name);
+  }
+}
 const withIdentityRows = structuredClone(canonical);
 withIdentityRows.renderRequest.diagramOptions.featureOverrides = [{
   recordKey: canonical.renderRequest.records[0].recordKey,
@@ -1825,23 +1834,24 @@ const conservationCanonical = buildCanonicalRenderRequest({
   filesData: {
     ...filesData,
     c_conservation_blasts: [blastTable],
-    c_conservation_sequence_sources: [comparisonFasta],
+    c_conservation_sequence_sources: [[comparisonFasta]],
   },
 });
 assert.deepEqual(
   conservationCanonical.renderRequest.diagramOptions.conservationFastaFiles,
-  [{ resourceId: 'conservation-fasta-files-1', representation: 'file' }]
+  [[{ resourceId: 'conservation-fasta-files-1-1', representation: 'file' }]]
 );
 assert.equal(conservationCanonical.webFiles.conservationSequenceSources, undefined);
 assert.equal(
-  projectCanonicalSessionRequest(conservationCanonical).files.c_conservation_sequence_sources[0].data,
+  projectCanonicalSessionRequest(conservationCanonical).files.c_conservation_sequence_sources[0][0].data,
   comparisonFasta.data
 );
 const conservationProjection = projectCanonicalSessionRequest(conservationCanonical);
 assert.equal(conservationProjection.config.circularConservation.enabled, true);
 assert.equal(conservationProjection.config.circularConservation.source, 'upload');
 assert.equal(conservationProjection.config.circularConservation.reference, 'subject');
-assert.equal(conservationProjection.config.circularConservation.labels, 'Comparison');
+// The series owns the ring labels; the projection writes no label list from it (#1777 review 8, OV-3202).
+assert.equal(conservationProjection.config.circularConservation.labels, '');
 assert.equal(conservationProjection.config.circularConservation.ring_width, 14);
 assert.equal(conservationProjection.config.circularConservation.ring_gap, 3);
 assert.deepEqual(
@@ -1885,7 +1895,7 @@ assert.deepEqual(
 );
 assert.deepEqual(
   reorderedUploadCanonical.renderRequest.diagramOptions.conservationFastaFiles
-    .map((ref) => reorderedUploadCanonical.resources[ref.resourceId].data),
+    .map(([ref]) => reorderedUploadCanonical.resources[ref.resourceId].data),
   [comparisonFastaB.data, comparisonFasta.data]
 );
 const reorderedUploadProjection = projectCanonicalSessionRequest(reorderedUploadCanonical);
@@ -1904,7 +1914,7 @@ const losatConservationCanonical = buildCanonicalRenderRequest({
   filesData: {
     ...filesData,
     c_conservation_blasts: [blastTable],
-    c_conservation_fastas: [comparisonFasta, comparisonFastaB]
+    c_conservation_fastas: [[comparisonFasta], [comparisonFastaB]]
   }
 });
 assert.equal(
@@ -1913,19 +1923,41 @@ assert.equal(
 );
 assert.deepEqual(
   losatConservationCanonical.webFiles.conservationLosatFastaSources,
+  // One list of resource IDs per ring, in series order.
   [
-    'conservation-losat-fasta-files-1',
-    'conservation-losat-fasta-files-2'
+    ['conservation-losat-fasta-files-1-1'],
+    ['conservation-losat-fasta-files-2-1']
   ]
 );
 assert.equal(
-  losatConservationCanonical.resources['conservation-losat-fasta-files-1'].data,
+  losatConservationCanonical.resources['conservation-losat-fasta-files-1-1'].data,
   comparisonFastaB.data
 );
 assert.deepEqual(
   projectCanonicalSessionRequest(losatConservationCanonical)
-    .files.c_conservation_fastas.map((file) => file.data),
-  [comparisonFastaB.data, comparisonFasta.data]
+    .files.c_conservation_fastas.map((files) => files.map((file) => file.data)),
+  [[comparisonFastaB.data], [comparisonFasta.data]]
+);
+// PR-B: a ring's comparison genome of two files writes both, in order, and the
+// Load projection reads both back into that ring (series B is the outer ring).
+// Not one of the characterized requests below.
+const twoFileRingCanonical = buildCanonicalRenderRequestRaw({
+  state,
+  filesData: {
+    ...filesData,
+    c_conservation_blasts: [blastTable],
+    c_conservation_fastas: [[comparisonFasta], [comparisonFastaB, comparisonFasta]]
+  }
+});
+// A file both rings read is one resource (allocated by content).
+assert.deepEqual(twoFileRingCanonical.webFiles.conservationLosatFastaSources, [
+  ['conservation-losat-fasta-files-1-1', 'conservation-losat-fasta-files-1-2'],
+  ['conservation-losat-fasta-files-1-2']
+]);
+assert.deepEqual(
+  projectCanonicalSessionRequest(twoFileRingCanonical)
+    .files.c_conservation_fastas.map((files) => files.map((file) => file.data)),
+  [[comparisonFastaB.data, comparisonFasta.data], [comparisonFasta.data]]
 );
 const losatReplayCanonical = buildCanonicalRenderRequest({
   state,
@@ -1933,7 +1965,7 @@ const losatReplayCanonical = buildCanonicalRenderRequest({
     ...filesData,
     c_conservation_blasts: [blastTable, blastTableB],
     c_conservation_blasts_source: 'losat-cache',
-    c_conservation_fastas: [comparisonFasta, comparisonFastaB]
+    c_conservation_fastas: [[comparisonFasta], [comparisonFastaB]]
   }
 });
 assert.equal(
@@ -1952,8 +1984,8 @@ assert.deepEqual(
 assert.equal(losatReplayCanonical.webFiles.conservationBlastSource, 'losat-cache');
 assert.deepEqual(
   losatReplayCanonical.webFiles.conservationLosatFastaSources
-    .map((resourceId) => losatReplayCanonical.resources[resourceId].data),
-  [comparisonFastaB.data, comparisonFasta.data]
+    .map((ids) => ids.map((resourceId) => losatReplayCanonical.resources[resourceId].data)),
+  [[comparisonFastaB.data], [comparisonFasta.data]]
 );
 const losatReplayProjection = projectCanonicalSessionRequest(losatReplayCanonical);
 assert.equal(losatReplayProjection.files.c_conservation_blasts_source, 'losat-cache');
@@ -1963,18 +1995,18 @@ const mixedFastaCanonical = buildCanonicalRenderRequest({
     ...filesData,
     c_conservation_blasts: [blastTable, blastTableB],
     c_conservation_blasts_source: 'losat-cache',
-    c_conservation_fastas: [comparisonFasta, null]
+    c_conservation_fastas: [[comparisonFasta], []]
   }
 });
 assert.deepEqual(
   mixedFastaCanonical.webFiles.conservationLosatFastaSources,
-  [null, 'conservation-losat-fasta-files-2']
+  [[], ['conservation-losat-fasta-files-2-1']]
 );
 const mixedFastaProjection = projectCanonicalSessionRequest(mixedFastaCanonical);
 assert.equal(mixedFastaProjection.files.c_conservation_fastas.length, 2);
-assert.equal(mixedFastaProjection.files.c_conservation_fastas[0], null);
+assert.deepEqual(mixedFastaProjection.files.c_conservation_fastas[0], []);
 assert.equal(
-  mixedFastaProjection.files.c_conservation_fastas[1].data,
+  mixedFastaProjection.files.c_conservation_fastas[1][0].data,
   comparisonFasta.data
 );
 const mixedFastaRebuilt = buildCanonicalRenderRequest({
@@ -1989,7 +2021,7 @@ const mixedFastaRebuilt = buildCanonicalRenderRequest({
 });
 assert.deepEqual(
   mixedFastaRebuilt.webFiles.conservationLosatFastaSources,
-  [null, 'conservation-losat-fasta-files-2']
+  [[], ['conservation-losat-fasta-files-2-1']]
 );
 const missingFastasCanonical = buildCanonicalRenderRequest({
   state,
@@ -2002,14 +2034,14 @@ const missingFastasCanonical = buildCanonicalRenderRequest({
 });
 assert.deepEqual(
   missingFastasCanonical.webFiles.conservationLosatFastaSources,
-  [null, null]
+  [[], []]
 );
 const missingFastasProjection = projectCanonicalSessionRequest(
   missingFastasCanonical
 );
 assert.deepEqual(
   missingFastasProjection.files.c_conservation_fastas,
-  [null, null]
+  [[], []]
 );
 const missingFastasRebuilt = buildCanonicalRenderRequest({
   state: {
@@ -2023,7 +2055,7 @@ const missingFastasRebuilt = buildCanonicalRenderRequest({
 });
 assert.deepEqual(
   missingFastasRebuilt.webFiles.conservationLosatFastaSources,
-  [null, null]
+  [[], []]
 );
 state.circularConservation = {
   ...losatReplayProjection.config.circularConservation,
@@ -5385,7 +5417,7 @@ const combinedGeometryCanonical = buildCanonicalRenderRequest({
     ...filesData,
     c_depth: [depthA, depthB],
     c_conservation_blasts: [blastTable],
-    c_conservation_sequence_sources: [comparisonFasta]
+    c_conservation_sequence_sources: [[comparisonFasta]]
   }
 });
 const combinedGeometrySlots =
@@ -5468,7 +5500,7 @@ const managedComparisonCanonical = buildCanonicalRenderRequest({
   filesData: {
     ...filesData,
     c_conservation_blasts: [blastTable],
-    c_conservation_sequence_sources: [comparisonFasta]
+    c_conservation_sequence_sources: [[comparisonFasta]]
   }
 });
 assert.equal(
@@ -6017,7 +6049,9 @@ assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).
   // Re-recorded when a read card wrote the CLI's committed records (D-13): one `exactly_one` record per record, and no
   // selector for a file's only record. Against dev's request schema 10 requests (record windows, axis label styles),
   // 14 Circular requests differ, only in `records` (keys, cardinality, selectors, and one file's one resource).
-  'a1731207352d3f179f9c82c479265279fbb330be49379b35bc4ae8944218567b',
+  // Re-recorded when a similarity ring's comparison genome became a list of files (request schema 10): with each
+  // ring's list read back as its one reference or null, the four ring requests are the ones recorded before.
+  'de6e464d0a032170306020d2022448fcfee1aa01e3f01f2454acd71903676a26',
   'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
 // The Python tests hand this bridge a Session of any version; a 49 is read as the one-drawing view of its shown drawing.

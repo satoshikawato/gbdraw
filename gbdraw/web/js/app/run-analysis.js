@@ -88,10 +88,7 @@ import {
 /** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import { placeCircularStackForGenerate } from '../services/circular-track-slot-model.js';
-import {
-  normalizeFileList,
-  orderedConservationSources
-} from '../services/conservation-series.js';
+import { normalizeFileList, ringsOfDrawing } from '../services/conservation-series.js';
 import {
   placeLinearStackForGenerate
 } from '../services/linear-track-slot-model.js';
@@ -176,9 +173,13 @@ import {
   readParsedSequenceRecords,
   circularDepthRowsAfterRead
 } from '../services/record-discovery.js';
-import { bindDrawingInputFileTree, idleCircularRecordDiscovery, markCircularDepthRows } from '../services/drawing/inputs.js';
+import {
+  bindDrawingInputFileTree, idleCircularRecordDiscovery, markCircularDepthRows, ringGenomeFileLists
+} from '../services/drawing/inputs.js';
 import { circularInputComplete, circularSourceInputs, inputTypeSpec } from '../services/input-types.js';
-import { NO_CONSERVATION_PAIRS, buildFastaText, circularConservationKeys, conservationHashPairs } from '../services/circular-conservation-keys.js';
+import {
+  NO_CONSERVATION_PAIRS, buildFastaText, circularConservationKeys, conservationHashPairs, losatRequestRings
+} from '../services/circular-conservation-keys.js';
 import {
   classifyRawLosatCacheEntry,
   emptyProteinIdentityManifest,
@@ -196,6 +197,10 @@ import {
   webLosatRuntimeRecord,
   isReusableLosatEntry,
   writtenLegacyProteinArtifacts,
+  losatResultRowsOfDrawing,
+  losatRowsOfDrawing,
+  losatRowsOfOtherDrawings,
+  losatRowsWithDrawing,
   CIRCULAR_CONSERVATION_FLOW
 } from '../services/losat-cache.js';
 import {
@@ -241,7 +246,10 @@ import {
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { FeatureCatalog } from '../services/feature-catalog.js' */
 /** @import { LosatJob, LosatJobResult, LosatOverlayRun, LosatRunOptions } from '../services/losat.js' */
-/** @import { AdoptedConservationPairs, CircularConservationKeys, ConservationPairs, ConservationSubject } from '../services/circular-conservation-keys.js' */
+/**
+ * @import { AdoptedConservationPairs, CircularConservationKeys, ConservationPairs, ConservationSubject, SearchedRingAdoption }
+ *   from '../services/circular-conservation-keys.js'
+ */
 /** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
 /** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
 /** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
@@ -261,7 +269,6 @@ import {
  */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
-/** @import { CircularConservationLike, RawConservationSeriesEntry } from '../services/conservation-series.js' */
 /** @import { FeatureFill, LegendRow } from '../services/drawing/paint.js' */
 /** @import { LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 /** @import { RequestCanonicalComparison } from '../services/session-request.js' */
@@ -575,10 +582,6 @@ const convertRingTablesOncePerFrame = async (referenceFiles, { renderRequest, re
   return new Map(rings.map(({ resourceId }, index) => [resourceId, converted[index]]));
 };
 
-/**
- * One circular conservation comparison, resolved to the BLAST text the request carries.
- * @typedef {{ name: string, text: string, sourceIndex: number, label: string, color: string }} ResolvedCircularConservation
- */
 
 /**
  * A match in one of Generate's cache maps, whose keys are text (`RawLosatCacheMatch` of services/losat-cache.js
@@ -964,9 +967,10 @@ const rewriteMappedProteinReferences = (value, idMap) => {
 /**
  * @param {Map<string, LosatDerivedCacheEntry> | null | undefined} cacheMap
  * @param {string} key
- * @param {{ mode: unknown, payload: Record<string, unknown> | null | undefined, manifest: unknown }} entry
+ * @param {{ mode: unknown, payload: Record<string, unknown> | null | undefined, manifest: unknown, rawKeys: readonly string[] }} entry
+ *   `rawKeys`: the raw searches it is converted from; an Undo or a Redo puts it back with them (`losatEvidenceAfterStep`).
  */
-const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) => {
+const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest, rawKeys }) => {
   if (!cacheMap || !key || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return null;
   }
@@ -976,7 +980,8 @@ const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) =
     idEncoding: 'runtime-handle-v1',
     key,
     mode: String(mode || ''),
-    payload: stripRuntimeCacheStats(payload)
+    payload: stripRuntimeCacheStats(payload),
+    rawKeys
   };
   if (
     !isLosatDerivedCacheEntry(entry, { allowLegacy: false }) ||
@@ -1358,22 +1363,6 @@ const losatSeqEntryFromRecord = (record, regionSpec) => {
 export const extractLosatFastaFast = async ({ text, fmt, regionSpec, recordSelector }) => (
   losatSeqEntryFromRecord(selectParsedRecord(parseSequenceRecordsFast(text, fmt), recordSelector), regionSpec)
 );
-/**
- * @param {InputFileRef | InputFileRef[] | null | undefined} sourceFiles
- * @param {CircularConservationLike | null | undefined} circularConservation
- */
-const buildConservationSeries = (sourceFiles, circularConservation) => {
-  return orderedConservationSources(sourceFiles, circularConservation).map((entry) => ({
-    label: entry.label,
-    color: entry.color
-  }));
-};
-/**
- * The rings of a series as one string: equal only for the same keys in the same order. It reads the keys the series
- * holds, so both sides of a comparison read one channel whichever files the keys came from.
- * @param {readonly RawConservationSeriesEntry[]} series
- */
-const ringKeysOfSeries = (series) => JSON.stringify(series.map((entry) => String(entry.sourceKey)));
 /** @param {unknown} value */
 const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -1676,11 +1665,11 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
  * @property {EncodeSessionResources} encodeSessionResources The Session file writer's encoding of the inputs
  *   Generate described by their File (the exact replay Session of the reproducibility files, OV-2612).
- * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, builtFromDraft?: boolean, drawing: DrawingState,
- *   conservationPairs: AdoptedConservationPairs }) => void} adoptCanonicalRenderArtifacts
+ * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, ringAdoption?: SearchedRingAdoption | null,
+ *   drawing: DrawingState, conservationPairs: AdoptedConservationPairs }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, files, and the conservation hash pairs it names.
- *   `builtFromDraft` says the draft's rings at this adoption are the rings the request was built from: a Generate whose
- *   rings did not change while it ran, not the committed request (a rotation, an alignment, a placement).
+ *   `ringAdoption` is a LOSAT Generate's own rings (`SearchedRingAdoption`); a candidate of the committed request (a
+ *   rotation, an alignment, a placement) has none and leaves the draft's rings.
  * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
  * @property {() => number} [readCommittedCanonicalRevision] The Session owner's count of committed Session replacements.
  * @property {(writes: readonly LiveSettingWrite[]) => void} [commitLiveSettingValues]
@@ -1694,11 +1683,14 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {() => DrawingState} displayedArtifactDrawing The drawing the displayed Result belongs to.
  * @property {(drawing: DrawingState) => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
  *   The artifact owners' values, with the color rules and queued palette of `drawing`.
- * @property {(ownerSet: Record<string, any>, options: { drawing: DrawingState, selectedResultIndex: number, installResults: (results: SvgResultEntry[]) => void }) => void} installGeneratedArtifactOwnerSet
- *   Installs an owner set as the displayed artifact, its color rules and queued palette into `drawing`.
+ * @property {(ownerSet: Record<string, any>, options: { drawing: DrawingState, selectedResultIndex: number, installResults: (results: SvgResultEntry[]) => void, commit: boolean }) => void} installGeneratedArtifactOwnerSet
+ *   Installs a Generate's owner set (`commit`) as the displayed artifact, its color rules and queued palette into `drawing`.
  * @property {(drawingId: DrawingState['id'], redrawn: RedrawnArtifact, options: { installResults: (results: SvgResultEntry[]) => void }) => void} installRedrawnArtifact
  *   The artifact owner's install of a label rerender into its Result's drawing (OV-111).
  * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
+ * @property {() => void} [emptyKeptProteinIdentityManifests] Empties the protein identity manifest each drawing not
+ *   shown keeps in its artifact slot (Clear LOSAT results, D-197), and counts the Clear for the drawings History holds
+ *   out of the store, which come back emptied (OV-3274).
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
  * @property {((label: string, execute: (before: HistoryArtifactHandle | null) => any, options?: HistoryStepOptions<Record<string, any>>) => Promise<Record<string, any>>) | null} [runGeneratedArtifactReplacement]
  *   History's undoable replacement of the generated artifact.
@@ -1748,6 +1740,36 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {ShowNotice} [showNotice] The root's notice banner.
  */
 
+/**
+ * The LOSAT result rows of each drawing, over the app's cache-info rows and raw cache: their readers and the swap of a
+ * drawing's rows as it leaves the drawing store or comes back.
+ * @param {Pick<WebState, 'losatCacheInfo' | 'losatCache'>} refs
+ */
+const losatResultRowsAccess = ({ losatCacheInfo, losatCache }) => {
+  /** @returns {LosatCacheInfoEntry[]} */
+  const cacheInfoRows = () => (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : []);
+  return {
+    cacheInfoRows,
+    /**
+     * The LOSAT results of a drawing, the one reader of its results (#1777 review 9, OV-3203, OV-3204): **Save Raw
+     * LOSAT TSV** and Run Info read its rows, one per cache key, never another drawing's.
+     * @param {DrawingState} drawing
+     */
+    losatResultRowsOf: (drawing) => losatResultRowsOfDrawing(cacheInfoRows(), drawing.id),
+    /** A drawing's rows as written, which a Duplicate copies (OV-3205). @param {DrawingId} drawingId */
+    losatRowsOf: (drawingId) => losatRowsOfDrawing(cacheInfoRows(), drawingId),
+    /** The count of **Clear LOSAT results**: the searches it removes, the whole cache, one per key (PD-OI-022: Clear Cache
+     * invalidates retained evidence), a search only a deleted drawing's rows name included (OV-3211). */
+    clearableLosatResultCount: () => losatCache.value.size,
+    /** A drawing's rows come and go with it (OV-3205, OV-3209); a row whose search a Clear removed meanwhile stays out. @param {DrawingId} drawingId @param {readonly LosatCacheInfoEntry[]} drawingRows */
+    swapLosatResultRows: (drawingId, drawingRows) => {
+      const { rows, held } = losatRowsWithDrawing(cacheInfoRows(), drawingId, drawingRows.filter((row) => losatCache.value.has(row.key)));
+      losatCacheInfo.value = rows;
+      return held;
+    }
+  };
+};
+
 /** @param {RunAnalysisOptions} options */
 export const createRunAnalysis = ({
   state,
@@ -1766,6 +1788,7 @@ export const createRunAnalysis = ({
   installGeneratedArtifactOwnerSet,
   installRedrawnArtifact,
   restoreGeneratedArtifactHandle,
+  emptyKeptProteinIdentityManifests = () => {},
   setGeneratedArtifactIdentity = null,
   runGeneratedArtifactReplacement = null,
   previewRuntime = null,
@@ -2048,6 +2071,7 @@ export const createRunAnalysis = ({
       installGeneratedArtifactOwnerSet(candidate.ownerSet, {
         drawing,
         selectedResultIndex,
+        commit: true,
         installResults(nextResults) {
           results.value = nextResults;
         }
@@ -2214,9 +2238,8 @@ export const createRunAnalysis = ({
     return { status: 'error', error, recovery };
   };
 
-  // Raw searches finish before the artifact transaction. Keep only the latest
-  // search's entries for retry, without changing the saved Result. Cache owner
-  // replacement (Clear Cache, Session load, or History) invalidates the retry.
+  // Raw searches finish before the artifact transaction: keep the latest search's entries for retry, Result unchanged.
+  // Clear, Session load or a History step that adds entries ends the retry; one that adds none keeps it (D-200).
   /** @type {{ owner: any, entries: Map<string, any> } | null} */
   let completedLosatSearch = null;
   /**
@@ -2310,10 +2333,9 @@ export const createRunAnalysis = ({
     return (Array.isArray(edges) ? edges : []).find((edge) => edge.edgeKey === normalizedKey) || null;
   };
 
-  /** @param {string | number} edgeKey An edge key, or the entry's index. */
-  const getLosatCacheInfoEntry = (edgeKey) => {
-    /** @type {LosatCacheInfoEntry[]} */
-    const entries = Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : [];
+  /** @param {DrawingState} drawing @param {string | number} edgeKey An edge key, or the index, among the drawing's rows (OV-3210). */
+  const getLosatCacheInfoEntry = (drawing, edgeKey) => {
+    const entries = losatRowsOfDrawing(cacheInfoRows(), drawing.id);
     // `Number.isInteger` is true only for a number.
     if (Number.isInteger(edgeKey)) return entries[/** @type {number} */ (edgeKey)] || null;
     const normalizedKey = String(edgeKey || '').trim();
@@ -2346,7 +2368,7 @@ export const createRunAnalysis = ({
    * @param {string} edgeKey
    */
   const losatPairDefaultName = (drawing, edgeKey) => {
-    const edge = getResolvedLinearEdge(drawing, edgeKey) || getLosatCacheInfoEntry(edgeKey);
+    const edge = getResolvedLinearEdge(drawing, edgeKey) || getLosatCacheInfoEntry(drawing, edgeKey);
     const drawnSeqs = drawing.drawnLinearSeqs.value;
     const places = catalogUnitPlaces(featureCatalog.value);
     const query = places.get(String(edge?.queryUid ?? ''));
@@ -2411,7 +2433,7 @@ export const createRunAnalysis = ({
    */
   const downloadLosatPair = async (drawing, edgeKey, customName) => {
     if (drawing.mode !== 'linear') return;
-    const entry = getLosatCacheInfoEntry(edgeKey);
+    const entry = getLosatCacheInfoEntry(drawing, edgeKey);
     const cacheMap = losatCache.value;
     if (!entry || !cacheMap) return;
     const cached = cacheMap.get(entry.key);
@@ -2760,9 +2782,9 @@ export const createRunAnalysis = ({
     let generatedLabelProjection = null;
     // The Feature visibility the request draws, kept with the input summaries.
     let drawnVisibility = '';
-    // The rings this run's ring searches read (`ringKeysOfSeries`); null when it runs none.
+    // The rings this run's ring searches read (`ringsOfDrawing`); null when it runs none.
     /** @type {string | null} */
-    let requestRingKeys = null;
+    let requestRings = null;
     // The record key moves of this run (OV-1949), and the record lists its identities are read from.
     /** @type {ReadonlyMap<string, string>} */
     let recordMoves = new Map();
@@ -3073,8 +3095,9 @@ export const createRunAnalysis = ({
       let requestComparisonPlan = activeComparisonPlanSnapshot;
       let requestDrawnUnits = /** @type {LinearUnitSearch | null} */ (null); // The units its comparison indexes count.
       let searchedSavedPipeline = false; // Whether it searched the saved pipeline Inherit runs (OV-3003).
-      /** @type {ResolvedCircularConservation[]} */
-      let resolvedCircularConservation = [];
+      // The rings the ring searches read and their tables, in ring order (`losatRequestRings`); none without a search.
+      /** @type {SearchedRingAdoption['searched']} */ let searchedRings = [];
+      /** @type {{ name: string, text: string }[]} */ let searchedRingTables = [];
       // The conservation hash pairs the request names: its rings' when it reads them (D-15-124).
       /** @type {ConservationPairs} */
       let conservationPairs = NO_CONSERVATION_PAIRS;
@@ -3351,9 +3374,11 @@ export const createRunAnalysis = ({
         const sourceMode = String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload'
           ? 'upload'
           : 'losat';
+        // A Circular Generate replaces only its own drawing's cache-info rows (OV-3201).
+        workingLosatCacheInfo = losatRowsOfOtherDrawings(workingLosatCacheInfo, drawing.id);
         const circularConservationSourceFiles = sourceMode === 'upload'
           ? normalizeFileList(drawing.files.c_conservation_blasts)
-          : normalizeFileList(drawing.files.c_conservation_fastas);
+          : ringGenomeFileLists(drawing.files.c_conservation_fastas).filter((files) => files.length > 0);
         // Show Comparison Rings decides whether Generate searches and draws the
         // rings (OV-2818); the request reads the same setting.
         if (drawing.circularConservation.enabled === true && circularConservationSourceFiles.length > 0) {
@@ -3399,11 +3424,11 @@ export const createRunAnalysis = ({
             for (const [index, ring] of conservationKeys.rings.entries()) {
               throwIfGenerationCanceled();
               const comparisonEntry = ring.source;
-              const fileObj = /** @type {FileLike} */ (ring.file);
+              const ringFiles = /** @type {readonly [FileLike, ...FileLike[]]} */ (ring.files);
               const queryHash = /** @type {string} */ (ring.queryCanonicalHash);
-              // One sequence reader (D12): the Python helper reads FASTA, GenBank
-              // or DDBJ and returns the query FASTA that the CLI ring hashes.
-              const { fasta: queryFasta } = await readComparisonSequence({ file: fileObj });
+              // One sequence reader (D12): the Python helper reads FASTA, GenBank or DDBJ, every
+              // file of the ring in order, into the query FASTA the CLI ring hashes.
+              const { fasta: queryFasta } = await readComparisonSequence({ files: ringFiles });
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
               const extraArgs = buildExtraArgs(comparisonEntry?.losat_gencode);
@@ -3417,7 +3442,7 @@ export const createRunAnalysis = ({
               };
               const cacheKey = await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
               const fallbackName = makeSafeFilename(
-                `${String(fileObj?.name || `comparison_${index + 1}`).replace(/\.[^.]+$/, '')}.circular_conservation.${circularLosatSuffix}.tsv`
+                `${String(ringFiles[0].name || `comparison_${index + 1}`).replace(/\.[^.]+$/, '')}.circular_conservation.${circularLosatSuffix}.tsv`
               );
               const pair = {
                 sourceIndex: index,
@@ -3425,11 +3450,7 @@ export const createRunAnalysis = ({
                 filename: fallbackName
               };
               losatPairs.push(pair);
-              cacheInfo.push({
-                key: cacheKey,
-                filename: fallbackName,
-                display: true
-              });
+              cacheInfo.push({ key: cacheKey, filename: fallbackName, display: true, drawingId: drawing.id });
               const cached = getReusableLosatCacheEntry(cacheMap, cacheKey, cacheMetadata);
               const hasCachedText = Boolean(cached);
               if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
@@ -3517,7 +3538,7 @@ export const createRunAnalysis = ({
                 text: blastText
               });
             }
-            pendingLosatCacheCommit = { cacheInfo, cacheMap, derivedCacheMap: null };
+            pendingLosatCacheCommit = { cacheInfo: [...workingLosatCacheInfo, ...cacheInfo], cacheMap, derivedCacheMap: null };
             return resolved;
           };
 
@@ -3530,7 +3551,6 @@ export const createRunAnalysis = ({
             drawing.circularConservation.reference = ['query', 'subject'].includes(rawReference)
               ? rawReference
               : 'auto';
-            workingLosatCacheInfo = [];
           } else {
             const comparisonFiles = circularConservationSourceFiles;
             if (comparisonFiles.length === 0) {
@@ -3538,29 +3558,15 @@ export const createRunAnalysis = ({
             }
             // The ring keys, in ring order (the one builder, D-15-123); their
             // pairs go with the request it installs, for Save (D-15-124).
-            requestRingKeys = ringKeysOfSeries(drawing.circularConservation.series);
+            requestRings = ringsOfDrawing(drawing);
             const conservationKeys = await circularConservationKeys(drawing, inputFiles.fileOf, throwIfGenerationCanceled);
             conservationPairs = conservationHashPairs(conservationKeys);
-            const conservationEntries = conservationKeys.rings.map(({ source }) => source);
-            const conservationSeries = buildConservationSeries(comparisonFiles, drawing.circularConservation);
+            // Each ring's source with its label, color and genetic code, as the ring keys matched it (`searchedRingSources`).
+            searchedRings = conservationKeys.rings.map(({ source }) => source);
             const conservationResults = await runCircularLosatConservation(conservationKeys);
             drawing.circularConservation.reference = 'subject';
-            resolvedCircularConservation = conservationResults.map((result, index) => {
-              /** @type {Record<string, any>} */
-              const source = conservationEntries[index] || {};
-              /** @type {Record<string, any>} */
-              const style = conservationSeries[index] || {};
-              return {
-                name: result.name || getPayloadName(result.path),
-                text: result.text,
-                sourceIndex: Number(source.sourceIndex ?? index),
-                label: String(style.label || `Comparison ${index + 1}`),
-                color: String(style.color || '#D9EAF7')
-              };
-            });
+            searchedRingTables = conservationResults.map((result) => ({ name: result.name || getPayloadName(result.path), text: result.text }));
           }
-        } else {
-          workingLosatCacheInfo = [];
         }
       } else {
         requireCurrentLinearTrackLayout(drawing.form.linear_track_layout);
@@ -4544,6 +4550,7 @@ export const createRunAnalysis = ({
                 key: cacheKey,
                 filename: pair.filename,
                 display: true,
+                drawingId: drawing.id,
                 edgeKey: spec.edgeKey,
                 ordinal: spec.ordinal,
                 queryUid: resolvedEdge.queryUid,
@@ -4804,9 +4811,7 @@ export const createRunAnalysis = ({
               }
               if (useDerivedProteinPayloadCache && !convertedPayload?.error) {
                 setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {
-                  mode: blastpMode,
-                  payload: convertedPayload,
-                  manifest: workingProteinIdentityManifest
+                  mode: blastpMode, payload: convertedPayload, manifest: workingProteinIdentityManifest, rawKeys: proteinCacheKeys ?? []
                 });
               }
             }
@@ -5020,10 +5025,9 @@ export const createRunAnalysis = ({
       const candidateFiles = forceEmptyComparison
         ? { ...serializedFiles, linearCanonicalComparisons: [] }
         : serializedFiles;
-      const canonicalCircularConservation = resolvedCircularConservation.map((entry) => ({
-        ...entry,
-        fasta: candidateFiles.c_conservation_fastas?.[entry.sourceIndex] || null
-      }));
+      const canonicalCircularConservation = losatRequestRings(
+        searchedRings, searchedRingTables, ringGenomeFileLists(candidateFiles.c_conservation_fastas)
+      );
       recordSessionLifecycleEvent('canonical-request-construction-start');
       const canonical = buildCanonicalRenderRequest({
         state,
@@ -5240,7 +5244,7 @@ export const createRunAnalysis = ({
           startedAtIso: manualRunStartedAtIso,
           losatComparisons: mode.value === 'linear' && requestComparisonPlan?.hasLosatIntent === true,
           losatRuntimes: summarizeLosatRuntimes(
-            pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
+            losatResultRowsOfDrawing(pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo, drawing.id),
             pendingLosatCacheCommit?.cacheMap || losatCache.value
           ),
           featureIdentityNotices: generationMetadata.featureIdentityNotices
@@ -5458,9 +5462,9 @@ export const createRunAnalysis = ({
           adoptOwnedRequest: true,
           drawing,
           conservationPairs,
-          // The ring controls are disabled during a Generate (index.html), but a change from outside them may still have
-          // changed the draft's rings since the searches.
-          builtFromDraft: requestRingKeys !== null && requestRingKeys === ringKeysOfSeries(drawing.circularConservation.series)
+          // The rings it searched. The ring controls are disabled during a Generate (index.html), but a change from
+          // outside them may still have changed the draft's rings since the searches.
+          ringAdoption: requestRings === null ? null : { searched: searchedRings, builtFromDraft: requestRings === ringsOfDrawing(drawing) }
         });
       }
       // The identities of this request's records stay with it (DESIGN A1); History restores them with it.
@@ -6407,12 +6411,18 @@ export const createRunAnalysis = ({
     }
   };
 
-  const downloadLosatCache = async () => {
-    if (!losatCacheInfo.value || losatCacheInfo.value.length === 0) return;
+  const {
+    cacheInfoRows, losatResultRowsOf, losatRowsOf, clearableLosatResultCount, swapLosatResultRows
+  } = losatResultRowsAccess({ losatCacheInfo, losatCache });
+
+  /** @param {DrawingState} drawing */
+  const downloadLosatCache = async (drawing) => {
+    const rows = losatResultRowsOf(drawing);
+    if (rows.length === 0) return;
     const cacheMap = losatCache.value;
     if (!cacheMap || cacheMap.size === 0) return;
     const identityManifest = cloneJsonData(proteinIdentityManifest.value);
-    const hydratedEntries = (await Promise.all(losatCacheInfo.value.map(async (/** @type {LosatCacheInfoEntry} */ entry, /** @type {number} */ idx) => {
+    const hydratedEntries = (await Promise.all(rows.map(async (entry, idx) => {
       const cached = cacheMap.get(entry.key);
       if (!isCurrentRawLosatCacheEntry(cached)) return null;
       return {
@@ -6421,7 +6431,7 @@ export const createRunAnalysis = ({
         idx,
         hydrated: await hydrateLosatDownloadText(entry.key, cached, identityManifest)
       };
-    }))).filter(Boolean);
+    }))).filter((item) => item !== null);
     const totalBytes = totalHydratedLosatExportBytes(
       hydratedEntries.map((item) => item.hydrated)
     );
@@ -6449,6 +6459,7 @@ export const createRunAnalysis = ({
     losatCache.value = new Map();
     losatDerivedCache.value = new Map();
     proteinIdentityManifest.value = emptyProteinIdentityManifest();
+    emptyKeptProteinIdentityManifests();
     legacyProteinRawCandidates.value = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] };
     legacyProteinDerivedEvidence.value = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
     losatCacheInfo.value = [];
@@ -6530,6 +6541,8 @@ export const createRunAnalysis = ({
     readDrawingRecordIdentities,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
+    losatResultRowsOf,
+    clearableLosatResultCount, swapLosatResultRows, losatRowsOf,
     downloadLosatCache,
     downloadLosatPair,
     clearLosatCache,

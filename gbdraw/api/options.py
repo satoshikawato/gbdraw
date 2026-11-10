@@ -406,6 +406,42 @@ def _validate_sequence_elements(
             )
 
 
+RingGenomeFiles: TypeAlias = tuple[str, ...]
+"""The comparison genome files of one similarity ring in the listed order; empty for a ring without one."""
+
+
+def _ring_genome_files(values: object) -> tuple[RingGenomeFiles, ...] | None:
+    """``conservation_sequence_files`` as one tuple of paths per ring (the one normalization).
+
+    A ring takes one path, a sequence of paths (one genome split over several
+    files), or ``None``: no comparison genome, as an empty sequence and, as
+    before a ring took several files, ``""``.
+    """
+
+    if values is None:
+        return None
+    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+        raise ValidationError("conservation_sequence_files must be a sequence.", diagnostic={"code": "INPUT_INVALID"})
+    rings: list[RingGenomeFiles] = []
+    for index, value in enumerate(values):
+        if value is None or value == "":
+            rings.append(())
+        elif isinstance(value, str):
+            rings.append((value,))
+        elif (
+            isinstance(value, Sequence)
+            and not isinstance(value, bytes)
+            and all(isinstance(path, str) and path for path in value)
+        ):
+            rings.append(tuple(value))
+        else:
+            raise ValidationError(
+                f"conservation_sequence_files[{index}] must be a path, a sequence of paths, or None.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
+    return tuple(rings)
+
+
 def _validate_nested_sequence_elements(
     rows: object,
     *,
@@ -1163,7 +1199,7 @@ class CircularDiagramOptions(_ModeDiagramOptions):
     tracks: CircularRequestTrackOptions | None = None
     output: CircularOutputOptions | None = None
     conservation_blast_files: Sequence[str] | None = None
-    conservation_sequence_files: Sequence[str | None] | None = None
+    conservation_sequence_files: Sequence[str | Sequence[str] | None] | None = None
     conservation_dataframes: Sequence[DataFrame] | None = None
     conservation_reference: Literal["query", "subject", "auto"] = "auto"
     conservation_labels: Sequence[str] | None = None
@@ -1224,11 +1260,10 @@ class CircularDiagramOptions(_ModeDiagramOptions):
             field_name="conservation_blast_files",
             element_type=str,
         )
-        _validate_sequence_elements(
-            self.conservation_sequence_files,
-            field_name="conservation_sequence_files",
-            element_type=str,
-            allow_none=True,
+        object.__setattr__(
+            self,
+            "conservation_sequence_files",
+            _ring_genome_files(self.conservation_sequence_files),
         )
         _validate_sequence_elements(
             self.conservation_labels,
@@ -1299,6 +1334,13 @@ class CircularDiagramOptions(_ModeDiagramOptions):
                 diagnostic={"code": "COMPARISON_INPUT", "field": "conservation_search_results"},
             )
         self._validate_ring_losat()
+
+    @property
+    def conservation_genome_files(self) -> tuple[RingGenomeFiles, ...]:
+        """The comparison genome files of each ring (``conservation_sequence_files`` as normalized)."""
+
+        # __post_init__ stored the value of _ring_genome_files.
+        return cast("tuple[RingGenomeFiles, ...]", self.conservation_sequence_files or ())
 
     def _validate_ring_losat(self) -> None:
         """Circular LOSATN / TLOSATX ring intent (design 3.3, 3.4)."""
@@ -1399,25 +1441,25 @@ class CircularDiagramOptions(_ModeDiagramOptions):
             )
         if self.conservation_table_file is not None:
             return
-        sequences = tuple(self.conservation_sequence_files or ())
-        if not sequences or any(not value for value in sequences):
+        sequences = self.conservation_genome_files
+        if not sequences or any(not files for files in sequences):
             raise ring_input_error(
-                "A ring LOSAT search needs one comparison sequence file per ring "
-                "(conservation_sequence_files).",
+                "A ring LOSAT search needs a comparison genome (one or more sequence "
+                "files) for every ring (conservation_sequence_files).",
                 "conservation_sequence_files",
             )
         for field_name in ("conservation_labels", "conservation_colors"):
             values = getattr(self, field_name)
             if values is not None and len(tuple(values)) != len(sequences):
                 raise ring_input_error(
-                    f"{field_name} must give one value per comparison sequence file "
+                    f"{field_name} must give one value per comparison genome "
                     f"({len(sequences)}); got {len(tuple(values))}.",
                     field_name,
                 )
         if gencodes is not None and len(gencodes) not in {1, len(sequences)}:
             raise ring_input_error(
                 "conservation_losat_gencodes must give one translation table for all "
-                f"rings or one per comparison sequence file ({len(sequences)}); got "
+                f"rings or one per comparison genome ({len(sequences)}); got "
                 f"{len(gencodes)}.",
                 "conservation_losat_gencodes",
             )

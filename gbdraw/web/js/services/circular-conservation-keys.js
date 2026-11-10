@@ -7,7 +7,8 @@
 // request when Generate or Load installs it; Save reads that record, no file.
 import { inputSequenceSource } from './input-types.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { normalizeFileList, orderedConservationSources } from './conservation-series.js';
+import { orderedConservationSources } from './conservation-series.js';
+import { ringGenomeFileLists } from './drawing/inputs.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { CIRCULAR_CONSERVATION_FLOW } from './losat-cache.js';
 import { readAllSequenceRecords, readComparisonSequenceDigest, readOncePerFile } from './record-discovery.js';
@@ -21,7 +22,7 @@ import { readAllSequenceRecords, readComparisonSequenceDigest, readOncePerFile }
  * What the key builder reads of a Circular drawing: its input type, the reference and ring files it binds, and its
  * conservation settings (the ring order and whether the rings read sequences or uploaded BLAST tables).
  * @typedef {{
- *   files: { readonly c_conservation_fastas: (InputFileRef | null)[] },
+ *   files: { readonly c_conservation_fastas: readonly (readonly InputFileRef[])[] },
  *   circularSources: readonly Readonly<CircularSource>[],
  *   inputType: { readonly value: string },
  *   circularConservation: CircularConservationLike & { readonly source?: unknown }
@@ -48,10 +49,11 @@ export const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(re
  * @typedef {{ files: readonly FileLike[], fasta: string, hash: string }} ConservationSubject
  */
 /**
- * One conservation ring in ring order: its source, its bound File and that File's query hash (the entry's
- * `queryCanonicalHash`, from the Python ring reader); `file` and the hash are null when the File is not bound.
- * @typedef {{ source: OrderedConservationSource<InputFileRef>, file: FileLike, queryCanonicalHash: string }
- *   | { source: OrderedConservationSource<InputFileRef>, file: null, queryCanonicalHash: null }} ConservationRingKey
+ * One conservation ring in ring order: its source, the bound Files of its comparison genome (in the listed order) and
+ * their query hash (the entry's `queryCanonicalHash`: of the genome's LOSAT query FASTA, from the Python ring reader,
+ * as the CLI ring of the same files hashes it); `files` and the hash are null when a File is not bound.
+ * @typedef {{ source: OrderedConservationSource<InputFileRef>, files: readonly [FileLike, ...FileLike[]], queryCanonicalHash: string }
+ *   | { source: OrderedConservationSource<InputFileRef>, files: null, queryCanonicalHash: null }} ConservationRingKey
  */
 /**
  * @typedef {{ subject: ConservationSubject | null, rings: ConservationRingKey[] }} CircularConservationKeys
@@ -96,6 +98,48 @@ export const readConservationSubject = async (files, fmt) => {
 };
 
 /**
+ * The rings a LOSAT Generate of the drawing searches, in ring order: each ring's genome files at its place, matched to
+ * its series entry as Generate matches them (`orderedConservationSources`), with the label, colour and genetic code it
+ * searches the ring with. A drawing whose rings read uploaded BLAST tables searches none.
+ * @param {Pick<ConservationDrawing, 'files' | 'circularConservation'>} drawing
+ * @returns {OrderedConservationSource<InputFileRef>[]}
+ */
+export const searchedRingSources = (drawing) => (
+  String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload'
+    ? [] : orderedConservationSources(ringGenomeFileLists(drawing.files.c_conservation_fastas), drawing.circularConservation)
+);
+/**
+ * Generate's own rings, which its adoption of the result reads (`adoptCircularRingResult`): the rings it searched
+ * (`searchedRingSources`, request ring k is `searched[k]`), and whether the draft's rings at the adoption are still
+ * those (`builtFromDraft`; a change from outside the ring controls may have changed them while it ran).
+ * @typedef {{ searched: readonly OrderedConservationSource<InputFileRef>[], builtFromDraft: boolean }} SearchedRingAdoption
+ */
+/**
+ * One ring of a LOSAT Generate's request: its search result (`name`, `text`), the label and colour Generate searched
+ * it with, its source index and its genome files as the request's serialized files hold them.
+ * @template F
+ * @typedef {{ name: string, text: string, sourceIndex: number, label: string, color: string, fastas: F[] }} LosatRequestRing
+ */
+/**
+ * The request's rings of a LOSAT Generate, one per ring it searched, in ring order: ring k's table (`tables[k]`), and the
+ * genome files at its place of the serialized ring genome lists (`ringFastas`), so the request names the files of the
+ * rings it searched and no other.
+ * @template F
+ * @param {readonly OrderedConservationSource<InputFileRef>[]} searched
+ * @param {readonly { name: string, text: string }[]} tables
+ * @param {readonly (readonly F[])[]} ringFastas
+ * @returns {LosatRequestRing<F>[]}
+ */
+export const losatRequestRings = (searched, tables, ringFastas) => searched.map((source, index) => ({
+  name: tables[index].name,
+  text: tables[index].text,
+  sourceIndex: source.sourceIndex,
+  label: source.label,
+  color: source.color,
+  fastas: [...(ringFastas[source.placeIndex] || [])]
+}));
+
+/**
  * The subject and the rings of a Circular drawing's sequence conservation (its LOSAT rings), from its bound files.
  * A drawing whose rings read uploaded BLAST tables has none. `beforeRing` runs before each ring is read (Generate's
  * cancel check).
@@ -105,8 +149,7 @@ export const readConservationSubject = async (files, fmt) => {
  * @returns {Promise<CircularConservationKeys>}
  */
 export const circularConservationKeys = async (drawing, fileOf, beforeRing = () => {}) => {
-  if (String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload') return { subject: null, rings: [] };
-  const sources = orderedConservationSources(normalizeFileList(drawing.files.c_conservation_fastas), drawing.circularConservation);
+  const sources = searchedRingSources(drawing);
   if (!sources.length) return { subject: null, rings: [] };
   const { slot, format } = inputSequenceSource(drawing.inputType.value);
   const subjectFiles = drawing.circularSources.map((source) => fileOf(source[slot]));
@@ -116,10 +159,14 @@ export const circularConservationKeys = async (drawing, fileOf, beforeRing = () 
   const rings = [];
   for (const source of sources) {
     beforeRing();
-    const file = fileOf(source.file);
-    rings.push(file
-      ? { source, file, queryCanonicalHash: await readComparisonSequenceDigest({ file }) }
-      : { source, file: null, queryCanonicalHash: null });
+    const files = source.files.map((ref) => fileOf(ref));
+    rings.push(files.every(Boolean)
+      ? {
+          source,
+          files: /** @type {[FileLike, ...FileLike[]]} */ (files),
+          queryCanonicalHash: await readComparisonSequenceDigest({ files: /** @type {[FileLike, ...FileLike[]]} */ (files) })
+        }
+      : { source, files: null, queryCanonicalHash: null });
   }
   return { subject, rings };
 };

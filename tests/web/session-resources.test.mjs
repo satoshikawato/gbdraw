@@ -153,7 +153,7 @@ const committed = {
       'record-source': 'original-active.gb',
       'removed-inactive-resource': 'removed-inactive.txt'
     },
-    conservationLosatFastaSources: ['removed-inactive-resource']
+    conservationLosatFastaSources: [['removed-inactive-resource']]
   }
 };
 
@@ -167,8 +167,8 @@ const state = boundState({
     c_depth: [[makeFile('depth-1', 'depth-1.tsv')]],
     c_conservation_blasts: [makeFile('blast', 'blast.tsv')],
     c_conservation_blasts_source: 'losat-cache',
-    c_conservation_fastas: [makeFile('>subject\nATGC\n', 'subject.fa')],
-    c_conservation_sequence_sources: [makeFile('>source\nATGC\n', 'source.fa')],
+    c_conservation_fastas: [[makeFile('>subject\nATGC\n', 'subject.fa')]],
+    c_conservation_sequence_sources: [[makeFile('>source\nATGC\n', 'source.fa')]],
     d_color: inputFiles.registerFile(activeFile),
     t_color: inputFiles.registerFile(makeFile('CDS\t#ffffff\n', 'specific.tsv')),
     blacklist: inputFiles.registerFile(makeFile('hypothetical', 'blacklist.txt')),
@@ -309,7 +309,8 @@ assert.deepEqual(
   Object.keys(built.webFiles.resourceOriginalNames),
   [bindings.circularSources[0].gb.resourceId]
 );
-assert.deepEqual(built.webFiles.conservationLosatFastaSources, [null]);
+// The ring whose file left keeps its place, an empty list of files.
+assert.deepEqual(built.webFiles.conservationLosatFastaSources, [[]]);
 assert.equal(
   Object.values(built.resources).some(
     (resource) => Buffer.from(resource.data, 'base64').toString('utf8')

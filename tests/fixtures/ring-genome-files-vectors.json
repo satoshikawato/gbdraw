@@ -1,0 +1,18 @@
+{
+  "description": "conservationFastaFiles of a stored request: request schema 9 (v0.14.5) wrote one file reference or null per ring; schema 10 writes the list of the ring's comparison genome files (none for a ring without one). Python's decoder (tests/test_ring_genome_files.py) and the Web promotion (tests/web/session-request.test.mjs) read each schema 9 value as its schema 10 value.",
+  "cases": [
+    {
+      "name": "a file, no file, a file",
+      "schema9": [
+        {"resourceId": "ring-a", "representation": "file"},
+        null,
+        {"resourceId": "ring-c", "representation": "file"}
+      ],
+      "schema10": [
+        [{"resourceId": "ring-a", "representation": "file"}],
+        [],
+        [{"resourceId": "ring-c", "representation": "file"}]
+      ]
+    }
+  ]
+}

@@ -4075,8 +4075,8 @@
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-cache')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                 <div class="linear-primary-label">{{ t('LOSAT cache') }}</div>
-                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)" :aria-describedby="losatCacheInfo.length === 0 ? 'linear-losat-cache-reason' : null"><i class="ph ph-trash" aria-hidden="true"></i> {{ losatCacheInfo.length === 0 ? t('Clear LOSAT results') : tn(losatCacheInfo.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}</button>
-                                <p v-if="losatCacheInfo.length === 0" id="linear-losat-cache-reason" class="ui-hint">{{ t('No LOSAT results yet') }}</p>
+                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (clearableLosatResultCount === 0)" :aria-describedby="clearableLosatResultCount === 0 ? 'linear-losat-cache-reason' : null"><i class="ph ph-trash" aria-hidden="true"></i> {{ clearableLosatResultCount === 0 ? t('Clear LOSAT results') : tn(clearableLosatResultCount, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}</button>
+                                <p v-if="clearableLosatResultCount === 0" id="linear-losat-cache-reason" class="ui-hint">{{ t('No LOSAT results yet') }}</p>
                             </section>
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('collinear-details') || linearComparisonUi.sectionKeys.advanced.includes('paralog-links')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
@@ -4454,14 +4454,14 @@
                                     </div>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
-                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs flex-auto" :disabled="losatCacheInfo.length === 0" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
+                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs flex-auto" :disabled="losatResultRows.length === 0" :aria-describedby="losatResultRows.length === 0 ? 'circular-losat-cache-reason' : null">
                                         <i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}
                                     </button>
-                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
-                                        <i class="ph ph-trash" aria-hidden="true"></i> {{ losatCacheInfo.length === 0 ? t('Clear LOSAT results') : tn(losatCacheInfo.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}
+                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="!semanticMutationAvailable || (clearableLosatResultCount === 0)" :aria-describedby="clearableLosatResultCount === 0 ? 'circular-losat-cache-reason' : null">
+                                        <i class="ph ph-trash" aria-hidden="true"></i> {{ clearableLosatResultCount === 0 ? t('Clear LOSAT results') : tn(clearableLosatResultCount, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}
                                     </button>
                                 </div>
-                                <p v-if="losatCacheInfo.length === 0" id="circular-losat-cache-reason" class="ui-hint">{{ t('No LOSAT results yet') }}</p>
+                                <p v-if="losatResultRows.length === 0" id="circular-losat-cache-reason" class="ui-hint">{{ clearableLosatResultCount === 0 ? t('No LOSAT results yet') : t('No LOSAT results in this drawing') }}</p>
                             </div>
                             <div v-if="circularConservation.source === 'upload' && circularConservationSeriesRows.length === 0">
                                 <span class="text-[9px] flex items-center">{{ t('Series names') }} <help-tip id="help-circular-comparison-series-names" :text="t('Optional fallback names for rings, one per source. Use new lines or commas.')"></help-tip></span>
@@ -4517,29 +4517,33 @@
                                 </div>
                             </div>
                             <div v-if="circularConservation.source === 'losat' || circularConservationSeriesRows.length > 0" class="space-y-1">
-                                <span v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">{{ t('Comparison sequence files') }} <help-tip :text="t('Add one comparison sequence file (FASTA, GenBank, or DDBJ) per pairwise comparison ring, then set the ring name, color, and default order. Custom Track Slots can override the radial track order.')"></help-tip></span>
+                                <span v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">{{ t('Comparison sequence files') }} <help-tip :text="t('Add a comparison sequence file (FASTA, GenBank, or DDBJ) for each pairwise comparison ring; Add file on a ring adds more files of the same genome. Then set the ring name, color, and default order. Custom Track Slots can override the radial track order.')"></help-tip></span>
                                 <span v-else class="text-[9px] flex items-center">{{ t('Series') }} <help-tip :text="t('Set the ring name, color, and default order for each pairwise comparison source. Custom Track Slots can override the radial track order.')"></help-tip></span>
                                 <div v-for="row in circularConservationSeriesRows" :key="`conservation-series-${row.index}-${row.filename}`" class="grid grid-cols-[1.8rem_minmax(0,1fr)_auto] gap-1.5 items-center">
-                                    <input type="color" v-model="circularConservation.series[row.index].color" @input="refreshCircularConservationSlots()" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="t('Comparison ring color for {file}', { file: row.filename })" :disabled="!semanticMutationAvailable">
+                                    <input type="color" v-model="circularConservation.series[row.index].color" @input="refreshCircularConservationSlots()" class="self-start h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="t('Comparison ring color for {file}', { file: row.filename })" :disabled="!semanticMutationAvailable">
                                     <div class="min-w-0 space-y-0.5">
                                         <input type="text" v-model="circularConservation.series[row.index].label" @input="refreshCircularConservationSlots()" :aria-label="t('Comparison ring label {n}', { n: row.index + 1 })" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
-                                        <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span> - {{ row.filename }}</div>
-                                        <label v-if="circularConservation.source === 'upload'"
-                                               class="flex items-center gap-1 text-[9px] text-slate-500 cursor-pointer">
-                                            <span class="shrink-0">{{ t('Comparison sequence') }}</span>
-                                            <span class="truncate text-slate-600">{{ row.comparisonSequenceFilename || t('Choose file…') }}</span>
-                                            <input type="file"
-                                                   class="hidden"
+                                        <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span><template v-if="circularConservation.source === 'upload'"> - {{ row.filename }}</template></div>
+                                        <!-- The ring's comparison genome: its files in the order added (a LOSAT query, or an uploaded table's optional comparison sequence), each added or removed here. -->
+                                        <div data-ring-row-files class="space-y-0.5">
+                                            <span v-if="circularConservation.source === 'upload'" class="block text-[9px] text-slate-500">{{ t('Comparison sequence') }}</span>
+                                            <div v-for="(name, fileIndex) in row.files" :key="`ring-file-${row.index}-${fileIndex}-${name}`" data-ring-row-file class="flex items-center gap-0.5 text-[9px] text-slate-600">
+                                                <span class="min-w-0 flex-1 truncate" :title="name">{{ name }}</span>
+                                                <button v-if="row.canRemoveFile" type="button" class="btn btn-secondary h-5 w-5 p-0 text-[9px]" @click="removeRingRowFile(row.index, fileIndex)" :disabled="!semanticMutationAvailable || processing" :aria-label="t('Remove {name}', { name })" :title="t('Remove {name}', { name })"><i class="ph ph-x" aria-hidden="true"></i></button>
+                                            </div>
+                                            <input type="file" multiple class="hidden"
                                                    accept=".fa,.fas,.fasta,.fna,.ffn,.gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*,.gz,application/gzip"
-                                                   @change="setCircularConservationCompanionFile(row.sourceIndex, $event)" :disabled="!semanticMutationAvailable">
-                                        </label>
+                                                   :aria-label="t('Add file')"
+                                                   @change="addRingRowFiles(row.index, $event)" :disabled="!semanticMutationAvailable || processing">
+                                            <button type="button" data-history-ignore data-ring-row-file-add class="btn btn-secondary h-5 px-1 text-[9px]" @click="$event.currentTarget.previousElementSibling.click()" :disabled="!semanticMutationAvailable || processing"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add file') }}</button>
+                                        </div>
                                         <div v-if="circularConservation.source === 'losat' && circularConservation.losat_program === 'tblastx'" class="grid grid-cols-[minmax(0,1fr)_4.8rem] gap-1 items-center">
                                             <label class="text-[9px] text-slate-500 truncate">{{ t('Comparison gencode') }}</label>
                                             <input type="number" min="1" step="1" v-model.number="circularConservation.series[row.index].losat_gencode" :aria-label="t('Comparison gencode {n}', { n: row.index + 1 })" placeholder="1" class="form-input px-1 py-0.5 text-[10px] h-6" :disabled="!semanticMutationAvailable">
                                         </div>
                                     </div>
-                                    <!-- While a Generate runs, the controls that rewrite the ring series (these, Add Seq, and the source radios) are disabled: the overlay stops the pointer, not the keyboard (OV-2446). -->
-                                    <div class="flex items-center gap-0.5">
+                                    <!-- While a Generate runs, the controls that rewrite the ring series (these, Add Seq, and the source radios) are disabled: the overlay stops the pointer, not the keyboard (OV-2446). They sit beside the ring's name, apart from its file controls. -->
+                                    <div class="flex items-center gap-0.5 self-start">
                                         <button :aria-label="t('Move series outward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!semanticMutationAvailable || processing || (!canMoveCircularConservationSeries(row.index, -1))" :title="t('Move series outward')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
                                         <button :aria-label="t('Move series inward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, 1)" :disabled="!semanticMutationAvailable || processing || (!canMoveCircularConservationSeries(row.index, 1))" :title="t('Move series inward')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
                                         <button :aria-label="t('Remove series')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeCircularConservationSource(row.index)" :title="t('Remove series')" :disabled="!semanticMutationAvailable || processing"><i class="ph ph-trash" aria-hidden="true"></i></button>
@@ -6863,8 +6867,14 @@
                 <div v-if="shownInputSummary && shownInputSummary.warnings.length && !shownInputSummaryStale && !processing"
                      role="status" aria-live="polite" aria-atomic="true" data-testid="input-summary-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
-                    <p class="font-semibold">{{ t('Part of the input was not drawn.') }}</p>
-                    <p v-for="(warning, index) in shownInputSummary.warnings" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
+                    <!-- The heading sits over the warnings that leave input out only; a warning of an input drawn in full follows apart. -->
+                    <div v-if="shownInputSummary.leftOutWarnings.length" data-input-warnings="left-out">
+                        <p class="font-semibold">{{ t('Part of the input was not drawn.') }}</p>
+                        <p v-for="(warning, index) in shownInputSummary.leftOutWarnings" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
+                    </div>
+                    <div v-if="shownInputSummary.drawnInWarnings.length" data-input-warnings="drawn-in" :class="{ 'mt-2': shownInputSummary.leftOutWarnings.length }">
+                        <p v-for="(warning, index) in shownInputSummary.drawnInWarnings" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
+                    </div>
                 </div>
                 <!-- A live Feature visibility edit no render drew: the summary's counts are the last render's. -->
                 <div v-if="shownInputSummaryStale && shownInputSummary.warnings.length && !processing"

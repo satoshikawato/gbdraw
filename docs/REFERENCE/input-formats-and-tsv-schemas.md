@@ -93,7 +93,10 @@ A Circular comparison genome (`--conservation_sequence`, the
 `comparison_sequence` table column, or `comparison_sequence_source` in Python)
 is read by content: a file whose first line starts with `>` is FASTA, and one
 that starts with `LOCUS` is a GenBank or DDBJ flat file. One file is one
-genome; all of its records form the LOSAT query. Only record IDs and sequences
+genome; all of its records form the LOSAT query. A genome split over several
+files (`--conservation_genome`, a `;`-separated `comparison_sequence` cell, or a
+list of paths in `conservation_sequence_files`) reads every file whole, in the
+given order, as one genome; two of its files must not share a record ID. Only record IDs and sequences
 are used, so the same sequence gives the same ring in any of the three formats.
 A flat-file record without sequence (an empty `ORIGIN` or `CONTIG` only) stops
 the run with `INPUT_UNREADABLE` (`SEQUENCE_MISSING`). The TLOSATX genetic code

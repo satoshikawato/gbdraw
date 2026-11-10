@@ -169,6 +169,12 @@ Session saved with a row per track after the features row; it adds no row to
 a stack you changed. It has no editor for the tracks themselves yet and shows
 how many the drawing has under the track switches.
 
+Request schema 10 also writes `diagramOptions.conservationFastaFiles` as one
+list of file references per similarity ring: the files of the ring's
+comparison genome in the listed order, or an empty list for a ring without
+one. A schema 1–9 request wrote one reference or `null` per ring; it reads as a
+ring of that one file or a ring without a comparison genome.
+
 The Python reader (`gbdraw ... --session` and the Python API) checks a
 schema-10 request against `describe_canonical_request()`: it refuses a key
 outside it, such as an older writer's `depthTrack*` input, and a value of
@@ -681,6 +687,13 @@ maps a `#N` record selector (`#02` and `#+2` are `#2`) to that record where the 
 otherwise the selector stays `#N`, and the Web app places it over the records of
 the cards as they were loaded, taken together in card order. Python validates and preserves a draft binding of a
 Session 41 to 50 without combining its components for rendering.
+
+A Session 51 Circular drawing binds each similarity ring's comparison genome as
+a list of files (`c_conservation_fastas` and `c_conservation_sequence_sources`,
+one list per ring, in the ring's file order), and its
+`conservationLosatFastaSources` and `conservationSequenceSources` hold one list
+of resource IDs per ring. A Session 50 or older wrote one file or none per
+ring; it loads as a ring of that one file, or a ring without files.
 
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings keep their request-derived source initialization;
