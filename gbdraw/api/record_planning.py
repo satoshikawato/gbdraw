@@ -43,7 +43,6 @@ from gbdraw.core.record_metadata import (
     _iter_source_features,
     _SourceFeatureAnchorProfile,
     _read_coord_map,
-    _source_feature_index,
     _source_period,
 )
 from gbdraw.io.cli_tables import (
@@ -59,6 +58,7 @@ from gbdraw.io.genome import (
 from gbdraw.io.record_select import (
     RecordSelector,
     drawn_record_units,
+    in_draw_order,
     parse_record_selector,
     reverse_records,
     select_record_units,
@@ -443,11 +443,11 @@ def comparison_record_binding(
     opposite: dict[int, str] = {}
     current_spans: dict[int, SourceFeatureSpan] = {}
     opposite_spans: dict[int, SourceFeatureSpan] = {}
-    for ordinal, feature in enumerate(_iter_source_features(record.features)):
+    indexes = _feature_source_index_map(record.features)
+    for feature in _iter_source_features(record.features):
         if feature.location is None:
             continue
-        index = _source_feature_index(feature)
-        index = ordinal if index is None else index
+        index = indexes[id(feature)]
         for target, spans, location in ((current, current_spans, feature.location),
                                         (opposite, opposite_spans, feature.location._flip(len(record)))):
             target[index] = compute_feature_hash_from_location_parts(
@@ -1636,7 +1636,7 @@ def _load_source_records(
             )
         elif isinstance(source, InMemoryRecordSource):
             # The caller keeps its record: a plan must not change with it.
-            records = [copy.deepcopy(source.record)]
+            records = [in_draw_order(copy.deepcopy(source.record))]
         else:  # pragma: no cover - RecordInput validates this union.
             raise ValidationError("Unsupported record input source.")
         if not records:

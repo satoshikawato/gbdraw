@@ -31,7 +31,7 @@ from gbdraw.api.requests import (
     RecordPresentation,
 )
 from gbdraw.api import render_request
-from gbdraw.core.record_metadata import _source_feature_index, record_identity_key
+from gbdraw.core.record_metadata import _source_feature_index, _source_feature_location_parts, record_identity_key
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RecordWindow, parse_region_spec
@@ -453,7 +453,7 @@ def test_a_window_across_the_origin_of_a_circular_record_is_one_unit(reverse: bo
     assert len(dloop.location.parts) == 1
     assert (int(dloop.location.start), int(dloop.location.end)) == ((424, 1546) if reverse else (24, 1146))
     [source_dloop] = [feature for feature in source.features if feature.type == "D-loop"]
-    assert getattr(dloop, "_gbdraw_source_feature_location_parts") == tuple(
+    assert _source_feature_location_parts(dloop) == tuple(
         (int(part.start), int(part.end), part.strand) for part in source_dloop.location.parts
     )
     # The crop map names source bases: the window's source start is its start, also reversed.

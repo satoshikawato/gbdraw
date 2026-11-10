@@ -28,7 +28,7 @@ from gbdraw.analysis.protein_colinearity import (
     validate_legacy_protein_raw_candidate_envelope,
     validate_protein_raw_entry_references,
 )
-from gbdraw.core.record_metadata import _iter_source_features, _source_feature_index
+from gbdraw.core.record_metadata import _feature_source_index_map, _iter_source_features
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.ids import compute_feature_hash
 from gbdraw.layout.similarity_alignment import (
@@ -644,11 +644,10 @@ def _drawn_features(
 
     catalog = provenance.source_features.source_hashes
     drawn: list[DrawnFeature] = []
-    # A feature's source index, or its ordinal in an untransformed record, as
-    # capture_source_features reads it.
-    for position, feature in enumerate(_iter_source_features(record.features)):
-        index = _source_feature_index(feature)
-        index = position if index is None else index
+    # A feature's source index, as capture_source_features reads it.
+    indexes = _feature_source_index_map(record.features)
+    for feature in _iter_source_features(record.features):
+        index = indexes[id(feature)]
         if index in catalog:
             drawn.append(
                 (catalog[index], compute_feature_hash(feature, record_id=record.id), index, ordinal)

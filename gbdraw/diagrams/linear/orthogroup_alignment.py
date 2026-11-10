@@ -6,13 +6,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, NamedTuple, Sequence
+from typing import Any, NamedTuple, Sequence
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
 from ...analysis.protein_colinearity import OrthogroupResult, OrthogroupGraphResult
-from ...core.record_metadata import _source_feature_index
+from ...core.record_metadata import _feature_source_index_map, _iter_source_features
 from ...exceptions import ValidationError
 from ...features.ids import compute_source_feature_hash
 
@@ -154,25 +154,8 @@ def _collect_label_members_from_orthogroups(
 
 
 def _features_by_source_index(record: SeqRecord) -> dict[int, object]:
-    by_source_index: dict[int, object] = {}
-    fallback_index = 0
-
-    def walk(features: Iterable[object] | None) -> None:
-        nonlocal fallback_index
-        for feature in features or ():
-            source_index = _source_feature_index(feature)
-            resolved_index = fallback_index if source_index is None else source_index
-            fallback_index += 1
-            existing = by_source_index.get(resolved_index)
-            if existing is not None and existing is not feature:
-                raise ValidationError(
-                    "Linear record contains duplicate source feature indexes."
-                )
-            by_source_index[resolved_index] = feature
-            walk(getattr(feature, "sub_features", None))
-
-    walk(record.features)
-    return by_source_index
+    indexes = _feature_source_index_map(record.features)
+    return {indexes[id(feature)]: feature for feature in _iter_source_features(record.features)}
 
 
 def _member_label_identity(

@@ -5,19 +5,23 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 import logging
 import re
 from typing import Sequence
 
+from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 
-from ..analysis.windows import reversed_window_source
+from ..analysis.windows import WINDOW_SOURCE_ANNOTATION, WindowSource, reversed_window_source, window_source
 from ..core.numeric import parse_ascii_nonnegative_integer
 from ..core.record_metadata import (
     _copy_source_feature_identity,
     _feature_source_index_map,
+    _holder_of,
     _read_coord_map,
+    _source_period,
     _write_coord_map,
     record_identity_key,
 )
@@ -160,6 +164,59 @@ def select_record_units(records: Sequence[SeqRecord], selector: RecordSelector |
     return matches[0]
 
 
+def _feature_start(feature: SeqFeature) -> float:
+    """The start a reverse complement orders features by; one with no location or no numeric start sorts last."""
+    try:
+        return int(feature.location.start)
+    except (AttributeError, TypeError):
+        return float("inf")
+
+
+def edited_crop_draw_order(crop: SeqRecord) -> list[SeqFeature]:
+    """The features of ``crop``, a crop edited since its cut, in the order its Session replay draws them.
+
+    The replay cuts again the record the crop was cut from, with the edits on it
+    (``session_request_codec._with_crop_edits``), where each feature takes its source feature index
+    (``_feature_source_index_map``) as its place: a forward cut lists the features by that index, a
+    reverse-complemented one by start, ties by that index, as ``reverse_records`` lists them (OV-3229). A copy of a
+    cut feature, and a feature that carries an index the crop did not cut (``WindowSource.cut_indexes``), is a
+    feature added at its place (``_holder_of``), as the replay reads it (OV-3247, OV-3256).
+
+    Which of two holders of one carried index is the cut feature is decided on ``crop.features``, the user's list;
+    the added features then take the indexes after the cut ones in that list's order. A reader of the drawn crop
+    reads the indexes from the returned list, where added features take theirs in the order drawn, as on replay.
+    """
+
+    cut = window_source(crop).cut_indexes
+    carried = _feature_source_index_map(crop.features)
+    holders = [_holder_of(feature, carried[id(feature)], cut) for feature in crop.features]
+    indexes = _feature_source_index_map(holders)
+    if _read_coord_map(crop)[1] < 0:
+        return sorted(holders, key=lambda feature: (_feature_start(feature), indexes[id(feature)]))
+    return sorted(holders, key=lambda feature: indexes[id(feature)])
+
+
+def in_draw_order(record: SeqRecord) -> SeqRecord:
+    """``record`` with its features in the order a figure draws them and a Session writes them.
+
+    A crop edited since its cut is a shallow copy that lists its features in ``edited_crop_draw_order``, the order
+    its replay draws them in; a crop saved as its own bytes is written in that order too. Any other record, a crop
+    as cut too, is ``record`` itself, in its own order. Readers of the drawn crop call ``_feature_source_index_map``
+    with the returned record's list, not the caller's: an added feature takes its index in the order drawn.
+    """
+
+    stored = record.annotations.get(WINDOW_SOURCE_ANNOTATION)
+    if not (
+        record.annotations.get("gbdraw_region_applied")
+        and isinstance(stored, WindowSource)
+        and not stored.holds_for(record)
+    ):
+        return record
+    ordered = copy.copy(record)
+    ordered.features = edited_crop_draw_order(record)
+    return ordered
+
+
 def reverse_records(
     records: Sequence[SeqRecord],
     reverse_flag: bool,
@@ -176,21 +233,17 @@ def reverse_records(
         rc_base = base + (step * max(0, record_length - 1))
         rc_step = -step
         source_indexes = _feature_source_index_map(rec.features)
-
-        def feature_start(feature):
-            try:
-                return int(feature.location.start)
-            except TypeError:
-                return None
+        period = _source_period(rec)
 
         def reverse_feature(feature):
             reversed_feature = feature._flip(record_length)
             _copy_source_feature_identity(
                 feature,
                 reversed_feature,
-                fallback_index=source_indexes[id(feature)],
+                index=source_indexes[id(feature)],
                 coord_base=base,
                 coord_step=step,
+                period=period,
             )
             sub_features = getattr(feature, "sub_features", None)
             if sub_features is not None:
@@ -198,7 +251,7 @@ def reverse_records(
                     reverse_feature(sub_feature)
                     for sub_feature in sub_features
                 ]
-                reversed_sub_features.sort(key=feature_start)
+                reversed_sub_features.sort(key=_feature_start)
                 reversed_feature.sub_features = reversed_sub_features
             return reversed_feature
 
@@ -206,7 +259,14 @@ def reverse_records(
             reverse_feature(feature)
             for feature in rec.features
         ]
-        reversed_features.sort(key=feature_start)
+        if rc_step > 0:
+            # Reversed back to its source's orientation, a record lists its features in source order, as its source
+            # and a forward cut of it do (OV-3271).
+            order = {id(reversed_feature): source_indexes[id(feature)]
+                     for feature, reversed_feature in zip(rec.features, reversed_features, strict=True)}
+            reversed_features.sort(key=lambda feature: order[id(feature)])
+        else:
+            reversed_features.sort(key=_feature_start)
         reversed_record = rec.reverse_complement(
             id=True,
             name=True,

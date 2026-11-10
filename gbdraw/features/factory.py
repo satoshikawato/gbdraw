@@ -12,7 +12,6 @@ from Bio.SeqFeature import SeqFeature, SimpleLocation
 
 from ..core.record_metadata import (
     _feature_source_index_map,
-    _source_feature_index,
 )
 from .ids import compute_source_feature_hash, feature_instances, shared_source_feature_hashes
 from .objects import GeneObject, RepeatObject, FeatureObject
@@ -305,12 +304,7 @@ def _build_feature_layers(
                 feature_override=override,
                 instance=instance,
             )
-        source_feature_index = _source_feature_index(feature)
-        feature_object.source_feature_index = (
-            source_indexes[id(feature)]
-            if source_feature_index is None
-            else source_feature_index
-        )
+        feature_object.source_feature_index = source_indexes[id(feature)]
         feature_object.feature_hash = compute_source_feature_hash(feature, gb_record)
         if feature_object.feature_hash in shared_hashes:
             feature_object.rendered_instance_index = feature_object.source_feature_index

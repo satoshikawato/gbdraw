@@ -98,6 +98,30 @@ write-up of a release.
   from with those edits (OV-3034). The GC content, GC skew and Depth lines of a
   crop of a circular record hold their last value up to 12 o'clock, as those of
   a record that is not circular do.
+- Fixed: a feature added to a crop given in memory no longer stops the figure
+  with "duplicate source feature indexes" when the crop keeps other features
+  (OV-3141). A feature moved inside such a crop now has the ID of its new place
+  in the figure, as in the replay of its Session (OV-3142). A crop whose
+  feature cut at an end was moved or retyped is saved as its source with the
+  edit, so its replay keeps the crop's subtitle, width and every feature ID
+  (OV-3246). A crop that holds a copy of a feature it cut now draws, and its
+  Session replays it as drawn (OV-3247). A feature copied into a crop from
+  another crop of the same record is a feature added at its place, with the
+  ID and paint order its replay gives it (OV-3256). An edited crop across the
+  origin is saved as its source with the edits, so it replays as drawn, with
+  its subtitle, width, feature IDs and partial feature ends (OV-3262). A crop
+  of a crop across the origin that runs across the origin or lies past it now
+  draws, also reverse-complemented (OV-3270). A reverse-complemented crop of a
+  reverse-complemented crop, back in its source's orientation, lists its
+  features in source order, so its replay paints overlapping features as the
+  figure does (OV-3271).
+- Changed: a crop given in memory and edited since its cut draws its features
+  in the order its Session replay draws them, the figure Save Session and Load
+  already gave: a crop in source order, with added features after the kept
+  ones, and a reverse-complemented crop by start. The Legend lists the feature
+  types in that order, and overlapping features are painted in that order.
+  The order of the crop's feature list no longer sets either; a whole record
+  and a crop as cut still draw in list order (OV-3229).
 - Changed: the Auto GC content and GC skew window is now at most a tenth of the
   drawn length, and the Auto step at most a tenth of the Auto window, so figures
   shorter than 10 kb keep about a hundred samples: a 671 bp region uses a 67 bp
