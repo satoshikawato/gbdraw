@@ -10,6 +10,7 @@ import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
+from svgwrite.container import Group
 
 from gbdraw.analysis.conservation import (
     load_conservation_sources,
@@ -29,6 +30,9 @@ from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.legend.circular_layout import build_circular_legend_layout
 from gbdraw.legend.metrics import legend_caption_box
 from gbdraw.render.groups.circular.legend import LegendGroup as CircularLegendGroup
+from gbdraw.render.drawers.circular.conservation import ConservationDrawer
+from gbdraw.comparisons.identity_scale import identity_color_domain
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.tracks import CircularTrackSlot, normalize_circular_track_slots
 from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
@@ -460,8 +464,8 @@ def test_circular_api_renders_conservation_ring_and_gradient_legend() -> None:
 
 
 def test_circular_rings_write_what_the_web_hover_reads() -> None:
-    """PD-OI-110 (hover): each hit names its drawn span and each ring its drawn radii and colour, so the Web reads
-    every ring's identity at a position and the rings' order from what Python drew."""
+    """PD-OI-110 (hover): each hit names its drawn span and each ring its drawn radii, so the Web reads every ring's
+    identity at a position, the rings' order and the hover line's ends from what Python drew."""
 
     canvas = assemble_circular_diagram_from_record(
         _record(),
@@ -504,6 +508,39 @@ def test_circular_rings_write_what_the_web_hover_reads() -> None:
         slot = geometry[rings[label].get("data-gbdraw-slot-id")]
         assert inner < outer
         assert outer - inner == pytest.approx(slot["widthPx"])
+
+
+def test_rotated_ring_hit_across_the_drawn_origin_names_each_fragment_span() -> None:
+    """A record drawn from another start (``start_coordinate``) draws a hit across the drawn origin as two
+    fragments; each names its own span in display bases, which is what the Web's ring hover reads."""
+
+    drawer = ConservationDrawer(
+        identity_domain=identity_color_domain(70, None),
+        min_color="#ffffff",
+        max_color="#000000",
+        fill_opacity=0.8,
+        stroke_color="none",
+        stroke_width=0,
+    )
+    # Bases 90..110 of a 120-bp record drawn from base 101: bases 90..100 end the drawing (display 109..120), and
+    # bases 101..110 start it (display 0..10).
+    hits = pd.DataFrame(
+        [{"identity": 91.5, "draw_start": 89, "draw_end": 110, "source_index": 0, "source_hit_index": 0,
+          "track_index": 1, "reference_side": "subject"}]
+    )
+    group = drawer.draw_hits(
+        Group(),
+        hits,
+        total_length=120,
+        inner_radius_px=100.0,
+        outer_radius_px=110.0,
+        record_transform=RecordDisplayTransform(120, 1, 1, 101, True),
+    )
+    spans = [
+        (path.attribs["data-display-start"], path.attribs["data-display-end"], path.attribs["data-gbdraw-match-fragment"])
+        for path in group.elements
+    ]
+    assert spans == [("109", "120", "0"), ("0", "10", "1")]
 
 
 def test_circular_api_renders_source_colored_conservation_ring() -> None:

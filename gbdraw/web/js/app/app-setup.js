@@ -1161,7 +1161,7 @@ export const createAppSetup = () => {
   });
   const featureActions = createFeatureEditor({
     state,
-    previewPopupsHeld,
+    previewPopupsHeld, shownAxisRecords,
     rulePreparation,
     evaluateLabelRules: evaluateRules,
     runUndoable: history.runUndoable,

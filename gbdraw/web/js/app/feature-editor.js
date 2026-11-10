@@ -2,7 +2,7 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { EditDefaultColorsPort, PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
-/** @import { CancelMarqueePointerPort, ClearFeatureSelectionPort, CommitMarqueePointerPort, ConsumeSuppressNextClickPort, IsPreviewTransformActivePort, MarkPlainFeatureClickPort, MoveMarqueePointerPort, PrepareDrawnFeatureMatchesPort, SelectFeatureByClickPort, ShowElementSettings, ShownLegendNamePort, StartMarqueePointerPort, SubscribePreviewTransformChangesPort } from './feature-editor/svg-actions.js' */
+/** @import { CancelMarqueePointerPort, ClearFeatureSelectionPort, CommitMarqueePointerPort, ConsumeSuppressNextClickPort, IsPreviewTransformActivePort, MarkPlainFeatureClickPort, MoveMarqueePointerPort, PrepareDrawnFeatureMatchesPort, SelectFeatureByClickPort, ShowElementSettings, ShownAxisRecordsPort, ShownLegendNamePort, StartMarqueePointerPort, SubscribePreviewTransformChangesPort } from './feature-editor/svg-actions.js' */
 /** @import { FindLegendRowNamedPort, KeepBothNamesPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort, WriteLegendRowColorPort } from './feature-editor/color-actions.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
 /** @import { CurrentResultsPort } from '../services/svg-result-ingestion.js' */
@@ -72,6 +72,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {IsPreviewTransformActivePort} isPreviewTransformActive
  * @property {SubscribePreviewTransformChangesPort} subscribePreviewTransformChanges
  * @property {() => boolean} [previewPopupsHeld] The root's hold of the popups while a review hides them.
+ * @property {ShownAxisRecordsPort} [shownAxisRecords]
  * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean, legendRows?: import('./candidate-render.js').RuleLegendRows | null }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3).
  * @property {() => any} projectFeatureEdits
@@ -122,7 +123,7 @@ export const createFeatureEditor = ({
   selectResult,
   isPatternEditAvailable = () => true,
   isPreviewTransformActive, subscribePreviewTransformChanges,
-  previewPopupsHeld = () => false,
+  previewPopupsHeld = () => false, shownAxisRecords = () => [],
   projectPaletteAndRules,
   projectFeatureEdits,
   evaluateLabelRules,
@@ -164,7 +165,7 @@ export const createFeatureEditor = ({
     onFeaturePopupOpened: () => editorPorts.syncLabelEditor({ reuseCurrentBinding: true }),
     consumeSuppressNextClick, selectFeatureByClick, markPlainFeatureClick, clearFeatureSelection, startMarqueePointer, moveMarqueePointer, commitMarqueePointer, cancelMarqueePointer,
     isPreviewTransformActive, subscribePreviewTransformChanges,
-    previewPopupsHeld,
+    previewPopupsHeld, shownAxisRecords,
     showElementSettings,
     closeElementSettings
   });

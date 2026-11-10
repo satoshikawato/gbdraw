@@ -39,10 +39,13 @@ into the `[Unreleased]` list below.
   to Annotations takes the first set without a row too, or none (OV-3153).
 - Added: in the Web app's Result Preview, pointing at a Circular comparison
   ring draws the other rings at 35%, makes the ring's Legend name bold, draws a
-  line through the pointer, and lists the position (bp) and every ring's
-  identity there, outermost first; pointing at a ring's Legend name shows the
-  same ring and name without the list. On the Multi-Record Canvas the ring
-  stays at full strength in every record. Exports and Sessions are unchanged.
+  line along the pointer's angle, and lists the position (bp) and every ring's
+  identity there, outermost first; this list replaces the match summary that
+  pointing at a ring's match showed, which stays for a Result without the
+  ring positions (gbdraw 0.14.5 or earlier, or a Session the `gbdraw` command
+  saved). Pointing at a ring's Legend name shows the same ring and name without
+  the list. On the Multi-Record Canvas the ring stays at full strength in every
+  record. Exports and Sessions are unchanged.
   Comparison rings in SVG output now name each match's drawn span and each
   ring's radii (`data-display-start`, `data-display-end`,
   `data-ring-inner-radius`, `data-ring-outer-radius`).

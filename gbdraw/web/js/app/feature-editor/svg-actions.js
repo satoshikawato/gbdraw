@@ -8,6 +8,7 @@
 /** @import { MatchPopupPayload, PopupRow } from '../../services/pairwise-match-popup.js' */
 /** @import { AlignmentFigureGeometry, AlignmentOverlayCandidate, AlignmentOverlayRecord, FigureSpan } from '../../services/alignment-review-view.js' */
 /** @import { PreviewTransformInteractionListener } from '../ui.js' */
+/** @import { RegionAxisRecord } from '../../services/region-axis.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds, primaryPressAfter } from '../../utils/popup-bounds.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
@@ -28,8 +29,7 @@ import { getFeatureOverride } from '../../services/feature-override-identity.js'
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
-import { shownAxisRecords } from '../../services/region-axis.js';
-import { attachRingHover, RING_SELECTOR } from './ring-hover.js';
+import { attachRingHover, ringPopupShows } from './ring-hover.js';
 import { fillRecordOf, legendEntryKey } from '../../services/drawing/paint.js';
 import { PREVIEW_ITEM_SELECTOR, matchPopupOf, previewItemPopupOf, previewItemTarget } from '../../services/match-frame-popup.js';
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
@@ -145,6 +145,7 @@ export {
  * hover. It returns the unsubscribe.
  * @typedef {(listener: PreviewTransformInteractionListener) => () => void} SubscribePreviewTransformChangesPort
  */
+/** @typedef {() => RegionAxisRecord[]} ShownAxisRecordsPort The records of the shown Result whose axis Python wrote. */
 
 /**
  * The visibility owner's preparation of the rule matches `resolveFeatureDrawn`
@@ -186,6 +187,7 @@ export {
  * @property {SubscribePreviewTransformChangesPort} subscribePreviewTransformChanges
  * @property {() => boolean} [previewPopupsHeld] While it holds (the Review alignment panel is open, the popups
  *   hidden), no gesture on the figure opens, retargets or closes a popup.
+ * @property {ShownAxisRecordsPort} [shownAxisRecords]
  * @property {ShowElementSettings} [showElementSettings]
  * @property {() => unknown} [closeElementSettings] The pane's closing of the popup that holds a settings section.
  */
@@ -339,7 +341,7 @@ export const createFeatureSvgActions = ({
   consumeSuppressNextClick, selectFeatureByClick, markPlainFeatureClick, clearFeatureSelection, startMarqueePointer, moveMarqueePointer, commitMarqueePointer, cancelMarqueePointer,
   isPreviewTransformActive,
   subscribePreviewTransformChanges,
-  previewPopupsHeld = () => false,
+  previewPopupsHeld = () => false, shownAxisRecords = () => [],
   showElementSettings = () => false,
   closeElementSettings = () => {}
 }) => {
@@ -1675,8 +1677,8 @@ export const createFeatureSvgActions = ({
 
       /** @param {Element} matchEl @param {HoverPoint | null | undefined} eventLike */
       const activateMatchHover = (matchEl, eventLike) => {
-        // A similarity ring's hit shows the ring hover (ring-hover.js) instead.
-        if (matchEl.closest(RING_SELECTOR)) {
+        // A similarity ring's hit shows the ring popup (ring-hover.js) instead, when the Result can show it.
+        if (ringPopupShows(svg, matchEl, shownAxisRecords())) {
           clearHover();
           hideHoverSummary();
           return false;
@@ -1988,7 +1990,7 @@ export const createFeatureSvgActions = ({
       window.addEventListener?.('blur', clearPendingMatch);
       const detachRingHover = attachRingHover({
         svg, isPreviewTransformActive,
-        axisRecords: () => shownAxisRecords({ trackSlotResolvedGeometry: state.trackSlotResolvedGeometry, selectedResultIndex: state.selectedResultIndex }),
+        axisRecords: shownAxisRecords,
         held: () => Boolean(clickedFeature.value || clickedPairwiseMatch?.value || featureSelectionDrag?.active || previewPopupsHeld())
       });
       handlerState.cleanup = () => {

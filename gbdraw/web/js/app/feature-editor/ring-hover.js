@@ -2,22 +2,30 @@
 // Hover on the similarity rings of the shown Result (PD-OI-110 scenario
 // revision 3): over a ring, that ring keeps its strength and every other ring
 // is drawn at 35%, its Legend row is bold, a radial line marks the pointer's
-// angle, and a popup gives the position (bp) and every ring's identity there,
-// outermost first; over a ring's Legend name, the same rings and row without
-// the line and the popup. Leaving restores everything; a click pins nothing.
+// angle from the innermost ring out across the features, and a popup gives the
+// position (bp) and every ring's identity there, outermost first; over a ring's
+// Legend name, the same rings and row without the line and the popup. Leaving
+// restores everything; a click pins nothing.
 // On the Multi-Record Canvas the hovered series keeps its strength in every
 // record (`data-source-index`).
 //
 // Nothing is written into the mounted root (R1; Export and Save read it): the
 // dimming and the bold row are rules of a <style> element beside the Result,
-// and the line and the popup are an overlay over it. Every value comes from
-// what Python drew: the ring groups, their hits' drawn spans, identities and
-// fills, their radii (`drawn-attributes.generated.js`), and the record's axis
-// (`services/region-axis.js`) for the position.
+// and the line and the popup are an overlay over it; both clear when the
+// Result leaves the page and never print. Every value comes from what Python
+// drew: the ring groups, their hits' drawn spans, identities and paint, their
+// radii (`drawn-attributes.generated.js`), the record's axis
+// (`services/region-axis.js`) for the position, and each ring's name as its
+// Legend row draws it (`services/legend-svg.js`).
 /** @import { CircularAxisGeometry, RegionAxisRecord } from '../../services/region-axis.js' */
+/** @import { LegendRowName } from '../../services/legend-row-names.js' */
 import { HIT_DISPLAY_SPAN_ATTRIBUTES, RING_RADIUS_ATTRIBUTES } from '../../services/drawn-attributes.generated.js';
+import { legendCaptionRuns } from '../../services/legend-layout.js';
+import { drawnLegendNames, legendSwatch } from '../../services/legend-row-names.js';
+import { drawnLegendRowName } from '../../services/legend-svg.js';
 import { axisPosition, framePoint, regionAxisFrame, sourceBaseAt } from '../../services/region-axis.js';
 import { formatGroupedNumber } from '../../services/record-options.js';
+import { hexToRgb, resolveColorToHex } from '../../utils/color-utils.js';
 import { t } from '../../utils/i18n.js';
 
 /** A similarity ring's group in a Result. */
@@ -28,15 +36,21 @@ export const RING_LEGEND_ROW_SELECTOR = '#conservation_identity_legend g[data-so
 export const DIMMED_RING_OPACITY = 0.35;
 /** The surface the preview mounts the Result in; the hover's rules apply only there. */
 const PREVIEW_SURFACE = '.gbdraw-preview-surface';
+const IDENTITY_FORMAT = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /**
- * One drawn ring of a record, as Python drew it. `inner`/`outer` are null on a Result drawn before Python wrote them.
+ * One drawn ring of a record, as Python drew it.
  * @typedef {object} DrawnRing
  * @property {Element} element
  * @property {string} sourceIndex The ring's series (`data-source-index`), the same in every record.
- * @property {string} name The ring's name, as its Legend row shows it.
- * @property {number | null} inner
- * @property {number | null} outer
+ * @property {string} name The ring's name as its Legend row draws it (`<i>` runs included).
+ * @property {number} inner
+ * @property {number} outer
+ */
+
+/**
+ * A ring's hit at a drawn position: its identity, and the paint it is drawn with there.
+ * @typedef {{ identity: number, color: string }} RingHit
  */
 
 /** @typedef {{ swatch: HTMLElement, value: HTMLElement }} PopupCells A popup row's swatch and identity cells. */
@@ -46,57 +60,102 @@ const PREVIEW_SURFACE = '.gbdraw-preview-surface';
  * @typedef {{ kind: 'ring', sourceIndex: string, ring: Element } | { kind: 'legend', sourceIndex: string } | null} RingHoverTarget
  */
 
+/**
+ * What a hovered ring's popup reads: its record's axis and frame, and the record's rings outermost first.
+ * @typedef {{ axis: CircularAxisGeometry, frame: SVGGraphicsElement, rings: DrawnRing[] }} RingPopupSource
+ */
+
 /** @param {string | null} value */
 const numberOrNull = (value) => (value === null || value.trim() === '' ? null : (Number.isFinite(Number(value)) ? Number(value) : null));
 
 /**
- * The CSS that shows a hover of the series `sourceIndex`: every other ring at 35%, the series' Legend row bold.
+ * The CSS that shows a hover of the series `sourceIndex` on screen: every other ring at 35%, the series' Legend row
+ * bold.
  * @param {string} sourceIndex
  */
 export const ringHoverStyle = (sourceIndex) => {
   const series = `[data-source-index="${CSS.escape(sourceIndex)}"]`;
-  return `${PREVIEW_SURFACE} ${RING_SELECTOR}:not(${series}) { opacity: ${DIMMED_RING_OPACITY}; }\n`
-    + `${PREVIEW_SURFACE} ${RING_LEGEND_ROW_SELECTOR}${series} text { font-weight: 700; }\n`;
+  return '@media screen {\n'
+    + `${PREVIEW_SURFACE} ${RING_SELECTOR}:not(${series}) { opacity: ${DIMMED_RING_OPACITY}; }\n`
+    + `${PREVIEW_SURFACE} ${RING_LEGEND_ROW_SELECTOR}${series} text { font-weight: 700; }\n`
+    + '}\n';
 };
 
 /**
- * The rings a record draws, outermost first (by the radii Python wrote; in document order when it wrote none).
- * @param {ParentNode} record The record's group, or the root of a Result with one record.
- * @returns {DrawnRing[]}
+ * Each ring's name as the Legend draws it: its row's drawn name (numbered when rings share a label, renamed when the
+ * row is); when the Result draws no Legend for the rings, the name the Legend's naming rule gives their labels.
+ * @param {ParentNode} root @param {Element[]} rings
+ * @returns {string[]}
  */
-export const ringsOfRecord = (record) => {
-  const rings = Array.from(record.querySelectorAll(RING_SELECTOR)).map((element) => ({
+const ringNames = (root, rings) => {
+  const rows = new Map(Array.from(root.querySelectorAll(RING_LEGEND_ROW_SELECTOR))
+    .map((row) => [row.getAttribute('data-source-index'), row]));
+  const drawn = rings.map((ring) => rows.get(ring.getAttribute('data-source-index')));
+  if (drawn.every((row) => row !== undefined)) return drawn.map((row) => drawnLegendRowName(/** @type {Element} */ (row)));
+  return drawnLegendNames(rings.map((ring) => ({
+    name: /** @type {LegendRowName} */ (ring.getAttribute('data-track-label') ?? ''),
+    swatch: legendSwatch({ type: 'ring', trackIndex: Number(ring.getAttribute('data-track-index')) })
+  })));
+};
+
+/**
+ * The rings a record draws, outermost first by the radii Python wrote; null for a Result drawn before Python wrote
+ * them (gbdraw 0.14.5 or earlier).
+ * @param {ParentNode} root The mounted root, which holds the Legend.
+ * @param {ParentNode} record The record's group, or the root of a Result with one record.
+ * @returns {DrawnRing[] | null}
+ */
+export const ringsOfRecord = (root, record) => {
+  const elements = Array.from(record.querySelectorAll(RING_SELECTOR));
+  const radii = elements.map((element) => [RING_RADIUS_ATTRIBUTES.inner, RING_RADIUS_ATTRIBUTES.outer]
+    .map((name) => numberOrNull(element.getAttribute(name))));
+  if (radii.some((pair) => pair.includes(null))) return null;
+  const names = ringNames(root, elements);
+  return elements.map((element, index) => ({
     element,
     sourceIndex: element.getAttribute('data-source-index') ?? '',
-    name: element.getAttribute('data-track-label') ?? '',
-    inner: numberOrNull(element.getAttribute(RING_RADIUS_ATTRIBUTES.inner)),
-    outer: numberOrNull(element.getAttribute(RING_RADIUS_ATTRIBUTES.outer))
-  }));
-  return rings.every((ring) => ring.outer !== null) ? rings.sort((a, b) => Number(b.outer) - Number(a.outer)) : rings;
+    name: names[index],
+    inner: Number(radii[index][0]),
+    outer: Number(radii[index][1])
+  })).sort((a, b) => b.outer - a.outer);
+};
+
+/** @param {string} color @param {number} opacity The colour a paint shows at an opacity, as CSS. */
+const paintShown = (color, opacity) => {
+  const rgb = opacity < 1 ? hexToRgb(resolveColorToHex(color) || '') : null;
+  return rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})` : color;
 };
 
 /**
- * A ring's hit at a drawn position: of its hits whose drawn span holds it, the one of highest identity (the one drawn
- * on top), with that identity and the colour it is drawn in; null when no hit does or Python wrote no spans.
+ * A ring's hit at a drawn position: of its hits whose drawn span holds it, the last in document order (Python
+ * paints that one on top), with its identity and the colour it shows (its fill at its fill opacity); null when no
+ * hit does or Python wrote no spans.
  * @param {Element} ring
  * @param {number} position Bases from display index 0.
- * @returns {{ identity: number, color: string } | null}
+ * @returns {RingHit | null}
  */
 export const ringHitAt = (ring, position) => {
-  /** @type {{ identity: number, color: string } | null} */
-  let best = null;
+  /** @type {RingHit | null} */
+  let top = null;
   for (const hit of ring.querySelectorAll(`path[${HIT_DISPLAY_SPAN_ATTRIBUTES.start}]`)) {
     const start = numberOrNull(hit.getAttribute(HIT_DISPLAY_SPAN_ATTRIBUTES.start));
     const end = numberOrNull(hit.getAttribute(HIT_DISPLAY_SPAN_ATTRIBUTES.end));
     const identity = numberOrNull(hit.getAttribute('data-identity'));
     if (start === null || end === null || identity === null || position < start || position >= end) continue;
-    if (best === null || identity > best.identity) best = { identity, color: hit.getAttribute('fill') ?? '' };
+    top = { identity, color: paintShown(hit.getAttribute('fill') ?? '', numberOrNull(hit.getAttribute('fill-opacity')) ?? 1) };
   }
-  return best;
+  return top;
 };
 
-/** @param {number | null} identity */
-export const identityText = (identity) => (identity === null ? t('No hit') : `${identity.toFixed(1)}%`);
+/**
+ * An identity as the popup shows it: one decimal, grouped like the position, and never 100.0 below 100.
+ * @param {number | null} identity
+ */
+export const identityText = (identity) => {
+  if (identity === null) return t('No hit');
+  const shown = identity < 100 ? Math.min(Math.round(identity * 10) / 10, 99.9) : identity;
+  return `${IDENTITY_FORMAT.format(shown)}%`;
+};
 
 /**
  * The record a ring is drawn in: its index and group (the root for a Result whose groups name no record).
@@ -110,21 +169,41 @@ const recordOfRing = (ring, root) => {
 };
 
 /**
- * Where the pointer is on a hovered ring's record: the source base (R5), the drawn position, and the radial line's
- * ends in overlay coordinates. Null when the Result has no axis or no spans for the record (a Result drawn before
- * Python wrote them: the rings still dim, without line or popup).
- * @param {{ root: Element, ring: Element, rings: DrawnRing[], axisRecords: RegionAxisRecord[], clientX: number, clientY: number, host: DOMRect }} input
+ * What the popup of a hovered ring reads, or null when the Result cannot show it: no axis for the ring's record (a
+ * Result loaded from a Session the `gbdraw` command saved) or no radii (a Result drawn by gbdraw 0.14.5 or earlier).
+ * @param {Element} root @param {Element} ring The ring's group, or an element in it.
+ * @param {RegionAxisRecord[]} axisRecords
+ * @returns {RingPopupSource | null}
  */
-export const ringPointAt = ({ root, ring, rings, axisRecords, clientX, clientY, host }) => {
-  const record = recordOfRing(ring, root);
+export const ringPopupSource = (root, ring, axisRecords) => {
+  const group = ring.closest(RING_SELECTOR);
+  if (!group || !root.contains(group)) return null;
+  const record = recordOfRing(group, root);
   const axis = axisRecords.find((entry) => entry.recordIndex === record.index)?.axis;
   const frame = regionAxisFrame(root, record.index);
-  const mapped = frame && axis?.kind === 'circular' ? framePoint(frame, clientX, clientY) : null;
-  const matrix = frame?.getScreenCTM();
-  if (!mapped || !matrix || axis?.kind !== 'circular' || rings.some((entry) => entry.inner === null)) return null;
+  const rings = axis?.kind === 'circular' && frame ? ringsOfRecord(root, record.group) : null;
+  return rings && frame && axis?.kind === 'circular' ? { axis, frame, rings } : null;
+};
+
+/**
+ * Whether a ring (or a hit of it) shows the ring popup, which then replaces the match hover summary of its hits.
+ * @param {Element} root @param {Element} element @param {RegionAxisRecord[]} axisRecords
+ */
+export const ringPopupShows = (root, element, axisRecords) => ringPopupSource(root, element, axisRecords) !== null;
+
+/**
+ * Where the pointer is on a hovered ring's record: the source base (R5), the drawn position, and the radial line's
+ * ends in overlay coordinates, from the innermost ring's inner edge to the outer edge of the feature band (or of the
+ * outermost ring when that lies further out). Null when the frame is not on screen.
+ * @param {{ source: RingPopupSource, clientX: number, clientY: number, host: DOMRect | { left: number, top: number } }} input
+ */
+export const ringPointAt = ({ source: { axis, frame, rings }, clientX, clientY, host }) => {
+  const mapped = framePoint(frame, clientX, clientY);
+  const matrix = frame.getScreenCTM();
+  if (!mapped || !matrix) return null;
   const position = axisPosition(axis, mapped.point).position;
   const angle = Math.atan2(mapped.point.y, mapped.point.x);
-  const radii = [...rings.flatMap((entry) => [Number(entry.inner), Number(entry.outer)]), /** @type {CircularAxisGeometry} */ (axis).bandOuterPx];
+  const radii = [...rings.flatMap((entry) => [entry.inner, entry.outer]), axis.bandOuterPx];
   const end = (/** @type {number} */ radius) => new DOMPoint(radius * Math.cos(angle), radius * Math.sin(angle)).matrixTransform(matrix);
   const [from, to] = [end(Math.min(...radii)), end(Math.max(...radii))];
   return {
@@ -135,7 +214,8 @@ export const ringPointAt = ({ root, ring, rings, axisRecords, clientX, clientY, 
 };
 
 /**
- * What a pointer event is over: a ring, else the Legend row whose box holds the point.
+ * What a pointer event is over: a ring, else the ring Legend row whose name's box holds the point (the gaps between
+ * its letters count; its identity ramp does not).
  * @param {Element} root @param {EventTarget | null} target @param {number} clientX @param {number} clientY
  * @returns {RingHoverTarget}
  */
@@ -143,8 +223,8 @@ export const ringHoverTarget = (root, target, clientX, clientY) => {
   const ring = target instanceof Element ? target.closest(RING_SELECTOR) : null;
   if (ring && root.contains(ring)) return { kind: 'ring', sourceIndex: ring.getAttribute('data-source-index') ?? '', ring };
   for (const row of root.querySelectorAll(RING_LEGEND_ROW_SELECTOR)) {
-    const box = row.getBoundingClientRect();
-    if (clientX >= box.left && clientX <= box.right && clientY >= box.top && clientY <= box.bottom) {
+    const box = row.querySelector('text')?.getBoundingClientRect();
+    if (box && clientX >= box.left && clientX <= box.right && clientY >= box.top && clientY <= box.bottom) {
       return { kind: 'legend', sourceIndex: row.getAttribute('data-source-index') ?? '' };
     }
   }
@@ -166,7 +246,12 @@ const buildPopupRows = (list, rings, sourceIndex) => {
     swatch.className = 'gbdraw-ring-hover-swatch';
     const name = document.createElement('span');
     name.className = 'gbdraw-ring-hover-name';
-    name.textContent = ring.name;
+    name.append(...legendCaptionRuns(ring.name).map((run) => {
+      if (!run.italic) return run.text;
+      const italic = document.createElement('i');
+      italic.textContent = run.text;
+      return italic;
+    }));
     const value = document.createElement('span');
     value.className = 'gbdraw-ring-hover-value';
     row.append(swatch, name, value);
@@ -178,7 +263,7 @@ const buildPopupRows = (list, rings, sourceIndex) => {
 
 /**
  * A row's swatch and identity: the colour drawn at the position and its identity, or an empty swatch and No hit.
- * @param {PopupCells} cells @param {{ identity: number, color: string } | null} hit
+ * @param {PopupCells} cells @param {RingHit | null} hit
  */
 const writeRingHit = ({ swatch, value }, hit) => {
   swatch.style.background = hit?.color ?? 'transparent';
@@ -233,7 +318,7 @@ export const attachRingHover = ({ svg, axisRecords, held, isPreviewTransformActi
   let pointer = null;
   let frame = 0;
   let shownStyle = '';
-  /** @type {{ rings: Element[], sourceIndex: string, cells: PopupCells[] }} */
+  /** @type {{ rings: DrawnRing[], sourceIndex: string, cells: PopupCells[] }} */
   let shownRows = { rings: [], sourceIndex: '', cells: [] };
   /** @param {string} css */
   const showStyle = (css) => {
@@ -243,25 +328,29 @@ export const attachRingHover = ({ svg, axisRecords, held, isPreviewTransformActi
     showStyle('');
     overlay.element.hidden = true;
   };
+  // The Result leaves the page (another Result, drawing or mode, a Session reset): the hover goes with it.
+  const unmounted = new MutationObserver(() => {
+    if (!svg.isConnected) clear();
+  });
+  [svg.parentElement, svg.parentElement?.parentElement].forEach((node) => node && unmounted.observe(node, { childList: true }));
   const update = () => {
     frame = 0;
     const event = pointer;
-    const target = event && !held() && !isPreviewTransformActive()
+    const target = event && svg.isConnected && !held() && !isPreviewTransformActive()
       ? ringHoverTarget(svg, event.target, event.clientX, event.clientY) : null;
     if (!event || !target) return clear();
     showStyle(ringHoverStyle(target.sourceIndex));
     const box = host.getBoundingClientRect();
-    const rings = target.kind === 'ring' ? ringsOfRecord(recordOfRing(target.ring, svg).group) : [];
-    const point = target.kind === 'ring'
-      ? ringPointAt({ root: svg, ring: target.ring, rings, axisRecords: axisRecords(), clientX: event.clientX, clientY: event.clientY, host: box })
-      : null;
+    const source = target.kind === 'ring' ? ringPopupSource(svg, target.ring, axisRecords()) : null;
+    const point = source ? ringPointAt({ source, clientX: event.clientX, clientY: event.clientY, host: box }) : null;
     overlay.element.hidden = !point;
-    if (!point) return;
+    if (!source || !point) return;
+    const { rings } = source;
     Object.entries(point.line).forEach(([name, value]) => overlay.line.setAttribute(name, value.toFixed(1)));
     overlay.heading.textContent = t('{position} bp', { position: formatGroupedNumber(point.base) });
     if (shownRows.sourceIndex !== target.sourceIndex || shownRows.rings.length !== rings.length
-      || shownRows.rings.some((element, index) => element !== rings[index].element)) {
-      shownRows = { rings: rings.map((ring) => ring.element), sourceIndex: target.sourceIndex, cells: buildPopupRows(overlay.list, rings, target.sourceIndex) };
+      || shownRows.rings.some((ring, index) => ring.element !== rings[index].element || ring.name !== rings[index].name)) {
+      shownRows = { rings, sourceIndex: target.sourceIndex, cells: buildPopupRows(overlay.list, rings, target.sourceIndex) };
     }
     rings.forEach((ring, index) => writeRingHit(shownRows.cells[index], ringHitAt(ring.element, point.position)));
     const { offsetWidth: width, offsetHeight: height } = overlay.popup;
@@ -290,6 +379,7 @@ export const attachRingHover = ({ svg, axisRecords, held, isPreviewTransformActi
     svg.removeEventListener('wheel', leave);
     svg.removeEventListener('mousedown', leave);
     if (frame) window.cancelAnimationFrame(frame);
+    unmounted.disconnect();
     overlay.style.remove();
     overlay.element.remove();
   };
