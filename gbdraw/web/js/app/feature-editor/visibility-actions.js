@@ -140,7 +140,7 @@ export const createFeatureVisibilityActions = ({
   const findOrthogroup = (orthogroupId) => {
     const id = normalizeText(orthogroupId);
     if (!id) return null;
-    const matches = (Array.isArray(orthogroups?.value) ? orthogroups.value : [])
+    const matches = orthogroups.value
       .filter((/** @type {{ id?: unknown, orthogroupId?: unknown, orthogroup_id?: unknown }} */ group) => orthogroupIdFor(group) === id);
     return matches.length === 1 ? matches[0] : null;
   };
@@ -170,7 +170,7 @@ export const createFeatureVisibilityActions = ({
 
     /** @type {Map<unknown, VisibilityTarget[]>} */
     const featuresByMember = new Map();
-    (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((/** @type {VisibilityTarget} */ candidate) => {
+    extractedFeatures.value.forEach((/** @type {VisibilityTarget} */ candidate) => {
       const candidateGroupId = orthogroupIdFor({
         orthogroupId: candidate?.orthogroupId,
         orthogroup_id: candidate?.orthogroup_id
@@ -305,7 +305,7 @@ export const createFeatureVisibilityActions = ({
       ? catalogFeatures.biological.map((/** @type {VisibilityTarget} */ feature) => (
         catalogFeatures.renderedByIdentity.get(stableFeatureOverrideKey(feature)) || feature
       ))
-      : uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []);
+      : uniqueFeaturesBySvgId(extractedFeatures.value);
   };
   // Shows the projection, unless the caller shows it in its own compile
   // (`show: false`); returns whether the Result changed (or is to change) and
@@ -349,16 +349,16 @@ export const createFeatureVisibilityActions = ({
    * @param {unknown} generationKey
    */
   const ensureCommandTargetResult = async (resultIndex, generationKey) => {
-    if (String(resultGenerationKey?.value ?? '') !== String(generationKey ?? '')) return false;
+    if (String(resultGenerationKey.value) !== String(generationKey ?? '')) return false;
     const targetIndex = Number(resultIndex);
     if (!Number.isInteger(targetIndex) || targetIndex < 0) return false;
-    const resultCount = Array.isArray(results?.value) ? results.value.length : 0;
+    const resultCount = results.value.length;
     if (targetIndex >= resultCount) return false;
-    if (Number(selectedResultIndex?.value || 0) !== targetIndex) {
+    if (selectedResultIndex.value !== targetIndex) {
       selectResult(targetIndex);
       await nextFrame();
     }
-    return Boolean(svgContainer?.value?.querySelector?.('svg'));
+    return Boolean(svgContainer.value?.querySelector('svg'));
   };
 
   /**
@@ -375,8 +375,8 @@ export const createFeatureVisibilityActions = ({
     if (changes.length === 0) return null;
     const changedKeys = new Set(changes.map(featureIdentityKeyOf));
     const changedFeatures = targetFeatures.filter((feature) => changedKeys.has(featureIdentityKeyOf(feature)));
-    const commandResultIndex = Number(selectedResultIndex?.value || 0);
-    const commandGenerationKey = String(resultGenerationKey?.value ?? '');
+    const commandResultIndex = selectedResultIndex.value;
+    const commandGenerationKey = String(resultGenerationKey.value);
 
     /** @param {'apply' | 'revert'} direction */
     const applyChangeSet = async (direction) => {
@@ -480,12 +480,11 @@ export const createFeatureVisibilityActions = ({
     const prepared = /** @type {any} */ (await prepareDrawn());
     if (run !== projectionRun) return { status: prepared?.error ? 'rejected' : 'superseded' };
     if (prepared?.error) {
-      if (!state.errorLog) return { status: 'rejected' };
       state.errorLog.value = normalizeUserFacingError(prepared.error, { operation: 'evaluateRules', stage: 'rule-validation' });
       ruleTableError = state.errorLog.value; // As the error log holds it (a reactive copy).
       return { status: 'rejected' };
     }
-    if (ruleTableError && state.errorLog?.value === ruleTableError) state.errorLog.value = null;
+    if (ruleTableError && state.errorLog.value === ruleTableError) state.errorLog.value = null;
     ruleTableError = null;
     return { status: 'projected', projection: projectDrawn(drawing, displayedFeatures(drawing), { legend, show }) };
   };
@@ -554,7 +553,7 @@ export const createFeatureVisibilityActions = ({
    * @param {(rules: FeatureVisibilityRuleDraft[]) => boolean | void} edit Changes the copy; false writes nothing.
    */
   const editFeatureVisibilityRules = async (drawing, edit) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const rules = [...drawing.featureVisibilityManualRules];
     if (edit(rules) === false) return false;
@@ -562,7 +561,7 @@ export const createFeatureVisibilityActions = ({
     replaceVisibilityRules(drawing.slices.visibilityRules, rules);
     if (JSON.stringify(requestFeatureVisibilityRules(rules)) === requested) return true;
     const editRun = ++visibilityEditRun;
-    const rerendering = Boolean(state.labelReflowProcessing?.value);
+    const rerendering = state.labelReflowProcessing.value;
     const outcome = await runProjection(drawing);
     const projection = outcome.status === 'projected' ? outcome.projection : null;
     const newest = editRun === visibilityEditRun;
@@ -591,7 +590,7 @@ export const createFeatureVisibilityActions = ({
    * @param {{ triggerReflow?: boolean, scope?: VisibilityScopeChoice }} [options]
    */
   const setFeatureVisibilityIn = (drawing, feat, modeRaw, options = {}) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!featureIdentityKeyOf(feat)) return false;
 
@@ -624,7 +623,7 @@ export const createFeatureVisibilityActions = ({
    * @param {unknown} modeRaw
    */
   const setSelectedFeaturesVisibility = async (features, modeRaw) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const command = buildSelectedFeaturesVisibilityCommand(features, modeRaw);
     if (!command) return false;
@@ -634,7 +633,7 @@ export const createFeatureVisibilityActions = ({
   /** @param {unknown} modeRaw */
   const updateClickedFeatureVisibility = async (modeRaw) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value?.feat) return false;
     /** @type {VisibilityTarget} */ const feat = clickedFeature.value.feat;
@@ -656,7 +655,7 @@ export const createFeatureVisibilityActions = ({
   /** @param {string} scopeId */
   const handleFeatureVisibilityScopeChoice = async (scopeId) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (scopeId === 'cancel' || !featureVisibilityScopeDialog.show) {
       clearFeatureVisibilityScopeDialog({ restorePrevious: true });

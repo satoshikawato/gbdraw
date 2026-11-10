@@ -77,7 +77,9 @@ const actionState = {
   selectedResultIndex,
   svgContainer: ref({
     querySelector: (selector) => (selector === 'svg' ? {} : null)
-  })
+  }),
+  labelReflowProcessing: ref(false),
+  errorLog: ref(null)
 };
 const actions = createFeatureVisibilityActions({
   state: withDrawings(actionState),
@@ -316,7 +318,9 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     resultGenerationKey: ref('generation-1'),
     results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
     selectedResultIndex: ref(0),
-    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) })
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
+    labelReflowProcessing: ref(false),
+    errorLog: ref(null)
   };
   const productPreparation = rulePreparationFor(productState);
   const productActions = createFeatureVisibilityActions({
@@ -374,6 +378,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
+    labelReflowProcessing: ref(false),
     errorLog: ref(null)
   };
   const panel = createFeatureVisibilityActions({
@@ -471,6 +476,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     results: ref([{ name: 'result-0.svg', content: '<svg />' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
+    labelReflowProcessing: ref(false),
     errorLog: ref(null)
   };
   const ports = {};

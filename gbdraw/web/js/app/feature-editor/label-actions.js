@@ -730,7 +730,7 @@ export const createFeatureLabelActions = ({
     if (!featureId) return null;
     if (displayed) return displayed.get(featureId) || null;
     const key = normalizeKeyToken(featureId);
-    return (extractedFeatures.value || []).find((/** @type {LabelFeature | null | undefined} */ feature) => normalizeKeyToken(feature?.svg_id) === key) || null;
+    return extractedFeatures.value.find((/** @type {LabelFeature | null | undefined} */ feature) => normalizeKeyToken(feature?.svg_id) === key) || null;
   };
   /** @param {DrawingState} drawing @param {LabelFeature | null | undefined} feature */
   const rowOf = (drawing, feature) => {
@@ -802,7 +802,7 @@ export const createFeatureLabelActions = ({
   /** @type {WeakSet<DrawingState>} */
   const redrawOwed = new WeakSet();
   const requestAutomaticRerender = () => {
-    if (!svgContainer.value?.querySelector?.('svg')) return false;
+    if (!svgContainer.value?.querySelector('svg')) return false;
     redrawOwed.add(state.activeDrawing());
     labelReflowLastError.value = null;
     labelReflowForceRequestSeq.value += 1;
@@ -926,7 +926,7 @@ export const createFeatureLabelActions = ({
   // follows them, so the moved rows ask for no rerender (OV-1983).
   /** @param {ReadonlyMap<string, string>} moves */
   const moveDrawnLabelVisibility = (moves) => {
-    const svg = svgContainer.value?.querySelector?.('svg');
+    const svg = svgContainer.value?.querySelector('svg');
     const drawn = svg ? drawnLabelVisibility.get(svg) : null;
     if (!svg || !drawn || moves.size === 0) return;
     drawnLabelVisibility.set(svg, new Map(Object.entries(movedIdentityValues(Object.fromEntries(drawn), moves))));
@@ -1164,7 +1164,7 @@ export const createFeatureLabelActions = ({
   // drew it, needs no such decision.
   const reconcileLabelOverrides = ({ reflow = false, rerender = false } = {}) => {
     const drawing = state.activeDrawing();
-    const svg = svgContainer.value?.querySelector?.('svg');
+    const svg = svgContainer.value?.querySelector('svg');
     if (!svg) return false;
     const projection = boundLabelRoots.has(svg) || svg.querySelector(EDITABLE_LABEL_SELECTOR)
       ? projectLabelIntent(drawing, svg, { queueIncompleteVisibility: false })
@@ -1184,7 +1184,7 @@ export const createFeatureLabelActions = ({
   const applyFeatureVisibilityToLabels = ({ reflow = true, rerender = false, labels = false } = {}) => {
     const drawing = state.activeDrawing();
     if (labels) return reconcileLabelOverrides({ reflow, rerender });
-    const svg = svgContainer.value?.querySelector?.('svg');
+    const svg = svgContainer.value?.querySelector('svg');
     if (!svg) return false;
     const projection = applyStoredVisibilityOverridesToSvg(drawing, svg);
     if (projection.changed) commitLabelEdit();
@@ -1194,7 +1194,7 @@ export const createFeatureLabelActions = ({
 
   /** @param {string | null | undefined} labelKey @param {unknown} nextTextRaw */
   const requestLabelTextChangeByKey = (labelKey, nextTextRaw) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!labelKey) return;
     const entry = editableLabels.value.find((/** @type {EditableLabelEntry} */ candidate) => candidate.key === labelKey);
@@ -1226,7 +1226,7 @@ export const createFeatureLabelActions = ({
 
   /** @param {unknown} featureId @param {unknown} nextTextRaw */
   const requestLabelTextChangeByFeatureId = (featureId, nextTextRaw) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const entry = getEditableLabelByFeatureId(featureId);
     if (!entry) return false;
@@ -1371,7 +1371,7 @@ export const createFeatureLabelActions = ({
     }
 
     if (visibilityChanged || (!edit.hasEditableLabel && textChanged)) {
-      const svg = svgContainer.value?.querySelector?.('svg');
+      const svg = svgContainer.value?.querySelector('svg');
       queueLabelReflow(forceReflow || !visibilityProjection.available
         || Boolean(svg && labelVisibilityReturnsToDefault(drawing, svg)));
       return;
@@ -1384,7 +1384,7 @@ export const createFeatureLabelActions = ({
 
   const updateClickedFeatureLabelText = async () => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return;
     const featureId = clickedFeatureId();
@@ -1417,7 +1417,7 @@ export const createFeatureLabelActions = ({
   // The Label Not Shown dialog answers the Apply that opened it.
   /** @param {string} choice */
   const handleHiddenLabelTextChoice = (choice) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     return closeHiddenLabelTextDialog(choice);
   };
@@ -1479,12 +1479,12 @@ export const createFeatureLabelActions = ({
   // Generate took over), so nothing is asked.
   /** @param {string} featureId */
   const reflowDrawsLabel = async (featureId) => {
-    const generationKey = state.resultGenerationKey?.value;
+    const generationKey = state.resultGenerationKey.value;
     // A new Result has a new identity; a write of the shown Result's edits keeps it.
     const shownIdentity = () => getResultIdentity(state.results.value[selectedResultIndex.value]);
     const before = shownIdentity();
     await nextTick();
-    if (labelReflowProcessing?.value && typeof watch === 'function') {
+    if (labelReflowProcessing.value && typeof watch === 'function') {
       await /** @type {Promise<void>} */ (new Promise((resolve) => {
         const stop = watch(labelReflowProcessing, (busy) => {
           if (busy) return;
@@ -1495,8 +1495,8 @@ export const createFeatureLabelActions = ({
     }
     if (shownIdentity() === before) return null;
     const result = currentResults()[selectedResultIndex.value];
-    if (!result || labelReflowLastError.value || state.processing?.value
-      || state.resultGenerationKey?.value !== generationKey) return null;
+    if (!result || labelReflowLastError.value || state.processing.value
+      || state.resultGenerationKey.value !== generationKey) return null;
     const root = new DOMParser().parseFromString(String(result.content || ''), 'image/svg+xml').documentElement;
     const key = normalizeKeyToken(featureId);
     return Array.from(root.querySelectorAll(`text[${LABEL_FEATURE_ID_ATTRIBUTE}]`))
@@ -1585,7 +1585,7 @@ export const createFeatureLabelActions = ({
   /** @param {string} choice */
   const handleLabelTextScopeChoice = (choice) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (choice === 'cancel' || !labelTextScopeDialog.show) {
       closeLabelTextScopeDialog();
@@ -1649,7 +1649,7 @@ export const createFeatureLabelActions = ({
   let labelImportNotice = null;
   const resetAllLabelTextOverrides = () => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     // D-06: the notice of the Label TSV edits this removes ends with them.
     const importNotice = labelImportNotice;
@@ -1716,7 +1716,7 @@ export const createFeatureLabelActions = ({
   const canRetryLabelImportFailure = computed(() => {
     const drawing = state.activeDrawing();
     return Boolean(labelImportFailure.value
-      && state.errorLog?.value === labelImportFailure.value.error
+      && state.errorLog.value === labelImportFailure.value.error
       && labelImportFailure.value.revision === labelImportRevision
       && isRuleInputCurrent(labelImportFailure.value.snapshot)
       && labelImportFailure.value.intent === labelIntentSignature(drawing));
@@ -1728,7 +1728,7 @@ export const createFeatureLabelActions = ({
   /** @param {{ target: LabelTableInput | null, sourceInput?: LabelTableInput }} event A file input's change event, or the retry's stand-in for it. */
   const loadLabelOverrideTable = async (event) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const input = event?.target;
     const file = input?.files?.[0];
@@ -1737,13 +1737,13 @@ export const createFeatureLabelActions = ({
     const before = snapshotRuleInputs();
     const labelIntent = labelIntentSignature(drawing);
     const revision = ++labelImportRevision;
-    const previousError = state.errorLog?.value;
+    const previousError = state.errorLog.value;
     const endRead = holdFileCopy(file);
 
     try {
       const text = await readFileText(file);
       if (input.files?.[0] !== file || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
-      if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
+      if (state.sessionOperationAvailability()) return state.sessionOperationAvailability();
       const rows = parseLabelOverrideTsv(text);
       const loadedRowsText = tn(rows.length, 'Loaded {count} row.', 'Loaded {count} rows.');
 
@@ -1755,7 +1755,7 @@ export const createFeatureLabelActions = ({
           entry.feature || { type: '', svg_id: entry.featureId }, entry.sourceText
         ))
       });
-      if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
+      if (state.sessionOperationAvailability()) return state.sessionOperationAvailability();
       if (revision !== labelImportRevision || input.files?.[0] !== file) return;
       // OV-447, OV-449 (Owner decisions): the table was evaluated against a
       // state that changed meanwhile, so the load is declined and names the
@@ -1838,16 +1838,16 @@ export const createFeatureLabelActions = ({
       const skipped = skippedNonTrackableCount > 0
         ? [tn(skippedNonTrackableCount, '{count} match lacked a feature key and was not applied.', '{count} matches lacked a feature key and were not applied.')]
         : [];
-      if (state.errorLog?.value === labelImportFailure.value?.error) state.errorLog.value = null;
+      if (state.errorLog.value === labelImportFailure.value?.error) state.errorLog.value = null;
       labelImportFailure.value = null;
       keepRetryCopy(null);
       const notice = showNotice({ text: message, items: skipped });
       labelImportNotice = notice ? { drawing, notice } : null;
     } catch (error) {
       if (revision !== labelImportRevision || input.files?.[0] !== file || !isRuleInputCurrent(before)
-        || state.errorLog?.value !== previousError) return;
+        || state.errorLog.value !== previousError) return;
       const model = normalizeUserFacingError(error, { operation: 'evaluateRules', stage: 'resource-staging' });
-      if (state.errorLog) state.errorLog.value = model;
+      state.errorLog.value = model;
       labelImportFailure.value = { error: model, snapshot: before, intent: labelIntent, revision,
         input: event.sourceInput || input,
         retry: () => loadLabelOverrideTable({ target: { files: [file], value: '' }, sourceInput: event.sourceInput || input }) };
