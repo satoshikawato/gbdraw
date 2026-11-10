@@ -156,10 +156,7 @@ def _circular_cli_record_cardinality() -> RecordCardinality:
 
 def _parse_multi_record_position_arg(value: str) -> str:
     try:
-        selector_text, row = parse_record_row_position(
-            value,
-            _compatibility="circular",
-        )
+        selector_text, row = parse_record_row_position(value)
     except ValidationError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
     return f"{selector_text}@{row}"

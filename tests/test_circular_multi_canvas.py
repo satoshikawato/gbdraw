@@ -2758,7 +2758,8 @@ def test_circular_cli_multi_record_canvas_passes_positions(
 @pytest.mark.circular
 @pytest.mark.parametrize(
     "position",
-    ["#1@", "@1", "#1@0", "#1@-1", "#1@abc", "#0@1", "none@1", "selector_only"],
+    # `none@1` names a record whose ID is `none`, as Linear Record Order reads it (OV-3312).
+    ["#1@", "@1", "#1@0", "#1@-1", "#1@abc", "#0@1", "#-1@1", "#+ 1@1", "selector_only"],
 )
 def test_circular_cli_rejects_invalid_multi_record_position(
     monkeypatch: pytest.MonkeyPatch,

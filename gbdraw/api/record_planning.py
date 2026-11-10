@@ -60,6 +60,7 @@ from gbdraw.io.record_select import (
     drawn_record_units,
     in_draw_order,
     parse_record_selector,
+    record_index_number,
     reverse_records,
     select_record_units,
 )
@@ -2377,7 +2378,7 @@ def _resolve_linear_comparison_selector(
     where = f"{table_path}: row {row_number}, column {column!r}"
     diagnostic = {"code": "COMPARISON_INPUT", "row": row_number}
     groups = drawn_record_units(records)
-    number = parse_ascii_integer(selector[1:].strip()) if selector.startswith("#") else None
+    number = record_index_number(selector) if selector.startswith("#") else None
     if number is not None:
         if 0 <= number - 1 < len(groups):
             return groups[number - 1]

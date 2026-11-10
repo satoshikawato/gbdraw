@@ -104,7 +104,8 @@ test('a #N record selector names the record the renderer draws', () => {
   /** @type {[string, number | null, number | null][]} text, record, N with 0 */
   const cases = [
     ['#1', 1, 1], ['#01', 1, 1], [' # 2 ', 2, 2], ['#0', null, 0], ['#00', null, 0],
-    ['#x', null, null], ['#', null, null], ['#1e1', null, null], ['#+1', null, null], ['#0x2', null, null],
+    ['#x', null, null], ['#', null, null], ['#1e1', null, null], ['#+1', 1, 1], ['# +02', 2, 2], ['#+ 1', null, null],
+    ['#++1', null, null], ['#-1', null, null], ['#+0', null, 0], ['+#1', null, null], ['#0x2', null, null],
     ['#1.0', null, null], ['BGC0000708', null, null], ['#\u00853', 3, 3], ['#\u001c3', 3, 3], ['#\ufeff3', null, null]
   ];
   for (const [text, record, number] of cases) {

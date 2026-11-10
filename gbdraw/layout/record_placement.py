@@ -7,9 +7,9 @@ from typing import Literal, Sequence
 
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.core.numeric import parse_ascii_integer, parse_ascii_nonnegative_integer
+from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.record_select import parse_record_selector
+from gbdraw.io.record_select import RecordSelector, drawn_record_units, parse_record_selector
 
 
 _PlacementCompatibility = Literal["linear", "circular"]
@@ -48,18 +48,17 @@ class FeatureAnchorPlacement:
         return "rotated" in self.statuses
 
 
-def parse_record_row_position(
-    value: str,
-    *,
-    _compatibility: _PlacementCompatibility = "linear",
-) -> tuple[str, int]:
-    """Parse one ``<selector>@<row>`` placement token."""
+def parse_record_row_position(value: str) -> tuple[str, int]:
+    """Parse one ``<selector>@<row>`` placement token, in both modes.
 
-    raw = str(value or "").strip() if _compatibility == "circular" else str(value).strip()
-    missing_separator = "@" not in raw
+    The row is the text after the last ``@``, a positive integer with an optional ``+``; the selector is the
+    text before it, a ``#N`` that :func:`parse_record_selector` reads or a record ID (which may hold ``@``).
+    """
+
+    raw = str(value or "").strip()
     if not raw:
         raise ValidationError("multi_record_position does not allow empty entries.")
-    if missing_separator or (_compatibility == "linear" and raw.count("@") != 1):
+    if "@" not in raw:
         raise ValidationError(
             f"multi_record_position entry '{raw}' must be in '<selector>@<row>' format."
         )
@@ -68,88 +67,67 @@ def parse_record_row_position(
         raise ValidationError(
             f"multi_record_position entry '{raw}' must include a selector before '@'."
         )
-    parse_row = (
-        parse_ascii_nonnegative_integer
-        if _compatibility == "circular"
-        else parse_ascii_integer
-    )
-    row = parse_row(row_text)
+    row = parse_ascii_integer(row_text)
     if row is None or row <= 0:
         raise ValidationError(
             f"multi_record_position entry '{raw}' must use a positive integer row."
         )
-    if _compatibility == "circular":
-        try:
-            parsed_selector = parse_record_selector(selector)
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
-        if parsed_selector is None:
-            raise ValidationError(
-                f"multi_record_position selector '{selector}' is invalid."
-            )
+    if selector.startswith("#"):
+        _record_index_selector(selector)
     return selector, row
 
 
-def _resolve_record_selector_index(
-    records: Sequence[SeqRecord],
-    selector: str,
-    *,
-    compatibility: _PlacementCompatibility,
-) -> int:
+def record_order_selector(selector: str, records: Sequence[SeqRecord]) -> RecordSelector:
+    """The record a Record Order selector names among the drawn ``records``, the one reader of it with or without
+    windows, in both modes: a ``#N`` as :func:`parse_record_selector` reads it; any other text the record with that
+    ID; a word :func:`parse_record_selector` reads as no selector (``none``, ``-``) that no record has as its ID, the
+    one drawn record when only one is drawn (D-211). Any other text names no record, and resolving it refuses it."""
+
+    if selector.startswith("#"):
+        return _record_index_selector(selector)
+    if (
+        parse_record_selector(selector) is None
+        and all(record.id != selector for record in records)
+        and len(drawn_record_units(records)) == 1
+    ):
+        return RecordSelector(raw=selector, record_id=None, record_index=0)
+    return RecordSelector(raw=selector, record_id=selector, record_index=None)
+
+
+def _record_index_selector(selector: str) -> RecordSelector:
+    """A ``#N`` Record Order selector as :func:`parse_record_selector` reads it, refused as a ``ValidationError``."""
+
+    try:
+        parsed = parse_record_selector(selector)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+    # ``parse_record_selector`` refuses or reads every text that starts with ``#``.
+    assert parsed is not None and parsed.record_index is not None
+    return parsed
+
+
+def _resolve_record_selector_index(records: Sequence[SeqRecord], selector: str) -> int:
     record_count = len(records)
-    if compatibility == "linear":
-        if selector.startswith("#"):
-            number = parse_ascii_integer(selector[1:].strip())
-            if number is None:
-                raise ValidationError(
-                    f"multi_record_position selector '{selector}' is invalid."
-                )
-            record_index = number - 1
-            if 0 <= record_index < record_count:
-                return record_index
-            raise ValidationError(
-                f"multi_record_position selector '{selector}' is out of range for "
-                f"{record_count} loaded record(s)."
-            )
-        matches = [
-            index
-            for index, record in enumerate(records)
-            if str(record.id) == selector
-        ]
-    else:
-        try:
-            parsed = parse_record_selector(selector)
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
-        if parsed is None:
-            raise ValidationError(
-                f"multi_record_position selector '{selector}' is invalid."
-            )
-        if parsed.record_index is not None:
-            record_index = int(parsed.record_index)
-            if 0 <= record_index < record_count:
-                return record_index
-            raise ValidationError(
-                f"multi_record_position selector '{selector}' is out of range for "
-                f"{record_count} record(s)."
-            )
-        matches = [
-            index
-            for index, record in enumerate(records)
-            if str(record.id) == str(parsed.record_id)
-        ]
+    record_index = record_order_selector(selector, records).record_index
+    if record_index is not None:
+        if record_index < record_count:
+            return record_index
+        raise ValidationError(
+            f"multi_record_position selector '{selector}' is out of range for "
+            f"{record_count} loaded record(s)."
+        )
+    matches = [
+        index
+        for index, record in enumerate(records)
+        if str(record.id) == selector
+    ]
     if not matches:
         raise ValidationError(
             f"multi_record_position selector '{selector}' did not match any record ID."
         )
     if len(matches) > 1:
-        suffix = (
-            "matched multiple records. Use #index to disambiguate."
-            if compatibility == "circular"
-            else "matched multiple records; use a #index selector."
-        )
         raise ValidationError(
-            f"multi_record_position selector '{selector}' {suffix}"
+            f"multi_record_position selector '{selector}' matched multiple records. Use #index to disambiguate."
         )
     return matches[0]
 
@@ -174,15 +152,8 @@ def resolve_record_row_positions(
     resolved: list[tuple[int, int, int]] = []
     seen: set[int] = set()
     for token_index, raw in enumerate(positions):
-        selector, row = parse_record_row_position(
-            str(raw),
-            _compatibility=_compatibility,
-        )
-        record_index = _resolve_record_selector_index(
-            records,
-            selector,
-            compatibility=_compatibility,
-        )
+        selector, row = parse_record_row_position(str(raw))
+        record_index = _resolve_record_selector_index(records, selector)
         if record_index in seen:
             raise ValidationError(
                 f"multi_record_position selector '{selector}' was specified more than once."
