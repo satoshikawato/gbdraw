@@ -1130,6 +1130,16 @@ into the `[Unreleased]` list below.
   every base of the record; the sums are taken in pieces and kept only at the
   window edges. `gbdraw circular` with a 64 Mbp depth file peaks at 396 MiB
   instead of 780 MiB. Drawings do not change.
+- Changed: Circular scale labels drawn inside the scale (the default figure,
+  `label_in_tick_out`) now stand as close to their tick marks as labels drawn
+  outside: 3.2-5.9 px of ink instead of 7.1-9.6 px in the default human
+  mitochondrion figure (OV-3300). Their text box keeps the label margin from
+  the ticks on both sides; before, labels inside kept a quarter of their
+  height more. Every default Circular figure changes: the labels move toward
+  the ticks and the tracks inside them move outward by the same few pixels.
+  Figures with the labels outside (`label_out_tick_in`) do not change. The
+  Circular tick tiers above 10 Mbp end 1.17 % later, since the labels now sit
+  on a larger circle.
 - Fixed: Circular scale labels no longer overlap or touch on records longer
   than about 34 Mbp (OV-2747, OV-2748). Every record above 10 Mbp had a large
   tick every 1 Mbp, so a 113 Mbp record drew 112 labels that merged into a black
@@ -1137,8 +1147,8 @@ into the `[Unreleased]` list below.
   record takes a longer interval where the labels of the shorter one would come
   closer than a quarter of their font size, the gap feature labels keep: a
   113 Mbp record has a tick every 5 Mbp, and a 35.8 Mbp record, whose 1 Mbp
-  labels touched, a tick every 2 Mbp. Figures of records up to 33.8 Mbp do not
-  change. Linear ruler labels (`--scale_style ruler` and the axis ruler)
+  labels touched, a tick every 2 Mbp. Records up to 34.2 Mbp keep a tick every
+  1 Mbp. Linear ruler labels (`--scale_style ruler` and the axis ruler)
   overlapped above 50 Mbp in the same way and now take the same steps from
   46,484,180 bp; the scale bar of a default Linear figure that long takes the
   same longer interval as its length (5 Mbp at 113 Mbp instead of a 1 Mbp bar

@@ -476,7 +476,7 @@ def _mers_request(
 def test_a_definition_over_the_tracks_offers_the_center_reserved_radius_that_narrows_them(tmp_path) -> None:
     """PD-OI-097 (N-a): MERS-CoV's definition is drawn on one line over a track. At 18 pt its band (the farthest
     corner of the bold line's ink, OV-1854) is cleared neither by the floor nor by any Center Reserved Radius, so the
-    narrow row finds nothing and the font row offers 17 pt. At 17.5 pt with track narrowing off, the font row offers
+    narrow row finds nothing and the font row offers 17.5 pt. At 17.5 pt with track narrowing off, the font row offers
     the size at which that line clears the tracks at their widths, and the narrow row writes the radius the
     definition reserves as Center Reserved Radius; drawn with it, the figure has no notice."""
 
@@ -495,8 +495,9 @@ def test_a_definition_over_the_tracks_offers_the_center_reserved_radius_that_nar
     ]
     assert [row["kind"] for row in entry["report"]["rows"]] == ["smaller_definition_font", "narrow_tracks"]
     font = searches.row(entry["rowToken"], "smaller_definition_font")
-    # 14 pt since the GC skew windows were centred (OV-2870; 13 pt before): the skew ring the line meets moved.
-    assert (font["status"], font["values"]) == ("found", {DEFINITION_FONT_PATH: 14.0})
+    # 14.5 pt since the inside tracks moved outward with the tick labels inside the scale (OV-3300; 14 pt before, and
+    # 13 pt before the GC skew windows were centred, OV-2870): the skew ring the line meets moved.
+    assert (font["status"], font["values"]) == ("found", {DEFINITION_FONT_PATH: 14.5})
     narrow = searches.row(entry["rowToken"], "narrow_tracks")
     # The radius is a track option of the request, not a config path: the Web writes it by the request's name.
     assert (narrow["status"], narrow["values"], narrow["trackOptions"]) == (
