@@ -245,6 +245,25 @@ def _add_conservation_input_args(parser: argparse.ArgumentParser) -> None:
         nargs='+')
 
 
+def _validate_conservation_input_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Refuse similarity ring inputs that cannot be given together, and empty ``--conservation_genome`` files."""
+
+    if args.conservation_genome and args.conservation_sequence:
+        parser.error("--conservation_genome cannot be combined with --conservation_sequence")
+    if args.conservation_genome and args.conservation_table:
+        parser.error("--conservation_genome cannot be combined with --conservation_table")
+    if any("" in genome and genome != [""] for genome in args.conservation_genome or ()):
+        parser.error("--conservation_genome files must not be empty; give '' alone for a ring without a genome")
+    if args.conservation_table and args.conservation_blast:
+        parser.error("--conservation_table cannot be combined with --conservation_blast")
+    if args.conservation_table and args.conservation_sequence:
+        parser.error("--conservation_table cannot be combined with --conservation_sequence")
+    if args.conservation_table and args.conservation_labels:
+        parser.error("--conservation_table cannot be combined with --conservation_labels")
+    if args.conservation_table and args.conservation_colors:
+        parser.error("--conservation_table cannot be combined with --conservation_colors")
+
+
 def _cli_conservation_genomes(args: argparse.Namespace) -> list[str | list[str] | None] | None:
     """Each ring's comparison genome: one ``--conservation_genome`` occurrence ('' alone: none) or one file."""
 
@@ -695,20 +714,7 @@ def _get_args(
         validate_output_choice_args(args)
     if args.records_table and args.multi_record_position:
         parser.error("--records_table cannot be combined with --multi_record_position; use row and column table columns instead.")
-    if args.conservation_genome and args.conservation_sequence:
-        parser.error("--conservation_genome cannot be combined with --conservation_sequence")
-    if args.conservation_genome and args.conservation_table:
-        parser.error("--conservation_genome cannot be combined with --conservation_table")
-    if any("" in genome and genome != [""] for genome in args.conservation_genome or ()):
-        parser.error("--conservation_genome files must not be empty; give '' alone for a ring without a genome")
-    if args.conservation_table and args.conservation_blast:
-        parser.error("--conservation_table cannot be combined with --conservation_blast")
-    if args.conservation_table and args.conservation_sequence:
-        parser.error("--conservation_table cannot be combined with --conservation_sequence")
-    if args.conservation_table and args.conservation_labels:
-        parser.error("--conservation_table cannot be combined with --conservation_labels")
-    if args.conservation_table and args.conservation_colors:
-        parser.error("--conservation_table cannot be combined with --conservation_colors")
+    _validate_conservation_input_args(parser, args)
     if args.circular_track_table and args.circular_track_order:
         parser.error("--circular_track_table cannot be combined with --circular_track_order")
     if args.circular_track_table and args.circular_track_slot:
