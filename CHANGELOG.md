@@ -664,9 +664,9 @@ write-up of a release.
   `overflow=clip` whose set width reaches past the centre now counts the
   labels it leaves out "in clipped slots", as every clipped slot does, not
   "for want of room before the centre".
-- Performance: a Circular map with hundreds of labelled regions in an
-  `inside` slot is drawn faster: with 400 labelled regions in about 4.5 s
-  instead of 10.5 s in v0.14.5 (OV-2981).
+- Performance: a Circular map with 400 labelled regions in an `inside` slot
+  is drawn in less than half the time of v0.14.5: about 4.6 s instead of
+  10.7 s of CPU time on a test map (OV-2981).
 - Fixed: after a font file was registered for a font family that had already
   been used, curved Circular region labels were still checked against the
   earlier font's letters (for overlaps and for their reach), while their size
