@@ -1,4 +1,5 @@
-// The Feature density section's editor (#199 E4b, app/feature-density-tracks.js): Add, Duplicate, Move and Remove
+// PD-OI-126 in docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md: the Feature density section's editor (#199,
+// app/feature-density-tracks.js): Add, Duplicate, Move and Remove
 // find a track by its id; a track's stack row follows it into a stack that draws or that a Session or the user saved,
 // and not into a stack no Session saved (Use custom stack builds that one again with every track); Remove asks first
 // when another row starts at or extends to the track's row (PD-OI-104); a field writes the request's shape and

@@ -1,6 +1,6 @@
 // @ts-check
 // The feature density tracks of the shown drawing (`adv.feature_density_tracks`) as its Feature density section edits
-// them: Add, Duplicate, Move, Remove, and the fields of a track. A button or a field the user changes is one History
+// them (PD-OI-126): Add, Duplicate, Move, Remove, and the fields of a track. A button or a field the user changes is one History
 // step (app/history-inputs.js); a Remove that asks runs its chosen removal as its own step. A track is found by its
 // id, never by its place or caption. A track's rows in the drawing's stack follow it: Add and Duplicate put one row
 // for the new track into a stack that draws (Use custom stack on) or that a Session or the user saved, and leave a
