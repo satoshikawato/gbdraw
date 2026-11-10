@@ -73,7 +73,7 @@ import { createDrawingReset, createResetSettings } from './reset-settings.js';
 import { createRegionDrawing } from './region-drawing.js';
 import { createFindInOtherFiles } from './find-in-other-files.js';
 import { createRegionSelect } from './region-select.js';
-import { readRegionAxisRecords } from '../services/region-axis.js';
+import { readRegionAxisRecords, shownAxisRecords as shownAxisRecordsOf } from '../services/region-axis.js';
 import { requestRecordSpanSequences } from '../services/record-span-sequences.js';
 import {
   adoptCanonicalRenderArtifacts,
@@ -1146,7 +1146,7 @@ export const createAppSetup = () => {
   const previewPopupsHeldNow = computed(() => similarityAlignmentTakeover.value !== null);
   const previewPopupsHeld = () => previewPopupsHeldNow.value;
   // The records of the shown Result whose axis Python wrote: Select region and Shift+click range selection read them.
-  const shownAxisRecords = () => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, Number(selectedResultIndex.value) || 0);
+  const shownAxisRecords = () => shownAxisRecordsOf(state);
   const {
     consumeSuppressNextClick, selectFeatureByClick, markPlainFeatureClick, clearFeatureSelection, startMarqueePointer, moveMarqueePointer, commitMarqueePointer, cancelMarqueePointer,
     syncFeatureSelectionClasses, replaceSelectedFeatureIds, featureSelectionMarqueeStyle, featureSelectionToolbarStyle, startToolbarDrag
@@ -1161,7 +1161,7 @@ export const createAppSetup = () => {
   });
   const featureActions = createFeatureEditor({
     state,
-    previewPopupsHeld,
+    previewPopupsHeld, shownAxisRecords,
     rulePreparation,
     evaluateLabelRules: evaluateRules,
     runUndoable: history.runUndoable,

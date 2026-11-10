@@ -1,6 +1,6 @@
 // @ts-check
 import { parseTransform } from '../../services/legend-svg.js';
-import { setClassToken } from '../../services/svg-serialization.js';
+import { setClassToken } from '../../services/preview-affordances.js';
 import {
   applyCanvasToSvg,
   bindCompositionMetadata,

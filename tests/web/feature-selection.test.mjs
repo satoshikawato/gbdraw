@@ -32,7 +32,7 @@ const {
   stripFeatureSelectionClasses
 } = await import(featureSelectionUrl);
 const { stripTransientPreviewState } = await import(serializationUrl);
-const { PREVIEW_MATCH_BUTTON_ATTRIBUTE } = await import(pathToFileURL(join(tempDir, 'services', 'preview-affordances.js')));
+const { PREVIEW_MATCH_BUTTON_ATTRIBUTE, setClassToken } = await import(pathToFileURL(join(tempDir, 'services', 'preview-affordances.js')));
 
 class FakeElement {
   constructor(className = '', style = '') {
@@ -162,6 +162,40 @@ assert.equal(emptiedStyle.getAttribute('style'), null);
 assert.equal(previewRoot.getAttribute('class'), 'keep-root');
 assert.equal(pairwise.getAttribute('data-gbdraw-match-id'), 'comparison1_match1');
 for (const name of ['role', 'tabindex', 'aria-label', PREVIEW_MATCH_BUTTON_ATTRIBUTE]) assert.equal(pairwise.getAttribute(name), null);
+// OV-3241: the one writer of a Preview class removes the attribute when no class is left. A browser's
+// `classList.toggle` or `remove` of the last class leaves `class=""`, which Python never draws and the SVG download
+// carried after a match popup marked and unmarked a match.
+class DomClassElement {
+  constructor(className = null) {
+    this.attributes = className === null ? {} : { class: className };
+    const element = this;
+    const tokens = () => String(element.attributes.class ?? '').split(/\s+/).filter(Boolean);
+    this.classList = {
+      toggle(token, force) {
+        const next = tokens().filter((entry) => entry !== token);
+        if (force) next.push(token);
+        if (force || tokens().includes(token)) element.attributes.class = next.join(' ');
+        return Boolean(force);
+      },
+      get length() { return tokens().length; }
+    };
+  }
+
+  getAttribute(name) { return Object.hasOwn(this.attributes, name) ? this.attributes[name] : null; }
+
+  removeAttribute(name) { delete this.attributes[name]; }
+}
+const marked = new DomClassElement();
+setClassToken(marked, 'gbdraw-match-selected', true);
+assert.equal(marked.getAttribute('class'), 'gbdraw-match-selected');
+setClassToken(marked, 'gbdraw-match-selected', false);
+assert.equal(marked.getAttribute('class'), null);
+const drawnClass = new DomClassElement('gbdraw-feature');
+setClassToken(drawnClass, 'gbdraw-match-pending', true);
+setClassToken(drawnClass, 'gbdraw-match-pending', false);
+assert.equal(drawnClass.getAttribute('class'), 'gbdraw-feature');
+setClassToken(marked, 'gbdraw-match-pending', false);
+assert.equal(marked.getAttribute('class'), null);
 const interactivePairwise = previewMatchButton('Pairwise match 1');
 stripTransientPreviewState(fakeSvg([interactivePairwise]), { stripCursor: false });
 assert.equal(interactivePairwise.getAttribute('role'), 'button');

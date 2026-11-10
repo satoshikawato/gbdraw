@@ -21,6 +21,7 @@ from gbdraw.core.numeric import (
 )
 from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import SourceFeatureHash, parse_source_feature_hash
+from gbdraw.render.drawers.circular.conservation import HIT_DISPLAY_SPAN_ATTRIBUTES
 
 SVG_NS = "http://www.w3.org/2000/svg"
 XLINK_NS = "http://www.w3.org/1999/xlink"
@@ -428,6 +429,15 @@ def _match_id(attributes: Mapping[str, object]) -> str:
     return str(attributes.get(MATCH_ID_ATTRIBUTE) or "").strip()
 
 
+# What may differ between the fragments of one match: the fragment's number and the span it draws (a ring hit across
+# the drawn origin is drawn in two pieces, each naming its own span). Every other ``data-`` attribute is the match's
+# source metadata and must agree. The standalone interactive script checks the same rule with this list, which its
+# asset takes at ``STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT``: written here when Python embeds the script, and
+# from the generated module when the Web does (tools/generate_web_contracts.py).
+MATCH_FRAGMENT_OWN_ATTRIBUTES: tuple[str, ...] = ("data-gbdraw-match-fragment", *HIT_DISPLAY_SPAN_ATTRIBUTES)
+STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT = "[/* gbdraw: MATCH_FRAGMENT_OWN_ATTRIBUTES */]"
+
+
 def _validate_match_fragments(attributes: Sequence[Mapping[str, object]]) -> None:
     """Admit explicit fragments only when DOM identity and source metadata agree."""
     if len(attributes) == 1 and "data-gbdraw-match-fragment" not in attributes[0]:
@@ -439,7 +449,7 @@ def _validate_match_fragments(attributes: Sequence[Mapping[str, object]]) -> Non
         dom_id = str(item.get("id") or "").strip()
         fragment = str(item.get("data-gbdraw-match-fragment", ""))
         current = {key: value for key, value in item.items()
-                   if key.startswith("data-") and key != "data-gbdraw-match-fragment"}
+                   if key.startswith("data-") and key not in MATCH_FRAGMENT_OWN_ATTRIBUTES}
         if (not dom_id or dom_id in dom_ids or not re.fullmatch(r"0|[1-9][0-9]*", fragment)
                 or fragment in fragments
                 or any(not str(item.get(key) or "").strip() for key in
@@ -1309,9 +1319,12 @@ def _load_standalone_assets() -> tuple[str, str]:
         )
     except Exception as exc:
         raise GbdrawError("Missing standalone interactive SVG runtime/style package asset.") from exc
+    script = _extract_template_literal(source, "STANDALONE_INTERACTIVE_SCRIPT")
+    if script.count(STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT) != 1:
+        raise GbdrawError("Malformed standalone interactive SVG asset: STANDALONE_INTERACTIVE_SCRIPT")
     return (
         _extract_template_literal(source, "STANDALONE_INTERACTIVE_STYLE"),
-        _extract_template_literal(source, "STANDALONE_INTERACTIVE_SCRIPT"),
+        script.replace(STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT, json.dumps(list(MATCH_FRAGMENT_OWN_ATTRIBUTES), separators=(",", ":"))),
     )
 
 

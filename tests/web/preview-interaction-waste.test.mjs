@@ -44,7 +44,11 @@ for (const source of [
   // feature-identity.js reads a record source's files from the input-type table.
   'services/input-types.js',
   // feature-selection.js reads a Shift+click range on the record axis and holds its gesture.
-  'services/region-axis.js', 'services/record-options.js', 'utils/pointer-gesture.js'
+  'services/region-axis.js', 'services/record-options.js', 'utils/pointer-gesture.js',
+  // svg-actions.js gives a similarity ring hit the ring hover (ring-hover.js); its Legend name and colour reads are
+  // stubbed below.
+  'app/feature-editor/ring-hover.js', 'services/legend-layout.js', 'services/font-families.js',
+  'utils/font-family-rules.generated.js'
 ]) await copyModule(source);
 // The identity owner, with its rendered-identity reads counted.
 await copyModule('services/feature-identity.js', 'services/feature-identity-owner.js');
@@ -61,7 +65,10 @@ const stubs = {
     'export const resultCatalogFeatures = () => null;',
     'export const stableFeatureOverrideKey = () => "";'
   ],
-  'utils/color-utils.js': ['export const resolveColorToHex = (value) => value || "#94a3b8";'],
+  'utils/color-utils.js': [
+    'export const resolveColorToHex = (value) => value || "#94a3b8";',
+    'export const hexToRgb = () => ({ r: 148, g: 163, b: 184 });'
+  ],
   'services/feature-utils.js': [
     'export const formatFeatureLength = (feature) => `${feature.end - feature.start} bp`;',
     'export const formatFeatureLocation = (feature) => `${feature.start + 1}..${feature.end}`;',
@@ -94,7 +101,8 @@ const stubs = {
   'services/feature-override-identity.js': ['export const getFeatureOverride = () => null;'],
   'services/legend-svg.js': [
     'export const COMPARISON_LEGEND_SELECTOR = "[data-gbdraw-role=comparison-legend]";',
-    'export const legendEntryKey = (entry) => String(entry?.caption || "");'
+    'export const legendEntryKey = (entry) => String(entry?.caption || "");',
+    'export const drawnLegendRowName = () => null;'
   ],
   'services/match-frame-popup.js': [
     'export const PREVIEW_ITEM_SELECTOR = "g[data-legend-key]";',

@@ -245,7 +245,7 @@ FUNCTION_STATEMENTS: dict[str, int] = {
     "gbdraw/analysis/protein_colinearity.py::extract_protein_identity_manifest": 84,
     "gbdraw/annotations/layout.py::_lane_rooms": 65,
     "gbdraw/api/diagram.py::assemble_circular_diagram_from_record": 95,
-    "gbdraw/api/diagram.py::assemble_circular_diagram_from_records": 156,
+    "gbdraw/api/diagram.py::assemble_circular_diagram_from_records": 151,
     "gbdraw/api/diagram.py::assemble_linear_diagram_from_records": 153,
     "gbdraw/api/options.py::_ModeDiagramOptions.__post_init__": 62,
     "gbdraw/api/region_drawing.py::derive_from_source": 66,

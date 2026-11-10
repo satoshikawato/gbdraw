@@ -46,6 +46,7 @@ from gbdraw.analysis.conservation import (
     ConservationReferenceMode,
     ConservationTrack,
     load_conservation_sources,
+    named_conservation_tracks,
     normalize_conservation_reference,
     read_conservation_inputs,
     normalize_conservation_tracks_for_record,
@@ -242,6 +243,7 @@ from gbdraw.layout.spatial import Aabb
 from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from gbdraw.legend.sources import LegendSources
 from gbdraw.legend.table import (
+    DrawnLegendName,
     LegendTable,
     draws_legend,
     pairwise_identity_legend_from_comparisons,
@@ -3034,6 +3036,57 @@ def assemble_circular_diagram_from_record(
     return result.drawing
 
 
+def _canvas_legend_table_and_ring_names(
+    records: Sequence[SeqRecord],
+    legend_sources: LegendSources,
+    tracks: CircularTrackInputs,
+    *,
+    profile: CircularRenderProfile,
+    legend: str,
+    depth_config: DepthConfigurator | None,
+    record_depth_tracks: Sequence[Sequence[DepthTrackData]] | None,
+    available_depth_track_count: int,
+    conservation_legend: Sequence[ConservationLegendSource],
+    conservation_min_identity: float,
+) -> tuple[LegendTable, dict[int, DrawnLegendName]]:
+    """The table the Multi-Record Canvas's shared Legend draws (empty with Legend position ``none``), and the name
+    that table gives each similarity ring, by ring (``LegendTable.ring_names``), for every record's copy of the ring.
+
+    With no Legend but with rings, the table is still built, so the rings are named as a drawn Legend would name them.
+    """
+
+    legend_table = LegendTable()
+    if legend != "none" or conservation_legend:
+        legend_slots, legend_annotations = plan_circular_annotation_slots(
+            tracks,
+            records,
+            show_ticks=bool(profile.config.objects.scale.show),
+            show_depth=bool(profile.show_depth and depth_config is not None),
+            show_gc=profile.show_gc,
+            show_skew=profile.show_skew,
+            depth_track_count=max(1, available_depth_track_count),
+        )
+        legend_depth_tracks = representative_depth_tracks(record_depth_tracks)
+        legend_depth_track_zero = index_depth_track_row(legend_depth_tracks).get(0)
+        legend_table = circular_legend_table(
+            records,
+            legend_sources,
+            profile=profile,
+            depth_config=depth_config,
+            depth_df=legend_depth_track_zero.df if legend_depth_track_zero is not None else None,
+            depth_tracks=legend_depth_tracks,
+            depth_track_count_value=depth_track_data_count(record_depth_tracks),
+            slots=circular_legend_slot_sources(legend_slots, tracks.circular_track_axis_index),
+            annotations=legend_annotations,
+            conservation_legend=conservation_legend,
+            conservation_min_identity=conservation_min_identity,
+        )
+    ring_names = legend_table.ring_names()
+    if legend == "none":
+        legend_table = LegendTable()
+    return legend_table, ring_names
+
+
 def assemble_circular_diagram_from_records(
     records: Sequence[SeqRecord],
     inputs: CircularAssemblyInputs,
@@ -3293,6 +3346,67 @@ def assemble_circular_diagram_from_records(
             available_indices=depth_track_indices(record_depth_track_data),
         )
 
+    legend_canvas_config = CircularCanvasConfigurator(
+        output_prefix=inputs.output_prefix,
+        profile=profile,
+        legend=legend_effective,
+        gb_record=records[0],
+    )
+    legend_window, legend_step = _resolve_circular_window_step(
+        records[0],
+        cfg,
+        window=inputs.window,
+        step=inputs.step,
+    )
+    gc_config = GcContentConfigurator(
+        window=legend_window,
+        step=legend_step,
+        dinucleotide=inputs.dinucleotide,
+        profile=profile,
+        default_colors_df=default_colors,
+    )
+    skew_config = GcSkewConfigurator(
+        window=legend_window,
+        step=legend_step,
+        dinucleotide=inputs.dinucleotide,
+        profile=profile,
+        default_colors_df=default_colors,
+    )
+    depth_config = DepthConfigurator(window=legend_window, step=legend_step, profile=profile) if cfg.canvas.show_depth else None
+    feature_config = FeatureDrawingConfigurator(
+        color_table=color_table,
+        default_colors=default_colors,
+        selected_features_set=list(selected_features_set),
+        profile=profile,
+        feature_table=feature_table,
+        feature_shapes=inputs.feature_shapes,
+        feature_visibility_rules=resolved_feature_inputs.feature_visibility_rules,
+        specific_color_rules=resolved_feature_inputs.specific_color_rules,
+        default_color_map=resolved_feature_inputs.default_color_map,
+        canvas_config=legend_canvas_config,
+        record_features=record_features,
+    )
+    legend_sources = LegendSources.of(
+        feature_config,
+        gc_config,
+        skew_config,
+        feature_density_legend(record_feature_density[0] if record_feature_density else None, profile),
+    )
+    legend_table, ring_names = _canvas_legend_table_and_ring_names(
+        records,
+        legend_sources,
+        CircularTrackInputs(
+            parsed_circular_track_slots, implicit_track_stack, circular_track_axis_index, annotations=resolved_annotations
+        ),
+        profile=profile,
+        legend=legend_effective,
+        depth_config=depth_config,
+        record_depth_tracks=record_depth_track_data,
+        available_depth_track_count=available_depth_track_count,
+        conservation_legend=first_record_conservation_legend,
+        conservation_min_identity=float(identity),
+    )
+
     record_results: list[CircularAssemblyResult] = []
     record_radii_px: list[float] = []
     track_slot_geometry_records: list[CircularTrackSlotRecord] = []
@@ -3364,7 +3478,7 @@ def assemble_circular_diagram_from_records(
                 precomputed_depth_track_count=(
                     available_depth_track_count if record_depth_track_data is not None else None
                 ),
-                precomputed_conservation_tracks=record_conservation_tracks,
+                precomputed_conservation_tracks=named_conservation_tracks(record_conservation_tracks, ring_names),
                 feature_density=record_feature_density[record_index],
                 record_transform=(_record_transforms[record_index] if _record_transforms is not None else None),
                 record_presentation=(
@@ -3401,7 +3515,6 @@ def assemble_circular_diagram_from_records(
         row_gap_px=row_gap_px,
     )
 
-    legend_table = LegendTable()
     legend_measurement: LegendMeasurement | None = None
     plot_title_content: GroupContent | None = None
 
@@ -3417,100 +3530,17 @@ def assemble_circular_diagram_from_records(
             record_presentation=_record_presentations[0] if _record_presentations else None,
         )
 
-    legend_canvas_config = CircularCanvasConfigurator(
-        output_prefix=inputs.output_prefix,
-        profile=profile,
-        legend=legend_effective,
-        gb_record=records[0],
-    )
-    legend_window, legend_step = _resolve_circular_window_step(
-        records[0],
-        cfg,
-        window=inputs.window,
-        step=inputs.step,
-    )
-    gc_config = GcContentConfigurator(
-        window=legend_window,
-        step=legend_step,
-        dinucleotide=inputs.dinucleotide,
-        profile=profile,
-        default_colors_df=default_colors,
-    )
-    skew_config = GcSkewConfigurator(
-        window=legend_window,
-        step=legend_step,
-        dinucleotide=inputs.dinucleotide,
-        profile=profile,
-        default_colors_df=default_colors,
-    )
-    depth_config = (
-        DepthConfigurator(
-            window=legend_window,
-            step=legend_step,
+    if draws_legend(legend_table):
+        legend_config = LegendDrawingConfigurator(
             profile=profile,
+            canvas_config=legend_canvas_config,
         )
-        if cfg.canvas.show_depth
-        else None
-    )
-    feature_config = FeatureDrawingConfigurator(
-        color_table=color_table,
-        default_colors=default_colors,
-        selected_features_set=list(selected_features_set),
-        profile=profile,
-        feature_table=feature_table,
-        feature_shapes=inputs.feature_shapes,
-        feature_visibility_rules=resolved_feature_inputs.feature_visibility_rules,
-        specific_color_rules=resolved_feature_inputs.specific_color_rules,
-        default_color_map=resolved_feature_inputs.default_color_map,
-        canvas_config=legend_canvas_config,
-        record_features=record_features,
-    )
-    legend_sources = LegendSources.of(
-        feature_config,
-        gc_config,
-        skew_config,
-        feature_density_legend(record_feature_density[0] if record_feature_density else None, profile),
-    )
-    if legend_effective != "none":
-        legend_slots, legend_annotations = plan_circular_annotation_slots(
-            CircularTrackInputs(parsed_circular_track_slots, implicit_track_stack, annotations=resolved_annotations),
-            records,
-            show_ticks=bool(cfg.objects.scale.show),
-            show_depth=bool(profile.show_depth and depth_config is not None),
-            show_gc=profile.show_gc,
-            show_skew=profile.show_skew,
-            depth_track_count=max(1, available_depth_track_count),
+        legend_measurement = measure_legend(
+            legend_config,
+            legend_table,
+            placement=legend_canvas_config.legend_position,
+            wrap_width=grid_layout.bounds.width,
         )
-        legend_depth_tracks = representative_depth_tracks(record_depth_track_data)
-        legend_depth_track_zero = index_depth_track_row(legend_depth_tracks).get(0)
-        legend_table = circular_legend_table(
-            records,
-            legend_sources,
-            profile=profile,
-            depth_config=depth_config,
-            depth_df=(
-                legend_depth_track_zero.df
-                if legend_depth_track_zero is not None
-                else None
-            ),
-            depth_tracks=legend_depth_tracks,
-            depth_track_count_value=depth_track_data_count(record_depth_track_data),
-            slots=circular_legend_slot_sources(legend_slots, circular_track_axis_index),
-            annotations=legend_annotations,
-            conservation_legend=first_record_conservation_legend,
-            conservation_min_identity=float(identity),
-        )
-        if draws_legend(legend_table):
-            legend_config = LegendDrawingConfigurator(
-                profile=profile,
-                canvas_config=legend_canvas_config,
-            )
-            legend_measurement = measure_legend(
-                legend_config,
-                legend_table,
-                placement=legend_canvas_config.legend_position,
-                wrap_width=grid_layout.bounds.width,
-            )
 
     legend_row_facts = LegendRowFacts(records=records, sources=legend_sources, legend_table=legend_table)
 

@@ -183,6 +183,15 @@ export const readRegionAxisRecords = (trackSlotGeometry, resultIndex) => {
 };
 
 /**
+ * The records of the shown Result whose axis Python wrote: the Result the preview shows of the shown drawing.
+ * @param {{ trackSlotResolvedGeometry: { value: unknown }, selectedResultIndex: { value: unknown } }} shown
+ * @returns {RegionAxisRecord[]}
+ */
+export const shownAxisRecords = ({ trackSlotResolvedGeometry, selectedResultIndex }) => (
+  readRegionAxisRecords(trackSlotResolvedGeometry.value, Number(selectedResultIndex.value) || 0)
+);
+
+/**
  * The drawn group whose frame a record's axis is in: the innermost group of the record that is not one of its parts
  * (a definition, or a drawn annotation, OV-2482). Null when the Result does not draw the record.
  * @param {ParentNode} root The Result's SVG root.
@@ -195,6 +204,18 @@ export const regionAxisFrame = (root, recordIndex) => {
   ));
   const innermost = groups.filter((group) => !groups.some((other) => other !== group && group.contains(other)));
   return innermost.length === 1 ? /** @type {SVGGraphicsElement} */ (innermost[0]) : null;
+};
+
+/**
+ * A screen point in a record frame's coordinates, and the frame's screen scale.
+ * @param {SVGGraphicsElement} frame @param {number} clientX @param {number} clientY
+ * @returns {{ point: FramePoint, scale: number } | null}
+ */
+export const framePoint = (frame, clientX, clientY) => {
+  const matrix = frame.getScreenCTM();
+  if (!matrix) return null;
+  const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse());
+  return { point: { x: point.x, y: point.y }, scale: Math.hypot(matrix.a, matrix.b) || 1 };
 };
 
 /** The SVG angle of a Circular display position (bases from display index 0). @param {CircularAxisGeometry} axis @param {number} position */
