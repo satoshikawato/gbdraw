@@ -95,6 +95,47 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFAC
 export const resultSetInventory = (results, inventory) => (results.length > 0 ? [...inventory] : []);
 
 /**
+ * The shown Result set's generated Legend inventory and colors, as a restore
+ * (a Session Load, its rollback, a History step) brings them.
+ * @typedef {object} ShownSetLegend
+ * @property {PythonLegendKey[]} originalOrder The inventory the set was drawn with.
+ * @property {Record<string, string>} originalColors Python's color of each generated row, by its key.
+ */
+/**
+ * The refs of the displayed Legend inventory and colors, and of the shown Results that decide them.
+ * @typedef {object} ShownSetLegendRefs
+ * @property {{ readonly value: readonly unknown[] }} results
+ * @property {{ value: PythonLegendKey[] }} originalLegendOrder
+ * @property {{ value: Record<string, string> }} originalLegendColors
+ */
+
+/**
+ * The one writer of the displayed inventory after an artifact install, after
+ * the install wrote the shown Results: `inventory` by the rule of
+ * `resultSetInventory`. The Legend owner calls it after a switch and a Load
+ * (`adoptShownSetInventory`), and `installShownSetLegend` for a restore.
+ * @param {Pick<ShownSetLegendRefs, 'results' | 'originalLegendOrder'>} refs
+ * @param {readonly PythonLegendKey[]} inventory
+ */
+export const writeShownSetInventory = (refs, inventory) => {
+  refs.originalLegendOrder.value = resultSetInventory(refs.results.value, inventory);
+};
+
+/**
+ * A restore's install of the shown set's inventory and colors (a Session
+ * Load, its rollback, a History step), after it wrote the Results. The colors
+ * have one more install: an artifact slot install writes them as a slot key
+ * (`installArtifactSlot` in `history-snapshot.js`), while the slot's
+ * inventory goes beside its values (`legendInventory`).
+ * @param {ShownSetLegendRefs} refs
+ * @param {ShownSetLegend} legend
+ */
+export const installShownSetLegend = (refs, { originalOrder, originalColors }) => {
+  refs.originalLegendColors.value = originalColors;
+  writeShownSetInventory(refs, originalOrder);
+};
+
+/**
  * A slot of `drawing`'s artifact; a value it is not given is the empty
  * slot's for the drawing's mode.
  * @param {{ drawing: DrawingIdentity, values: ArtifactSlot['values'], legendInventory?: ArtifactSlot['legendInventory'],

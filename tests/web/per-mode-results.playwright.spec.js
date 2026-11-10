@@ -732,6 +732,8 @@ test('a Session opened on its other Result set generates the Legend it shows', a
   test.setTimeout(480_000);
   await bothResults(page);
   await showMode(page, 'circular');
+  const circularInventory = await shownInventory(page);
+  expect(sorted(circularInventory)).toEqual(sorted(CIRCULAR_ROWS));
   const webPath = info.outputPath('web.gbdraw-session.json.gz');
   await save(page, webPath, { title: '' });
   const resavedPath = info.outputPath('cli-resaved.gbdraw-session.json');
@@ -746,6 +748,8 @@ test('a Session opened on its other Result set generates the Legend it shows', a
   try {
     await load(fresh, resavedPath);
     expect(await shown(fresh)).toMatchObject({ mode: 'circular', generatedDrawingId: 'circular', count: 1, mounted: true });
+    // The opened drawing shows its own Result's inventory, not the committed Linear set's.
+    expect(await shownInventory(fresh)).toEqual(circularInventory);
     const rows = (await legendState(fresh)).rows;
     expect(sorted(rows)).toEqual(sorted(CIRCULAR_ROWS));
     await expectShownAsGenerated(fresh, rows, 'the opened Result');

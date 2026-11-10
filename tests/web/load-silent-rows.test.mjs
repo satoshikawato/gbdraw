@@ -539,6 +539,19 @@ test('E4f m2: an empty editor map is no row; a map of another kind is listed', a
   }
 });
 
+// OV-3282: a Load that opens on its committed set installs the saved Legend
+// inventory and colors after the set's Results, by the rule of a set that
+// has a Result.
+test('OV-3282: a Load that opens on its committed set shows its saved Legend inventory', async () => {
+  const session = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
+  const { originalOrder, originalColors } = session.editorState.legend;
+  assert.ok(originalOrder.length > 0);
+  assert.deepEqual(await load(session), []);
+  assert.ok(state.results.value.length > 0);
+  assert.deepEqual(state.originalLegendOrder.value, originalOrder);
+  assert.deepEqual(state.originalLegendColors.value, originalColors ?? {});
+});
+
 // R2-m2: the verb agrees with each part's name (G1: the wording owner only).
 test('R2-m2: a dropped Session part is named with the verb its name takes', () => {
   const text = JSON.stringify(describeLoadRepairs(['resources', 'editorState', 'modes', 'otherModeResult']
