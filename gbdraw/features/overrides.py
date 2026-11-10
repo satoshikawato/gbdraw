@@ -10,7 +10,7 @@ from typing import Literal, cast
 
 from pandas import DataFrame
 
-from gbdraw.core.record_metadata import _feature_source_index_map, _source_feature_index
+from gbdraw.core.record_metadata import _feature_source_index_map
 from gbdraw.exceptions import ValidationError
 
 from .source import (
@@ -300,15 +300,11 @@ def feature_override_lookup(
     """Return the override of each top-level or nested feature of ``record``."""
     if not overrides:
         return lambda _feature: None
-    ordinals = _feature_source_index_map(getattr(record, "features", ()))
+    indexes = _feature_source_index_map(getattr(record, "features", ()))
 
     def lookup(feature: object) -> ResolvedFeatureOverride | None:
-        index = _source_feature_index(feature)
-        if index is None:
-            index = ordinals.get(id(feature))
-            if index is None:
-                return None
-        return overrides.get(index)
+        index = indexes.get(id(feature))
+        return None if index is None else overrides.get(index)
 
     return lookup
 

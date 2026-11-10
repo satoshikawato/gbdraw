@@ -273,9 +273,8 @@ def _feature_ids(svg: str) -> int:
 
 
 def _edit(record: SeqRecord) -> None:
-    """A user's edit: every feature but the source goes, one new CDS comes in, and the record is renamed."""
+    """A user's edit: one new CDS comes in beside the features the record has, and the record is renamed."""
 
-    record.features = [feature for feature in record.features if feature.type == "source"]
     record.features.append(
         SeqFeature(FeatureLocation(10, 400, 1), type="CDS", qualifiers={"product": ["USEREDIT"], "gene": ["userEdit"]})
     )
@@ -307,7 +306,7 @@ def test_a_session_saves_an_edited_copy_of_a_planned_record_as_itself(
         options=LinearDiagramOptions(), layout=LinearMultiRecordOptions(), output=_output(tmp_path),
     )
     live, replay = _replayed(request, tmp_path)
-    assert _feature_ids(live) == _feature_ids(replay) == 1  # the new CDS alone
+    assert _feature_ids(live) == _feature_ids(replay) > 1  # the new CDS beside the record's features
     # An edited crop is saved as the record it was cut from with its edits, and its window (OV-3034).
     assert replay == live
 
@@ -344,7 +343,7 @@ def test_a_session_saves_a_planned_record_edited_in_place_as_itself(tmp_path: Pa
     assert isinstance(source, InMemoryRecordSource)
     _edit(source.record)
     live, replay = _replayed(resolved, tmp_path)
-    assert _feature_ids(live) == 1
+    assert _feature_ids(live) > 1
     assert replay == live
 
 
@@ -361,7 +360,7 @@ def test_a_session_redraws_an_edited_crop_from_its_source_with_the_edits(spec: s
         options=LinearDiagramOptions(config_overrides=_TRACKS), output=_output(tmp_path),
     )
     live, replay = _replayed(request, tmp_path)
-    assert _feature_ids(live) == 1  # the new CDS alone
+    assert _feature_ids(live) == 2  # the record's CDS and the new one
     [saved] = _saved_records(tmp_path)
     assert saved["windows"] == [
         {"start": 20001, "end": 40000, "reverseComplement": spec.endswith(":rc"), "column": None}
@@ -443,6 +442,104 @@ def test_an_edited_crop_is_saved_with_only_its_edits_on_its_source(
     assert {_locus(feature): (str(feature.location), feature.qualifiers.get("product")) for feature in source.features} \
         == expected
     assert source.id == ("renamed" if edit == "rename" else "src")
+
+
+def _request(mode: str, crop: SeqRecord, tmp_path: Path) -> LinearDiagramRequest | CircularDiagramRequest:
+    record = RecordInput(source=InMemoryRecordSource(crop), record_key="r")
+    if mode == "linear":
+        return LinearDiagramRequest(records=(record,), options=LinearDiagramOptions(config_overrides=_TRACKS),
+                                    output=_output(tmp_path))
+    return CircularDiagramRequest(records=(record,), options=CircularDiagramOptions(config_overrides=_TRACKS),
+                                  output=_output(tmp_path))
+
+
+def _drawn_ids(svg: str) -> set[str]:
+    return set(re.findall(r'data-gbdraw-feature-id="([^"]+)"', svg))
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+@pytest.mark.parametrize("spec", ["src:20001-40000", "src:20001-40000:rc"], ids=["forward", "reversed"])
+@pytest.mark.parametrize("place", [3, 1], ids=["appended", "inserted"])
+def test_a_feature_added_to_a_crop_that_keeps_others_draws_and_replays(
+    mode: str, spec: str, place: int, tmp_path: Path
+) -> None:
+    """A feature added to a crop has no source feature: it takes a source feature index no feature cut from the
+    source can hold, so the live figure draws it beside the cut features and the replay draws the live figure, in
+    the same order (OV-3141, OV-3229). Appended, its list position (3) is the index of the CDS the crop cut from the
+    source's fourth feature."""
+
+    crop = apply_region_specs([_flanked_source()], parse_region_specs([spec]))[0]
+    crop.features.insert(
+        place,
+        SeqFeature(FeatureLocation(1000, 2000, 1), type="CDS", qualifiers={"locus_tag": ["NEW"], "product": ["n"]}),
+    )
+    live, replay = _replayed(_request(mode, crop, tmp_path), tmp_path)
+    assert replay == live
+    assert len(_drawn_ids(live)) == 3  # S1, I1 and the added CDS (the source feature is not drawn)
+    assert sorted(_locus(feature) for feature in _saved_source(tmp_path).features) == \
+        ["I1", "NEW", "ORI", "S1", "source"]
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+@pytest.mark.parametrize("spec", ["src:20001-40000", "src:20001-40000:rc"], ids=["forward", "reversed"])
+def test_a_feature_moved_inside_a_crop_has_one_id_live_and_on_replay(mode: str, spec: str, tmp_path: Path) -> None:
+    """A feature moved inside a crop is a feature at its new place, as a moved feature of a whole record is: the live
+    figure and the replay give it the ID of its new source location (OV-3142)."""
+
+    from gbdraw.features.ids import compute_feature_hash_from_location_parts
+
+    crop = apply_region_specs([_flanked_source()], parse_region_specs([spec]))[0]
+    first = tmp_path / "unedited"
+    first.mkdir()
+    unedited = _drawn_ids(_replayed(_request(mode, crop, first), first)[0])
+    moved = next(feature for feature in crop.features if _locus(feature) == "I1")
+    moved.location = FeatureLocation(7000, 8000, moved.location.strand)
+    live, replay = _replayed(_request(mode, crop, tmp_path), tmp_path)
+    assert replay == live
+    # The crop's 7,001-8,000 is the source's 27,001-28,000, or 32,001-33,000 in a reversed crop (the CDS stays on the
+    # source's forward strand).
+    start = 32_000 if spec.endswith(":rc") else 27_000
+    expected = compute_feature_hash_from_location_parts("CDS", [(start, start + 1000, 1)], record_id="src")
+    drawn = _drawn_ids(live)
+    assert expected in drawn
+    assert len(drawn) == len(unedited) and len(drawn - unedited) == 1
+
+
+@pytest.mark.parametrize("spec", ["src:20001-40000", "src:20001-40000:rc"], ids=["forward", "reversed"])
+def test_a_moved_feature_reads_its_source_location_from_its_new_place(spec: str) -> None:
+    """Once a crop's feature is moved, its source location parts and source strand are those of its new place; a
+    record gbdraw loads them from keeps them for every later reader (OV-3142)."""
+
+    import copy
+
+    from gbdraw.core.record_metadata import _source_feature_anchor_profile, _source_feature_location_parts
+    from gbdraw.features.source import capture_source_features
+
+    crop = apply_region_specs([_flanked_source()], parse_region_specs([spec]))[0]
+    moved = next(feature for feature in crop.features if _locus(feature) == "I1")
+    moved.location = FeatureLocation(7000, 8000, moved.location.strand)
+    planned = copy.deepcopy(crop)
+    capture_source_features(planned)
+    [feature] = [feature for feature in planned.features if _locus(feature) == "I1"]
+    start = 32_000 if spec.endswith(":rc") else 27_000
+    assert _source_feature_location_parts(feature) == ((start, start + 1000, 1),)
+    assert _source_feature_anchor_profile(feature).strand == "+"
+
+
+def test_a_copy_of_a_cut_feature_takes_a_source_feature_index_of_its_own(tmp_path: Path) -> None:
+    """A copy of a feature the crop cut carries that feature's source feature index; the copy takes the next free
+    index, so the live figure draws both (OV-3141)."""
+
+    import copy
+
+    from gbdraw.core.record_metadata import _feature_source_index_map
+
+    crop = apply_region_specs([_flanked_source()], parse_region_specs(["src:20001-40000"]))[0]
+    crop.features.append(copy.deepcopy(next(feature for feature in crop.features if _locus(feature) == "I1")))
+    assert list(_feature_source_index_map(crop.features).values()) == [0, 1, 3, 4]
+    render_request(_request("linear", crop, tmp_path))
+    # The two copies of I1 are drawn as two instances of one feature, named by their source feature indexes.
+    assert sorted(set(re.findall(r'id="f[0-9a-f]+__instance_(\d+)_', (tmp_path / "live.svg").read_text()))) == ["3", "4"]
 
 
 def test_a_session_saves_a_crop_that_moved_a_feature_cut_at_its_end_as_itself(tmp_path: Path) -> None:

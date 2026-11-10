@@ -10,9 +10,10 @@ import logging
 import re
 from typing import Sequence
 
+from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 
-from ..analysis.windows import reversed_window_source
+from ..analysis.windows import WINDOW_SOURCE_ANNOTATION, WindowSource, reversed_window_source
 from ..core.numeric import parse_ascii_nonnegative_integer
 from ..core.record_metadata import (
     _copy_source_feature_identity,
@@ -160,6 +161,35 @@ def select_record_units(records: Sequence[SeqRecord], selector: RecordSelector |
     return matches[0]
 
 
+def _feature_start(feature: SeqFeature) -> float:
+    """The start a reverse complement orders features by; one with no numeric start sorts last."""
+    try:
+        return int(feature.location.start)
+    except TypeError:
+        return float("inf")
+
+
+def order_reversed_crop_features(record: SeqRecord) -> SeqRecord:
+    """List the features of a reverse-complemented crop edited since its cut by start, as ``reverse_records``
+    lists them, and return the record.
+
+    A Session saves such a crop as the record it was cut from with the edits and replays it by cutting it again
+    (``session_request_codec._with_crop_edits``), which lists the features so; a feature added to or moved in the
+    crop takes its place by start here too, so the figure draws the features in the replay's order (OV-3229). A crop
+    as cut keeps its order.
+    """
+
+    stored = record.annotations.get(WINDOW_SOURCE_ANNOTATION)
+    if (
+        record.annotations.get("gbdraw_region_applied")
+        and _read_coord_map(record)[1] < 0
+        and isinstance(stored, WindowSource)
+        and not stored.holds_for(record)
+    ):
+        record.features = sorted(record.features, key=_feature_start)
+    return record
+
+
 def reverse_records(
     records: Sequence[SeqRecord],
     reverse_flag: bool,
@@ -177,12 +207,6 @@ def reverse_records(
         rc_step = -step
         source_indexes = _feature_source_index_map(rec.features)
 
-        def feature_start(feature):
-            try:
-                return int(feature.location.start)
-            except TypeError:
-                return None
-
         def reverse_feature(feature):
             reversed_feature = feature._flip(record_length)
             _copy_source_feature_identity(
@@ -198,7 +222,7 @@ def reverse_records(
                     reverse_feature(sub_feature)
                     for sub_feature in sub_features
                 ]
-                reversed_sub_features.sort(key=feature_start)
+                reversed_sub_features.sort(key=_feature_start)
                 reversed_feature.sub_features = reversed_sub_features
             return reversed_feature
 
@@ -206,7 +230,7 @@ def reverse_records(
             reverse_feature(feature)
             for feature in rec.features
         ]
-        reversed_features.sort(key=feature_start)
+        reversed_features.sort(key=_feature_start)
         reversed_record = rec.reverse_complement(
             id=True,
             name=True,

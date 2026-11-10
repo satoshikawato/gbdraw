@@ -107,7 +107,7 @@ def _catalog_identity(
 
     encoded = json.dumps(item)
     assert "_gbdraw_source_feature_index" not in encoded
-    assert "_gbdraw_source_feature_location_parts" not in encoded
+    assert "_gbdraw_source_feature_location" not in encoded
     return identities, rendered_identities
 
 

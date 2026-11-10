@@ -11,7 +11,7 @@ from gbdraw.core.record_metadata import (
     _iter_source_features as _iter_features,
     _read_coord_map as _read_record_coord_map,
     _source_feature_anchor_profile,
-    _source_feature_index,
+    _feature_source_index_map,
     _source_intervals,
     _source_period,
 )
@@ -329,9 +329,10 @@ def extract_features_from_records_payload(
             record, record_features[rec_idx].overrides if record_features else None
         )
         instance_of = feature_instances(record)
-        for feature_index, feat in enumerate(_iter_features(record.features)):
+        source_indexes = _feature_source_index_map(record.features)
+        for feat in _iter_features(record.features):
             cancel_checkpoint()
-            source_feature_index = _source_feature_index(feat)
+            feature_index = source_indexes[id(feat)]
             feature_override = override_of(feat)
             is_rendered_feature = should_render_feature(
                 feat,
@@ -365,7 +366,6 @@ def extract_features_from_records_payload(
             prepared_features.append(
                 (
                     feature_index,
-                    source_feature_index,
                     feat,
                     is_rendered_feature,
                     selector_values,
@@ -374,7 +374,6 @@ def extract_features_from_records_payload(
 
         for (
             feature_index,
-            source_feature_index,
             feat,
             is_rendered_feature,
             selector_values,
@@ -416,11 +415,7 @@ def extract_features_from_records_payload(
                 "stable_feature_id": stable_svg_id,
                 "record_id": record_id,
                 "record_idx": rec_idx,
-                "feature_index": (
-                    feature_index
-                    if source_feature_index is None
-                    else source_feature_index
-                ),
+                "feature_index": feature_index,
                 "organism": organism,
                 "type": feat.type,
                 "start": start,
@@ -474,11 +469,7 @@ def extract_features_from_records_payload(
             ):
                 rendered_feature_svg_id = instance_svg_id(
                     rendered_feature_svg_id,
-                    (
-                        feature_index
-                        if source_feature_index is None
-                        else source_feature_index
-                    ),
+                    feature_index,
                 )
             if rendered_feature_svg_id:
                 rendered_feature_payload["rendered_feature_svg_id"] = (

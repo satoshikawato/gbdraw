@@ -12,7 +12,7 @@ from gbdraw.core.record_metadata import (
     _iter_source_features,
     _mapped_feature_location_parts,
     _read_coord_map,
-    _source_feature_index,
+    _feature_source_index_map,
     _source_feature_location_parts,
     _stamped_source_feature_hash,
 )
@@ -392,11 +392,11 @@ def feature_instances(record: SeqRecord) -> Callable[[SeqFeature], str | None]:
     # record (its features are new objects) computes its own.
     if cached is None or cached[0] != key or cached[1] != identity:
         # The source features and indexes ``capture_source_features`` reads.
+        indexes = _feature_source_index_map(features)
         hashed = [
-            (feature, feature_hash, position if index is None else index)
-            for position, feature in enumerate(_iter_source_features(features))
+            (feature, feature_hash, indexes[id(feature)])
+            for feature in _iter_source_features(features)
             if (feature_hash := compute_source_feature_hash(feature, record))
-            for index in (_source_feature_index(feature),)
         ]
         biological_ids = disambiguate_feature_ids(
             ((key, feature_hash, index) for _, feature_hash, index in hashed),

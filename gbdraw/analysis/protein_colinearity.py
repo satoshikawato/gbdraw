@@ -64,7 +64,7 @@ from gbdraw.comparisons.losat_runtime import (
     run_losat_search,
 )
 from gbdraw.core.numeric import compensated_sum
-from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION, _read_coord_map, _source_feature_index
+from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION, _feature_source_index_map, _read_coord_map
 from gbdraw.core.sequence import translate_cds
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.features.ids import compute_feature_hash_from_location_parts, source_feature_hash_and_parts
@@ -3265,16 +3265,10 @@ def _iter_record_features(
     record: SeqRecord,
 ) -> list[tuple[int, SeqFeature, tuple[SeqFeature, ...]]]:
     items: list[tuple[int, SeqFeature, tuple[SeqFeature, ...]]] = []
+    indexes = _feature_source_index_map(record.features)
 
     def walk(feature: SeqFeature, ancestors: tuple[SeqFeature, ...]) -> None:
-        source_index = _source_feature_index(feature)
-        items.append(
-            (
-                len(items) if source_index is None else source_index,
-                feature,
-                ancestors,
-            )
-        )
+        items.append((indexes[id(feature)], feature, ancestors))
         sub_features = getattr(feature, "sub_features", None) or []
         for sub_feature in sub_features:
             walk(sub_feature, ancestors + (feature,))

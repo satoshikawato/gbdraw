@@ -20,8 +20,7 @@ if TYPE_CHECKING:
 _COORD_BASE_KEY = "gbdraw_coord_base"
 _COORD_STEP_KEY = "gbdraw_coord_step"
 _SOURCE_FEATURE_INDEX_ATTR = "_gbdraw_source_feature_index"
-_SOURCE_FEATURE_PARTS_ATTR = "_gbdraw_source_feature_location_parts"
-_SOURCE_FEATURE_ANCHOR_PROFILE_ATTR = "_gbdraw_source_feature_anchor_profile"
+_SOURCE_FEATURE_LOCATION_ATTR = "_gbdraw_source_feature_location"
 _SOURCE_FEATURE_HASH_ATTR = "_gbdraw_source_feature_hash"
 _SourceBase = TypeVar("_SourceBase", int, "NDArray[np.int64]")
 
@@ -87,6 +86,18 @@ class _SourceFeatureAnchorProfile(NamedTuple):
     strand: str
 
 
+class _CarriedSourceLocation(NamedTuple):
+    """The source location facts a transformation carried onto a feature (``_copy_source_feature_identity``).
+
+    They hold for the location object they were carried onto: a feature moved since (its location replaced)
+    is a feature at its new place, whose facts come from that place (OV-3142).
+    """
+
+    location: object
+    parts: tuple[tuple[int, int, int | None], ...]
+    anchor_profile: _SourceFeatureAnchorProfile
+
+
 class _SourceFeatureHashStamp(NamedTuple):
     """The source hash of a feature, computed once for the record it was loaded in.
 
@@ -109,8 +120,25 @@ def _iter_source_features(features: Iterable[SeqFeature] | None) -> Iterator[Seq
 
 
 def _feature_source_index_map(features: Iterable[SeqFeature] | None) -> dict[int, int]:
-    """Map nested feature objects to their flattened source-order ordinals."""
-    return {id(feature): index for index, feature in enumerate(_iter_source_features(features))}
+    """The source feature index of each feature, nested ones too, keyed by ``id(feature)``: the one owner of it.
+
+    A feature a transformation copied from its source carries its index there (``_copy_source_feature_identity``).
+    Every other feature takes the next index after the largest carried one, in source order, and so does a
+    feature whose carried index an earlier feature already holds (a copy of a cut feature): no carried index can
+    be taken twice (OV-3141). A record no transformation touched carries none, so its features take their
+    source-order ordinals.
+    """
+    flat = list(_iter_source_features(features))
+    carried = [_source_feature_index(feature) for feature in flat]
+    following = max((index for index in carried if index is not None), default=-1) + 1
+    indexes: dict[int, int] = {}
+    taken: set[int] = set()
+    for feature, index in zip(flat, carried, strict=True):
+        if index is None or index in taken:
+            index, following = following, following + 1
+        taken.add(index)
+        indexes[id(feature)] = index
+    return indexes
 
 
 def _source_feature_index(feature: object) -> int | None:
@@ -123,28 +151,22 @@ def _source_feature_index(feature: object) -> int | None:
     return index if index >= 0 else None
 
 
+def _carried_source_location(feature: object) -> _CarriedSourceLocation | None:
+    """The source location facts carried onto ``feature``, while it is at the location they were carried onto."""
+
+    carried = getattr(feature, _SOURCE_FEATURE_LOCATION_ATTR, None)
+    if isinstance(carried, _CarriedSourceLocation) and carried.location is getattr(feature, "location", None):
+        return carried
+    return None
+
+
 def _source_feature_location_parts(
     feature: object,
 ) -> tuple[tuple[int, int, int | None], ...] | None:
-    """Return pre-transform biological location parts, if attached."""
+    """Return pre-transform biological location parts, if carried for the feature's location."""
 
-    value = getattr(feature, _SOURCE_FEATURE_PARTS_ATTR, None)
-    if not isinstance(value, tuple):
-        return None
-    parts: list[tuple[int, int, int | None]] = []
-    for part in value:
-        if not isinstance(part, tuple) or len(part) != 3:
-            return None
-        try:
-            start = int(part[0])
-            end = int(part[1])
-        except (TypeError, ValueError):
-            return None
-        strand = part[2]
-        if strand not in {-1, 1}:
-            strand = None
-        parts.append((start, end, strand))
-    return tuple(parts) or None
+    carried = _carried_source_location(feature)
+    return None if carried is None else carried.parts or None
 
 
 def _location_anchor_profile(
@@ -207,9 +229,9 @@ def _source_feature_anchor_profile(
 ) -> _SourceFeatureAnchorProfile:
     """Return pre-transform source facts, computing them before first copy."""
 
-    stored = getattr(feature, _SOURCE_FEATURE_ANCHOR_PROFILE_ATTR, None)
-    if isinstance(stored, _SourceFeatureAnchorProfile):
-        return stored
+    carried = _carried_source_location(feature)
+    if carried is not None:
+        return carried.anchor_profile
     return _location_anchor_profile(
         getattr(feature, "location", None),
         coord_step=coord_step,
@@ -294,7 +316,10 @@ def _copy_source_feature_identity(
     coord_base: int,
     coord_step: int,
 ) -> None:
-    """Carry source ordinal, biological parts and source hash across a transformation."""
+    """Carry source ordinal, biological parts and source hash across a transformation.
+
+    ``fallback_index`` is the source's index (``_feature_source_index_map``) for a source that carries none.
+    """
 
     index = _source_feature_index(source)
     setattr(
@@ -302,23 +327,35 @@ def _copy_source_feature_identity(
         _SOURCE_FEATURE_INDEX_ATTR,
         int(fallback_index) if index is None else index,
     )
-    parts = _source_feature_location_parts(source)
-    if parts is None:
-        parts = _mapped_feature_location_parts(
-            source,
-            coord_base=coord_base,
-            coord_step=coord_step,
-        )
-    if parts:
-        setattr(target, _SOURCE_FEATURE_PARTS_ATTR, parts)
-    setattr(
-        target,
-        _SOURCE_FEATURE_ANCHOR_PROFILE_ATTR,
-        _source_feature_anchor_profile(source, coord_step=coord_step),
-    )
+    _carry_source_location(source, target, coord_base=coord_base, coord_step=coord_step)
     stamp = _feature_hash_stamp(source)
     if stamp is not None:
         _stamp_source_feature_hash(target, stamp.record_id, stamp.feature_hash)
+
+
+def _carry_source_location(source: object, target: object, *, coord_base: int, coord_step: int) -> None:
+    """Carry ``source``'s source location facts onto ``target``'s location; ``source`` maps through
+    ``coord_base`` and ``coord_step`` when it carries none for its own location."""
+
+    carried = _carried_source_location(source)
+    setattr(target, _SOURCE_FEATURE_LOCATION_ATTR, _CarriedSourceLocation(
+        getattr(target, "location", None),
+        carried.parts if carried is not None else _mapped_feature_location_parts(
+            source, coord_base=coord_base, coord_step=coord_step,
+        ),
+        carried.anchor_profile if carried is not None else _location_anchor_profile(
+            getattr(source, "location", None), coord_step=coord_step,
+        ),
+    ))
+
+
+def _settle_source_location(feature: object, record: object) -> None:
+    """Carry the source location facts of a feature moved or added since its record's transformation onto its
+    location, read through the record's coordinate map, so every later reader reads the facts of its place."""
+
+    coord_base, coord_step = _read_coord_map(record)
+    if (coord_base, coord_step) != (1, 1) and _carried_source_location(feature) is None:
+        _carry_source_location(feature, feature, coord_base=coord_base, coord_step=coord_step)
 
 
 # A drawn unit that is one of several windows of a record carries that record's key here (D-01); the unit's own key

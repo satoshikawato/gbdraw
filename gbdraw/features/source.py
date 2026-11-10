@@ -18,8 +18,8 @@ from gbdraw.core.record_metadata import (
     _SourceFeatureAnchorProfile,
     _feature_source_index_map,
     _iter_source_features,
+    _settle_source_location,
     _source_feature_anchor_profile,
-    _source_feature_index,
     _stamp_source_feature_hash,
     is_window_of,
 )
@@ -123,20 +123,22 @@ def capture_source_features(record: SeqRecord, *, stamp: bool = True) -> SourceF
     copy a crop, reverse complement or type filter makes reads it instead of
     hashing again. Stamp only records gbdraw owns: a fresh parse or its own
     copy. ``stamp=False`` leaves the features untouched, for a record the
-    caller owns.
+    caller owns. Stamping also settles the source location of a feature moved
+    or added since the record's crop or reverse complement
+    (``_settle_source_location``).
     """
     captured = []
-    for ordinal, feature in enumerate(_iter_source_features(record.features)):
-        index = _source_feature_index(feature)
+    indexes = _feature_source_index_map(record.features)
+    for feature in _iter_source_features(record.features):
+        if stamp:
+            _settle_source_location(feature, record)
         stable_id, parts = computed_source_feature_hash_and_parts(
             feature, record, record_id=record.id
         )
         if stamp:
             _stamp_source_feature_hash(feature, record.id, stable_id)
         if stable_id is not None:
-            captured.append(_CapturedSourceFeature(
-                ordinal if index is None else index, stable_id, parts, feature,
-            ))
+            captured.append(_CapturedSourceFeature(indexes[id(feature)], stable_id, parts, feature))
     source_hashes = {item.source_feature_index: item.stable_feature_id for item in captured}
     if len(source_hashes) != len(captured):
         raise ValidationError(
@@ -250,11 +252,8 @@ def resolve_feature_identities(
             entry.biological_feature_id: entry.source_feature_index
             for entry in source_catalogs[record_index]
         }
-        ordinals = _feature_source_index_map(record.features)
-        drawn = {}
-        for feature in _iter_source_features(record.features):
-            index = _source_feature_index(feature)
-            drawn[ordinals[id(feature)] if index is None else index] = feature
+        source_indexes = _feature_source_index_map(record.features)
+        drawn = {source_indexes[id(feature)]: feature for feature in _iter_source_features(record.features)}
         missing: Literal["crop_excluded", "absent"] = (
             "crop_excluded" if record.annotations.get("gbdraw_region_applied") else "absent"
         )
