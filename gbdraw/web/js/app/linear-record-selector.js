@@ -5,7 +5,7 @@ import { inputSourceFiles, inputTypeSpec } from '../services/input-types.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services/record-options.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
-/** @import { DrawingState, LinearSeq, SessionBusy } from '../state.js' */
+/** @import { DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { InputFileRef } from '../services/history-files.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
@@ -110,14 +110,10 @@ const sanitizePathSegment = (value) =>
 
 /**
  * The members of the `state.js` state that the selector reads; the root passes
- * the whole state. The two suppression flags and `sessionOperationAvailability`
- * are absent in a test state.
- * @typedef {object} LinearRecordSelectorState
- * @property {() => readonly Pick<DrawingState, 'id' | 'linearSeqs'>[]} drawingList every drawing; a drawing's
- *   rows keep their selector state while the drawing holds them
- * @property {{ value: boolean }} [semanticFileWatchersSuppressed]
- * @property {{ value: boolean }} [sessionImportRollbackInProgress]
- * @property {() => SessionBusy | null} [sessionOperationAvailability]
+ * the whole state. `drawingList()` lists every drawing; a drawing's rows keep
+ * their selector state while the drawing holds them.
+ * @typedef {Pick<WebState, 'drawingList' | 'semanticFileWatchersSuppressed' | 'sessionImportRollbackInProgress'
+ *   | 'sessionOperationAvailability'>} LinearRecordSelectorState
  */
 
 /**

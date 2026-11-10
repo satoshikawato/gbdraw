@@ -84,7 +84,7 @@ const sessionTitle = ref('');
 const sessionSavePending = ref(false);
 const sessionImportPending = typedRef(false);
 const semanticFileWatchersSuppressed = typedRef(false);
-const sessionImportRollbackInProgress = ref(false);
+const sessionImportRollbackInProgress = typedRef(false);
 
 const results = ref([]);
 const selectedResultIndex = ref(0);
