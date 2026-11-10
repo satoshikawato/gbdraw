@@ -20,10 +20,10 @@ them is importable at run time.
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, NewType, TypedDict, get_args, get_origin, get_type_hints
+from typing import Any, Literal, NewType, TypedDict, get_type_hints
 
 from .annotations.models import AnnotationWarningCode
-from .contract_shapes import ResolvedTrackSlotGeometry
+from .contract_shapes import ResolvedTrackSlotGeometry, shape_of_hint
 from .features.overrides import (
     FeatureEditKind,
     FeatureIdentityNoticeStatus,
@@ -379,13 +379,14 @@ def keys_of(cls: type) -> frozenset[str]:
 
 
 def literal_values(cls: type, key: str) -> tuple[str, ...]:
-    """The values a declared key takes, in their declared order: those of its ``Literal`` type, or of its items'
-    when it is a list."""
+    """The values a declared key takes, in their declared order, read from its JSON shape
+    (:func:`~gbdraw.contract_shapes.shape_of_hint`, the owner the admission description uses): those of its
+    literal, or of its items' when it is an array."""
 
-    hint = get_type_hints(cls)[key]
-    if get_origin(hint) is list:
-        (hint,) = get_args(hint)
-    values = get_args(hint) if get_origin(hint) is Literal else ()
+    shape = shape_of_hint(get_type_hints(cls)[key])
+    if shape["kind"] == "array":
+        shape = shape["items"]
+    values = tuple(shape["values"]) if shape["kind"] == "literal" else ()
     if not values or not all(isinstance(value, str) for value in values):
         raise TypeError(f"{cls.__name__}.{key} is not typed by a string Literal.")
     return values
