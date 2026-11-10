@@ -541,6 +541,43 @@ def test_a_copy_of_a_cut_feature_takes_a_source_feature_index_of_its_own(tmp_pat
     assert sorted(set(re.findall(r'id="f[0-9a-f]+__instance_(\d+)_', (tmp_path / "live.svg").read_text()))) == ["3", "4"]
 
 
+def _record_facts(svg: str) -> tuple[str, list[str], list[str], set[str]]:
+    """What a replay that saved the crop as its own bytes changed: the figure width, the record's subtitle and source
+    span attributes, and the feature IDs."""
+
+    width = re.search(r'<svg[^>]*\swidth="([^"]+)"', svg)
+    assert width is not None
+    return (
+        width.group(1),
+        re.findall(r'>([0-9,]+(?: bp|-[0-9,]+))</text>', svg),
+        re.findall(r'data-gbdraw-record-source-(?:start|end|step)="[^"]*"', svg),
+        _drawn_ids(svg),
+    )
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+@pytest.mark.parametrize("spec", ["src:20001-40000", "src:20001-40000:rc"], ids=["forward", "reversed"])
+@pytest.mark.parametrize("copied", ["I1", "S1"], ids=["inside", "cut-at-start"])
+def test_a_copy_of_a_cut_feature_is_saved_as_an_added_feature_and_replays_as_drawn(
+    mode: str, spec: str, copied: str, tmp_path: Path
+) -> None:
+    """A copy of a feature the crop cut is a feature added at the copy's place, live and in the saved Session: the
+    crop is saved as its source with the copy added, so the replay keeps the crop's subtitle, width, source span
+    and feature IDs (OV-3247). A copy of a feature the crop cut at its start is the part inside the crop."""
+
+    import copy
+
+    crop = apply_region_specs([_flanked_source()], parse_region_specs([spec]))[0]
+    crop.features.append(copy.deepcopy(next(feature for feature in crop.features if _locus(feature) == copied)))
+    live, replay = _replayed(_request(mode, crop, tmp_path), tmp_path)
+    assert _record_facts(replay) == _record_facts(live)
+    assert replay == live
+    [saved] = _saved_records(tmp_path)
+    assert [(window["start"], window["end"]) for window in saved["windows"]] == [(20001, 40000)]
+    assert sorted(_locus(feature) for feature in _saved_source(tmp_path).features) == \
+        sorted(["source", "S1", "ORI", "I1", copied])
+
+
 def _twins_source() -> SeqRecord:
     """A linear 60 kb record with a CDS X and two identical CDS B and C (same type and location) inside 20-40 kb."""
 
@@ -577,7 +614,8 @@ _TWIN_EDITS = {
 @pytest.mark.parametrize("edit", sorted(_TWIN_EDITS))
 def test_identical_features_of_an_edited_crop_keep_their_ids_on_replay(spec: str, edit: str, tmp_path: Path) -> None:
     """Identical features are told apart by their source feature indexes; an edit that removes nothing keeps every
-    index on replay, so the replay names them as the live figure does (B1 of the review of #1851)."""
+    index on replay, so the replay names them as the live figure does: the saved source keeps every kept feature at
+    its source place and lists the added ones after them."""
 
     crop = apply_region_specs([_twins_source()], parse_region_specs([spec]))[0]
     _TWIN_EDITS[edit](crop)
@@ -617,7 +655,8 @@ def test_a_feature_hidden_in_an_edited_crop_stays_hidden_after_save_and_load(spe
 def test_a_cut_feature_given_an_equal_location_keeps_its_id(spec: str, edited: bool, tmp_path: Path) -> None:
     """A feature whose location is replaced by an equal one has not moved, live as in a Session: the feature the crop
     cut at its start keeps the ID of its whole source location in both, alone or beside an edit that makes the
-    Session write the crop's source with its edits (S1 of the review of #1851)."""
+    Session write the crop's source with its edits: one rule, a location equal as GenBank writes it, says whether a
+    feature moved."""
 
     import copy
 
@@ -636,7 +675,7 @@ def test_a_cut_feature_given_an_equal_location_keeps_its_id(spec: str, edited: b
 
 def test_the_web_view_parts_of_a_crop_read_the_source_feature_index_owner() -> None:
     """The Web helper that indexes view location parts by source feature index reads the index owner, so a crop with
-    an added feature gives each feature its own parts (S2 of the review of #1851)."""
+    an added feature gives each feature its own parts instead of two features one index."""
 
     from gbdraw.core.record_metadata import _feature_source_index_map
 
@@ -657,7 +696,7 @@ def test_the_web_view_parts_of_a_crop_read_the_source_feature_index_owner() -> N
 
 def test_an_edited_reverse_complemented_crop_draws_a_feature_with_no_location(tmp_path: Path) -> None:
     """A feature with no location is left out of the drawing, as in any record; ordering an edited crop's features for
-    its replay does not stop the render on it (N2 of the review of #1851)."""
+    its replay sorts it last instead of stopping the render."""
 
     crop = apply_region_specs([_flanked_source()], parse_region_specs(["src:20001-40000:rc"]))[0]
     crop.features.append(SeqFeature(None, type="misc_feature", qualifiers={"note": ["no place"]}))
@@ -669,11 +708,9 @@ def test_an_edited_crop_saved_as_its_own_bytes_lists_its_features_as_drawn(tmp_p
     """A crop saved as its own bytes lists its features in the order the live figure draws them, so the replay paints
     them in that order too."""
 
-    import copy
-
     crop = apply_region_specs([_flanked_source()], parse_region_specs(["src:20001-40000"]))[0]
-    # A crop that holds a cut feature twice is saved as its own bytes.
-    crop.features.append(copy.deepcopy(next(feature for feature in crop.features if _locus(feature) == "I1")))
+    # A crop whose bases were edited is saved as its own bytes.
+    crop.seq = Seq("A" * 100) + crop.seq[100:]
     crop.features.insert(
         1, SeqFeature(FeatureLocation(1000, 2000, 1), type="CDS", qualifiers={"locus_tag": ["NEW"], "product": ["n"]})
     )

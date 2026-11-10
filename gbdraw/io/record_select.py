@@ -19,6 +19,7 @@ from ..core.numeric import parse_ascii_nonnegative_integer
 from ..core.record_metadata import (
     _copy_source_feature_identity,
     _feature_source_index_map,
+    _holder_of,
     _read_coord_map,
     _write_coord_map,
     record_identity_key,
@@ -176,13 +177,19 @@ def edited_crop_draw_order(crop: SeqRecord) -> list[SeqFeature]:
     The replay cuts again the record the crop was cut from, with the edits on it
     (``session_request_codec._with_crop_edits``), where each feature takes its source feature index
     (``_feature_source_index_map``) as its place: a forward cut lists the features by that index, a
-    reverse-complemented one by start, ties by that index, as ``reverse_records`` lists them (OV-3229).
+    reverse-complemented one by start, ties by that index, as ``reverse_records`` lists them (OV-3229). A copy of a
+    cut feature is a feature added at its place (``_holder_of``), as the replay reads it (OV-3247).
+
+    The indexes are those the map gives ``crop.features``, the user's list; a reader of the drawn crop reads them from
+    the returned list, where added features take theirs in the order drawn, as on replay.
     """
 
     indexes = _feature_source_index_map(crop.features)
     if _read_coord_map(crop)[1] < 0:
-        return sorted(crop.features, key=lambda feature: (_feature_start(feature), indexes[id(feature)]))
-    return sorted(crop.features, key=lambda feature: indexes[id(feature)])
+        ordered = sorted(crop.features, key=lambda feature: (_feature_start(feature), indexes[id(feature)]))
+    else:
+        ordered = sorted(crop.features, key=lambda feature: indexes[id(feature)])
+    return [_holder_of(feature, indexes[id(feature)]) for feature in ordered]
 
 
 def in_draw_order(record: SeqRecord) -> SeqRecord:
@@ -190,7 +197,8 @@ def in_draw_order(record: SeqRecord) -> SeqRecord:
 
     A crop edited since its cut is a shallow copy that lists its features in ``edited_crop_draw_order``, the order
     its replay draws them in; a crop saved as its own bytes is written in that order too. Any other record, a crop
-    as cut too, is ``record`` itself, in its own order.
+    as cut too, is ``record`` itself, in its own order. Readers of the drawn crop call ``_feature_source_index_map``
+    with the returned record's list, not the caller's: an added feature takes its index in the order drawn.
     """
 
     stored = record.annotations.get(WINDOW_SOURCE_ANNOTATION)

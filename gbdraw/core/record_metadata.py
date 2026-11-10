@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import re
 from collections.abc import Iterable, Iterator
@@ -124,8 +125,8 @@ def _feature_source_index_map(features: Iterable[SeqFeature] | None) -> dict[int
 
     A feature a transformation copied from its source carries its index there (``_copy_source_feature_identity``).
     Every other feature takes the next index after the largest carried one, in source order, and so does a
-    feature whose carried index an earlier feature already holds (a copy of a cut feature): no carried index can
-    be taken twice (OV-3141). A record no transformation touched carries none, so its features take their
+    feature whose carried index an earlier feature already holds (a copy of a cut feature, which ``_holder_of``
+    makes a feature added at its place): no carried index can be taken twice (OV-3141). A record no transformation touched carries none, so its features take their
     source-order ordinals.
     """
     flat = list(_iter_source_features(features))
@@ -139,6 +140,22 @@ def _feature_source_index_map(features: Iterable[SeqFeature] | None) -> dict[int
         taken.add(index)
         indexes[id(feature)] = index
     return indexes
+
+
+def _holder_of(feature: SeqFeature, index: int) -> SeqFeature:
+    """``feature`` as the holder of ``index``, the source feature index ``_feature_source_index_map`` gave it.
+
+    A feature that carries another index, a copy of a cut feature whose index an earlier feature holds, is a feature
+    added at its place: a shallow copy that carries no source identity (index, source location facts, source hash),
+    so every reader reads it from its place, as the replay of its saved Session does (OV-3247).
+    """
+
+    if _source_feature_index(feature) in (None, index):
+        return feature
+    added = copy.copy(feature)
+    for name in (_SOURCE_FEATURE_INDEX_ATTR, _SOURCE_FEATURE_LOCATION_ATTR, _SOURCE_FEATURE_HASH_ATTR):
+        added.__dict__.pop(name, None)
+    return added
 
 
 def _source_feature_index(feature: object) -> int | None:

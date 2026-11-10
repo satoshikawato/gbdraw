@@ -1149,7 +1149,8 @@ def _with_crop_edits(source: SeqRecord, crop: SeqRecord, window: RecordWindow) -
     whole source feature, so one the crop cut at an end keeps its full location), a changed type (likewise), a
     moved feature (``_same_location``; written at its new place, mapped back into the window and reversed back for a
     reverse-complemented crop, as the figure places it), a feature the crop left out, a feature added to the crop
-    (mapped back likewise), and a changed name or annotation.
+    (mapped back likewise; a copy of a cut feature is one, ``edited_crop_draw_order``), and a changed name or
+    annotation.
 
     A feature's place in the source is its source feature index on replay, so every feature the crop kept, and
     every feature outside the window (across the origin too), stays at its place. The added features follow the
@@ -1157,8 +1158,8 @@ def _with_crop_edits(source: SeqRecord, crop: SeqRecord, window: RecordWindow) -
     the indexes the crop gives them, the ones after every index it carries (``_feature_source_index_map``).
     Cutting the result through the window again draws the edited crop with its flanks, each feature with the
     source feature index it has in the crop, unless the crop left out a feature that comes before others in the
-    source (OV-3230). ``None`` (the crop is written as its own bytes) for a crop across the origin, one whose
-    bases are no longer the source's bases in the window, or one that holds a cut feature twice.
+    source (OV-3230). ``None`` (the crop is written as its own bytes) for a crop across the origin, or one whose
+    bases are no longer the source's bases in the window.
     """
 
     if window.start > window.end:
@@ -1186,8 +1187,6 @@ def _with_crop_edits(source: SeqRecord, crop: SeqRecord, window: RecordWindow) -
         index = _source_feature_index(feature)
         if index is None or index not in cut:
             added.append(in_source(feature))
-        elif index in kept:
-            return None
         else:
             kept[index] = feature
 
