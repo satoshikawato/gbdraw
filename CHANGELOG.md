@@ -871,9 +871,12 @@ into the `[Unreleased]` list below.
   the outward label fixes said "Does not fit up to ... offset 2" although they
   cleared the leader crossings, and computing them redrew the figure about 120
   times (17-52 s in the Web app; the CLI offered no fix within its 5 s). These
-  fixes now answer only for the labels they move: they are offered with
-  "1 region label still overlaps other labels or lines" (or how many other
-  region label warnings stay) after the fixes that fit, and the Web app's
+  fixes now answer only for the labels they move. When the first value that
+  clears those labels keeps the region warning, the next two values of the
+  fix are tried and the first whose whole figure fits is offered; otherwise
+  the fix is offered with "1 region label still overlaps other labels or
+  lines" (or how many other region label warnings stay) after the fixes that
+  fit (about 11 redraws in place of 120), and the Web app's
   **Choose a fix** first selects a fix that fits. A Linear "separate
   overlapping features" fix, or a fix offered when nothing was drawn, whose
   figure keeps a region label warning now says so too (OV-3105, OV-3108).

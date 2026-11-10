@@ -417,9 +417,12 @@ mildest value that leaves no overlapping labels, if there is one, and says how
 many leader pairs still cross or labels still cover the definition text. Such
 a row comes after the others; running again with it draws the figure with the
 warning. The label rows answer for the labels they move, not for region
-labels: a row whose figure still has a region label warning is offered the
-same way, says how many region labels still overlap other labels or lines (or
-how many other region label warnings stay), and comes after the rows that fit.
+labels. When the figure of a row's first value still has a region label
+warning, the next two values of that row are tried, and the first whose whole
+figure fits is the row; otherwise the first value is offered the same way as a
+row that leaves crossings, says how many region labels still overlap other
+labels or lines (or how many other region label warnings stay), and comes after
+the rows that fit.
 The Web app's **Choose a fix** first selects a row that fits, when there is
 one. With several records, one value must fit every record. The outer-label
 rows do not move inner, embedded, or radial labels. For inner, embedded, or radial
