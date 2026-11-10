@@ -1451,7 +1451,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app?.form?.linear_track_layout !== 'above' || app?.form?.separate_strands !== true || app?.form?.keep_definition_left_aligned !== true) throw new Error('Restored Linear layout does not match the tutorial.'); const card = [...document.querySelectorAll('.card')].find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const content = card?.querySelector('details > div'); const track = content?.children?.[0]; const options = content?.children?.[1]; if (!summary || !track || !options) throw new Error('Layout controls are unavailable.'); summary.setAttribute('data-capture-linear-layout-summary', 'true'); track.setAttribute('data-capture-linear-layout-track', 'true'); options.setAttribute('data-capture-linear-layout-options', 'true'); track.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; if (app?.form?.linear_track_layout !== 'above' || app?.form?.separate_strands !== true || app?.form?.keep_definition_left_aligned !== true) throw new Error('Restored Linear layout does not match the tutorial.'); const card = [...document.querySelectorAll('.card')].find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const content = card?.querySelector('details > div'); const track = content?.querySelector('#linear-track-layout')?.parentElement; const options = content?.querySelector(\"[data-setting='definition-column']\"); if (!summary || !track || !options) throw new Error('Layout controls are unavailable.'); summary.setAttribute('data-capture-linear-layout-summary', 'true'); track.setAttribute('data-capture-linear-layout-track', 'true'); options.setAttribute('data-capture-linear-layout-options', 'true'); track.scrollIntoView({ block: 'center' });"
               }
             ],
             "clipSelectors": [
@@ -1459,7 +1459,12 @@
               "[data-capture-linear-layout-track='true']",
               "[data-capture-linear-layout-options='true']"
             ],
-            "cropPadding": 12
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 2,
+              "left": 12
+            }
           }
         }
       ]

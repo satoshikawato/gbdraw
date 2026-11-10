@@ -98,12 +98,12 @@ LAYOUT_RESULT_CAPTURES = {
             "adv.multi_record_column_gap_ratio": 0.1,
             "adv.multi_record_row_gap_ratio": 0.05,
             "adv.multi_record_positions": [
-                {"selector": "#1", "row": 1},
-                {"selector": "#2", "row": 1},
-                {"selector": "#3", "row": 2},
-                {"selector": "#4", "row": 2},
-                {"selector": "#5", "row": 2},
-                {"selector": "#6", "row": 2},
+                {"selector": "record-1:1", "row": 1},
+                {"selector": "record-1:2", "row": 1},
+                {"selector": "record-1:3", "row": 2},
+                {"selector": "record-1:4", "row": 2},
+                {"selector": "record-1:5", "row": 2},
+                {"selector": "record-1:6", "row": 2},
             ],
             "form.plot_title": "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome",
             "adv.plot_title_position": "bottom",
@@ -674,8 +674,13 @@ def test_vnig_upload_capture_names_the_session_file_it_shows() -> None:
     capture = operation.get("capture", {})
     assert capture.get("source") == "webapp"
     assert capture.get("session") == sample["session"]
-    assert capture.get("assertAppState") == {"mode": "circular", "files.c_gb.name": filename}
-    assert capture.get("visibleText") == [filename]
+    # The file of the first Circular File card (OV-3328: `files.c_gb` is gone), and the six
+    # records the step says the app finds, read as the reader's upload reads them (OV-3139).
+    assert capture.get("assertAppState") == {
+        "mode": "circular",
+        "circularFileCards.cards.value.0.source.gb.name": filename,
+    }
+    assert capture.get("visibleText") == [filename, "6 source records inspected"]
 
 
 def test_ready_gallery_media_passes_capture_contract_validation() -> None:
@@ -1073,3 +1078,129 @@ def test_each_capture_action_lets_its_transitions_end_before_the_next() -> None:
 
     assert events[0] == "app.zoom = 1.15"
     assert len(events) == 2 and "CSSTransition" in events[1] and ".finished" in events[1]
+
+
+class _PreparePage:
+    """A page that records what prepare_capture_page does to it, in order."""
+
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+
+    def set_viewport_size(self, size: dict[str, int]) -> None:
+        pass
+
+    def goto(self, url: str, wait_until: str) -> None:
+        self.events.append("open page")
+
+    def evaluate(self, script: str, *args: object) -> None:
+        if "data-linear-source-fold" in script:
+            self.events.append("open Linear File cards")
+
+    def add_style_tag(self, content: str) -> None:
+        if "[data-session-file-picker]" in content and "display: none" in content:
+            self.events.append("hide Files in this Session")
+
+
+@pytest.mark.parametrize("fresh_page", [False, True])
+def test_session_capture_reads_the_records_as_the_readers_upload_did(
+    fresh_page: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-3139: a loaded Session leaves its records unread; the reader who uploaded the files sees them read."""
+
+    events: list[str] = []
+    monkeypatch.setattr(capture_tool, "wait_for_app_shell", lambda page: None)
+    monkeypatch.setattr(capture_tool, "load_web_app_session", lambda page, path: events.append("load session"))
+    monkeypatch.setattr(capture_tool, "inspect_shown_records", lambda page: events.append("read records"))
+    monkeypatch.setattr(capture_tool, "replay_tutorial_steps", lambda page, sample, through: events.append("replay"))
+    monkeypatch.setattr(capture_tool, "apply_capture_action", lambda page, action: events.append("action"))
+    sample = load_ready_examples("HmmtDNA_ATskew")[0]
+    capture: dict[str, object] = {"source": "webapp", "actions": [{"type": "wait"}]}
+    if fresh_page:
+        capture["freshPage"] = True
+    else:
+        capture.update(session=sample["session"], replayThrough=2)
+
+    capture_tool.prepare_capture_page(_PreparePage(events), "http://gallery", sample, capture)
+
+    if fresh_page:
+        assert events == ["open page", "action"]
+    else:
+        assert events == [
+            "open page",
+            "load session",
+            "open Linear File cards",
+            "hide Files in this Session",
+            "replay",
+            "read records",
+            "action",
+        ]
+
+
+def test_webapp_crop_refuses_records_not_inspected() -> None:
+    """The guard reads the shown drawing's records in both modes and refuses a crop that shows them unread."""
+
+    class FakePage:
+        def __init__(self, read: bool) -> None:
+            self.read = read
+            self.scripts: list[str] = []
+
+        def evaluate(self, script: str) -> bool:
+            self.scripts.append(script)
+            return self.read
+
+    unread = FakePage(read=False)
+    with pytest.raises(RuntimeError, match="records not inspected"):
+        capture_tool.assert_capture_records_read(unread)
+    capture_tool.assert_capture_records_read(FakePage(read=True))
+
+    script = unread.scripts[0]
+    assert "circularRecordDiscoveryState" in script and "status === 'ready'" in script
+    assert "linearRecordSelectorDisabled" in script
+
+
+def test_no_tutorial_step_names_the_session_file_chooser_that_captures_hide() -> None:
+    """A capture stands in for a reader who uploaded the files, who has no Session: it hides
+    **Files in this Session** (OV-3330), so no step may tell the reader to use it."""
+
+    result = ValidationResult(errors=[], warnings=[])
+    capture_tool.add_step_text_validation(
+        result, _manual_context(2), {"title": "Upload", "body": "Pick it in Files in this Session."}
+    )
+    capture_tool.add_step_text_validation(result, _manual_context(3), {"title": "Upload", "body": "Add the file."})
+
+    assert len(result.errors) == 1
+    assert "step 2" in result.errors[0] and "Files in this Session" in result.errors[0]
+
+
+@pytest.mark.parametrize(
+    ("script", "reason"),
+    [
+        ("const track = content?.children?.[0];", "by position"),
+        ("const row = card.children[1];", "by position"),
+        ("async () => { await window.__GBDRAW_APP__.refreshLinearRecordSelectors(); }", "reads the records"),
+    ],
+)
+def test_capture_scripts_find_elements_by_identity_and_leave_the_record_read_to_the_tool(
+    script: str, reason: str
+) -> None:
+    """A capture finds a control by its identity, not by its place among its siblings, which a new
+    control shifts (OV-3366: the Layout crops showed Figure size instead of Track Layout). It does not
+    read the records itself, nor click Inspect source records: the tool reads them after the replay
+    for every capture (OV-3139)."""
+
+    def step(action: dict[str, str]) -> dict[str, object]:
+        return {"title": "Layout", "body": "Open Layout.", "operations": [{"capture": {"actions": [action]}}]}
+
+    result = ValidationResult(errors=[], warnings=[])
+    capture_tool.add_step_text_validation(result, _manual_context(2), step({"type": "evaluate", "script": script}))
+    capture_tool.add_step_text_validation(
+        result, _manual_context(3), step({"type": "click", "selector": "button:text-is('Inspect source records')"})
+    )
+    capture_tool.add_step_text_validation(
+        result,
+        _manual_context(4),
+        step({"type": "evaluate", "script": "document.querySelector('[data-layout-options]').dataset.capture = 'x';"}),
+    )
+
+    assert [error.split(":")[0] for error in result.errors] == [_manual_context(2).label, _manual_context(3).label]
+    assert reason in result.errors[0]

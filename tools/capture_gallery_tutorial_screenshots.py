@@ -78,6 +78,15 @@ CAPTURE_SELECT_CONTROL_SELECTOR = ".gbdraw-capture-select-control"
 # A drawn openSelect menu shows at most this many rows, scrolled so the
 # selected option is in view, like a native select list.
 OPEN_SELECT_MAX_VISIBLE_OPTIONS = 17
+SESSION_FILE_CHOOSER_SELECTOR = "[data-session-file-picker]"
+SESSION_FILE_CHOOSER_NAME = "Files in this Session"
+CAPTURE_POSITION_PICK = re.compile(r"\bchildren\s*(?:\?\.)?\s*\[")
+CAPTURE_RECORD_READS = (
+    "inspectCircularSourceRecords",
+    "refreshLinearRecordSelectors",
+    "Inspect source records",
+    "Inspect records",
+)
 
 
 class QuietGalleryRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -470,6 +479,37 @@ def add_capture_contract_validation(
         )
 
 
+def add_step_text_validation(
+    result: ValidationResult,
+    context: TutorialContext,
+    step: dict[str, Any],
+) -> None:
+    """No step tells the reader to use the uploader's Session file chooser, which captures hide;
+    no capture action finds an element by position or reads the records the tool reads."""
+
+    if SESSION_FILE_CHOOSER_NAME.lower() in json.dumps(step, ensure_ascii=False).lower():
+        result.errors.append(
+            f"{context.label}: names {SESSION_FILE_CHOOSER_NAME}, which tutorial captures hide: "
+            "the reader uploads the files and has no Session."
+        )
+    actions = [
+        json.dumps(action, ensure_ascii=False)
+        for operation in as_array(step.get("operations"))
+        if isinstance(operation, dict) and isinstance(operation.get("capture"), dict)
+        for action in as_array(operation["capture"].get("actions"))
+    ]
+    if any(CAPTURE_POSITION_PICK.search(action) for action in actions):
+        result.errors.append(
+            f"{context.label}: a capture action finds an element by position, which a new sibling "
+            "shifts; find it by its id, data attribute or accessible name."
+        )
+    if any(read in action for action in actions for read in CAPTURE_RECORD_READS):
+        result.errors.append(
+            f"{context.label}: a capture action reads the records, which the tool does for every "
+            "capture after the replay (inspect_shown_records)."
+        )
+
+
 def add_step_replay_validation(
     result: ValidationResult,
     context: TutorialContext,
@@ -535,6 +575,7 @@ def validate_tutorial_media(
                 and not media_entries(step.get("media"))
             ):
                 result.errors.append(f"{context.label}: step is missing operations.")
+            add_step_text_validation(result, context, step)
             add_step_replay_validation(result, context, step)
             for entry in media_entries(step.get("media")):
                 add_media_validation(
@@ -657,6 +698,55 @@ def load_web_app_session(page, session_path: Path) -> None:
         """,
         timeout=120000,
     )
+
+
+# Whether the shown drawing's input records are read, as a reader's upload reads them: a
+# Circular drawing's Source records count, a Linear card's Record select. A drawing without
+# input files has nothing to read. A loaded Session defers the read ("Records not inspected").
+SHOWN_RECORDS_READ_SCRIPT = """
+() => {
+  const app = window.__GBDRAW_APP__;
+  if (app.mode === 'circular') {
+    const discovery = app.circularRecordDiscoveryState;
+    return !discovery.hasInput || discovery.status === 'ready';
+  }
+  return app.linearSeqs
+    .filter((seq) => app.shownInputComplete('linear', seq))
+    .every((seq) => !app.linearRecordSelectorDisabled(seq));
+}
+"""
+
+
+def inspect_shown_records(page) -> None:
+    """Read the shown drawing's records, as the reader's upload did (OV-3139).
+
+    A tutorial reader uploads the files, and an upload reads their records ("1 source record
+    inspected", the Record select naming the record). A loaded Session leaves them unread
+    until **Inspect source records** (a Linear card's **Inspect records**), which changes
+    neither the Result nor Undo history; this presses that action through the app.
+    """
+
+    page.evaluate(
+        """
+        async () => {
+          const app = window.__GBDRAW_APP__;
+          await (app.mode === 'circular' ? app.inspectCircularSourceRecords() : app.refreshLinearRecordSelectors());
+        }
+        """
+    )
+    try:
+        page.wait_for_function(SHOWN_RECORDS_READ_SCRIPT, timeout=DEFAULT_GENERATE_TIMEOUT_MS)
+    except Exception as error:
+        raise RuntimeError(f"Could not read the records of the capture session: {error}") from error
+
+
+def assert_capture_records_read(page) -> None:
+    """A webapp crop shows the records read, as the reader who uploaded the files sees them."""
+
+    if not page.evaluate(SHOWN_RECORDS_READ_SCRIPT):
+        raise RuntimeError(
+            "capture shows records not inspected: the reader who uploaded the files sees them read."
+        )
 
 
 def apply_capture_action(page, action: dict[str, Any]) -> None:
@@ -1355,9 +1445,18 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
                 "() => document.querySelectorAll('[data-linear-source-fold]')"
                 ".forEach((fold) => { fold.open = true; })"
             )
+            # The uploader offers the files of a loaded Session (**Files in this Session**). A
+            # tutorial reader uploaded the files and has no Session, so no capture shows it
+            # (OV-3330); `add_step_text_validation` keeps every step from naming it.
+            page.add_style_tag(content=f"{SESSION_FILE_CHOOSER_SELECTOR} {{ display: none !important; }}")
         replay_through = capture.get("replayThrough")
         if isinstance(replay_through, int):
             replay_tutorial_steps(page, sample, replay_through)
+        # After the replay, so the read meets the settings of the reader's step, as an upload
+        # does: a read that finds one record opens the single-record panel only when those
+        # settings allow it.
+        if session_path is not None and session_path.exists():
+            inspect_shown_records(page)
     else:
         raise RuntimeError(f"Unsupported capture source: {source}")
 
@@ -1486,6 +1585,8 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
             "height": float(box["height"]),
         }
 
+    if as_text(capture.get("source")).lower() in {"webapp", "web-app", "app"}:
+        assert_capture_records_read(page)
     assert_capture_app_state(page, capture)
     assert_capture_visible_contract(page, capture, clip)
     png_bytes = page.screenshot(type="png", clip=clip)

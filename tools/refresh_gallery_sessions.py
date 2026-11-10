@@ -47,6 +47,7 @@ from gbdraw.session_io import (  # noqa: E402
     validate_session,
     write_serialized_session,
     write_session_json,
+    written_file_metadata,
 )
 from gbdraw.session import _keep_resources  # noqa: E402
 from gbdraw.session_drawings import (  # noqa: E402
@@ -995,6 +996,48 @@ def _set_output_prefix(session: dict[str, Any], prefix: str) -> int:
     return changed
 
 
+def _store_written_file_metadata(session: dict[str, Any]) -> int:
+    """Give every file of ``session`` the metadata gbdraw's writer stores (OV-3331).
+
+    A Session the Web saved keeps each uploaded file's browser metadata (a media
+    type the machine guessed from the file name, the file's modification time),
+    and the Python writer keeps an entry it carries over. A Gallery Session is
+    published by this tool, not by a browser, so each resource and each file
+    binding (a leaf with a ``resourceId``) takes the metadata of its resource
+    kind (:func:`written_file_metadata`): the same bytes on every machine.
+    Returns the number of entries changed.
+    """
+
+    resources = session.get("resources")
+    resources = resources if isinstance(resources, dict) else {}
+    kinds = {
+        resource_id: resource.get("kind") for resource_id, resource in resources.items() if isinstance(resource, dict)
+    }
+    entries: list[tuple[dict[str, Any], object]] = [
+        (resource, resource.get("kind")) for resource in resources.values() if isinstance(resource, dict)
+    ]
+
+    def bindings(value: object) -> None:
+        if isinstance(value, list):
+            for item in value:
+                bindings(item)
+        elif isinstance(value, dict):
+            if "resourceId" in value and ("type" in value or "lastModified" in value):
+                entries.append((value, kinds.get(str(value["resourceId"]))))
+            for key, item in value.items():
+                if key != "resources":
+                    bindings(item)
+
+    bindings(session)
+    changed = 0
+    for entry, kind in entries:
+        metadata = written_file_metadata(kind if isinstance(kind, str) else None)
+        if any(entry.get(field) != value for field, value in metadata.items()):
+            entry.update(metadata)
+            changed += 1
+    return changed
+
+
 def _materialize_one_record_sources(session: dict[str, Any]) -> int:
     """Store the record of a one-record GenBank source as the CLI replay writes it.
 
@@ -1692,7 +1735,7 @@ def _refresh_one_session(
         # `finalize` keeps, so it is set on the input, before `prepare`.
         if _reopen_for_publication(session_path, session) + _set_output_prefix(
             session, gallery_id
-        ) + _search_stale_losat_results(
+        ) + _store_written_file_metadata(session) + _search_stale_losat_results(
             session, staging_root, env=env
         ):
             publication_input_path = (

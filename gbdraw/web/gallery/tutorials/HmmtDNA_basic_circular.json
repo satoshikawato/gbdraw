@@ -63,9 +63,10 @@
           "capture": {
             "source": "webapp",
             "session": "./sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+            "replayThrough": 2,
             "viewport": {
               "width": 1280,
-              "height": 900
+              "height": 1400
             },
             "actions": [
               {
@@ -77,14 +78,18 @@
                 "script": "() => (document.querySelector(\"[data-setting='inputs']\")?.textContent || '').includes('HmmtDNA.gbk')"
               }
             ],
-            "cardTitle": "Input Genomes",
             "cropPadding": 14,
             "assertAppState": {
               "mode": "circular",
               "circularFileCards.cards.value.0.source.gb.name": "HmmtDNA.gbk"
             },
             "visibleText": [
-              "HmmtDNA.gbk"
+              "HmmtDNA.gbk",
+              "1 source record inspected"
+            ],
+            "clipSelectors": [
+              "[data-setting='inputs'] .card-header",
+              "section[aria-label='Record rotation']"
             ]
           }
         },

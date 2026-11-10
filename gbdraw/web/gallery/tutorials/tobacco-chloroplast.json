@@ -107,6 +107,8 @@
           },
           "capture": {
             "source": "webapp",
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "replayThrough": 2,
             "cardTitle": "Input Genomes",
             "cropPadding": 14,
             "actions": [
@@ -118,7 +120,10 @@
             "assertAppState": {
               "mode": "circular",
               "circularFileCards.cards.value.0.source.gb.name": "NC_001879.gbk"
-            }
+            },
+            "visibleText": [
+              "1 source record inspected"
+            ]
           }
         },
         {
@@ -751,10 +756,6 @@
               }
             ],
             "actions": [
-              {
-                "type": "click",
-                "selector": "button:text-is('Inspect source records')"
-              },
               {
                 "type": "waitForFunction",
                 "script": "() => { const app = window.__GBDRAW_APP__; const set = app?.annotationSets?.find((entry) => entry.id === 'plastome_regions'); return app?.circularRecordList?.length === 1 && set?.annotations?.map((entry) => entry.id).join(',') === 'lsc,irb,ssc,ira'; }"
