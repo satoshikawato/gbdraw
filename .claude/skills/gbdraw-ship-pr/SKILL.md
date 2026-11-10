@@ -22,9 +22,9 @@ this skill, they win.
 2. **Use at most two or three CI slots per session.** Serialize PRs that touch
    the same files: open the next one only after the previous one merges, then
    rebase it on `origin/dev`. Stack linearly; never stack through merge
-   commits. `CHANGELOG.md` does not count: while two or more of your PRs are
-   open at once, leave their entries out. Add them together to the last open
-   PR once the others have merged, or in one documentation-only PR afterwards.
+   commits. Changelog entries never serialize PRs: each PR writes its own
+   fragment under `changelog.d/` (`changelog.d/README.md`) and leaves
+   `CHANGELOG.md` alone.
 3. **Check version literals.** If the change bumps a schema or version
    constant, grep `tests/`, `docs/capture/`, `docs/recipes/`, and tool fixtures
    for the old value, including suites that run only on `main`, nightly, or by
