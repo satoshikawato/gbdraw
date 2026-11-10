@@ -490,19 +490,25 @@ def linear_annotation_label_side(
     """Where a Linear annotation slot on ``side`` puts its labels; ``feature_slot_sides`` is the side of each drawn
     features slot, by slot id.
 
-    The labels of an overlay that keeps off its anchor's glyphs (``overlay_labels_clear_anchor``) stand on its
-    marks' other side, away from lanes drawn above or below the axis, and beyond lanes drawn on the axis, on its
-    layer's side. Every other slot puts its labels above its marks on the ``above`` side and on an underlay overlay,
-    below them elsewhere.
+    An overlay anchored on a features slot drawn on the axis that spans no other slot (no ``to_slot``) puts its
+    labels below the lanes on either layer, where feature labels do not stand (OV-3223): beyond them when it keeps
+    off its anchor's glyphs (``overlay_labels_clear_anchor``), and below its covering band with ``cover_anchor``.
+    An overlay that keeps off the glyphs of lanes drawn above or below the axis stands its labels on its marks'
+    other side, away from the lanes. Every other slot puts its labels above its marks on the ``above`` side and on
+    an underlay overlay, below them elsewhere.
     """
 
-    layer_above = side == "above" or (side == "overlay" and params.layer == "underlay")
     anchor = overlay_labels_clear_anchor(side, params, feature_slot_sides)
-    if anchor is None:
-        return LinearAnnotationLabelSide(layer_above)
-    if feature_slot_sides[anchor] == "overlay":
-        return LinearAnnotationLabelSide(layer_above, anchor)
-    return LinearAnnotationLabelSide(feature_slot_sides[anchor] == "below")
+    if (
+        side == "overlay"
+        and params.to_slot is None
+        and params.anchor_slot is not None
+        and feature_slot_sides.get(params.anchor_slot) == "overlay"
+    ):
+        return LinearAnnotationLabelSide(False, anchor)
+    if anchor is not None:
+        return LinearAnnotationLabelSide(feature_slot_sides[anchor] == "below")
+    return LinearAnnotationLabelSide(side == "above" or (side == "overlay" and params.layer == "underlay"))
 
 
 def annotation_track_params_from_mapping(params: Mapping[str, object]) -> AnnotationTrackParams:

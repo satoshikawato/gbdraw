@@ -705,7 +705,20 @@ def test_linear_span_with_nothing_to_cover_reserves_its_mark_like_a_plain_overla
 
     # OV-1171: record 2 has neither lanes nor depth, so the span has nothing to cover there. It keeps its own
     # band and reserves it, with its labels, as a plain overlay on its anchor does ...
-    assert slots(span) == slots(plain)
+    if anchor == "features" and layer == "underlay" and label_text:
+        # ... except that a plain overlay on the features slot drawn on the axis stands its labels below it on
+        # either layer (OV-3223), while a span keeps its layer's side, above: each reserves the same label room
+        # on its own side of the same band.
+        own, plain_own = slots(span)["regions"], slots(plain)["regions"]
+        assert (own["resolvedOriginPx"], own["heightPx"]) == (plain_own["resolvedOriginPx"], plain_own["heightPx"])
+        band_top = float(own["resolvedOriginPx"])
+        band_bottom = band_top + float(own["heightPx"])
+        above, below = own["reserveBand"], plain_own["reserveBand"]
+        assert (above["bottomPx"], below["topPx"]) == pytest.approx((band_bottom, band_top), abs=1e-9)
+        assert band_top - above["topPx"] == pytest.approx(below["bottomPx"] - band_bottom, abs=1e-9)
+        assert band_top - above["topPx"] > 0.0
+    else:
+        assert slots(span) == slots(plain)
     # ... so its mark lies over no slot but its anchor (no line across the GC or skew plot).
     regions = slots(span)["regions"]
     top = float(regions["resolvedOriginPx"])
@@ -2684,9 +2697,10 @@ regions\tlysis\tline\t44000\t46500\tLysis\thorizontal\t20
 _OVERLAY_LAYOUTS = {
     # Labels on the glyphs on dev: the marks lie between the axis and the lanes below it ...
     "below-foreground": ("features:features@side=below", "layer=foreground,z=1", "above"),
-    # ... or on the lanes of features drawn on the axis (the default middle layout) ...
+    # ... or on the lanes of features drawn on the axis (the default middle layout), where they stand below the
+    # lanes on either layer, as a covering overlay's do there (OV-3223) ...
     "middle-foreground": ("features:features@side=overlay", "layer=foreground,z=1", "beyond below"),
-    "middle-underlay": ("features:features@side=overlay", "layer=underlay,z=-1", "beyond above"),
+    "middle-underlay": ("features:features@side=overlay", "layer=underlay,z=-1", "beyond below"),
     # ... or between the lanes above the axis and the axis, hidden under the glyphs (OV-3219).
     "above-underlay": ("features:features@side=above,z=1", "layer=underlay,z=0", "below"),
     # Already off the glyphs on dev: unchanged.
@@ -2694,10 +2708,24 @@ _OVERLAY_LAYOUTS = {
     "above-foreground": ("features:features@side=above", "layer=foreground,z=1", "below"),
     "cover-foreground": ("features:features@side=below", "layer=foreground,z=1,cover_anchor=true", "beyond below"),
     "cover-underlay": ("features:features@side=below,z=1", "layer=underlay,z=0,cover_anchor=true", "beyond above"),
+    # A covering overlay on lanes drawn on the axis stands its labels below them on either layer (OV-3223): an
+    # underlay one, such as the automatic row of labelled highlights, no longer above them.
+    "middle-cover-foreground": (
+        "features:features@side=overlay", "layer=foreground,z=1,cover_anchor=true", "beyond below"
+    ),
+    "middle-cover-underlay": ("features:features@side=overlay", "layer=underlay,z=-1,cover_anchor=true", "beyond below"),
 }
 
 
-def _lambda_overlay(tmp_path: Path, layout: str, *, tsv: str = _OVERLAY_REGIONS_TSV, overrides=None):
+def _lambda_overlay(
+    tmp_path: Path,
+    layout: str,
+    *,
+    tsv: str = _OVERLAY_REGIONS_TSV,
+    overrides=None,
+    slots: tuple[str, ...] = (),
+    params: str = "",
+):
     features, overlay, _side = _OVERLAY_LAYOUTS[layout]
     table = tmp_path / "regions.tsv"
     table.write_text(tsv, encoding="utf-8")
@@ -2709,7 +2737,10 @@ def _lambda_overlay(tmp_path: Path, layout: str, *, tsv: str = _OVERLAY_REGIONS_
             legend="none",
             linear_track_slots=[
                 parse_linear_track_slot(features),
-                parse_linear_track_slot(f"regions:annotations@set_id=regions,side=overlay,anchor_slot=features,{overlay}"),
+                *(parse_linear_track_slot(slot) for slot in slots),
+                parse_linear_track_slot(
+                    f"regions:annotations@set_id=regions,side=overlay,anchor_slot=features,{overlay}{params}"
+                ),
             ],
             annotation_options=AnnotationOptions(table_file=str(table)),
         ),
@@ -2816,6 +2847,34 @@ def test_linear_overlay_region_labels_of_two_lanes_stay_off_the_glyphs_and_each_
     assert not any(_overlapping(a, b) for index, a in enumerate(inks) for b in inks[index + 1 :])
     above = [label["ink"][3] <= label["mark"][0] for label in _span_label_marks(drawing)]
     assert len(set(above)) == 1
+
+
+def test_linear_span_from_lanes_on_the_axis_keeps_its_labels_on_its_layer_side(tmp_path: Path) -> None:
+    # An underlay that spans from the lanes on the axis to the GC plot above them stands its labels above the GC
+    # plot, on its layer's side, as before: only overlays that span nothing go below the lanes (OV-3223).
+    drawing = _lambda_overlay(
+        tmp_path, "middle-underlay", slots=("gc:dinucleotide_content@side=above",), params=",to_slot=gc"
+    )
+    glyphs = _feature_glyph_boxes(drawing)
+
+    assert len(_region_label_inks(drawing)) == 7
+    assert _labels_on_glyphs(drawing) == []
+    for label in _span_label_marks(drawing):
+        assert label["ink"][3] <= label["mark"][0], label["text"]
+        assert label["ink"][3] <= min(box[1] for box in glyphs), label["text"]
+    assert _label_box(drawing)[1] <= _slot_paint(drawing, "gc")[0]
+
+
+def test_linear_highlight_labels_stand_below_lanes_drawn_on_the_axis() -> None:
+    # The default figure: the labelled highlights' automatic row covers the lanes drawn on the axis (the default
+    # middle layout). Its labels stand below the tint, label_offset from it, where feature labels do not stand
+    # (OV-3223); dev stood them above the lanes.
+    drawing = _real_record_tint("NC_001416.gb", 27500, 29500, "Integration", "middle")
+    (label,) = _span_label_marks(drawing)
+
+    assert label["text"] == "Integration"
+    assert label["ink"][1] >= label["mark"][1] and _ink_gap_to_mark(label) == pytest.approx(4.0, abs=1e-6)
+    assert label["ink"][1] > max(box[3] for box in _feature_glyph_boxes(drawing))
 
 
 # The layouts whose labels were already off the glyphs keep every label where dev drew it (values read on dev
