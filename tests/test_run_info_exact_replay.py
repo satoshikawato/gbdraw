@@ -40,7 +40,9 @@ SOURCE_SHA = "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
 # 3,107 (7d9560a3... before).
 # OV-3084 (every track group named from its slot) moved it again: only the slot group ids, the ids hashed from them,
 # the references that follow them, and the features group's added slot tags changed (16305735... before).
-OUTPUT_SHA = "cb9037a6761ae9f38c5b69d860757d5ce996223a4aa9759785b2f7e520ccb3fe"
+# OV-3300 (Circular tick labels inside the scale stand as close to their ticks as outside) moved it again: the tick
+# labels and the tracks inside them moved, with the ids hashed from their paths (cb9037a6... before).
+OUTPUT_SHA = "9dcef4d8e16eb2549b73b5a2263697b4c6af08fba49b88525fd5719ff8375686"
 # The replay before the feature label style (dev d84352d8a, hash
 # 76e2e0a1250b90d63fcd55ef3a96119c8ab3fafc5c890594033fa27aa94379d0), with only
 # the overlayObstacles array of the composition removed. The leader width went
@@ -50,9 +52,10 @@ OUTPUT_SHA = "cb9037a6761ae9f38c5b69d860757d5ce996223a4aa9759785b2f7e520ccb3fe"
 # and since D-13 D2 with 3-decimal path numbers (9a34cf0d... before), and since OV-1840 with split Circular arcs
 # (bcdd87d3... before), and since OV-2863 and OV-2870 with the new GC content and skew paths (8d5f0207... before),
 # and since OV-2799 with the GC content path over A/C/G/T only (428cb45b... before), and since OV-3084 with the slot
-# group ids (123694e1... before).
+# group ids (123694e1... before), and since OV-3300 with the tick labels inside the scale closer to their ticks
+# (d93a6549... before).
 PRE_FEATURE_LABEL_STYLE_COMPARABLE_SHA = (
-    "d93a6549f007b4573d8078dee274e80d6167d0feaa5fa814f0b5cbcc1420777c"
+    "d3637cfafd9c8dcc212df8117d912eca860e96d6bbb1d9db65545018372cda8e"
 )
 
 
