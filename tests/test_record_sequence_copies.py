@@ -35,9 +35,6 @@ SEQUENCE_NAMES = {"seq", "sequence"}
 # reads such a sequence in pieces removes its entry.
 SITES: dict[str, int] = {
     "gbdraw/analysis/protein_colinearity.py::_clean_protein_sequence::str()": 1,
-    "gbdraw/analysis/skew.py::_counted_bases::reverse_complement()": 1,
-    "gbdraw/analysis/skew.py::counted_sequence::bytes()": 1,
-    "gbdraw/analysis/skew.py::counted_sequence::str()": 1,
     "gbdraw/comparisons/circular_losat.py::comparison_query_fasta::join": 1,
     "gbdraw/comparisons/circular_losat.py::comparison_query_fasta::str()": 1,
     "gbdraw/comparisons/locate.py::locate_query::reverse_complement()": 1,
@@ -46,17 +43,11 @@ SITES: dict[str, int] = {
     "gbdraw/comparisons/losat_jobs.py::losat_fasta_text::str()": 1,
     "gbdraw/comparisons/losat_jobs.py::losat_search_frame_fasta::reverse_complement()": 1,
     "gbdraw/comparisons/losat_jobs.py::losat_search_frame_fasta::str()": 1,
-    "gbdraw/core/record_metadata.py::record_content_digest::bytes()": 1,
-    "gbdraw/crop_genbank.py::gbk_to_seqrecord::SeqIO.parse": 1,
     "gbdraw/crop_genbank.py::write_cropped_genbank::SeqIO.write": 1,
     "gbdraw/io/comparison_sequences.py::_sequence_text::str()": 1,
     "gbdraw/io/comparison_sequences.py::read_comparison_sequence_file::SeqIO.parse": 1,
     "gbdraw/io/genome.py::record_sequence_text::str()": 1,
-    "gbdraw/io/record_select.py::reverse_records::reverse_complement()": 1,
-    "gbdraw/io/regions.py::_origin_crossing_view::+": 1,
     "gbdraw/session_request_codec.py::_genbank_bytes::SeqIO.write": 1,
-    "gbdraw/session_request_codec.py::_with_crop_edits::bytes()": 1,
-    "gbdraw/session_request_codec.py::_with_crop_edits::reverse_complement()": 1,
     "gbdraw/web_support/record_spans.py::read_record_span_sequences.source_bases::str()": 1,
     "gbdraw/web_support/sequence_search.py::read_search_queries::str()": 1,
 }

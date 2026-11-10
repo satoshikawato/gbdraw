@@ -106,11 +106,13 @@ from gbdraw.features.placement import (
 from gbdraw.io.colors import color_table_path
 from gbdraw.io.record_select import (
     RecordSelector,
+    complemented_as_rna,
     edited_crop_draw_order,
     in_draw_order,
     parse_record_selector,
     reverse_records,
 )
+from gbdraw.io.record_sequences import same_bases, sequence_view, two_turns
 from gbdraw.io.regions import RecordWindow, RegionSpec, _wrapped_location, crop_record_to_region, region_text
 from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
@@ -1183,8 +1185,14 @@ def _with_crop_edits(source: SeqRecord, crop: SeqRecord, window: RecordWindow) -
 
     across_origin = window.start > window.end
     start_0, end_0 = window.start - 1, window.end
-    bases = source.seq[start_0:] + source.seq[:end_0] if across_origin else source.seq[start_0:end_0]
-    if bytes(crop.seq) != bytes(bases.reverse_complement() if window.reverse_complement else bases):
+    # The window's bases, read from the source (two turns of it across its origin) and compared a span at a time.
+    length = len(source)
+    turns = two_turns(source.seq) if across_origin else source.seq
+    low, high = (min(start_0, length), length + min(end_0, length)) if across_origin else (start_0, end_0)
+    # A reverse-complemented crop is complemented as its record is: an RNA record as RNA (OV-3332).
+    bases = sequence_view(turns, low, high, strand=-1 if window.reverse_complement else 1,
+                          rna=window.reverse_complement and complemented_as_rna(source))
+    if not same_bases(crop.seq, bases):
         return None
     spec = RegionSpec(
         raw=region_text(window.start, window.end, window.reverse_complement), file_selector=None, record_id=None,

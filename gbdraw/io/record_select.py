@@ -25,6 +25,7 @@ from ..core.record_metadata import (
     _write_coord_map,
     record_identity_key,
 )
+from .record_sequences import sequence_view
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +220,35 @@ def in_draw_order(record: SeqRecord) -> SeqRecord:
     return ordered
 
 
+def complemented_as_rna(record: SeqRecord) -> bool:
+    """Whether ``record``'s reverse complement complements it as RNA (A to U), as Biopython's
+    ``SeqRecord.reverse_complement`` does: when its ``molecule_type`` says RNA. One that says protein has none."""
+
+    molecule_type = str(record.annotations.get("molecule_type", ""))
+    if "protein" in molecule_type:
+        raise ValueError("Proteins do not have complements!")
+    return "RNA" in molecule_type
+
+
+def _reverse_complement_record(record: SeqRecord, features: list[SeqFeature]) -> SeqRecord:
+    """``record.reverse_complement(id=True, name=True, description=True, features=features, annotations=True,
+    letter_annotations=True, dbxrefs=True)``, its sequence a reverse-strand view of ``record``'s
+    (:func:`complemented_as_rna`)."""
+
+    reversed_record = SeqRecord(
+        sequence_view(record.seq, strand=-1, rna=complemented_as_rna(record)),
+        id=record.id,
+        name=record.name,
+        description=record.description,
+        dbxrefs=record.dbxrefs[:],
+        features=features,
+        annotations=record.annotations.copy(),
+    )
+    for key, value in record.letter_annotations.items():
+        reversed_record.letter_annotations[key] = value[::-1]
+    return reversed_record
+
+
 def reverse_records(
     records: Sequence[SeqRecord],
     reverse_flag: bool,
@@ -269,15 +299,7 @@ def reverse_records(
             reversed_features.sort(key=lambda feature: order[id(feature)])
         else:
             reversed_features.sort(key=_feature_start)
-        reversed_record = rec.reverse_complement(
-            id=True,
-            name=True,
-            description=True,
-            features=reversed_features,
-            annotations=True,
-            letter_annotations=True,
-            dbxrefs=True,
-        )
+        reversed_record = _reverse_complement_record(rec, reversed_features)
         _write_coord_map(reversed_record, base=rc_base, step=rc_step)
         reversed_window_source(reversed_record, rec)
         reversed_records.append(reversed_record)

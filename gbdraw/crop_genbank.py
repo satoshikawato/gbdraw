@@ -17,7 +17,8 @@ from gbdraw.core.record_metadata import (
     _feature_source_index_map,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.input_text import LineStream, read_sequence_text
+from gbdraw.io.genome import read_flat_file_records
+from gbdraw.io.record_sequences import sequence_view
 
 def _get_args():
     parser = argparse.ArgumentParser(description='Crop genbank file. ')
@@ -52,8 +53,9 @@ def _get_args():
 
 
 def gbk_to_seqrecord(in_gbk):
-    """The first record of a GenBank file, its text read as every sequence file is (``read_sequence_text``)."""
-    return read_sequence_text(in_gbk, lambda lines: next(SeqIO.parse(LineStream(lines), 'genbank')))
+    """The first record of a GenBank file, read as the drawing reads it (``read_flat_file_records``): its sequence
+    is read from the file on demand."""
+    return read_flat_file_records(in_gbk)[0]
 
 
 def check_start_end_coords(record_len: int, start: int, end: int, record_id: str) -> tuple[int, int]:
@@ -234,9 +236,8 @@ def main():
     start_0, end_0 = check_start_end_coords(len(record.seq), start_1, end_1, str(record.id))
 
     # 3. Crop Sequence and Create New Record
-    new_seq = record.seq[start_0:end_0]
     new_record = SeqRecord(
-        new_seq,
+        sequence_view(record.seq, start_0, end_0),
         id=record.id,
         name=record.name,
         description=record.description,
