@@ -379,3 +379,19 @@ def test_crop_genbank_writes_what_it_wrote_with_its_own_parse(
         assert bytes(SeqIO.read(out, "genbank").seq) == bytes(record.seq)[start - 1 : end]
         return
     assert out.read_bytes() == (tmp_path / "old.gb").read_bytes()
+
+
+@pytest.mark.parametrize("name", ["fixtures/input_variants/cgview7_multi_record.gbff", "fixtures/b_dup_ids.gb"])
+@pytest.mark.parametrize("packed", [False, True], ids=["plain", "gzip"])
+def test_the_first_record_alone_reads_as_it_does_among_all(name: str, packed: bool, tmp_path: Path) -> None:
+    """``crop_genbank`` reads the first record only (``first_only``), as its own parse did, not every record."""
+
+    path = TESTS / name
+    if packed:
+        path = tmp_path / (path.name + ".gz")
+        path.write_bytes(gzip.compress((TESTS / name).read_bytes()))
+    every = read_flat_file_records(str(path))
+    (first,) = read_flat_file_records(str(path), first_only=True)
+    assert len(every) > 1
+    assert (first.id, bytes(first.seq), [str(f.location) for f in first.features]) == (
+        every[0].id, bytes(every[0].seq), [str(f.location) for f in every[0].features])
