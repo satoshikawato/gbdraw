@@ -229,9 +229,12 @@ const orthogroups = typedRef(/** @type {OrthogroupGroup[]} */ ([]));
 const collinearGroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
 const selectedOrthogroupAlignmentFeature = ref('');
-const similarityAlignmentPlan = ref(null);
-const similarityAlignmentResetReceipt = ref(null);
-const linearRecordTranslations = ref([]);
+/** @import { CanonicalSimilarityAlignmentPlan } from './contracts/request.generated.js' */
+/** @import { StoredRecordTranslation } from './services/linear-record-layout.js' */
+/** @import { AlignmentResetReceipt } from './services/session-active-config-contract.js' */
+const similarityAlignmentPlan = typedRef(/** @type {CanonicalSimilarityAlignmentPlan | null} */ (null));
+const similarityAlignmentResetReceipt = typedRef(/** @type {AlignmentResetReceipt | null} */ (null));
+const linearRecordTranslations = typedRef(/** @type {StoredRecordTranslation[]} */ ([]));
 const selectedOrthogroupId = typedRef('');
 const orthogroupSearch = typedRef('');
 const orthogroupSortMode = typedRef('id');
@@ -285,7 +288,7 @@ const biologicalFeatures = ref([]); // Complete source catalog, including non-re
 /** @import { FeatureCatalog } from './services/feature-catalog.js' */
 // Null, or the admitted catalog of the committed Results (`admittedFeatureCatalog`
 // in services/config.js; R11), held by reference.
-const featureCatalog = /** @type {{ value: FeatureCatalog | null }} */ (ref(null));
+const featureCatalog = typedRef(/** @type {FeatureCatalog | null} */ (null));
 // Whether the rule preparation (app/rule-matching.js) is matching rules; it
 // records the matches, which live on the feature objects, before this falls back.
 const ruleMatchingPending = ref(false);
