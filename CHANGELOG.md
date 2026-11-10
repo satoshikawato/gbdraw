@@ -10,6 +10,10 @@ and full feature descriptions) live under `docs/RELEASE_NOTES_*.md`. This
 file is the short, chronological index; follow the links below for the full
 write-up of a release.
 
+While a release is developed, each pull request writes its entries to its own
+file under [`changelog.d/`](./changelog.d/README.md); the release moves them
+into the `[Unreleased]` list below.
+
 ## [Unreleased]
 
 - Fixed: in the Web app, Add track with the Annotations renderer gave the new

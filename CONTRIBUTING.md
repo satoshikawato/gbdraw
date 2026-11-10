@@ -421,6 +421,10 @@ corresponding issue. Then:
    owner or path in the same change.
 8. If SVG output changes, review the actual output and the reference diff, and
    identify every intentional rendering change.
+9. If the change deserves a `CHANGELOG.md` entry, write the entry in a new file
+   under [`changelog.d/`](./changelog.d/README.md), named after your branch,
+   instead of editing `CHANGELOG.md`. `python tools/changelog.py check` checks
+   it; the release session folds the entries into `CHANGELOG.md`.
 
 Passing CI is necessary but not sufficient for merge. The maintainer also
 evaluates product behavior, scientific meaning, architecture, compatibility,
