@@ -108,9 +108,10 @@ write-up of a release.
   Session replays it as drawn (OV-3247). A feature copied into a crop from
   another crop of the same record is a feature added at its place, with the
   ID and paint order its replay gives it (OV-3256). An edited crop across the
-  origin is saved as its source with the edits, so its replay keeps the crop's
-  subtitle, width and feature IDs, and a feature added to it past the source's
-  origin has the ID of its place on the source (OV-3262).
+  origin is saved as its source with the edits, so it replays as drawn, with
+  its subtitle, width, feature IDs and partial feature ends (OV-3262). A crop
+  of a crop across the origin that runs across the origin or lies past it now
+  draws, also reverse-complemented (OV-3270).
 - Changed: a crop given in memory and edited since its cut draws its features
   in the order its Session replay draws them, the figure Save Session and Load
   already gave: a crop in source order, with added features after the kept

@@ -11,7 +11,7 @@ import re
 from pathlib import PurePath, PureWindowsPath
 from typing import Sequence
 
-from Bio.SeqFeature import CompoundLocation, Location, SeqFeature, SimpleLocation
+from Bio.SeqFeature import CompoundLocation, ExactPosition, Location, SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
 from ..analysis.windows import WINDOW_SOURCE_ANNOTATION, keep_window_source
@@ -358,7 +358,8 @@ def _wrapped_location(location: Location, length: int) -> Location:
     """``location``, read on a circle of ``length`` bases from its origin onwards for up to two turns, on one turn:
     the inverse of ``_unwrapped_location``. A part past the origin moves one turn back, and a part across it is split
     there (``_source_intervals``) into a part that ends at the origin and one that starts after it, in biological
-    order."""
+    order. The cut points at the origin are exact; the part's own ends keep their positions (a partial end stays
+    partial)."""
 
     parts: list[Location] = []
     for part in getattr(location, "parts", None) or [location]:
@@ -367,7 +368,11 @@ def _wrapped_location(location: Location, length: int) -> Location:
         if len(intervals) == 1:
             parts.append(part if intervals[0][0] == start else part._shift(intervals[0][0] - start))
             continue
-        pieces = [SimpleLocation(low, high, strand=part.strand) for low, high in intervals]
+        # A position plus an offset keeps its kind (minus gives a plain int).
+        pieces = [
+            SimpleLocation(part.start, ExactPosition(length), strand=part.strand),
+            SimpleLocation(ExactPosition(0), part.end + (-length), strand=part.strand),
+        ]
         parts.extend(reversed(pieces) if part.strand == -1 else pieces)
     if len(parts) == 1:
         return parts[0]
@@ -459,6 +464,9 @@ def _crop_record_to_region(
         if sliced:
             new_record.letter_annotations = sliced
 
+    # A crop across the origin, or a crop of one, reads source bases round the circle (``_wrap_source_base``): the
+    # base of its map is a source base, also where it lies past the source end (OV-3270).
+    period = source_length if crosses_origin else _source_period(record)
     new_record.features = crop_and_shift_features(
         source.features,
         start_0,
@@ -467,17 +475,14 @@ def _crop_record_to_region(
         coord_step=coord_step,
         period=_source_period(record),
     )
-    cropped_base = coord_base + (coord_step * start_0)
+    cropped_base = _wrap_source_base(coord_base + (coord_step * start_0), period)
     cropped_step = coord_step
     _write_coord_map(new_record, base=cropped_base, step=cropped_step)
 
     if spec.reverse_complement:
         new_record = reverse_records((new_record,), True, log=log)[0]
         cropped_length = len(new_record.seq)
-        rc_base = cropped_base + (cropped_step * max(0, cropped_length - 1))
-        if crosses_origin:
-            # The map reads source bases round the circle (``_wrap_source_base``); its base is a source base.
-            rc_base = _wrap_source_base(rc_base, source_length)
+        rc_base = _wrap_source_base(cropped_base + (cropped_step * max(0, cropped_length - 1)), period)
         rc_step = -cropped_step
         _write_coord_map(new_record, base=rc_base, step=rc_step)
 

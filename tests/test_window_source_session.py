@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
-from Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqFeature import AfterPosition, BeforePosition, CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api import (
@@ -613,7 +613,35 @@ _ORIGIN_EDITS = {
     "added": lambda crop: crop.features.append(
         SeqFeature(FeatureLocation(9_500, 10_500, 1), type="CDS", qualifiers={"locus_tag": ["NEW"], "product": ["n"]})
     ),
+    # A partial CDS added across the source's origin, open at both ends: its partial ends stay on replay.
+    "partial": lambda crop: crop.features.append(
+        SeqFeature(FeatureLocation(BeforePosition(9_900), AfterPosition(10_200), 1), type="CDS",
+                   qualifiers={"locus_tag": ["NEW"], "product": ["n"]})
+    ),
 }
+
+
+@pytest.mark.parametrize(
+    ("location", "expected"),
+    [
+        (FeatureLocation(BeforePosition(59_900), AfterPosition(60_200), 1), "join{[<59900:60000](+), [0:>200](+)}"),
+        (FeatureLocation(BeforePosition(59_900), AfterPosition(60_200), -1), "join{[0:>200](-), [<59900:60000](-)}"),
+        (FeatureLocation(BeforePosition(60_100), AfterPosition(60_400), 1), "[<100:>400](+)"),
+        (FeatureLocation(BeforePosition(100), AfterPosition(900), -1), "[<100:>900](-)"),
+    ],
+    ids=["across-plus", "across-minus", "past", "before"],
+)
+def test_a_place_read_past_the_origin_is_wrapped_onto_the_circle_with_its_partial_ends(location, expected) -> None:
+    """A place read past the origin of a circle goes back onto it; a part across the origin is split there, the cut
+    points exact and the outer ends keeping their partial positions, and reading it round the origin gives the place
+    back (OV-3262)."""
+
+    from gbdraw.io.regions import _unwrapped_location, _wrapped_location
+
+    wrapped = _wrapped_location(location, 60_000)
+    assert str(wrapped) == expected
+    if isinstance(wrapped, CompoundLocation):
+        assert str(_unwrapped_location(wrapped, 60_000)) == str(location)
 
 
 @pytest.mark.parametrize("mode", ["linear", "circular"])
@@ -636,6 +664,23 @@ def test_an_edited_crop_across_the_origin_is_saved_with_its_edits_on_its_source(
     assert replay == live
     [saved] = _saved_records(tmp_path)
     assert [(window["start"], window["end"]) for window in saved["windows"]] == [(50001, 10000)]
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+@pytest.mark.parametrize(
+    "inner", ["src:5001-15000:rc", "src:5001-15000", "src:12001-15000", "src:12001-15000:rc"],
+    ids=["across-reversed", "across-forward", "past-forward", "past-reversed"],
+)
+def test_a_crop_of_a_crop_across_the_origin_draws_and_replays(mode: str, inner: str, tmp_path: Path) -> None:
+    """A crop of a crop across the origin reads its source bases round the origin, whether it runs across the origin
+    or lies past it, forward or reverse-complemented: it draws, and its Session replays it as drawn (OV-3270)."""
+
+    from gbdraw.io.regions import crop_record_to_region
+
+    outer = crop_record_to_region(_flanked_source(), parse_region_specs(["src:50001-10000:origin"])[0], circular=True)
+    crop = crop_record_to_region(outer, parse_region_specs([inner])[0])
+    live, replay = _replayed(_request(mode, crop, tmp_path), tmp_path)
+    assert replay == live
 
 def _twins_source() -> SeqRecord:
     """A linear 60 kb record with a CDS X and two identical CDS B and C (same type and location) inside 20-40 kb."""
