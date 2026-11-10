@@ -105,7 +105,8 @@ rows in order:
 2. `features`, on the axis
 3. `mitochondrial_regions`, inside the axis, width `24px`
 
-Bind the annotation row to `mitochondrial_regions`, show labels, set padding to
+The stack starts with an Annotations row that draws the imported set,
+`annotations_1`. Rename it `mitochondrial_regions`, show labels, set padding to
 `1`, and select **Compress** for overflow. Remove the GC-content and GC-skew
 rows. In **Axis & Scale**, set the axis stroke to `#374151` at `4` px. Set the
 plot title to `Human mitochondrial feature presentation`, position it at the

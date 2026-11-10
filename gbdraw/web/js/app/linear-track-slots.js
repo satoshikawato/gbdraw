@@ -23,7 +23,7 @@ import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
-import { OVERLAY_ANNOTATION_PARAMS, automaticAnnotationTrackSlots, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { OVERLAY_ANNOTATION_PARAMS, annotationSetForNewRow, annotationSetIdsOf, automaticAnnotationTrackSlots, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
 import {
@@ -240,11 +240,7 @@ export const createLinearTrackSlotEditor = ({
   /** @param {unknown} renderer */
   const linearTrackRendererLabel = (renderer) => tm(RENDERER_LABELS[normalizeRenderer(renderer)] || String(renderer || ''));
   /** @param {DrawingState} drawing */
-  const annotationSetIds = (drawing) => (
-    (Array.isArray(drawing.annotationSets) ? drawing.annotationSets : [])
-      .map((set) => String(set?.id || '').trim())
-      .filter(Boolean)
-  );
+  const annotationSetIds = (drawing) => annotationSetIdsOf(drawing.annotationSets);
 
   /** @param {DrawingState} drawing */
   const linearTrackValidationPlan = (drawing) => validateCustomTrackPlan({
@@ -522,8 +518,12 @@ export const createLinearTrackSlotEditor = ({
   /** @param {DrawingState} drawing @param {string} renderer */
   const nextLinearTrackSlotId = (drawing, renderer) => nextNumberedId(DEFAULT_SLOT_IDS[renderer] || 'slot', drawing.adv.linear_track_slots);
 
-  /** @param {unknown} [renderer] */
-  const addLinearTrackSlot = (renderer = 'spacer') => {
+  /**
+   * @param {unknown} [renderer]
+   * @param {string | null} [setId] The set a new Annotations row draws: '' for none yet (the row asks for one), null
+   *   for the first set no row names (`annotationSetForNewRow`; the root asks when every set has a row).
+   */
+  const addLinearTrackSlot = (renderer = 'spacer', setId = null) => {
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -536,7 +536,7 @@ export const createLinearTrackSlotEditor = ({
       height: normalizedRenderer === 'spacer' ? '12px' : '',
       params: normalizedRenderer === 'annotations'
         ? {
-            set_id: annotationSetIds(drawing)[0] || '',
+            set_id: setId ?? annotationSetForNewRow(drawing.adv.linear_track_slots, drawing.annotationSets) ?? '',
             overflow: 'error',
             show_labels: true,
             layer: 'foreground'
@@ -839,7 +839,8 @@ export const createLinearTrackSlotEditor = ({
     }
     if (slot.renderer === 'annotations') {
       slot.side = slot.side === 'overlay' ? 'overlay' : 'above';
-      slot.params.set_id = String(slot.params.set_id || drawing.annotationSets?.[0]?.id || '');
+      // The row itself names no set yet, so it does not count against one.
+      slot.params.set_id = String(slot.params.set_id || annotationSetForNewRow(drawing.adv.linear_track_slots, drawing.annotationSets) || '');
       slot.params.overflow = 'error';
       slot.params.show_labels = true;
       slot.params.layer = 'foreground';

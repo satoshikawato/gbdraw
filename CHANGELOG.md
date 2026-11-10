@@ -12,6 +12,14 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: in the Web app, Add track with the Annotations renderer gave the new
+  row the first Region Annotation set even when that set already had a row,
+  so the set was drawn twice without a word (two bracket rings for the tobacco
+  plastome after Use custom stack). The new row now draws the first set that
+  no row of the stack draws, in Circular and Linear. When every set already
+  has a row, a dialog asks whether the new row draws one of them again or
+  starts without a set; Cancel adds nothing. A row whose renderer is changed
+  to Annotations takes the first set without a row too, or none (OV-3153).
 - Fixed: in the Python API, a new drawing from a region ignored a Circular
   track slot given as a string (`"depth:depth@width=20px"`): the slot's hand-set
   width was neither kept nor returned to Auto as the same slot given as a

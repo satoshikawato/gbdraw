@@ -15,6 +15,9 @@ import { t } from '../utils/i18n.js';
  * @property {string} id What the promise of `ask` resolves to.
  * @property {string} label The button text; it names the outcome.
  * @property {ChoiceTone} [tone]
+ * @property {string} [detail] A line under the label that says what the choice does. When an action has one, the
+ *   actions show as a list of options above Cancel.
+ * @property {string} [icon] The Phosphor class of the icon that leads an option of that list, such as `ph-copy`.
  *
  * A short line of a choice dialog, led by an icon (a Phosphor class such as `ph-warning`).
  * @typedef {object} ChoiceLine
