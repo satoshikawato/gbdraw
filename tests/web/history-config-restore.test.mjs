@@ -190,9 +190,15 @@ console.log('History restores nullable config values and preserves key guards.')
 
 // SE-01, N-19, N-20: History checkpoints and the Session rollback hold the
 // admitted feature catalog by reference; state admits no other catalog.
+// OV-3285: a checkpoint restore installs the catalog's own features, as
+// Generate and Load do, so the rule matches recorded on them reach the
+// features each Result draws.
 {
   const { FEATURE_CATALOG_SCHEMA, admitFeatureCatalog, featureStateFromCatalog } = await import('../../gbdraw/web/js/services/feature-catalog.js');
-  const { buildEditorStateData, applyEditorStateData } = await import('../../gbdraw/web/js/services/config.js');
+  const {
+    buildEditorStateData, applyEditorStateData, buildFeatureStateData, applyFeatureStateData,
+    buildOrthogroupStateData, applyOrthogroupStateData
+  } = await import('../../gbdraw/web/js/services/config.js');
   const marker = 'se01-catalog-payload';
   const catalog = admitFeatureCatalog({
     schema: FEATURE_CATALOG_SCHEMA,
@@ -214,12 +220,17 @@ console.log('History restores nullable config values and preserves key guards.')
   installShownDrawing('circular');
   state.results.value = [{ name: 'diagram.svg', content: '<svg />' }];
   state.featureCatalog.value = catalog;
+  const generated = featureStateFromCatalog(catalog, { mode: 'circular' });
+  state.extractedFeatures.value = generated.extractedFeatures;
+  state.biologicalFeatures.value = generated.biologicalFeatures;
+  state.featureRecordIds.value = generated.featureRecordIds;
   const liveCatalog = () => window.Vue.toRaw?.(state.featureCatalog.value) ?? state.featureCatalog.value;
   assert.strictEqual(liveCatalog(), catalog);
 
   const artifactSnapshots = createHistorySnapshotService({
     state, fileStore: createInputFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData,
-    buildEditorStateData, applyEditorStateData
+    buildEditorStateData, applyEditorStateData, buildFeatureStateData, applyFeatureStateData,
+    buildOrthogroupStateData, applyOrthogroupStateData
   });
   const artifactHistory = createHistoryManager({
     ...artifactSnapshots.drawingHistory(state.activeDrawing().id),
@@ -234,6 +245,12 @@ console.log('History restores nullable config values and preserves key guards.')
     await artifactHistory[direction]();
     assert.strictEqual(liveCatalog(), catalog, `${direction} keeps the admitted catalog object`);
     assert.equal(featureStateFromCatalog(liveCatalog(), { mode: 'circular' }).extractedFeatures.length, 1);
+    for (const field of ['extractedFeatures', 'biologicalFeatures']) {
+      assert.equal(state[field].value.length, generated[field].length);
+      state[field].value.forEach((feature, index) => assert.strictEqual(
+        feature, generated[field][index], `${direction} installs the catalog's own ${field}, not copies`
+      ));
+    }
   }
 
   applyEditorStateData(state.activeDrawing(), buildEditorStateData(state.activeDrawing()));
@@ -241,6 +258,9 @@ console.log('History restores nullable config values and preserves key guards.')
   applyEditorStateData(state.activeDrawing(), { featureCatalog: structuredClone(catalog) });
   assert.equal(state.featureCatalog.value, null, 'an unadmitted catalog never enters state');
   state.featureCatalog.value = null;
+  state.extractedFeatures.value = [];
+  state.biologicalFeatures.value = [];
+  state.featureRecordIds.value = [];
   state.results.value = [];
   state.activeDrawing().legendEntries.value = [];
   console.log('History and Session rollback keep the admitted feature catalog by reference.');

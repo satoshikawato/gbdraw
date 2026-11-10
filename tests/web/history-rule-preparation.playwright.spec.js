@@ -1,7 +1,8 @@
 const { test, expect } = require('@playwright/test');
 const { resolve } = require('node:path');
-const { openApp, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
-const { expectLiveEqualsGenerate } = require('./helpers/live-generate-parity.cjs');
+const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
+const { openBatch } = require('./helpers/audit-browser.cjs');
 const { appAction, history } = require('./helpers/live-generate-parity-steps.cjs');
 
 const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
@@ -129,4 +130,37 @@ test('Redo of a rule predicate change shows what Generate draws', async ({ page 
   await history(page, 'redo');
   await history(page, 'redo');
   await expectLiveEqualsGenerate(page, { label: 'Redo of a rule predicate change' });
+});
+
+// OV-3285: a feature color edit and a product-scope hide, both undone, end
+// in the restore of a History checkpoint. A Feature visibility rule added
+// after it hides its feature live, as Generate does: the restore installs the
+// catalog's own features, on which the rule matches are recorded, not copies
+// of them.
+test('A visibility rule added after the Undo of feature edits shows what Generate draws', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openBatch(page);
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const colored = app.extractedFeatures.find((item) => item.locus_tag === 'TESTA_0001');
+    await app.openFeatureEditorFromList(colored, null);
+    await app.requestFeatureColorChange(colored, '#ff0000');
+    await app.handleFeatureStyleScopeChoice('annotationLabel');
+    const hidden = app.extractedFeatures.find((item) => item.locus_tag === 'TESTA_0004');
+    await app.openFeatureEditorFromList(hidden, null);
+    await app.updateClickedFeatureVisibility('off');
+    await app.handleFeatureVisibilityScopeChoice('product');
+    app.clickedFeature = null;
+  });
+  await settleLive(page);
+  await history(page, 'undo');
+  await history(page, 'undo');
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.addFeatureVisibilityRule();
+    const index = app.featureVisibilityManualRules.length - 1;
+    const rule = { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '_0004$', action: 'off' };
+    for (const [field, value] of Object.entries(rule)) await app.setFeatureVisibilityRuleField(index, field, value);
+  });
+  await expectLiveEqualsGenerate(page, { label: 'Visibility rule after the Undo of feature edits' });
 });

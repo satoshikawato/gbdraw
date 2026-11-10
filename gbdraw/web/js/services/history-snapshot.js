@@ -12,6 +12,8 @@ import { restoreLinearCardOrientation } from './linear-card-windows.js';
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { DEFAULT_PNG_DPI } from '../contracts/schema.generated.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
+import { featureStateFromCatalog } from './feature-catalog.js';
+/** @import { FeatureCatalogFeatureState } from './feature-catalog.js' */
 import { logicalResultsOf } from './result-normalization.js';
 import { cloneJsonData } from './json-clone.js';
 import { diagnosticError } from '../utils/error-normalization.js';
@@ -825,8 +827,9 @@ const applyFilesData = (state, drawing, filesData, fileStore) => {
  * @property {((drawing: D, editorState: HistorySnapshotData, options: { normalized: boolean }) => unknown) | null} [applyEditorStateData]
  *   The editor restore; `normalized` marks a state that is installed as captured.
  * @property {((drawing: D) => HistorySnapshotData) | null} [buildOrthogroupStateData] The orthogroup capture.
- * @property {((drawing: D, orthogroupState: HistorySnapshotData) => unknown) | null} [applyOrthogroupStateData]
- *   The orthogroup restore.
+ * @property {((drawing: D, orthogroupState: HistorySnapshotData,
+ *   options: { catalogFeatureState: FeatureCatalogFeatureState | null }) => unknown) | null} [applyOrthogroupStateData]
+ *   The orthogroup restore; `catalogFeatureState`: the restored catalog's features, which already carry its groups.
  * @property {CurrentResultsPort} currentResults Every capture of the Results reads them through it.
  * @property {((results: HistorySnapshotData[], ui: HistorySnapshotData) => unknown) | null} [applyResultsData]
  *   The generated Results' restore, with the checkpoint's UI state.
@@ -846,6 +849,40 @@ const applyFilesData = (state, drawing, filesData, fileStore) => {
  *   inputSummaries: readonly DrawnInputSummary[] }>} RedrawnArtifact
  *   What a label rerender draws again of its Result's drawing (OV-111).
  */
+
+// SE-01/N-20 (R11): a checkpoint never copies or signs the Generate-owned
+// feature catalog. It keeps the admitted catalog by reference, and History
+// retains each checkpoint object as captured.
+/** @type {WeakMap<ArtifactCheckpointData, unknown>} */
+const checkpointFeatureCatalogs = new WeakMap();
+// The catalog's features are its admission's (`featureStateFromCatalog`),
+// the objects Generate and Load install and the rule matches are recorded on
+// (OV-3285): a checkpoint with a catalog holds no copies of them, and its
+// restore installs the catalog's own. A Result without a catalog keeps its
+// features in the checkpoint.
+const CATALOG_FEATURE_FIELDS = Object.freeze(/** @type {const} */ (['extractedFeatures', 'biologicalFeatures', 'featureRecordIds']));
+/**
+ * The features a checkpoint copies: none of its catalog's.
+ * @param {HistorySnapshotData} features
+ * @param {unknown} featureCatalog
+ * @returns {HistorySnapshotData}
+ */
+const checkpointFeatureCopy = (features, featureCatalog) => (featureCatalog
+  ? Object.fromEntries(Object.entries(features).filter(([field]) => !CATALOG_FEATURE_FIELDS.some((name) => name === field)))
+  : features);
+/**
+ * A checkpoint's catalog, its admission's features, and the features its restore installs.
+ * @param {ArtifactCheckpointData} snapshot
+ */
+const checkpointCatalogFeatures = (snapshot) => {
+  const featureCatalog = checkpointFeatureCatalogs.get(snapshot) ?? null;
+  /** @type {FeatureCatalogFeatureState | null} */
+  const catalogFeatureState = featureCatalog && typeof featureCatalog === 'object' ? featureStateFromCatalog(featureCatalog) : null;
+  const features = catalogFeatureState
+    ? { ...snapshot.features, ...Object.fromEntries(CATALOG_FEATURE_FIELDS.map((field) => [field, catalogFeatureState[field]])) }
+    : snapshot.features || {};
+  return { featureCatalog, catalogFeatureState, features };
+};
 
 /**
  * @template {DrawingView} D
@@ -1592,17 +1629,13 @@ export const createHistorySnapshotService = ({
     return { ui, results, features, editorState, orthogroupState, runState };
   };
 
-  // SE-01/N-20 (R11): a checkpoint never copies or signs the Generate-owned
-  // feature catalog. It keeps the admitted catalog by reference, and History
-  // retains each checkpoint object as captured.
-  const checkpointFeatureCatalogs = new WeakMap();
-
   /**
    * @param {D} drawing
    * @param {ArtifactCheckpointData} snapshot
    */
   const applyArtifactDomains = (drawing, snapshot) => {
     const ui = snapshot?.ui || {};
+    const { featureCatalog, catalogFeatureState, features } = checkpointCatalogFeatures(snapshot);
     if (typeof applyResultsData === 'function') {
       applyResultsData(snapshot?.results || [], ui);
     } else {
@@ -1611,13 +1644,13 @@ export const createHistorySnapshotService = ({
     }
 
     if (typeof applyFeatureStateData === 'function') {
-      applyFeatureStateData(drawing, snapshot?.features || {});
+      applyFeatureStateData(drawing, features);
     } else {
-      applyFallbackFeatureStateData(state, drawing, snapshot?.features || {});
+      applyFallbackFeatureStateData(state, drawing, features);
     }
 
     if (typeof applyOrthogroupStateData === 'function') {
-      applyOrthogroupStateData(drawing, snapshot?.orthogroupState || {});
+      applyOrthogroupStateData(drawing, snapshot?.orthogroupState || {}, { catalogFeatureState });
     } else {
       applyFallbackOrthogroupStateData(state, drawing, snapshot?.orthogroupState || {});
     }
@@ -1627,7 +1660,7 @@ export const createHistorySnapshotService = ({
       // is, so a value such as the Result's named stroke color stays unchanged.
       applyEditorStateData(drawing, {
         ...cloneJsonData(snapshot?.editorState || {}),
-        featureCatalog: checkpointFeatureCatalogs.get(snapshot) ?? null
+        featureCatalog
       }, { normalized: true });
     }
 
@@ -1842,6 +1875,7 @@ export const createHistorySnapshotService = ({
       files: buildFilesData(drawing),
       ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState(drawingId) } : {}),
       ...generated,
+      features: checkpointFeatureCopy(generated.features, featureCatalog),
       ...(generated.ui ? { ui: withoutSessionUi(generated.ui) } : {}),
       editorState
     });
