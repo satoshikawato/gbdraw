@@ -1382,10 +1382,14 @@ def layout_annotation_track(
         and band.bare_px(lane_count) + room > available_extent_px
         and band.passes(lane_count)
     )
-    track = replace(track, required_extent_px=float(fit.required_px), clipped=clipped, lane_gap_px=fit.lane_gap_px)
+    track = replace(track, clipped=clipped, lane_gap_px=fit.lane_gap_px)
     track = _cut_by_clip(track, band, labelled=packing.labelled, measures=measures)
+    # The extent is set last: the drawer does not read it, so the track the drawer's checks read here is the one the
+    # packing rounds checked where it is unchanged, and its labels are placed once (``LabelSizing``).
     track = _across_centre(track, band, labels, track_params, labelled=packing.labelled)
-    return replace(track, without_room_font_sizes=measures.left_out_font_sizes(track))
+    return replace(
+        track, required_extent_px=float(fit.required_px), without_room_font_sizes=measures.left_out_font_sizes(track)
+    )
 
 
 __all__ = [

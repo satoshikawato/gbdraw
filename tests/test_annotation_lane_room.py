@@ -34,6 +34,7 @@ from gbdraw.annotations import (
     LabelExtent,
     LabelSizing,
     LaneRoom,
+    ResolvedAnnotationTrack,
     ResolvedRegionAnnotation,
     layout_annotation_track,
 )
@@ -494,6 +495,33 @@ def test_the_definition_scan_draws_and_paints_each_slot_once_for_the_same_inputs
     for calls in (drawn, painted):
         distinct = [call for index, call in enumerate(calls) if call not in calls[:index]]
         assert calls and len(calls) == len(distinct), (len(calls), len(distinct))
+
+
+def test_the_lane_packer_places_an_inside_slots_labels_once_for_its_two_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Where the packer draws an inside slot's lanes, it checks which lanes draw two labels over each other and which
+    # labels the drawer draws across the centre onto a mark (OV-3111). Both read the labels placed among the track's
+    # own labels only; for the same lanes, rooms and band they are placed once.
+    import gbdraw.render.drawers.circular.annotations as drawer
+
+    record, options = _inside_slot_over_the_definition()
+    placed: list[tuple[object, ...]] = []
+    place = drawer.circular_annotation_labels
+
+    def counting(track: ResolvedAnnotationTrack, **kwargs: object) -> object:
+        obstacles = kwargs.get("obstacles")
+        if isinstance(obstacles, drawer.CircularLabelObstacles) and not obstacles.labels and not kwargs.get("rings"):
+            placed.append((
+                track.placements, track.lane_rooms, track.without_letters, track.without_room, track.clipped,
+                track.lane_gap_px, kwargs["inner_radius_px"], kwargs["outer_radius_px"], kwargs["side"],
+            ))
+        return place(track, **kwargs)
+
+    monkeypatch.setattr(drawer, "circular_annotation_labels", counting)
+    with pytest.warns(UserWarning, match="definition lines"):
+        gbdraw.draw_circular(record, options=options)
+
+    distinct = [call for index, call in enumerate(placed) if call not in placed[:index]]
+    assert placed and len(placed) == len(distinct), (len(placed), len(distinct))
 
 
 def test_a_curved_label_pushed_to_the_centre_is_measured_within_one_turn() -> None:

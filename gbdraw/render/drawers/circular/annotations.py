@@ -788,7 +788,15 @@ def circular_annotation_labels(
     )
 
 
-def circular_annotation_lanes_meeting(
+# The labels the drawer draws for each record of a track (record index, drawn labels), placed among the track's own
+# labels only (``circular_annotation_lane_labels``): what the lane packer's checks read.
+CircularLaneLabels: TypeAlias = tuple[tuple[int, tuple[CircularAnnotationLabel, ...]], ...]
+# ``circular_annotation_lane_labels`` bound to where a slot's lanes stack: the labels of a track, its parameters and
+# the extent its lanes take.
+LaneLabelPlacer: TypeAlias = Callable[[ResolvedAnnotationTrack, AnnotationTrackParams, float], CircularLaneLabels]
+
+
+def circular_annotation_lane_labels(
     track: ResolvedAnnotationTrack,
     params: AnnotationTrackParams,
     extent_px: float,
@@ -798,22 +806,42 @@ def circular_annotation_lanes_meeting(
     lanes_from_px: float,
     outward: bool,
     clearance_px: float,
-) -> frozenset[tuple[int, int, int]]:
-    """The lanes (record index, row, lane) in which ``circular_annotation_labels`` draws two of ``track``'s labels over
-    each other, the lanes taking ``extent_px`` from ``lanes_from_px``, the radius they stack from (away from the
-    centre, or toward it when not ``outward``), with the track's own labels as the only obstacles, kept
-    ``clearance_px`` apart as where the drawing places them (``CircularLabelObstacles.clearance``): each label moved
-    along its region where it comes that near one placed before it. The lane packer's measure (``LabelSizing.meet``)."""
+) -> CircularLaneLabels:
+    """The labels ``circular_annotation_labels`` draws for each record of ``track``, the lanes taking ``extent_px``
+    from ``lanes_from_px``, the radius they stack from (away from the centre, or toward it when not ``outward``), with
+    the track's own labels as the only obstacles, kept ``clearance_px`` apart as where the drawing places them
+    (``CircularLabelObstacles.clearance``): each label moved along its region where it comes that near one placed
+    before it. The one placement the lane packer's checks read (``circular_annotation_lanes_meeting``,
+    ``circular_annotation_labels_across_centre``)."""
 
     inner, outer = (lanes_from_px, lanes_from_px + extent_px) if outward else (lanes_from_px - extent_px, lanes_from_px)
+    return tuple(
+        (
+            record_index,
+            circular_annotation_labels(
+                track, record_index=record_index, record_length=record_length, inner_radius_px=max(0.0, inner),
+                outer_radius_px=outer, side="outside" if outward else "inside", font_family=font_family, params=params,
+                obstacles=CircularLabelObstacles(clearance=clearance_px),
+            ).drawn,
+        )
+        for record_index in sorted({item.annotation.record_index for item in track.placements})
+    )
+
+
+def circular_annotation_lanes_meeting(
+    track: ResolvedAnnotationTrack,
+    params: AnnotationTrackParams,
+    extent_px: float,
+    *,
+    placed: LaneLabelPlacer,
+) -> frozenset[tuple[int, int, int]]:
+    """The lanes (record index, row, lane) in which ``circular_annotation_labels`` draws two of ``track``'s labels over
+    each other, the lanes taking ``extent_px``, its labels ``placed`` (``circular_annotation_lane_labels``). The lane
+    packer's measure (``LabelSizing.meet``)."""
+
     met: set[tuple[int, int, int]] = set()
-    for record_index in sorted({item.annotation.record_index for item in track.placements}):
+    for record_index, drawn in placed(track, params, extent_px):
         lanes = {item.annotation.id: item.lane for item in track.placements if item.annotation.record_index == record_index}
-        drawn = circular_annotation_labels(
-            track, record_index=record_index, record_length=record_length, inner_radius_px=max(0.0, inner),
-            outer_radius_px=outer, side="outside" if outward else "inside", font_family=font_family, params=params,
-            obstacles=CircularLabelObstacles(clearance=clearance_px),
-        ).drawn
         for index, first in enumerate(drawn):
             for second in drawn[index + 1 :]:
                 lane = lanes[first.annotation_id]
@@ -829,31 +857,23 @@ def circular_annotation_labels_across_centre(
     params: AnnotationTrackParams,
     extent_px: float,
     *,
-    font_family: str,
+    placed: LaneLabelPlacer,
     record_length: int,
     lanes_from_px: float,
-    clearance_px: float,
 ) -> frozenset[tuple[int, str]]:
     """The labels (record index, annotation id) of an inside track whose letters ``circular_annotation_labels`` draws
     over the centre of the circle and within their ``label_offset`` of another annotation's painted mark, or across the
     paint of their own mark (``_mark_ink``), its lanes taking ``extent_px`` toward the centre from ``lanes_from_px`` and
-    its labels placed as ``circular_annotation_lanes_meeting`` places them. Letters too wide for the circle their mark
-    leaves them are centred on the centre of the circle and come back across it, where no room keeps them clear of the
-    marks they meet (LBL-ACROSS-CENTRE-OMIT; OV-2991, OV-3035). Letters that only come nearer their own mark than their
-    ``label_offset`` are not counted. The lane packer's measure (``LabelSizing.across_centre``)."""
+    its labels ``placed`` as ``circular_annotation_lanes_meeting`` reads them (``circular_annotation_lane_labels``).
+    Letters too wide for the circle their mark leaves them are centred on the centre of the circle and come back across
+    it, where no room keeps them clear of the marks they meet (LBL-ACROSS-CENTRE-OMIT; OV-2991, OV-3035). Letters that
+    only come nearer their own mark than their ``label_offset`` are not counted. The lane packer's measure
+    (``LabelSizing.across_centre``)."""
 
     ring = AnnotationRing(max(0.0, lanes_from_px - extent_px), lanes_from_px, "inside")
     met: set[tuple[int, str]] = set()
-    for record_index in sorted({item.annotation.record_index for item in track.placements}):
-        across = [
-            label
-            for label in circular_annotation_labels(
-                track, record_index=record_index, record_length=record_length, inner_radius_px=ring.inner_radius_px,
-                outer_radius_px=ring.outer_radius_px, side="inside", font_family=font_family, params=params,
-                obstacles=CircularLabelObstacles(clearance=clearance_px),
-            ).drawn
-            if label.ink_radii[0] <= 0.0
-        ]
+    for record_index, drawn in placed(track, params, extent_px):
+        across = [label for label in drawn if label.ink_radii[0] <= 0.0]
         if not across:
             continue
         placements, lane_width = _record_lanes(
@@ -1620,8 +1640,11 @@ __all__ = [
     "RegionLabelPlace",
     "CircularObstacleLabel",
     "CircularLabelRoom",
+    "CircularLaneLabels",
+    "LaneLabelPlacer",
     "LeaderSegment",
     "circular_annotation_label_extent",
+    "circular_annotation_lane_labels",
     "circular_annotation_mark_past_lane",
     "circular_annotation_mark_reach",
     "circular_annotation_label_room",

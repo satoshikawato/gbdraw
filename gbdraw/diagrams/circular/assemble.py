@@ -190,11 +190,13 @@ from ...render.drawers.circular.annotations import (
     CircularAnnotationLabels,
     CircularLabelObstacles,
     CircularLabelRoom,
+    CircularLaneLabels,
     CircularObstacleLabel,
     LeaderSegment,
     RegionLabelPlace,
     circular_annotation_label_extent,
     circular_annotation_label_room,
+    circular_annotation_lane_labels,
     circular_annotation_lanes_meeting,
     circular_annotation_mark_past_lane,
     circular_annotation_labels,
@@ -530,6 +532,26 @@ class _CircularAnnotationPacking:
         checks_set_size: bool,
     ) -> ResolvedAnnotationTrack:
         params = annotation_track_params_from_mapping(slot.params)
+        # The two checks of where the lanes are drawn read one placement of the labels for the same track and extent.
+        placements: _ResultsByInputs[CircularLaneLabels] = _ResultsByInputs()
+
+        def placed(track: ResolvedAnnotationTrack, track_params: AnnotationTrackParams, extent_px: float) -> CircularLaneLabels:
+            return placements.get(
+                extent_px,
+                (track, track_params),
+                partial(
+                    circular_annotation_lane_labels,
+                    track,
+                    track_params,
+                    extent_px,
+                    font_family=self.font_family,
+                    record_length=self.record_length,
+                    lanes_from_px=lanes_from_px,
+                    outward=not inside,
+                    clearance_px=self.label_clearance_px,
+                ),
+            )
+
         return layout_annotation_track(
             slot.id,
             params.set_id,
@@ -548,22 +570,12 @@ class _CircularAnnotationPacking:
                 ),
                 reach=circular_annotation_mark_past_lane,
                 bp_per_px={self.record_index: self.record_length / max(1.0, 2.0 * math.pi * self.axis_radius_px)},
-                meet=partial(
-                    circular_annotation_lanes_meeting,
-                    font_family=self.font_family,
-                    record_length=self.record_length,
-                    lanes_from_px=lanes_from_px,
-                    outward=not inside,
-                    clearance_px=self.label_clearance_px,
-                )
-                if drawn
-                else None,
+                meet=partial(circular_annotation_lanes_meeting, placed=placed) if drawn else None,
                 across_centre=partial(
                     circular_annotation_labels_across_centre,
-                    font_family=self.font_family,
+                    placed=placed,
                     record_length=self.record_length,
                     lanes_from_px=lanes_from_px,
-                    clearance_px=self.label_clearance_px,
                 )
                 if drawn and inside
                 else None,
