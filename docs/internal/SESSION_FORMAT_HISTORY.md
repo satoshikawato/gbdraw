@@ -279,6 +279,18 @@ when it was edited by hand. Vectors: `requestTypes` in `tests/fixtures/contract_
 U+FEFF as a `recordKey` and around an annotation color), run by `tests/test_contract_shape_vectors.py` and
 `tests/web/contract-shape.test.mjs`.
 
+## Unreleased: a `#+N` record selector reads as record N
+
+No Session or request version changes, and no writer changes. `RECORD_INDEX_SELECTOR_PATTERN`
+(`gbdraw/io/record_select.py`, carried to the Web by `tools/generate_web_contracts.py` as the `schema.generated.js`
+export of the same name) now allows one `+` after `#` and its spaces, so `#+2` and `# +02` name record 2 wherever
+gbdraw reads a `#N` record selector, as Linear Record Order (`--multi_record_position`) always read them (OV-2988).
+Before, the move of a Session 41 to 50 (`gbdraw/session_drawings.py`, Web `services/session-drawings-upgrade.js`)
+kept such a selector as it was, a key no record has; it now places it at the record's identity, as it places `#2`.
+`#+ 2`, `#-1`, `#+0` and `#++2` stay as they were. No gbdraw writer writes a `+`; a file holds one only when it was
+edited by hand. Vector: the OV-2988 case of `tests/fixtures/sessions/drawings-vectors.json`, run by
+`tests/test_session_drawings_vectors.py` and `tests/web/session-drawings-upgrade.test.mjs`.
+
 ## 0.14.5: Session 50 stores the Linear wrap length, italic gene names, and the identity colour scale
 
 Session version 50 adds the config leaf `canvas.linear.wrap_length` (`"none"`,

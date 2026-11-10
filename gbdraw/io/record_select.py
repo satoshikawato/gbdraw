@@ -29,9 +29,11 @@ from ..core.record_metadata import (
 logger = logging.getLogger(__name__)
 
 # A ``#N`` record selector, as ``parse_record_selector`` reads it: spaces (``str.strip``'s, which are ``\s``'s)
-# around it and after ``#``, and N in ASCII digits, leading zeros allowed (``#01`` is record 1). The Web reads
-# the same pattern from the generated contracts (``RECORD_INDEX_SELECTOR_PATTERN``).
-RECORD_INDEX_SELECTOR_PATTERN = r"\s*#\s*([0-9]+)\s*"
+# around it and after ``#``, an optional ``+`` (Linear Record Order read ``#+2`` as record 2, OV-2988), and N in
+# ASCII digits, leading zeros allowed (``#01`` is record 1). The one reader of the form: Record Order in both modes,
+# ``--record_id``, ``--region``, and the Web, which reads this pattern from the generated contracts
+# (``RECORD_INDEX_SELECTOR_PATTERN``).
+RECORD_INDEX_SELECTOR_PATTERN = r"\s*#\s*\+?([0-9]+)\s*"
 _RECORD_INDEX_SELECTOR = re.compile(RECORD_INDEX_SELECTOR_PATTERN)
 
 

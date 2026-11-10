@@ -217,6 +217,13 @@ write-up of a release.
   app a click on a moved record's name opened another record's settings
   (OV-2931). Each record now keeps the index it was given; the figure looks
   the same.
+- Changed: a record selector with a plus sign (`#+2`) now names that record
+  everywhere, as Linear `--multi_record_position` already read it; Circular
+  `--multi_record_position`, `--record_id`, `--region`, and the Web app
+  refused it. Both modes' `--multi_record_position` now read one grammar: a
+  row with a plus sign (`#2@+1`) and a record ID that holds `@` or is `none`
+  or `-`, which one mode drew and the other refused, now draw in both
+  (OV-2988, OV-3312).
 - Changed: a Session saved by the command line or the Python API
   (`--save_session`, `--session_output`) no longer depends on the machine or on
   when its input files were last changed: each embedded file stores no guessed

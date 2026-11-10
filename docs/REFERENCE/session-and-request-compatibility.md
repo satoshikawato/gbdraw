@@ -671,7 +671,7 @@ resource bindings, each with its own filename, MIME type, modification time and
 exact bytes; duplicate payloads can share storage while every occurrence is
 kept). Loading it makes one File card per component, in order, with uid
 `record-<n>` (`source-<n>` when the request drew the files as one source), and
-maps a `#N` record selector to that record where the record counts are known;
+maps a `#N` record selector (`#02` and `#+2` are `#2`) to that record where the record counts are known;
 otherwise the selector stays `#N`, and the Web app places it over the records of
 the cards as they were loaded, taken together in card order. Python validates and preserves a draft binding of a
 Session 41 to 50 without combining its components for rendering.
