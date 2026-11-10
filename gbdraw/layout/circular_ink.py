@@ -209,7 +209,9 @@ def _box_turn_range(box: Aabb) -> tuple[float, float] | None:
 def _ray_turns(box: Aabb, inks: Sequence[CircularInk]) -> NDArray[np.float64]:
     covered = _box_turn_range(box)
     start, end = (0.0, 1.0) if covered is None else covered
-    count = max(2, int(math.ceil((end - start) / _RAY_STEP_TURNS)) + 1)
+    # At least three rays: one runs through the middle of a box narrower than a step, whose corner rays can
+    # miss it by rounding (OV-3322).
+    count = max(3, int(math.ceil((end - start) / _RAY_STEP_TURNS)) + 1)
     candidates = [np.linspace(start, end, count)]
     # Where each edge comes nearest the centre, and where each ink starts, ends, or turns.
     candidates.append(_turns_of(np.array([0.0, 0.5 * math.pi, math.pi, -0.5 * math.pi])))
