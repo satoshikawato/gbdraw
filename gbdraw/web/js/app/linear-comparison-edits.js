@@ -8,13 +8,12 @@
 // admission, History's undoable step, the alignment owner's clear, the record
 // discovery, and the Comparison card's readers and focus paths as ports. The
 // root creates these edits once the alignment owner exists.
-import { SETTINGS_SLICE } from '../services/drawing/settings.js';
+import { SETTINGS_SLICE, edgeRetainsUserData } from '../services/drawing/settings.js';
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
   adjacentRowPairs,
   createLinearComparisonEdge,
-  edgeRetainsUserData,
   linearComparisonEdgeKey,
   materializeResolvedEdgesAsSelectedPlan,
   normalizeLinearComparisonPlan,

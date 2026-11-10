@@ -121,13 +121,18 @@ test('Remove window moves each window-pair name with its window and drops the re
   const places = catalogUnitPlaces(catalog);
   const [w1, w2, w3] = [...places.keys()].slice(0, 3);
   const pair = (unit) => linearComparisonEdgeKey(unit, 'b');
-  const names = { [pair(w1)]: 'first.tsv', [pair(w2)]: 'second.tsv', [pair(w3)]: 'third.tsv', 'x->y': 'kept.tsv' };
-  // Remove window 1: window 2 is now window 1, window 3 window 2; a name of units the Result does not know stays.
+  const names = { [pair(w1)]: 'first.tsv', [pair(w2)]: 'second.tsv', [pair(w3)]: 'third.tsv' };
+  // Remove window 1: window 2 is now window 1, window 3 window 2.
   assert.deepEqual(windowLosatFilenamesAfterRemoval(names, places, 'a', 1, 2),
-    { [pair(w1)]: 'second.tsv', [pair(w2)]: 'third.tsv', 'x->y': 'kept.tsv' });
+    { [pair(w1)]: 'second.tsv', [pair(w2)]: 'third.tsv' });
   // Remove window 2: window 1 keeps its name.
   assert.deepEqual(windowLosatFilenamesAfterRemoval(names, places, 'a', 2, 2),
-    { [pair(w1)]: 'first.tsv', [pair(w2)]: 'third.tsv', 'x->y': 'kept.tsv' });
+    { [pair(w1)]: 'first.tsv', [pair(w2)]: 'third.tsv' });
+  // A name of units the Result does not hold cannot be placed (the Web forms no unit key), so it goes; with no drawn
+  // Result every name goes, rather than land on another window's span.
+  assert.deepEqual(windowLosatFilenamesAfterRemoval({ ...names, 'x->y': 'lost.tsv' }, places, 'a', 3, 2),
+    { [pair(w1)]: 'first.tsv', [pair(w2)]: 'second.tsv' });
+  assert.deepEqual(windowLosatFilenamesAfterRemoval(names, new Map(), 'a', 3, 2), {});
   // One window left: the record is drawn whole, so no window pair of it is left to name.
   assert.deepEqual(windowLosatFilenamesAfterRemoval({ [pair(w1)]: 'first.tsv' }, places, 'a', 2, 1), {});
   // Another record's windows are not this record's.

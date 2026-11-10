@@ -351,6 +351,22 @@ test('Remove window moves the window-pair names of the plan with their windows',
   assert.equal(Object.hasOwn(drawing.linearComparisonPlan.edges[0], 'windowLosatFilenames'), false);
 });
 
+// OV-2742: with no drawn Result the Web cannot place a window-pair name (Python forms the unit keys), so Remove window
+// drops the edited record's names rather than leave one on another window's span; another record pair keeps its own.
+test('Remove window with no drawn Result drops the edited record\'s window-pair names', () => {
+  const cards = [createLinearSeq({ uid: 'a', windows: [span(1, 100), span(101, 200), span(201, 300)] }),
+    createLinearSeq({ uid: 'b' }), createLinearSeq({ uid: 'c', windows: [span(1, 50), span(51, 100)] })];
+  const { drawing, steps, edits } = recordEditsOf(cards);
+  const othersNames = { [linearComparisonEdgeKey('c~w1', 'b')]: 'other.tsv' };
+  drawing.linearComparisonPlan.edges.push(
+    { id: 'e1', queryUid: 'a', subjectUid: 'b', windowLosatFilenames: { [linearComparisonEdgeKey('a~w3', 'b')]: 'third.tsv' } },
+    { id: 'e2', queryUid: 'c', subjectUid: 'b', windowLosatFilenames: { ...othersNames } });
+  edits.removeLinearCardWindow(cards[0], 0);
+  assert.deepEqual(steps.map(String), ['Remove window']);
+  assert.equal(Object.hasOwn(drawing.linearComparisonPlan.edges[0], 'windowLosatFilenames'), false);
+  assert.deepEqual(drawing.linearComparisonPlan.edges[1].windowLosatFilenames, othersNames);
+});
+
 test('Add window and Remove are one History step each through the record rows\' transition (F7)', () => {
   const cards = [createLinearSeq({ uid: 'a', region_start: 1, region_end: 100 }), createLinearSeq({ uid: 'b' })];
   const { drawing, applied, steps, edits } = recordEditsOf(cards);

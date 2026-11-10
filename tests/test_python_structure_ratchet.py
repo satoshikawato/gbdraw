@@ -271,7 +271,6 @@ FUNCTION_LINES: dict[str, int] = {
     "gbdraw/session_io.py::_append_linear_gui_args": 157,
     "gbdraw/session_io.py::_attach_current_web_file_bindings": 172,
     "gbdraw/session_io.py::_migrate_legacy_linear_comparison_draft": 320,
-    "gbdraw/session_io.py::_validate_current_comparison_authority": 178,
     "gbdraw/session_io.py::build_session_json": 168,
     "gbdraw/session_migration.py::project_session_adjunct_for_current_write": 182,
     "gbdraw/session_request_codec.py::_decode_canonical_request": 157,

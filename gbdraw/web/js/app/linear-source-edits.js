@@ -562,8 +562,10 @@ export const createLinearRecordEdits = ({
       if (!removeCardWindow(card, index)) return false;
       const recordKey = linearSeqRecordKey(card, drawing.linearSeqs.indexOf(sequence));
       const places = shownUnitPlaces();
-      /** @type {LinearComparisonPlan} */ (drawing.linearComparisonPlan).edges.forEach((edge) => setWindowLosatFilenames(edge, windowLosatFilenamesAfterRemoval(
-        windowLosatFilenamesOf(edge), places, recordKey, index + 1, cardWindowList(card).length)));
+      /** @type {LinearComparisonPlan} */ (drawing.linearComparisonPlan).edges
+        .filter((edge) => edge.queryUid === recordKey || edge.subjectUid === recordKey)
+        .forEach((edge) => setWindowLosatFilenames(edge, windowLosatFilenamesAfterRemoval(
+          windowLosatFilenamesOf(edge), places, recordKey, index + 1, cardWindowList(card).length)));
       return true;
     }
   );

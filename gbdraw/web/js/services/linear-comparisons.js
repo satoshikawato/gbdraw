@@ -1,6 +1,7 @@
 // @ts-check
 import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection.js';
 import { msg } from '../utils/i18n.js';
+import { edgeRetainsUserData } from './drawing/settings.js';
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
 /** @import { InputFileRef } from './history-files.js' */
 /** @import { CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
@@ -769,15 +770,6 @@ export const hasLinearComparisonIntent = (resolution) => Boolean(resolution?.has
 export const hasActiveLinearLosatIntent = (resolution) => Boolean(resolution?.hasLosatIntent);
 /** @param {LinearComparisonResolution | null | undefined} resolution */
 export const hasActiveLinearUploadIntent = (resolution) => Boolean(resolution?.hasUploadIntent);
-
-/**
- * Whether an edge the plan leaves out still holds what the user gave it (its BLAST TSV, a typed LOSAT name of the
- * record pair or of one of its window pairs), so the plan keeps it.
- * @param {Pick<LinearComparisonEdge, 'file' | 'losatFilename' | 'windowLosatFilenames'>} edge
- */
-export const edgeRetainsUserData = (edge) => Boolean(
-  edge.file || edge.losatFilename.trim() || Object.keys(windowLosatFilenamesOf(edge)).length > 0
-);
 
 /**
  * @param {unknown} plan

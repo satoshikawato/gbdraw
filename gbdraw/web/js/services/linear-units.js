@@ -167,7 +167,8 @@ export const searchUnitPlaces = (search) => unitPlacesOf(search.unitKeys, search
  * leaves it `windowsLeft` windows (OV-2742): a name stays with its window or goes. The removed window's names go; a
  * later window's name moves to the unit key of the window before it; and when one window is left, every name of the
  * record's windows goes (its unit is then the record drawn whole). `places` are the drawn Result's units, whose keys
- * Python formed; a name whose units it does not know is kept as it is.
+ * Python formed; the Web cannot form a unit key, so a name whose units they do not hold goes too (with no drawn
+ * Result, every name). Pass only the names of a record pair that holds `recordKey`.
  * @param {WindowLosatFilenames} names
  * @param {ReadonlyMap<string, LinearUnitPlace>} places
  * @param {string} recordKey
@@ -189,7 +190,7 @@ export const windowLosatFilenamesAfterRemoval = (names, places, recordKey, remov
   };
   return Object.fromEntries(Object.entries(names).flatMap(([edgeKey, name]) => {
     const pair = pairOf.get(edgeKey);
-    if (pair === undefined) return [[edgeKey, name]];
+    if (pair === undefined) return [];
     const [query, subject] = pair.map(moved);
     return query === null || subject === null ? [] : [[linearComparisonEdgeKey(query, subject), name]];
   }));
