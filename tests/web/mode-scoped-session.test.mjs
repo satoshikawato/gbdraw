@@ -1222,6 +1222,31 @@ test('Load keeps a saved color the user set: a live edit, a committed row, and a
   assert.deepEqual(kept, earthtones);
 }));
 
+// OV-3257: Save wrote a drawing's whole color table, its palette's rows included, so a later palette change never
+// reached the Session. A drawing that changed none of its palette's colors saves none; one with a user color keeps it.
+test('Save stores no palette colors for a drawing whose colors are its palette\'s, so a later palette reaches it (OV-3257)', () => withBootPalettes(state, async () => {
+  const { editDefaultColor } = await import('../../gbdraw/web/js/services/drawing/palette.js');
+  const slicesOf = (session) => session.drawings.find(({ id }) => id === 'circular').config;
+  assert.deepEqual(buildPaletteColorOverrideRows({ colors: await loadedColorsOf(v0145Session()), paletteColors: currentPalette('default') }), []);
+  const untouched = await save('palette colors');
+  assert.equal(Object.hasOwn(slicesOf(untouched), 'colors'), false);
+  assert.deepEqual(await loadedColorsOf(untouched), currentPalette('default'));
+  // A later palette: the Session takes its colors.
+  const palettes = state.paletteDefinitions.value;
+  state.paletteDefinitions.value = { ...palettes, default: { ...palettes.default, CDS: '#010203' } };
+  try {
+    assert.equal((await loadedColorsOf(untouched)).CDS, '#010203');
+  } finally {
+    state.paletteDefinitions.value = palettes;
+  }
+  // A user color is saved and loads as saved.
+  await loadedColorsOf(v0145Session());
+  editDefaultColor(state.drawingOf('circular').slices.palette, 'CDS', '#123456');
+  const edited = await save('a user color');
+  assert.equal(slicesOf(edited).colors.CDS, '#123456');
+  assert.equal((await loadedColorsOf(edited)).CDS, '#123456');
+}));
+
 // The request Generate builds from a drawing's draft. It reads the Legend rows of the loaded Result's SVG; Node has no
 // SVG parser, and no row matters to the feature density cases.
 const draftRequest = async (drawing) => {

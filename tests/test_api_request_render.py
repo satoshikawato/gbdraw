@@ -1141,7 +1141,6 @@ def test_option_resolution_clears_shadowed_file_inputs_without_reading(
             feature_visibility_table_file="unused-visibility.tsv",
         ),
         mode="linear",
-        load_comparison_colors=False,
     )
 
     assert resolved.colors is not None

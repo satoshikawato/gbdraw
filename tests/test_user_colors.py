@@ -522,3 +522,23 @@ def test_orientation_identity_gradient_names_the_collinear_color_key() -> None:
     with pytest.raises(ValidationError, match=re.escape("'#11223344' for feature type 'collinear_block_plus_min'")) as raised:
         group.resolve_match_fill_color(row, 0.5, "#000000")
     assert raised.value.diagnostic == {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR"}
+
+
+def test_a_cli_session_stores_only_the_default_colors_rows_the_user_gave(tmp_path: Path) -> None:
+    # OV-3302: the CLI saved its Default colors table resolved over the palette,
+    # so every palette row became a row of the Session's table and a later
+    # palette change never reached the Session. It stores the user's rows.
+    import base64
+
+    from tests.utils.session_drawing_view import session_view
+
+    _run_cli(
+        "circular", "--gbk", str(REPO / "tests" / "test_inputs" / "HmmtDNA.gbk"),
+        "-d", _tsv(tmp_path, "colors.tsv", "CDS\t#123456\n"),
+        "-o", str(tmp_path / "out"), "-f", "svg", "--session_output", str(tmp_path / "out.gbdraw-session.json"),
+    )
+    session = session_view(json.loads((tmp_path / "out.gbdraw-session.json").read_text(encoding="utf-8")))
+    colors = session["renderRequest"]["diagramOptions"]["colors"]
+    ref = colors["defaultColorsFile"] or colors["defaultColors"]
+    text = base64.b64decode(session["resources"][ref["resourceId"]]["data"]).decode("utf-8")
+    assert [line.split("\t") for line in text.splitlines() if line.strip()] == [["CDS", "#123456"]]

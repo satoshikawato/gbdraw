@@ -151,7 +151,6 @@ from .diagram import (
     build_circular_multi_diagram,
     build_linear_diagram_result,
     label_fit_report,
-    resolve_default_colors,
     resolve_feature_inputs,
 )
 from .io import load_render_gbks as load_gbks  # the render's reader; tests replace it under this name
@@ -335,7 +334,6 @@ def _resolve_request_option_tables(
     options: _OptionsT,
     *,
     mode: Literal["circular", "linear"],
-    load_comparison_colors: bool,
 ) -> _OptionsT:
     """Resolve file-backed option tables once before record and drawing plans."""
 
@@ -348,24 +346,14 @@ def _resolve_request_option_tables(
                 read_color_table(colors.color_table_file),
                 colors.color_table_file,
             )
-        default_colors = colors.default_colors
-        if default_colors is None and colors.default_colors_file is not None:
-            # The request keeps the merged table (a Session saves it).
-            default_colors, _default_color_map = render_stage(
-                "default_colors",
-                resolve_default_colors,
-                None,
-                _default_color_overrides(colors),
-                colors.default_colors_palette,
-                load_comparison_colors,
-            )
-        if colors.color_table_file is not None or colors.default_colors_file is not None:
+        # A Default colors file stays a file unless a table shadows it: a
+        # Session saves the rows the user gave, which apply over the palette
+        # when the request is drawn (`_prepare_diagram_inputs`), so a later
+        # palette change reaches the Session (OV-3302).
+        default_colors_file = None if colors.default_colors is not None else colors.default_colors_file
+        if colors.color_table_file is not None or default_colors_file != colors.default_colors_file:
             colors = replace(
-                colors,
-                color_table=color_table,
-                color_table_file=None,
-                default_colors=default_colors,
-                default_colors_file=None,
+                colors, color_table=color_table, color_table_file=None, default_colors_file=default_colors_file
             )
             changed = True
 
@@ -2027,7 +2015,6 @@ def plan_circular_request(
         resolved_options = _resolve_request_option_tables(
             resolve_circular_options(request.options),
             mode="circular",
-            load_comparison_colors=False,
         )
         unresolved_request = (
             request
@@ -2090,7 +2077,6 @@ def plan_circular_batch_request(
         resolved_options = _resolve_request_option_tables(
             resolve_circular_options(request.options),
             mode="circular",
-            load_comparison_colors=False,
         )
         unresolved_request = (
             request
@@ -2170,7 +2156,6 @@ def plan_linear_request(
             options=_resolve_request_option_tables(
                 request.options,
                 mode="linear",
-                load_comparison_colors=_linear_request_uses_comparisons(request),
             ),
         )
         inputs = _prepare_diagram_inputs(unresolved_request)

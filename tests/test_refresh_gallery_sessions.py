@@ -2253,46 +2253,81 @@ def test_refresh_sets_every_stored_output_prefix() -> None:
     assert refresh_gallery_sessions_module._set_output_prefix(session, "card-id") == 0
 
 
-def test_refresh_resolves_web_default_colors_over_their_palette() -> None:
-    # The Web stores the Default colors rows that differ from the palette; the
-    # CLI replay stores them resolved over it, and `finalize` compares the two
-    # (OV-375). A resolved table is left as it is.
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:
-        import tomli as tomllib
-
-    rows = "CDS\t#d3d3d3\nskew_low\t#ad72e3\n"
-    resource = {
-        "kind": "colors-default-colors-file",
-        "size": len(rows),
-        "encoding": "base64",
-        "data": base64.b64encode(rows.encode()).decode(),
-    }
-    session = {
+def _default_colors_session(rows: str, *, palette: str, canonical: bool) -> dict:
+    key, resource_id = ("defaultColors", "colors-default-colors") if canonical else ("defaultColorsFile", "colors-default-colors-file")
+    return {
         "renderRequest": {
             "diagramOptions": {
                 "colors": {
                     "defaultColors": None,
-                    "defaultColorsPalette": "orange",
-                    "defaultColorsFile": {"resourceId": "colors-default-colors-file", "representation": "file"},
+                    "defaultColorsFile": None,
+                    "defaultColorsPalette": palette,
+                    key: {"resourceId": resource_id, "representation": "canonicalTsv" if canonical else "file"},
                 }
             }
         },
-        "resources": {"colors-default-colors-file": resource},
+        "resources": {
+            resource_id: {
+                "kind": "canonical-tsv" if canonical else resource_id,
+                "size": len(rows),
+                "encoding": "base64",
+                "data": base64.b64encode(rows.encode()).decode(),
+            }
+        },
+        "webFiles": {"resourceOriginalNames": {resource_id: "colors.tsv", "record-1-genbank": "a.gb"}},
     }
-    palettes = tomllib.loads(Path("gbdraw/data/color_palettes.toml").read_text(encoding="utf-8"))
 
-    assert refresh_gallery_sessions_module._resolve_default_colors(session) == 1
+
+def _palette(name: str) -> dict[str, str]:
+    from gbdraw.io.colors import packaged_color_palettes
+
+    return dict(packaged_color_palettes()[name])
+
+
+def test_refresh_keeps_only_the_default_colors_rows_that_differ_from_the_palette() -> None:
+    # OV-3257: the refresh stored the table resolved over the palette, so each
+    # palette row became a user row and no later palette change reached the
+    # Session. It keeps the user's rows only (`palette_override_rows`).
+    orange = _palette("orange")
+    rows = f"CDS\t#d3d3d3\nskew_low\t{orange['skew_low'].upper()}\nmisc_feature\t{orange['misc_feature']}\n"
+    session = _default_colors_session(rows, palette="orange", canonical=False)
+
+    assert refresh_gallery_sessions_module._keep_user_default_colors(session) == 1
+    resource = session["resources"]["colors-default-colors-file"]
     text = base64.b64decode(resource["data"]).decode()
-    assert dict(line.split("\t") for line in text.splitlines()) == {
-        **palettes["orange"],
-        "CDS": "#d3d3d3",
-        "skew_low": "#ad72e3",
-    }
+    assert text == "CDS\t#d3d3d3\n"
     assert resource["size"] == len(text.encode())
-    assert refresh_gallery_sessions_module._resolve_default_colors(session) == 0
-    assert refresh_gallery_sessions_module._resolve_default_colors({"renderRequest": {"diagramOptions": {}}}) == 0
+    assert refresh_gallery_sessions_module._keep_user_default_colors(session) == 0
+    assert refresh_gallery_sessions_module._keep_user_default_colors({"renderRequest": {"diagramOptions": {}}}) == 0
+
+
+def test_refresh_drops_a_default_colors_table_that_holds_only_palette_rows() -> None:
+    # A table of palette rows names no user color: the request draws the
+    # palette, and a later palette change reaches the Session (OV-3257).
+    palette = _palette("default")
+    rows = "feature_type\tcolor\n" + "".join(f"{key}\t{color}\n" for key, color in palette.items())
+    session = _default_colors_session(rows, palette="default", canonical=True)
+
+    assert refresh_gallery_sessions_module._keep_user_default_colors(session) == 1
+    colors = session["renderRequest"]["diagramOptions"]["colors"]
+    assert (colors["defaultColors"], colors["defaultColorsFile"]) == (None, None)
+    assert session["resources"] == {}
+    assert session["webFiles"]["resourceOriginalNames"] == {"record-1-genbank": "a.gb"}
+
+
+def test_refresh_stores_a_canonical_table_with_user_rows_as_their_file() -> None:
+    # A canonical table is complete, so Python draws its rows only: the user's
+    # rows go to a Default colors file, which applies over the palette.
+    rows = "".join(f"{key}\t{color}\n" for key, color in {**_palette("default"), "CDS": "#123456"}.items())
+    session = _default_colors_session(rows, palette="default", canonical=True)
+
+    assert refresh_gallery_sessions_module._keep_user_default_colors(session) == 1
+    colors = session["renderRequest"]["diagramOptions"]["colors"]
+    assert colors["defaultColors"] is None
+    assert colors["defaultColorsFile"] == {"resourceId": "colors-default-colors-file", "representation": "file"}
+    resource = session["resources"]["colors-default-colors-file"]
+    assert base64.b64decode(resource["data"]).decode() == "CDS\t#123456\n"
+    assert "colors-default-colors" not in session["resources"]
 
 
 def test_refresh_stores_one_record_sources_as_exactly_one() -> None:

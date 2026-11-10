@@ -26,10 +26,12 @@ from tests.utils.cli_session_cross_surface import (
 from tests.utils.session_drawing_view import session_view
 
 CASES = load_cases()
-# The table options of the CLI and the request field each one writes.
+# The table options of the CLI and the request field each one writes. The
+# Default colors stay the user's file, whose rows apply over the palette; the
+# writers of the older Session fixtures saved the merged table (OV-3302).
 TABLE_FIELDS = {
     "-t": ("colors", "colorTable"),
-    "-d": ("colors", "defaultColors"),
+    "-d": ("colors", ("defaultColorsFile", "defaultColors")),
     "--feature_visibility_table": ("featureVisibilityTable",),
     "--label_table": ("labelOverrideTable",),
     "--label_whitelist": ("labelWhitelistTable",),
@@ -57,7 +59,7 @@ def test_cli_session_draws_the_cli_figure_on_the_cli_and_in_python(case, tmp_pat
             if option in case["args"]:
                 ref = request["diagramOptions"]
                 for key in path:
-                    ref = ref[key]
+                    ref = next(ref[name] for name in key if ref[name]) if isinstance(key, tuple) else ref[key]
                 assert ref["resourceId"] in session["resources"], option
         if "-b" in case["args"]:
             assert "nucleotideBlast" in [item["kind"] for item in request["comparisons"]]

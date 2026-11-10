@@ -127,3 +127,13 @@ for (const [low, high, factor, expected] of [
 ]) {
   assert.equal(interpolateColor(low, high, factor), expected, `${low} to ${high} at ${factor}`);
 }
+
+// The user's rows of a color table, as Python reads them (`palette_override_rows`,
+// OV-3257): tests/fixtures/palette_override_row_vectors.json pins both.
+{
+  const { readFileSync } = await import('node:fs');
+  const vectors = JSON.parse(readFileSync(new URL('../fixtures/palette_override_row_vectors.json', import.meta.url), 'utf8'));
+  vectors.cases.forEach((/** @type {{ id: string, colors: Record<string, string>, palette: Record<string, string>, rows: string[][] }} */ vector) => {
+    assert.deepEqual(buildPaletteColorOverrideRows({ colors: vector.colors, paletteColors: vector.palette }), vector.rows, vector.id);
+  });
+}

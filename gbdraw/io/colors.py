@@ -399,6 +399,30 @@ def require_palette_name(palette: str) -> str:
     return palette
 
 
+def _comparable_color(color: object) -> str:
+    """A color as two colors compare: a name as its hex, ``#rgb`` as ``#rrggbb``, any case (D-15)."""
+
+    text = str(color or "").strip()
+    resolved = (text if text.startswith("#") else named_color_hex(text) or text).lower()
+    return "#" + "".join(digit * 2 for digit in resolved[1:]) if re.fullmatch(r"#[0-9a-f]{3}", resolved) else resolved
+
+
+def palette_override_rows(colors: Mapping[str, object], palette: Mapping[str, str]) -> list[tuple[str, str]]:
+    """The user's rows of a color table: each row whose color differs from ``palette``'s for its type.
+
+    A row with a blank type or color is none. The Web reads the rows the same
+    way (``buildPaletteColorOverrideRows`` in gbdraw/web/js/utils/color-utils.js);
+    tests/fixtures/palette_override_row_vectors.json pins both.
+    """
+
+    rows = []
+    for key, color in colors.items():
+        feature_type, text = str(key or "").strip(), str(color or "").strip()
+        if feature_type and text and _comparable_color(text) != _comparable_color(palette.get(feature_type)):
+            rows.append((feature_type, text))
+    return rows
+
+
 def merge_default_colors(
     overrides: DataFrame | None,
     palette: str = "default",
@@ -611,6 +635,7 @@ __all__ = [
     "merge_default_colors",
     "read_default_color_overrides",
     "named_color_hex",
+    "palette_override_rows",
     "read_color_table",
     "resolve_color_to_hex",
     "rule_captions_as_written",
