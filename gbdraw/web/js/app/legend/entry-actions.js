@@ -114,7 +114,8 @@ const placeByInventory = (placed, unplaced, inventory, keyOf) => {
 /**
  * @typedef {object} LegendEntryActionsOptions
  * @property {Pick<WebState, 'activeDrawing' | 'sessionOperationAvailability' | 'svgContainer' | 'results'
- *   | 'originalLegendOrder' | 'originalLegendColors' | 'legendStrokeOptionsOpen'>} state
+ *   | 'originalLegendOrder' | 'originalLegendColors' | 'legendStrokeOptionsOpen' | 'extractedFeatures'
+ *   | 'displayedResultMetadata'>} state
  * @property {(() => string | undefined) | null} [readActiveResultIdentity]
  *   The preview owner's runtime identity of the mounted Result.
  * @property {import('../candidate-render.js').ReadLegendRowColorsPort} readLegendRowColors
