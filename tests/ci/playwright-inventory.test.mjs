@@ -149,10 +149,12 @@ test('functional CI shards run the planned spec file lists and every acceptance 
   assert.deepEqual(assignmentProblems(specFiles, shards), []);
   assert.deepEqual(unlistedMeasurements([...secondsPerCase.keys()], specFiles, existsSync), []);
   // Until the next pull request removes them, the old `shards` lists are what the trusted base
-  // before the planned lists runs on a pull request, so they must be the plan itself.
+  // before the planned lists runs on a pull request. They must cover every functional spec once;
+  // their balance may lag the plan as case counts change on dev.
   const { shards: transitional } = JSON.parse(readFileSync(SHARDS_FILE, 'utf8'));
   if (transitional !== undefined) {
-    assert.deepEqual(transitional, shards, 'regenerate the shards key of tests/ci/functional-shards.json');
+    assert.deepEqual(assignmentProblems(specFiles, transitional), [],
+      'the shards key of tests/ci/functional-shards.json must list every functional spec once');
   }
   // Playwright file filters are regular expressions, so list each shard to prove
   // that no filter also selects another shard's file.
