@@ -756,6 +756,9 @@ def test_a_species_change_on_a_multi_record_circular_canvas_builds_no_catalog_sn
     redraws each record's definition part, which reads nothing for the catalog,
     so it builds no ``catalog_snapshot``; a palette change repaints the feature
     parts, whose snapshots rebuild with the new fills (no stale hit).
+
+    The species change is also OV-2109's full-definition case: kept in full, the
+    definitions draw the species and rebuild (no stale hit).
     """
 
     case = CASES["C2"]
@@ -768,6 +771,8 @@ def test_a_species_change_on_a_multi_record_circular_canvas_builds_no_catalog_sn
     assert species.error is None
     assert species.reply["results"] != before.reply["results"]
     assert "record_part" in species.stages.builds
+    assert species.stages.builds.get("circular_definition_content") == 3, "OV-2109: each full definition rebuilds"
+    assert species.stages.builds.get("record_part", 0) >= 3, "OV-2109: each record part with a definition rebuilds"
     assert "catalog_snapshot" not in species.stages.builds
     assert species.reply["featureCatalog"] == before.reply["featureCatalog"]
     palette = harness.warm([*base, "--species", "<i>Homo sapiens</i> X", "-p", "soft_pastels"])
@@ -781,33 +786,23 @@ def _without_typed_plot_title(arguments: list[str]) -> list[str]:
     return [*arguments[:at], *arguments[at + 2:]]
 
 
-@pytest.mark.parametrize(
-    ("keep_full", "drawn"),
-    [pytest.param(False, False, id="record-summary"), pytest.param(True, True, id="full-definition")],
-)
-def test_a_species_change_rebuilds_the_record_definitions_only_where_they_draw_it(
-    keep_full: bool, drawn: bool, tables: Path, tmp_path: Path
-) -> None:
+def test_a_species_change_rebuilds_the_record_definitions_only_where_they_draw_it(tables: Path, tmp_path: Path) -> None:
     """OV-2109: beside a plot title each record draws its summary (no species, no strain), so a species change
-    rebuilds no record definition, record part or record group. Kept in full, the definitions draw the
-    species and rebuild (no stale hit)."""
+    rebuilds no record definition, record part or record group. The full-definition case, where the definitions
+    draw the species and rebuild, is asserted on the same change in the OV-2108 test above."""
 
     case = CASES["C2"]
     placeholders = Placeholders(tables)
     harness = EquivalenceHarness(case.mode, tmp_path / "C2")
-    base = [*placeholders.expand(case, case.base), *(["--keep_full_definition_with_plot_title"] if keep_full else [])]
+    base = placeholders.expand(case, case.base)
     before = harness.warm([*base, "--species", "<i>Homo sapiens</i>"])
     assert before.error is None
     outcome = harness.warm([*base, "--species", "<i>Homo sapiens</i> X"])
     assert outcome.error is None
-    builds = outcome.stages.builds
-    if drawn:
-        assert outcome.reply["results"] != before.reply["results"]
-        assert builds.get("circular_definition_content") == 3
-        assert builds.get("record_part", 0) >= 3
-    else:
-        assert outcome.reply == before.reply
-        assert not {"circular_definition_content", "record_part", "record_merge"} & set(builds), builds
+    assert outcome.reply == before.reply
+    assert not {"circular_definition_content", "record_part", "record_merge"} & set(outcome.stages.builds), (
+        outcome.stages.builds
+    )
 
 
 @pytest.mark.parametrize(

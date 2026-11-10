@@ -15,6 +15,7 @@ import pytest
 
 import gbdraw.circular as circular_cli
 import gbdraw.linear as linear_cli
+from gbdraw.config.toml import load_config_toml
 from gbdraw.core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink_offsets
 from gbdraw.labels.label_style import (
     BOX_OPACITY,
@@ -40,6 +41,22 @@ def _svg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, *argv: str,
     main = linear_cli.linear_main if mode == "linear" else circular_cli.circular_main
     main([*argv, "-o", name, "-f", fmt])
     return tmp_path / f"{name}.{fmt}"
+
+
+CIRCULAR_LABELS = ("--gbk", str(LAMBDA), "--labels", "both")
+
+
+@pytest.fixture(scope="module")
+def circular_default(tmp_path_factory: pytest.TempPathFactory) -> ET.Element:
+    """The Circular Lambda figure with every label and the default label style, drawn once for two tests.
+
+    The packaged Circular default draws no label protection, so this is also the ``--label_protection none``
+    figure: the two commands write the same bytes.
+    """
+
+    assert load_config_toml("gbdraw.data", "config.toml")["labels"]["circular"]["protection"] == "none"
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        return ET.parse(_svg(tmp_path_factory.mktemp("circular-default"), monkeypatch, "circular", *CIRCULAR_LABELS)).getroot()
 
 
 def _walk(element: ET.Element, parents: tuple[ET.Element, ...] = ()) -> Iterator[tuple[ET.Element, tuple[ET.Element, ...]]]:
@@ -143,17 +160,21 @@ def test_each_label_with_a_leader_has_one_halo_behind_its_letters(
     ("mode", "argv"),
     [
         ("linear", ("--gbk", str(LAMBDA), "--show_labels")),
-        ("circular", ("--gbk", str(LAMBDA), "--labels", "both", "--label_protection", "box")),
+        ("circular", (*CIRCULAR_LABELS, "--label_protection", "box")),
     ],
     ids=["linear-default", "circular"],
 )
 def test_protection_none_draws_no_halo_and_box_draws_a_box_per_label(
-    mode: str, argv: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    mode: str, argv: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
 ) -> None:
     """Linear draws a box by default (LP-D106): one per label with a leader, white at ``BOX_OPACITY``, bound
     to its label so that hiding the label hides it, and, like a halo or a casing, taking no pointer events."""
 
-    plain = ET.parse(_svg(tmp_path, monkeypatch, mode, *argv, "--label_protection", "none")).getroot()
+    if mode == "circular":
+        # ``--label_protection none`` is the Circular default: the shared default figure.
+        plain = request.getfixturevalue("circular_default")
+    else:
+        plain = ET.parse(_svg(tmp_path, monkeypatch, mode, *argv, "--label_protection", "none")).getroot()
     assert not _halos(plain)
     boxed = ET.parse(_svg(tmp_path, monkeypatch, mode, *argv)).getroot()
     boxes = [element for element, _ in _walk(boxed) if element.tag == f"{SVG}rect" and element.get("fill-opacity") == str(BOX_OPACITY)]
@@ -414,11 +435,10 @@ def test_a_casing_hides_nothing_but_leaders(argv: tuple[str, ...], tmp_path: Pat
 
 
 def test_a_circular_underline_continues_its_leader_without_a_new_bend(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, circular_default: ET.Element
 ) -> None:
-    base = ("--gbk", str(LAMBDA), "--labels", "both")
-    default = ET.parse(_svg(tmp_path, monkeypatch, "circular", *base)).getroot()
-    under = ET.parse(_svg(tmp_path, monkeypatch, "circular", *base, "--label_line", "under")).getroot()
+    default = circular_default
+    under = ET.parse(_svg(tmp_path, monkeypatch, "circular", *CIRCULAR_LABELS, "--label_line", "under")).getroot()
 
     def groups(root: ET.Element) -> tuple[ET.Element, ET.Element]:
         found = {element.get("id"): element for element, _ in _walk(root) if element.get("id") in {"label_leaders", "label_text"}}

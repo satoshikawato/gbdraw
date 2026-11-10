@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
 from collections.abc import Callable
 from functools import cache
 from pathlib import Path
@@ -201,7 +199,7 @@ def find_test_input() -> Callable[[str], Path | None]:
 
 
 class GbdrawRunner:
-    """Run one gbdraw CLI subcommand and report its SVG output."""
+    """Run one gbdraw CLI subcommand in this process and report its SVG output."""
 
     def run(
         self,
@@ -212,12 +210,8 @@ class GbdrawRunner:
         *,
         blast_files: list[Path] | None = None,
         extra_args: list[str] | None = None,
-        timeout: int = 300,
     ) -> tuple[int, str, Path]:
-        cmd = [
-            sys.executable,
-            "-m",
-            "gbdraw.cli",
+        args = [
             subcommand,
             "--gbk",
             *(str(path) for path in gbk_files),
@@ -227,17 +221,13 @@ class GbdrawRunner:
             "svg",
         ]
         if blast_files:
-            cmd.extend(["-b", *(str(path) for path in blast_files)])
+            args.extend(["-b", *(str(path) for path in blast_files)])
         if extra_args:
-            cmd.extend(extra_args)
+            args.extend(extra_args)
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=output_dir,
-        )
+        from tests.utils.cli_in_process import run_gbdraw
+
+        result = run_gbdraw(args, cwd=output_dir)
         return (
             result.returncode,
             result.stdout + result.stderr,

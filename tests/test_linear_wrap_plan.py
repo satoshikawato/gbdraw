@@ -7,8 +7,6 @@ import inspect
 import json
 import re
 from pathlib import Path
-import subprocess
-import sys
 from xml.etree import ElementTree
 
 from Bio import SeqIO
@@ -49,6 +47,7 @@ from gbdraw.mode_profiles import (
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.web_support.mode_scoped_settings import SLICE_CONTAINERS
 from tests.utils.session_drawing_view import drawing_view
+from tests.utils.cli_in_process import CliResult, run_gbdraw
 
 
 WRAP = "canvas.linear.wrap_length"
@@ -444,11 +443,7 @@ def test_a_stored_session_with_a_cut_record_moved_sideways_is_refused_by_the_cli
         "recordTranslations": [{"recordKey": request["records"][0]["recordKey"], "x": 40.0, "y": 0.0}],
     }
     session_path.write_text(json.dumps(session), encoding="utf-8")
-    replay = subprocess.run(
-        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--session", session_path.name,
-         "-o", "replayed", "-f", "svg"],
-        cwd=tmp_path, capture_output=True, text=True, env={"PYTHONPATH": str(Path(__file__).parents[1]), "PATH": "/usr/bin:/bin"},
-    )
+    replay = run_gbdraw(["linear", "--session", session_path.name, "-o", "replayed", "-f", "svg"], cwd=tmp_path)
     assert replay.returncode != 0
     assert "moved sideways" in replay.stderr + replay.stdout
     assert "Traceback" not in replay.stderr
@@ -465,14 +460,8 @@ def test_the_builder_decides_as_the_plan_does() -> None:
     assert longer.drawing.tostring() == plain.drawing.tostring()
 
 
-def _cli(*args: str, cwd: Path, gbk: tuple[Path, ...] = (LAMBDA,)) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--gbk", *map(str, gbk), *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        env={"PYTHONPATH": str(Path(__file__).parents[1]), "PATH": "/usr/bin:/bin"},
-    )
+def _cli(*args: str, cwd: Path, gbk: tuple[Path, ...] = (LAMBDA,)) -> CliResult:
+    return run_gbdraw(["linear", "--gbk", *map(str, gbk), *args], cwd=cwd)
 
 
 @pytest.mark.parametrize(
@@ -621,14 +610,7 @@ def test_cli_track_order_refused_for_rows_is_refused_when_a_record_is_cut(tmp_pa
 def test_a_track_order_decided_by_the_record_lengths_is_stored_as_drawn(tmp_path: Path) -> None:
     saved = _cli("--wrap_length", "10kb", *ORDER_WITH_AXIS, "1", "--save_session", "-o", "out", cwd=tmp_path)
     assert saved.returncode == 0, saved.stderr
-    replayed = subprocess.run(
-        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--session", "out.gbdraw-session.json",
-         "-o", "again"],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        env={"PYTHONPATH": str(Path(__file__).parents[1]), "PATH": "/usr/bin:/bin"},
-    )
+    replayed = run_gbdraw(["linear", "--session", "out.gbdraw-session.json", "-o", "again"], cwd=tmp_path)
     assert replayed.returncode == 0, replayed.stderr
     assert (tmp_path / "again.svg").read_bytes() == (tmp_path / "out.svg").read_bytes()
 
@@ -708,11 +690,7 @@ def test_a_cut_figure_stores_what_it_drew_and_replays_byte_identical(tmp_path: P
     assert linear["config"]["canvas"]["linear"]["track_layout"] == "above"
     assert linear["config"]["canvas"]["linear"]["wrap_length"] == 10_000
     assert linear["config"]["objects"]["scale"]["style"] == "ruler"
-    replay = subprocess.run(
-        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--session", "out.gbdraw-session.json",
-         "-o", "replayed", "-f", "svg"],
-        cwd=tmp_path, capture_output=True, text=True, env={"PYTHONPATH": str(Path(__file__).parents[1]), "PATH": "/usr/bin:/bin"},
-    )
+    replay = run_gbdraw(["linear", "--session", "out.gbdraw-session.json", "-o", "replayed", "-f", "svg"], cwd=tmp_path)
     assert replay.returncode == 0, replay.stderr
     assert (tmp_path / "replayed.svg").read_bytes() == (tmp_path / "out.svg").read_bytes()
 
@@ -724,11 +702,7 @@ def test_a_figure_with_nothing_to_cut_stores_the_plain_leaves_and_replays_byte_i
     assert linear["config"]["canvas"]["linear"]["track_layout"] == "middle"
     assert linear["config"]["canvas"]["linear"]["wrap_length"] == 100_000
     assert "data-gbdraw-wrap-row" not in (tmp_path / "out.svg").read_text(encoding="utf-8")
-    replay = subprocess.run(
-        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--session", "out.gbdraw-session.json",
-         "-o", "replayed", "-f", "svg"],
-        cwd=tmp_path, capture_output=True, text=True, env={"PYTHONPATH": str(Path(__file__).parents[1]), "PATH": "/usr/bin:/bin"},
-    )
+    replay = run_gbdraw(["linear", "--session", "out.gbdraw-session.json", "-o", "replayed", "-f", "svg"], cwd=tmp_path)
     assert replay.returncode == 0, replay.stderr
     assert (tmp_path / "replayed.svg").read_bytes() == (tmp_path / "out.svg").read_bytes()
 
@@ -754,11 +728,7 @@ def test_the_field_the_planner_consumes_is_refused_in_a_stored_request(tmp_path:
     assert options is not None and "wrapDefaults" not in options
     options["wrapDefaults"] = {"trackLayout": "above"}
     session_path.write_text(json.dumps(session), encoding="utf-8")
-    replay = subprocess.run(
-        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--session", session_path.name,
-         "-o", "replayed", "-f", "svg"],
-        cwd=tmp_path, capture_output=True, text=True, env={"PYTHONPATH": str(Path(__file__).parents[1]), "PATH": "/usr/bin:/bin"},
-    )
+    replay = run_gbdraw(["linear", "--session", session_path.name, "-o", "replayed", "-f", "svg"], cwd=tmp_path)
     assert replay.returncode != 0
     assert "wrapDefaults" in replay.stderr + replay.stdout
     assert not (tmp_path / "replayed.svg").exists()

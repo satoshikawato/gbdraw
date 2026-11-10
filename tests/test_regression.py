@@ -8,11 +8,9 @@ Run with: pytest tests/test_regression.py -v
 Run fast tests only: pytest tests/test_regression.py -v -m "not slow"
 """
 
-import subprocess
-import sys
-
 import pytest
 
+from tests.utils.cli_in_process import run_gbdraw
 from tests.utils.svg_compare import compare_svgs
 
 
@@ -23,46 +21,26 @@ from tests.utils.svg_compare import compare_svgs
 class TestBasicFunctionality:
     """Test that gbdraw runs without errors."""
 
-    def test_help_command(self):
+    def test_help_command(self, tmp_path):
         """Test that help command works."""
-        result = subprocess.run(
-            [sys.executable, "-m", "gbdraw.cli", "--help"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        result = run_gbdraw(["--help"], cwd=tmp_path)
         assert result.returncode == 0
         assert "gbdraw" in result.stdout.lower() or "genome" in result.stdout.lower()
 
-    def test_circular_help(self):
+    def test_circular_help(self, tmp_path):
         """Test that circular subcommand help works."""
-        result = subprocess.run(
-            [sys.executable, "-m", "gbdraw.cli", "circular", "--help"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        result = run_gbdraw(["circular", "--help"], cwd=tmp_path)
         assert result.returncode == 0
         assert "circular" in result.stdout.lower() or "gbk" in result.stdout.lower()
 
-    def test_linear_help(self):
+    def test_linear_help(self, tmp_path):
         """Test that linear subcommand help works."""
-        result = subprocess.run(
-            [sys.executable, "-m", "gbdraw.cli", "linear", "--help"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        result = run_gbdraw(["linear", "--help"], cwd=tmp_path)
         assert result.returncode == 0
         assert "linear" in result.stdout.lower() or "gbk" in result.stdout.lower()
 
-    def test_unknown_command_lists_every_surface(self):
-        result = subprocess.run(
-            [sys.executable, "-m", "gbdraw.cli", "unknown"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+    def test_unknown_command_lists_every_surface(self, tmp_path):
+        result = run_gbdraw(["unknown"], cwd=tmp_path)
 
         assert result.returncode == 1
         assert result.stdout == ""
@@ -162,7 +140,6 @@ class TestCircularRegression:
             "NC_010162_test",
             tmp_path,
             extra_args=args,
-            timeout=600,  # Large genome needs more time
         )
 
         assert returncode == 0, f"gbdraw failed: {output}"
@@ -364,7 +341,6 @@ class TestLinearRegression:
             tmp_path,
             blast_files=blast_files,
             extra_args=["--align_center", "--separate_strands", "--legend", "none"],
-            timeout=600,
         )
 
         assert returncode == 0, f"gbdraw failed: {output}"

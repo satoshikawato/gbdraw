@@ -4,8 +4,6 @@ import argparse
 from functools import lru_cache
 import json
 import re
-import subprocess
-import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -42,6 +40,7 @@ from gbdraw.linear import (
     _parse_linear_track_layout,
 )
 from gbdraw.render.groups.linear.length_bar import LengthBarGroup, RULER_TICK_LENGTH
+from tests.utils.cli_in_process import run_gbdraw
 from tests.utils.linear_render_context import alone_sequence_widths, make_linear_record_render_context
 from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 
@@ -61,10 +60,7 @@ def _run_linear_with_gbks(
     *,
     output_name: str = "linear_track_layout_test",
 ) -> tuple[int, str, str, Path]:
-    cmd = [
-        sys.executable,
-        "-m",
-        "gbdraw.cli",
+    args = [
         "linear",
         "--gbk",
         *(str(path) for path in gbk_paths),
@@ -75,7 +71,7 @@ def _run_linear_with_gbks(
         "--legend",
         "none",
     ] + list(extra_args)
-    result = subprocess.run(cmd, cwd=str(tmp_path), capture_output=True, text=True, timeout=240)
+    result = run_gbdraw(args, cwd=tmp_path)
     return result.returncode, result.stdout, result.stderr, (tmp_path / f"{output_name}.svg")
 
 
