@@ -5,7 +5,7 @@ import os
 import logging
 from contextlib import contextmanager
 from collections import Counter
-from collections.abc import Iterator, Set as AbstractSet
+from collections.abc import Iterator, Sequence, Set as AbstractSet
 import string
 from typing import Callable, List, Dict, Literal
 
@@ -743,7 +743,22 @@ def load_gff_fasta(
     return record_list
 
 
+def source_genome_length(kind: str, paths: Sequence[str], loaded_length: int) -> int:
+    """The length a source counts in its genome (OV-3143): every sequence of the source, uncropped, drawn or not.
+
+    A GenBank or FASTA file, or an in-memory record, counts the records its loader read (``loaded_length``, their
+    uncropped lengths summed); a GFF3/FASTA pair (``kind`` ``gff_fasta``, ``paths`` the GFF3 and FASTA files)
+    counts every entry of its FASTA file, also one the GFF3 file does not name, as the Circular similarity
+    rings search it. The one owner of a source's genome length.
+    """
+
+    if kind != "gff_fasta":
+        return loaded_length
+    return sum(len(record) for record in read_sequence_file_records(str(paths[-1]), "fasta"))
+
+
 __all__ = [
+    "source_genome_length",
     "load_gbks",
     "load_fasta",
     "load_query_fasta",

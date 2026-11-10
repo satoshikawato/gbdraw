@@ -121,6 +121,65 @@ export const readLinearUnitPlan = (result, asked) => {
 };
 
 /**
+ * The `planGenomeScales` reply (`LinearGenomeScales` of gbdraw/web_support/linear_units.py): the key of the record
+ * each drawn unit draws, in drawing order, and the E-value scale of each search between two drawn units:
+ * `scales[query][subject]` is the `--searchsp` of a LOSATN or TLOSATX search, the `--dbsize` of a LOSATP one, or null
+ * for LOSAT's own (PD-OI-018 revision 6). Python sums and multiplies the genomes; the page never does. A scale is a
+ * positive decimal string, passed to LOSAT unchanged: the product of two large genomes is past what a number holds.
+ * `warnings` names the unit pairs searched per file, their genome pair's search space past what LOSAT reads, with the
+ * warning the command line logs (Owner decision 2026-11-10).
+ * @typedef {{ queryUnit: number, subjectUnit: number, message: string }} GenomeScaleWarning
+ * @typedef {{ recordKeys: string[], scales: (string | null)[][], warnings: GenomeScaleWarning[] }} LinearGenomeScales
+ */
+/** The E-value scale of a search between two drawn units. @typedef {(queryUnit: number, subjectUnit: number) => string | null} GenomeScaleOf */
+/**
+ * The scales of one Generate's searches: `scaleOf` each pair's, `warningOf` the warning of a pair searched per file.
+ * @typedef {{ scaleOf: GenomeScaleOf, warningOf: (queryUnit: number, subjectUnit: number) => string | null }} GenomeScales
+ */
+
+/** @param {unknown} value @returns {value is string | null} */
+const isScale = (value) => value === null || (typeof value === 'string' && /^[1-9]\d*$/.test(value));
+
+/**
+ * The E-value scale of each search between two drawn units, from Python's reply for the drawing's request, checked
+ * against `LinearGenomeScales`: the reply names the units `recordKeys` lists (the units Generate searches), in their
+ * order, with a scale for every pair of them and the warnings of pairs among them.
+ * @param {unknown} result
+ * @param {readonly string[]} recordKeys The record each drawn unit draws (`LinearUnitSearch.recordKeys`).
+ * @returns {GenomeScales}
+ */
+export const readGenomeScales = (result, recordKeys) => {
+  const failure = /** @type {const} */ ({ stage: 'helper', operation: 'planGenomeScales' });
+  const count = recordKeys.length;
+  /** @param {unknown} value @returns {value is number} */
+  const isUnit = (value) => isIndex(value) && Number(value) < count;
+  const valid = isRecord(result) && Array.isArray(result.recordKeys) && Array.isArray(result.scales)
+    && result.recordKeys.length === count && result.recordKeys.every((key, index) => key === recordKeys[index])
+    && result.scales.length === count
+    && result.scales.every((row) => Array.isArray(row) && row.length === count && row.every(isScale))
+    && Array.isArray(result.warnings) && result.warnings.every((warning) => isRecord(warning)
+      && isUnit(warning.queryUnit) && isUnit(warning.subjectUnit) && typeof warning.message === 'string'
+      && warning.message !== '');
+  if (!valid) throw diagnosticError('RESULT_INVALID', {}, failure);
+  const { scales, warnings } = /** @type {LinearGenomeScales} */ (/** @type {unknown} */ (result));
+  const messages = new Map(warnings.map(({ queryUnit, subjectUnit, message }) => [`${queryUnit}:${subjectUnit}`, message]));
+  /** @param {number} queryUnit @param {number} subjectUnit */
+  const checked = (queryUnit, subjectUnit) => {
+    if (!isUnit(queryUnit) || !isUnit(subjectUnit)) throw diagnosticError('RESULT_INVALID', {}, failure);
+  };
+  return {
+    scaleOf: (queryUnit, subjectUnit) => {
+      checked(queryUnit, subjectUnit);
+      return scales[queryUnit][subjectUnit];
+    },
+    warningOf: (queryUnit, subjectUnit) => {
+      checked(queryUnit, subjectUnit);
+      return messages.get(`${queryUnit}:${subjectUnit}`) ?? null;
+    }
+  };
+};
+
+/**
  * Whether drawn cards or request records draw several units: only one whose window list holds several windows does
  * (D-01). Without one, Python's unit plan is the records themselves and the plan's own edges, so a request needs no
  * plan to write them, and a unit index is a record index.

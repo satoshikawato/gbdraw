@@ -4,6 +4,7 @@
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
 /** @import { RecordSpanRead } from '../services/diagram-worker-protocol.js' */
 /** @import { LinearUnitPlanPayload } from '../services/linear-units.js' */
+/** @import { PlanGenomeScales } from './run-analysis.js' */
 /** @import { CardWindowRecordInput } from '../contracts/card-windows.generated.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
@@ -407,6 +408,17 @@ const shownResultRoot = () => state.svgContainer.value?.querySelector('svg') ?? 
 // The Worker helper that plans a Linear request's drawn units (`planLinearUnitSearch`).
 /** @param {LinearUnitPlanPayload} payload */
 const planLinearUnits = (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload);
+/**
+ * The E-value scales of a drawing's LOSAT searches: Python plans the drawing's draft request, as Save writes it, staged
+ * as Generate stages its request (PD-OI-018 revision 6).
+ * @type {PlanGenomeScales}
+ */
+const planDraftGenomeScales = async (drawing, { program, ...facts }) => {
+  const { envelope: { renderRequest, resources } } = await projectDraftRequest(state, drawing, { ...facts, planLinearUnits });
+  return (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_GENOME_SCALES, {
+    canonicalRequest: renderRequest, resources: /** @type {GenerationPayload['resources']} */ (resources), program
+  })).result;
+};
 // The Worker helper that plans a Linear card's window numbers and omitted lengths (PD-OI-124).
 /** @param {{ records: CardWindowRecordInput[] }} payload */
 const planCardWindows = (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_CARD_WINDOWS, payload);
@@ -1762,7 +1774,7 @@ export const createAppSetup = () => {
         hiddenDepth: true
       })
     ),
-    prepareLinearRecordCatalog,
+    prepareLinearRecordCatalog, planGenomeScales: planDraftGenomeScales,
     readRecordIdentitySources,
     linearCardRecord,
     readLinearCardRecords: linearRecordSelector.refresh,

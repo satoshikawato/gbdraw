@@ -382,7 +382,7 @@ def test_losat_with_blast_files_is_a_plan_error() -> None:
     from gbdraw.comparisons.linear_losat import NucleotideLosatRecord, resolve_linear_nucleotide_losat
 
     records = [
-        NucleotideLosatRecord(record=record, source_id=key, record_key=f"record-{index + 1}", label=key, window=None, input_index=index)
+        NucleotideLosatRecord(record=record, source_id=key, source_length=len(record), record_key=f"record-{index + 1}", label=key, window=None, input_index=index)
         for index, (record, key) in enumerate(zip(read_genbank([LAMBDA, DE3]), ("a", "b")))
     ]
     with pytest.raises(ValidationError) as excinfo:

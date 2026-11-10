@@ -19,6 +19,7 @@ const modulePath = join(tempDir, 'js', 'app', 'run-info.js');
 const {
   buildRunInfo,
   LOSAT_DATABASE_SCOPE_NOTE,
+  LOSAT_EVALUE_SCALE_NOTE,
   buildSourceRecipe,
   quoteShellArg,
   reproducibilityLabel,
@@ -1874,16 +1875,20 @@ test('a feature edit or placement whose feature the source lacks makes the Sourc
   }
 });
 
-// PD-OI-018 revision 4 and D-40: Run Info states the LOSAT E-value database.
-test('Run Info states the LOSAT search database only when LOSAT comparisons are present', () => {
+// PD-OI-018 revision 4 and D-40, OV-3143: Run Info states the LOSAT E-value scale.
+test('Run Info states the LOSAT E-value scale only when LOSAT comparisons are present', () => {
   const recipe = { mode: 'linear', available: true, args: ['--gbk', '/a.gb'], fileMetadata: [] };
   const withLosat = buildRunInfo({ mode: 'linear', sourceRecipe: recipe, losatComparisons: true });
-  assert(withLosat.reproducibility.notes.includes(LOSAT_DATABASE_SCOPE_NOTE));
-  assert.match(LOSAT_DATABASE_SCOPE_NOTE, /subject source file/);
-  // The CLI and Python API search the same databases (design D7).
-  assert.doesNotMatch(LOSAT_DATABASE_SCOPE_NOTE, /CLI/);
+  assert(withLosat.reproducibility.notes.includes(LOSAT_EVALUE_SCALE_NOTE));
+  assert.match(LOSAT_EVALUE_SCALE_NOTE, /LOSATN and TLOSATX E-values use one scale for each pair of genomes/);
+  assert.match(LOSAT_EVALUE_SCALE_NOTE, /LOSATP E-values use the proteins of the subject genome as the database size/);
+  assert.doesNotMatch(LOSAT_EVALUE_SCALE_NOTE, /subject source file/);
+  // The CLI and Python API use the same scale (design D7).
+  assert.doesNotMatch(LOSAT_EVALUE_SCALE_NOTE, /CLI/);
   const without = buildRunInfo({ mode: 'linear', sourceRecipe: recipe });
-  assert(!without.reproducibility.notes.includes(LOSAT_DATABASE_SCOPE_NOTE));
+  assert(!without.reproducibility.notes.includes(LOSAT_EVALUE_SCALE_NOTE));
+  // A Result made before stored the database note, which stays true of it and is still shown.
+  assert.deepEqual(shownRunInfoNoteParts([{ text: LOSAT_DATABASE_SCOPE_NOTE }]), [{ text: LOSAT_DATABASE_SCOPE_NOTE }]);
 });
 
 test('Run Info lists the search runtime of Web, CLI and unrecorded raw entries (D9/D10)', () => {
@@ -1945,7 +1950,7 @@ test('OV-1678: in Simplified Chinese the Run info shows its notes, files descrip
   const reason = 'Source recipe unavailable: multiple uploaded inputs use the visible filename "x.gb".';
   assert.equal(english.sourceRecipe.unavailableReason, reason);
   assert.deepEqual(english.reproducibility.notes, [
-    reason, 'Exact replay remains available from the committed canonical session.', LOSAT_DATABASE_SCOPE_NOTE
+    reason, 'Exact replay remains available from the committed canonical session.', LOSAT_EVALUE_SCALE_NOTE
   ]);
   assert.equal(english.downloadBundle.description, 'The Source recipe is unavailable. No Exact replay file is available.');
   assert.equal(english.losatRuntimes[0].text, 'blastn: runtime not recorded');
@@ -1960,7 +1965,9 @@ test('OV-1678: in Simplified Chinese the Run info shows its notes, files descrip
       zh['multiple uploaded inputs use the visible filename "{name}".'].replace('{name}', 'x.gb'));
     assert.equal(errorText(english.sourceRecipe.unavailableReasonParts), shownReason);
     assert.deepEqual(english.reproducibility.noteParts.map((part) => errorText([part])), [
-      shownReason, zh['Exact replay remains available from the committed canonical session.'], zh[LOSAT_DATABASE_SCOPE_NOTE]
+      shownReason, zh['Exact replay remains available from the committed canonical session.'],
+      // A new note reads in English until the translation batch before a release.
+      zh[LOSAT_EVALUE_SCALE_NOTE] ?? LOSAT_EVALUE_SCALE_NOTE
     ]);
     assert.equal(errorText(english.downloadBundle.descriptionParts),
       `${zh['The Source recipe is unavailable.']}${zh['No Exact replay file is available.']}`);
@@ -1992,7 +1999,7 @@ test('the Run info tab shows the notes a reader acts on, from the stored notes',
       count === 1
         ? 'Needs pair_0.tsv from "Download reproducibility files"'
         : 'Needs pair_0.tsv, pair_1.tsv from "Download reproducibility files"',
-      LOSAT_DATABASE_SCOPE_NOTE
+      LOSAT_EVALUE_SCALE_NOTE
     ]);
   }
   const plain = buildRunInfo({ mode: 'circular', args: ['--gbk', '/seq.gb'], fileMetadata: { '/seq.gb': { name: 'seq.gb', kind: 'uploaded' } } });

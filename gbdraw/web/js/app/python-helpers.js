@@ -29,7 +29,9 @@ from gbdraw.web_support.feature_override_table import read_feature_override_tabl
 from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 from gbdraw.web_support.locate import locate_web_json
 from gbdraw.web_support.record_spans import read_record_span_sequences_json
-from gbdraw.web_support.linear_units import plan_card_windows_json, plan_linear_units_json, plan_record_places_json
+from gbdraw.web_support.linear_units import (
+    plan_card_windows_json, plan_genome_scales_json, plan_linear_units_json, plan_record_places_json,
+)
 from gbdraw.web_support.reply_buffers import json_utf8_chunks, text_utf8_chunks, write_reply_buffer
 from gbdraw.web_support.sequence_search import read_search_queries_json, sequence_search_annotation_set_json
 from gbdraw.web_support.feature_anchor import resolve_feature_anchor_json
@@ -1814,6 +1816,11 @@ _WEB_JSON_HELPERS = {
     "locate_web_json": (_with_prepared_input_lookup(locate_web_json, 1), "findInOtherFiles"),
     "read_record_span_sequences_json": (
         _with_prepared_input_lookup(read_record_span_sequences_json, 1), "readRecordSpanSequences"
+    ),
+    # Generate's LOSAT searches pass the E-value scale Python plans for the drawing's request: its parse is kept for
+    # the render (PD-OI-018 revision 6).
+    "plan_genome_scales_json": (
+        _with_prepared_input_lookup(plan_genome_scales_json, 1, publish_inputs=True), "planGenomeScales"
     ),
     # Generate's comparison searches run over the drawn units Python plans (D-01, D-37).
     "plan_linear_units_json": (plan_linear_units_json, "planLinearUnits"),

@@ -44,6 +44,7 @@ from gbdraw.analysis.origin_arcs import Arc, LinkSide, directed_arc, location_or
 from gbdraw.analysis.ortholog_paths import OrthologPath, OrthologPathCollection, ortholog_edge_id
 from gbdraw.contract_shapes import Spellings, read_spelling
 from gbdraw.comparisons.losat_jobs import (
+    GenomeDatabaseSizes,
     LosatBatch,
     RecordPair,
     losat_entry_filename,
@@ -61,6 +62,7 @@ from gbdraw.comparisons.losat_runtime import (
     LosatRuntimeRecord,
     LosatSearchArgs,
     losat_cache_args,
+    losat_takes_genome_scale,
     run_losat_search,
 )
 from gbdraw.core.numeric import compensated_sum
@@ -2836,10 +2838,18 @@ class LosatpCacheState:
     proteins_by_instance: tuple[tuple[str, tuple[CdsProtein, ...]], ...]
     threads_per_job: str | int
     runtime_compatibility: str
+    database_sizes: GenomeDatabaseSizes | None = None
 
 
 class LosatpCacheManager(LosatRawCache):
-    """Validated schema-4 protein raw-cache lookup and collection."""
+    """Validated schema-4 protein raw-cache lookup and collection.
+
+    It holds the request's search settings that its raw entries record:
+    ``threads_per_job``, ``runtime_compatibility``, and ``database_sizes``,
+    each search's ``-dbsize`` (the subject genome's proteins,
+    :func:`gbdraw.comparisons.losat_jobs.genome_database_sizes`; ``None``
+    keeps LOSAT's own), which enters the raw key's args.
+    """
 
     def __init__(
         self,
@@ -2848,10 +2858,12 @@ class LosatpCacheManager(LosatRawCache):
         identity_manifest: ProteinIdentityManifest | Mapping[str, object] | None = None,
         threads_per_job: str | int = "auto",
         runtime_compatibility: str = "threaded-compatible-v1",
+        database_sizes: GenomeDatabaseSizes | None = None,
     ) -> None:
         super().__init__()
         self.threads_per_job = threads_per_job
         self.runtime_compatibility = runtime_compatibility
+        self.database_sizes = database_sizes
         self.identity_manifest = (
             validate_protein_identity_manifest(identity_manifest)
             if identity_manifest is not None
@@ -2910,6 +2922,7 @@ class LosatpCacheManager(LosatRawCache):
             proteins_by_instance=tuple(self._proteins_by_instance.items()),
             threads_per_job=self.threads_per_job,
             runtime_compatibility=self.runtime_compatibility,
+            database_sizes=self.database_sizes,
         )
 
     @classmethod
@@ -2919,6 +2932,7 @@ class LosatpCacheManager(LosatRawCache):
         cache = cls(
             threads_per_job=state.threads_per_job,
             runtime_compatibility=state.runtime_compatibility,
+            database_sizes=state.database_sizes,
         )
         cache.identity_manifest = state.identity_manifest
         cache._restore_raw_state(state.entries, state.display)
@@ -3578,6 +3592,29 @@ def proteins_to_fasta(proteins: Sequence[CdsProtein]) -> str:
         sequence = protein.sequence
         lines.extend(sequence[index : index + 80] for index in range(0, len(sequence), 80))
     return "\n".join(lines) + ("\n" if lines else "")
+
+
+def source_protein_letters(
+    records: Sequence[SeqRecord],
+    *,
+    feature_visibility_rules: list[dict[str, object]] | None = None,
+    feature_overrides: Sequence[Mapping[int, object]] | None = None,
+) -> int:
+    """The letters of every protein LOSATP would search in a whole source: its database size share (OV-3143).
+
+    ``records`` are every record of the source, uncropped, drawn or not; the proteins are those
+    :func:`extract_cds_proteins` takes for a LOSATP search, under the same visibility rules and per-record
+    overrides (``feature_overrides[i]`` for ``records[i]``; an undrawn record has none). The one owner of a
+    source's protein count, which ``gbdraw.comparisons.losat_jobs.genome_database_sizes`` sums per genome.
+    """
+
+    extraction = extract_cds_proteins(
+        records,
+        prefer_source_ids=False,
+        feature_visibility_rules=feature_visibility_rules,
+        feature_overrides=feature_overrides,
+    )
+    return sum(len(protein.sequence) for proteins in extraction.proteins_by_record for protein in proteins)
 
 
 def _finite_numeric_values(df: DataFrame) -> np.ndarray | None:
@@ -6191,8 +6228,13 @@ def run_losatp_blastp(
     threads: int | None = None,
     raw_output_callback: Callable[[str], None] | None = None,
     runtime_callback: LosatRuntimeCallback | None = None,
+    dbsize: int | None = None,
 ) -> DataFrame:
-    """Run LOSATP through the shared LOSAT runtime and parse outfmt 6 output."""
+    """Run LOSATP through the shared LOSAT runtime and parse outfmt 6 output.
+
+    ``dbsize`` is the database size LOSAT scales E-values by (``-dbsize``);
+    omitted, the subject FASTA's own.
+    """
 
     if max_hits is not None:
         _validate_max_hits(max_hits, option_name="protein_blastp_candidate_limit")
@@ -6206,6 +6248,7 @@ def run_losatp_blastp(
         options=LosatSearchArgs(
             max_hsps=max_hsps_per_subject,
             max_target_seqs=max_hits,
+            dbsize=dbsize,
         ),
         losat_bin=losatp_bin,
         ncbi_blast_bin=ncbi_blastp_bin,
@@ -6311,14 +6354,11 @@ def _search_losatp_record_pairs(
     :func:`gbdraw.comparisons.losat_jobs.plan_losat_jobs` runs once, and its
     result is split into record-pair hits and raw cache entries under the Web
     raw keys. ``display_filenames`` names the displayed pairs.
+    The request's cache gives each pair's ``-dbsize``, its subject genome's
+    proteins (``LosatpCacheManager.database_sizes``); a runtime without
+    ``-dbsize`` searches without it, with a warning.
     """
 
-    args = tuple(
-        losat_cache_args(
-            "losatp",
-            LosatSearchArgs(max_hsps=max_hsps_per_subject, max_target_seqs=candidate_limit),
-        )
-    )
     fasta_by_record: dict[int, str] = {}
 
     def record_fasta(index: int) -> str:
@@ -6326,20 +6366,45 @@ def _search_losatp_record_pairs(
             fasta_by_record[index] = proteins_to_fasta(extraction.proteins_by_record[index])
         return fasta_by_record[index]
 
-    batches = prepare_losat_batches(
-        plan_losat_jobs(
-            source_ids=losat_source_ids(records),
-            specs=specs,
-            build_args=lambda _query, _subject: args,
-        ),
-        uids=losat_record_uids(records),
-        record_fasta=record_fasta,
-        protein=True,
-    )
-    displayed = dict(display_filenames or {})
+    sizes = losatp_cache.database_sizes if losatp_cache is not None else None
+
+    def search_args(query: int, subject: int) -> LosatSearchArgs:
+        dbsize = sizes(query, subject) if sizes is not None else None
+        return LosatSearchArgs(max_hsps=max_hsps_per_subject, max_target_seqs=candidate_limit, dbsize=dbsize)
+
+    def plan() -> tuple[LosatBatch, ...]:
+        return prepare_losat_batches(
+            plan_losat_jobs(
+                source_ids=losat_source_ids(records),
+                specs=specs,
+                build_args=lambda query, subject: losat_cache_args("losatp", search_args(query, subject)),
+            ),
+            uids=losat_record_uids(records),
+            record_fasta=record_fasta,
+            protein=True,
+        )
+
     cache = losatp_cache if runner is None else None
+    batches = plan()
+    # The runtime is probed only when a search must run: a cache that answers every pair needs none (the Web).
+    if (
+        sizes is not None
+        and runner is None
+        and any(sizes(*pair) is not None for pair in specs)
+        and not all(
+            cache is not None and cache.cached_text(
+                record_fasta(query), record_fasta(subject), args=batch.job.args, search_context=batch.search_context,
+            ) is not None
+            for batch in batches for query, subject in batch.job.specs
+        )
+        and not losat_takes_genome_scale("losatp", losat_bin=losatp_bin, ncbi_blast_bin=ncbi_blastp_bin)
+    ):
+        sizes = None
+        batches = plan()
+    displayed = dict(display_filenames or {})
     hits: dict[RecordPair, DataFrame] = {}
     for batch in batches:
+        args = batch.job.args
         texts: dict[RecordPair, str] = {}
         if cache is not None:
             for pair in batch.job.specs:
@@ -6373,6 +6438,8 @@ def _search_losatp_record_pairs(
                 threads=losatp_threads,
                 raw_output_callback=raw_text.append,
                 runtime_callback=runtime_records.append,
+                # One job is one subject genome, so its pairs share one database size.
+                dbsize=search_args(*batch.job.specs[0]).dbsize,
             )
         hits.update(_split_protein_hits(batch_hits, batch, missing))
         if cache is None:
@@ -7091,6 +7158,7 @@ __all__ = [
     "parse_losat_fasta_ids",
     "percent_encode_losat_transport_field",
     "proteins_to_fasta",
+    "source_protein_letters",
     "promote_legacy_protein_raw_cache_entries",
     "raw_protein_tsv_matches_bindings",
     "run_losatp_blastp",

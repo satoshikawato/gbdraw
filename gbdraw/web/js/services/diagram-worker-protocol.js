@@ -71,6 +71,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   LIST_GFF_FASTA_RECORDS: 'listGffFastaRecords',
   LIST_SEQUENCE_RECORDS: 'listSequenceRecords',
   PLAN_CARD_WINDOWS: 'planCardWindows',
+  PLAN_GENOME_SCALES: 'planGenomeScales',
   PLAN_LINEAR_UNITS: 'planLinearUnits',
   PLAN_RECORD_PLACES: 'planRecordPlaces',
   PROMOTE_LEGACY_LOSATP_CACHE: 'promoteLegacyLosatpCache',
@@ -118,7 +119,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.FIND_IN_OTHER_FILES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: (payload) => payload.projection?.canonicalRequest,
-  [DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA]: (payload) => payload.recordSource
+  [DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA]: (payload) => payload.recordSource,
+  [DIAGRAM_HELPER_OPERATIONS.PLAN_GENOME_SCALES]: (payload) => payload.canonicalRequest
 });
 
 /**
@@ -128,6 +130,16 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @typedef {object} AutoOrientationHelperPayload
  * @property {CanonicalRenderRequest} canonicalRequest
  * @property {CommittedCanonicalSession['resources']} resources
+ */
+
+/**
+ * The payload of `planGenomeScales`: a Linear drawing's draft request (`projectDraftRequest`), whose resources the
+ * page stages (`resources`, the request's resource table), and the LOSAT program of its searches (`losatn`,
+ * `tlosatx` or `losatp`; a request holds no nucleotide search, which the page resolves before it renders).
+ * @typedef {object} GenomeScalesHelperPayload
+ * @property {CanonicalRenderRequest} canonicalRequest
+ * @property {CommittedCanonicalSession['resources']} resources
+ * @property {'losatn' | 'tlosatx' | 'losatp'} program
  */
 
 /**

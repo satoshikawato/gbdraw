@@ -4115,6 +4115,104 @@ test('@comparison-contract real LOSAT Wasm searches two multi-record sources in 
   expect(snapshot.svgPairs).toEqual(pairs.map((pair) => pair.join('->')).sort());
 });
 
+// Both engines pass the genome pair's -searchsp. The serial engine (losat.wasm, LOSAT web ABI) refuses
+// -searchsp until the vendored losat.wasm is rebuilt from a LOSAT commit whose web ABI reads it.
+for (const engine of ['threaded', 'serial']) test(`@comparison-contract a cropped LOSATN pair searches with the search space of its two whole genomes (${engine})`, async ({ page }) => {
+  test.setTimeout(300000);
+  await routeCrossOriginIsolated(page.context());
+  await page.addInitScript(() => {
+    window.__GBDRAW_LOSATN_ARGS__ = [];
+    window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+      window.__GBDRAW_LOSATN_ARGS__.push(jobs.map((job) => job.extraArgs));
+      const { runLosatPairsParallel } = await import('/gbdraw/web/js/services/losat.js');
+      return runLosatPairsParallel(jobs, options);
+    };
+  });
+  let seed = 977;
+  const sequence = Array.from({ length: 360 }, () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return 'acgt'[seed >>> 30];
+  }).join('');
+  const contents = ['GenomeA', 'GenomeB'].map((id) =>
+    makeDerivedOptionGenbank(id).replace(/ORIGIN[\s\S]*$/, `ORIGIN\n        1 ${sequence}\n//\n`));
+  await openApp(page);
+  expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
+  await showDrawing(page, { kind: 'linear' });
+  await page.evaluate(async ({ contents, engine }) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearInputType('gb');
+    for (const [index, text] of contents.entries()) {
+      if (index > 0) app.addLinearSeq();
+      app.setLinearSeqPrimaryFile(index, 'gb', new File([text], `genome${index}.gbff`, { type: 'text/plain', lastModified: 1 }));
+      await app.refreshLinearRecordSelectors();
+    }
+    Object.assign(app.form, { show_gc: false, show_skew: false, show_depth: false, show_labels_linear: 'none' });
+    Object.assign(app.adv, { min_bitscore: 0, evalue: 1, identity: 0, alignment_length: 0 });
+    app.losatExecution.executionMode = engine;
+    await app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastn');
+  }, { contents, engine });
+  const run = async () => {
+    const result = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+    expect(result, JSON.stringify(await page.evaluate(() => window.__GBDRAW_APP__.errorLog))).toEqual({ status: 'ok' });
+    return page.evaluate(() => window.__GBDRAW_LOSATN_ARGS__.at(-1));
+  };
+  // The whole one-record pair keeps LOSAT's own scale: no -searchsp.
+  const [whole] = await run();
+  expect(whole).not.toContain('--searchsp');
+  // A crop of GenomeA searches 200 of its 360 bases; the E-values stay on the scale of the two genomes.
+  await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.linearSeqs[0], { region_start: 1, region_end: 200 }));
+  const [cropped] = await run();
+  expect(cropped.slice(cropped.indexOf('--searchsp'), cropped.indexOf('--searchsp') + 2))
+    .toEqual(['--searchsp', String(360 * 360)]);
+});
+
+// LOSATP passes the proteins of the subject genome as -dbsize (PD-OI-018 revision 6), which Python plans for the
+// drawing's request. Threaded only: the serial engine refuses -dbsize until the vendored losat.wasm reads it (OV-3251).
+test('@comparison-contract a cropped LOSATP pair searches with the proteins of its subject genome (threaded)', async ({ page }) => {
+  test.setTimeout(300000);
+  await routeCrossOriginIsolated(page.context());
+  await page.addInitScript(() => {
+    window.__GBDRAW_LOSATP_ARGS__ = [];
+    window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+      window.__GBDRAW_LOSATP_ARGS__.push(jobs.map((job) => job.extraArgs));
+      const { runLosatPairsParallel } = await import('/gbdraw/web/js/services/losat.js');
+      return runLosatPairsParallel(jobs, options);
+    };
+  });
+  const contents = ['GenomeA', 'GenomeB'].map((id) => makeDerivedOptionGenbank(id));
+  await openApp(page);
+  expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
+  await showDrawing(page, { kind: 'linear' });
+  await page.evaluate(async ({ contents }) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearInputType('gb');
+    for (const [index, text] of contents.entries()) {
+      if (index > 0) app.addLinearSeq();
+      app.setLinearSeqPrimaryFile(index, 'gb', new File([text], `protein${index}.gbff`, { type: 'text/plain', lastModified: 1 }));
+      await app.refreshLinearRecordSelectors();
+    }
+    Object.assign(app.form, { show_gc: false, show_skew: false, show_depth: false, show_labels_linear: 'none' });
+    Object.assign(app.adv, { min_bitscore: 0, evalue: 1, identity: 0, alignment_length: 0 });
+    app.losatExecution.executionMode = 'threaded';
+    await app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('pairwise');
+  }, { contents });
+  const run = async () => {
+    const result = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+    expect(result, JSON.stringify(await page.evaluate(() => window.__GBDRAW_APP__.errorLog))).toEqual({ status: 'ok' });
+    return page.evaluate(() => window.__GBDRAW_LOSATP_ARGS__.at(-1));
+  };
+  // The whole one-record pair keeps LOSAT's own database size: no -dbsize.
+  const [whole] = await run();
+  expect(whole).not.toContain('--dbsize');
+  // A crop of GenomeA searches GenomeB's three proteins of ten letters each as the database, as the CLI does.
+  await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.linearSeqs[0], { region_start: 1, region_end: 200 }));
+  const [cropped] = await run();
+  expect(cropped.slice(cropped.indexOf('--dbsize'), cropped.indexOf('--dbsize') + 2)).toEqual(['--dbsize', '30']);
+});
+
 test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs and preserves independent rows through Save and Load', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   await page.context().route('**/*', (route) => (

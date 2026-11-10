@@ -73,6 +73,7 @@ const state = {
   // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
   losatExecution: { totalThreadBudget: 'safe', threadsPerJob: '32', parallelWorkers: undefined },
   losat: {
+    blastn: { task: 'megablast' },
     blastp: {
       mode: 'orthogroup',
       collinearSearchScope: 'adjacent'
@@ -93,6 +94,7 @@ const loadingOrderState = {
   // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
   losatExecution: { totalThreadBudget: 'safe', threadsPerJob: '32', parallelWorkers: undefined },
   losat: {
+    blastn: { task: 'megablast' },
     blastp: {
       mode: 'orthogroup',
       collinearSearchScope: 'adjacent'
@@ -110,6 +112,7 @@ const noneState = {
   // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
   losatExecution: { totalThreadBudget: '17', threadsPerJob: '32', parallelWorkers: '9' },
   losat: {
+    blastn: { task: 'megablast' },
     blastp: { mode: 'pairwise', collinearSearchScope: 'adjacent' }
   },
   losatProgram: { value: 'blastn' }
@@ -133,6 +136,7 @@ const mixedState = {
   // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
   losatExecution: { totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined },
   losat: {
+    blastn: { task: 'megablast' },
     blastp: { mode: 'pairwise', collinearSearchScope: 'adjacent' }
   },
   losatProgram: { value: 'blastn' }
@@ -148,6 +152,7 @@ const expansionState = {
   // How LOSAT runs is one app-level setting (`state.losatExecution`, PR-1).
   losatExecution: { totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined },
   losat: {
+    blastn: { task: 'megablast' },
     blastp: { mode: 'orthogroup', collinearSearchScope: 'all' }
   },
   losatProgram: { value: 'blastp' }
@@ -197,7 +202,7 @@ const offState = {
   recordsOff: ['record-1'],
   linearComparisonResolution: resolved({ sources: ['losat'] }),
   losatExecution: { totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined },
-  losat: { blastp: { mode: 'orthogroup', collinearSearchScope: 'all' } },
+  losat: { blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', collinearSearchScope: 'all' } },
   losatProgram: { value: 'blastp' }
 };
 const offSettings = createLosatSettings({ state: withDrawings(offState) });
@@ -234,7 +239,7 @@ const budgetState = {
   linearSeqs: [{ uid: 'a', windows: [] }, { uid: 'b', windows: [] }],
   linearComparisonResolution: resolved({ sources: ['losat'] }),
   losatExecution: { totalThreadBudget: '32', threadsPerJob: 'auto', parallelWorkers: undefined },
-  losat: { blastp: { mode: 'orthogroup', collinearSearchScope: 'all' } },
+  losat: { blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', collinearSearchScope: 'all' } },
   losatProgram: { value: 'blastp' }
 };
 const budgetSettings = createLosatSettings({ state: withDrawings(budgetState) });
@@ -287,7 +292,7 @@ assert.equal(budgetSettings.losatThreadedOptionLabel.value, 'Threaded (unavailab
         edgeKey: linearComparisonEdgeKey('a', 'b') }]
     } },
     losatExecution: { totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined },
-    losat: { blastp: { mode: 'pairwise', collinearSearchScope: 'adjacent' } },
+    losat: { blastn: { task: 'megablast' }, blastp: { mode: 'pairwise', collinearSearchScope: 'adjacent' } },
     losatProgram: { value: 'blastn' }
   };
   const asked = [];

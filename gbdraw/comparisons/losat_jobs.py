@@ -25,10 +25,11 @@ LOSATN, TLOSATX and LOSATP all search these source batches (design D7).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
 import re
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Hashable, Literal, Mapping, Sequence, TypedDict, cast
 
 from Bio.SeqRecord import SeqRecord
@@ -238,6 +239,202 @@ def losatp_job_specs(
         for query, subject in edges:
             specs.extend(((query, subject), (subject, query)))
     return tuple(specs)
+
+
+# One E-value scale per genome pair (OV-3143).
+
+
+def linked_genomes(rows: Sequence[Hashable], source_ids: Sequence[Hashable]) -> list[int]:
+    """The genome of each record, by record indexes: the source files linked through the rows they share.
+
+    Two files with records in one row are one genome, and so is every file linked to them through other shared
+    rows (``rows[i]`` and ``source_ids[i]`` are record ``i``'s row and source file); a file that shares no row
+    with another file is a genome of its own, wherever its records stand. The one builder of genome keys:
+    :func:`genome_search_spaces` reads them.
+    """
+
+    parent: dict[Hashable, Hashable] = {}
+
+    def root(source: Hashable) -> Hashable:
+        while parent.setdefault(source, source) != source:
+            parent[source] = parent[parent[source]]
+            source = parent[source]
+        return source
+
+    first_of_row: dict[Hashable, Hashable] = {}
+    for row, source_id in zip(rows, source_ids, strict=True):
+        parent[root(source_id)] = root(first_of_row.setdefault(row, source_id))
+    roots: dict[Hashable, int] = {}
+    return [roots.setdefault(root(source_id), len(roots)) for source_id in source_ids]
+
+
+# The largest search space LOSAT reads (``-searchsp``): a signed 64-bit integer, as NCBI BLAST+'s.
+LOSAT_SEARCH_SPACE_LIMIT = 2**63 - 1
+
+
+@dataclass(frozen=True)
+class GenomeSearchSpaces:
+    """The ``-searchsp`` of each record-pair search (:func:`genome_search_spaces`), called with record indexes.
+
+    ``query_letters[i]`` and ``subject_letters[i]`` are record ``i``'s genome length in the program's letters on
+    each side, ``genomes[i]`` its genome, ``whole[i]`` whether its genome is searched whole (:func:`_whole_genomes`).
+    A pair of two whole genomes passes none (LOSAT's own); so does a genome pair whose search space is past
+    :data:`LOSAT_SEARCH_SPACE_LIMIT`, whose E-values are then computed per file (Owner decision 2026-11-10;
+    :meth:`per_file_warning` says so). A frozen value, so a render stage may take it as an argument.
+    """
+
+    query_letters: tuple[int, ...]
+    subject_letters: tuple[int, ...]
+    genomes: tuple[int, ...]
+    whole: tuple[bool, ...]
+
+    def _genome_space(self, query: int, subject: int) -> int | None:
+        if self.whole[query] and self.whole[subject]:
+            return None
+        return self.query_letters[query] * self.subject_letters[subject]
+
+    def __call__(self, query: int, subject: int) -> int | None:
+        space = self._genome_space(query, subject)
+        return None if space is None or space > LOSAT_SEARCH_SPACE_LIMIT else space
+
+    def per_file_warning(self, query: int, subject: int, genome_names: Sequence[str]) -> str | None:
+        """The warning of a pair searched per file because its genome pair's search space is past what LOSAT
+        reads, or ``None``. ``genome_names[i]`` names record ``i``'s genome (:func:`genome_file_names`); the
+        message is one for the genome pair, whichever records and direction the search has."""
+
+        space = self._genome_space(query, subject)
+        if space is None or space <= LOSAT_SEARCH_SPACE_LIMIT:
+            return None
+        first, second = sorted((genome_names[query], genome_names[subject]))
+        return (
+            f"The search space of genomes {first} and {second} ({space:,}) is past the largest LOSAT reads "
+            f"({LOSAT_SEARCH_SPACE_LIMIT:,}), so their E-values are computed per file, not per genome."
+        )
+
+
+def genome_search_spaces(
+    *,
+    rows: Sequence[Hashable],
+    source_ids: Sequence[Hashable],
+    source_lengths: Sequence[int],
+    searched_lengths: Sequence[int],
+    letters: tuple[int, int],
+) -> GenomeSearchSpaces:
+    """The search space each record-pair search passes LOSAT (``-searchsp``), by record indexes.
+
+    A genome is the source files linked through the rows they share (:func:`linked_genomes`; ``rows[i]`` is
+    record ``i``'s row); its length is the length of every record of those files, drawn or not
+    (``source_lengths[i]`` is the length of record ``i``'s whole source, :func:`gbdraw.io.genome.source_genome_length`). A search
+    between two genomes counts their lengths multiplied, each in the program's letters (``letters``: bases per
+    letter on the query and subject sides), so every record, crop or window of the two genomes shares one
+    E-value scale, whichever records a search reads. ``searched_lengths[i]`` is the length record ``i``'s search
+    reads: a pair of two whole genomes (:func:`_whole_genomes`) needs no search space (``None``), since LOSAT's own
+    is then the genome pair's.
+    """
+
+    lengths = _genome_totals(rows, source_ids, source_lengths, "lengths")
+    query_letters, subject_letters = letters
+    return GenomeSearchSpaces(
+        query_letters=tuple(length // query_letters for length in lengths),
+        subject_letters=tuple(length // subject_letters for length in lengths),
+        genomes=tuple(linked_genomes(rows, source_ids)),
+        whole=tuple(_whole_genomes(rows, source_ids, lengths, searched_lengths)),
+    )
+
+
+def source_file_name(source_id: Hashable) -> str:
+    """The file name of a source (:func:`losat_source_ids`): its first path's name, as the input summary names it."""
+
+    if isinstance(source_id, tuple) and source_id and source_id[0] != "memory":
+        return Path(str(source_id[0])).name
+    return "in-memory record"
+
+
+def genome_file_names(
+    rows: Sequence[Hashable], source_ids: Sequence[Hashable], name_of: Callable[[Hashable], str]
+) -> list[str]:
+    """The name of each record's genome: the names of its files (``name_of`` of each source), in record order."""
+
+    genomes = linked_genomes(rows, source_ids)
+    files: dict[int, list[str]] = {}
+    for genome, source_id in zip(genomes, source_ids, strict=True):
+        name = name_of(source_id)
+        if name not in files.setdefault(genome, []):
+            files[genome].append(name)
+    return [" + ".join(files[genome]) for genome in genomes]
+
+
+@dataclass(frozen=True)
+class GenomeDatabaseSizes:
+    """The ``-dbsize`` of each LOSATP record-pair search (:func:`genome_database_sizes`), called with record indexes.
+
+    ``proteins[i]`` is record ``i``'s genome's protein letters, ``whole[i]`` whether record ``i``'s genome is
+    searched whole (:func:`_whole_genomes`). A frozen value, so a render stage may take it as an argument.
+    """
+
+    proteins: tuple[int, ...]
+    whole: tuple[bool, ...]
+
+    def __call__(self, query: int, subject: int) -> int | None:
+        return None if self.whole[query] and self.whole[subject] else self.proteins[subject]
+
+
+def genome_database_sizes(
+    *,
+    rows: Sequence[Hashable],
+    source_ids: Sequence[Hashable],
+    source_lengths: Sequence[int],
+    searched_lengths: Sequence[int],
+    source_proteins: Sequence[int],
+) -> GenomeDatabaseSizes:
+    """The database size each LOSATP record-pair search passes LOSAT (``-dbsize``), by record indexes.
+
+    The genomes are those of :func:`genome_search_spaces`; ``source_proteins[i]`` is the length of every protein
+    of record ``i``'s whole source, extracted by the rules LOSATP searches with
+    (``gbdraw.analysis.protein_colinearity.source_protein_letters``). A search counts its subject genome's
+    proteins as its database, so every record, crop or window of the genome shares one E-value scale; the query
+    side counts each protein as LOSAT does. A pair of two whole genomes needs no database size (``None``), as for
+    the search space.
+    """
+
+    lengths = _genome_totals(rows, source_ids, source_lengths, "lengths")
+    return GenomeDatabaseSizes(
+        proteins=tuple(_genome_totals(rows, source_ids, source_proteins, "protein counts")),
+        whole=tuple(_whole_genomes(rows, source_ids, lengths, searched_lengths)),
+    )
+
+
+def _whole_genomes(
+    rows: Sequence[Hashable], source_ids: Sequence[Hashable], lengths: Sequence[int], searched_lengths: Sequence[int]
+) -> list[bool]:
+    """Whether each record's genome is searched whole: every drawn record of the genome reads all of it.
+
+    ``lengths[i]`` is record ``i``'s genome length, ``searched_lengths[i]`` the length its search reads. One record
+    that reads less (a crop, a window, one record of several) makes every search of its genome pass the genome's
+    scale, so a source batch is never split by the scale (a record drawn whole and as a window is one batch).
+    """
+
+    genomes = linked_genomes(rows, source_ids)
+    partial = {
+        genome for genome, searched, length in zip(genomes, searched_lengths, lengths, strict=True) if searched != length
+    }
+    return [genome not in partial for genome in genomes]
+
+
+def _genome_totals(
+    rows: Sequence[Hashable], source_ids: Sequence[Hashable], values: Sequence[int], name: str
+) -> list[int]:
+    """Each record's genome total of a per-source value (``values[i]`` is record ``i``'s source's)."""
+
+    by_source: dict[Hashable, int] = {}
+    for source_id, value in zip(source_ids, values, strict=True):
+        if by_source.setdefault(source_id, int(value)) != int(value):
+            raise ValueError(f"Source {source_id!r} is given two {name}.")
+    genomes = linked_genomes(rows, source_ids)
+    totals: dict[int, int] = {}
+    for source_id, genome in dict(zip(source_ids, genomes)).items():
+        totals[genome] = totals.get(genome, 0) + by_source[source_id]
+    return [totals[genome] for genome in genomes]
 
 
 # Job plan.
@@ -487,12 +684,20 @@ def nucleotide_losat_cache_key(
 
 __all__ = [
     "LOSAT_OUTFMT",
+    "LOSAT_SEARCH_SPACE_LIMIT",
+    "GenomeSearchSpaces",
+    "genome_file_names",
+    "source_file_name",
     "LosatBatch",
     "LosatBatchSide",
     "LosatJob",
     "LosatpSpecMode",
     "NUCLEOTIDE_LOSAT_CACHE_SCHEMA",
     "effective_collinear_search_scope",
+    "GenomeDatabaseSizes",
+    "genome_database_sizes",
+    "genome_search_spaces",
+    "linked_genomes",
     "losat_entry_filename",
     "losat_fasta_text",
     "losat_pair_filename",

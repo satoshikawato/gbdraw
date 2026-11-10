@@ -17,9 +17,11 @@ import {
   linearSourceDepthStatus,
   losatSearchSequences,
   moveLinearSourceGroup,
+  nucleotideLosatArgs,
   planLinearSourceRemoval,
   planLosatSourceJobs,
   prepareLosatSourceBatches,
+  proteinLosatArgs,
   restoreFoldedLinearSources,
   setLinearSourceFolded,
   splitLosatSourceResult
@@ -416,19 +418,11 @@ test('shared LOSAT job plan and nucleotide raw-key vectors', async () => {
       if (!files.has(record.source)) files.set(record.source, file(record.source));
       return { uid: record.uid, gb: files.get(record.source), gff: null, fasta: null, losat_gencode: record.gencode };
     });
-    // The buildLosatArgs rules of run-analysis.js for one record pair.
-    const buildArgs = (query, subject) => {
-      const args = [];
-      const push = (flag, value) => {
-        if (value !== null && value !== undefined && value !== '') args.push(flag, String(value));
-      };
-      if (vector.program === 'blastn') push('--task', vector.task);
-      else {
-        push('--query-gencode', vector.records[query].gencode);
-        push('--db-gencode', vector.records[subject].gencode);
-      }
-      return args;
-    };
+    // The args Generate builds for one record pair (`buildLosatArgs` of run-analysis.js), without a genome pair.
+    const buildArgs = (query, subject) => nucleotideLosatArgs({
+      program: vector.program, task: vector.task, searchSpace: null,
+      queryGencode: vector.records[query].gencode, dbGencode: vector.records[subject].gencode
+    });
     const specs = vector.specs.map(([queryIndex, subjectIndex]) => ({ queryIndex, subjectIndex }));
     const plan = await prepareLosatSourceBatches({
       sequences: records, specs, getEntry: async (index) => ({ fasta: vector.records[index].fasta }),
@@ -672,4 +666,78 @@ test('input types read the record source files Python names, and a card holds a 
   assert.equal(inputSourceFiles('fasta', { gff: 'annotation.gff3', fasta: null }).holdsFile, false);
   assert.equal(inputSourceFiles('gff', { gff: 'annotation.gff3', fasta: null }).holdsFile, true);
   assert.equal(inputSourceFiles('gb', { gb: null, fasta: 'genome.fasta' }).holdsFile, false);
+});
+
+// PD-OI-018 revision 6: one E-value scale per genome. The Web's args for each unit pair of a figure (a crop, two
+// windows, a genome split over two files, and a whole single-record pair, which passes none; LOSATN, TLOSATX and LOSATP)
+// are built from the scales Python plans for that figure and equal the command line's raw args
+// (tests/test_losat_job_plan.py runs the same figures through the command line and the planner).
+test('the Web passes the E-value scale Python plans, as the command line does', async () => {
+  const { readGenomeScales } = await import('../../gbdraw/web/js/services/linear-units.js');
+  const { searchSpaceCases } = JSON.parse(readFileSync(new URL('../fixtures/losat_job_plan_cases.json', import.meta.url), 'utf8'));
+  assert.ok(searchSpaceCases.filter(({ program }) => program === 'blastp').length >= 3);
+  for (const vector of searchSpaceCases) {
+    const { scaleOf } = readGenomeScales(vector.reply, vector.reply.recordKeys);
+    const args = vector.expected.args.map(([query, subject]) => [query, subject, vector.program === 'blastp'
+      ? proteinLosatArgs({ pairwise: vector.mode === 'pairwise', candidateLimit: vector.candidateLimit, databaseSize: scaleOf(query, subject) })
+      : nucleotideLosatArgs({
+        program: vector.program, task: vector.task, queryGencode: null, dbGencode: null, searchSpace: scaleOf(query, subject)
+      })]);
+    assert.deepEqual(args, vector.expected.args, vector.name);
+  }
+});
+
+// The reply is read against the units Generate searches: another unit list, a scale that is not a positive integer,
+// or a unit the reply does not hold is a helper failure, never a search without its scale.
+test('a genome scale reply that does not fit the searched units is refused', async () => {
+  const { readGenomeScales } = await import('../../gbdraw/web/js/services/linear-units.js');
+  const warning = { queryUnit: 0, subjectUnit: 1, message: 'searched per file' };
+  const good = { recordKeys: ['a', 'b'], scales: [[null, '7'], ['5', null]], warnings: [warning] };
+  assert.equal(readGenomeScales(good, ['a', 'b']).scaleOf(0, 1), '7');
+  assert.equal(readGenomeScales(good, ['a', 'b']).scaleOf(1, 1), null);
+  assert.equal(readGenomeScales(good, ['a', 'b']).warningOf(0, 1), 'searched per file');
+  assert.equal(readGenomeScales(good, ['a', 'b']).warningOf(1, 0), null);
+  const refused = (result, keys = ['a', 'b']) => assert.throws(() => readGenomeScales(result, keys), { code: 'RESULT_INVALID' });
+  refused({ ...good, warnings: [{ ...warning, subjectUnit: 2 }] });
+  refused({ ...good, warnings: [{ ...warning, message: '' }] });
+  refused({ recordKeys: good.recordKeys, scales: good.scales });
+  refused(good, ['b', 'a']);
+  refused(good, ['a']);
+  refused({ ...good, scales: [[null, '0'], ['5', null]] });
+  refused({ ...good, scales: [[null, '07'], ['5', null]] });
+  refused({ ...good, scales: [[null, '1.5'], ['5', null]] });
+  refused({ ...good, scales: [[null, 7], ['5', null]] });
+  refused({ ...good, scales: [[null, '7']] });
+  refused({ recordKeys: ['a', 'b'] });
+  refused(null);
+  assert.throws(() => readGenomeScales(good, ['a', 'b']).scaleOf(2, 0), { code: 'RESULT_INVALID' });
+});
+
+// Two genomes of 120 Mb and 95 Mb: their search space is past Number.MAX_SAFE_INTEGER, and reaches LOSAT digit for digit.
+test('a search space past what a number holds exactly reaches the args unchanged', async () => {
+  const { readGenomeScales } = await import('../../gbdraw/web/js/services/linear-units.js');
+  const space = String(120000000n * 95000000n);
+  assert.ok(BigInt(space) > BigInt(Number.MAX_SAFE_INTEGER));
+  const { scaleOf } = readGenomeScales({ recordKeys: ['a', 'b'], scales: [[null, space], [space, null]], warnings: [] }, ['a', 'b']);
+  const args = nucleotideLosatArgs({ program: 'blastn', task: 'megablast', queryGencode: null, dbGencode: null, searchSpace: scaleOf(0, 1) });
+  assert.deepEqual(args, ['--task', 'megablast', '--searchsp', '11400000000000000']);
+});
+
+// An OFF record has no genome: it joins the database of the drawn subject it is searched with, under that subject's
+// args, so a genome pair's search space does not keep it out (record selection D-07, OV-3143).
+test('an OFF record joins a subject database under the args of the drawn subject', () => {
+  const a = file('a.gb');
+  const b = file('b.gb');
+  const sequences = [
+    { uid: 'q', gb: a, gff: null, fasta: null }, { uid: 's1', gb: b, gff: null, fasta: null },
+    { uid: 's2-off', gb: b, gff: null, fasta: null }
+  ];
+  const buildArgs = (query, subject, drawnSubject = subject) => nucleotideLosatArgs({
+    program: 'blastn', task: 'megablast', queryGencode: null, dbGencode: null,
+    searchSpace: drawnSubject === 1 ? 600 : null
+  });
+  const { jobs } = planLosatSourceJobs({ sequences, specs: [{ queryIndex: 0, subjectIndex: 1 }], buildArgs, drawnCount: 2 });
+  assert.deepEqual(jobs.map(({ queryIndexes, subjectIndexes, args }) => ({ queryIndexes, subjectIndexes, args })), [
+    { queryIndexes: [0], subjectIndexes: [1, 2], args: ['--task', 'megablast', '--searchsp', '600'] }
+  ]);
 });

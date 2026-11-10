@@ -109,7 +109,7 @@ def _logged_calls(log: Path) -> list[list[str]]:
 @pytest.fixture(autouse=True)
 def _fresh_probe_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runtime_module, "_RUNTIME_VERSIONS", {})
-    monkeypatch.setattr(runtime_module, "_PROGRAM_SUPPORT", {})
+    monkeypatch.setattr(runtime_module, "_HELP_TEXTS", {})
 
 
 # Resolution order (design 3.6): explicit, conda, managed, PATH losat,
