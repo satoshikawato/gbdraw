@@ -11,7 +11,8 @@
 import { createLinearSeq, normalizeLinearSeqList, replaceLinearSeqs } from '../services/drawing/inputs.js';
 import { padDepthFileSlots } from '../services/depth-track-state.js';
 import { inputSourceFiles } from '../services/input-types.js';
-import { reconcileLinearComparisonPlan, setWindowLosatFilenames, windowLosatFilenamesOf } from '../services/linear-comparisons.js';
+import { reconcileLinearComparisonPlan, setWindowLosatFilenames } from '../services/linear-comparisons.js';
+import { windowLosatFilenamesOf } from '../services/linear-comparison-retained.js';
 import { windowLosatFilenamesAfterRemoval } from '../services/linear-units.js';
 import { placeNewLayoutWindow, planLinearSourceRowMove, reconcileLinearRecordLayout } from '../services/linear-record-layout.js';
 import { addCardWindow, cardWindowEditKind, cardWindowList, editCardWindow, removeCardWindow } from '../services/linear-card-windows.js';

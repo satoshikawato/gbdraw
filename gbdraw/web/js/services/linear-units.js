@@ -167,8 +167,10 @@ export const searchUnitPlaces = (search) => unitPlacesOf(search.unitKeys, search
  * leaves it `windowsLeft` windows (OV-2742): a name stays with its window or goes. The removed window's names go; a
  * later window's name moves to the unit key of the window before it; and when one window is left, every name of the
  * record's windows goes (its unit is then the record drawn whole). `places` are the drawn Result's units, whose keys
- * Python formed; the Web cannot form a unit key, so a name whose units they do not hold goes too (with no drawn
- * Result, every name). Pass only the names of a record pair that holds `recordKey`.
+ * Python formed. Only the edited record's side of a name is re-keyed; the other side stays as it is, placed or not
+ * (a record left out of the last Generate keeps its own key). The Web cannot form a unit key, so a name none of whose
+ * sides is a unit of the edited record in `places` goes (with no drawn Result, every name). Pass only the names of a
+ * record pair that holds `recordKey`.
  * @param {WindowLosatFilenames} names
  * @param {ReadonlyMap<string, LinearUnitPlace>} places
  * @param {string} recordKey
@@ -177,9 +179,17 @@ export const searchUnitPlaces = (search) => unitPlacesOf(search.unitKeys, search
  * @returns {WindowLosatFilenames}
  */
 export const windowLosatFilenamesAfterRemoval = (names, places, recordKey, removed, windowsLeft) => {
-  const unitKeys = [...places.keys()];
-  const pairOf = new Map(unitKeys.flatMap((query) => unitKeys.map((subject) => (
-    /** @type {[string, [string, string]]} */ ([linearComparisonEdgeKey(query, subject), [query, subject]])))));
+  const ownUnits = [...places].filter(([, place]) => place.recordKey === recordKey).map(([unitKey]) => unitKey);
+  /** @param {string} edgeKey @returns {[string, string] | undefined} The two units of a name with an own unit. */
+  const pairOf = (edgeKey) => {
+    for (const unit of ownUnits) {
+      const asQuery = linearComparisonEdgeKey(unit, '');
+      const asSubject = linearComparisonEdgeKey('', unit);
+      if (edgeKey.startsWith(asQuery)) return [unit, edgeKey.slice(asQuery.length)];
+      if (edgeKey.endsWith(asSubject)) return [edgeKey.slice(0, -asSubject.length), unit];
+    }
+    return undefined;
+  };
   const unitAt = new Map([...places].map(([unitKey, place]) => [`${place.recordKey}\n${place.window}`, unitKey]));
   /** @param {string} unitKey @returns {string | null} */
   const moved = (unitKey) => {
@@ -189,7 +199,7 @@ export const windowLosatFilenamesAfterRemoval = (names, places, recordKey, remov
     return place.window < removed ? unitKey : unitAt.get(`${recordKey}\n${place.window - 1}`) ?? null;
   };
   return Object.fromEntries(Object.entries(names).flatMap(([edgeKey, name]) => {
-    const pair = pairOf.get(edgeKey);
+    const pair = pairOf(edgeKey);
     if (pair === undefined) return [];
     const [query, subject] = pair.map(moved);
     return query === null || subject === null ? [] : [[linearComparisonEdgeKey(query, subject), name]];

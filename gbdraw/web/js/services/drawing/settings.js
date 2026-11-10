@@ -14,9 +14,10 @@
 import { reactive, ref } from '../../utils/reactivity.js';
 import { cloneJsonData } from '../json-clone.js';
 import { createSliceHandle, sliceMembers } from './slice-handle.js';
+import { edgeRetainsUserData } from '../linear-comparison-retained.js';
 /** @import { Ref } from '../../utils/reactivity.js' */
 /** @import { SliceHandle } from './slice-handle.js' */
-/** @import { LinearComparisonEdge, LinearComparisonPlan } from '../linear-comparisons.js' */
+/** @import { LinearComparisonPlan } from '../linear-comparisons.js' */
 
 const SETTINGS_MEMBERS = /** @type {const} */ ([
   'form', 'adv', 'losat', 'losatProgram', 'circularConservation', 'linearComparisonPlan',
@@ -159,16 +160,6 @@ const install = (slice, data) => {
     if (data[member] !== undefined) writeMember(member, members[member], data[member]);
   });
 };
-
-/**
- * Whether a comparison-plan edge the plan leaves out still holds what the user gave it (its BLAST TSV, a typed LOSAT
- * name of the record pair or of one of its window pairs), so the plan keeps it: the one rule the plan's edits and
- * Reset Settings (below) keep edges by.
- * @param {Pick<LinearComparisonEdge, 'file' | 'losatFilename' | 'windowLosatFilenames'>} edge
- */
-export const edgeRetainsUserData = (edge) => Boolean(
-  edge.file || edge.losatFilename.trim() || Object.keys(edge.windowLosatFilenames ?? {}).length > 0
-);
 
 // Reset Settings: the reset members take their defaults. The comparison plan
 // keeps the edges that hold a file or a LOSAT file name (`edgeRetainsUserData`),

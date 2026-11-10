@@ -139,6 +139,18 @@ test('Remove window moves each window-pair name with its window and drops the re
   assert.deepEqual(windowLosatFilenamesAfterRemoval(names, places, 'b', 1, 2), names);
 });
 
+// OV-2742: only the edited record's side of a name is re-keyed. The other record may be one the last Generate left
+// out (its record OFF), so the drawn Result does not place it; its side keeps its own key.
+test('Remove window re-keys the edited record\'s side of a name and keeps a side the Result does not place', () => {
+  const places = new Map([['R~w1', { recordKey: 'R', window: 1 }], ['R~w2', { recordKey: 'R', window: 2 }],
+    ['R~w3', { recordKey: 'R', window: 3 }]]);
+  assert.deepEqual(windowLosatFilenamesAfterRemoval({ [linearComparisonEdgeKey('R~w2', 'S')]: 'two.tsv' }, places, 'R', 1, 2),
+    { [linearComparisonEdgeKey('R~w1', 'S')]: 'two.tsv' });
+  assert.deepEqual(windowLosatFilenamesAfterRemoval({ [linearComparisonEdgeKey('S~w4', 'R~w3')]: 'three.tsv' }, places, 'R', 2, 2),
+    { [linearComparisonEdgeKey('S~w4', 'R~w2')]: 'three.tsv' });
+  assert.deepEqual(windowLosatFilenamesAfterRemoval({ [linearComparisonEdgeKey('R~w1', 'S')]: 'one.tsv' }, places, 'R', 1, 2), {});
+});
+
 test('a card pair whose cards draw one unit each lists no window pair (its row is the card pair\'s own)', async () => {
   const cards = [createLinearSeq({ uid: 'a', windows: [span(1, 150)] }), createLinearSeq({ uid: 'b' })];
   const { cacheInfo, catalog } = await generated(cards, [['a', 'b']]);

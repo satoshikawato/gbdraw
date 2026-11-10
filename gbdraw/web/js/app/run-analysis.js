@@ -116,9 +116,9 @@ import {
   canonicalGridDisplayPairs,
   linearComparisonEdgeKey,
   numberLosatDisplayPairs,
-  resolveLinearComparisonPlan,
-  windowLosatFilenamesOf
+  resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
+import { windowLosatFilenamesOf } from '../services/linear-comparison-retained.js';
 import { catalogUnitPlaces, generateUnitSearch, searchUnitPlaces } from '../services/linear-units.js';
 import {
   movedIdentityValues,

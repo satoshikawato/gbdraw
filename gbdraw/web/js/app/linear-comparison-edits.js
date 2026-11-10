@@ -8,7 +8,8 @@
 // admission, History's undoable step, the alignment owner's clear, the record
 // discovery, and the Comparison card's readers and focus paths as ports. The
 // root creates these edits once the alignment owner exists.
-import { SETTINGS_SLICE, edgeRetainsUserData } from '../services/drawing/settings.js';
+import { SETTINGS_SLICE } from '../services/drawing/settings.js';
+import { edgeRetainsUserData, windowLosatFilenamesOf } from '../services/linear-comparison-retained.js';
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
@@ -21,8 +22,7 @@ import {
   resolveLinearComparisonPlan,
   setComparisonEdgeFile,
   setWindowLosatFilenames,
-  swapComparisonEdgeFile,
-  windowLosatFilenamesOf
+  swapComparisonEdgeFile
 } from '../services/linear-comparisons.js';
 import {
   moveLinearLayoutCell,

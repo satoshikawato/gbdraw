@@ -115,7 +115,12 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "services" / "linear-comparisons.js")
         .read_text(encoding="utf-8")
         .replace("./record-draw-selection.js", "./record-draw-selection.mjs")
-        .replace("../utils/i18n.js", "./i18n.mjs"),
+        .replace("../utils/i18n.js", "./i18n.mjs")
+        .replace("./linear-comparison-retained.js", "./linear-comparison-retained.mjs"),
+        encoding="utf-8",
+    )
+    (tmp_path / "linear-comparison-retained.mjs").write_text(
+        (WEB_ROOT / "js" / "services" / "linear-comparison-retained.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     (tmp_path / "record-options.mjs").write_text(

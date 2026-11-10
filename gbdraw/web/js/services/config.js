@@ -119,9 +119,9 @@ import {
   resolveLinearComparisonPlan,
   setComparisonEdgeFile,
   windowLosatFilenamesField,
-  windowLosatFilenamesOf,
   withoutWindowLosatFilenames
 } from './linear-comparisons.js';
+import { windowLosatFilenamesOf } from './linear-comparison-retained.js';
 import { foldLoadedLinearSources, groupLinearSourceRecords, restoreFoldedLinearSources } from './linear-sources.js';
 import { buildSessionDrawingResources } from './session-resources.js';
 import { savedDrawingsOf } from './session-drawings.js';

@@ -1,7 +1,7 @@
 // @ts-check
 import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection.js';
 import { msg } from '../utils/i18n.js';
-import { edgeRetainsUserData } from './drawing/settings.js';
+import { edgeRetainsUserData, windowLosatFilenamesOf } from './linear-comparison-retained.js';
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
 /** @import { InputFileRef } from './history-files.js' */
 /** @import { CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
@@ -250,13 +250,6 @@ const normalizeWindowLosatFilenames = (value) => Object.fromEntries(
   Object.entries(value && typeof value === 'object' && !Array.isArray(value) ? value : {})
     .filter(isWindowLosatFilenameEntry)
 );
-
-/**
- * The window-pair names of an edge; an edge without any holds none.
- * @param {{ windowLosatFilenames?: WindowLosatFilenames }} edge
- * @returns {WindowLosatFilenames}
- */
-export const windowLosatFilenamesOf = (edge) => edge.windowLosatFilenames ?? {};
 
 /**
  * The edge field that holds `names`: absent when no window pair has a name.

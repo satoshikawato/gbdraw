@@ -23,7 +23,7 @@ await Promise.all([
     join(tempRoot, 'js', 'services', 'record-draw-selection.js')
   ),
   // The feature-edits and paint slices the record Delete settings writes through.
-  ...['services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/drawing/settings.js', 'services/drawing/slice-handle.js', 'services/json-clone.js', 'utils/reactivity.js', 'contracts/schema.generated.js']
+  ...['services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/linear-comparison-retained.js', 'services/drawing/slice-handle.js', 'services/json-clone.js', 'utils/reactivity.js', 'contracts/schema.generated.js']
     .map((path) => cp(join(repoRoot, 'gbdraw', 'web', 'js', path), join(tempRoot, 'js', path))),
   // The Collinear anchor-mode default comes from the generated request description.
   ...['services/losat-normalization.js', 'contracts/request-shape.generated.js', 'utils/contract-shape.js']
