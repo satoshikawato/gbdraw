@@ -233,7 +233,10 @@ class _SequenceFile:
     """One input file's bytes: read in order by the parse pass, and at offsets by its record sequences.
 
     A gzip input is expanded once into a file of its own (gzip cannot be read at
-    an offset), removed when the last record sequence of the input goes.
+    an offset), removed when the last record sequence of the input goes. A link
+    is followed once: the records read the file it names, so they keep reading
+    after the link goes (the Web Worker links each input into the folder of one
+    request and removes the folder when the request ends).
     ``read_at`` is the one read below a record sequence. The parse pass records
     the file's stamp, and a read of a file that changed since is refused with an
     ``InputFileError``, never answered with other bases.
@@ -246,7 +249,7 @@ class _SequenceFile:
         self.key = next(_FILE_KEYS)
         self.stamp: _Stamp = (-1, -1, -1)
         copy = expand_input_copy(self.name, _expansion_directory()) if is_gzip_file(self.name) else None
-        self.path = copy or self.name
+        self.path = copy or os.path.realpath(self.name)
         weakref.finalize(self, _release, self.key, copy)
         self._tables = 0
 

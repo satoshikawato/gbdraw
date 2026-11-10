@@ -67,6 +67,24 @@ def test_the_render_path_reads_sequences_from_the_file() -> None:
     assert all(_reads_its_file(record) for record in read_flat_file_records(str(GENBANK)))
 
 
+def test_records_read_through_a_link_keep_reading_after_the_link_goes(tmp_path: Path) -> None:
+    """The Web Worker links each input of a request into that request's folder and removes the folder afterwards.
+
+    Records Python built from the link (and keeps for the next request by the input's content token) read the
+    file the link names, which stays while the token does.
+    """
+
+    cached = tmp_path / "cache" / "token.bin"
+    cached.parent.mkdir()
+    shutil.copy(GENBANK, cached)
+    workspace = tmp_path / "request-1"
+    workspace.mkdir()
+    (workspace / "0001.bin").symlink_to(cached)
+    records = read_flat_file_records(str(workspace / "0001.bin"))
+    shutil.rmtree(workspace)
+    assert str(records[0].seq) == _sequence(GENBANK)
+
+
 @pytest.mark.parametrize("change", ["same size", "shorter", "removed"])
 def test_a_file_that_changed_under_its_records_is_refused_by_name(change: str, tmp_path: Path) -> None:
     path = tmp_path / "a.gb"
