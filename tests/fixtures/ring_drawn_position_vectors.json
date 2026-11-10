@@ -1,0 +1,427 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "no-stack-three-rings",
+      "count": 3,
+      "slots": null,
+      "expected": {
+        "drawnPlaces": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "id": "stack-in-series-order",
+      "count": 3,
+      "slots": [
+        {
+          "id": "features",
+          "renderer": "features",
+          "enabled": true,
+          "params": {}
+        },
+        {
+          "id": "ring_1",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 1
+          }
+        },
+        {
+          "id": "ring_2",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 2
+          }
+        },
+        {
+          "id": "ring_3",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 3
+          }
+        },
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content",
+          "enabled": true,
+          "params": {}
+        }
+      ],
+      "expected": {
+        "drawnPlaces": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "id": "stack-reordered",
+      "count": 3,
+      "slots": [
+        {
+          "id": "features",
+          "renderer": "features",
+          "enabled": true,
+          "params": {}
+        },
+        {
+          "id": "ring_3",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 3
+          }
+        },
+        {
+          "id": "ring_1",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 1
+          }
+        },
+        {
+          "id": "ring_2",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 2
+          }
+        }
+      ],
+      "expected": {
+        "drawnPlaces": [
+          2,
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "id": "track-index-as-text",
+      "count": 3,
+      "slots": [
+        {
+          "id": "features",
+          "renderer": "features",
+          "enabled": true,
+          "params": {}
+        },
+        {
+          "id": "ring_2",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": "2"
+          }
+        },
+        {
+          "id": "ring_1",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": "1"
+          }
+        },
+        {
+          "id": "ring_3",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": "3"
+          }
+        }
+      ],
+      "expected": {
+        "drawnPlaces": [
+          1,
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "disabled-row",
+      "count": 3,
+      "slots": [
+        {
+          "id": "features",
+          "renderer": "features",
+          "enabled": true,
+          "params": {}
+        },
+        {
+          "id": "ring_2",
+          "renderer": "sequence_conservation",
+          "enabled": false,
+          "params": {
+            "track_index": 2
+          }
+        },
+        {
+          "id": "ring_3",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 3
+          }
+        },
+        {
+          "id": "ring_1",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 1
+          }
+        }
+      ],
+      "expected": {
+        "drawnPlaces": [
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "id": "row-repeated",
+      "count": 3,
+      "slots": [
+        {
+          "id": "ring_2",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 2
+          }
+        },
+        {
+          "id": "ring_2_again",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 2
+          }
+        },
+        {
+          "id": "ring_1",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 1
+          }
+        },
+        {
+          "id": "ring_3",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 3
+          }
+        }
+      ],
+      "expected": {
+        "drawnPlaces": [
+          1,
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "ring-without-row",
+      "count": 3,
+      "slots": [
+        {
+          "id": "features",
+          "renderer": "features",
+          "enabled": true,
+          "params": {}
+        },
+        {
+          "id": "ring_3",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 3
+          }
+        },
+        {
+          "id": "ring_1",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 1
+          }
+        }
+      ],
+      "expected": {
+        "drawnPlaces": [
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "id": "row-of-no-ring",
+      "count": 2,
+      "slots": [
+        {
+          "id": "ring_5",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 5
+          }
+        },
+        {
+          "id": "ring_2",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 2
+          }
+        },
+        {
+          "id": "ring_1",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 1
+          }
+        }
+      ],
+      "expected": {
+        "drawnPlaces": [
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "id": "twelve-rings-reversed",
+      "count": 12,
+      "slots": [
+        {
+          "id": "ring_12",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 12
+          }
+        },
+        {
+          "id": "ring_11",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 11
+          }
+        },
+        {
+          "id": "ring_10",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 10
+          }
+        },
+        {
+          "id": "ring_9",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 9
+          }
+        },
+        {
+          "id": "ring_8",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 8
+          }
+        },
+        {
+          "id": "ring_7",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 7
+          }
+        },
+        {
+          "id": "ring_6",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 6
+          }
+        },
+        {
+          "id": "ring_5",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 5
+          }
+        },
+        {
+          "id": "ring_4",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 4
+          }
+        },
+        {
+          "id": "ring_3",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 3
+          }
+        },
+        {
+          "id": "ring_2",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 2
+          }
+        },
+        {
+          "id": "ring_1",
+          "renderer": "sequence_conservation",
+          "enabled": true,
+          "params": {
+            "track_index": 1
+          }
+        }
+      ],
+      "expected": {
+        "drawnPlaces": [
+          11,
+          10,
+          9,
+          8,
+          7,
+          6,
+          5,
+          4,
+          3,
+          2,
+          1,
+          0
+        ]
+      }
+    }
+  ]
+}
