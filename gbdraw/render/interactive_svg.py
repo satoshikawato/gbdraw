@@ -1324,7 +1324,7 @@ def _load_standalone_assets() -> tuple[str, str]:
         raise GbdrawError("Malformed standalone interactive SVG asset: STANDALONE_INTERACTIVE_SCRIPT")
     return (
         _extract_template_literal(source, "STANDALONE_INTERACTIVE_STYLE"),
-        script.replace(STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT, json.dumps(list(MATCH_FRAGMENT_OWN_ATTRIBUTES))),
+        script.replace(STANDALONE_MATCH_FRAGMENT_OWN_ATTRIBUTES_SLOT, json.dumps(list(MATCH_FRAGMENT_OWN_ATTRIBUTES), separators=(",", ":"))),
     )
 
 
