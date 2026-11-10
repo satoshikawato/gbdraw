@@ -136,11 +136,11 @@ class _Rows(NamedTuple):
     end: int
 
 
-def _alphabet(totals: NDArray[np.int64]) -> int:
-    """What the bases counted in ``totals`` (rows of 7 columns) hold (``gbdraw.core.base_counts``)."""
+def _alphabets(totals: NDArray[np.int64]) -> NDArray[np.uint8]:
+    """What the bases counted in each row of ``totals`` (7 columns) hold (``gbdraw.core.base_counts``)."""
 
-    beyond = totals[:, (BEYOND_NUCLEOTIDE, BEYOND_PROTEIN)].any(axis=0)
-    return OTHER if beyond[1] else PROTEIN if beyond[0] else NUCLEOTIDE
+    return np.where(totals[:, BEYOND_PROTEIN] > 0, OTHER,
+                    np.where(totals[:, BEYOND_NUCLEOTIDE] > 0, PROTEIN, NUCLEOTIDE)).astype(np.uint8)
 
 # Biopython's record start and sequence headers (Bio.GenBank.Scanner).
 _GENBANK_RECORD_START = "LOCUS       "
@@ -519,18 +519,17 @@ class _SequenceTable:
         if (not run and last >= 0 and self.kinds[last] == kind
                 and self.offsets[last] + self.sizes[last] == offset and self.sizes[last] + len(raw) <= _CHUNK_BYTES):
             self.sizes[last] += len(raw)  # lines read line by line stay in chunks of the usual size
-            self.alphabets[last] = max(self.alphabets[last], _alphabet(totals))
+            self.alphabets[last] = max(self.alphabets[last], int(_alphabets(totals.sum(axis=0, keepdims=True))[0]))
             self.length += counted.bases
             return
         if not run:
             totals = totals.sum(axis=0, keepdims=True)
-        chunk_starts = self.length + np.cumsum(totals[:, BASES]) - totals[:, BASES]
-        for index, start in enumerate(range(0, len(raw), _CHUNK_BYTES) if run else (0,)):
-            self.offsets.append(offset + start)
-            self.sizes.append(min(_CHUNK_BYTES, len(raw) - start) if run else len(raw))
-            self.starts.append(int(chunk_starts[index]))
-            self.kinds.append(kind)
-            self.alphabets.append(_alphabet(totals[index:index + 1]))
+        chunk_offsets = np.arange(0, len(raw), _CHUNK_BYTES) if run else np.zeros(1, dtype=np.int64)
+        self.offsets.extend((offset + chunk_offsets).tolist())
+        self.sizes.extend(np.minimum(_CHUNK_BYTES if run else len(raw), len(raw) - chunk_offsets).tolist())
+        self.starts.extend((self.length + np.cumsum(totals[:, BASES]) - totals[:, BASES]).tolist())
+        self.kinds.extend(bytes((kind,)) * len(chunk_offsets))
+        self.alphabets.extend(_alphabets(totals).tobytes())
         self.length += counted.bases
 
     def finish(self) -> None:
