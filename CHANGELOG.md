@@ -257,10 +257,11 @@ write-up of a release.
   (Linear) after the features row was drawn inside or below it. Load now
   places each row on the side the CLI drew it. An Annotations row with no
   `side=` is read as outside (above), and a Linear features row with no
-  `side=` as below, as the CLI draws them. The Web lists the rows by side, so
-  where the CLI's order of writing differs, the Legend can list its entries in
-  another order: the track rows of a Circular Legend, and in both modes the
-  entries of Annotations rows on different sides (OV-3079, OV-3155).
+  `side=` as below, as the CLI draws them. Web Generate lists the Legend
+  entries of such a Session by side, as the CLI now does too (OV-3187); the
+  figure a gbdraw 0.14.5 or earlier CLI saved in it lists them in the order the
+  slots were written, so for a stack written out of side order the Legend order
+  changes at the first Generate (OV-3079, OV-3155).
 - Fixed: a foreground annotation overlay written before another slot of the
   same `z` that it covers (with `to_slot`, or with its own `w` or `h`) was
   painted under that slot, so a GC content or skew plot hid the highlight. An
@@ -268,9 +269,20 @@ write-up of a release.
   underlay now paints under, and a foreground overlay over, every other slot,
   whatever order the slots are written in, in the CLI, the Python API, and the
   Web app. Such a CLI stack saved as a Session now draws the same figure on Web
-  Generate, and its overlay rows keep their place in the Legend against the
-  other Annotations rows wherever the stack's sides allow it. Other figures are
-  unchanged (OV-3184, OV-3185).
+  Generate. Other figures are unchanged (OV-3184, OV-3185).
+- Changed: the Legend lists the rows of track slots and annotation slots by
+  side, in both modes: the rows outside (above) the Axis first, then the rows
+  on it, then the rows inside (below), each side in the order the slots are
+  written; an annotation overlay comes right after its `anchor_slot`. Before,
+  the CLI and the Python API listed them in the order the slots were written,
+  so a stack written out of side order, such as
+  `features, gc:content, sk:skew@side=outside`, listed GC content before the
+  GC skew ring that lies outside it, and the same stack in the Web app listed
+  them by side. A default figure (no track stack) also changes where an earlier
+  annotation set draws highlights with a legend label and a later set draws
+  another mark with one: the highlight entries, drawn over the features, now
+  come after the later set's entries, which lie outside them. No Gallery
+  Session, example figure or reference output changes (OV-3187).
 - Fixed (Web app): a Circular Session saved by the CLI with
   `--circular_track_axis_index` and a `features:features` slot with no
   `side=` or `lane_direction=` loaded with the lanes of the track type (split
