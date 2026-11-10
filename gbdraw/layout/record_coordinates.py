@@ -286,9 +286,10 @@ class RecordDisplayTransform:
         """This record drawn over rows of ``wrap_length`` bp along its ``display_length`` bases."""
         return replace(self, wrap_length=wrap_length, display_length=display_length)
 
-    def with_circle(self, place: CirclePlace) -> RecordDisplayTransform:
-        """This record drawn at ``place`` on a circle it shares with other records."""
-        return replace(self, circle=place)
+    def with_circle(self, place: CirclePlace, drawn_length: int) -> RecordDisplayTransform:
+        """This record drawn at ``place`` on a circle it shares with other records, over its ``drawn_length``
+        bases (a crop draws fewer than its complete source ``length``)."""
+        return replace(self, circle=place, display_length=drawn_length)
 
     @property
     def _circle_offset(self) -> int:

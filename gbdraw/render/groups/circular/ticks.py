@@ -153,7 +153,7 @@ class TickGroup:
                 tick_width=float(self.tick_width), length_reference_radius_px=float(self.geometry.radius),
                 # The circle's longest record, from the circle's start: its labels' text and spacing.
                 record_transform=RecordDisplayTransform(self.scale_length, 1, 1, None, False).with_circle(
-                    CirclePlace(0, self.total_len, self.scale_length)
+                    CirclePlace(0, self.total_len, self.scale_length), self.scale_length
                 ),
                 tick_interval=self.tick_large, length_threshold=self.length_threshold,
             )

@@ -136,7 +136,7 @@ def test_a_record_on_a_shared_circle_inks_its_deviation_baseline_along_its_own_a
     from gbdraw.layout.record_coordinates import CirclePlace
 
     frame = _gc_frame()
-    shared = RecordDisplayTransform(120, 1, 1, None, False).with_circle(CirclePlace(offset=30, length=300, scale_length=120))
+    shared = RecordDisplayTransform(120, 1, 1, None, False).with_circle(CirclePlace(offset=30, length=300, scale_length=120), 120)
     alone = RecordDisplayTransform(120, 1, 1, None, True)
     for drawer in (
         CircularGcContentDrawer(_gc_content_config(stroke_color="black", stroke_width=1.0)),

@@ -62,8 +62,8 @@ def test_records_under_the_shortest_drawn_length_are_counted_not_drawn() -> None
 
 def test_a_record_on_the_circle_maps_its_bases_after_its_offset_reversed_when_drawn_reverse() -> None:
     place = CirclePlace(offset=500, length=10_000, scale_length=2_000)
-    forward = RecordDisplayTransform(2_000, 1, 1, None, False).with_circle(place)
-    reverse = RecordDisplayTransform(2_000, 2_000, -1, None, False).with_circle(place)
+    forward = RecordDisplayTransform(2_000, 1, 1, None, False).with_circle(place, 2_000)
+    reverse = RecordDisplayTransform(2_000, 2_000, -1, None, False).with_circle(place, 2_000)
 
     assert forward.projects
     assert forward.source_boundary_to_display_offset(0) == 500
@@ -78,7 +78,7 @@ def test_a_record_on_the_circle_maps_its_bases_after_its_offset_reversed_when_dr
     assert (fragment.local_start, fragment.local_end) == (1_600, 1_900)
     assert fragment.orientation == -1
     with pytest.raises(ValidationError, match="must end on it"):
-        RecordDisplayTransform(2_000, 1, 1, None, False).with_circle(CirclePlace(9_000, 10_000, 2_000))
+        RecordDisplayTransform(2_000, 1, 1, None, False).with_circle(CirclePlace(9_000, 10_000, 2_000), 2_000)
 
 
 def _one_circle_svg(records: list[SeqRecord], **layout: object) -> str:
@@ -261,6 +261,31 @@ def test_a_tick_label_that_would_run_past_its_record_is_left_out_and_its_mark_ke
     # The tick keeps its mark: alpha marks every 10 kbp from 10 to 100 kbp.
     alpha_ticks = _slot_groups(svg, "ticks")[0]
     assert sum(1 for item in alpha_ticks.iter() if item.get("stroke") == "gray") == 10
+
+
+@pytest.mark.parametrize("cropped_first", [True, False])
+def test_a_cropped_record_draws_over_its_cropped_bases_on_one_circle(cropped_first: bool, tmp_path) -> None:
+    # A crop's transform keeps the complete source length: read as the drawn length, the cropped record's arc ran
+    # past its own into the gap and its neighbour, and a cropped record placed last was refused.
+    from Bio import SeqIO
+
+    from gbdraw.circular import circular_main
+
+    SeqIO.write([_record("alpha", 120_000)], tmp_path / "alpha.gb", "genbank")
+    SeqIO.write([_record("beta", 80_000)], tmp_path / "beta.gb", "genbank")
+    rows = [f"{tmp_path / 'beta.gb'}\t20001-70000", f"{tmp_path / 'alpha.gb'}\t"]
+    table = tmp_path / "records.tsv"
+    table.write_text("\n".join(["gbk\tregion", *(rows if cropped_first else rows[::-1])]) + "\n", encoding="utf-8")
+    circular_main(["--records_table", str(table), "--one_circle", "-o", str(tmp_path / "one"), "-f", "svg"])
+    svg = (tmp_path / "one.svg").read_text(encoding="utf-8")
+
+    gap = math.ceil(170_000 / 358.0)
+    length = 170_000 + 2 * gap
+    start = gap // 2 if cropped_first else gap // 2 + 120_000 + gap
+    (background,), _axes = _gc_parts(_slot_groups(svg, "dinucleotide_content")[0 if cropped_first else 1])
+    x, y = (float(value) for value in background.get("d", "").split()[-1].split(","))
+    end_degrees = math.degrees(math.atan2(x, -y)) % 360.0
+    assert end_degrees == pytest.approx(360.0 * (start + 50_000) / length, abs=0.01)
 
 
 def test_the_gc_axis_draws_no_full_baseline_circle_over_the_gaps() -> None:

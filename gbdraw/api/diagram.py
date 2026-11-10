@@ -3199,7 +3199,7 @@ def _one_circle_drawing(
         units=tuple(
             CircularCircleUnit(
                 unit_data(unit.record_index),
-                one_circle_inputs.transforms[unit.record_index].with_circle(place),
+                one_circle_inputs.transforms[unit.record_index].with_circle(place, unit.length),
                 unit.record_index,
             )
             for unit, place in circle_layout.placed
