@@ -346,8 +346,8 @@ assert.ok(downloadedBlob instanceof Blob);
     topologyOverride: null, reverseComplementOverride: null, anchorIntent: null
   });
   const rows = ['NC_004603.1', 'NC_004605.1'].map((recordId, index) => ({
-    key: JSON.stringify(['circular', `#${index + 1}`]), scope: 'circular', sourceUid: 'circular',
-    selector: `#${index + 1}`, recordId, recordLength: 60, detectedTopology: 'circular'
+    key: JSON.stringify(['circular', `#${index + 1}`]), scope: 'circular', drawingId: modeDrawing(state, 'circular').id,
+    sourceUid: 'circular', selector: `#${index + 1}`, recordId, recordLength: 60, detectedTopology: 'circular'
   }));
   const drafts = modeDrawing(state, 'circular').recordDisplayDrafts;
   drafts.splice(0, drafts.length, draft('NC_004603.1', 1000), draft('NC_004605.1', 2000));

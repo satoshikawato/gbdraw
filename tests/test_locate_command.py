@@ -322,8 +322,11 @@ def test_the_tables_and_the_new_drawing_give_the_same_records_and_pairs(
 
 @pytest.mark.parametrize("whole", [False, True], ids=["part-of-a-record", "whole-record"])
 def test_the_new_drawing_writes_a_reversed_window_in_the_form_the_web_cards_write(tmp_path: Path, whole: bool) -> None:
-    # OV-3365, OV-3376: a record drawn in one window carries its orientation on the window, a record drawn whole on
-    # its presentation (``RecordInput.oriented``), as the Web's File cards write it back; the drawn units are reversed.
+    # A record drawn in one window carries its orientation on the window, a record drawn whole on its presentation
+    # (``RecordInput.oriented``), as the Web's File cards write it back; the drawn units are reversed. The
+    # part-of-a-record case failed on dev before OV-3365's fix (Python wrote the presentation form). The whole-record
+    # case passed on dev already: it pins the form a (-) whole record keeps, which the Web then reads (OV-3376 was
+    # the Web reading another drawing's row, tests/web/record-draw-request.test.mjs).
     paths = _genomes(tmp_path)
     plan = _plan(paths, _fake_losat(tmp_path), ("a",))
     [planned] = plan.files[0].windows

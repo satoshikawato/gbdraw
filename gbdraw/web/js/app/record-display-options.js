@@ -33,7 +33,6 @@ import { draftFeatureOverlapTolerance } from '../services/session-active-config-
 import { msg, t, tm } from '../utils/i18n.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
-/** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
 /** @import { LinearSeqWindow } from '../services/drawing/inputs.js' */
 /** @import { LinearCardOrientation } from '../services/record-display-model.js' */
@@ -252,7 +251,7 @@ export const createRecordDisplayControls = ({
   let committedRows = [];
   /** @type {Record<string, any> | null} */
   let boundRequest = null;
-  /** @type {(RecordDisplaySource & { drawingId: DrawingId })[]} */
+  /** @type {Pick<DrawingRecordSource, 'drawingId' | 'scope' | 'sourceUid' | 'source' | 'paired'>[]} */
   let boundSources = [];
   // The record sources of one drawing, each named by that drawing's ID: a
   // Circular drawing's source cards with its crop and orientation, a Linear
@@ -275,7 +274,7 @@ export const createRecordDisplayControls = ({
   // A drawing's drafts on the rows of their sources (OV-278). An edit of a
   // draft first writes them there, within its own step.
   /** @param {DrawingState} drawing */
-  const boundDrafts = (drawing) => bindRecordDisplayDrafts(drawing.recordDisplayDrafts, allRows.value);
+  const boundDrafts = (drawing) => bindRecordDisplayDrafts(drawing.recordDisplayDrafts, allRows.value, drawing.id);
   /** @param {DrawingState} drawing */
   const settleDrafts = (drawing) => {
     const bound = boundDrafts(drawing);
@@ -366,8 +365,8 @@ export const createRecordDisplayControls = ({
       const input = inputs[0];
       // The resource of each file of the record's source, in source order: the File card's, then a GFF3 file's FASTA.
       const [primaryId, pairedId] = storedRecordSourceResourceIds(record.source);
-      if (!boundSources.some(source => source.scope === input.scope && source.sourceUid === input.sourceUid
-          && source.source === input.source && source.paired === input.paired)
+      if (!boundSources.some(source => source.drawingId === input.drawingId && source.scope === input.scope
+          && source.sourceUid === input.sourceUid && source.source === input.source && source.paired === input.paired)
         || !input.source || !matchesSavedSource(input.source, primaryId)
         || (pairedId !== undefined && (!input.paired || !matchesSavedSource(input.paired, pairedId)))) {
         throw new Error('Alignment record source binding changed.');
@@ -443,7 +442,7 @@ export const createRecordDisplayControls = ({
         canonicalRecordKey: selected.recordKey,
         canonicalSource: selected.source,
         recordKey: selected.cardinality === 'all'
-        && allRows.value.filter((entry) => entry.sourceUid === row.sourceUid).length > 1
+        && allRows.value.filter((entry) => entry.drawingId === row.drawingId && entry.sourceUid === row.sourceUid).length > 1
         ? `${selected.recordKey}:${Number(row.selector.slice(1))}` : selected.recordKey }];
     });
   };
@@ -516,7 +515,8 @@ export const createRecordDisplayControls = ({
     // The committed request is the adopted canonical request: its `records` is always set.
     const request = /** @type {CommittedRecordRequest | null} */ (getCommittedRequest());
     const record = committedRecordForKey(request, recordKey);
-    const discoveries = record ? sources.value
+    // The committed request is the shown drawing's: its sources, not another drawing's of the same uids.
+    const discoveries = record ? sourcesOf(state.activeDrawing())
       .filter((source) => source.source && committedRecordUsesSource(request, record, source)).map(discoveryFor) : [];
     if (!discoveries.length || discoveries.some(({ status }) => status === 'ready')) return null;
     const failed = discoveries.find(({ status }) => status === 'error');

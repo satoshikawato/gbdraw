@@ -372,7 +372,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { DiagramMode, DrawingState, DrawingTab, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
-/** @import { CanonicalRenderEnvelope } from './session-request.js' */
+/** @import { CanonicalRenderEnvelope, RequestRecordDisplayRow } from './session-request.js' */
 /** @import { DerivedRegionDrawing } from '../contracts/locate.generated.js' */
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
@@ -6591,7 +6591,7 @@ const artifactUiState = (view) => ({
  *   linearRecordCatalog?: any,
  *   omittedAnnotationRecordKeys?: string[],
  *   planLinearUnits: DraftRequestFacts['planLinearUnits'],
- *   recordDisplayRows?: any,
+ *   recordDisplayRows?: { value: readonly RequestRecordDisplayRow[] } | null,
  *   written: readonly SavedSessionDrawing[],
  *   activeDrawingId: DrawingId,
  *   projectUi: Record<string, unknown>,
@@ -7250,7 +7250,7 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
  * units, which the request asks when a card draws several windows.
  * @typedef {object} DraftRequestFacts
  * @property {unknown} linearRecordCatalog
- * @property {readonly unknown[]} recordDisplayRows
+ * @property {readonly RequestRecordDisplayRow[]} recordDisplayRows
  * @property {string[]} omittedAnnotationRecordKeys
  * @property {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} planLinearUnits
  */
@@ -8851,7 +8851,7 @@ export const disposeSessionOperations = () => {
  * @property {DraftRequestFacts['planLinearUnits']} planLinearUnits Runs the Worker helper that plans drawn units.
  * @property {(operation: 'save' | 'load') => SessionBusy | null} [availability]
  * @property {DownloadChoicePort} [askChoice]
- * @property {{ value?: Parameters<typeof bindRecordDisplayDrafts>[1] }} [recordDisplayRows]
+ * @property {{ value: readonly RequestRecordDisplayRow[] }} [recordDisplayRows]
  * @property {() => readonly Readonly<ArtifactSlot>[]} [readKeptArtifacts]
  * @property {() => Promise<string | null>} [resolveTitle] Null when the person canceled the title dialog.
  * @property {(request: { draftRequest: boolean }) => Promise<Pick<ExportSessionDocumentOptions,
@@ -8896,10 +8896,10 @@ export const exportSession = (titleOverride = null, options) => {
     const drawing = options.shownDrawing();
     // Each drawing's drafts are written on the rows of their records (OV-278,
     // OV-325): a Session without a Web draft loads a draft selected by record ID on '#1'.
-    const recordDisplayRows = /** @type {{ recordDisplayRows?: { value?: Parameters<typeof bindRecordDisplayDrafts>[1] } }} */ (options).recordDisplayRows?.value || [];
+    const recordDisplayRows = /** @type {{ recordDisplayRows?: { value: readonly RequestRecordDisplayRow[] } }} */ (options).recordDisplayRows?.value || [];
     /** @type {DrawingState[]} */
     const savedDrawings = state.drawingList().map((live) => {
-      const drafts = bindRecordDisplayDrafts(live.recordDisplayDrafts, recordDisplayRows);
+      const drafts = bindRecordDisplayDrafts(live.recordDisplayDrafts, recordDisplayRows, live.id);
       return drafts === live.recordDisplayDrafts ? live : { ...live, recordDisplayDrafts: drafts };
     });
     // Each drawing is checked as it is, before the JSON copy, so a value JSON

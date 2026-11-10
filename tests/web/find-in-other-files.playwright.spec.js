@@ -300,6 +300,14 @@ test('Linear: a (-) window that covers a whole record is drawn reverse-complemen
   const card = found.cards.find((entry) => entry.id === 'NZ_JABKAY010000079.1');
   expect(card).toEqual({ id: 'NZ_JABKAY010000079.1', reverse: true, windows: [] });
   expect(found.records.find((record) => record.id === 'NZ_JABKAY010000079.1').reverse).toBe(true);
+  // The ribbons to contig 79 run parallel: each ribbon is M top-left L top-right L bottom L bottom, and a twisted one
+  // ends its bottom edge left to right. Drawn forward, nearly all of them were twisted.
+  const ribbons = await page.evaluate(() => [...document.querySelectorAll('.gbdraw-preview-surface svg path[data-gbdraw-match-id]')]
+    .filter((path) => [path.dataset.queryRecordId, path.dataset.subjectRecordId].includes('NZ_JABKAY010000079.1'))
+    .map((path) => (path.getAttribute('d').match(/-?[\d.]+(?=,)/g) || []).map(Number)));
+  expect(ribbons.length).toBeGreaterThan(0);
+  const parallel = ribbons.filter(([x1, x2, x3, x4]) => (x2 > x1) === (x3 > x4)).length;
+  expect(parallel, `${parallel} of ${ribbons.length} ribbons to contig 79 run parallel`).toBeGreaterThan(ribbons.length / 2);
   expect(found.pending).toBe(false);
   await expect(page.getByText('changes pending Generate')).toHaveCount(0);
 });

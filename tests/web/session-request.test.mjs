@@ -101,21 +101,6 @@ assert.deepEqual(
   ]
 );
 
-// OV-3365: a record drawn in several windows stands in its row where its first window stands (Python's
-// `grid_placement_order` places each window by its column), so a request Find in other files wrote in drawing order
-// keeps its record order, and the drawn units keep the numbers its saved comparison names.
-assert.deepEqual(
-  normalizeWebGridColumnOrdering([
-    { recordKey: 'reference', presentation: { gridRow: 1, gridColumn: 1 }, windows: [] },
-    { recordKey: 'plasmid', presentation: { gridRow: 2, gridColumn: 1 }, windows: [{ start: 32762, end: 32761, column: null }] },
-    { recordKey: 'contig-80', presentation: { gridRow: 3, gridColumn: null },
-      windows: [{ start: 1, end: 13298, column: 1 }, { start: 13299, end: 30248, column: 4 }] },
-    { recordKey: 'contig-79', presentation: { gridRow: 3, gridColumn: 2 }, windows: [] },
-    { recordKey: 'contig-86', presentation: { gridRow: 3, gridColumn: 3 }, windows: [{ start: 1, end: 27527, column: null }] }
-  ]).records.map((record) => record.recordKey),
-  ['reference', 'plasmid', 'contig-80', 'contig-79', 'contig-86']
-);
-
 // A fixture state is its own drawing.
 const buildCanonicalRenderRequestRaw = (args) => buildDrawingRenderRequest({ drawing: args.state, ...args });
 const projectCommittedEditorIntent = (args) => projectDrawingEditorIntent({ drawing: args.state, ...args });

@@ -4814,12 +4814,17 @@ export const linearCardRequestedCircular = ({ drawing, card, index, recordDispla
       presentation: { reverseComplement: linearPresentationReverse(card, windows) }
     },
     recordDisplayRows,
-    drafts: bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows)
+    drafts: bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows, drawing.id)
   }).wholeTransform().display.isCircular;
 };
 
 /**
- * @param {Record<string, any>} input
+ * What the request writer reads. The record display rows are typed (`RequestRecordDisplayRow`): a row names its
+ * drawing, and the writer reads only the rows of the drawing it writes.
+ * @typedef {{ [field: string]: any, recordDisplayRows?: readonly RequestRecordDisplayRow[] }} CanonicalRenderInput
+ */
+/**
+ * @param {CanonicalRenderInput} input
  * @returns {CanonicalRenderEnvelope}
  */
 const projectCanonicalRenderInput = ({
@@ -4868,7 +4873,7 @@ const projectCanonicalRenderInput = ({
   const webFiles = {};
   const recordPlan = buildRecords({ drawing, filesData, resources });
   const arrangedRows = Boolean(drawing.linearRecordLayoutEnabled?.value);
-  const drafts = bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows);
+  const drafts = bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows, drawing.id);
   /** @type {number[]} */
   const sourceInputIndexes = [];
   const records = recordPlan.records.flatMap((record, index) => {
@@ -5624,33 +5629,23 @@ const cloneCanonicalJsonValue = (value) => (
 // column value. Preserve the engine's row/column render order in the projected
 // record sequence, then retire the unsupported numeric column in the draft.
 /**
- * The column a request record stands at in its row: its presentation's, else, for a record drawn in several windows,
- * its first window's (Python's `grid_placement_order` places each window by its own column, D-08), else none.
- * @param {{ presentation?: UnvalidatedFields<'gridColumn'>, windows?: unknown }} record
- * @returns {number | null}
- */
-const requestRecordColumn = (record) => {
-  const own = record?.presentation?.gridColumn;
-  if (own !== null && own !== undefined) return Number.isInteger(Number(own)) ? Number(own) : null;
-  const columns = (Array.isArray(record?.windows) ? record.windows : [])
-    .map((/** @type {{ column?: unknown }} */ window) => window?.column)
-    .filter((column) => Number.isInteger(column));
-  return columns.length > 1 ? Math.min(.../** @type {number[]} */ (columns)) : null;
-};
-/**
- * @template {{ presentation?: UnvalidatedFields<'gridRow' | 'gridColumn'>, windows?: unknown }} R
+ * @template {{ presentation?: UnvalidatedFields<'gridRow' | 'gridColumn'> }} R
  * @param {readonly R[]} [records]
  */
 export const normalizeWebGridColumnOrdering = (records = []) => {
   const source = Array.isArray(records) ? records : [];
   const entries = source.map((record, sourceIndex) => {
     const rawRow = record?.presentation?.gridRow;
+    const rawColumn = record?.presentation?.gridColumn;
     const row = Number(rawRow);
+    const column = Number(rawColumn);
     return {
       record,
       sourceIndex,
       row: rawRow !== null && rawRow !== undefined && Number.isInteger(row) ? row : sourceIndex + 1,
-      column: requestRecordColumn(record) ?? sourceIndex + 1
+      column: rawColumn !== null && rawColumn !== undefined && Number.isInteger(column)
+        ? column
+        : sourceIndex + 1
     };
   });
   const hasColumns = source.some((record) => (

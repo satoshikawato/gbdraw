@@ -718,8 +718,10 @@ const inheritChoiceRequired = (reason) => diagnosticError('COMPARISON_CHOICE_REQ
 
 /**
  * The saved index of a drawn unit, carried into a request that draws `candidateRecords`. The saved indexes count drawn
- * units (OV-2995). Python plans the units from the records' keys and windows (`planLinearUnits`), so a request that
- * draws the same records in the same windows draws the same units, and the indexes carry over as saved; a request
+ * units (OV-2995). Python plans the units from the records' keys and windows (`planLinearUnits`): one per window of a
+ * record, in its window list's order, else the record itself (`record_drawn_windows`). A request that draws the same
+ * records in the same windows draws the same units, in the order of its records, which Load may change
+ * (`normalizeWebGridColumnOrdering`, OV-3365): each saved unit is found by its record's key and its window. A request
  * whose windows differ draws other units. Without windows a unit is a record, found by its key.
  * @param {SavedComparisonSource} source
  * @param {readonly SavedUnitInput[]} candidateRecords
@@ -736,13 +738,20 @@ const savedIndexCarrier = (source, candidateRecords) => {
   const windowed = drawsSeveralUnits(committedRecords) || drawsSeveralUnits(candidateRecords);
   /** @param {unknown} window */
   const span = (window) => (isObject(window) ? [window.start, window.end, window.reverseComplement] : window);
-  /** @param {readonly SavedUnitInput[]} unitInputs */
-  const drawnUnits = (unitInputs) => JSON.stringify(unitInputs.map(({ recordKey: key, windows }) => [key, windows.map(span)]));
-  if (windowed && drawnUnits(committedRecords) !== drawnUnits(candidateRecords)) throw inheritChoiceRequired('INHERIT_UNITS_CHANGED');
+  /** @param {readonly SavedUnitInput[]} unitInputs @returns {string[]} Each drawn unit's record key and window. */
+  const drawnUnits = (unitInputs) => unitInputs.flatMap(({ recordKey: key, windows }) => (windows.length > 0
+    ? windows.map((window) => JSON.stringify([key, span(window)])) : [JSON.stringify([key])]));
+  const savedUnits = drawnUnits(committedRecords);
+  const candidateUnitIndex = new Map(drawnUnits(candidateRecords).map((unit, index) => [unit, index]));
+  if (windowed && (candidateUnitIndex.size !== savedUnits.length || !savedUnits.every((unit) => candidateUnitIndex.has(unit)))) {
+    throw inheritChoiceRequired('INHERIT_UNITS_CHANGED');
+  }
   return (value) => {
     const sourceIndex = Number(value);
-    if (windowed && Number.isInteger(sourceIndex) && sourceIndex >= 0) return sourceIndex;
-    if (!Number.isInteger(sourceIndex) || !committedRecords[sourceIndex]) throw inheritChoiceRequired('INHERIT_UNITS_CHANGED');
+    if (windowed && Number.isInteger(sourceIndex) && sourceIndex >= 0 && sourceIndex < savedUnits.length) {
+      return /** @type {number} */ (candidateUnitIndex.get(savedUnits[sourceIndex]));
+    }
+    if (windowed || !Number.isInteger(sourceIndex) || !committedRecords[sourceIndex]) throw inheritChoiceRequired('INHERIT_UNITS_CHANGED');
     const candidateIndex = candidateIndexByKey.get(committedRecords[sourceIndex].recordKey);
     if (candidateIndex === undefined) throw inheritChoiceRequired('INHERIT_UNITS_CHANGED');
     return candidateIndex;

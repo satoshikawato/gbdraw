@@ -10,4 +10,5 @@
   feature placement, or tolerance has changes pending Generate right after a
   Generate of a drawing that Find in other files created (OV-3375), and
   Similarity alignment works in such a drawing and in the drawing it came from
-  (OV-3377).
+  (OV-3377). In the drawing it came from, the feature popup's record start and
+  orientation actions also work again on a File drawn whole.

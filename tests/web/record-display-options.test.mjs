@@ -78,19 +78,22 @@ test('a draft that names its record by ID moves to that record once the rows are
   const shared = buildRecordDisplayRows({ scope: 'linear', sourceUid: 'card-2', source, records: [
     { selector: '#1', recordId: 'AAA.1', recordLength: 60, detectedTopology: 'circular' },
     { selector: '#2', recordId: 'BBB.1', recordLength: 60, detectedTopology: 'circular' }
-  ] });
+  ] }).map((row) => ({ ...row, drawingId: 'linear' }));
   const draft = (selector, recordId, startCoordinate) => ({ sourceUid: 'card-2', selector, recordId,
     topologyOverride: null, startCoordinate, reverseComplementOverride: null, anchorIntent: null });
-  assert.deepEqual(bindRecordDisplayDrafts([draft('#1', 'BBB.1', 11)], shared), [draft('#2', 'BBB.1', 11)]);
+  assert.deepEqual(bindRecordDisplayDrafts([draft('#1', 'BBB.1', 11)], shared, 'linear'), [draft('#2', 'BBB.1', 11)]);
+  // Only the drafts' own drawing's rows bind them: another drawing's card of the same uid does not.
+  const drafts = [draft('#1', 'BBB.1', 11)];
+  assert.equal(bindRecordDisplayDrafts(drafts, shared, 'linear-2'), drafts);
   // Unchanged (the same array): a draft on its record, records not yet listed,
   // a duplicate ID, a record the file lacks, and a row that already has a draft.
   for (const [drafts, known] of [
     [[draft('#1', 'AAA.1', 7)], shared],
     [[draft('#1', 'BBB.1', 11)], []],
-    [[draft('#2', 'same', 25)], rows.map((row) => ({ ...row, sourceUid: 'card-2' }))],
+    [[draft('#2', 'same', 25)], rows.map((row) => ({ ...row, sourceUid: 'card-2', drawingId: 'linear' }))],
     [[draft('#1', 'CCC.1', 11)], shared],
     [[draft('#1', 'BBB.1', 11), draft('#2', 'BBB.1', 9)], shared]
-  ]) assert.equal(bindRecordDisplayDrafts(drafts, known), drafts);
+  ]) assert.equal(bindRecordDisplayDrafts(drafts, known, 'linear'), drafts);
 });
 
 test('blank remains null, explicit 1 survives, malformed input is never clamped', () => {
@@ -229,6 +232,11 @@ const circularControls = ({ linear = false, discovered = true, oneCard = false, 
   const featureCard = () => circularSources[oneCard ? 0 : 1];
   return { state, actions, controls, feature, makeFile, featureCard, linearDiscovery, history,
     enabled: () => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value),
+    // A committed request that draws every record of its cards (cardinality 'all').
+    commitAllRecords: () => {
+      committed = { ...committed, renderRequest: { ...committed.renderRequest,
+        records: committed.renderRequest.records.map((record) => ({ ...record, cardinality: 'all' })) } };
+    },
     // A committed request that draws the record at `index` in the orientation `reverse`.
     commitOrientation: (index, reverse) => {
       committed = { ...committed, renderRequest: { ...committed.renderRequest,
@@ -402,11 +410,11 @@ test('an Align commit writes a windowed card\'s windows and its restore gives th
   // Windows of both orientations: the record is drawn forward (not every window is reversed).
   const sequence = windowedCard(model, false, true);
   const directions = [{ recordKey: 'record-2', reverseComplement: true }];
-  const checkpoint = model.controls.captureAlignmentOrientationIntent(model.state, directions);
-  model.controls.commitAlignmentOrientations(model.state, directions);
+  const checkpoint = model.controls.captureAlignmentOrientationIntent(model.state.activeDrawing(), directions);
+  model.controls.commitAlignmentOrientations(model.state.activeDrawing(), directions);
   assert.deepEqual(cardOrientation(sequence), [false, true, true]);
   assert.equal(model.controls.rows.value.find((entry) => entry.sourceUid === 'record-2').reverse, true);
-  model.controls.restoreAlignmentOrientationIntent(model.state, checkpoint);
+  model.controls.restoreAlignmentOrientationIntent(model.state.activeDrawing(), checkpoint);
   assert.deepEqual(cardOrientation(sequence), [false, false, true]);
 });
 
@@ -584,8 +592,8 @@ test('alignment intent changes only its target direction and preserves pending d
   model.controls.setStart(rows[0],25);model.controls.setStart(rows[1],40);
   const pending=structuredClone(model.state.recordDisplayDrafts);
   const directions=[{recordKey:'record-1',reverseComplement:true}];
-  const checkpoint=model.controls.captureAlignmentOrientationIntent(model.state, directions);
-  model.controls.commitAlignmentOrientations(model.state, directions);
+  const checkpoint=model.controls.captureAlignmentOrientationIntent(model.state.activeDrawing(), directions);
+  model.controls.commitAlignmentOrientations(model.state.activeDrawing(), directions);
   assert.equal(model.state.linearSeqs[0].region_reverse,true);
   assert.equal(model.state.linearSeqs[1].region_reverse,false);
   assert.equal(model.state.recordDisplayDrafts.length,pending.length);
@@ -595,7 +603,7 @@ test('alignment intent changes only its target direction and preserves pending d
   // A later normal Reverse checkbox remains effective, with no forced override.
   model.state.linearSeqs[0].region_reverse=false;
   assert.equal(effectiveRecordReverseComplement({...rows[0],reverse:false},model.state.recordDisplayDrafts[0]),false);
-  model.controls.restoreAlignmentOrientationIntent(model.state, checkpoint);
+  model.controls.restoreAlignmentOrientationIntent(model.state.activeDrawing(), checkpoint);
   assert.deepEqual(model.state.recordDisplayDrafts,pending);
 });
 
@@ -618,11 +626,11 @@ test('an alignment checkpoint restores the Linear drafts and leaves the Circular
   model.state.recordDisplayDrafts[0].reverseComplementOverride = true;
   const pending = structuredClone(model.state.recordDisplayDrafts);
   const directions = [{ recordKey: 'record-1', reverseComplement: true }];
-  const checkpoint = model.controls.captureAlignmentOrientationIntent(model.state, directions);
-  model.controls.commitAlignmentOrientations(model.state, directions);
+  const checkpoint = model.controls.captureAlignmentOrientationIntent(model.state.activeDrawing(), directions);
+  model.controls.commitAlignmentOrientations(model.state.activeDrawing(), directions);
   assert.equal(model.state.linearSeqs[0].region_reverse, true);
   assert.equal(model.state.recordDisplayDrafts[0].reverseComplementOverride, null);
-  model.controls.restoreAlignmentOrientationIntent(model.state, checkpoint);
+  model.controls.restoreAlignmentOrientationIntent(model.state.activeDrawing(), checkpoint);
   assert.equal(model.state.linearSeqs[0].region_reverse, false);
   assert.deepEqual({ linear: model.state.recordDisplayDrafts, circular: circular.recordDisplayDrafts },
     { linear: pending, circular: circularBefore });
@@ -634,17 +642,27 @@ test('fresh loaded alignment binds canonical sources before discovery and restor
   model.state.linearSeqs[0].region_reverse = true;
   const target = {recordKey:'record-1', reverseComplement:true};
   assert.equal(model.controls.allRows.value.filter(row => row.scope === 'linear').length, 0);
-  const checkpoint = model.controls.captureAlignmentOrientationIntent(model.state, [target]);
-  model.controls.commitAlignmentOrientations(model.state, [target]);
+  const checkpoint = model.controls.captureAlignmentOrientationIntent(model.state.activeDrawing(), [target]);
+  model.controls.commitAlignmentOrientations(model.state.activeDrawing(), [target]);
   assert.equal(model.state.linearSeqs[0].region_reverse, true);
   assert.equal(model.state.linearSeqs[1].region_reverse, false);
   // Artifact rollback restores its canonical direction first; the same owner
   // then restores the pre-operation pending input, without needing discovery.
   model.state.linearSeqs[0].region_reverse = false;
-  model.controls.restoreAlignmentOrientationIntent(model.state, checkpoint);
+  model.controls.restoreAlignmentOrientationIntent(model.state.activeDrawing(), checkpoint);
   assert.equal(model.state.linearSeqs[0].region_reverse, true);
   model.state.linearSeqs[0].gb = model.state.inputFiles.registerFile(new File(['replacement'], 'replacement.gb'));
-  assert.throws(() => model.controls.captureAlignmentOrientationIntent(model.state, [target]), /source binding changed/);
+  assert.throws(() => model.controls.captureAlignmentOrientationIntent(model.state.activeDrawing(), [target]), /source binding changed/);
+});
+
+// A card that draws its file whole keeps its record's key when another drawing has a card of the same uid, so the
+// feature popup's record start and orientation actions find their record in the drawing Find in other files came from.
+test('the popup finds a whole-file card\'s record when another drawing has a card of the same uid', () => {
+  const model = circularControls({ linear: true });
+  model.commitAllRecords();
+  const before = model.controls.targetForFeature(model.feature).row.recordKey;
+  addSourceDrawingOfSameUids(model.state);
+  assert.equal(model.controls.targetForFeature(model.feature).row.recordKey, before);
 });
 
 // OV-3377: Similarity alignment orients the shown drawing's card, found by drawing and uid, when another drawing has
@@ -723,11 +741,11 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
     linearRecordStatusFor: () => 'ready', linearRecordErrorFor: () => '',
     runUndoable: (_label, fn) => fn(), getCommittedRequest: () => committed.renderRequest, getCommittedSession: () => committed });
   const directions = [{ recordKey: 'record-1', reverseComplement: true }];
-  const checkpoint = controls.captureAlignmentOrientationIntent(state, directions);
+  const checkpoint = controls.captureAlignmentOrientationIntent(state.activeDrawing(), directions);
   assert.equal(state.recordDisplayDrafts[0].selector, '#2', 'the capture settled the draft onto its row');
-  controls.commitAlignmentOrientations(state, directions);
+  controls.commitAlignmentOrientations(state.activeDrawing(), directions);
   assert.equal(state.recordDisplayDrafts[0].reverseComplementOverride, null);
-  controls.restoreAlignmentOrientationIntent(state, checkpoint);
+  controls.restoreAlignmentOrientationIntent(state.activeDrawing(), checkpoint);
   assert.equal(state.recordDisplayDrafts[0].reverseComplementOverride, true, 'the row override comes back');
   assert.equal(state.linearSeqs[0].region_reverse, false);
 });
