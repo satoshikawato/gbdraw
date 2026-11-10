@@ -288,7 +288,10 @@ const displayWhileSaveHeld = async (page, resultIndex) => {
     return app.sessionSavePending && app.selectedResultIndex === index && isCommittedSvgResultMounted(app.results[index]);
   }, resultIndex)).toBe(true);
   await settleLive(page);
-  await evaluateWithRetainedPromise(page, async () => { window.releaseSave(); await window.pendingSave; });
+  await evaluateWithRetainedPromise(page, async () => {
+    window.releaseSave();
+    try { await window.pendingSave; } finally { delete window.releaseSave; delete window.pendingSave; }
+  });
   await settleLive(page);
 };
 
