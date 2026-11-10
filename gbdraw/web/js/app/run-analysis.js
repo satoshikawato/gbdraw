@@ -5186,7 +5186,9 @@ export const createRunAnalysis = ({
           readResourceRecordCount: (/** @type {string} */ id, /** @type {'genbank' | 'fasta'} */ kind) => readCanonicalResourceRecordCount(canonical.resources, id, kind),
           readResourceFileBytes: (/** @type {string} */ id) => readCanonicalResourceFileBytes(canonical.resources, id),
           readResourceText: (/** @type {string} */ id) => readCanonicalResourceText(canonical.resources, id),
-          drawnUnits: requestDrawnUnits
+          drawnUnits: requestDrawnUnits,
+          planRecordPlaces: (/** @type {{ records: unknown[] }} */ payload) => runDiagramHelperOperation(
+            DIAGRAM_HELPER_OPERATIONS.PLAN_RECORD_PLACES, payload)
         }));
         throwIfGenerationCanceled();
       }

@@ -39,6 +39,7 @@ import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
 /** @import { LosatCacheInfoEntry } from '../services/config.js' */
 /** @import { ErrorTextPart } from '../utils/error-normalization.js' */
+/** @import { RecordPlace, RecordPlaceInput } from '../contracts/card-windows.generated.js' */
 
 /**
  * @typedef {{ path?: unknown, name?: unknown, kind?: unknown, slot?: unknown }} FileMetadataInput One file's metadata as a caller supplies it.
@@ -306,18 +307,29 @@ const identityTableUnavailable = (text) => Object.assign(new SourceRecipeUnavail
  * @typedef {{ position: number, expansion: number | null }} RequestRecordPosition
  */
 /**
+ * The CLI positions of each request record (`CliPositions`): one, or one per drawn record when the records table
+ * writes a placed file drawn whole as a row per record (`appendInputArgs`).
+ * @typedef {readonly (readonly number[])[]} CliPositions
+ */
+/**
  * @param {CanonicalRenderRequest} renderRequest
  * @param {string} recordKey
  * @param {boolean} [anyCase] Compare the keys without letter case, as a color rule's pattern does.
+ * @param {CliPositions | null} [cliPositions] Without them, record n is the CLI's n-th record input.
  * @returns {RequestRecordPosition[]}
  */
-const requestRecordsOf = (renderRequest, recordKey, anyCase = false) => {
+const requestRecordsOf = (renderRequest, recordKey, anyCase = false, cliPositions = null) => {
   const fold = (/** @type {string} */ key) => (anyCase ? key.toLowerCase() : key);
-  return renderRequest.records.flatMap((record, index) => (
-    recordKeyBelongsToRequest(fold(recordKey), [{ ...record, recordKey: fold(record.recordKey) }])
-      ? [{ position: index + 1, expansion: recordKeyExpansion(fold(recordKey), fold(record.recordKey)) }]
-      : []
-  ));
+  return renderRequest.records.flatMap((record, index) => {
+    if (!recordKeyBelongsToRequest(fold(recordKey), [{ ...record, recordKey: fold(record.recordKey) }])) return [];
+    const expansion = recordKeyExpansion(fold(recordKey), fold(record.recordKey));
+    const positions = cliPositions?.[index] ?? [index + 1];
+    if (positions.length === 1) return [{ position: positions[0], expansion }];
+    // A record written as a table row per drawn record: its `<key>:<k>` is the k-th row, a CLI input of its own.
+    if (expansion === null) return positions.map((position) => ({ position, expansion: null }));
+    const position = positions[expansion - 1];
+    return position === undefined ? [] : [{ position, expansion: null }];
+  });
 };
 
 // R12: identity-table rows must read back as the same rows through the CLI's one
@@ -328,9 +340,10 @@ const requestRecordsOf = (renderRequest, recordKey, anyCase = false) => {
  * @param {CanonicalRenderRequest} renderRequest
  * @param {{ recordKey: string, biologicalFeatureId: string }} row
  * @param {'placement' | 'feature edit'} kind
+ * @param {CliPositions | null} [cliPositions] See `requestRecordsOf`.
  */
-const identityTableCells = (renderRequest, row, kind) => {
-  const [record] = requestRecordsOf(renderRequest, row.recordKey);
+const identityTableCells = (renderRequest, row, kind, cliPositions = null) => {
+  const [record] = requestRecordsOf(renderRequest, row.recordKey, false, cliPositions);
   const id = row.biologicalFeatureId;
   if (!record || record.expansion !== null || typeof id !== 'string' || !id || id !== id.trim() || /[\t\r\n\0]/.test(id)) {
     throw identityTableUnavailable(kind === 'placement'
@@ -356,9 +369,10 @@ const identityTableCells = (renderRequest, row, kind) => {
 /**
  * @param {CanonicalRenderRequest} renderRequest
  * @param {string} text The Web's specific color table (`serializeSpecificRules`).
+ * @param {CliPositions} cliPositions See `requestRecordsOf`.
  * @returns {string | null} The table to write ('' for no row), or null when no row changes.
  */
-const cliSpecificColorTable = (renderRequest, text) => {
+const cliSpecificColorTable = (renderRequest, text, cliPositions) => {
   let changed = false;
   const rules = parseSpecificRules(text).rules.flatMap((rule) => {
     const named = namedFeatureInstance(rule);
@@ -368,7 +382,7 @@ const cliSpecificColorTable = (renderRequest, text) => {
       }
       return [rule];
     }
-    const records = requestRecordsOf(renderRequest, named.recordKey, true);
+    const records = requestRecordsOf(renderRequest, named.recordKey, true, cliPositions);
     if (records.length > 1) {
       throw recipeUnavailable(msg('a feature color rule names feature instances by a pattern that the CLI record keys cannot carry.'));
     }
@@ -966,12 +980,47 @@ const gridCoordinate = (value) => {
 };
 
 /**
+ * The Worker helper `planRecordPlaces`: the columns Python's drawing gives each request record
+ * (gbdraw/web_support/linear_units.py `plan_record_places`).
+ * @typedef {(payload: { records: RecordPlaceInput[] }) => Promise<{ result?: unknown }>} RecordPlacePlanner
+ */
+/**
+ * The columns of the records a placed Linear file drawn whole draws, and of every other record, as Python numbers
+ * them (OV-3072): such a file takes a column per record, and the later columns of its row move after them. The
+ * records table writes each drawn record as a row of its own, so it reads these columns rather than the request's.
+ * @param {readonly CanonicalRecord[]} records
+ * @param {readonly number[]} drawnRecords How many records each request record draws.
+ * @param {RecordPlacePlanner | null} planRecordPlaces
+ * @returns {Promise<RecordPlace[]>}
+ */
+const plannedRecordPlaces = async (records, drawnRecords, planRecordPlaces) => {
+  const unavailable = () => recipeUnavailable(msg('this record cardinality cannot be preserved by a CLI records table.'));
+  if (!planRecordPlaces) throw unavailable();
+  const { result } = await planRecordPlaces({
+    records: records.map((record, index) => ({
+      gridRow: record.presentation.gridRow ?? null,
+      gridColumn: record.presentation.gridColumn ?? null,
+      windowColumns: record.windows.map((window) => window.column ?? null),
+      drawnRecords: drawnRecords[index]
+    }))
+  });
+  const places = Array.isArray(result) ? result : null;
+  if (!places || places.length !== records.length || !places.every((place, index) => (
+    isPlainObject(place) && Array.isArray(place.columns)
+    && place.columns.length === (records[index].windows.length > 1 ? records[index].windows.length : drawnRecords[index])
+  ))) throw unavailable();
+  return /** @type {RecordPlace[]} */ (places);
+};
+
+/**
  * @param {string[]} args
  * @param {CanonicalRenderRequest} request
  * @param {RecipeFiles} files
- * @returns {Promise<boolean>} Whether a records table carries the records.
+ * @param {RecordPlacePlanner | null} planRecordPlaces
+ * @returns {Promise<{ recordsTableUsed: boolean, cliPositions: CliPositions }>} Whether a records table carries the
+ *   records, and the CLI position of each record it draws.
  */
-const appendInputArgs = async (args, request, files) => {
+const appendInputArgs = async (args, request, files, planRecordPlaces) => {
   const records = Array.isArray(request.records) ? request.records : [];
   if (records.length === 0) {
     throw recipeUnavailable(msg('the committed render has no source records.'));
@@ -1021,13 +1070,30 @@ const appendInputArgs = async (args, request, files) => {
     }
   });
   const recordsTableRequired = hasDuplicateSources || circularSelectorNeedsTable || recordNeedsTable;
+  // How many records each request record draws, as table rows: a Linear file drawn whole at a place draws each of its
+  // records in a column of its own (OV-3072); a table row names one record.
+  const drawnRecords = records.map(() => 1);
   if (recordsTableRequired) {
     for (const [index, record] of records.entries()) {
       if (record.cardinality === 'exactly_one') continue;
-      if (await files.resourceRecordCount(specs[index].ids.at(-1), countFormat) === 1) continue;
+      const count = await files.resourceRecordCount(specs[index].ids.at(-1), countFormat);
+      if (count === 1) continue;
+      if (
+        request.mode === 'linear' && record.cardinality === 'all' && !record.selector && record.windows.length === 0
+        && gridCoordinate(record.presentation?.gridColumn) !== '' && Number.isSafeInteger(count) && count > 1
+      ) {
+        drawnRecords[index] = count;
+        continue;
+      }
       throw recipeUnavailable(msg('this record cardinality cannot be preserved by a CLI records table.'));
     }
   }
+  /** @type {number[][]} */
+  const cliPositions = [];
+  drawnRecords.reduce((next, count) => {
+    cliPositions.push(Array.from({ length: count }, (_unused, at) => next + at));
+    return next + count;
+  }, 1);
 
   if (!recordsTableRequired) {
     const loadComparison = request.mode === 'linear'
@@ -1052,6 +1118,9 @@ const appendInputArgs = async (args, request, files) => {
   }
 
   if (recordsTableRequired) {
+    const places = drawnRecords.some((count) => count > 1)
+      ? await plannedRecordPlaces(records, drawnRecords, planRecordPlaces)
+      : null;
     const requestedTableRows = requestedRows;
     // The windows of a record drawn in several are table rows that share a record_group value (PD-OI-122).
     const grouped = records.some((record) => record.windows.length > 1);
@@ -1061,6 +1130,8 @@ const appendInputArgs = async (args, request, files) => {
     ];
     const rows = records.flatMap((record, index) => {
       const selector = selectorText(record.selector);
+      // Python's columns of the records or windows this record draws, when a file drawn whole takes several.
+      const columns = places?.[index].columns ?? [];
       const row = {
         ...Object.fromEntries(options.map((option, part) => [option, files.visibleName(sourcePaths[index][part])])),
         record_label: String(record.presentation?.label || ''),
@@ -1068,20 +1139,25 @@ const appendInputArgs = async (args, request, files) => {
         record_id: selector,
         region: '',
         reverse_complement: record.windows.length ? '0' : (record.presentation?.reverseComplement ? '1' : '0'),
-        order: index + 1,
+        order: cliPositions[index][0],
         row: gridCoordinate(record.presentation?.gridRow) || requestedTableRows[index] || '',
-        column: gridCoordinate(record.presentation?.gridColumn) || requestedColumns[index] || '',
+        column: gridCoordinate(columns[0]) || gridCoordinate(record.presentation?.gridColumn) || requestedColumns[index] || '',
         topology: record.display?.isCircular == null ? '' : record.display.isCircular ? 'circular' : 'linear',
         display_start: record.display?.startCoordinate ?? '',
         ...(grouped ? { record_group: '' } : {})
       };
+      if (drawnRecords[index] > 1) {
+        return cliPositions[index].map((order, at) => ({
+          ...row, record_id: `#${at + 1}`, order, column: gridCoordinate(columns[at]) || row.column
+        }));
+      }
       if (record.windows.length <= 1) {
         return [{ ...row, region: record.windows.length ? regionText(record.windows[0]) : '' }];
       }
-      return record.windows.map((window) => ({
+      return record.windows.map((window, at) => ({
         ...row,
         region: regionText(window),
-        column: gridCoordinate(window.column) || row.column,
+        column: gridCoordinate(columns[at]) || gridCoordinate(window.column) || row.column,
         record_group: String(index + 1)
       }));
     });
@@ -1091,12 +1167,12 @@ const appendInputArgs = async (args, request, files) => {
       'generatedFiles.source_recipe.records_table'
     );
     args.push('--records_table', tablePath);
-    return true;
+    return { recordsTableUsed: true, cliPositions };
   }
 
   options.forEach((option, part) => args.push(`--${option}`, ...sourcePaths.map((paths) => paths[part])));
 
-  if (request.mode !== 'linear') return false;
+  if (request.mode !== 'linear') return { recordsTableUsed: false, cliPositions };
   // A record drawn in a window names its record in its `--region`.
   const selectors = records.map((record) => (record.windows.length ? '' : selectorText(record.selector)));
   if (selectors.some(Boolean)) args.push(...selectors.flatMap((value) => ['--record_id', value]));
@@ -1118,7 +1194,7 @@ const appendInputArgs = async (args, request, files) => {
   rows.forEach((row, index) => {
     if (row !== '') args.push('--multi_record_position', `#${index + 1}@${row}`);
   });
-  return false;
+  return { recordsTableUsed: false, cliPositions };
 };
 
 /**
@@ -2081,6 +2157,8 @@ const readGeneratedFileBytes = (generatedFiles, readResourceFileBytes) => Promis
  *   bytes a File holds; without it, the text of the bytes its descriptor holds.
  * @property {LinearUnitRecords | null} [drawnUnits] The drawn units of a Linear request, as Python's unit plan gave
  *   them to Generate; without them, a request that draws a record in several windows names no comparison by record.
+ * @property {RecordPlacePlanner | null} [planRecordPlaces] The Worker helper that numbers the columns of a placed file
+ *   drawn whole; without it, such a file has no records table.
  */
 
 /**
@@ -2095,7 +2173,8 @@ export const buildSourceRecipe = async ({
   readResourceRecordCount = null,
   readResourceFileBytes = null,
   readResourceText = null,
-  drawnUnits = null
+  drawnUnits = null,
+  planRecordPlaces = null
 } = {}) => {
   const mode = String(renderRequest?.mode || '').trim();
   /**
@@ -2120,13 +2199,17 @@ export const buildSourceRecipe = async ({
     const files = createRecipeFiles(resources, webFiles, generatedFileNameHints, readResourceRecordCount);
     /** @type {string[]} */
     const args = [];
-    const recordsTableUsed = await appendInputArgs(args, renderRequest, files);
+    const { recordsTableUsed, cliPositions } = await appendInputArgs(args, renderRequest, files, planRecordPlaces);
+    // The comparisons name the request's drawn units, which count a file drawn whole as one.
+    if (cliPositions.some((positions) => positions.length > 1) && (renderRequest.comparisons || []).length > 0) {
+      throw recipeUnavailable(msg('a comparison cannot be bound losslessly to its source records.'));
+    }
     const placements = renderRequest.diagramOptions?.featurePlacements || [];
     const featureOverrides = renderRequest.diagramOptions?.featureOverrides || [];
     if (placements.length || featureOverrides.length) await requireExactRecords(renderRequest, files);
     if (placements.length) {
       const rows = placements.map((row) => ({
-        ...identityTableCells(renderRequest, row, 'placement'),
+        ...identityTableCells(renderRequest, row, 'placement', cliPositions),
         placement: row.placement.kind === 'main' ? 'main' : row.placement.side,
         level: row.placement.kind === 'main' ? '' : row.placement.level
       }));
@@ -2141,7 +2224,7 @@ export const buildSourceRecipe = async ({
     const colorTableId = referencedResourceId(colors?.colorTable || colors?.colorTableFile);
     const cliColorTable = colorTableId ? cliSpecificColorTable(renderRequest, typeof readResourceText === 'function'
       ? await readResourceText(colorTableId)
-      : descriptorText(resources, colorTableId)) : null;
+      : descriptorText(resources, colorTableId), cliPositions) : null;
     appendDiagramOptions(args, renderRequest, files, cliColorTable === null ? undefined : cliColorTable && files.generatedTextPath(
       'specific-colors.tsv', cliColorTable, 'generatedFiles.source_recipe.specific_colors') || null, drawnUnits);
     appendConfigOverrides(args, renderRequest, files);

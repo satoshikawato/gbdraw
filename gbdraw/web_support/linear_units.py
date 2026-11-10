@@ -240,9 +240,8 @@ def plan_card_windows(records: Sequence[object]) -> CardWindowPlan:
     cards = [_card_record(record, position) for position, record in enumerate(records)]
     # Each card at the place the drawing gives it: a placed file card drawn whole takes a column per record.
     places = numbered_places([
-        InputPlace(
-            card["gridRow"], card["gridColumn"],
-            tuple(window.span.column for window in windows if window is not None) if len(windows) > 1 else (),
+        InputPlace.at(
+            card["gridRow"], card["gridColumn"], [window.span.column for window in windows if window is not None],
             card["drawnRecords"],
         )
         for card, windows in cards
@@ -313,9 +312,61 @@ def plan_card_windows_json(records_json: str) -> str:
     return json.dumps(plan_card_windows(json.loads(str(records_json))))
 
 
+class RecordPlaceInput(TypedDict):
+    """Where a request record stands before its records expand (``renderRequest.records[]``): its grid row and
+    column, the column of each of its windows, and how many records it draws (a file drawn whole: each record of the
+    file; any other record: one)."""
+
+    gridRow: int | None
+    gridColumn: int | None
+    windowColumns: list[int | None]
+    drawnRecords: int
+
+
+class RecordPlace(TypedDict):
+    """Where the drawing places a request record: the column of each record or window it draws, in drawing order
+    (``InputPlace.drawn_columns`` after ``numbered_places``); its row stays the one the request writes."""
+
+    columns: list[int | None]
+
+
+def _whole_number(value: object, *, least: int | None) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and (least is None or value >= least)
+
+
+def plan_record_places(records: Sequence[object]) -> list[RecordPlace]:
+    """The columns the drawing gives the records of ``records`` (in request order): a placed file drawn whole takes
+    one column per record and moves the later columns of its row (``numbered_places``). The Source recipe writes a
+    records table row per drawn record at these columns."""
+
+    places: list[InputPlace] = []
+    for record in records:
+        if not isinstance(record, Mapping):
+            raise _protocol_error("A record of a place plan must be an object.")
+        row, column, windows, drawn = (
+            record.get("gridRow"), record.get("gridColumn"), record.get("windowColumns"), record.get("drawnRecords")
+        )
+        if (
+            any(value is not None and not _whole_number(value, least=1) for value in (row, column))
+            or not isinstance(windows, list)
+            or any(value is not None and not _whole_number(value, least=1) for value in windows)
+            or not _whole_number(drawn, least=1)
+            or (windows and drawn != 1)
+        ):
+            raise _protocol_error("A record of a place plan needs whole-number places and how many records it draws.")
+        places.append(InputPlace.at(cast(int | None, row), cast(int | None, column), windows, cast(int, drawn)))
+    return [{"columns": list(place.drawn_columns())} for place in numbered_places(places)]
+
+
+def plan_record_places_json(records_json: str) -> str:
+    """JSON boundary of the diagram Worker."""
+
+    return json.dumps(plan_record_places(json.loads(str(records_json))))
+
+
 def describe_card_window_plan() -> dict[str, dict[str, Shape]]:
-    """The request and the answer of :func:`plan_card_windows_json` as named shapes of :mod:`gbdraw.contract_shapes`
-    (tools/generate_web_contracts.py)."""
+    """The requests and the answers of :func:`plan_card_windows_json` and :func:`plan_record_places_json` as named
+    shapes of :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py)."""
 
     types_: dict[str, Shape] = {}
 
@@ -327,7 +378,7 @@ def describe_card_window_plan() -> dict[str, dict[str, Shape]]:
             return ref(hint.__name__)
         return None
 
-    for root in (CardWindowRecordInput, CardWindowPlan):
+    for root in (CardWindowRecordInput, CardWindowPlan, RecordPlaceInput, RecordPlace):
         special(root)
     return {"types": types_}
 
@@ -349,4 +400,8 @@ __all__ = [
     "LinearUnitWindow",
     "plan_linear_units",
     "plan_linear_units_json",
+    "RecordPlace",
+    "RecordPlaceInput",
+    "plan_record_places",
+    "plan_record_places_json",
 ]

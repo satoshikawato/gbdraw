@@ -72,6 +72,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   LIST_SEQUENCE_RECORDS: 'listSequenceRecords',
   PLAN_CARD_WINDOWS: 'planCardWindows',
   PLAN_LINEAR_UNITS: 'planLinearUnits',
+  PLAN_RECORD_PLACES: 'planRecordPlaces',
   PROMOTE_LEGACY_LOSATP_CACHE: 'promoteLegacyLosatpCache',
   READ_ALL_SEQUENCE_RECORDS: 'readAllSequenceRecords',
   READ_COMPARISON_SEQUENCE: 'readComparisonSequence',

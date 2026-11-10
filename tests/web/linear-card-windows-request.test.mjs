@@ -103,6 +103,23 @@ except Exception as exc:
     result = json.dumps(str(exc))
 `, { canonicalRequest: renderRequest, staged: await stagedFiles(renderRequest, resources) }));
 
+/** The records Python plans for `renderRequest`, in request order, as `[record key, row, column]`. */
+const pythonPlaces = async ({ renderRequest, resources }) => JSON.parse(await evaluatePython(`
+import base64, json, os, tempfile
+from gbdraw.api.request_render import plan_linear_request
+from gbdraw.session_request_codec import decode_canonical_request
+directory = tempfile.mkdtemp()
+paths = {}
+for index, (resource_id, staged) in enumerate(payload['staged'].items()):
+    path = os.path.join(directory, f'r{index}_{staged["name"]}')
+    with open(path, 'wb') as handle:
+        handle.write(base64.b64decode(staged['base64']))
+    paths[resource_id] = path
+request = decode_canonical_request(payload['canonicalRequest'], resource_paths=paths, output_directory=directory)
+result = json.dumps([[record.record_key, record.presentation.grid_row, record.presentation.grid_column]
+                     for record in plan_linear_request(request).request.records])
+`, { canonicalRequest: renderRequest, staged: await stagedFiles(renderRequest, resources) }));
+
 /**
  * The request of `drawing` (each record as `[key, cardinality, row, column, windows as [start, end, column]]`) and
  * Python's verdict on it.
@@ -214,10 +231,15 @@ test('Add window beside a card that draws a file of three records whole keeps a 
   // dev refused it: "grid_column cannot be set for a Linear RecordCardinality.ALL input".
   assert.deepEqual(await requestOf(drawing), { verdict: 'drawn', records: [
     ['m', 'all', 1, 1, []], ['w', 'exactly_one', 1, null, [[1, 100, 2], [301, 400, 3]]]] });
+  const planned = async () => pythonPlaces((await projectDraftRequest(state, drawing, {
+    linearRecordCatalog: await fullCatalog(drawing), recordDisplayRows: [], omittedAnnotationRecordKeys: []
+  })).envelope);
+  assert.deepEqual(await planned(), [['m:1', 1, 1], ['m:2', 1, 2], ['m:3', 1, 3], ['w~w1', 1, 4], ['w~w2', 1, 5]]);
   // Down on m keeps a request Python draws: the file between w's windows, the cards swapped as Down swaps them.
   moveCell(drawing, 'm', 1);
   assert.deepEqual(await requestOf(drawing), { verdict: 'drawn', records: [
     ['w', 'exactly_one', 1, null, [[1, 100, 1], [301, 400, 3]]], ['m', 'all', 1, 2, []]] });
+  assert.deepEqual(await planned(), [['w~w1', 1, 1], ['w~w2', 1, 5], ['m:1', 1, 2], ['m:2', 1, 3], ['m:3', 1, 4]]);
 });
 
 test('a card drawn in two windows with Draw this record off leaves a request Python draws (review case C)', async () => {

@@ -1870,21 +1870,31 @@ class InputPlace(NamedTuple):
     records: int
 
     @classmethod
+    def at(cls, row: int | None, column: int | None, window_columns: Sequence[int | None], records: int) -> InputPlace:
+        """The place of an input at ``row`` and ``column`` whose windows stand at ``window_columns`` (a record drawn
+        in one window stands at the input's column) and which draws ``records`` records."""
+
+        return cls(row, column, tuple(window_columns) if len(window_columns) > 1 else (), records)
+
+    @classmethod
     def of(cls, record_input: RecordInput, records: int) -> InputPlace:
         """The place of ``record_input``, which draws ``records`` records."""
 
-        windows = record_input.windows
-        return cls(
-            record_input.presentation.grid_row,
-            record_input.presentation.grid_column,
-            tuple(window.column for window in windows) if len(windows) > 1 else (),
-            records,
+        presentation = record_input.presentation
+        return cls.at(
+            presentation.grid_row, presentation.grid_column, [window.column for window in record_input.windows], records
         )
 
     def record_column(self, index: int) -> int | None:
         """The column of the input's record ``index`` (from 0, in file order)."""
 
         return None if self.column is None else self.column + index
+
+    def drawn_columns(self) -> tuple[int | None, ...]:
+        """The column of each record or window the input draws, in drawing order: its windows' columns when it draws
+        several, else one column per record (``record_column``)."""
+
+        return self.window_columns or tuple(self.record_column(index) for index in range(self.records))
 
 
 def numbered_places(places: Sequence[InputPlace]) -> tuple[InputPlace, ...]:
