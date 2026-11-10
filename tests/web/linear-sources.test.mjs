@@ -746,8 +746,11 @@ test('the banner shows each per-file warning of the searched pairs once, transla
   await setUiLocale('ja', async () => ({ default: { [GENOME_SCALE_WARNING_TEXT]: '{first} / {second}: per file' } }));
   try {
     const translated = [];
-    perFileWarningNotice((entry) => translated.push(entry.text))(warningOf(0, 1));
-    assert.deepEqual(translated, ['a.gb / b.gb: per file']);
+    const translatedNotice = perFileWarningNotice((entry) => translated.push(entry.text));
+    translatedNotice(warningOf(0, 1));
+    translatedNotice(warningOf(2, 2));
+    // Two warnings join with the locale's sentence separator (none in Japanese).
+    assert.deepEqual(translated, ['a.gb / b.gb: per file', 'a.gb / b.gb: per filec.gb / c.gb: per file']);
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }

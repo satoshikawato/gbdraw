@@ -13,7 +13,7 @@
 import { linearComparisonEdgeKey } from './linear-comparisons.js';
 import { linearSeqRecordKey } from './record-draw-selection.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { tm } from '../utils/i18n.js';
+import { sentenceSeparator, tm } from '../utils/i18n.js';
 
 const FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'planLinearUnits' });
 
@@ -203,7 +203,7 @@ export const perFileWarningNotice = (show) => {
     const text = tm(warning.text, { ...warning.params });
     if (shown.has(text)) return;
     shown.add(text);
-    show({ text: [...shown].join(' '), tone: 'warning' });
+    show({ text: [...shown].join(sentenceSeparator()), tone: 'warning' });
   };
 };
 
