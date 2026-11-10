@@ -225,9 +225,11 @@ write-up of a release.
   (Linear) after the features row was drawn inside or below it. Load now
   places each row on the side the CLI drew it. An Annotations row with no
   `side=` is read as outside (above), and a Linear features row with no
-  `side=` as below, as the CLI draws them. The Legend of such a Session lists
-  its entries as the CLI did: both now list them by side (OV-3079, OV-3155,
-  OV-3187).
+  `side=` as below, as the CLI draws them. Web Generate lists the Legend
+  entries of such a Session by side, as the CLI now does too (OV-3187); the
+  figure a gbdraw 0.14.5 or earlier CLI saved in it lists them in the order the
+  slots were written, so for a stack written out of side order the Legend order
+  changes at the first Generate (OV-3079, OV-3155).
 - Fixed: a foreground annotation overlay written before another slot of the
   same `z` that it covers (with `to_slot`, or with its own `w` or `h`) was
   painted under that slot, so a GC content or skew plot hid the highlight. An

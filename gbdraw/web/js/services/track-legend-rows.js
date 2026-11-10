@@ -1,8 +1,10 @@
 // @ts-check
 import {
-  GLOBAL_SUPPRESS_PARAM, circularTrackSlotHiddenBySuppressForm, normalizeCircularTrackSlot, normalizeNt, parseCircularTrackSlotSpec
+  GLOBAL_SUPPRESS_PARAM, circularTrackSlotHiddenBySuppressForm, effectiveSlotPlacement, normalizeCircularTrackSlot, normalizeNt,
+  parseCircularTrackSlotSpec
 } from './circular-track-slot-model.js';
-import { parseLinearTrackSlotSpecs } from './linear-track-slot-model.js';
+import { effectiveLinearSlotPlacement, parseLinearTrackSlotSpecs } from './linear-track-slot-model.js';
+import { stackTrackSlotsBySide } from './track-slot-validation.js';
 import { defaultDepthSeriesLabel } from './depth-track-state.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 import { samePaint } from '../utils/color-utils.js';
@@ -103,11 +105,12 @@ const isRecord = (value) => typeof value === 'object' && value !== null && !Arra
 
 /**
  * What the tracks read of the request that drew a Result, checked: its mode,
- * its dinucleotide and the slot entries of its mode (null: no explicit slots,
- * so Python draws the default tracks). Null for a value that is no such request.
+ * its dinucleotide, the slot entries of its mode (null: no explicit slots,
+ * so Python draws the default tracks) and whether it names the mode's Axis index.
+ * Null for a value that is no such request.
  * @param {unknown} request
  * @returns {{ mode: 'circular' | 'linear', defaultNt: string, entries: ReadonlyArray<string | Record<string, unknown>> | null,
- *   depth: DepthSeriesLabels } | null}
+ *   depth: DepthSeriesLabels, axisIndexed: boolean } | null}
  */
 const trackRequestView = (request) => {
   if (!isRecord(request)) return null;
@@ -122,7 +125,8 @@ const trackRequestView = (request) => {
   if (!Array.isArray(depthTracks) || !depthTracks.every(isRecord)) return null;
   const depth = depthTracks.map(({ label }, index) => (typeof label === 'string' && label
     ? label : defaultDepthSeriesLabel(index, depthTracks.length)));
-  return { mode, defaultNt: normalizeNt(dinucleotide), entries, depth };
+  const axisIndexed = (tracks?.[mode === 'linear' ? 'linearTrackAxisIndex' : 'circularTrackAxisIndex'] ?? null) !== null;
+  return { mode, defaultNt: normalizeNt(dinucleotide), entries, depth, axisIndexed };
 };
 
 /** @type {Readonly<Record<DrawnTrack['kind'], number>>} The order of a Linear request's rows by kind. */
@@ -131,7 +135,7 @@ const LINEAR_KIND_ORDER = Object.freeze({ content: 0, depth: 1, skew: 2 });
 /**
  * The content, skew and Depth tracks drawn from track slots, in Python's
  * order: Circular in slot order, Linear content rows, then Depth rows, then
- * skew rows. A Depth slot draws the series of its `track_index`, if the
+ * skew rows. `slots` are in the Legend's order (`entrySlots` with `bySide`). A Depth slot draws the series of its `track_index`, if the
  * request has it. Without slots, each mode draws each Depth series under its
  * label (Linear through `default_linear_track_slots`).
  * @param {'circular' | 'linear'} mode
@@ -178,7 +182,7 @@ export const drawnTracks = (request) => {
   const view = trackRequestView(request);
   if (!view) return [];
   try {
-    const slots = view.entries ? entrySlots(view.mode, view.defaultNt, view.entries) : null;
+    const slots = view.entries ? entrySlots(view.mode, view.defaultNt, view.entries, !view.axisIndexed) : null;
     return view.entries && !slots ? [] : slotTracks(view.mode, view.defaultNt, slots, view.depth);
   } catch {
     return [];
@@ -187,15 +191,22 @@ export const drawnTracks = (request) => {
 /**
  * A request's slot entries, each read by the slot parsers, in entry order; null when the Linear parser
  * drops an entry, so no slot is read under another entry's place. The parsers throw for an entry they reject.
+ * With `bySide` (a request that names no Axis index, as the CLI and the Python API write), the slots come in the
+ * order Python's Legend lists them, by side (`legend_slot_sources` in gbdraw/legend/sources.py): the order Load
+ * gives the Web stack of such a request (`stackTrackSlotsBySide`), so a track takes the numbered key of its place.
  * @param {'circular' | 'linear'} mode @param {string} defaultNt @param {ReadonlyArray<string | Record<string, unknown>>} entries
+ * @param {boolean} [bySide]
  * @returns {readonly TrackRowSlot[] | null}
  */
-const entrySlots = (mode, defaultNt, entries) => {
-  const slots = mode === 'linear'
-    ? parseLinearTrackSlotSpecs(entries, defaultNt)
-    : entries.map((entry, index) => (typeof entry === 'string'
-        ? parseCircularTrackSlotSpec(entry, index, defaultNt) : normalizeCircularTrackSlot(entry, index, defaultNt)));
-  return slots.length === entries.length ? slots : null;
+const entrySlots = (mode, defaultNt, entries, bySide = false) => {
+  if (mode === 'linear') {
+    const slots = parseLinearTrackSlotSpecs(entries, defaultNt);
+    if (slots.length !== entries.length) return null;
+    return bySide ? stackTrackSlotsBySide(slots, effectiveLinearSlotPlacement, 'above').slots : slots;
+  }
+  const slots = entries.map((entry, index) => (typeof entry === 'string'
+    ? parseCircularTrackSlotSpec(entry, index, defaultNt) : normalizeCircularTrackSlot(entry, index, defaultNt)));
+  return bySide ? stackTrackSlotsBySide(slots, (slot) => effectiveSlotPlacement(slot), 'outside').slots : slots;
 };
 /**
  * The explicit track slots of the request that drew a Result, as the slot
