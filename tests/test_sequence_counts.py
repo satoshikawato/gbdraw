@@ -183,3 +183,27 @@ def test_every_byte_counts_as_the_counting_rule_says() -> None:
     every = np.frombuffer(bytes(range(256)) * 3, dtype=np.uint8)
     positions = np.arange(0, len(every) + 1, dtype=np.intp)
     assert base_counts.known_prefix_counts(every.tobytes(), positions).tolist() == _oracle(every.tobytes(), positions)
+
+
+def test_a_render_reads_a_file_record_s_bases_once_after_its_parse_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The letter check, the definition's GC % and the GC/skew windows read the parse pass's counts; the one whole
+    read left is the record's content digest. Window edges read their own rows, each once, so at most one more read
+    of the bases however dense the windows (dev read this record six times whole)."""
+
+    from tests.utils.cli_in_process import run_gbdraw
+
+    bases = _random_bases(11, 1_200_000, b"ACGTNacgt")
+    path = _fasta(tmp_path / "g.fasta", bases, width=80)
+    whole: list[int] = []
+    edges: list[int] = []
+    read, row_bases = record_sequences.RecordSequence._read, record_sequences._SequenceTable._row_bases
+    monkeypatch.setattr(record_sequences.RecordSequence, "_read",
+                        lambda self, start, stop: whole.append(stop - start) or read(self, start, stop))
+    monkeypatch.setattr(record_sequences._SequenceTable, "_row_bases",
+                        lambda self, row: edges.append(len(data := row_bases(self, row))) or data)
+    result = run_gbdraw(["circular", "--fasta", str(path), "-o", str(tmp_path / "out"), "-f", "svg"], cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert sum(whole) == len(bases)
+    assert sum(edges) <= len(bases)
