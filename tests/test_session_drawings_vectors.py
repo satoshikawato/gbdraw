@@ -169,6 +169,24 @@ def test_other_mode_settings_count_only_when_they_differ_from_its_default_and_th
     assert _ids(data) == ["circular", "linear"]
 
 
+def test_an_other_mode_holding_the_colors_of_the_default_palette_before_ov_3114_is_not_used() -> None:
+    # 0.14.5 and earlier wrote repeat_region, misc_feature and default as one
+    # gray (#d3d3d3) in the default palette; the file now tells them apart.
+    data = _settings_only_v48()
+    earlier = {
+        "CDS": "#54bcf8", "rRNA": "#71ee7d", "tRNA": "#e8b441", "tmRNA": "#ded44e", "ncRNA": "#c4fac3",
+        "repeat_region": "#d3d3d3", "misc_feature": "#d3d3d3", "default": "#d3d3d3",
+        "skew_high": "#6dded3", "skew_low": "#ad72e3", "gc_content": "#a1a1a1",
+        "pairwise_match": "#d3d3d3", "pairwise_match_min": "#FFE7E7", "pairwise_match_max": "#FF7272",
+        "collinear_block_plus_min": "#f0f1f5", "collinear_block_plus": "#8b9cc1",
+        "collinear_block_minus_min": "#FFE7E7", "collinear_block_minus": "#E15759",
+    }
+    _slices(data)["linear"]["config"]["colors"] = earlier
+    assert _ids(data) == ["circular"]
+    _slices(data)["linear"]["config"]["colors"] = {**earlier, "default": "#123456"}
+    assert _ids(data) == ["circular", "linear"]
+
+
 def test_an_other_mode_holding_the_default_depth_series_is_not_used_when_the_shown_mode_has_two() -> None:
     # OV-1901 (D-15-122): 0.14.0 wrote one default Depth series in every mode,
     # so rule d sees it as the mode's default (session-drawings-upgrade.test.mjs).

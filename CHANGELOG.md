@@ -393,6 +393,16 @@ write-up of a release.
   with `--conservation_colors '#6e91b7' '#f4a251' '#8fc4c0' '#e67577'
   '#c6bebb' '#77b26f' '#be92b2' '#f0d369' '#ae8e7c' '#ffafb7'`, repeating
   from ring 11 (PD-OI-110 scenario revision 3).
+- Fixed: in 53 of the 55 packaged palettes, `repeat_region`, `misc_feature` and the
+  color of every type the palette does not list (`default`, which is also the color
+  of `ncRNA` in 48 of them) were one gray or one color, so a Legend showed
+  several rows with the same swatch and the map did not tell them apart. In each of
+  those palettes `misc_feature` is now a sand tone and the unlisted types a
+  blue-gray tone derived from the palette's own `repeat_region` color, which is
+  unchanged (`default`: `#e3cfab` and `#aebccb`). `earthtones` and `psyche` already
+  differed. A figure draws the new colors where it has a `misc_feature` or an
+  unlisted type such as `ncRNA`; every other figure is unchanged. A test now
+  requires the three to differ in every palette (OV-3114).
 - Fixed: a Circular Legend on the left or right centred the feature rows and
   the whole block of similarity rings and gradient bars each on its own, with
   the ring names at that block's left edge, so the blocks sat apart. Every

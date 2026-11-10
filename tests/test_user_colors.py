@@ -364,6 +364,21 @@ def test_every_built_in_palette_passes() -> None:
         )
 
 
+def test_every_built_in_palette_tells_repeats_misc_features_and_other_types_apart() -> None:
+    # OV-3114: repeat_region, misc_feature and ``default`` (the color of every
+    # type the palette does not list, ncRNA in most palettes) were one grey.
+    palettes = color_io.tomllib.loads(
+        (REPO / "gbdraw" / "data" / "color_palettes.toml").read_text(encoding="utf-8")
+    )
+    same = {
+        palette: [colors["repeat_region"], colors["misc_feature"], colors["default"]]
+        for palette, colors in palettes.items()
+        if isinstance(colors, dict)
+        and len({colors["repeat_region"].lower(), colors["misc_feature"].lower(), colors["default"].lower()}) < 3
+    }
+    assert same == {}
+
+
 @pytest.mark.parametrize("session_path", GALLERY_SESSIONS, ids=lambda path: path.name)
 def test_every_gallery_session_passes_request_preparation(session_path: Path) -> None:
     # Decode and input preparation only: the render-time checks (depth, skew
