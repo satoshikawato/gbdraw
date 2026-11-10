@@ -421,7 +421,7 @@ test('shared LOSAT job plan and nucleotide raw-key vectors', async () => {
     // The args Generate builds for one record pair (`buildLosatArgs` of run-analysis.js), without a genome pair.
     const buildArgs = (query, subject) => nucleotideLosatArgs({
       program: vector.program, task: vector.task, searchSpace: null,
-      queryGencode: vector.records[query].gencode, dbGencode: vector.records[subject].gencode
+      gencodes: () => [vector.records[query].gencode, vector.records[subject].gencode]
     });
     const specs = vector.specs.map(([queryIndex, subjectIndex]) => ({ queryIndex, subjectIndex }));
     const plan = await prepareLosatSourceBatches({
@@ -681,7 +681,7 @@ test('the Web passes the E-value scale Python plans, as the command line does', 
     const args = vector.expected.args.map(([query, subject]) => [query, subject, vector.program === 'blastp'
       ? proteinLosatArgs({ pairwise: vector.mode === 'pairwise', candidateLimit: vector.candidateLimit, databaseSize: scaleOf(query, subject) })
       : nucleotideLosatArgs({
-        program: vector.program, task: vector.task, queryGencode: null, dbGencode: null, searchSpace: scaleOf(query, subject)
+        program: vector.program, task: vector.task, gencodes: () => [null, null], searchSpace: scaleOf(query, subject)
       })]);
     assert.deepEqual(args, vector.expected.args, vector.name);
   }
@@ -762,7 +762,7 @@ test('a search space past what a number holds exactly reaches the args unchanged
   const space = String(120000000n * 95000000n);
   assert.ok(BigInt(space) > BigInt(Number.MAX_SAFE_INTEGER));
   const { scaleOf } = readGenomeScales({ recordKeys: ['a', 'b'], scales: [[null, space], [space, null]], warnings: [] }, ['a', 'b']);
-  const args = nucleotideLosatArgs({ program: 'blastn', task: 'megablast', queryGencode: null, dbGencode: null, searchSpace: scaleOf(0, 1) });
+  const args = nucleotideLosatArgs({ program: 'blastn', task: 'megablast', gencodes: () => [null, null], searchSpace: scaleOf(0, 1) });
   assert.deepEqual(args, ['--task', 'megablast', '--searchsp', '11400000000000000']);
 });
 
@@ -776,7 +776,7 @@ test('an OFF record joins a subject database under the args of the drawn subject
     { uid: 's2-off', gb: b, gff: null, fasta: null }
   ];
   const buildArgs = (query, subject, drawnSubject = subject) => nucleotideLosatArgs({
-    program: 'blastn', task: 'megablast', queryGencode: null, dbGencode: null,
+    program: 'blastn', task: 'megablast', gencodes: () => [null, null],
     searchSpace: drawnSubject === 1 ? 600 : null
   });
   const { jobs } = planLosatSourceJobs({ sequences, specs: [{ queryIndex: 0, subjectIndex: 1 }], buildArgs, drawnCount: 2 });

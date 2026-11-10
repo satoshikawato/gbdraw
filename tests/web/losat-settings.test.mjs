@@ -210,6 +210,25 @@ assert.equal(offSettings.losatEstimatedJobCount.value, 4, 'two drawn records: tw
 offState.recordsOff = [];
 assert.equal(offSettings.losatEstimatedJobCount.value, 9);
 
+// OV-3326 review B-2: LOSATN reads no genetic code, so a TLOSATX Gencode left on a card (hidden under LOSATN) changes
+// no LOSATN estimate; a TLOSATX one splits its records' batches, a code LOSAT does not read too (Generate refuses it).
+const gencodeState = {
+  linearSeqs: Array.from({ length: 3 }, (_, index) => ({ uid: `record-${index}`, windows: [], losat_gencode: index === 1 ? 7 : null })),
+  linearComparisonResolution: resolved({ sources: ['losat', 'losat'] }),
+  losatExecution: { totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined },
+  losat: { blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', collinearSearchScope: 'all' } },
+  losatProgram: { value: 'blastn' }
+};
+const gencodeSettings = createLosatSettings({ state: withDrawings(gencodeState) });
+const losatnJobs = gencodeSettings.losatEstimatedJobCount.value;
+assert.ok(losatnJobs > 0, 'LOSATN counts its searches with a TLOSATX Gencode 7 left on a card');
+gencodeState.linearSeqs[1].losat_gencode = null;
+assert.equal(gencodeSettings.losatEstimatedJobCount.value, losatnJobs);
+gencodeState.losatProgram.value = 'tblastx';
+const tlosatxJobs = gencodeSettings.losatEstimatedJobCount.value;
+gencodeState.linearSeqs[1].losat_gencode = 7;
+assert.ok(gencodeSettings.losatEstimatedJobCount.value >= tlosatxJobs, 'TLOSATX counts a typed code it does not read');
+
 console.log('losat-settings tests passed');
 
 const inputFiles = createTestInputStore();

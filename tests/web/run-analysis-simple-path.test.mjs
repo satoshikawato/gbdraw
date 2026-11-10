@@ -2957,6 +2957,57 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     downloadedFilename = '';
     await runner.downloadLosatPair(state.activeDrawing(), wholeFilePair, '');
     assert.equal(downloadedFilename, 'seq_2.P3.losatn.tsv');
+    // #1911 review N1: a window pair whose card pair has a typed name downloads under that name without reading every
+    // card, though neither the window pair nor its row has a name of its own.
+    const windowRow = pairRows.find(({ filename }) => filename === 'P1.seq_2.losatn.w1.tsv');
+    state.activeDrawing().linearComparisonPlan.edges.push({
+      id: 'typed-card-pair', queryUid: 'pair-1', subjectUid: 'pair-2', included: true, source: 'losat', file: null,
+      fileActive: false, losatFilename: 'typed.tsv', losatFilenameActive: true
+    });
+    state.losatCacheInfo.value = pairRows.map((row) => (row === windowRow ? { ...row, filename: '' } : row));
+    // The drawn Result's units, as Python's catalog names them: the two windows of pair-1, then pair-2 and pair-3.
+    const shownCatalog = state.featureCatalog.value;
+    state.featureCatalog.value = { ...shownCatalog, items: [{ ...shownCatalog.items[0],
+      recordKeys: ['pair-1~w1', 'pair-1~w2', 'pair-2', 'pair-3'], windowOf: { 'pair-1~w1': 'pair-1', 'pair-1~w2': 'pair-1' } }] };
+    unreadCards.add('pair-3');
+    downloadedFilename = '';
+    await runner.downloadLosatPair(state.activeDrawing(), windowRow.edgeKey, '');
+    assert.ok(unreadCards.has('pair-3'), 'a typed card pair name needs no read of the cards');
+    assert.equal(downloadedFilename, runner.getLosatPairDefaultName(state.activeDrawing(), windowRow.edgeKey));
+    assert.match(downloadedFilename, /^typed/);
+    state.featureCatalog.value = shownCatalog;
+
+    // OV-3326: a TLOSATX Gencode that is not an NCBI table LOSAT reads stops Generate before any search, and the
+    // Generation Error panel names the card, its field and the tables.
+    let searches = 0;
+    globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => {
+      searches += jobs.length;
+      return jobs.map((job) => ({ cacheKey: job.cacheKey, text: '' }));
+    };
+    state.activeDrawing().losatProgram.value = 'tblastx';
+    state.losatCache.value = new Map();
+    state.activeDrawing().linearSeqs[2].losat_gencode = 7;
+    assert.equal((await runner.runAnalysis(resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
+      losatProgram: 'tblastx', blastpMode: state.activeDrawing().losat.blastp.mode
+    }))).status, 'error');
+    assert.equal(searches, 0);
+    assert.equal(state.errorLog.value?.code, 'COMPARISON_INPUT');
+    assert.match(state.errorLog.value?.summary, /Sequence 3\. Field: LOSAT Gencode\./);
+    assert.match(state.errorLog.value?.summary, /Genetic codes LOSAT reads: 1–6, 9–16, 21–33\./);
+    // The refusal leads to its cause only: no Retry, which refuses the same code again (OV-3317 rule).
+    assert.deepEqual(state.errorLog.value?.actions, ['edit-comparison']);
+    // Review B-2: LOSATN reads no genetic code, so the Gencode 7 left on the card (hidden under LOSATN) refuses nothing.
+    state.activeDrawing().losatProgram.value = 'blastn';
+    state.errorLog.value = null;
+    await runner.runAnalysis(resolveLinearComparisonPlan({
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
+      losatProgram: 'blastn', blastpMode: state.activeDrawing().losat.blastp.mode
+    }));
+    assert.notEqual(state.errorLog.value?.code, 'COMPARISON_INPUT', state.errorLog.value?.summary);
+    assert.ok(searches > 0, 'LOSATN searches');
+    state.activeDrawing().linearSeqs[2].losat_gencode = 1;
+    state.errorLog.value = null;
   } finally {
     state.similarityAlignmentPlan.value = null;
     state.linearRecordTranslations.value = [];

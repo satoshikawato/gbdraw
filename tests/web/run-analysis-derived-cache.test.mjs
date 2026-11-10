@@ -298,4 +298,7 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
   assert.equal(reuse([1, 2, 3]), true, 'the same rows reuse');
   assert.equal(reuse([1, 2, 2]), false, 'C moved into row 2 joins B\'s genome: the stored search had no --dbsize');
   assert.equal(reuse([null, null, null]), false, 'rows turned off write no grid rows');
+  // OV-3318: every file stays its own genome, but the adjacent rows pair C with A, which the stored results never
+  // searched; reuse would draw no C-A ribbons (a Session saved after the reorder without Generate, then loaded).
+  assert.equal(reuse([2, 3, 1]), false, 'a reorder that keeps every genome still pairs other records');
 }

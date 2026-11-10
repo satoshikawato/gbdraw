@@ -21,7 +21,7 @@ input comparison protein_blastp_max_hits orthogroup_member_max_hits bitscore eva
 losatp_max_hits losatp_max_target_seqs losatp_member_max_hits losatp_mode losatn_task record_gencodes
 losat losat_search program pairs source losat_gencode comparison_sequence comparison_sequence_source comparison_fasta
 conservation_blast_files conservation_dataframes conservation_reference conservation_sequence_files
-conservation_labels conservation_colors conservation_losat_gencodes conservation_search_results
+conservation_labels conservation_colors conservation_losat_gencodes conservation_search_results reference_gencode
 alignment_length wrap_length anchor_feature collinear_min_anchors collinear_max_gene_gap collinear_block_merge_gap
 collinear_singleton_merge_gap collinear_max_diagonal_drift collinear_gap_penalty
 collinear_nearby_duplicate_window collinear_constant_anchor_score collinear_infer_orthogroups
@@ -123,6 +123,9 @@ const REASONS = Object.freeze({
   UNIQUE_IDS: 'Use distinct record or protein identifiers.', MATCH_IDS: 'Use matching protein FASTA and metadata identifiers.',
   SEARCH_FRAME: 'Use comparison coordinates within the selected and cropped record, counted on its source strand.',
   LOSAT_OPTION_PROGRAM: 'Use only the options of the selected LOSAT program.',
+  // A TLOSATX genetic code that is not an NCBI table LOSAT reads (gbdraw/api/options.py, services/linear-sources.js
+  // `requireLosatGeneticCode`); `geneticCodes` lists the tables (PHRASES.geneticCodes).
+  GENETIC_CODE: 'Use the number of an NCBI genetic code that LOSAT reads.',
   LOSAT_PLAN: 'Choose record pairs that the LOSAT search can run: two or more records, LOSAT rows only with a LOSAT program, and LOSATP Pairwise for selected pairs.',
   // A Selected plan with a LOSATP mode that compares every adjacent pair.
   SELECTED_PAIRS_NEED_PAIRWISE: 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs. Choose Run LOSAT for all adjacent pairs, or choose Pairwise matches.',
@@ -324,6 +327,7 @@ const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Pairwise display 
   losatp_max_hits: 'Pairwise display max hits', losatp_max_target_seqs: 'LOSATP Max target seqs',
   losatp_member_max_hits: 'Max hits per protein for groups',
   output_prefix: 'Output Prefix',
+  losat_gencode: 'LOSAT Gencode', conservation_losat_gencodes: 'Comparison gencode', reference_gencode: 'Reference gencode',
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
   depth_window: 'Depth Window', depth_step: 'Depth Step', dinucleotide: 'Dinucleotide',
@@ -353,6 +357,8 @@ NotImplementedError RecursionError RuntimeError TypeError UnboundLocalError Name
 // Locators shown in the summary; indexes are zero-based, ordinals one-based.
 /** @type {Readonly<Record<string, string>>} */
 const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result {n}.', COMPARISON_INPUT: 'Comparison sequence {n}.' });
+// Fields whose ordinal counts the Linear cards (PHRASES.sequence), not comparison sequences: a card's LOSAT Gencode.
+const CARD_ORDINAL_FIELDS = new Set(['losat_gencode']);
 // The tables a Session stores as text resources, as the documentation names them.
 /** @type {Readonly<Record<string, string>>} */
 export const SESSION_TABLE_LABELS = Object.freeze({ 'default-colors': 'Default colors', 'specific-colors': 'Specific colors',
@@ -413,6 +419,8 @@ const PHRASES = Object.freeze({
   // LOSAT_RUNTIME of a LOSAT run that exited with an error (services/losat-runtime.js `losatRunFailure`): LOSAT's
   // own first error line, shown as written (`shownLosatMessage`).
   losatReported: 'LOSAT reported: {message}',
+  // GENETIC_CODE: the NCBI tables LOSAT reads, as Python names them (`LOSAT_GENETIC_CODE_TEXT`).
+  geneticCodes: 'Genetic codes LOSAT reads: {codes}.',
   // The first sentence of a LOSAT failure that repeats (`losatFailureRepeats`) on Generate, in place of the code's
   // message and the reason's sentence: the one action leads to the comparison settings, never to Retry (OV-3317).
   losatRefused: 'LOSAT stopped the comparison search. Generating again with the same settings and inputs stops the same way; change what LOSAT names below, then Generate again.',
@@ -573,6 +581,8 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [sessionVersion] The version of a Session file this app does not read.
  * @property {number} [latestSessionVersion] The newest Session version this app reads.
  * @property {string} [readSessionVersions] The Session versions this app reads, as words ("27–33, 39–42, and 44").
+ * @property {string} [geneticCodes] The NCBI genetic codes LOSAT reads, as Python names them ("1–6, 9–16, 21–33").
+ * @property {string} [cardUid] The Linear card whose LOSAT Gencode was refused, whose input "Show in Comparison" focuses.
  * @property {number} [sessionBytes] The size in bytes of a Session that Save refused: its expanded size, or its gzip file's with `sessionSizeKind`.
  * @property {number} [sessionByteLimit] The size in bytes that Load opens at most.
  * @property {'file'} [sessionSizeKind] Set when the two sizes are those of the gzip file, not of its expanded JSON.
@@ -846,6 +856,8 @@ const contextFor = (value) => {
   if (typeof value.sessionTable === 'string' && Object.hasOwn(SESSION_TABLE_LABELS, value.sessionTable)) context.sessionTable = value.sessionTable;
   if (Number.isSafeInteger(value.sessionVersion)) context.sessionVersion = value.sessionVersion;
   if (Number.isSafeInteger(value.latestSessionVersion)) context.latestSessionVersion = value.latestSessionVersion;
+  if (typeof value.geneticCodes === 'string' && /^[0-9\u2013, ]{1,80}$/.test(value.geneticCodes)) context.geneticCodes = value.geneticCodes;
+  if (typeof value.cardUid === 'string' && /^[A-Za-z0-9_.:~-]{1,128}$/.test(value.cardUid)) context.cardUid = value.cardUid;
   if (typeof value.readSessionVersions === 'string' && /^[0-9\u2013, and]{1,200}$/.test(value.readSessionVersions)) {
     context.readSessionVersions = value.readSessionVersions;
   }
@@ -1009,6 +1021,24 @@ export const losatFailureRepeats = (error) => error.code === 'LOSAT_RUNTIME'
   && (error.context.losatMessage !== undefined || error.context.reason === 'TRAP');
 
 /**
+ * The sentence that lists the genetic codes LOSAT reads, as a refused code's Generation Error says it: a Linear card
+ * marks a typed code LOSAT does not read with it before Generate (OV-3326).
+ * @param {string} codes The tables as Python names them (`LOSAT_GENETIC_CODE_TEXT`).
+ * @returns {ErrorTextPart[]}
+ */
+export const losatGeneticCodeHint = (codes) => [{ text: PHRASES.geneticCodes, params: { codes } }];
+
+/**
+ * Whether the same Generate would stop on the same comparison setting again: a LOSAT failure that repeats
+ * (`losatFailureRepeats`), or a TLOSATX genetic code LOSAT does not read (OV-3326). The failure offers the comparison
+ * settings and never Retry, in both modes.
+ * @param {{ code: string, context: UserFacingContext }} error
+ * @returns {boolean}
+ */
+export const comparisonCauseRepeats = (error) => losatFailureRepeats(error)
+  || (error.code === 'COMPARISON_INPUT' && error.context.reason === 'GENETIC_CODE');
+
+/**
  * The first sentence of a failure: the code's message for its operation where the code's own names a step that
  * operation does not have (`OPERATION_MESSAGES`), else for a threaded trap or a LOSAT failure that repeats the sentence
  * that says so, which also stands for the reason's sentence (`coversReason`), else the code's message.
@@ -1062,7 +1092,7 @@ export const normalizeUserFacingError = (value, {
     .filter(Boolean).join(', ');
   const { queryRecordIndex, subjectRecordIndex, labelFitCounts, labelCapacityOuter, labelCapacityInner, exceptionType } = result.context;
   const { sessionBytes, sessionByteLimit, sessionSizeKind, largestInputs, inputName, losatMessage } = result.context;
-  const { limit, width, height, rowLength, dpi } = result.context;
+  const { limit, width, height, rowLength, dpi, geneticCodes } = result.context;
   const exportSize = (reason === 'PNG_SIZE' || reason === 'PDF_SIZE') && limit !== undefined && width !== undefined
     && height !== undefined && { text: reason === 'PNG_SIZE' ? PHRASES.exportSizePx : PHRASES.exportSizePt,
     params: { limit: grouped(limit), width: grouped(width), height: grouped(height) } };
@@ -1083,7 +1113,7 @@ export const normalizeUserFacingError = (value, {
     saveOverCap && { text: PHRASES.sessionSaveRemedy },
     diagramMode !== undefined && { text: diagramMode === 'linear' ? PHRASES.diagramLinear : PHRASES.diagramCircular },
     sessionTable !== undefined && { text: PHRASES.sessionTable, params: { table: { text: SESSION_TABLE_LABELS[sessionTable] } } },
-    inputOrdinal !== undefined && { text: ORDINAL_LABELS[result.code] || PHRASES.sequence, params: { n: inputOrdinal } },
+    inputOrdinal !== undefined && { text: (!CARD_ORDINAL_FIELDS.has(field ?? '') && ORDINAL_LABELS[result.code]) || PHRASES.sequence, params: { n: inputOrdinal } },
     // A comparison pair as the comparison panel numbers it (#1 to #2).
     queryRecordIndex !== undefined && subjectRecordIndex !== undefined
       && { text: PHRASES.pair, params: { query: queryRecordIndex + 1, subject: subjectRecordIndex + 1 } },
@@ -1108,6 +1138,7 @@ export const normalizeUserFacingError = (value, {
     !lead.coversReason && (sessionVersionGuidance(result.context) || (figureSizeSentences.length > 0 ? null
       : (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null))),
     losatMessage !== undefined && { text: PHRASES.losatReported, params: { message: shownLosatMessage(losatMessage) } },
+    reason === 'GENETIC_CODE' && geneticCodes !== undefined && { text: PHRASES.geneticCodes, params: { codes: geneticCodes } },
     reason === 'NOT_NUCLEOTIDE' && letter && { text: PHRASES.letter, params: { letter } },
     reason === 'NOT_SEQUENCE' && letter && { text: PHRASES.queryLetter, params: { letter } },
     innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },
@@ -1138,7 +1169,7 @@ export const normalizeUserFacingError = (value, {
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
   // A table stored in a Session is corrected in the Session file, not in this page.
   result.actions = sessionTable !== undefined || saveOverCap ? ['select-input']
-    : losatFailureRepeats(result) ? ['edit-comparison']
+    : comparisonCauseRepeats(result) ? ['edit-comparison']
     : [...(reason !== undefined && Object.hasOwn(REASON_ACTIONS, reason) ? REASON_ACTIONS[reason] : actions)];
   return result;
 };

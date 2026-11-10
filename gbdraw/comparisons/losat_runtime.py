@@ -96,6 +96,26 @@ LOSAT_OPTION_FLAGS: Mapping[str, LosatOptionFlags] = MappingProxyType(
         "dbsize": LosatOptionFlags("-dbsize", "--dbsize"),
     }
 )
+# The genetic codes a TLOSATX search translates with: the NCBI tables (NCBI gc.prt) that LOSAT reads (``TABLES`` in
+# LOSAT's src/utils/genetic_code.rs; Biopython's ``CodonTable`` lists the same ids). LOSAT stops with a trap on any
+# other code, so gbdraw refuses one before any search (OV-3326). The Web reads both values from
+# js/contracts/schema.generated.js.
+LOSAT_GENETIC_CODES: frozenset[int] = frozenset((*range(1, 7), *range(9, 17), *range(21, 34)))
+
+
+def _code_ranges(codes: frozenset[int]) -> str:
+    runs: list[list[int]] = []
+    for code in sorted(codes):
+        if runs and code == runs[-1][-1] + 1:
+            runs[-1].append(code)
+        else:
+            runs.append([code])
+    return ", ".join(f"{run[0]}\u2013{run[-1]}" if len(run) > 1 else str(run[0]) for run in runs)
+
+
+# The tables of :data:`LOSAT_GENETIC_CODES` as a refusal names them (``1–6, 9–16, 21–33``).
+LOSAT_GENETIC_CODE_TEXT = _code_ranges(LOSAT_GENETIC_CODES)
+
 # The option that scales a comparison program's E-values by its genomes, not by the sequences a search reads
 # (OV-3143): the first of these a program takes.
 GENOME_SCALE_OPTIONS: tuple[str, ...] = ("searchsp", "dbsize")
@@ -921,6 +941,8 @@ __all__ = [
     "COMPARISON_LOSAT_PROGRAMS",
     "DEFAULT_LOSATN_TASK",
     "LOSAT_BIN_OPTION",
+    "LOSAT_GENETIC_CODE_TEXT",
+    "LOSAT_GENETIC_CODES",
     "LOSAT_OPTION_FLAGS",
     "LOSAT_PROGRAMS",
     "LosatCacheWrite",

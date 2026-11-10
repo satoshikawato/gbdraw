@@ -19,7 +19,9 @@ import { linearRecordNames } from '../services/linear-sources.js';
 import { catalogUnitPlaces, isDrawnWindowPairRow, linearWindowPairsByCardEdge } from '../services/linear-units.js';
 import { losatRowsOfDrawing } from '../services/losat-cache.js';
 import { inputSourceFiles } from '../services/input-types.js';
-import { diagnosticError, losatFailureRepeats, normalizeUserFacingError } from '../utils/error-normalization.js';
+import {
+  comparisonCauseRepeats, diagnosticError, losatFailureRepeats, normalizeUserFacingError
+} from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 import { t } from '../utils/i18n.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
@@ -287,17 +289,20 @@ export const createLinearComparisonFocus = ({ state, mode, errorLog, linearCompa
 
   // Whether the Generate error offers "Show in Comparison": in Linear for
   // every error that leads to the comparison settings; in Circular, whose
-  // comparison rings have no issue list, for a LOSAT failure that repeats
-  // (OV-3317, OV-3327), whose options and inputs are in Pairwise Comparisons.
+  // comparison rings have no issue list, for a comparison setting the same
+  // Generate stops on again (a LOSAT failure that repeats, OV-3317, OV-3327,
+  // or a genetic code LOSAT does not read, OV-3326), whose options and
+  // inputs are in Pairwise Comparisons.
   const comparisonCauseShown = computed(() => {
     const error = normalizeUserFacingError(errorLog.value);
-    return Boolean(error?.actions.includes('edit-comparison')) && (mode.value === 'linear' || (error !== null && losatFailureRepeats(error)));
+    return Boolean(error?.actions.includes('edit-comparison')) && (mode.value === 'linear' || (error !== null && comparisonCauseRepeats(error)));
   });
   // The Generate error's "Show in Comparison": in Circular, the Pairwise
-  // Comparisons section; in Linear, the first issue's control, the LOSAT mode
-  // when the same search would stop the same way, the Execution setting for
-  // another LOSAT runtime failure, or the Comparison card when the cause has
-  // no control.
+  // Comparisons section; in Linear, the refused card's LOSAT Gencode, found
+  // by the card's identity (OV-3326), the first issue's control, the LOSAT
+  // mode when the same search would stop the same way, the Execution setting
+  // for another LOSAT runtime failure, or the Comparison card when the cause
+  // has no control.
   const showComparisonCause = async () => {
     if (mode.value !== 'linear') {
       await revealSettingsSection('pairwise-comparisons');
@@ -305,6 +310,14 @@ export const createLinearComparisonFocus = ({ state, mode, errorLog, linearCompa
     }
     const error = normalizeUserFacingError(errorLog.value);
     const code = error?.code;
+    const cardUid = error?.context.reason === 'GENETIC_CODE' ? error.context.cardUid : undefined;
+    const gencodeInput = cardUid === undefined ? undefined
+      : /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-linear-gencode-input]')])
+        .find((element) => element.dataset.linearGencodeInput === cardUid);
+    if (gencodeInput) {
+      await revealSetting(gencodeInput);
+      return;
+    }
     const runtimeCause = error && losatFailureRepeats(error) ? { disclosureKey: 'settings', focusTargetKey: 'losat-options' }
       : code === 'LOSAT_THREADING_UNAVAILABLE' || code === 'LOSAT_RUNTIME'
         ? { disclosureKey: 'settings', focusTargetKey: 'losat-execution' } : null;

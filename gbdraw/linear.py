@@ -156,7 +156,7 @@ from .cli_utils.losat_output import (
 )
 from .comparisons.identity_scale import LINEAR_IDENTITY_SCALE_PATH
 from .comparisons.losat_jobs import losat_entry_filename, losat_pair_filename, unique_losat_filenames
-from .comparisons.losat_runtime import COMPARISON_LOSAT_PROGRAMS, NUCLEOTIDE_LOSAT_PROGRAMS
+from .comparisons.losat_runtime import COMPARISON_LOSAT_PROGRAMS, LOSAT_GENETIC_CODE_TEXT, NUCLEOTIDE_LOSAT_PROGRAMS
 from .core.numeric import (
     argparse_float,
     argparse_integer,
@@ -402,7 +402,8 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help=(
             'TLOSATX genetic code with --losat tlosatx: one for every record or one '
             'per record input; the records table losat_gencode column sets it per '
-            'row (default: the runtime default, 1).'
+            f'row. LOSAT reads the NCBI tables {LOSAT_GENETIC_CODE_TEXT} '
+            '(default: the runtime default, 1).'
         ),
     )
     runtime_group = parser.add_mutually_exclusive_group()
@@ -1426,13 +1427,16 @@ def _cli_losat_search(
         )
     except ValidationError as exc:
         diagnostic = exc.diagnostic or {}
-        flag = _CLI_LOSAT_FIELD_FLAGS.get(str(diagnostic.get("field")))
-        if diagnostic.get("reason") != "LOSAT_OPTION_PROGRAM" or flag is None:
+        field = str(diagnostic.get("field"))
+        flag = _CLI_LOSAT_FIELD_FLAGS.get(field)
+        if flag is None or diagnostic.get("reason") not in {"LOSAT_OPTION_PROGRAM", "GENETIC_CODE"}:
             raise
-        raise ValidationError(
-            f"{flag} does not apply to --losat {args.losat}.",
-            diagnostic=diagnostic,
-        ) from exc
+        message = (
+            f"{flag} does not apply to --losat {args.losat}."
+            if diagnostic.get("reason") == "LOSAT_OPTION_PROGRAM"
+            else str(exc).replace(field, flag, 1)
+        )
+        raise ValidationError(message, diagnostic=diagnostic) from exc
 
 
 def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:

@@ -144,8 +144,10 @@ import {
   getLinearSourceDefaultSubtitle,
   setLinearSourceDefaultSubtitle,
   resolveLinearRecordEffectiveDefinition,
-  resolveLinearRecordEffectiveSubtitle
+  resolveLinearRecordEffectiveSubtitle,
+  losatGencodeProblem
 } from '../services/linear-sources.js';
+import { LOSAT_GENETIC_CODE_TEXT } from '../contracts/schema.generated.js';
 import { captureSvgExport, serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { toRaw } from '../utils/vue-raw.js';
@@ -194,7 +196,9 @@ import { createCircularRecordOrder, createCircularRecordPresentation } from './c
 import {
   createClickedFeatureCopy, createImportedComparisonChoice, createMissingBlastTsvChoice, createResultExport, createRunInfoCopy
 } from './result-actions.js';
-import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import {
+  diagnosticError, losatGeneticCodeHint, normalizeCaughtError, normalizeUserFacingError
+} from '../utils/error-normalization.js';
 import { shownRunInfoNoteParts } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import { pythonLegendRowKeys, stepRefitsDrawnLegend } from '../services/legend-draft-rows.js';
@@ -1474,19 +1478,24 @@ export const createAppSetup = () => {
     target[key] = text === '' ? null : numeric ? Number(text) : text;
   };
   // The problems a File card marks, for the open card and its folded line:
-  // a file whose inspection failed, and a record that TLOSATX cannot search
-  // without a translation table.
+  // a file whose inspection failed, and a record's LOSAT Gencode under
+  // TLOSATX (`losatGencodeProblem`): "Gencode required" when it is empty, the
+  // tables LOSAT reads when the typed one is not one of them (OV-3326).
   /** @param {LinearSourceGroup} source a File card of the shown drawing */
   const linearSourceInspectionFailed = (source) => Boolean(linearRecordSelector.errorFor(state.activeDrawing(), source.sequence));
   /** @param {LinearSeq} seq */
-  const linearRecordGencodeRequired = (seq) => {
+  const linearRecordGencodeProblem = (seq) => {
     const drawing = shownDrawingOfMode('linear');
-    if (!drawing) return false;
-    return drawing.hasActiveLinearLosatIntent.value && drawing.losatProgram.value === 'tblastx'
-      && !(Number(seq.losat_gencode) >= 1);
+    return drawing?.hasActiveLinearLosatIntent.value && drawing.losatProgram.value === 'tblastx' ? losatGencodeProblem(seq) : null;
   };
-  /** @param {LinearSourceGroup} source */
-  const linearSourceGencodeRequired = (source) => source.records.some(({ sequence }) => linearRecordGencodeRequired(sequence));
+  /** A File card's mark: a typed table LOSAT does not read before an empty one. @param {LinearSourceGroup} source */
+  const linearSourceGencodeProblem = (source) => {
+    const problems = source.records.map(({ sequence }) => linearRecordGencodeProblem(sequence));
+    return problems.includes('unread') ? 'unread' : problems.includes('empty') ? 'empty' : null;
+  };
+  /** @param {'empty' | 'unread' | null} problem */
+  const linearGencodeMark = (problem) => (problem === 'unread' ? errorText(losatGeneticCodeHint(LOSAT_GENETIC_CODE_TEXT))
+    : problem === 'empty' ? t('Gencode required') : '');
   const {
     linearLabelHasSharedRow, linearLabelVisibilitySummary, linearLabelAutoFields, linearLabelAutoDisclosure,
     focusLinearLabelVisibility, getDefinitionLineStyleSize, setDefinitionLineStyleSize, getDefinitionLineStyleWeight,
@@ -3604,8 +3613,9 @@ export const createAppSetup = () => {
     isLinearSourceFolded,
     syncLinearSourceFold,
     linearSourceInspectionFailed,
-    linearRecordGencodeRequired,
-    linearSourceGencodeRequired,
+    linearRecordGencodeProblem,
+    linearSourceGencodeProblem,
+    linearGencodeMark,
     linearRecordLayoutEnabled: drawingMember('linearRecordLayoutEnabled'),
     linearRecordGap: drawingMember('linearRecordGap'),
     linearRecordRows: drawingMember('linearRecordRows'),

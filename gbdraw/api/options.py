@@ -43,6 +43,8 @@ from gbdraw.comparisons.losat_runtime import (
     AUTOMATIC_LOSAT_BIN,
     COMPARISON_LOSAT_PROGRAMS,
     DEFAULT_LOSATN_TASK,
+    LOSAT_GENETIC_CODE_TEXT,
+    LOSAT_GENETIC_CODES,
     NUCLEOTIDE_LOSAT_PROGRAMS,
 )
 from gbdraw.config.models import GbdrawConfig
@@ -383,6 +385,19 @@ def _validate_positive_int(
             ),
         )
     return int(value)
+
+
+def _validate_genetic_code(value: object, *, field_name: str) -> int:
+    """A TLOSATX genetic code: one of the NCBI tables LOSAT reads (``LOSAT_GENETIC_CODES``), the one check of every
+    record and ring code before any search (OV-3326)."""
+
+    code = _validate_positive_int(value, field_name=field_name)
+    if code not in LOSAT_GENETIC_CODES:
+        raise ValidationError(
+            f"{field_name} must be an NCBI genetic code that LOSAT reads ({LOSAT_GENETIC_CODE_TEXT}); got {code}.",
+            diagnostic={"code": "COMPARISON_INPUT", "reason": "GENETIC_CODE", "field": field_name},
+        )
+    return cast(int, code)
 
 
 def _validate_sequence_elements(
@@ -963,7 +978,7 @@ class LosatSearchOptions:
             tuple(
                 None
                 if value is None
-                else _validate_positive_int(value, field_name="record_gencodes")
+                else _validate_genetic_code(value, field_name="record_gencodes")
                 for value in gencodes
             ),
         )
@@ -1446,6 +1461,9 @@ class CircularDiagramOptions(_ModeDiagramOptions):
                     "program": search.program,
                 },
             )
+        # A TLOSATX ring's tables, checked once the search is known to read them (as Linear checks its program first).
+        for value in gencodes or ():
+            _validate_genetic_code(value, field_name="conservation_losat_gencodes")
 
         def ring_input_error(message: str, field_name: str) -> ValidationError:
             return ValidationError(

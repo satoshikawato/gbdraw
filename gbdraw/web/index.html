@@ -3087,11 +3087,11 @@
                                 :can-move-up="canMoveLinearSource(sourceIndex, -1)"
                                 :can-move-down="canMoveLinearSource(sourceIndex, 1)"
                                 :move-blocked-reason="linearSourceMoveBlockedReason || ''"
-                                :describedby="linearSourceGencodeRequired(source) ? `linear-file-gencode-${source.uid}` : ''"
+                                :describedby="linearSourceGencodeProblem(source) ? `linear-file-gencode-${source.uid}` : ''"
                                 @fold="syncLinearSourceFold(source, $event)"
                                 @move="moveLinearSource(sourceIndex, $event)"
                             >
-                                <template #status><span v-if="linearSourceGencodeRequired(source)" :id="`linear-file-gencode-${source.uid}`" class="font-normal text-red-700">{{ t('Gencode required') }}</span></template>
+                                <template #status><span v-if="linearSourceGencodeProblem(source)" :id="`linear-file-gencode-${source.uid}`" class="font-normal text-red-700">{{ linearGencodeMark(linearSourceGencodeProblem(source)) }}</span></template>
                             <div v-if="inputType === 'gb'" class="space-y-2">
                                 <file-uploader
                                     :label="t('GenBank / DDBJ File')"
@@ -3242,7 +3242,7 @@
                             <details :data-linear-source-records="source.uid" :open="source.records.length === 1" class="min-w-0">
                                 <summary v-show="source.records.length > 1" role="button" :aria-label="t('Records for file {n}', { n: sourceIndex + 1 })" class="mt-1 text-xs font-normal text-slate-500">
                                     {{ t('Number of records: {count} · {drawn} drawn', { count: source.records.length, drawn: recordSelection.drawnCount('linear', source.records.map(({ sequence }) => sequence.uid)) }) }}
-                                    <span v-if="linearSourceGencodeRequired(source)" class="ml-1 text-red-700">{{ t('Gencode required') }}</span>
+                                    <span v-if="linearSourceGencodeProblem(source)" class="ml-1 text-red-700">{{ linearGencodeMark(linearSourceGencodeProblem(source)) }}</span>
                                 </summary>
                                 <div
                                     v-for="({ sequence: seq, index: idx }) in source.records"
@@ -3264,10 +3264,11 @@
                                         class="ml-auto rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700"
                                     >{{ t('OFF') }}</span>
                                     <span
-                                        v-if="linearRecordGencodeRequired(seq)"
+                                        v-if="linearRecordGencodeProblem(seq)"
+                                        :id="`linear-record-gencode-${seq.uid}`"
                                         :class="recordSelection.isDrawn('linear', seq.uid) ? 'ml-auto' : ''"
                                         class="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
-                                    >{{ t('Gencode required') }}</span>
+                                    >{{ linearGencodeMark(linearRecordGencodeProblem(seq)) }}</span>
                                 </summary>
                                 <div class="min-w-0 space-y-2 pt-2">
                             <div v-if="source.records.length > 1" class="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -3420,7 +3421,7 @@
                             </div>
                             <div v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="linear-primary-label mb-1">{{ t('LOSAT Gencode') }}</div>
-                                <input type="number" v-model.number="seq.losat_gencode" :aria-label="t('TLOSATX gencode for sequence {n}', { n: idx + 1 })" :placeholder="t('Gencode (this entry)')" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                <input type="number" v-model.number="seq.losat_gencode" :data-linear-gencode-input="seq.uid" :aria-invalid="linearRecordGencodeProblem(seq) === 'unread' ? 'true' : undefined" :aria-describedby="linearRecordGencodeProblem(seq) ? `linear-record-gencode-${seq.uid}` : undefined" :aria-label="t('TLOSATX gencode for sequence {n}', { n: idx + 1 })" :placeholder="t('Gencode (this entry)')" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                             </div>
                                 </div>
                             </details>

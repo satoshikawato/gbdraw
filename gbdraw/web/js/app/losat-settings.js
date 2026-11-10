@@ -128,9 +128,10 @@ const estimateLosatArgs = (drawing, sequences) => (query, subject) => {
   if (program !== 'blastn' && program !== 'tblastx') {
     return proteinLosatArgs({ pairwise: drawing.losat.blastp?.mode === 'pairwise', candidateLimit: null, databaseSize: null });
   }
+  // The typed tables as Generate passes them; Generate refuses one LOSAT does not read (OV-3326).
   return nucleotideLosatArgs({
-    program, task: drawing.losat.blastn.task, queryGencode: losatRecordGencode(sequences[query]),
-    dbGencode: losatRecordGencode(sequences[subject]), searchSpace: null
+    program, task: drawing.losat.blastn.task, searchSpace: null,
+    gencodes: () => [losatRecordGencode(sequences[query]), losatRecordGencode(sequences[subject])]
   });
 };
 
