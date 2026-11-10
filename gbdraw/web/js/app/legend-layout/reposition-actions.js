@@ -112,7 +112,7 @@ export const createLegendRepositionActions = ({
    *   `commit: false` leaves the commit to the caller (the mount binder).
    */
   const repositionForLegendChange = (drawing, newPosition, _oldPosition, options = {}) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!svgContainer.value || !svgContent.value) return false;
     const svg = svgContainer.value.querySelector('svg');

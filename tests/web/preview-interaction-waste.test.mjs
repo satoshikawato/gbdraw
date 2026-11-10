@@ -380,6 +380,10 @@ const createPreview = ({ features, bands }) => {
     state,
     getFeatureColor: () => '#123456',
     getEffectiveLegendCaption: (feature) => feature.legend || '',
+    // No selection gesture in these cases: the selection owner's ports take nothing.
+    consumeSuppressNextClick: () => false, selectFeatureByClick: () => {}, markPlainFeatureClick: () => {},
+    clearFeatureSelection: () => {}, startMarqueePointer: () => false, moveMarqueePointer: () => false,
+    commitMarqueePointer: () => false, cancelMarqueePointer: () => {},
     isPreviewTransformActive: panZoom.isPreviewTransformActive,
     subscribePreviewTransformChanges: panZoom.subscribePreviewTransformChanges
   });

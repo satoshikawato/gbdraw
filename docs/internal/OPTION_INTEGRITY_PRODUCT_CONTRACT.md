@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `140`
+- Contract revision: `141`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -5234,7 +5234,33 @@ Status: active Product authority
   or outcome changes.
   - No other record is amended or retired.
   - This change is Contract-only, and the Review is `REQUIRED`.
-- Revision 140 changes: `PD-OI-097` gains scenario revision `26` (concern
+- Revision 140 changes: `PD-OI-018` is replaced for scenario revision `6`
+  (`D / GENOME-E-VALUE-SCALE`), from the Product Decision Owner
+  `satoshikawato`'s statements of `2026-11-10`.
+  - Rule message 1: 「直し方：1つのファイル内の複数レコード、あるいは1つのファイル内の1レコード内の複数領域だったら、E-valueは1ファイル単位で数えるべきでは？1ファイル内に複数のレプリコンがある場合はそうしてたよね？それと同じ」
+  - Rule message 2: 「1行に複数ファイルがある場合も、E-valueはまとめて計算するべき。」
+  - Rule message 3: 「もとは1つのゲノムのレプリコンが複数ファイルに分かれているような場合、E-valueはゲノム単位で計算すべきという意味」
+  - Message 4, a question that the session answered yes (the receipt's
+    Circular sentence follows that answer): 「CircularのMulti-replicon genome (Vibrio nigripulchritudo TUMSAT-TG-2018のExampleみたいな）は、「リング」は複数だけど1個のゲノムということでいいね？」
+  - Reply to the full receipt text recorded below: 「すべて推奨通り、文面承認」
+  - The Owner approved the receipt text as written; it is recorded byte for
+    byte.
+  - `PD-OI-091`'s Must preserve sentence that the E-value database stays the
+    whole subject source file "(`PD-OI-018`)" is read together with `PD-OI-018`
+    scenario revision `6`: the E-value scale is the genome's, so that database
+    statement no longer describes the scale. Its guarantee that turning a
+    record ON or OFF does not change other records' E-values stays, because
+    every record of a genome counts whether it is drawn or not. The text of
+    `PD-OI-091` is unchanged.
+  - Although the concern key names Linear, this record also governs the
+    E-value scale of Circular similarity rings; the Contract has no other rule
+    on it.
+  - New receipt SHA-256: `PD-OI-018` scenario revision `6`
+    `ee923a2c40c72a5563d5211203ec358e1732ac57aac6d189e0b6c8f14045c24e`.
+  - No other record is amended or retired.
+  - This authority-only amendment contains no runtime; dependent runtime
+    requires it merged into its base, and the Review is `REQUIRED`.
+- Revision 141 changes: `PD-OI-097` gains scenario revision `26` (concern
   `product.circular-outer-label-fit`; it adds `CIR-RGN-FRONT`). A Circular
   region label whose letters meet only feature labels' leader lines is drawn
   in front of them on a white backing, as Linear region labels are
@@ -5836,6 +5862,56 @@ Decision date: 2026-10-22
 ### PD-OI-018: Complete Linear records, placement, and comparison scope
 
 - Concern key: `diagram-generation.linear-record-universe-and-search-scope`
+- Scenario revision: `6`
+- Supersedes: `PD-OI-018`, scenario revision `5` (`C / CONSECUTIVE-FILE-ROW-BLOCKS`).
+- Status: `ACCEPTED`
+- Selected outcome: `D / GENOME-E-VALUE-SCALE`
+- Normative outcome: exactly the complete approved scenario revision `6`
+  `PRODUCT_DECISION` receipt and its JSON representation below, together with
+  the scenario revision `5`, `4`, and `3` outcomes retained below. The revision
+  `6` receipt's Must preserve retains revision `5` and, through it, revision
+  `4` and items 1–7 of revision `3`, except the E-value scale it restates.
+- Decision source: the Revision 140 entry above, which quotes `satoshikawato`'s
+  statements of `2026-11-10` and the reply 「すべて推奨通り、文面承認」 to the
+  full receipt text below. The receipt and JSON are recorded byte for byte.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `ee923a2c40c72a5563d5211203ec358e1732ac57aac6d189e0b6c8f14045c24e`.
+- Acceptance contracts: `OIC-005`, `OIC-006`, `OIC-007`, `OIC-013`, `OIC-015`,
+  `OIC-018`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.linear-record-universe-and-search-scope
+Scenario revision: 6
+Supersedes: PD-OI-018, scenario revision 5
+Choice: D / GENOME-E-VALUE-SCALE
+Rationale: E-value はゲノム単位で数える。1 つのファイルの複数の record、1 つの record の複数の領域、1 つの行に置いた複数のファイル、複数のファイルに分かれた 1 つのゲノムは、どれも 1 つのゲノムとして数え、同じ E-value の尺度（LOSAT が E-value の計算に使う探索空間または database の大きさ）を使う。window や crop で描く範囲を変えても、その尺度は変えない。
+Must preserve: revision 5 の receipt と、それが保持する revision 4 の receipt とその Must preserve（revision 3 の item 1〜7 を含む。source ファイル単位の batch、database の範囲を raw cache の identity に含めること、要求していない自己検索をしないこと、job 数の見積もりを実行の計画と同じ関数から出すこと）。ただし E-value の尺度は次のとおりとする。a) Linear では、同じ行に record を置いたファイルどうしをつないだまとまりを 1 つのゲノムとする（ほかのファイルと行を共有しないファイルは、それだけで 1 つのゲノムとする）。Circular では、図に描く record のファイルの全体を reference 側のゲノム、1 つの similarity ring に置いたファイルの全体をその ring のゲノムとする。ゲノムの長さは、それらのファイルのすべての record（描くかどうかによらず、crop する前の長さ。GFF3 と FASTA の組では FASTA のすべての配列）の合計とする。b) LOSATN と TLOSATX の検索には、2 つのゲノムの長さの積を探索空間（-searchsp）として渡す。TLOSATX では長さをアミノ酸の数（塩基の数を 3 で割り、端数を切り捨てた数）で数える。c) LOSATP（Pairwise、Similarity groups、Collinear）の検索には、subject 側のゲノムのすべての record（crop する前）から、LOSATP が検索に使うのと同じ規則で取り出したタンパク質の長さの合計を database の大きさ（-dbsize）として渡す。query 側は今までどおりタンパク質ごとの長さで数える。d) 両側のゲノムがそれぞれ 1 つの record だけのファイル 1 つからなり、検索がその record 全体を読むときは、-searchsp も -dbsize も渡さず、図、raw cache の key、Session はこれまでと同じになる。e) 検索が読む配列と job の数は変えない。f) 探索空間と database の大きさは Python が計算し、CLI と Web は同じ値を渡す。g) docs と Run Info には、E-value の尺度（LOSATN と TLOSATX は 2 つのゲノムの組、LOSATP は subject 側のゲノム）を明記する。h) -searchsp と -dbsize のない LOSAT（gbdraw setup-losat が入れる v0.1.0）で CLI が検索するときは、これまでの尺度で検索し、警告でそう伝える。
+May retire: E-value の database が subject 側の source ファイルであることを docs と Run Info に明記するという項目、ファイルの分け方を変えると E-value が変わるという残余リスク、record の対ごとに検索する CLI と複数 record のファイルで E-value が一致しないという残余リスク、描く record、window、crop で E-value が変わる動作（query 側でも subject 側でも）。
+Accepted residual risk: d) の組は LOSAT 自身の探索空間（長さの補正あり）を使い、-searchsp を渡す組は補正のない積を使うので、同じゲノムの組でも、Linear で record 全体を描いた図と crop や window で描いた図の E-value がわずかに違う（48.5 kb と 42.9 kb の配列の組で、TLOSATX 約 0.5 %、LOSATN 約 0.1 %）。複数の record のファイル、複数のファイルを置いた行や similarity ring、crop、window を含む図では、次に LOSAT で検索すると E-value が変わり、raw cache の key も変わるため保存した検索結果は使われず検索し直す。E-value の閾値の近くのリンクは増えたり減ったりすることがある。同じ行に置いたファイル（Circular では 1 つの図、1 つの similarity ring に置いたファイル）は、別の生物のものでも 1 つのゲノムとして数える。LOSATP では、subject 側のゲノムの描かない部分からもタンパク質を取り出すため、その分の時間がかかる。gbdraw setup-losat が入れる LOSAT v0.1.0 で検索する CLI は、h) のため Web と違う E-value を出す。
+Owner: satoshikawato
+Decision date: 2026-11-10
+```
+
+```json
+{
+  "concern": "diagram-generation.linear-record-universe-and-search-scope",
+  "scenarioRevision": 6,
+  "supersedes": "PD-OI-018, scenario revision 5",
+  "choice": "D / GENOME-E-VALUE-SCALE",
+  "rationale": "E-value はゲノム単位で数える。1 つのファイルの複数の record、1 つの record の複数の領域、1 つの行に置いた複数のファイル、複数のファイルに分かれた 1 つのゲノムは、どれも 1 つのゲノムとして数え、同じ E-value の尺度（LOSAT が E-value の計算に使う探索空間または database の大きさ）を使う。window や crop で描く範囲を変えても、その尺度は変えない。",
+  "mustPreserve": "revision 5 の receipt と、それが保持する revision 4 の receipt とその Must preserve（revision 3 の item 1〜7 を含む。source ファイル単位の batch、database の範囲を raw cache の identity に含めること、要求していない自己検索をしないこと、job 数の見積もりを実行の計画と同じ関数から出すこと）。ただし E-value の尺度は次のとおりとする。a) Linear では、同じ行に record を置いたファイルどうしをつないだまとまりを 1 つのゲノムとする（ほかのファイルと行を共有しないファイルは、それだけで 1 つのゲノムとする）。Circular では、図に描く record のファイルの全体を reference 側のゲノム、1 つの similarity ring に置いたファイルの全体をその ring のゲノムとする。ゲノムの長さは、それらのファイルのすべての record（描くかどうかによらず、crop する前の長さ。GFF3 と FASTA の組では FASTA のすべての配列）の合計とする。b) LOSATN と TLOSATX の検索には、2 つのゲノムの長さの積を探索空間（-searchsp）として渡す。TLOSATX では長さをアミノ酸の数（塩基の数を 3 で割り、端数を切り捨てた数）で数える。c) LOSATP（Pairwise、Similarity groups、Collinear）の検索には、subject 側のゲノムのすべての record（crop する前）から、LOSATP が検索に使うのと同じ規則で取り出したタンパク質の長さの合計を database の大きさ（-dbsize）として渡す。query 側は今までどおりタンパク質ごとの長さで数える。d) 両側のゲノムがそれぞれ 1 つの record だけのファイル 1 つからなり、検索がその record 全体を読むときは、-searchsp も -dbsize も渡さず、図、raw cache の key、Session はこれまでと同じになる。e) 検索が読む配列と job の数は変えない。f) 探索空間と database の大きさは Python が計算し、CLI と Web は同じ値を渡す。g) docs と Run Info には、E-value の尺度（LOSATN と TLOSATX は 2 つのゲノムの組、LOSATP は subject 側のゲノム）を明記する。h) -searchsp と -dbsize のない LOSAT（gbdraw setup-losat が入れる v0.1.0）で CLI が検索するときは、これまでの尺度で検索し、警告でそう伝える。",
+  "mayRetire": "E-value の database が subject 側の source ファイルであることを docs と Run Info に明記するという項目、ファイルの分け方を変えると E-value が変わるという残余リスク、record の対ごとに検索する CLI と複数 record のファイルで E-value が一致しないという残余リスク、描く record、window、crop で E-value が変わる動作（query 側でも subject 側でも）。",
+  "acceptedResidualRisk": "d) の組は LOSAT 自身の探索空間（長さの補正あり）を使い、-searchsp を渡す組は補正のない積を使うので、同じゲノムの組でも、Linear で record 全体を描いた図と crop や window で描いた図の E-value がわずかに違う（48.5 kb と 42.9 kb の配列の組で、TLOSATX 約 0.5 %、LOSATN 約 0.1 %）。複数の record のファイル、複数のファイルを置いた行や similarity ring、crop、window を含む図では、次に LOSAT で検索すると E-value が変わり、raw cache の key も変わるため保存した検索結果は使われず検索し直す。E-value の閾値の近くのリンクは増えたり減ったりすることがある。同じ行に置いたファイル（Circular では 1 つの図、1 つの similarity ring に置いたファイル）は、別の生物のものでも 1 つのゲノムとして数える。LOSATP では、subject 側のゲノムの描かない部分からもタンパク質を取り出すため、その分の時間がかかる。gbdraw setup-losat が入れる LOSAT v0.1.0 で検索する CLI は、h) のため Web と違う E-value を出す。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-10"
+}
+```
+
+#### Retained scenario revision `5` outcome
+
 - Scenario revision: `5`
 - Supersedes: `PD-OI-018`, scenario revision `4` (`B / FILE-DATABASE-WITHOUT-UNREQUESTED-SELF`).
 - Status: `ACCEPTED`
@@ -10412,7 +10488,7 @@ Decision date: 2026-11-04
 - Scenario revision: `26`
 - Supersedes: `PD-OI-097`, scenario revision `25`. Scenario revision `26`
   keeps every outcome of scenario revision `25` and adds `CIR-RGN-FRONT`;
-  D-61 and D-65 of the Revision 140 entry approve its additions to the
+  D-61 and D-65 of the Revision 141 entry approve its additions to the
   Choice, the Rationale, the Must preserve, the May retire, and the Accepted
   residual risk, and the words it replaces in the Accepted residual risk.
   Scenario revision `25`
@@ -10655,7 +10731,7 @@ Decision date: 2026-11-04
 - Receipt SHA-256 (scenario revision `25`; UTF-8, excluding the final newline):
   `66b8bef249cc8d3f4d199515a056e9a3c9d81bcb49cccfcc6add248891ee2798`.
 - Decision source (scenario revision `26`): the Owner replies of `2026-11-10`
-  quoted in the Revision 140 entry above (D-61 and D-65); D-65 approves the
+  quoted in the Revision 141 entry above (D-61 and D-65); D-65 approves the
   twentieth receipt and JSON below, without translation or additional terms.
   The runtime, tests, and documentation that implement it merge with it
   (static Product Contract co-change); this record supplies no runtime

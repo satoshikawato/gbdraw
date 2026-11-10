@@ -2,7 +2,7 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { EditDefaultColorsPort, PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
-/** @import { FeatureSelectionPort, IsPreviewTransformActivePort, PrepareDrawnFeatureMatchesPort, ShowElementSettings, ShownLegendNamePort, SubscribePreviewTransformChangesPort } from './feature-editor/svg-actions.js' */
+/** @import { CancelMarqueePointerPort, ClearFeatureSelectionPort, CommitMarqueePointerPort, ConsumeSuppressNextClickPort, IsPreviewTransformActivePort, MarkPlainFeatureClickPort, MoveMarqueePointerPort, PrepareDrawnFeatureMatchesPort, SelectFeatureByClickPort, ShowElementSettings, ShownLegendNamePort, StartMarqueePointerPort, SubscribePreviewTransformChangesPort } from './feature-editor/svg-actions.js' */
 /** @import { FindLegendRowNamedPort, KeepBothNamesPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort, WriteLegendRowColorPort } from './feature-editor/color-actions.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
 /** @import { CurrentResultsPort } from '../services/svg-result-ingestion.js' */
@@ -52,7 +52,14 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   The Legend owner's move of a drawing's Legend records (Delete settings' take-back of rule rows).
  * @property {import('./candidate-render.js').ReadLegendRowColorsPort} readLegendRowColors
  *   The root's colors of a drawing's Legend rows as they show (OV-282), which the rule owner's commit owns rows by.
- * @property {FeatureSelectionPort | null} [featureSelection]
+ * @property {ConsumeSuppressNextClickPort} consumeSuppressNextClick
+ * @property {SelectFeatureByClickPort} selectFeatureByClick
+ * @property {MarkPlainFeatureClickPort} markPlainFeatureClick
+ * @property {ClearFeatureSelectionPort} clearFeatureSelection
+ * @property {StartMarqueePointerPort} startMarqueePointer
+ * @property {MoveMarqueePointerPort} moveMarqueePointer
+ * @property {CommitMarqueePointerPort} commitMarqueePointer
+ * @property {CancelMarqueePointerPort} cancelMarqueePointer
  * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  * @property {CurrentResultsPort} currentResults
@@ -107,7 +114,7 @@ export const createFeatureEditor = ({
   prepareFileLegendEntries,
   moveLegendRecords,
   readLegendRowColors,
-  featureSelection = null,
+  consumeSuppressNextClick, selectFeatureByClick, markPlainFeatureClick, clearFeatureSelection, startMarqueePointer, moveMarqueePointer, commitMarqueePointer, cancelMarqueePointer,
   commitActiveResultEdit = null,
   currentResults,
   getResultIdentity,
@@ -154,7 +161,7 @@ export const createFeatureEditor = ({
     prepareDrawnFeatureMatches: (...args) => editorPorts.prepareDrawnFeatureMatches(...args),
     // OV-923: an unchanged Result keeps its label binding.
     onFeaturePopupOpened: () => editorPorts.syncLabelEditor({ reuseCurrentBinding: true }),
-    featureSelection,
+    consumeSuppressNextClick, selectFeatureByClick, markPlainFeatureClick, clearFeatureSelection, startMarqueePointer, moveMarqueePointer, commitMarqueePointer, cancelMarqueePointer,
     isPreviewTransformActive, subscribePreviewTransformChanges,
     previewPopupsHeld,
     showElementSettings,

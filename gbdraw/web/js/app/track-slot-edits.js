@@ -6,7 +6,8 @@
 // icon inside a button); the edit itself runs without the event.
 /** @import { AskChoice } from './app-messages.js' */
 /** @import { DepthSourceLoss } from '../services/depth-track-state.js' */
-import { overlayRowsReaching } from '../services/track-slot-validation.js';
+/** @import { AnnotationSetRow } from '../services/drawing/annotation-sets.js' */
+import { annotationRowSetId, annotationSetForNewRow, annotationSetIdsOf, overlayRowsReaching } from '../services/track-slot-validation.js';
 import { joinSentences, listText, msg, t, tn } from '../utils/i18n.js';
 
 /**
@@ -97,6 +98,15 @@ export const trackRowsText = (numbers) => tn(numbers.length, 'Track row {rows}',
   rows: listText(numbers.map(String))
 });
 /**
+ * Whether a stack still holds what a question was asked about, the same rows
+ * (or set ids) in the same order: an answer to a stack that changed meanwhile
+ * does nothing.
+ * @param {readonly unknown[]} asked The entries when the question was asked.
+ * @param {readonly unknown[]} now The entries at the answer.
+ */
+const sameEntries = (asked, now) => now.length === asked.length && now.every((row, index) => row === asked[index]);
+
+/**
  * PD-OI-104 scenario revisions 6 and 7: a change that removes or turns off
  * stack rows that other rows start at or extend to (`overlayRowsReaching`)
  * does not go ahead alone (a stack Generate refuses). It asks first: the
@@ -118,7 +128,7 @@ export const askTrackHide = ({ askChoice, runUndoable }, { rows, mode, hiding, a
   const asked = () => {
     const now = rows();
     const reachingNow = overlayRowsReaching(now, mode, hiding);
-    return now.length === stack.length && now.every((row, index) => row === stack[index])
+    return sameEntries(stack, now)
       && reachingNow.length === reachingIds.size && reachingNow.every((index) => reachingIds.has(String(now[index].id)));
   };
   const own = question(stack.flatMap((row, index) => (ids.has(String(row.id)) ? [index + 1] : [])), ids);
@@ -137,10 +147,12 @@ export const askTrackHide = ({ askChoice, runUndoable }, { rows, mode, hiding, a
 };
 
 /**
- * What the composition root gives a stack edit that asks: `rows` is the shown drawing's stack.
+ * What the composition root gives a stack edit that asks: `rows` is the shown drawing's stack, and `annotationSets`
+ * the shown drawing's Region Annotation sets.
  * @template {SwitchedTrackRow} Row
  * @typedef {{ askChoice: AskChoice, runUndoable: (label: string, fn: () => unknown) => unknown,
- *   busy: () => unknown, rows: () => readonly Row[], mode: 'circular' | 'linear' }} AskingStackPorts
+ *   busy: () => unknown, rows: () => readonly Row[], mode: 'circular' | 'linear',
+ *   annotationSets: () => readonly AnnotationSetRow[] }} AskingStackPorts
  */
 
 /**
@@ -203,6 +215,64 @@ export const askingTrackRowRemoval = ({ askChoice, runUndoable, busy, rows, mode
 
 /** @param {number} index A row's index in its stack. @param {unknown} id Its slot id. */
 const trackRowItem = (index, id) => t('{row} ({id})', { row: trackRowName(index), id: String(id) });
+
+/** A stack row as Add track reads it: its slot id, switch, renderer and params. @typedef {{ id?: unknown, enabled?: unknown, renderer?: unknown, params?: unknown }} AnnotationAddRow */
+/** The action id of the choice that adds a row drawing the set of this id again. */
+const AGAIN_PREFIX = 'again:';
+/**
+ * Add track with the Annotations renderer (OV-3153, Owner D-60 of 2026-11-10):
+ * the new row draws the first annotation set no row of the stack names
+ * (`annotationSetForNewRow`, by set id). When every set already has a row it
+ * asks what the new row draws: one set again, or no set yet (the row then asks
+ * for one). A row turned off names its set too (it draws it once turned on);
+ * the question says it is off, and claims no second drawing of a set whose
+ * every row is off. It describes only the rows of the current sets: a row
+ * whose set was removed draws nothing. The choice adds the row as one History step; Cancel adds
+ * nothing.
+ * The answer does nothing when the stack's rows or the sets are no longer
+ * those it asked about. The composition root wraps each stack editor's Add
+ * track with it.
+ * @template {SwitchedTrackRow & AnnotationAddRow} Row
+ * @param {AskingStackPorts<Row>} ports
+ * @param {(renderer: string, setId: string | null, event?: Event) => unknown} add The editor's Add track, run in its
+ *   stack edit transition: a new Annotations row draws the set of `setId` ('' for none, null for the first set no row
+ *   names); `event` names the control for the transition's own question.
+ * @returns {(renderer: string, event?: Event) => unknown}
+ */
+export const askingAnnotationTrackAdd = ({ askChoice, runUndoable, busy, rows, annotationSets: sets }, add) => (renderer, event) => {
+  const stack = [...rows()];
+  const setIds = annotationSetIdsOf(sets());
+  if (renderer !== 'annotations' || busy() || setIds.length === 0 || annotationSetForNewRow(stack, sets()) !== null) {
+    return add(renderer, null, event);
+  }
+  /** @type {Set<string>} The sets a row that is on draws. */
+  const drawnSets = new Set();
+  const named = stack.flatMap((row, index) => {
+    const setId = annotationRowSetId(row);
+    if (!setIds.includes(setId)) return [];
+    const texts = { row: trackRowItem(index, row.id), set: setId };
+    if (row.enabled === false) return [t('{row} names {set} but is turned off.', texts)];
+    drawnSets.add(setId);
+    return [t('{row} draws {set}.', texts)];
+  });
+  return askChoice({
+    title: t('Every annotation set already has a row'),
+    description: joinSentences(...named, t('Choose what the new Annotations row draws.')),
+    actions: [
+      ...setIds.map((setId) => ({
+        id: `${AGAIN_PREFIX}${setId}`, label: t('Draw {set} again', { set: setId }),
+        detail: drawnSets.has(setId) ? t('A second row draws {set}; the figure shows it twice.', { set: setId }) : t('A second row draws {set}.', { set: setId }),
+        icon: 'ph-copy'
+      })),
+      { id: 'unset', label: t('Add a row without a set'), detail: t('Choose the set later in the new row.'), icon: 'ph-plus' }
+    ]
+  }).then((choice) => {
+    const asked = sameEntries(stack, rows()) && sameEntries(setIds, annotationSetIdsOf(sets()));
+    const setId = choice === 'unset' ? '' : (choice.startsWith(AGAIN_PREFIX) ? choice.slice(AGAIN_PREFIX.length) : null);
+    if (!asked || setId === null || (setId !== '' && !setIds.includes(setId))) return false;
+    return runUndoable(msg('Add track'), () => add(renderer, setId));
+  });
+};
 
 /**
  * @typedef {object} TrackSourceRemoval
@@ -267,7 +337,7 @@ export const askTrackSourceRemoval = ({ askChoice, runUndoable, busy, rows, mode
     label,
     unchanged: () => {
       const now = sources();
-      return !busy() && now.length === asked.length && now.every((source, index) => source === asked[index]);
+      return !busy() && sameEntries(asked, now);
     },
     apply
   });

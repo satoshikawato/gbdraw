@@ -71,7 +71,7 @@ export const createLegendLayout = ({
   });
 
   const resetAllPositions = () => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const svg = state.svgContainer.value?.querySelector?.('svg') || null;
     if (!svg) return;
@@ -145,7 +145,7 @@ export const createLegendLayout = ({
    * @param {ReadonlySet<string>} identities
    */
   const reconcileCompositionUserDeltas = (record, identities) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     let reconciled = false;
     identities.forEach((identity) => {

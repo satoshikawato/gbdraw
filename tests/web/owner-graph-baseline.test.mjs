@@ -25,12 +25,10 @@ import { compareCountBaseline, reportLowerable } from './helpers/count-baseline.
 // Print the current subjects with `node tools/report-web-owner-graph.mjs --at worktree`.
 const OWNER_GRAPH_BASELINE = {
   // owner-graph.injection-edge.v1
-  'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-featureSelection': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|featureRecordRotation<-featureRecordRotationAction': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|legendLayout<-previewRuntime': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|colorActions<-ruleActions': 1,
-  'owner-graph.injection-edge.v1|app/feature-editor.js|featureSvgActions<-featureSelection': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|labelActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|ruleActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|visibilityActions<-rulePreparation': 1,
@@ -38,7 +36,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|ruleActions': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/label-actions.js|createFeatureLabelActions|rulePreparation': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/rule-actions.js|createFeatureRuleActions|rulePreparation': 1,
-  'owner-graph.whole-object-port.v1|app/feature-editor/svg-actions.js|createFeatureSvgActions|featureSelection': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/visibility-actions.js|createFeatureVisibilityActions|rulePreparation': 1,
   'owner-graph.whole-object-port.v1|app/run-analysis.js|createRunAnalysis|previewRuntime': 1,
   'owner-graph.whole-object-port.v1|app/run-analysis.js|createRunAnalysis|rulePreparation': 1,

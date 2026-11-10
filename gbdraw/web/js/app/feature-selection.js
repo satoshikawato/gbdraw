@@ -3,7 +3,9 @@ import { setClassToken } from '../services/svg-serialization.js';
 import { featureParts, onTheWay, partsMidpoint } from '../services/region-axis.js';
 import { capturePointer, holdTextSelection } from '../utils/pointer-gesture.js';
 
-const { computed, reactive } = window.Vue;
+// createFeatureSelection reads `window.Vue` when it runs, not when the module loads: other modules import this
+// module's pure helpers (feature-editor/svg-actions.js imports getSelectableFeatureTarget), and loading them must not
+// need Vue.
 
 export const FEATURE_SELECTION_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
 export const RENDERED_FEATURE_SELECTION_ID_ATTRIBUTE =
@@ -268,7 +270,6 @@ const angleOnClockwiseInterval = (startAngle, endAngle, angle) => {
  * @property {FeatureSelectionDrag} featureSelectionDrag
  * @property {{ value: SelectionFeature[] }} extractedFeatures
  * @property {{ value: Map<string, SelectionFeature> }} featuresBySvgId
- * @property {{ value: SelectionFeature[] }} selectedFeatures
  * @property {{ value: HTMLElement | null }} svgContainer
  * @property {WebState['clickedFeature']} clickedFeature The open popup, closed by setting null.
  * @property {WebState['clickedPairwiseMatch']} clickedPairwiseMatch The open popup, closed by setting null.
@@ -290,6 +291,7 @@ const angleOnClockwiseInterval = (startAngle, endAngle, angle) => {
 export const createFeatureSelection = ({
   state, onMounted = null, onUnmounted = null, previewPopupsHeld = () => false, axisRecordOf = () => null
 }) => {
+  const { computed, reactive } = window.Vue;
   const {
     selectedFeatureIds,
     selectedFeatureAnchorId,
@@ -298,7 +300,6 @@ export const createFeatureSelection = ({
     featureSelectionDrag,
     extractedFeatures,
     featuresBySvgId,
-    selectedFeatures,
     svgContainer,
     clickedFeature,
     clickedPairwiseMatch,
@@ -621,6 +622,13 @@ export const createFeatureSelection = ({
     return true;
   };
 
+  // A click on a feature with Ctrl or Cmd alone toggles it; otherwise the range from the anchor, added with Ctrl or Cmd.
+  /** @param {string} featureId @param {{ ctrlKey: boolean, metaKey: boolean, shiftKey: boolean }} modifiers */
+  const selectFeatureByClick = (featureId, { ctrlKey, metaKey, shiftKey }) => {
+    const additive = Boolean(ctrlKey || metaKey);
+    return additive && !shiftKey ? toggleFeatureSelection(featureId) : selectFeatureRange(featureId, { additive });
+  };
+
   /**
    * @param {Element} svg
    * @param {Edges} marqueeRect
@@ -782,19 +790,14 @@ export const createFeatureSelection = ({
     consumeSuppressNextClick,
     featureSelectionMarqueeStyle,
     featureSelectionToolbarStyle,
-    getFeatureById,
-    getSelectableFeatureTarget,
     markPlainFeatureClick,
     replaceSelectedFeatureIds,
-    selectFeatureRange,
+    selectFeatureByClick,
     startToolbarDrag,
     startMarqueePointer,
     moveMarqueePointer,
     commitMarqueePointer,
     cancelMarqueePointer,
-    selectedFeatures,
-    setStatus,
-    syncFeatureSelectionClasses,
-    toggleFeatureSelection
+    syncFeatureSelectionClasses
   };
 };
