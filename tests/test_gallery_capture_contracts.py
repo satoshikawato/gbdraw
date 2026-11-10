@@ -98,12 +98,12 @@ LAYOUT_RESULT_CAPTURES = {
             "adv.multi_record_column_gap_ratio": 0.1,
             "adv.multi_record_row_gap_ratio": 0.05,
             "adv.multi_record_positions": [
-                {"selector": "#1", "row": 1},
-                {"selector": "#2", "row": 1},
-                {"selector": "#3", "row": 2},
-                {"selector": "#4", "row": 2},
-                {"selector": "#5", "row": 2},
-                {"selector": "#6", "row": 2},
+                {"selector": "record-1:1", "row": 1},
+                {"selector": "record-1:2", "row": 1},
+                {"selector": "record-1:3", "row": 2},
+                {"selector": "record-1:4", "row": 2},
+                {"selector": "record-1:5", "row": 2},
+                {"selector": "record-1:6", "row": 2},
             ],
             "form.plot_title": "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome",
             "adv.plot_title_position": "bottom",
@@ -1170,3 +1170,37 @@ def test_no_tutorial_step_names_the_session_file_chooser_that_captures_hide() ->
 
     assert len(result.errors) == 1
     assert "step 2" in result.errors[0] and "Files in this Session" in result.errors[0]
+
+
+@pytest.mark.parametrize(
+    ("script", "reason"),
+    [
+        ("const track = content?.children?.[0];", "by position"),
+        ("const row = card.children[1];", "by position"),
+        ("async () => { await window.__GBDRAW_APP__.refreshLinearRecordSelectors(); }", "reads the records"),
+    ],
+)
+def test_capture_scripts_find_elements_by_identity_and_leave_the_record_read_to_the_tool(
+    script: str, reason: str
+) -> None:
+    """A capture finds a control by its identity, not by its place among its siblings, which a new
+    control shifts (OV-3366: the Layout crops showed Figure size instead of Track Layout). It does not
+    read the records itself, nor click Inspect source records: the tool reads them after the replay
+    for every capture (OV-3139)."""
+
+    def step(action: dict[str, str]) -> dict[str, object]:
+        return {"title": "Layout", "body": "Open Layout.", "operations": [{"capture": {"actions": [action]}}]}
+
+    result = ValidationResult(errors=[], warnings=[])
+    capture_tool.add_step_text_validation(result, _manual_context(2), step({"type": "evaluate", "script": script}))
+    capture_tool.add_step_text_validation(
+        result, _manual_context(3), step({"type": "click", "selector": "button:text-is('Inspect source records')"})
+    )
+    capture_tool.add_step_text_validation(
+        result,
+        _manual_context(4),
+        step({"type": "evaluate", "script": "document.querySelector('[data-layout-options]').dataset.capture = 'x';"}),
+    )
+
+    assert [error.split(":")[0] for error in result.errors] == [_manual_context(2).label, _manual_context(3).label]
+    assert reason in result.errors[0]

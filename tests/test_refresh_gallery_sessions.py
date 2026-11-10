@@ -2590,3 +2590,33 @@ def test_refresh_searches_again_a_losat_result_of_another_wasm_build(tmp_path: P
     (tmp_path / "missing").mkdir()
     with pytest.raises(ValueError, match="no whole file or record"):
         _search_stale_losat_results(session, tmp_path / "missing", env=env)
+
+
+def test_refresh_gives_every_gallery_file_the_writers_metadata() -> None:
+    """OV-3331: a Web-saved Gallery Session kept each upload's browser metadata (a media type
+    guessed from the name, the file's modification time); the refresh stores the writer's."""
+
+    session = {
+        "resources": {
+            "record-1-genbank": {"kind": "genbank", "type": "application/x-gameboy-rom", "lastModified": 1792769561077},
+            "depth": {"kind": "depth-track-file", "type": "text/tab-separated-values", "lastModified": 1794131353048},
+            "table": {"kind": "canonical-tsv", "type": "text/tab-separated-values", "lastModified": 0},
+        },
+        "webFiles": {"bindings": {"linearSeqs": [{"gb": {
+            "resourceId": "record-1-genbank", "name": "AP027078.gb",
+            "type": "application/x-gameboy-rom", "lastModified": 1792769561077,
+        }}]}},
+    }
+
+    changed = refresh_gallery_sessions_module._store_written_file_metadata(session)
+
+    assert changed == 3
+    resources = session["resources"]
+    assert {key: (value["type"], value["lastModified"]) for key, value in resources.items()} == {
+        "record-1-genbank": ("application/octet-stream", 0),
+        "depth": ("application/octet-stream", 0),
+        "table": ("text/tab-separated-values", 0),
+    }
+    binding = session["webFiles"]["bindings"]["linearSeqs"][0]["gb"]
+    assert (binding["type"], binding["lastModified"], binding["name"]) == ("application/octet-stream", 0, "AP027078.gb")
+    assert refresh_gallery_sessions_module._store_written_file_metadata(session) == 0

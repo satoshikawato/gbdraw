@@ -80,6 +80,13 @@ CAPTURE_SELECT_CONTROL_SELECTOR = ".gbdraw-capture-select-control"
 OPEN_SELECT_MAX_VISIBLE_OPTIONS = 17
 SESSION_FILE_CHOOSER_SELECTOR = "[data-session-file-picker]"
 SESSION_FILE_CHOOSER_NAME = "Files in this Session"
+CAPTURE_POSITION_PICK = re.compile(r"\bchildren\s*(?:\?\.)?\s*\[")
+CAPTURE_RECORD_READS = (
+    "inspectCircularSourceRecords",
+    "refreshLinearRecordSelectors",
+    "Inspect source records",
+    "Inspect records",
+)
 
 
 class QuietGalleryRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -477,12 +484,29 @@ def add_step_text_validation(
     context: TutorialContext,
     step: dict[str, Any],
 ) -> None:
-    """No step tells the reader to use the uploader's Session file chooser, which captures hide."""
+    """No step tells the reader to use the uploader's Session file chooser, which captures hide;
+    no capture action finds an element by position or reads the records the tool reads."""
 
     if SESSION_FILE_CHOOSER_NAME.lower() in json.dumps(step, ensure_ascii=False).lower():
         result.errors.append(
             f"{context.label}: names {SESSION_FILE_CHOOSER_NAME}, which tutorial captures hide: "
             "the reader uploads the files and has no Session."
+        )
+    actions = [
+        json.dumps(action, ensure_ascii=False)
+        for operation in as_array(step.get("operations"))
+        if isinstance(operation, dict) and isinstance(operation.get("capture"), dict)
+        for action in as_array(operation["capture"].get("actions"))
+    ]
+    if any(CAPTURE_POSITION_PICK.search(action) for action in actions):
+        result.errors.append(
+            f"{context.label}: a capture action finds an element by position, which a new sibling "
+            "shifts; find it by its id, data attribute or accessible name."
+        )
+    if any(read in action for action in actions for read in CAPTURE_RECORD_READS):
+        result.errors.append(
+            f"{context.label}: a capture action reads the records, which the tool does for every "
+            "capture after the replay (inspect_shown_records)."
         )
 
 

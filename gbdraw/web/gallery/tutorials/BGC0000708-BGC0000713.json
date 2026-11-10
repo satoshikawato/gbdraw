@@ -694,10 +694,6 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "async () => { await window.__GBDRAW_APP__.refreshLinearRecordSelectors(); }"
-              },
-              {
-                "type": "evaluate",
                 "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const seq = app.linearSeqs[4]; if (seq?.uid !== 'record-5') throw new Error('BGC0000713 record was not restored as sequence 5.'); const row = document.querySelector('[data-linear-record-card=\"record-5\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-5\"]'); if (!row || !options) throw new Error('BGC0000713 Record options were not found.'); options.open = true; const card = row.closest('[data-linear-source-card]'); const fold = card?.querySelector(':scope > [data-linear-source-fold]'); const uploader = fold?.querySelector(':scope > .space-y-2'); if (!card || !uploader) throw new Error('BGC0000713 file card was not found.'); uploader.setAttribute('data-capture', 'bgc0713-file'); row.setAttribute('data-capture', 'bgc0713-record'); card.scrollIntoView({ block: 'start' });"
               },
               {

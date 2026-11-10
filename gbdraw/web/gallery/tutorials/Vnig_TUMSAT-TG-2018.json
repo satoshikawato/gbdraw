@@ -130,27 +130,27 @@
               "adv.multi_record_size_mode": "auto",
               "adv.multi_record_positions": [
                 {
-                  "selector": "#1",
+                  "selector": "record-1:1",
                   "row": 1
                 },
                 {
-                  "selector": "#2",
+                  "selector": "record-1:2",
                   "row": 1
                 },
                 {
-                  "selector": "#3",
+                  "selector": "record-1:3",
                   "row": 1
                 },
                 {
-                  "selector": "#4",
+                  "selector": "record-1:4",
                   "row": 2
                 },
                 {
-                  "selector": "#5",
+                  "selector": "record-1:5",
                   "row": 2
                 },
                 {
-                  "selector": "#6",
+                  "selector": "record-1:6",
                   "row": 2
                 }
               ],
@@ -237,27 +237,27 @@
               "form.multi_record_canvas": true,
               "adv.multi_record_positions": [
                 {
-                  "selector": "#1",
+                  "selector": "record-1:1",
                   "row": 1
                 },
                 {
-                  "selector": "#2",
+                  "selector": "record-1:2",
                   "row": 1
                 },
                 {
-                  "selector": "#3",
+                  "selector": "record-1:3",
                   "row": 2
                 },
                 {
-                  "selector": "#4",
+                  "selector": "record-1:4",
                   "row": 2
                 },
                 {
-                  "selector": "#5",
+                  "selector": "record-1:5",
                   "row": 2
                 },
                 {
-                  "selector": "#6",
+                  "selector": "record-1:6",
                   "row": 2
                 }
               ]
@@ -309,27 +309,27 @@
               "adv.multi_record_size_mode": "auto",
               "adv.multi_record_positions": [
                 {
-                  "selector": "#1",
+                  "selector": "record-1:1",
                   "row": 1
                 },
                 {
-                  "selector": "#2",
+                  "selector": "record-1:2",
                   "row": 1
                 },
                 {
-                  "selector": "#3",
+                  "selector": "record-1:3",
                   "row": 2
                 },
                 {
-                  "selector": "#4",
+                  "selector": "record-1:4",
                   "row": 2
                 },
                 {
-                  "selector": "#5",
+                  "selector": "record-1:5",
                   "row": 2
                 },
                 {
-                  "selector": "#6",
+                  "selector": "record-1:6",
                   "row": 2
                 }
               ],
@@ -438,27 +438,27 @@
               "adv.multi_record_size_mode": "auto",
               "adv.multi_record_positions": [
                 {
-                  "selector": "#1",
+                  "selector": "record-1:1",
                   "row": 1
                 },
                 {
-                  "selector": "#2",
+                  "selector": "record-1:2",
                   "row": 1
                 },
                 {
-                  "selector": "#3",
+                  "selector": "record-1:3",
                   "row": 2
                 },
                 {
-                  "selector": "#4",
+                  "selector": "record-1:4",
                   "row": 2
                 },
                 {
-                  "selector": "#5",
+                  "selector": "record-1:5",
                   "row": 2
                 },
                 {
-                  "selector": "#6",
+                  "selector": "record-1:6",
                   "row": 2
                 }
               ],
@@ -590,27 +590,27 @@
               "adv.multi_record_size_mode": "auto",
               "adv.multi_record_positions": [
                 {
-                  "selector": "#1",
+                  "selector": "record-1:1",
                   "row": 1
                 },
                 {
-                  "selector": "#2",
+                  "selector": "record-1:2",
                   "row": 1
                 },
                 {
-                  "selector": "#3",
+                  "selector": "record-1:3",
                   "row": 2
                 },
                 {
-                  "selector": "#4",
+                  "selector": "record-1:4",
                   "row": 2
                 },
                 {
-                  "selector": "#5",
+                  "selector": "record-1:5",
                   "row": 2
                 },
                 {
-                  "selector": "#6",
+                  "selector": "record-1:6",
                   "row": 2
                 }
               ],
