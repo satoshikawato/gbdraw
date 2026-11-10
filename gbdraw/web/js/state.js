@@ -61,6 +61,7 @@ import { SETTINGS_SLICE } from './services/drawing/settings.js';
 import { allocateDrawingId, defaultDrawingName } from './services/drawing-view.js';
 import { FEATURE_EDITOR_STATUS_IDLE } from './services/artifact-slot.js';
 /** @import { FeatureEditorStatus } from './services/artifact-slot.js' */
+/** @import { LosatRuntimeStatus } from './services/losat.js' */
 import { diagnosticError } from './utils/error-normalization.js';
 import {
   createDefaultAdv,
@@ -198,10 +199,10 @@ const losatExecution = reactive(createDefaultLosatExecution());
 const richFeaturePopup = ref(true);
 
 const losatCacheInfo = ref([]);
-const losatThreadingStatus = ref({
+const losatThreadingStatus = typedRef(/** @type {LosatRuntimeStatus} */ ({
   state: 'unknown',
   message: ''
-});
+}));
 // The temporary copies of the chosen inputs (PD-OI-121): creating the store takes
 // this tab's folder and lock and deletes the folders of closed tabs.
 useInputCopyStore(createBrowserInputCopyStore());
@@ -930,7 +931,7 @@ const settingsDefaults = (drawingMode) => () => ({
   losatProgram: 'blastn', // 'blastn' | 'tblastx' | 'blastp'
   circularConservation: createDefaultCircularConservation(),
   linearComparisonPlan: createDefaultLinearComparisonPlan(),
-  linearRecordLayoutEnabled: WEB_UX_PROFILE.linear.arrangeInRowsByDefault,
+  linearRecordLayoutEnabled: /** @type {boolean} */ (WEB_UX_PROFILE.linear.arrangeInRowsByDefault),
   linearRecordGap: DEFAULT_LINEAR_RECORD_GAP_PX,
   linearRecordRows: [],
   recordDisplayDrafts: [],
@@ -973,9 +974,9 @@ export const createDrawingState = (id, drawingMode) => {
     }
   });
   const losat = reactive(initial.losat);
-  const losatProgram = ref(initial.losatProgram);
+  const losatProgram = typedRef(initial.losatProgram);
   const linearComparisonPlan = reactive(initial.linearComparisonPlan);
-  const linearRecordLayoutEnabled = ref(initial.linearRecordLayoutEnabled);
+  const linearRecordLayoutEnabled = typedRef(initial.linearRecordLayoutEnabled);
   const linearRecordRows = reactive(initial.linearRecordRows);
   // The keys of the records this drawing leaves out (record-selection D-02):
   // Linear card uids or Circular source selectors `#N`
