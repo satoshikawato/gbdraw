@@ -513,6 +513,13 @@ def _contains_ascii_control(value: str) -> bool:
 # filesystems.
 # A File card (RecordCardinality.ALL) that expands names its records "<card key>:<position>".
 EXPANDED_RECORD_KEY_SEPARATOR = ":"
+
+
+def expanded_record_key(card_key: str, position: int) -> str:
+    """The key of the record at ``position`` (from 1) of the file a File card draws whole, when it draws several."""
+
+    return f"{card_key}{EXPANDED_RECORD_KEY_SEPARATOR}{position}"
+
 # A record with several windows draws each as a unit keyed "<record key>~w<window number>" (D-01); a record with one
 # window draws one unit with the record's own key.
 WINDOW_UNIT_KEY_SEPARATOR = "~w"
@@ -750,17 +757,9 @@ def _validate_linear_placements(
     *,
     layout: LinearMultiRecordOptions | None,
 ) -> None:
-    if any(
-        record.cardinality is RecordCardinality.ALL
-        and record.presentation.grid_column is not None
-        for record in records
-    ):
-        raise ValidationError(
-            "grid_column cannot be set for a Linear RecordCardinality.ALL input; "
-            "expanded records inherit only the source card's grid_row."
-        )
     placements = [record.presentation for record in records]
-    # The cells a record takes: one per window of a record with several (D-08), else its own.
+    # The cells a record takes: one per window of a record with several (D-08), else its own. A File card's column is
+    # the first of the consecutive columns its records take when they expand (``numbered_places``, OV-3072).
     cells = [
         (record.presentation.grid_row, column)
         for record in records

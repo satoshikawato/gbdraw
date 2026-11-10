@@ -22,14 +22,15 @@ from collections.abc import Mapping, Sequence
 from typing import Literal, TypedDict, cast, is_typeddict
 
 from gbdraw.api.record_planning import (
+    InputPlace,
     ResolvedWindow,
     comparison_unit_pairs,
+    numbered_places,
     record_drawn_windows,
     refuse_file_comparison_of_windows,
-    unit_grid_column,
 )
 from gbdraw.api.request_render import grid_placement_order
-from gbdraw.api.requests import RecordPresentation
+from gbdraw.api.requests import RecordPresentation, expanded_record_key
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.regions import window_drawn_reverse
@@ -236,17 +237,33 @@ def plan_card_windows(records: Sequence[object]) -> CardWindowPlan:
     row of its own), read by the row's captions (``plan_row_windows``)."""
 
     units: list[tuple[CardWindowRecordInput, int | None, RecordUnit, RecordPresentation]] = []
-    for position, record in enumerate(records):
-        card, windows = _card_record(record, position)
+    cards = [_card_record(record, position) for position, record in enumerate(records)]
+    # Each card at the place the drawing gives it: a placed file card drawn whole takes a column per record.
+    places = numbered_places([
+        InputPlace(
+            card["gridRow"], card["gridColumn"],
+            tuple(window.span.column for window in windows if window is not None) if len(windows) > 1 else (),
+            card["drawnRecords"],
+        )
+        for card, windows in cards
+    ])
+    for (card, windows), place in zip(cards, places, strict=True):
         # A file card drawn whole draws each of its records as a unit of its own; a record drawn whole without a known
         # length takes a one-base span, which no number or omitted length reads.
         many = card["drawnRecords"] > 1
         drawn = (
-            [(f"{card['recordKey']}:{index + 1}" if many else card["recordKey"], None) for index in range(card["drawnRecords"])]
+            [
+                (expanded_record_key(card["recordKey"], index + 1) if many else card["recordKey"], None,
+                 place.record_column(index))
+                for index in range(card["drawnRecords"])
+            ]
             if windows == (None,)
-            else [(card["recordKey"], window) for window in windows]
+            else [
+                (card["recordKey"], window, place.window_columns[at] if place.window_columns else place.column)
+                for at, window in enumerate(windows)
+            ]
         )
-        for identity, window in drawn:
+        for identity, window, column in drawn:
             length = card["sourceLength"] or 1
             span = (1, length) if window is None else (window.span.start, window.span.end)
             reverse = window_drawn_reverse(window is not None and window.span.reverse_complement, card["reverseComplement"])
@@ -255,9 +272,7 @@ def plan_card_windows(records: Sequence[object]) -> CardWindowPlan:
                 span=span, reverse=reverse, source_length=length, circular=card["circular"],
                 is_window=window is not None, window_index=None if window is None or len(windows) < 2 else window.index,
             )
-            placement = RecordPresentation(
-                grid_row=card["gridRow"], grid_column=unit_grid_column(card["gridColumn"], window)
-            )
+            placement = RecordPresentation(grid_row=card["gridRow"], grid_column=column)
             units.append((card, None if window is None else window.index, unit, placement))
     positioned = [(index, placement) for index, (*_, placement) in enumerate(units) if placement.grid_row is not None]
     if positioned:

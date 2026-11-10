@@ -1759,10 +1759,10 @@ const buildRecords = ({ drawing, filesData, resources }) => {
       const selector = linearCardSelector(seq);
       return {
         recordKey: linearSeqRecordKey(seq, index),
-        // A card that draws the only record of its file and takes a place is that one record: Python places no
-        // file card drawn whole (OV-3072); without a place it stays the file, as before.
+        // A card that draws its file whole is the file, placed or not: Python numbers the records it draws within
+        // their row from its place (OV-3072).
         cardinality: canonicalCardinalityByUid.get(seq.uid) || seq.cardinality
-          || (selector || windows.length || (gridColumn !== null && recordOf(seq).count === 1) ? 'exactly_one' : 'all'),
+          || (selector || windows.length ? 'exactly_one' : 'all'),
         source,
         selector,
         windows,

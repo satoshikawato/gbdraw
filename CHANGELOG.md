@@ -413,6 +413,15 @@ write-up of a release.
   or Remove left only some records with a place in their row. Record Layout
   moves a record's windows to the end of a new row, and a card without windows
   no longer counts as having settings.
+- Fixed: Generate no longer refuses an arranged Linear drawing in which a card
+  draws a file of several records whole and the records of its row have places
+  (for example after Add window on another card). The card's records take
+  consecutive places in its row, in file order, and the records after the card
+  follow them; the figure is the one the same row draws with each record on a
+  card of its own. In the Python API, a `RecordCardinality.ALL` input of a
+  Linear request may set `grid_column`, read the same way (OV-3072). "Orient
+  records from comparisons" no longer fails on a drawing with a record drawn in
+  several windows and a reversed record below the top row (OV-3225).
 - Added: a window of a circular record may run across its origin. In the
   Python API, a `RecordWindow` whose `start` is after its `end` draws the arc
   from `start` across the origin to `end` as one continuous unit: a feature

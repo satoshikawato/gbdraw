@@ -23,6 +23,10 @@ from gbdraw.api import (
     build_request_diagram,
 )
 from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.options import LinearDiagramOptions
+from gbdraw.api.request_render import resolve_request_records
+from gbdraw.io.record_select import parse_record_selector
+from gbdraw.io.regions import RecordWindow
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
@@ -871,15 +875,105 @@ def test_linear_all_source_cards_inherit_rows_and_contiguous_columns(
     ]
 
 
-def test_linear_all_source_card_rejects_explicit_column() -> None:
-    with pytest.raises(ValidationError, match="grid_column.*RecordCardinality.ALL"):
+def _placements(svg: str) -> list[tuple[str, int, int]]:
+    root = ET.fromstring(svg)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    return [
+        (group.attrib["data-record-key"], int(group.attrib["data-record-row"]), int(group.attrib["data-record-column"]))
+        for group in root.findall(".//svg:g", namespace)
+        if "data-record-row" in group.attrib
+    ]
+
+
+def _file_card_sources(tmp_path) -> tuple[GenBankInputSource, GenBankInputSource, GenBankInputSource]:
+    """A file of three records, then two files of one record each."""
+
+    paths = []
+    for name, lengths in (("card", (100, 120, 140)), ("next", (160,)), ("below", (180,))):
+        records = _records(*lengths)
+        for index, record in enumerate(records, start=1):
+            record.id = record.name = f"{name}-{index}"
+        path = tmp_path / f"{name}.gbk"
+        SeqIO.write(records, path, "genbank")
+        paths.append(GenBankInputSource(path))
+    return paths[0], paths[1], paths[2]
+
+
+@pytest.mark.linear
+def test_a_placed_file_card_numbers_its_records_within_its_row_as_written_record_by_record(tmp_path) -> None:
+    """OV-3072: a File card (``RecordCardinality.ALL``) with a column draws its records in consecutive columns from
+    it, in file order, and the next records of its row after them: the figure of the same layout written record by
+    record, its comparison between an expanded record and a record of the row below included."""
+
+    card, after, below = _file_card_sources(tmp_path)
+    options = LinearDiagramOptions(linear_comparisons=[_comparison(1, 4)])
+    placed = LinearDiagramRequest(
+        records=(
+            RecordInput(card, cardinality=RecordCardinality.ALL, record_key="card",
+                        presentation=RecordPresentation(grid_row=1, grid_column=1)),
+            RecordInput(after, record_key="next", presentation=RecordPresentation(grid_row=1, grid_column=2)),
+            RecordInput(below, record_key="below", presentation=RecordPresentation(grid_row=2, grid_column=1)),
+        ),
+        options=options,
+        layout=LinearMultiRecordOptions(),
+    )
+    written = LinearDiagramRequest(
+        records=(
+            *(
+                RecordInput(card, selector=parse_record_selector(f"#{index}"), record_key=f"card:{index}",
+                            presentation=RecordPresentation(grid_row=1, grid_column=index))
+                for index in (1, 2, 3)
+            ),
+            RecordInput(after, record_key="next", presentation=RecordPresentation(grid_row=1, grid_column=4)),
+            RecordInput(below, record_key="below", presentation=RecordPresentation(grid_row=2, grid_column=1)),
+        ),
+        options=options,
+        layout=LinearMultiRecordOptions(),
+    )
+
+    svg = build_request_diagram(placed).drawing.tostring()
+    assert _placements(svg) == [
+        ("card:1", 0, 0), ("card:2", 0, 1), ("card:3", 0, 2), ("next", 0, 3), ("below", 1, 0),
+    ]
+    assert 'data-query-record-index="1" data-query-row="0" data-subject-record-index="4" data-subject-row="1"' in svg
+    assert svg == build_request_diagram(written).drawing.tostring()
+
+
+@pytest.mark.linear
+def test_a_placed_file_card_moves_the_windows_after_it_in_its_row(tmp_path) -> None:
+    """The windows of a record drawn in several, placed after a File card in its row, follow its records."""
+
+    card, after, _below = _file_card_sources(tmp_path)
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(after, record_key="next", windows=(RecordWindow(1, 50, column=1), RecordWindow(80, 140, column=3)),
+                        presentation=RecordPresentation(grid_row=1)),
+            RecordInput(card, cardinality=RecordCardinality.ALL, record_key="card",
+                        presentation=RecordPresentation(grid_row=1, grid_column=2)),
+        ),
+        layout=LinearMultiRecordOptions(),
+    )
+    assert [
+        (provenance.record_key, provenance.presentation.grid_column)
+        for provenance in resolve_request_records(request).provenance
+    ] == [("next~w1", 1), ("next~w2", 5), ("card:1", 2), ("card:2", 3), ("card:3", 4)]
+    assert sorted(_placements(build_request_diagram(request).drawing.tostring()), key=lambda cell: cell[2]) == [
+        ("next~w1", 0, 0), ("card:1", 0, 1), ("card:2", 0, 2), ("card:3", 0, 3), ("next~w2", 0, 4),
+    ]
+
+
+def test_a_file_card_column_is_one_cell_before_its_records_expand() -> None:
+    """A File card's column is the first of its records: two inputs of a row still cannot share one."""
+
+    with pytest.raises(ValidationError, match="placements must be unique"):
         LinearDiagramRequest(
-            records=(
+            records=tuple(
                 RecordInput(
-                    source=InMemoryRecordSource(_records(100)[0]),
+                    source=InMemoryRecordSource(record),
                     cardinality=RecordCardinality.ALL,
                     presentation=RecordPresentation(grid_row=1, grid_column=1),
-                ),
+                )
+                for record in _records(100, 100)
             ),
             layout=LinearMultiRecordOptions(),
         )

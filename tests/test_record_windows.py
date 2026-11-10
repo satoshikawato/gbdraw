@@ -627,6 +627,37 @@ def test_a_cli_session_of_a_records_table_group_keeps_the_window_columns(
     assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "g.svg").read_bytes()
 
 
+def test_a_records_table_names_each_record_of_a_file_the_web_draws_whole_in_a_placed_card(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-3072: a records table writes a file drawn whole one row per record, each with its column; a Session of the
+    Web's File card of that file, placed at the first of those columns, draws the same figure. A File card's records
+    are keyed ``<card>:<n>``, the table's ``record-<row>``."""
+    import json
+
+    monkeypatch.chdir(tmp_path)
+    table = _table(
+        tmp_path,
+        [f"{TWO_RECORDS}\t#1\t1\t1", f"{TWO_RECORDS}\t#2\t1\t2", f"{MITO}\t\t1\t3"],
+        "gbk\trecord_id\trow\tcolumn",
+    )
+    _cli(monkeypatch, ["linear", "--records_table", str(table), "-o", "t", "-f", "svg", "--save_session"])
+    document = json.loads((tmp_path / "t.gbdraw-session.json").read_text(encoding="utf-8"))
+    request = document["drawings"][0]["renderRequest"]
+    first, _second, last = request["records"]
+    request["records"] = [
+        {**first, "cardinality": "all", "selector": None},
+        {**last, "presentation": {**last["presentation"], "gridColumn": 2}},
+    ]
+    (tmp_path / "card.gbdraw-session.json").write_text(json.dumps(document), encoding="utf-8")
+    _cli(monkeypatch, ["render", "--session", "card.gbdraw-session.json", "-o", "card", "-f", "svg"])
+    card = (tmp_path / "card.svg").read_text(encoding="utf-8")
+    assert 'data-record-key="record-1:2"' in card
+    assert card.replace("record-1:2", "record-2").replace("record-1:1", "record-1") == (
+        tmp_path / "t.svg"
+    ).read_text(encoding="utf-8")
+
+
 def test_a_cli_session_of_a_records_table_drawing_one_file_record_twice_replays_the_figure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

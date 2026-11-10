@@ -18,7 +18,7 @@ them.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import TypedDict
 
@@ -44,18 +44,33 @@ class AutoOrientationReply(TypedDict):
     records: list[RecordOrientation]
 
 
-def _record_input_of(item: RecordInput, provenance: ResolvedRecordProvenance) -> RecordInput:
-    """The input that draws only this record: an input that draws all its file's records, narrowed to this one."""
+def _record_inputs_of(item: RecordInput, units: Sequence[ResolvedRecordProvenance]) -> tuple[RecordInput, ...]:
+    """The inputs that draw the records of ``item`` as the plan drew them (``units``, its drawn units), each at the
+    place the plan gave it: one per record of an input that draws all its file's records, its records' columns
+    numbered within the row (``numbered_places``), else ``item`` itself, its windows one input (OV-3225)."""
 
-    if item.cardinality is not RecordCardinality.ALL:
-        return item
-    index = provenance.source_record_index
-    return replace(
-        item,
-        selector=RecordSelector(raw=f"#{index + 1}", record_id=None, record_index=index),
-        cardinality=RecordCardinality.EXACTLY_ONE,
-        record_key=provenance.record_key,
-    )
+    if item.cardinality is RecordCardinality.ALL:
+        return tuple(
+            replace(
+                item,
+                selector=RecordSelector(raw=f"#{unit.source_record_index + 1}", record_id=None,
+                                        record_index=unit.source_record_index),
+                cardinality=RecordCardinality.EXACTLY_ONE,
+                record_key=unit.record_key,
+                presentation=replace(item.presentation, grid_column=unit.presentation.grid_column),
+            )
+            for unit in units
+        )
+    if len(item.windows) > 1:
+        columns = tuple(unit.window.span.column if unit.window is not None else None for unit in units)
+        if columns == tuple(window.column for window in item.windows):
+            return (item,)
+        return (replace(item, windows=tuple(
+            replace(window, column=column) for window, column in zip(item.windows, columns, strict=True)
+        )),)
+    column = units[0].presentation.grid_column
+    return (item if column == item.presentation.grid_column
+            else replace(item, presentation=replace(item.presentation, grid_column=column)),)
 
 
 def _with_rows_below_top_unreversed(request: LinearDiagramRequest, plan: LinearRequestPlan) -> LinearDiagramRequest | None:
@@ -64,7 +79,8 @@ def _with_rows_below_top_unreversed(request: LinearDiagramRequest, plan: LinearR
     The rows are the planner's (``resolve_record_row_positions`` on the plan's
     records and layout). An input that draws several records is narrowed to
     one input per record, so a record below the top row is cleared also when
-    another record of its file is in the top row.
+    another record of its file is in the top row; the windows of a record share
+    its row and stay one input.
     """
 
     rows = resolve_record_row_positions(
@@ -74,11 +90,14 @@ def _with_rows_below_top_unreversed(request: LinearDiagramRequest, plan: LinearR
              for provenance, row in zip(plan.provenance, rows, strict=True)]
     if not any(below):
         return None
-    # Every other input draws exactly one record, so the drawn records name the inputs in order.
-    narrowed = (_record_input_of(request.records[provenance.input_index], provenance) for provenance in plan.provenance)
-    return replace(request, records=tuple(
-        item.oriented(False) if clear else item for item, clear in zip(narrowed, below, strict=True)
-    ))
+    records: list[RecordInput] = []
+    for input_index, item in enumerate(request.records):
+        units = [(unit, clear) for unit, clear in zip(plan.provenance, below, strict=True) if unit.input_index == input_index]
+        narrowed = _record_inputs_of(item, [unit for unit, _clear in units])
+        # A narrowed input draws one record (one unit); the input left whole draws its windows in one row.
+        clears = [clear for _unit, clear in units] if len(narrowed) > 1 else [any(clear for _unit, clear in units)]
+        records.extend(record.oriented(False) if clear else record for record, clear in zip(narrowed, clears, strict=True))
+    return replace(request, records=tuple(records))
 
 
 def decide_auto_orientation(

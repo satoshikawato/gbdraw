@@ -264,3 +264,9 @@ def test_card_window_plan_counts_each_record_a_file_card_draws_whole() -> None:
     assert [entry["number"] for entry in shared["windows"]] == [3, 4]
     apart = plan_card_windows([_card("m", [], None, False, drawn=2), {**windowed, "gridRow": None}])
     assert [entry["number"] for entry in apart["windows"]] == [1, 2]
+    # A placed file card between the windows takes a column per record (OV-3072): the windows are 1 and 4.
+    placed = plan_card_windows([
+        _card("a", [(1, 100, False, 1), (301, 400, False, 3)], 10_000, False, row=1),
+        _card("m", [], None, False, row=1, column=2, drawn=2),
+    ])
+    assert [entry["number"] for entry in placed["windows"]] == [1, 4]

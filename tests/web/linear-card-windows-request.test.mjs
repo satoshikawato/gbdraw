@@ -1,8 +1,9 @@
 // The request a Linear drawing with card windows writes (PD-OI-124), built by the app's own request owner
 // (`projectDraftRequest`, which Save without a Result, New drawing from region and Generate share) and read by the
 // real Python codec. Record Layout edits leave stored places on some cells: the request writes a place for every
-// cell or for none, as Python reads them (OV-3071), and a card that draws the only record of its file takes a place
-// as that one record (OV-3072). A drawing whose places can be written as they are writes them unchanged. A card that
+// cell or for none, as Python reads them (OV-3071), and a card that draws its file whole takes a place as the file:
+// Python numbers its records within their row (OV-3072). A drawing whose places can be written as they are writes them
+// unchanged. A card that
 // chose its record and lists a window reads its record from Generate's record catalog, so an empty window draws the
 // whole record and a refusal names the record (B1).
 import assert from 'node:assert/strict';
@@ -164,12 +165,12 @@ test('a Row change that drops one record\'s place writes a place for every recor
   setLinearRecordRow(drawing.linearRecordRows, 'a', 1);
   assert.deepEqual(await requestOf(drawing), { verdict: 'drawn', records: [
     ['a', 'exactly_one', 1, 3, []], ['b', 'exactly_one', 1, 1, []], ['c', 'exactly_one', 1, 2, []]] });
-  // A card added to that row (a new file, drawn whole) takes the place after them as its file's one record.
+  // A card added to that row (a new file, drawn whole) takes the place after them as its file.
   drawing.linearSeqs.push(createLinearSeq({ uid: 'n', gb: fileOf('recn') }));
   drawing.linearRecordRows.push({ uid: 'n', row: 1 });
   const added = await requestOf(drawing);
   assert.equal(added.verdict, 'drawn');
-  assert.deepEqual(added.records.at(-1), ['n', 'exactly_one', 1, 4, []]);
+  assert.deepEqual(added.records.at(-1), ['n', 'all', 1, 4, []]);
 });
 
 test('Add window and then Remove in an arranged drawing keep a request Python draws (review cases A and B, OV-3072)', async () => {
@@ -181,12 +182,12 @@ test('Add window and then Remove in an arranged drawing keep a request Python dr
   edits.addLinearCardWindow(drawing.linearSeqs[1]);
   edits.setLinearCardWindow(drawing.linearSeqs[1], 1, 'start', 301);
   edits.setLinearCardWindow(drawing.linearSeqs[1], 1, 'end', 400);
-  // a and c draw the one record of their files: each takes its place as that record.
+  // a and c draw their files whole: each takes its place as its file.
   assert.deepEqual(await requestOf(drawing), { verdict: 'drawn', records: [
-    ['a', 'exactly_one', 1, 1, []], ['w', 'exactly_one', 1, null, [[1, 100, 2], [301, 400, 3]]], ['c', 'exactly_one', 2, 1, []]] });
+    ['a', 'all', 1, 1, []], ['w', 'exactly_one', 1, null, [[1, 100, 2], [301, 400, 3]]], ['c', 'all', 2, 1, []]] });
   edits.removeLinearCardWindow(drawing.linearSeqs[1], 1);
   assert.deepEqual(await requestOf(drawing), { verdict: 'drawn', records: [
-    ['a', 'exactly_one', 1, 1, []], ['w', 'exactly_one', 1, 2, [[1, 100, null]]], ['c', 'exactly_one', 2, 1, []]] });
+    ['a', 'all', 1, 1, []], ['w', 'exactly_one', 1, 2, [[1, 100, null]]], ['c', 'all', 2, 1, []]] });
   // Case B: a, b, w in row 1, w drawn in two windows. Down on a, then Remove one of w's windows.
   const shared = arrangedDrawing(['a', 'b', 'w']);
   shared.linearSeqs[2].windows = [1, 301].map((start) => ({ start, end: start + 99, reverseComplement: false, column: null, acrossOrigin: false }));
@@ -196,6 +197,27 @@ test('Add window and then Remove in an arranged drawing keep a request Python dr
   const removed = await requestOf(shared);
   assert.equal(removed.verdict, 'drawn');
   assert.deepEqual(removed.records.map(([key, , row, column]) => [key, row, column]), [['b', 1, 1], ['a', 1, 2], ['w', 1, 3]]);
+});
+
+test('Add window beside a card that draws a file of three records whole keeps a request Python draws (OV-3072)', async () => {
+  // m draws its file of three records whole; w reads another file. Both in row 1; Add window on w writes places.
+  const drawing = arrangedDrawing(['w']);
+  drawing.linearSeqs.unshift(createLinearSeq({ uid: 'm', gb: fileOf('recx', 'recy', 'recz') }));
+  drawing.linearRecordRows.splice(0, Infinity, { uid: 'm', row: 1 }, { uid: 'w', row: 1 });
+  const edits = cardEditsOf(drawing);
+  edits.addLinearCardWindow(drawing.linearSeqs[1]);
+  for (const [window, start, end] of [[0, 1, 100], [1, 301, 400]]) {
+    edits.setLinearCardWindow(drawing.linearSeqs[1], window, 'start', start);
+    edits.setLinearCardWindow(drawing.linearSeqs[1], window, 'end', end);
+  }
+  // m is the file at the first place of the row; Python numbers its records 1 to 3 and w's windows after them.
+  // dev refused it: "grid_column cannot be set for a Linear RecordCardinality.ALL input".
+  assert.deepEqual(await requestOf(drawing), { verdict: 'drawn', records: [
+    ['m', 'all', 1, 1, []], ['w', 'exactly_one', 1, null, [[1, 100, 2], [301, 400, 3]]]] });
+  // Down on m keeps a request Python draws: the file between w's windows, the cards swapped as Down swaps them.
+  moveCell(drawing, 'm', 1);
+  assert.deepEqual(await requestOf(drawing), { verdict: 'drawn', records: [
+    ['w', 'exactly_one', 1, null, [[1, 100, 1], [301, 400, 3]]], ['m', 'all', 1, 2, []]] });
 });
 
 test('a card drawn in two windows with Draw this record off leaves a request Python draws (review case C)', async () => {

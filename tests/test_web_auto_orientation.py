@@ -18,8 +18,10 @@ from Bio import SeqIO
 import gbdraw
 from gbdraw.api import (
     GenBankInputSource,
+    LinearComparison,
     LinearDiagramOptions,
     LinearDiagramRequest,
+    LinearMultiRecordOptions,
     RecordCardinality,
     RecordInput,
     RecordPresentation,
@@ -28,6 +30,9 @@ from gbdraw.api import (
 )
 from gbdraw.api.record_planning import record_is_reverse_complemented
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.comparisons import read_comparison_resource
+from gbdraw.io.record_select import parse_record_selector
+from gbdraw.io.regions import RecordWindow
 from gbdraw.session_request_codec import encode_canonical_request
 from gbdraw.web_support.auto_orientation import decide_auto_orientation
 
@@ -158,6 +163,65 @@ def test_a_card_that_draws_both_records_is_decided_per_record(tmp_path: Path) ->
     assert reply == {"records": [
         {"recordKey": "card:1", "reverseComplement": True},
         {"recordKey": "card:2", "reverseComplement": False},
+    ]}
+
+
+@pytest.mark.linear
+def test_a_placed_file_card_is_decided_as_its_records_written_one_by_one(tmp_path: Path) -> None:
+    """OV-3072: a File card placed in its row (a column on a ``RecordCardinality.ALL`` input) answers as the same
+    row written record by record, each record at the column the planner numbered for it."""
+
+    both = tmp_path / "both.gb"
+    SeqIO.write([SeqIO.read(_QUERY, "genbank"), SeqIO.read(_SUBJECT, "genbank")], both, "genbank")
+    written = LinearDiagramRequest(
+        records=(
+            *(
+                RecordInput(GenBankInputSource(both), selector=parse_record_selector(f"#{index}"),
+                            record_key=f"card:{index}", presentation=RecordPresentation(grid_row=1, grid_column=index))
+                for index in (1, 2)
+            ),
+            RecordInput(GenBankInputSource(_SUBJECT), record_key="below",
+                        presentation=RecordPresentation(grid_row=2, grid_column=1, reverse_complement=True)),
+        ),
+        # The second record of the card against the record below it.
+        options=LinearDiagramOptions(linear_comparisons=(
+            LinearComparison(1, 2, read_comparison_resource(_reverse_hits_table(tmp_path))),
+        )),
+        layout=LinearMultiRecordOptions(),
+    )
+    payload, paths = _committed(written, tmp_path / "written")
+    records = cast("list[dict[str, object]]", payload["records"])
+    # The Web sends the card as one input at the first column of its records.
+    card = {**records[0], "cardinality": "all", "recordKey": "card", "selector": None}
+    placed = {**payload, "records": [card, records[2]]}
+    reply = decide_auto_orientation(placed, paths, str(tmp_path / "placed"))
+    # The record below is decided by its comparison with the card's second record.
+    assert reply == {"records": [
+        {"recordKey": "card:1", "reverseComplement": False},
+        {"recordKey": "card:2", "reverseComplement": False},
+        {"recordKey": "below", "reverseComplement": True},
+    ]}
+    assert reply == decide_auto_orientation(payload, paths, str(tmp_path / "out"))
+
+
+@pytest.mark.linear
+def test_a_record_drawn_in_several_windows_stays_one_input_when_a_record_below_is_cleared(tmp_path: Path) -> None:
+    """OV-3225: the windows of a record are one input of the request the helper plans again, not one per window."""
+
+    payload, paths = _committed(LinearDiagramRequest(
+        records=(
+            RecordInput(GenBankInputSource(_QUERY), record_key="query",
+                        windows=(RecordWindow(1, 3000, column=1), RecordWindow(5001, 8000, column=2)),
+                        presentation=RecordPresentation(grid_row=1)),
+            RecordInput(GenBankInputSource(_SUBJECT), record_key="subject",
+                        presentation=RecordPresentation(grid_row=2, grid_column=1, reverse_complement=True)),
+        ),
+        layout=LinearMultiRecordOptions(),
+    ), tmp_path)
+    assert decide_auto_orientation(payload, paths, str(tmp_path / "out")) == {"records": [
+        {"recordKey": "query~w1", "reverseComplement": False},
+        {"recordKey": "query~w2", "reverseComplement": False},
+        {"recordKey": "subject", "reverseComplement": False},
     ]}
 
 
