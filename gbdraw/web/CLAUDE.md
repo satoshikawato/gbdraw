@@ -214,7 +214,7 @@ full checkpoint cloning or signing, and its pre-state is the sole rollback autho
 
 Keep top-level `create*` entry points in `js/app/*.js`. Put larger,
 single-purpose helpers in the matching subfolder instead of growing another
-general utility module. Functions stay within the line limit of
+general utility module. Functions stay within the statement limit of
 [Web function size](../../docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#web-function-size),
 which counts a `create*` factory with every function inside it.
 

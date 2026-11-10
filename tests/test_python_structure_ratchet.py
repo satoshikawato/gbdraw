@@ -14,9 +14,10 @@ except ``gbdraw/web/``, without importing it.
 - Import cycles. Module-level imports form no cycle. An import inside a
   function can close one; ``IMPORT_CYCLE_SIZES`` gives, for each module in a
   cycle today, the number of modules in its cycle.
-- Function size. A function has at most ``MAX_FUNCTION_LINES`` lines and
-  ``MAX_FUNCTION_PARAMETERS`` parameters. ``FUNCTION_LINES`` and
-  ``FUNCTION_PARAMETERS`` list today's larger functions with their sizes.
+- Function size. A function has at most ``MAX_FUNCTION_STATEMENTS``
+  statements and ``MAX_FUNCTION_PARAMETERS`` parameters.
+  ``FUNCTION_STATEMENTS`` and ``FUNCTION_PARAMETERS`` list today's larger
+  functions with their sizes.
 
 The four baselines and the two limits are registered design-rule allowlists:
 adding or raising an entry, or raising a limit, is an authority-only change
@@ -35,9 +36,12 @@ import n`` is an edge to ``X.n`` when that is a module, else to ``X``;
 relative imports are resolved, and imports under ``if TYPE_CHECKING:`` are not
 counted. An import inside a ``def`` is function-level; any other is
 module-level. A function is every ``def`` and ``async def``, methods and
-nested functions included; it is named ``path::qualified.name``. Its lines run
-from ``def`` to its last line, and its parameters are every name in its
-signature, ``self``, ``cls``, ``*args`` and ``**kwargs`` included.
+nested functions included; it is named ``path::qualified.name``. Its
+statements are those in its body, the statements of the functions and classes
+nested in it included; a docstring is not one, and the body of each
+``lambda`` in it counts as one, its implicit return. Comments, blank lines and
+line breaks change no count. Its parameters are every name in its signature,
+``self``, ``cls``, ``*args`` and ``**kwargs`` included.
 """
 
 from __future__ import annotations
@@ -109,7 +113,9 @@ LAYERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
 )
 
-MAX_FUNCTION_LINES = 150
+# 150 lines at the median density of the functions of 100 to 200 lines when
+# the limit moved from lines to statements (2.6 lines a statement, 2026-11-10).
+MAX_FUNCTION_STATEMENTS = 58
 MAX_FUNCTION_PARAMETERS = 10
 
 UPWARD_IMPORTS: frozenset[str] = frozenset(
@@ -228,61 +234,80 @@ IMPORT_CYCLE_SIZES: dict[str, int] = {
     "gbdraw.web_support.feature_catalog": 16,
 }
 
-FUNCTION_LINES: dict[str, int] = {
-    "gbdraw/analysis/protein_colinearity.py::_build_adjacent_display_edges_by_pair": 179,
-    "gbdraw/analysis/protein_colinearity.py::_build_anchor_core_orthogroups": 303,
-    "gbdraw/analysis/protein_colinearity.py::extract_cds_proteins": 188,
-    "gbdraw/analysis/protein_colinearity.py::extract_protein_identity_manifest": 238,
-    "gbdraw/api/diagram.py::assemble_circular_diagram_from_record": 381,
-    "gbdraw/api/diagram.py::assemble_circular_diagram_from_records": 588,
-    "gbdraw/api/diagram.py::assemble_linear_diagram_from_records": 483,
-    "gbdraw/api/options.py::_ModeDiagramOptions.__post_init__": 165,
-    "gbdraw/circular.py::_get_args": 604,
-    "gbdraw/circular.py::run_circular_from_namespace": 558,
-    "gbdraw/diagrams/circular/assemble.py::_draw_resolved_circular_slot": 230,
-    "gbdraw/diagrams/circular/assemble.py::_try_shift_labels_away_from_legend": 155,
-    "gbdraw/diagrams/circular/assemble.py::add_record_on_circular_canvas": 634,
-    "gbdraw/diagrams/circular/assemble.py::circular_labels": 228,
-    "gbdraw/diagrams/circular/radial_layout.py::_resolve_circular_radial_layout": 405,
-    "gbdraw/diagrams/linear/assemble.py::_build_linear_record_vertical_plans": 142,
-    "gbdraw/diagrams/linear/assemble.py::_collect_linear_primary_bounds": 160,
-    "gbdraw/diagrams/linear/builders.py::add_record_definition_group": 158,
-    "gbdraw/features/factory.py::_build_feature_layers": 155,
-    "gbdraw/labels/circular.py::_legacy_improved_label_placement_fc": 183,
-    "gbdraw/labels/circular.py::_polish_total_leader_distance": 240,
-    "gbdraw/labels/circular.py::_rebalance_inner_labels_strict_order": 374,
-    "gbdraw/labels/circular.py::_refine_labels_to_preferred_hemisphere": 286,
-    "gbdraw/labels/circular.py::_resolve_label_leader_line_collisions": 355,
-    "gbdraw/labels/circular.py::_resolve_outer_label_overlaps_with_fixed_radii": 182,
-    "gbdraw/labels/circular.py::improved_label_placement_fc": 720,
-    "gbdraw/labels/circular.py::improved_label_placement_fc.optimize_with_shift_limit": 158,
-    "gbdraw/labels/circular.py::prepare_label_list": 596,
-    "gbdraw/labels/circular.py::prepare_label_list.place_external_labels": 215,
-    "gbdraw/labels/circular.py::rearrange_labels_fc": 183,
-    "gbdraw/labels/linear.py::linear_record_labels": 288,
-    "gbdraw/layout/similarity_alignment.py::resolve_similarity_alignment": 236,
-    "gbdraw/legend/circular_layout.py::build_circular_legend_layout": 168,
-    "gbdraw/linear.py::_get_args": 869,
-    "gbdraw/linear.py::run_linear_from_namespace": 529,
-    "gbdraw/render/drawers/circular/annotations.py::circular_annotation_track_content": 141,
-    "gbdraw/render/drawers/linear/annotations.py::linear_annotation_track_content": 161,
-    "gbdraw/render/interactive_svg.py::enrich_svg": 194,
-    "gbdraw/session_contract.py::describe_session_admission": 190,
-    "gbdraw/session_io.py::_append_linear_gui_args": 157,
-    "gbdraw/session_io.py::_attach_current_web_file_bindings": 172,
-    "gbdraw/session_io.py::_migrate_legacy_linear_comparison_draft": 320,
-    "gbdraw/session_io.py::build_session_json": 168,
-    "gbdraw/session_migration.py::project_session_adjunct_for_current_write": 182,
-    "gbdraw/session_request_codec.py::_decode_canonical_request": 157,
-    "gbdraw/session_request_codec.py::_decode_comparisons": 167,
-    "gbdraw/session_request_codec.py::describe_canonical_request": 432,
-    "gbdraw/session_request_codec.py::migrate_flat_config_overrides": 225,
-    "gbdraw/tracks/circular.py::_normalize_circular_track_slots": 147,
-    "gbdraw/web_support/feature_catalog.py::_normalized_biological_features": 168,
-    "gbdraw/web_support/feature_catalog.py::_normalized_matches": 181,
-    "gbdraw/web_support/feature_catalog.py::select_feature_catalog_item": 381,
-    "gbdraw/web_support/feature_metadata.py::extract_features_from_records_payload": 209,
-    "gbdraw/web_support/request_render.py::_render_canonical_web_request": 131,
+FUNCTION_STATEMENTS: dict[str, int] = {
+    "gbdraw/analysis/collinearity_units.py::build_collinearity_unit_index": 75,
+    "gbdraw/analysis/ortholog_paths.py::OrthologPathCollection._build_index": 60,
+    "gbdraw/analysis/protein_artifacts.py::validate_current_derived_protein_artifacts": 79,
+    "gbdraw/analysis/protein_colinearity.py::_build_adjacent_display_edges_by_pair": 92,
+    "gbdraw/analysis/protein_colinearity.py::_build_anchor_core_orthogroups": 118,
+    "gbdraw/analysis/protein_colinearity.py::_check_protein_identity_manifest": 66,
+    "gbdraw/analysis/protein_colinearity.py::extract_cds_proteins": 65,
+    "gbdraw/analysis/protein_colinearity.py::extract_protein_identity_manifest": 84,
+    "gbdraw/annotations/layout.py::_lane_rooms": 65,
+    "gbdraw/api/diagram.py::assemble_circular_diagram_from_record": 95,
+    "gbdraw/api/diagram.py::assemble_circular_diagram_from_records": 156,
+    "gbdraw/api/diagram.py::assemble_linear_diagram_from_records": 154,
+    "gbdraw/api/options.py::_ModeDiagramOptions.__post_init__": 62,
+    "gbdraw/api/region_drawing.py::derive_from_source": 66,
+    "gbdraw/api/session_compat.py::_main_drawn_hash_selectors_to_source": 59,
+    "gbdraw/circular.py::_get_args": 214,
+    "gbdraw/circular.py::run_circular_from_namespace": 205,
+    "gbdraw/cli_utils/session.py::collect_embedded_files_from_cli_args": 83,
+    "gbdraw/diagrams/circular/assemble.py::_try_shift_labels_away_from_legend": 102,
+    "gbdraw/diagrams/circular/assemble.py::add_record_on_circular_canvas": 164,
+    "gbdraw/diagrams/circular/assemble.py::circular_labels": 61,
+    "gbdraw/diagrams/circular/radial_layout.py::_resolve_circular_radial_layout": 158,
+    "gbdraw/io/regions.py::assign_region_specs": 69,
+    "gbdraw/labels/circular.py::_legacy_improved_label_placement_fc": 113,
+    "gbdraw/labels/circular.py::_polish_total_leader_distance": 114,
+    "gbdraw/labels/circular.py::_rebalance_inner_labels_strict_order": 194,
+    "gbdraw/labels/circular.py::_refine_labels_to_preferred_hemisphere": 133,
+    "gbdraw/labels/circular.py::_resolve_label_leader_line_collisions": 169,
+    "gbdraw/labels/circular.py::_resolve_outer_label_overlaps_with_fixed_radii": 131,
+    "gbdraw/labels/circular.py::improved_label_placement_fc": 475,
+    "gbdraw/labels/circular.py::improved_label_placement_fc.optimize_with_shift_limit": 108,
+    "gbdraw/labels/circular.py::improved_label_placement_fc.relax_overlapping_clusters": 90,
+    "gbdraw/labels/circular.py::place_labels_on_arc_fc": 68,
+    "gbdraw/labels/circular.py::prepare_label_list": 206,
+    "gbdraw/labels/circular.py::prepare_label_list.place_external_labels": 59,
+    "gbdraw/labels/circular.py::rearrange_labels_fc": 63,
+    "gbdraw/labels/filtering.py::_label_text": 65,
+    "gbdraw/labels/linear.py::linear_record_labels": 124,
+    "gbdraw/labels/linear.py::place_linear_label_row": 62,
+    "gbdraw/layout/linear_multi_record.py::solve_linear_horizontal_layout": 63,
+    "gbdraw/layout/similarity_alignment.py::resolve_similarity_alignment": 86,
+    "gbdraw/linear.py::_get_args": 221,
+    "gbdraw/linear.py::run_linear_from_namespace": 195,
+    "gbdraw/render/drawers/circular/annotations.py::circular_annotation_track_content": 68,
+    "gbdraw/render/drawers/linear/annotations.py::linear_annotation_track_content": 83,
+    "gbdraw/render/interactive_svg.py::enrich_svg": 96,
+    "gbdraw/render_stages.py::render_stage": 59,
+    "gbdraw/session_contract.py::describe_session_admission": 81,
+    "gbdraw/session_io.py::_append_linear_gui_args": 72,
+    "gbdraw/session_io.py::_attach_current_web_file_bindings": 77,
+    "gbdraw/session_io.py::_canonicalize_legacy_session_cli_args": 65,
+    "gbdraw/session_io.py::_legacy_feature_index": 69,
+    "gbdraw/session_io.py::_migrate_legacy_linear_comparison_draft": 159,
+    "gbdraw/session_io.py::_validate_current_comparison_authority": 76,
+    "gbdraw/session_io.py::_validate_web_file_bindings": 80,
+    "gbdraw/session_io.py::build_session_json": 67,
+    "gbdraw/session_io.py::migrate_session_annotation_targets": 71,
+    "gbdraw/session_io.py::migrate_session_feature_edits": 78,
+    "gbdraw/session_io.py::split_draft_into_modes": 73,
+    "gbdraw/session_migration.py::project_session_adjunct_for_current_write": 91,
+    "gbdraw/session_request_codec.py::_decode_comparisons": 75,
+    "gbdraw/session_request_codec.py::describe_canonical_request": 121,
+    "gbdraw/session_request_codec.py::describe_canonical_typed_resources": 66,
+    "gbdraw/session_request_codec.py::migrate_flat_config_overrides": 109,
+    "gbdraw/session_request_codec.py::migrate_legacy_full_config": 66,
+    "gbdraw/tracks/circular.py::_normalize_circular_track_slots": 65,
+    "gbdraw/tracks/circular.py::parse_circular_track_slot": 80,
+    "gbdraw/web_support/feature_catalog.py::_normalized_biological_features": 74,
+    "gbdraw/web_support/feature_catalog.py::_normalized_matches": 63,
+    "gbdraw/web_support/feature_catalog.py::select_feature_catalog_item": 135,
+    "gbdraw/web_support/feature_metadata.py::extract_features_from_records_payload": 66,
+    "gbdraw/web_support/orthogroup_metadata.py::enrich_features_with_orthogroups": 60,
+    "gbdraw/web_support/rule_matching.py::_colored_table": 77,
 }
 
 FUNCTION_PARAMETERS: dict[str, int] = {
@@ -417,7 +442,7 @@ class Import:
 class Function:
     key: str
     line: int
-    lines: int
+    statements: int
     parameters: int
 
 
@@ -441,6 +466,21 @@ def unit_of(module: str) -> str:
 def _is_type_checking(test: ast.expr) -> bool:
     return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
         isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+    )
+
+
+def statement_count(function: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
+    """The statements of ``function`` as the module docstring defines them."""
+    nodes = [node for statement in function.body for node in ast.walk(statement)]
+    docstrings = {
+        id(scope.body[0])
+        for scope in (function, *nodes)
+        if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        and ast.get_docstring(scope, clean=False) is not None
+    }
+    return sum(
+        isinstance(node, ast.Lambda) or (isinstance(node, ast.stmt) and id(node) not in docstrings)
+        for node in nodes
     )
 
 
@@ -489,13 +529,12 @@ class _Collector(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         arguments = node.args
-        assert node.end_lineno is not None
         self.scope.append(node.name)
         self.functions.append(
             Function(
                 key=f"{self.path}::{'.'.join(self.scope)}",
                 line=node.lineno,
-                lines=node.end_lineno - node.lineno + 1,
+                statements=statement_count(node),
                 parameters=len(arguments.posonlyargs)
                 + len(arguments.args)
                 + len(arguments.kwonlyargs)
@@ -585,7 +624,7 @@ def _warn_lowerable(name: str, entries: list[str]) -> None:
 def test_baselines_are_sorted() -> None:
     for name, baseline in (
         ("IMPORT_CYCLE_SIZES", IMPORT_CYCLE_SIZES),
-        ("FUNCTION_LINES", FUNCTION_LINES),
+        ("FUNCTION_STATEMENTS", FUNCTION_STATEMENTS),
         ("FUNCTION_PARAMETERS", FUNCTION_PARAMETERS),
     ):
         assert list(baseline) == sorted(baseline), f"keep {name} sorted by key"
@@ -722,8 +761,52 @@ def _assert_function_sizes(measure: str, limit: int, name: str, baseline: dict[s
     )
 
 
-def test_functions_stay_within_the_line_limit() -> None:
-    _assert_function_sizes("lines", MAX_FUNCTION_LINES, "FUNCTION_LINES", FUNCTION_LINES)
+_COMPACT = """
+def measured(items):
+    total = sum(item for item in items)
+    def inner():
+        return total
+    key = lambda item: item
+    return sorted(items, key=key), inner()
+"""
+
+_SPREAD = '''
+def measured(items):
+    """A docstring is not a statement."""
+    # Nor is a comment, a blank line or a line break.
+    total = sum(
+        item
+        for item in items
+    )
+
+    def inner():
+        """Nor is a nested docstring."""
+        return total
+
+    key = lambda item: (
+        item
+    )
+    return (
+        sorted(items, key=key),
+        inner(),
+    )
+'''
+
+
+def test_a_function_counts_statements_not_lines() -> None:
+    counts = []
+    for source in (_COMPACT, _SPREAD):
+        function = ast.parse(source).body[0]
+        assert isinstance(function, ast.FunctionDef)
+        counts.append(statement_count(function))
+    # total, def inner, its return, key, the body of the lambda, return
+    assert counts == [6, 6]
+
+
+def test_functions_stay_within_the_statement_limit() -> None:
+    _assert_function_sizes(
+        "statements", MAX_FUNCTION_STATEMENTS, "FUNCTION_STATEMENTS", FUNCTION_STATEMENTS
+    )
 
 
 def test_functions_stay_within_the_parameter_limit() -> None:
