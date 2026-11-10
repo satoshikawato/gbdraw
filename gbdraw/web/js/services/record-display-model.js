@@ -3,7 +3,7 @@
 // display start and topology, and the record orientation intent, as the
 // request and Session services read them. The Record Display controls
 // (app/record-display-options.js) edit it.
-import { resolveDisambiguatedRecordSelection } from './record-options.js';
+import { regionWithinRecord, resolveDisambiguatedRecordSelection } from './record-options.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { isPlainObject } from '../utils/contract-shape.js';
 import { cloneJsonData } from './json-clone.js';
@@ -39,9 +39,16 @@ export const detectedTopologyNote = (topology) => tm(topology === 'circular' || 
  * }} RecordDisplayRequested
  */
 /**
+ * The crop a record row draws, as its Display start reads it: the span of the first window the row draws (1-based,
+ * source coordinates; a Start after the End runs across the origin of a circular record) and that window's
+ * orientation (`recordDisplayCrop`).
+ * @typedef {{ start: number, end: number, reverseComplement: boolean }} RecordDisplayCrop
+ */
+/**
  * What the row's source says about the draft's record: the row's cropped and
- * reverse state.
- * @typedef {{ cropped?: unknown, reverse?: unknown }} RecordDisplayContext
+ * reverse state, and the crop it draws (null while it draws none, or while the
+ * crop cannot be read yet).
+ * @typedef {{ cropped?: unknown, reverse?: unknown, crop?: RecordDisplayCrop | null }} RecordDisplayContext
  */
 /**
  * A discovered record row as the surface reads it.
@@ -263,17 +270,39 @@ export const validateRecordDisplayDrafts = (drafts, { scoped = false } = {}) => 
 };
 
 /**
+ * The crop a window draws, as a record row's Display start reads it; null while either end is not stated.
+ * @param {{ start: number | null, end: number | null, reverseComplement: boolean }} window
+ * @returns {RecordDisplayCrop | null}
+ */
+export const recordDisplayCrop = ({ start, end, reverseComplement }) => (
+  start === null || end === null ? null : { start, end, reverseComplement }
+);
+
+/**
+ * The coordinate a crop's drawing starts at (Circular 12 o'clock, the Linear left end): its End when it is drawn
+ * reverse-complemented, else its Start. An End past the end of a record of known length is drawn to the record end
+ * (`regionWithinRecord`); a window across the origin is drawn as stated.
+ * @param {RecordDisplayCrop} crop
+ * @param {number | null | undefined} recordLength
+ */
+const cropDisplayStart = ({ start, end, reverseComplement }, recordLength) => {
+  if (!reverseComplement) return start;
+  return start <= end ? regionWithinRecord(start, end, recordLength)?.drawnEnd ?? end : end;
+};
+
+/**
  * @param {RecordDisplayRowView} row
  * @param {RecordDisplayRequested} [draft] the row's requested display
  * @param {RecordDisplayContext} [context]
  */
-export const recordDisplaySurface = (row, draft = {}, { cropped = false, reverse = false } = {}) => {
+export const recordDisplaySurface = (row, draft = {}, { cropped = false, reverse = false, crop = null } = {}) => {
   const override = draft.topologyOverride ?? null;
   if (override !== null && typeof override !== 'boolean') throw new Error('Topology override must be boolean or null.');
   const effectiveCircular = override ?? row.detectedTopology === 'circular';
   const lengthKnown = Number.isSafeInteger(row.recordLength) && /** @type {number} */ (row.recordLength) > 0;
   const startEnabled = effectiveCircular && lengthKnown && !cropped;
-  const currentStart = reverse ? (lengthKnown ? row.recordLength : null) : 1;
+  const cropStart = crop === null ? null : cropDisplayStart(crop, row.recordLength);
+  const currentStart = cropStart ?? (reverse ? (lengthKnown ? row.recordLength : null) : 1);
   return {
     effectiveCircular,
     startEnabled,
@@ -283,7 +312,8 @@ export const recordDisplaySurface = (row, draft = {}, { cropped = false, reverse
     currentStart,
     // OV-374: the Display start field shows the requested start, kept while
     // the field is disabled, or else the current one; never an empty field.
-    displayStart: draft.startCoordinate ?? currentStart
+    // A crop disables it and the drawing starts where the crop does (OV-3341).
+    displayStart: cropStart ?? draft.startCoordinate ?? currentStart
   };
 };
 

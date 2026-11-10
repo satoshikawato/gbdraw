@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRecordDisplayControls } from '../../gbdraw/web/js/app/record-display-options.js';
+import { linearDrawingWindowsOf } from '../../gbdraw/web/js/services/session-request.js';
 import { createRecordAutoOrientation } from '../../gbdraw/web/js/app/record-auto-orientation.js';
 import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import { adoptCurrentSessionResources, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
@@ -53,7 +54,7 @@ const controlsFor = ({ mode = 'linear', runUndoable, sessionBusy = null }) => {
   state.mode.value = mode;
   const controls = createRecordDisplayControls({
     state: wrapped, computed: (fn) => ({ get value() { return fn(); } }), watch: () => {},
-    linearRecordsFor: (seq) => [{
+    linearWindowsOf: linearDrawingWindowsOf, linearRecordsFor: (seq) => [{
       selector: '#1', recordId: seq.uid === 'ca' ? 'first' : 'second', recordLength: 100, detectedTopology: 'linear'
     }],
     linearRecordStatusFor: () => 'ready', linearRecordErrorFor: () => '',
