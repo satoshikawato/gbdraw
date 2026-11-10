@@ -867,6 +867,25 @@ into the `[Unreleased]` list below.
   Web app shows "Region labels overlap other labels or lines (N)."). A
   feature label counts once, whether the region label meets its letters, its
   leader line, or both. The figure is drawn as before.
+- Fixed: on a Circular figure whose region label warns over the outer labels,
+  the label fixes said "Does not fit up to ... offset 2" although they cleared
+  the leader crossings, and the CLI often offered no fix within its 5 s, when
+  no value cleared the region label warning (a region label cut to its circle
+  or lying on another track, for example). These fixes now answer only for the
+  labels they move: they leave out the region label warnings each record
+  already had, and a value that adds one still does not fit. When the first
+  value that clears those labels keeps the region warning, the fix goes on, as
+  before, to the first value whose whole figure fits; if none fits up to the
+  fix's limit, its first value is offered with a note such as "the figure is
+  drawn with 1 region label overlap". The CLI lists such fixes after the fixes
+  that fit and tries every fix's first value before any fix goes on, so when
+  the 5 s limit ends the search, a fix that would fit with more time may show
+  its first value with its note; the Web
+  app's **Choose a fix**
+  keeps its order and first selects a fix that fits. A Linear "separate
+  overlapping features" fix, or a fix offered when nothing was drawn, whose
+  figure is drawn with a region label warning (one the figure had or one the
+  fix adds) now says so too (OV-3105, OV-3108).
 - Fixed: a Circular region label whose letters still met a feature label's
   letters after it moved along its region (for example "Integration" over
   "integrase" on lambda with `--labels out`) was drawn over them. The

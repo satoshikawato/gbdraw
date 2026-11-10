@@ -153,6 +153,17 @@ test('crossing leaders: the notice bar opens the dialog, which computes the rows
     .every(([, status]) => status === 'found' || status === 'not_found'), { timeout: 420000 }).toBe(true);
   expect((await rowStatuses(dialog)).map(([kind]) => kind)).toEqual(ROW_KINDS);
   await shot(dialog.getByRole('dialog'), 'label-fit-dialog-crossing.png');
+  // A click on the row already selected is the user's choice too, though the radio fires no change event then.
+  const selected = dialog.locator('input[name="label-fit-row"]:checked');
+  const selectedKind = await selected.getAttribute('value');
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const choose = app.chooseLabelFitRow;
+    window.__labelFitChoices = [];
+    app.chooseLabelFitRow = (kind) => { window.__labelFitChoices.push(kind); choose(kind); };
+  });
+  await selected.click();
+  expect(await page.evaluate(() => window.__labelFitChoices)).toEqual([selectedKind]);
 
   // K-a (PD-OI-097): over a drawn figure the dialog's Cancel reads "Keep as drawn".
   await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);

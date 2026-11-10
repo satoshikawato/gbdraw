@@ -6,6 +6,7 @@ import dataclasses
 import hashlib
 import json
 import sys
+import typing
 import warnings
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -34,11 +35,14 @@ from gbdraw.labels.circular_fit import (
     CircularLabelFitSearch,
     CircularLabelLayout,
     CircularLabelPlacement,
+    ROW_KINDS,
     check_circular_label_fit,
 )
 from gbdraw.labels.fit import (
     FONT_SIZE_PATHS,
     PLACEMENT_PATH,
+    REGION_WARNING_FIELDS,
+    LabelFitField,
     SCOPE_PATH,
     SEPARATE_FEATURES_PATH,
     SPACING_PATH,
@@ -50,6 +54,7 @@ from gbdraw.labels.fit import (
     LabelFitRow,
     LabelFitVerification,
     LabelShape,
+    fit_counts,
     format_label_fit_report,
     label_fit_notice,
     label_fit_outcome,
@@ -607,7 +612,7 @@ def _fit_assembly(fit_for: Callable[[Mapping[str, object]], LabelFit]):
     def verify(values: Mapping[str, object]) -> LabelFitVerification:
         calls.append(dict(values))
         fit = fit_for(values)
-        return LabelFitVerification(label_fit_outcome([fit]), (1000.0, 900.0), fit)
+        return LabelFitVerification(label_fit_outcome([fit]), (1000.0, 900.0), fit, record_fits={0: fit})
 
     return verify, calls
 
@@ -660,6 +665,31 @@ def test_the_notice_row_words_crossings_and_the_definition_text() -> None:
     assert row_note(row(LabelFit(0, 1))) == "1 leader pair still crosses"
     assert row_note(row(LabelFit(0, 0, 2))) == "2 labels still cover the definition text"
     assert row_note(row(LabelFit(0, 3, 1))) == "3 leader pairs still cross and 1 label still covers the definition text"
+    # OV-3108, D-115: a row whose figure is drawn with region label warnings names each kind in the figure's count
+    # words, the same whether the drawn figure had it or the row's values add it.
+    assert row_note(row(LabelFit(0, 0, region_overlaps=1))) == "the figure is drawn with 1 region label overlap"
+    assert row_note(row(LabelFit(0, 2, region_overlaps=2, region_cuts=1, region_cuts_left_out=1))) == (
+        "2 leader pairs still cross and the figure is drawn with 2 region label overlaps, 1 region label cut,"
+        " 1 region label left out: no letter fits its circle"
+    )
+    assert row_note(row(LabelFit(0, 0, region_track_overlaps=1))) == (
+        "the figure is drawn with 1 region label on another track"
+    )
+
+
+def test_the_region_label_warnings_have_one_list_of_fields() -> None:
+    """The region warning fields of ``LabelFit`` are summed, left out and worded from one list."""
+
+    region_fields = tuple(item.name for item in dataclasses.fields(LabelFit) if item.name.startswith("region_"))
+    assert REGION_WARNING_FIELDS == region_fields
+    assert typing.get_args(LabelFitField) == tuple(item.name for item in dataclasses.fields(LabelFit))
+    each = LabelFit(0, 0, **{name: 1 for name in REGION_WARNING_FIELDS})
+    assert each.region_warnings == len(REGION_WARNING_FIELDS)
+    assert not each.fits and LabelFit(0, 0).fits
+    assert each.without_region_warnings(FITS) == each
+    assert each.without_region_warnings(each) == FITS
+    assert fit_counts(each).count("region label") == len(REGION_WARNING_FIELDS)
+    assert each + each == LabelFit(0, 0, **{name: 2 for name in REGION_WARNING_FIELDS})
 
 
 def test_each_lever_offers_a_value_that_leaves_only_crossings_when_none_fits() -> None:
@@ -711,6 +741,442 @@ def test_a_drawn_figure_offers_only_rows_that_fit() -> None:
     assert rows["labels_out"].status == "not_found"
     assert rows["labels_out"].reason == "Labels still do not fit (0 label pairs overlap, 1 leader pair crosses)"
     assert checked[1].row("labels_out").status == "not_found"
+
+
+def _region_case(
+    *, drawn: bool, region_clear_y: float = 3.0
+) -> tuple[CircularLabelLayout, Callable[[Mapping[str, object]], LabelFit]]:
+    """Outer labels at 17 pt whose leaders cross (or overlap, when nothing was drawn) until Y 1.025, X 1.075 or 15 pt,
+    and one region label over them that the smaller font clears, and from ``region_clear_y`` the Y offset."""
+
+    def outer(values: Mapping[str, object]) -> LabelFit:
+        x, y = values.get(X_OFFSET_PATH, 1.0), values.get(Y_OFFSET_PATH, 1.0)
+        font = values.get(FONT_SIZE_PATHS[0], 17.0)
+        assert isinstance(x, float) and isinstance(y, float) and isinstance(font, float)
+        if y >= 1.025 - 1e-9 or x >= 1.075 - 1e-9 or font <= 15.0:
+            return FITS
+        return LabelFit(0 if drawn else 2, 10)
+
+    def full(values: Mapping[str, object]) -> LabelFit:
+        font, y = values.get(FONT_SIZE_PATHS[0], 17.0), values.get(Y_OFFSET_PATH, 1.0)
+        assert isinstance(font, float) and isinstance(y, float)
+        region = 0 if font <= 15.0 or y >= region_clear_y - 1e-9 else 1
+        return dataclasses.replace(outer(values), region_overlaps=region)
+
+    layout = dataclasses.replace(
+        _layout("P1", _p1_like),
+        font_size=17.0,
+        kind_fits={"circular_outer": outer({}), "circular_region": LabelFit(0, 0, region_overlaps=1)},
+        label_counts={"circular_outer": 71, "circular_region": 1},
+        region_font_size=10.0,
+        probe=outer,
+    )
+    return layout, full
+
+
+REGION_NOTE = "the figure is drawn with 1 region label overlap"
+
+
+def test_label_rows_answer_for_the_labels_they_move_and_say_which_region_warning_stays() -> None:
+    """OV-3105 (D-108), OV-3110 (D-117): a region label no outer row clears leaves the outer rows at their first value,
+    drawn with the notice and its note, once they walked to their limit; the font row that clears it too fits and
+    comes first."""
+
+    layout, full = _region_case(drawn=True)
+    verify, calls = _fit_assembly(full)
+    with pytest.warns(LabelLeadersCrossWarning) as caught:
+        checked = check_circular_label_fit([layout], verify, warn_search_seconds=600.0)
+    assert checked is not None
+    rows = {row.kind: row for row in checked[0].rows}
+    assert (rows["outward_vertical"].status, rows["outward_vertical"].values) == (
+        "found_with_notice", {Y_OFFSET_PATH: 1.025}
+    )
+    assert (rows["outward_horizontal"].status, rows["outward_horizontal"].values) == (
+        "found_with_notice", {X_OFFSET_PATH: 1.075}
+    )
+    assert rows["outward_both"].status == "found_with_notice"
+    assert rows["outward_vertical"].remaining == LabelFit(0, 0, region_overlaps=1)
+    assert {row_note(rows[kind]) for kind in ("outward_both", "outward_vertical", "outward_horizontal")} == {REGION_NOTE}
+    assert (rows["smaller_font"].status, rows["smaller_font"].values) == (
+        "found", {path: 15.0 for path in FONT_SIZE_PATHS}
+    )
+    assert row_note(rows["smaller_font"]) is None
+    statuses = [row.status for row in checked[0].rows]
+    assert statuses == sorted(statuses, key=lambda status: status == "found_with_notice")
+    # Each outward row and the combination walk every value to offset 2, as dev did (40 + 40 + 38 + 40), and the
+    # font row fits at its first value.
+    assert len(calls) == 40 + 40 + 38 + 1 + 40, len(calls)
+    lines = [" ".join(line.split()) for line in str(caught[0].message).splitlines()]
+    assert lines[1:4] == [
+        "Run again with one of:",
+        "--label_font_size 15 (smaller font)",
+        f"--outer_label_x_radius_offset 1.025 --outer_label_y_radius_offset 1.025 (outward, both directions; {REGION_NOTE})",
+    ]
+
+    # Nothing drawn (overlapping labels): the first value that clears the overlaps is the row, with the same note.
+    layout, full = _region_case(drawn=False)
+    verify, calls = _fit_assembly(full)
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_circular_label_fit([layout], verify)
+    rows = {row.kind: row for row in raised.value.report.rows}
+    assert (rows["outward_vertical"].status, rows["outward_vertical"].values) == (
+        "found_with_notice", {Y_OFFSET_PATH: 1.025}
+    )
+    assert row_note(rows["outward_vertical"]) == REGION_NOTE
+    assert rows["smaller_font"].status == "found"
+
+
+def test_the_combination_starts_from_the_font_the_smaller_font_row_offers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-118: the combination halves the drop of the font the smaller-font row offers, its walked value when that
+    value's whole figure fits, as dev does; so where dev's combination fits, it fits here too. The region label warning
+    clears only at 15.5 and 14.5 pt: the font row's first value (15 pt) keeps it and the row walks on to 14.5 pt; the
+    combination is 17 - round_half(2.5 / 2) = 15.5 pt + Y 1.025, which fits (from 15 pt it would be 16 pt, which
+    keeps the warning up to Y 2)."""
+
+    clock = [0.0]
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: clock[0])
+
+    def outer(values: Mapping[str, object]) -> LabelFit:
+        x = float(values.get(X_OFFSET_PATH, 1.0))
+        y = float(values.get(Y_OFFSET_PATH, 1.0))
+        font = float(values.get(FONT_SIZE_PATHS[0], 17.0))
+        return FITS if (y >= 1.025 - 1e-9 or x >= 1.075 - 1e-9 or font <= 15.0) else LabelFit(0, 10)
+
+    def full(values: Mapping[str, object]) -> LabelFit:
+        x = float(values.get(X_OFFSET_PATH, 1.0))
+        font = float(values.get(FONT_SIZE_PATHS[0], 17.0))
+        region = 0 if (font in (15.5, 14.5) or x >= 1.075 - 1e-9) else 1
+        return dataclasses.replace(outer(values), region_overlaps=region)
+
+    layout = dataclasses.replace(
+        _layout("P1", _p1_like), font_size=17.0, kind_fits={"circular_outer": outer({}),
+        "circular_region": LabelFit(0, 0, region_overlaps=1)}, label_counts={"circular_outer": 71,
+        "circular_region": 1}, region_font_size=10.0, probe=outer,
+    )
+    for seconds in (1e9, None):
+        verify, _calls = _fit_assembly(full)
+        if seconds is None:  # row by row, as the Web asks
+            search = CircularLabelFitSearch([layout], verify, offer_notice_rows=False)
+            rows = {kind: search.row(kind) for kind in ROW_KINDS if kind in search.row_kinds}
+        else:
+            with pytest.warns(LabelLeadersCrossWarning):
+                checked = check_circular_label_fit([layout], verify, warn_search_seconds=seconds)
+            assert checked is not None
+            rows = {row.kind: row for row in checked[0].rows}
+        assert (rows["smaller_font"].status, rows["smaller_font"].values) == (
+            "found", {path: 14.5 for path in FONT_SIZE_PATHS}
+        )
+        assert (rows["combination"].status, rows["combination"].values) == (
+            "found", {**{path: 15.5 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.025}
+        )
+
+
+def _bound_case(
+    outer: Callable[[float, float, float], bool], region: Callable[[float, float, float], int]
+) -> tuple[CircularLabelLayout, Callable[[Mapping[str, object]], LabelFit]]:
+    """Lambda-like outer labels at 17 pt with one region label: ``outer(x, y, font)`` says whether the outer labels
+    fit, ``region(x, y, font)`` how many region label overlaps the figure keeps; returns the layout and the whole
+    figure's fit."""
+
+    def values_of(values: Mapping[str, object]) -> tuple[float, float, float]:
+        return (
+            float(str(values.get(X_OFFSET_PATH, 1.0))),
+            float(str(values.get(Y_OFFSET_PATH, 1.0))),
+            float(str(values.get(FONT_SIZE_PATHS[0], 17.0))),
+        )
+
+    def probe(values: Mapping[str, object]) -> LabelFit:
+        return FITS if outer(*values_of(values)) else LabelFit(0, 10)
+
+    def full(values: Mapping[str, object]) -> LabelFit:
+        return dataclasses.replace(probe(values), region_overlaps=region(*values_of(values)))
+
+    layout = dataclasses.replace(
+        _layout("P1", _p1_like), font_size=17.0, kind_fits={"circular_outer": probe({}),
+        "circular_region": LabelFit(0, 0, region_overlaps=1)}, label_counts={"circular_outer": 71,
+        "circular_region": 1}, region_font_size=10.0, probe=probe,
+    )
+    return layout, full
+
+
+def _bound_case_rows(
+    monkeypatch: pytest.MonkeyPatch, case: tuple[CircularLabelLayout, Callable[[Mapping[str, object]], LabelFit]]
+) -> list[dict[str, LabelFitRow]]:
+    """The rows unbounded (the CLI's two passes) and row by row (the Web)."""
+
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: 0.0)
+    layout, full = case
+    verify, _calls = _fit_assembly(full)
+    with pytest.warns(LabelLeadersCrossWarning):
+        checked = check_circular_label_fit([layout], verify, warn_search_seconds=1e9)
+    assert checked is not None
+    verify, _calls = _fit_assembly(full)
+    search = CircularLabelFitSearch([layout], verify, offer_notice_rows=False)
+    return [{row.kind: row for row in checked[0].rows}, {kind: search.row(kind) for kind in ROW_KINDS if kind in search.row_kinds}]
+
+
+def test_a_smaller_font_row_offered_with_the_notice_leaves_the_combination_starting_from_6_pt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-118 as amended: only a value whose whole figure fits bounds the rows that start from it, as on dev; a row
+    offered with the notice bounds none. Smaller font never clears the region label (only Y 1.1 does), so it is
+    offered at its first value (15 pt) with the notice, and the combination starts from 6 pt, as on dev
+    (11.5 pt + Y 1.1)."""
+
+    comb = _bound_case(lambda x, y, font: y >= 1.025 - 1e-9 or font <= 15.0, lambda x, y, font: 0 if y >= 1.1 - 1e-9 else 1)
+    for rows in _bound_case_rows(monkeypatch, comb):
+        assert (rows["smaller_font"].status, rows["smaller_font"].values) == (
+            "found_with_notice", {path: 15.0 for path in FONT_SIZE_PATHS}
+        )
+        assert (rows["combination"].status, rows["combination"].values) == (
+            "found", {**{path: 11.5 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.1}
+        )
+
+
+def test_an_outward_vertical_row_offered_with_the_notice_leaves_outward_both_unbounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-118 as amended: Outward vertical keeps a region label overlap at every Y while X stays 1.0, so it is offered
+    at its first value (Y 1.1) with the notice and bounds nothing; Outward both is not bounded by Y 1.1 and finds
+    X 1.025 + Y 1.025, as on dev."""
+    both = _bound_case(
+        lambda x, y, font: y >= 1.1 - 1e-9 or (x >= 1.025 - 1e-9 and abs(y - 1.025) < 1e-9) or font <= 15.0,
+        lambda x, y, font: 0 if (x >= 1.025 - 1e-9 or font <= 14.0) else 1,
+    )
+    for rows in _bound_case_rows(monkeypatch, both):
+        assert (rows["outward_vertical"].status, rows["outward_vertical"].values) == (
+            "found_with_notice", {Y_OFFSET_PATH: 1.1}
+        )
+        assert (rows["outward_both"].status, rows["outward_both"].values) == (
+            "found", {X_OFFSET_PATH: 1.025, Y_OFFSET_PATH: 1.025}
+        )
+
+
+def test_the_cli_first_pass_leaves_the_combination_to_the_second_while_the_font_row_walks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-118: Smaller font's first value (16 pt) keeps the region warning and its walk is not finished in the CLI's
+    first pass, so the combination waits for the second pass instead of starting from 6 pt; then Smaller font fits
+    at 14 pt and the combination is 15.5 pt + Y 1.025, as on dev, in 7 redraws (one second each, 8 s bound or none).
+    With a 7 s bound, which ends before the second pass reaches it, the combination is not searched, as on dev."""
+
+    def values_of(values: Mapping[str, object]) -> tuple[float, float, float]:
+        return (
+            float(str(values.get(X_OFFSET_PATH, 1.0))),
+            float(str(values.get(Y_OFFSET_PATH, 1.0))),
+            float(str(values.get(FONT_SIZE_PATHS[0], 17.0))),
+        )
+
+    def probe(values: Mapping[str, object]) -> LabelFit:
+        x, y, font = values_of(values)
+        return FITS if (y >= 1.025 - 1e-9 or x >= 1.075 - 1e-9 or font <= 15.0) else LabelFit(0, 10)
+
+    clock = [0.0]
+
+    def full(values: Mapping[str, object]) -> LabelFit:
+        clock[0] += 1.0
+        x, y, font = values_of(values)
+        region = 0 if (font <= 14.0 or y >= 1.025 - 1e-9 or x >= 1.075 - 1e-9) else 1
+        return dataclasses.replace(probe(values), region_overlaps=region)
+
+    layout = dataclasses.replace(
+        _layout("P1", _p1_like), font_size=17.0, kind_fits={"circular_outer": probe({}),
+        "circular_region": LabelFit(0, 0, region_overlaps=1)}, label_counts={"circular_outer": 71,
+        "circular_region": 1}, region_font_size=10.0, probe=probe,
+    )
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: clock[0])
+    for seconds, combination, redraws in (
+        (8.0, ("found", {**{path: 15.5 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.025}), 7),
+        (1e9, ("found", {**{path: 15.5 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.025}), 7),
+        (7.0, ("not_computed", None), 6),
+    ):
+        clock[0] = 0.0
+        verify, calls = _fit_assembly(full)
+        with pytest.warns(LabelLeadersCrossWarning):
+            checked = check_circular_label_fit([layout], verify, warn_search_seconds=seconds)
+        assert checked is not None
+        rows = {row.kind: row for row in checked[0].rows}
+        assert (rows["combination"].status, rows["combination"].values) == combination, seconds
+        assert (rows["smaller_font"].status, rows["smaller_font"].values) == (
+            "found", {path: 14.0 for path in FONT_SIZE_PATHS}
+        ), seconds
+        assert len(calls) == redraws, (seconds, calls)
+
+
+def test_a_label_row_walks_on_to_a_value_whose_whole_figure_fits_else_offers_its_first_value() -> None:
+    """OV-3110 (D-117): a label row whose first value keeps a region label warning walks on as when it answered for the
+    whole figure, to the first value whose whole figure fits; without one up to its limit, it offers its first value,
+    which draws with the notice and its note."""
+
+    layout, full = _region_case(drawn=True, region_clear_y=1.1)
+    verify, calls = _fit_assembly(full)
+    with pytest.warns(LabelLeadersCrossWarning):
+        checked = check_circular_label_fit([layout], verify, warn_search_seconds=600.0)
+    assert checked is not None
+    rows = {row.kind: row for row in checked[0].rows}
+    assert (rows["outward_vertical"].status, rows["outward_vertical"].values) == ("found", {Y_OFFSET_PATH: 1.1})
+    assert [values for values in calls if set(values) == {Y_OFFSET_PATH}] == [
+        {Y_OFFSET_PATH: 1.025}, {Y_OFFSET_PATH: 1.05}, {Y_OFFSET_PATH: 1.075}, {Y_OFFSET_PATH: 1.1}
+    ]
+    assert rows["outward_both"].status == "found"
+    assert rows["outward_both"].values is not None and rows["outward_both"].values[Y_OFFSET_PATH] == 1.1
+    # X never clears the region label: every X value to the limit, then the first value with the note.
+    assert (rows["outward_horizontal"].status, rows["outward_horizontal"].values) == (
+        "found_with_notice", {X_OFFSET_PATH: 1.075}
+    )
+    assert row_note(rows["outward_horizontal"]) == REGION_NOTE
+    x_values = [values[X_OFFSET_PATH] for values in calls if set(values) == {X_OFFSET_PATH}]
+    assert x_values[0] == 1.075 and x_values[-1] == 2.0 and len(x_values) == 38
+    # The font row that clears the labels it moves fits at once (its figure has no region warning).
+    assert (rows["smaller_font"].status, rows["smaller_font"].values) == (
+        "found", {path: 15.0 for path in FONT_SIZE_PATHS}
+    )
+
+
+def test_a_label_row_leaves_out_only_the_region_label_warnings_the_figure_already_had() -> None:
+    """D-112: a label row leaves out, per region warning field, only as many warnings as the figure had; a value that
+    adds a region label warning does not fit, and the row walks on to a value that fits."""
+
+    def outer(values: Mapping[str, object]) -> LabelFit:
+        x, y = values.get(X_OFFSET_PATH, 1.0), values.get(Y_OFFSET_PATH, 1.0)
+        font = values.get(FONT_SIZE_PATHS[0], 17.0)
+        assert isinstance(x, float) and isinstance(y, float) and isinstance(font, float)
+        if y >= 1.025 - 1e-9 or x >= 1.075 - 1e-9 or font <= 15.0:
+            return FITS
+        return LabelFit(0, 10)
+
+    def case(figure_regions: int) -> dict[str, LabelFitRow]:
+        # From Y 1.025 to below 1.1 a leader crosses one more region label.
+        def full(values: Mapping[str, object]) -> LabelFit:
+            y = values.get(Y_OFFSET_PATH, 1.0)
+            assert isinstance(y, float)
+            added = 1 if 1.025 - 1e-9 <= y < 1.1 - 1e-9 else 0
+            return dataclasses.replace(outer(values), region_overlaps=figure_regions + added)
+
+        kind_fits = {"circular_outer": outer({})}
+        if figure_regions:
+            kind_fits["circular_region"] = LabelFit(0, 0, region_overlaps=figure_regions)
+        layout = dataclasses.replace(
+            _layout("P1", _p1_like), font_size=17.0, kind_fits=kind_fits,
+            label_counts={"circular_outer": 71, "circular_region": 1}, probe=outer,
+        )
+        verify, _calls = _fit_assembly(full)
+        with pytest.warns(LabelLeadersCrossWarning):
+            checked = check_circular_label_fit([layout], verify, warn_search_seconds=600.0)
+        assert checked is not None
+        return {row.kind: row for row in checked[0].rows}
+
+    # The drawn figure only crosses leaders: the rows walk past the values that add a region warning, as on dev.
+    rows = case(0)
+    assert (rows["outward_vertical"].status, rows["outward_vertical"].values) == ("found", {Y_OFFSET_PATH: 1.1})
+    assert (rows["outward_both"].status, rows["outward_both"].values) == (
+        "found", {X_OFFSET_PATH: 1.1, Y_OFFSET_PATH: 1.1}
+    )
+    assert (rows["outward_horizontal"].status, rows["outward_horizontal"].values) == ("found", {X_OFFSET_PATH: 1.075})
+    assert all(row_note(row) is None for row in rows.values())
+    # The figure had one region warning: a value with two does not fit; the first value with one is offered with
+    # the notice (every later value up to the limit keeps that one warning).
+    rows = case(1)
+    assert (rows["outward_vertical"].status, rows["outward_vertical"].values) == (
+        "found_with_notice", {Y_OFFSET_PATH: 1.1}
+    )
+    assert rows["outward_vertical"].remaining == LabelFit(0, 0, region_overlaps=1)
+    assert (rows["outward_horizontal"].status, rows["outward_horizontal"].values) == (
+        "found_with_notice", {X_OFFSET_PATH: 1.075}
+    )
+
+
+def test_a_region_label_warning_a_value_moves_to_another_record_does_not_count_as_kept() -> None:
+    """D-115: on a canvas of two records, the region label warnings a label row leaves out are each record's own, per
+    field: a value that clears record 0's region label overlap but gives record 1 one does not fit."""
+
+    def outer(values: Mapping[str, object]) -> LabelFit:
+        y = values.get(Y_OFFSET_PATH, 1.0)
+        assert isinstance(y, float)
+        return FITS if y >= 1.025 - 1e-9 else LabelFit(0, 10)
+
+    def record_fits(values: Mapping[str, object]) -> dict[int, LabelFit]:
+        # From Y 1.025 to below 1.1 the region label overlap moves from record 0 to record 1.
+        y = values.get(Y_OFFSET_PATH, 1.0)
+        assert isinstance(y, float)
+        moved = 1.025 - 1e-9 <= y < 1.1 - 1e-9
+        return {
+            0: dataclasses.replace(outer(values), region_overlaps=0 if moved else 1),
+            1: LabelFit(0, 0, region_overlaps=1 if moved else 0),
+        }
+
+    def verify(values: Mapping[str, object]) -> LabelFitVerification:
+        fits = record_fits(values)
+        fit = sum(fits.values(), FITS)
+        return LabelFitVerification(label_fit_outcome([fit]), (1000.0, 900.0), fit, record_fits=fits)
+
+    first = dataclasses.replace(
+        _layout("P1", _p1_like), font_size=17.0,
+        kind_fits={"circular_outer": outer({}), "circular_region": LabelFit(0, 0, region_overlaps=1)},
+        label_counts={"circular_outer": 71, "circular_region": 1}, probe=outer,
+    )
+    with pytest.warns(LabelLeadersCrossWarning):
+        checked = check_circular_label_fit([first], verify, warn_search_seconds=600.0)
+    assert checked is not None
+    rows = {row.kind: row for row in checked[0].rows}
+    assert (rows["outward_vertical"].status, rows["outward_vertical"].values) == (
+        "found_with_notice", {Y_OFFSET_PATH: 1.1}
+    )
+    assert rows["outward_vertical"].remaining == LabelFit(0, 0, region_overlaps=1)
+
+
+def test_every_row_gets_its_first_value_before_any_row_tries_its_next_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-110: the bounded search takes every row's first value first, then the next values of the rows whose figure
+    keeps a region label warning walk on (OV-3110, D-117) while the bound allows; without a bound, and row by row as the
+    Web asks, the rows are the same."""
+
+    clock = [0.0]
+
+    class _Clock:
+        @staticmethod
+        def monotonic() -> float:
+            return clock[0]
+
+    monkeypatch.setattr(circular_fit_module, "time", _Clock)
+    layout, full = _region_case(drawn=True, region_clear_y=1.05)
+
+    def ticking(values: Mapping[str, object]) -> LabelFit:
+        clock[0] += 1.0  # each full assembly takes one second
+        return full(values)
+
+    # Six seconds allow the five rows' first values and no more.
+    verify, calls = _fit_assembly(ticking)
+    with pytest.warns(LabelLeadersCrossWarning):
+        checked = check_circular_label_fit([layout], verify, warn_search_seconds=6.0)
+    assert checked is not None
+    bounded = {row.kind: row for row in checked[0].rows}
+    assert len(calls) == 5, calls
+    assert {kind: (row.status, dict(row.values or {})) for kind, row in bounded.items()} == {
+        "outward_vertical": ("found_with_notice", {Y_OFFSET_PATH: 1.025}),
+        "outward_both": ("found_with_notice", {X_OFFSET_PATH: 1.025, Y_OFFSET_PATH: 1.025}),
+        "outward_horizontal": ("found_with_notice", {X_OFFSET_PATH: 1.075}),
+        "smaller_font": ("found", {path: 15.0 for path in FONT_SIZE_PATHS}),
+        "tighter_rows": ("not_found", {}),
+        "combination": ("found_with_notice", {**{path: 16.0 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.025}),
+    }
+    # A row asked for later (the Web's per-row computation) tries on from the stored assemblies.
+    later = checked[1].row("outward_vertical")
+    assert (later.status, later.values) == ("found", {Y_OFFSET_PATH: 1.05})
+
+    # Without a bound: every walk ends, the same as each row computed alone in report order (the Web).
+    verify, calls = _fit_assembly(ticking)
+    with pytest.warns(LabelLeadersCrossWarning):
+        checked = check_circular_label_fit([layout], verify, warn_search_seconds=1e9)
+    assert checked is not None
+    unbounded = {row.kind: row for row in checked[0].rows}
+    assert (unbounded["outward_vertical"].status, unbounded["outward_vertical"].values) == (
+        "found", {Y_OFFSET_PATH: 1.05}
+    )
+    # Y clears the region label at 1.05; X never does, so the horizontal row walks to offset 2 (38 values).
+    assert len(calls) == 2 + 2 + 38 + 1 + 2, len(calls)
+    verify, _calls = _fit_assembly(ticking)
+    search = CircularLabelFitSearch([layout], verify, offer_notice_rows=False)
+    assert {kind: search.row(kind) for kind in ROW_KINDS if kind in search.row_kinds} == unbounded
 
 
 def test_labels_count_once_by_kind_and_leaders_count_against_the_definition_text() -> None:
@@ -770,6 +1236,15 @@ def test_linear_labels_on_stacked_features_stop_with_the_separate_features_row()
     assert (row.status, row.values, row.remaining) == (
         "found_with_notice", {SEPARATE_FEATURES_PATH: True}, LabelFit(0, 2)
     )
+
+    # OV-3108: separated features whose figure is drawn with a region label over other labels say so.
+    def region(values: Mapping[str, object]) -> LabelFitVerification:
+        return LabelFitVerification("warn", (500.0, 200.0), LabelFit(0, 0, region_overlaps=1))
+
+    with pytest.raises(LabelsDoNotFitError) as raised:
+        check_linear_label_fit(label_fit, region, features_separated=False)
+    (row,) = raised.value.report.rows
+    assert (row.status, row_note(row)) == ("found_with_notice", REGION_NOTE)
 
     with pytest.raises(LabelsDoNotFitError) as raised:
         check_linear_label_fit(label_fit, verify, features_separated=True)
@@ -883,7 +1358,11 @@ def test_drawing_with_crossing_leaders_carries_the_report_and_computes_rows(monk
     Lambda at 15 pt (14 pt while labels were laid out in point-mode boxes; OV-165).
     """
 
-    from gbdraw.api.diagram import build_circular_diagram, label_fit_report, label_fit_row
+    from gbdraw.api.diagram import (
+        build_circular_diagram,
+        label_fit_report,
+        label_fit_row,
+    )
     from gbdraw.api.options import CircularDiagramOptions
     from gbdraw.config.modify import with_config_overrides
     from gbdraw.config.toml import load_config_toml
@@ -912,6 +1391,118 @@ def test_drawing_with_crossing_leaders_carries_the_report_and_computes_rows(monk
     vertical = label_fit_row(drawing, "outward_vertical")
     assert vertical is not None and vertical.status == "found"
     assert vertical.values == {Y_OFFSET_PATH: 1.025}
+
+
+def _lambda_band_rows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, start: int, end: int, label: str
+) -> tuple[LabelFitReport, list[dict[str, object]], str]:
+    """Lambda at 17 pt with outer labels and one region band: the drawn report, every full assembly of its rows in
+    order, and the CLI warning text."""
+
+    from gbdraw.annotations import AnnotationOptions
+    from gbdraw.api.diagram import build_circular_diagram, label_fit_report
+    from gbdraw.api.options import CircularDiagramOptions
+
+    assemblies: list[dict[str, object]] = []
+    search_init = CircularLabelFitSearch.__init__
+
+    def counted_init(
+        self: CircularLabelFitSearch,
+        layouts: list[CircularLabelLayout],
+        verify: Callable[[Mapping[str, object]], LabelFitVerification],
+        **kwargs: bool,
+    ) -> None:
+        def counted(values: Mapping[str, object]) -> LabelFitVerification:
+            assemblies.append(dict(values))
+            return verify(values)
+
+        search_init(self, layouts, counted, **kwargs)
+
+    monkeypatch.setattr(CircularLabelFitSearch, "__init__", counted_init)
+    # A clock that stands still computes every row within the warning's bound (LP-D48).
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: 0.0)
+    band = tmp_path / "band.tsv"
+    band.write_text(f"set_id\tid\tmark\tstart\tend\tlabel\ns\ta\tband\t{start}\t{end}\t{label}\n", encoding="utf-8")
+    options = CircularDiagramOptions(
+        config_overrides={
+            "labels.circular.scope": "outer",
+            "labels.filtering.blacklist_keywords": [],
+            "labels.font_size.short": 17.0,
+            "labels.font_size.long": 17.0,
+        },
+        annotations=AnnotationOptions(table_file=str(band)),
+    )
+    record = SeqIO.read(str(TEST_INPUTS / "NC_001416.gb"), "genbank")
+    with pytest.warns(LabelLeadersCrossWarning) as caught:
+        drawing = build_circular_diagram(record, options=options)
+    report = label_fit_report(drawing)
+    assert report is not None and report.drawn
+    text = str(next(item.message for item in caught if issubclass(item.category, LabelLeadersCrossWarning)))
+    return report, assemblies, text
+
+
+@pytest.mark.circular
+def test_a_region_label_among_outer_labels_lets_each_row_walk_on_to_a_value_that_fits(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """OV-3105 (D-108), OV-3110 (D-117), D-110: lambda at 17 pt with a long region label among the outer labels, which
+    the rev 26 backing still counts (3 overlaps with feature labels' letters). Every row's first value comes first;
+    the rows whose first value keeps some of those overlaps walk on to the first value whose whole figure fits, as
+    dev does: Smaller font 12.5 pt; the combination halves that font's drop, as on dev (14.5 pt, D-118). The CLI's
+    first pass leaves the combination to the second while the font row walks, so it draws 10 figures, as dev does."""
+
+    report, assemblies, text = _lambda_band_rows(monkeypatch, tmp_path, 18500, 19000, "prophage integration region")
+    assert report.region_overlaps == 3
+    rows = {row.kind: (row.status, dict(row.values or {}), row_note(row)) for row in report.rows}
+    assert rows["outward_both"] == ("found", {X_OFFSET_PATH: 1.025, Y_OFFSET_PATH: 1.025}, None)
+    assert rows["outward_vertical"] == ("found", {Y_OFFSET_PATH: 1.05}, None)
+    assert rows["outward_horizontal"] == ("found", {X_OFFSET_PATH: 1.1}, None)
+    assert rows["smaller_font"] == ("found", {path: 12.5 for path in FONT_SIZE_PATHS}, None)
+    assert rows["combination"] == ("found", {**{path: 14.5 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.025}, None)
+    assert rows["tighter_rows"][0] == "not_found"
+    font = FONT_SIZE_PATHS[0]
+    # The four rows' first values, then the walks of the rows whose first value keeps a region warning, then the
+    # combination.
+    assert assemblies == [
+        {Y_OFFSET_PATH: 1.025},
+        {X_OFFSET_PATH: 1.025, Y_OFFSET_PATH: 1.025},
+        {X_OFFSET_PATH: 1.075},
+        {path: 14.0 for path in FONT_SIZE_PATHS},
+        {Y_OFFSET_PATH: 1.05},
+        {X_OFFSET_PATH: 1.1},
+        {path: 13.5 for path in FONT_SIZE_PATHS},
+        {path: 13.0 for path in FONT_SIZE_PATHS},
+        {path: 12.5 for path in FONT_SIZE_PATHS},
+        {**{path: 14.5 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.025},
+    ], [values.get(font) for values in assemblies]
+    assert [" ".join(line.split()) for line in text.splitlines()[1:]] == [
+        "Run again with one of:",
+        "--outer_label_x_radius_offset 1.025 --outer_label_y_radius_offset 1.025 (outward, both directions)",
+        "--outer_label_y_radius_offset 1.05 (outward, vertical only)",
+        "--outer_label_x_radius_offset 1.1 (outward, horizontal only)",
+        "--label_font_size 12.5 (smaller font)",
+        "--outer_label_y_radius_offset 1.025 --label_font_size 14.5 (combination)",
+        "Tighter rows do not fit this map.",
+    ]
+
+
+@pytest.mark.circular
+def test_outer_rows_walk_past_values_that_put_a_region_label_over_a_leader(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """D-112: lambda at 17 pt with the band 22000..22500, whose region label the rev 26 backing clears on the drawn
+    figure. Y 1.025 puts it over a feature label's letters, so the vertical, both-directions and combination rows walk
+    on to 1.05, which fits."""
+
+    report, assemblies, _text = _lambda_band_rows(monkeypatch, tmp_path, 22000, 22500, "region")
+    assert report.region_overlaps == 0
+    rows = {row.kind: (row.status, dict(row.values or {}), row_note(row)) for row in report.rows}
+    assert rows["outward_both"] == ("found", {X_OFFSET_PATH: 1.05, Y_OFFSET_PATH: 1.05}, None)
+    assert rows["outward_vertical"] == ("found", {Y_OFFSET_PATH: 1.05}, None)
+    assert rows["outward_horizontal"] == ("found", {X_OFFSET_PATH: 1.075}, None)
+    assert rows["smaller_font"] == ("found", {path: 14.0 for path in FONT_SIZE_PATHS}, None)
+    assert rows["combination"] == ("found", {**{path: 15.5 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.05}, None)
+    assert len(assemblies) == 8, assemblies
 
 
 def _drawn_label_digest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, args: list[str]) -> tuple[int, str]:

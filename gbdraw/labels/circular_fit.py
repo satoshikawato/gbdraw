@@ -55,6 +55,8 @@ from .fit import (
     DEFINITION_FONT_PATH,
     DEFINITION_ROW_KINDS,
     FITS,
+    OFFERED_ROW_STATUSES,
+    REGION_WARNING_FIELDS,
     FONT_LIMIT_PT,
     FONT_SIZE_PATHS,
     LabelCapacityRecord,
@@ -246,6 +248,10 @@ def circular_label_outcome(layouts: Sequence[CircularLabelLayout]) -> LabelFitOu
 
 class _SearchStopped(Exception):
     """The bounded search reached its deadline before a new probe."""
+
+
+class _RowDeferred(_SearchStopped):
+    """In the first pass, a row whose value depends on a row still walking waits for the second pass (D-118)."""
 
 
 def _offset_grid(current: float) -> list[float]:
@@ -443,6 +449,8 @@ class CircularLabelFitSearch:
         self._outer_only = all(layout.outer_only for layout in label_layouts)
         label_layouts = label_layouts or list(self.layouts)
         self._verify_assembly = verify
+        # The region label warnings each record already has: a label row leaves out only these (D-112, D-115).
+        self._record_fits = {layout.record_index: layout.fit for layout in self.layouts}
         # A verification starts only if one more, as long as the last, ends before the deadline; the first one
         # starts whenever the deadline has not passed (OV-2527: a full first assembly is no estimate of it).
         self._verification_seconds = 0.0
@@ -462,14 +470,18 @@ class CircularLabelFitSearch:
             tuple[tuple[str, LabelFitValue], ...], LabelFitVerification
         ] = {}
         self._rows: dict[LabelFitRowKind, tuple[LabelFitRow, float | None]] = {}
-        # A row found before the deadline that a later ask may make milder is not kept in ``_rows``.
+        # A row found before the deadline that a later ask may make milder, whose walk past a region label warning
+        # (OV-3110) is not finished, or that starts from such a row, is not kept in ``_rows``.
         self._unfinished = False
+        # ``rows`` takes every row's first value before any row walks on past it (D-110).
+        self._first_values_only = False
         self._deadline: float | None = None
 
     def row(self, kind: LabelFitRowKind, *, deadline: float | None = None) -> LabelFitRow:
         """One row; with a ``time.monotonic()`` deadline it may be ``not_computed``."""
 
         self._deadline = deadline
+        self._unfinished = False
         try:
             return self._row(kind)[0]
         except _SearchStopped:
@@ -486,17 +498,28 @@ class CircularLabelFitSearch:
     def rows(self, *, deadline: float | None = None) -> tuple[LabelFitRow, ...]:
         """The rows that apply, in the dialog order, searched until ``deadline``.
 
-        Rows that leave crossings or labels over the definition text come
-        after the others (LP-D57).
+        Rows that leave crossings, labels over the definition text, or a
+        region label warning come after the others (LP-D57, OV-3105). Every
+        row's first value comes first; then the rows whose figure keeps a
+        region label warning walk on to a value whose whole figure fits while
+        the deadline allows (OV-3110, D-110). Only the combination, whose font
+        comes from the smaller-font row, waits for that row's walk; a row the
+        deadline leaves out is not searched (D-118).
         """
 
-        found: dict[LabelFitRowKind, LabelFitRow] = {}
         order = _SEARCH_ORDER if self._outer_only else _SWITCHES_FIRST_ORDER
-        for kind in order:
-            if kind in self.row_kinds:
-                found[kind] = self.row(kind, deadline=deadline)
+        kinds = [kind for kind in order if kind in self.row_kinds]
+        self._first_values_only = True
+        try:
+            found = {kind: self.row(kind, deadline=deadline) for kind in kinds}
+        finally:
+            self._first_values_only = False
+        for kind in kinds:
+            if kind not in self._rows:
+                row = self.row(kind, deadline=deadline)
+                found[kind] = found[kind] if row.status == "not_computed" else row
         rows = [found[kind] for kind in ROW_KINDS if kind in found]
-        return tuple(sorted(rows, key=lambda row: row.status == "found_with_notice"))
+        return tuple(sorted(rows, key=lambda row: row.status in OFFERED_ROW_STATUSES[1:]))
 
     # --- probes ---
 
@@ -522,18 +545,67 @@ class CircularLabelFitSearch:
             started = time.monotonic()
             self._verifications[key] = self._verify_assembly(values)
             self._verification_seconds = time.monotonic() - started
-        return _row_verification(kind, self._verifications[key])
+        return _row_verification(kind, self._verifications[key], self._record_fits)
 
     # --- rows ---
 
     def _row(self, kind: LabelFitRowKind) -> tuple[LabelFitRow, float | None]:
         if kind in self._rows:
             return self._rows[kind]
+        asking_row_unfinished = self._unfinished
         self._unfinished = False
-        computed = self._compute(kind)
-        if not self._unfinished:
+        row, value = self._compute(kind)
+        computed = self._with_region_notice(row), value
+        finished = not self._unfinished
+        if finished:
             self._rows[kind] = computed
+        # A row that starts from an unfinished row is unfinished too: a later ask may bound it differently.
+        self._unfinished = asking_row_unfinished or not finished
         return computed
+
+    def _region_warned(self, row: LabelFitRow) -> LabelFit | None:
+        """The figure's fit when a label row fits the labels it moves but its figure keeps region label warnings the
+        figure already had, which no label row moves (OV-3105, D-112); otherwise None."""
+
+        if row.status != "found" or row.kind in DEFINITION_ROW_KINDS or row.values is None:
+            return None
+        fit = self._verifications[_settings_key(row.values)].fit
+        return fit if fit is not None and fit.region_warnings else None
+
+    def _with_region_notice(self, row: LabelFitRow) -> LabelFitRow:
+        """A row whose figure keeps a region label warning draws with the notice; it bounds no row that starts from
+        it (D-118)."""
+
+        fit = self._region_warned(row)
+        return row if fit is None else replace(row, status="found_with_notice", remaining=fit)
+
+    def _clear_of_regions(
+        self,
+        kind: LabelFitRowKind,
+        found: tuple[LabelFitRow, float],
+        later_values: Sequence[float],
+        values_for: Callable[[float], dict[str, LabelFitValue]],
+    ) -> tuple[LabelFitRow, float | None]:
+        """A row whose first value keeps a region label warning walks on, as when it answered for the whole figure,
+        to the first later value of its lever whose whole figure fits; without one up to the lever's limit, its first
+        value stays and draws with the notice (OV-3110, D-117). Only a value whose whole figure fits bounds the rows
+        that start from this one, as on dev; a row offered with the notice bounds none (D-118). At the deadline the
+        first value is the row, kept out of the cache so a later ask walks on."""
+
+        if self._region_warned(found[0]) is None:
+            return found
+        if self._first_values_only:
+            self._unfinished = True
+            return found[0], None
+        try:
+            for value in later_values:
+                values = values_for(value)
+                row = verified_row(kind, values, self._verify(kind, values), offer_notice=False)
+                if row is not None and self._region_warned(row) is None:
+                    return row, value
+        except _SearchStopped:
+            self._unfinished = True
+        return found[0], None
 
     def _compute(self, kind: LabelFitRowKind) -> tuple[LabelFitRow, float | None]:
         if kind in _SWITCH_VALUES:
@@ -559,13 +631,14 @@ class CircularLabelFitSearch:
         """
 
         notice: LabelFitRow | None = None
-        for value in _font_grid(self._font_size):
+        grid = _font_grid(self._font_size)
+        for index, value in enumerate(grid):
             values = _font_values(value)
             row = verified_row(
                 "smaller_font", values, self._verify("smaller_font", values), offer_notice=self._offer_notice_rows
             )
             if row is not None and row.status == "found":
-                return row, value
+                return self._clear_of_regions("smaller_font", (row, value), grid[index + 1 :], _font_values)
             notice = notice or row
         if notice is not None:
             return notice, None
@@ -669,6 +742,9 @@ class CircularLabelFitSearch:
         # Combination (OD-F4, OD-F7): half the font row's drop, at least one step,
         # then the smallest Y offset at that font; the current Y offset comes first.
         font_value = self._row("smaller_font")[1]
+        if self._first_values_only and "smaller_font" not in self._rows:
+            # The font row is still walking: its value decides this row's font, so this row waits (D-118).
+            raise _RowDeferred
         drop = max(FONT_STEP_PT, _round_half_pt((self._font_size - (font_value or FONT_LIMIT_PT)) / 2.0))
         combined_font = max(FONT_LIMIT_PT, self._font_size - drop)
 
@@ -702,7 +778,7 @@ class CircularLabelFitSearch:
 
     def _mildest_row(
         self, kind: LabelFitRowKind, lever: _Lever, *, offer_notice: bool
-    ) -> tuple[LabelFitRow, float] | None:
+    ) -> tuple[LabelFitRow, float | None] | None:
         """The mildest value every record's probe accepts, stepped stronger until verified.
 
         Probes accept a fit, or with ``offer_notice`` a layout without overlaps.
@@ -733,17 +809,33 @@ class CircularLabelFitSearch:
             if mildest is None:
                 return None
             strongest = max(strongest, mildest)
-        for value in grid[strongest:]:
-            values = lever.values_for(value)
+        for index in range(strongest, len(grid)):
+            values = lever.values_for(grid[index])
             row = verified_row(kind, values, self._verify(kind, values), offer_notice=offer_notice)
             if row is not None:
-                return row, value
+                return self._clear_of_regions(kind, (row, grid[index]), grid[index + 1 :], lever.values_for)
         return None
 
 
-def _row_verification(kind: LabelFitRowKind, verification: LabelFitVerification) -> LabelFitVerification:
-    """A full assembly as one row reads it: the label rows answer for the labels, the definition rows for the
-    definition text over a track (D-12); an assembly that stops is read as it is."""
+def _kept_region_warnings(record_fits: Mapping[int, LabelFit], had: Mapping[int, LabelFit]) -> LabelFit:
+    """The region label warnings each record keeps of those it had: per record and field, at most its count in
+    ``had`` (D-112, D-115). A warning that moves to another record, or one more of a kind, is not kept."""
+
+    kept = FITS
+    for index, fit in record_fits.items():
+        before = had.get(index, FITS)
+        kept += LabelFit(0, 0, **{name: min(fit.count(name), before.count(name)) for name in REGION_WARNING_FIELDS})
+    return kept
+
+
+def _row_verification(
+    kind: LabelFitRowKind, verification: LabelFitVerification, had: Mapping[int, LabelFit]
+) -> LabelFitVerification:
+    """A full assembly as one row reads it: the label rows answer for the labels they move, not for the region
+    label warnings each record already had (``had``, by record index, up to its count of each, D-112, D-115;
+    ``_UNMOVED_LABEL_KINDS``; ``_with_region_notice`` says which warning stays, OV-3105), so a value that adds one
+    does not fit; the definition rows answer for the definition text over a track (D-12); an assembly that stops is
+    read as it is."""
 
     fit = verification.fit
     if verification.outcome == "stop" or fit is None:
@@ -751,7 +843,10 @@ def _row_verification(kind: LabelFitRowKind, verification: LabelFitVerification)
     if kind in DEFINITION_ROW_KINDS:
         outcome: LabelFitOutcome = "fits" if fit.definition_track_overlaps == 0 else "warn"
     else:
-        outcome = label_fit_outcome([replace(fit, definition_track_overlaps=0)])
+        outcome = label_fit_outcome([replace(
+            fit.without_region_warnings(_kept_region_warnings(verification.record_fits, had)),
+            definition_track_overlaps=0,
+        )])
     return replace(verification, outcome=outcome)
 
 
