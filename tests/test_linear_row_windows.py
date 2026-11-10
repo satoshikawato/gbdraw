@@ -467,3 +467,130 @@ def test_ribbons_end_above_the_window_numbers_of_the_row_they_reach(tmp_path: Pa
     ]
     assert len(circles) == 2
     assert ribbon_bottom <= min(circles)
+
+
+def _translate(element: ET.Element) -> tuple[float, float]:
+    pairs = re.findall(r"translate\(([-\d.]+),([-\d.]+)\)", element.get("transform", ""))
+    return sum(float(x) for x, _y in pairs), sum(float(y) for _x, y in pairs)
+
+
+def _path_points(group: ET.Element, path: ET.Element) -> list[tuple[float, float]]:
+    dx, dy = _translate(group)
+    return [(dx + float(x), dy + float(y)) for x, y in re.findall(r"([-\d.]+),([-\d.]+)", path.get("d", ""))]
+
+
+def _stranded_record(record_id: str, length: int, features: list[tuple[int, int, int]]) -> SeqRecord:
+    record = SeqRecord(Seq("ACGT" * (length // 4)), id=record_id, name=record_id)
+    record.annotations.update({"molecule_type": "DNA", "topology": "linear"})
+    record.features = [SeqFeature(FeatureLocation(start, end, strand=strand), type="CDS") for start, end, strand in features]
+    return record
+
+
+def _match(query: int, subject: int, query_id: str, subject_id: str) -> LinearComparison:
+    row = [query_id, subject_id, 90.0, 300, 0, 0, 100, 400, 100, 400, 1e-20, 200]
+    return LinearComparison(query, subject, pd.DataFrame([row], columns=COMPARISON_COLUMNS))
+
+
+def _row_between_ribbons_figure(tmp_path: Path) -> ET.Element:
+    """Strands drawn apart; a windowed middle row between two whole records, ribbons above and below it. The row
+    holds a reversed window that reaches its contig's start (C1, every feature on the lower strand), then two
+    windows of one record (C2): the first without a lower-strand feature, the second without an upper one."""
+
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(
+                InMemoryRecordSource(_stranded_record("T", 3_000, [(100, 600, 1), (1_200, 1_700, -1), (2_000, 2_600, 1)])),
+                record_key="t",
+                presentation=RecordPresentation(grid_row=1),
+            ),
+            RecordInput(
+                InMemoryRecordSource(_stranded_record("C1", 1_000, [(100, 400, 1), (500, 900, 1)])),
+                windows=(RecordWindow(1, 950, True),),
+                record_key="c1",
+                presentation=RecordPresentation(label="Row", grid_row=2),
+            ),
+            RecordInput(
+                InMemoryRecordSource(_stranded_record("C2", 4_000, [(100, 600, 1), (2_100, 2_600, -1)])),
+                windows=(RecordWindow(1, 1_000), RecordWindow(2_001, 3_000)),
+                record_key="c2",
+                presentation=RecordPresentation(grid_row=2),
+            ),
+            RecordInput(
+                InMemoryRecordSource(_stranded_record("B", 3_000, [(100, 600, 1), (1_200, 1_700, -1)])),
+                record_key="b",
+                presentation=RecordPresentation(grid_row=3),
+            ),
+        ),
+        layout=LinearMultiRecordOptions(),
+    )
+    comparisons = (
+        _match(0, 1, "T", "C1"), _match(0, 2, "T", "C2"), _match(0, 3, "T", "C2"),
+        _match(1, 4, "C1", "B"), _match(2, 4, "C2", "B"), _match(3, 4, "C2", "B"),
+    )
+    overrides = {"canvas.strandedness": True, "canvas.show_gc": False, "canvas.show_skew": False}
+    options = replace(request.options, linear_comparisons=comparisons, config_overrides=overrides)
+    return _render(tmp_path, replace(request, options=options))
+
+
+def test_window_numbers_stand_at_the_upper_left_of_each_window_clear_of_ribbons_and_features(tmp_path: Path) -> None:
+    """OV-3374: a window without an upper-strand feature put its number at axis height and drew the "//" length
+    there, over the ribbons; the ribbons to it ended inside the row's upper lane, and those from a window without a
+    lower-strand feature started inside its lower lane. The windows of a row share one top and one bottom: every
+    number and length stands on the row's top, the ribbons end above them and start below the row's lower lane."""
+
+    root = _row_between_ribbons_figure(tmp_path)
+    [marks] = [g for g in root.iter(f"{SVG}g") if g.get("data-gbdraw-role") == "row-window-marks"]
+    marks_x, marks_y = _translate(marks)
+    circles = [
+        (marks_x + float(circle.get("cx", "0")), marks_y + float(circle.get("cy", "0")), float(circle.get("r", "0")))
+        for number in marks
+        if number.get("data-gbdraw-row-mark") == "number"
+        for circle in number.iter(f"{SVG}circle")
+    ]
+    [gap] = [g for g in marks if g.get("data-gbdraw-row-mark") == "gap"]
+    [box] = gap.iter(f"{SVG}rect")
+    [length] = gap.iter(f"{SVG}text")
+    assert _texts(gap) == ["1.0 kb"]
+    assert len(circles) == 3
+    # One line for the row's numbers and its omitted length.
+    assert len({round(cy, 3) for _cx, cy, _r in circles} | {round(marks_y + float(length.get("y", "0")), 3)}) == 1
+
+    windows = {
+        index: g
+        for g in root.iter(f"{SVG}g")
+        if g.get("data-gbdraw-slot-renderer") == "features" and (index := g.get("data-record-index")) in {"1", "2", "3"}
+    }
+    axis_y = {round(_translate(g)[1], 3) for g in windows.values()}
+    assert len(axis_y) == 1
+    features = [
+        _path_points(g, path) for g in windows.values() for path in g.iter(f"{SVG}path") if path.get("data-gbdraw-feature-id")
+    ]
+    row_top = min(y for points in features for _x, y in points)
+    row_bottom = max(y for points in features for _x, y in points)
+    for cx, cy, r in circles:
+        # Above the axis, on the row's upper edge, and in no feature's box.
+        assert row_top - r <= cy <= row_top < min(axis_y)
+        for points in features:
+            left, right = min(x for x, _y in points), max(x for x, _y in points)
+            top, bottom = min(y for _x, y in points), max(y for _x, y in points)
+            assert cx + r <= left or cx - r >= right or cy + r <= top or cy - r >= bottom
+
+    def ribbon_points(attribute: str) -> list[list[tuple[float, float]]]:
+        return [
+            _path_points(g, path)
+            for g in root.iter(f"{SVG}g")
+            if g.get(attribute) == "1"
+            for path in g.iter(f"{SVG}path")
+        ]
+
+    into_row = ribbon_points("data-subject-row")
+    out_of_row = ribbon_points("data-query-row")
+    assert len(into_row) == 3 and len(out_of_row) == 3
+    # Every ribbon into the row ends at one y, above its numbers and the length's box.
+    ends = {round(max(y for _x, y in points), 3) for points in into_row}
+    assert len(ends) == 1
+    assert max(ends) <= min(cy - r for _cx, cy, r in circles)
+    assert max(ends) <= marks_y + float(box.get("y", "0"))
+    # Every ribbon out of the row starts at one y, below the row's lower lane.
+    starts = {round(min(y for _x, y in points), 3) for points in out_of_row}
+    assert len(starts) == 1 and min(starts) >= row_bottom
