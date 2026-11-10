@@ -122,6 +122,7 @@ import {
   writeLosatCacheInfo,
   CIRCULAR_RECORD_FORM_DEFAULTS,
   linearCardWindowPlanRecords,
+  linearDrawingUnitPlaces,
   linearDrawingWindowsOf
 } from '../services/config.js';
 import { artifactSlotAs } from '../services/artifact-slot.js';
@@ -1406,15 +1407,16 @@ export const createAppSetup = () => {
     });
   };
   const {
-    linearRegionNote, linearCardWindowView, linearLayoutCellRows, linearCardWindowsOf, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
+    linearRegionNote, linearCardWindowView, linearLayoutCellRows, linearUnitPlacesOf, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
     committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds, shownLinearWrapLeaf, shownLinearWrapReading
   } = createShownDrawingReaders({
     state, shownDrawingOfMode, linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor, refreshLinearRecords: linearRecordSelector.refresh,
-    committedLinearRecordCards, getCommittedCanonicalRenderRequest, windowsOf: linearDrawingWindowsOf, planCardWindows,
+    committedLinearRecordCards, getCommittedCanonicalRenderRequest, windowsOf: linearDrawingWindowsOf,
+    unitPlacesOf: linearDrawingUnitPlaces, planCardWindows,
     cardWindowPlanRecords: linearCardWindowPlanRecords, recordDisplayRows: () => recordDisplayControls.allRows.value || []
   });
-  const losatSettings = createLosatSettings({ state, planLinearUnits, shownWindowsOf: () => linearCardWindowsOf(state.activeDrawing()) });
+  const losatSettings = createLosatSettings({ state, planLinearUnits, shownPlacesOf: () => linearUnitPlacesOf(state.activeDrawing()) });
   // Auto values follow the records the next Generate draws; until they are
   // known the values name their rule.
   const autoValueDisplay = createAutoValueDisplay(state, {

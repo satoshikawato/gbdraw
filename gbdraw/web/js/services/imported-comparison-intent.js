@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { LinearSeq } from './drawing/inputs.js' */
 /** @import { LinearComparisonEdge, LinearComparisonLayoutRow, LinearComparisonResolution } from './linear-comparisons.js' */
-/** @import { LinearUnitPlanPayload, LinearUnitRecord, LinearUnitSearch, LinearUnitWindowsOf } from './linear-units.js' */
+/** @import { LinearUnitPlanPayload, LinearUnitRecord, LinearUnitSearch, LinearCardPlacesOf } from './linear-units.js' */
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import { COMPARISON_THRESHOLD_KEYS } from '../mode-profiles.js';
 import {
@@ -763,7 +763,7 @@ const searchedPipelineOf = (source) => /** @type {SavedPipeline | undefined} */ 
  * @param {{
  *   source: SavedComparisonSource | null,
  *   cards: readonly LinearSeq[],
- *   windowsOf: LinearUnitWindowsOf,
+ *   placesOf: LinearCardPlacesOf,
  *   runHelper: (payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>,
  *   requirePlan: (resolution: LinearComparisonResolution) => LinearComparisonResolution,
  *   plan: { sequences: readonly LinearSeq[], recordsOff: Iterable<unknown>, layout: readonly LinearComparisonLayoutRow[] }
@@ -772,11 +772,11 @@ const searchedPipelineOf = (source) => /** @type {SavedPipeline | undefined} */ 
  *   the drawing no longer allows (its records moved into one row) stops before any search.
  * @returns {Promise<InheritedPipelineSearch | null>}
  */
-export const inheritedPipelineSearch = async ({ source: held, cards, windowsOf, runHelper, requirePlan, plan }) => {
+export const inheritedPipelineSearch = async ({ source: held, cards, placesOf, runHelper, requirePlan, plan }) => {
   const source = toRaw(held);
   const pipeline = source === null ? null : searchedPipelineOf(source);
   if (source === null || pipeline === null) return null;
-  const carry = savedIndexCarrier(source, unitRecordInputs(cards, windowsOf));
+  const carry = savedIndexCarrier(source, unitRecordInputs(cards, placesOf));
   /** @param {LinearComparisonEdge[]} edges The selected record pairs; none plans the records of adjacent rows. */
   const losatPlan = (edges) => requirePlan(resolveLinearComparisonPlan({
     ...plan,
@@ -791,8 +791,8 @@ export const inheritedPipelineSearch = async ({ source: held, cards, windowsOf, 
     queryUnit: carry(pair.queryRecordIndex), subjectUnit: carry(pair.subjectRecordIndex)
   }));
   const unitSearch = pairs.length === 0
-    ? await planLinearUnitSearch(cards, losatPlan([]), windowsOf, runHelper)
-    : await savedPairsUnitSearch(cards, pairs, windowsOf, runHelper, (recordPairs) => losatPlan(recordPairs.map(
+    ? await planLinearUnitSearch(cards, losatPlan([]), placesOf, runHelper)
+    : await savedPairsUnitSearch(cards, pairs, placesOf, runHelper, (recordPairs) => losatPlan(recordPairs.map(
       ({ queryRecordKey, subjectRecordKey }) => createLinearComparisonEdge({
         queryUid: queryRecordKey, subjectUid: subjectRecordKey, source: LINEAR_COMPARISON_SOURCES.LOSAT, included: true
       }))));

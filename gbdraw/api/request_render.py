@@ -114,6 +114,7 @@ from gbdraw.labels.filtering import (
     read_label_override_file,
     read_qualifier_priority_file,
 )
+from gbdraw.layout.linear_multi_record import drawn_unit_rows, grid_display_pairs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import detected_topology
 from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
@@ -1843,12 +1844,19 @@ def _linear_layout_with_record_placements(
         return _windows_share_rows(request, layout)
     if layout is None:  # pragma: no cover - LinearDiagramRequest refuses grid rows without a layout.
         raise ValidationError("Grid placement requires LinearMultiRecordOptions.", diagnostic={"code": "INPUT_INVALID"})
-    positioned = grid_placement_order(positioned)
-    positions = tuple(
-        f"#{index + 1}@{presentation.grid_row}"
-        for index, presentation in positioned
-    )
+    rows = _request_unit_rows(request)
+    positions = tuple(f"#{index + 1}@{rows[index] + 1}" for index, _presentation in grid_placement_order(positioned))
     return replace(layout, multi_record_positions=positions)
+
+
+def _request_unit_rows(request: LinearDiagramRequest) -> tuple[int, ...]:
+    """The row of each record of a projected request that names no row positions (``drawn_unit_rows``): the one rule
+    the Web's unit plan reads too (``plan_linear_units``)."""
+
+    return drawn_unit_rows(
+        [record_input.presentation.grid_row for record_input in request.records],
+        [drawn_record_identity(record_input) for record_input in request.records],
+    )
 
 
 def _unit_positions(request: LinearDiagramRequest, layout: LinearMultiRecordOptions) -> LinearMultiRecordOptions:
@@ -1895,10 +1903,10 @@ def _windows_share_rows(
     keys = [drawn_record_identity(record_input) for record_input in request.records]
     if layout is None or len(set(keys)) == len(keys):
         return layout
-    rows = {key: row for row, key in enumerate(dict.fromkeys(keys), start=1)}
+    rows = _request_unit_rows(request)
     return replace(
         layout,
-        multi_record_positions=tuple(f"#{index}@{rows[key]}" for index, key in enumerate(keys, start=1)),
+        multi_record_positions=tuple(f"#{index + 1}@{row + 1}" for index, row in enumerate(rows)),
     )
 
 
@@ -2937,20 +2945,16 @@ def _request_record_instance_keys(request: DiagramRequest) -> tuple[str, ...]:
 def _request_derived_settings(
     request: LinearDiagramRequest,
     mode: str,
+    rows_by_record: Sequence[int],
 ) -> DerivedLosatpSettings:
-    """The converter settings a request's derived payload was computed with."""
+    """The converter settings a request's derived payload was computed with. ``rows_by_record`` are the rows the
+    drawing places its records in: a drawing whose records stand in a grid displays its grid pairs
+    (``grid_display_pairs``), as the Web's unit plan says."""
 
     options = request.options
     params = options.collinearity_params or LosslessCollinearityParameters()
     search = options.losat_search
-    # The Python reading of the Web's grid precondition: every drawn record
-    # holds one canonical grid cell (`canonicalGridDisplayPairs`).
-    explicit_display_pairs = len(request.records) >= 2 and all(
-        record_input.presentation.grid_row is not None
-        and record_input.presentation.grid_column is not None
-        and record_input.cardinality is RecordCardinality.EXACTLY_ONE
-        for record_input in request.records
-    )
+    explicit_display_pairs = grid_display_pairs(rows_by_record) is not None
     return normalize_derived_losatp_settings(
         mode=mode,
         bitscore=options.bitscore,
@@ -3042,6 +3046,7 @@ def _build_current_derived_entries(
     metadata: LinearDiagramMetadata | None,
     request: LinearDiagramRequest,
     records: tuple[SeqRecord, ...],
+    layout: LinearMultiRecordOptions | None,
     artifacts: _PreparedLinearArtifacts,
     raw_entries: Sequence[Mapping[str, Any]],
 ) -> tuple[Mapping[str, Any], ...]:
@@ -3071,7 +3076,11 @@ def _build_current_derived_entries(
     # from raw LOSAT results: one owner gives its identity, key and pairs.
     if not wanted or not compact_resource:
         return ()
-    settings = _request_derived_settings(request, mode)
+    settings = _request_derived_settings(
+        request,
+        mode,
+        resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1],
+    )
     pairs = _derived_identity_pairs(request, settings, pair_frames, raw_entries)
     if pairs is None:
         return ()
@@ -3285,6 +3294,7 @@ def _build_request_plan_diagram(
                 linear_metadata,
                 plan.request,
                 records,
+                plan.layout,
                 linear_artifacts,
                 losat_cache_entries,
             )

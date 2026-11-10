@@ -15,10 +15,13 @@ import pytest
 from gbdraw.api import GenBankInputSource
 from gbdraw.api.options import LinearDiagramOptions, LinearMultiRecordOptions, LosatSearchOptions
 from gbdraw.api.record_planning import resolve_linear_options
-from gbdraw.api.request_render import resolve_request_records
-from gbdraw.api.requests import LinearDiagramRequest, RecordInput
+import gbdraw.api.request_render as request_render_module
+from gbdraw.api.request_render import LinearRequestPlan, plan_request, resolve_request_records
+from gbdraw.api.requests import LinearDiagramRequest, RecordInput, RecordPresentation
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.regions import RecordWindow
+from gbdraw.layout.linear_multi_record import grid_display_pairs
+from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.web_support.linear_units import plan_linear_units, plan_linear_units_json
 
 REPO = Path(__file__).resolve().parents[1]
@@ -55,11 +58,14 @@ def test_the_web_plan_is_the_search_and_the_drawing_python_runs_for_the_same_rec
 
     plan = plan_linear_units(
         [
-            {"recordKey": "mito", "windows": [
+            {"recordKey": "mito", "gridRow": None, "windows": [
                 {"start": w.start, "end": w.end, "reverseComplement": w.reverse_complement, "column": None}
                 for w in windows
             ]},
-            {"recordKey": "other", "windows": [{"start": 1, "end": 500, "reverseComplement": False, "column": None}]},
+            {
+                "recordKey": "other", "gridRow": None,
+                "windows": [{"start": 1, "end": 500, "reverseComplement": False, "column": None}],
+            },
         ],
         [{"queryRecordKey": "mito", "subjectRecordKey": "other", "source": "losat"}],
     )
@@ -71,6 +77,52 @@ def test_the_web_plan_is_the_search_and_the_drawing_python_runs_for_the_same_rec
         (0, 2),
         (1, 2),
     ]
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [(1, 1, 2), (None, None, None), (2, 1, 1), (1, 2, 3)],
+    ids=["two-above-one", "no-rows", "one-above-two", "one-per-row"],
+)
+def test_the_web_display_pairs_are_the_pairs_the_drawing_and_the_derived_identity_read(rows: tuple) -> None:
+    """Parity (OV-3248): the unit pairs the Web's unit plan says the drawing displays are the pairs the Python drawing
+    displays for the same request (``grid_display_pairs`` over its rows), and they decide the derived LOSATP
+    identity's ``explicitDisplayPairs``: a grid arranged in the Web (rows, no columns), and a record drawn in two
+    windows, which share its row."""
+
+    windows = (RecordWindow(100, 900), RecordWindow(5000, 5600))
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(GenBankInputSource(MITO), windows=windows, record_key="mito",
+                        presentation=RecordPresentation(grid_row=rows[0])),
+            RecordInput(GenBankInputSource(MITO), record_key="other", presentation=RecordPresentation(grid_row=rows[1])),
+            RecordInput(GenBankInputSource(MITO), windows=(RecordWindow(1, 500),), record_key="third",
+                        presentation=RecordPresentation(grid_row=rows[2])),
+        ),
+        layout=LinearMultiRecordOptions(),
+    )
+    plan = plan_request(request)
+    assert isinstance(plan, LinearRequestPlan)
+    drawn_rows = resolve_record_row_positions(
+        plan.records, plan.layout.multi_record_positions if plan.layout is not None else None
+    )[1]
+    web = plan_linear_units(
+        [
+            {"recordKey": key, "gridRow": row, "windows": [
+                {"start": w.start, "end": w.end, "reverseComplement": w.reverse_complement, "column": None}
+                for w in record_windows
+            ]}
+            for key, row, record_windows in (
+                ("mito", rows[0], windows), ("other", rows[1], ()), ("third", rows[2], (RecordWindow(1, 500),))
+            )
+        ],
+        [],
+    )
+    drawn = grid_display_pairs(drawn_rows)
+    assert drawn is not None  # the two windows of mito share a row
+    assert web["gridPairs"] == [{"queryUnit": query, "subjectUnit": subject} for query, subject in drawn]
+    settings = request_render_module._request_derived_settings(plan.request, "collinear", drawn_rows)
+    assert settings.explicit_display_pairs is True
 
 
 def test_an_uploaded_comparison_of_a_record_drawn_in_windows_is_refused() -> None:
@@ -87,12 +139,21 @@ def test_an_uploaded_comparison_of_a_record_drawn_in_windows_is_refused() -> Non
 @pytest.mark.parametrize(
     ("records", "pairs"),
     [
-        ([{"recordKey": "a", "windows": [{"start": 0, "end": 5}]}], []),
-        ([{"recordKey": "a", "windows": []}, {"recordKey": "a", "windows": []}], []),
-        ([{"recordKey": "a", "windows": []}], [{"queryRecordKey": "a", "subjectRecordKey": "z", "source": "losat"}]),
-        ([{"recordKey": "a", "windows": []}], [{"queryRecordKey": "a", "subjectRecordKey": "a", "source": "table"}]),
+        ([{"recordKey": "a", "windows": [{"start": 0, "end": 5}], "gridRow": None}], []),
+        ([{"recordKey": "a", "windows": [], "gridRow": None}, {"recordKey": "a", "windows": [], "gridRow": None}], []),
+        (
+            [{"recordKey": "a", "windows": [], "gridRow": None}],
+            [{"queryRecordKey": "a", "subjectRecordKey": "z", "source": "losat"}],
+        ),
+        (
+            [{"recordKey": "a", "windows": [], "gridRow": None}],
+            [{"queryRecordKey": "a", "subjectRecordKey": "a", "source": "table"}],
+        ),
+        ([{"recordKey": "a", "windows": []}], []),
+        ([{"recordKey": "a", "windows": [], "gridRow": 0}], []),
+        ([{"recordKey": "a", "windows": [], "gridRow": 1}, {"recordKey": "b", "windows": [], "gridRow": None}], []),
     ],
-    ids=["bad-window", "record-twice", "unknown-record", "unknown-source"],
+    ids=["bad-window", "record-twice", "unknown-record", "unknown-source", "no-grid-row", "bad-grid-row", "partial-rows"],
 )
 def test_a_malformed_plan_request_is_a_helper_protocol_error(records: list, pairs: list) -> None:
     with pytest.raises(ValidationError) as caught:
@@ -116,9 +177,9 @@ def test_the_cli_and_the_web_write_one_protein_identity_for_each_window_unit() -
     cli = _extract_linear_request_proteins(plan.request, plan.records, plan.inputs, plan.provenance).identity_manifest
     assert cli is not None
     units = plan_linear_units(
-        [{"recordKey": "mito", "windows": [
+        [{"recordKey": "mito", "gridRow": None, "windows": [
             {"start": w.start, "end": w.end, "reverseComplement": w.reverse_complement, "column": None} for w in windows
-        ]}, {"recordKey": "other", "windows": []}],
+        ]}, {"recordKey": "other", "gridRow": None, "windows": []}],
         [],
     )["units"]
     helpers = _web_helpers()

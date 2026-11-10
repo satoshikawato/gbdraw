@@ -4990,6 +4990,30 @@ def test_similarity_groups_with_two_records_on_one_row_link_adjacent_rows(
 
 
 @pytest.mark.linear
+def test_protein_links_join_adjacent_rows_when_the_rows_do_not_follow_the_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OV-3286: one record per row, drawn in the order 2, 3, 1, joins the records of adjacent rows (2-3 and 3-1)
+    instead of refusing the consecutive record pair 1-2, which is not between adjacent rows."""
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _all_pairs_losatp)
+    records = [_long_record(f"record_{index}", f"p{index}") for index in range(3)]
+
+    result = api_diagram_module.build_linear_diagram_result(
+        records,
+        options=LinearDiagramOptions(
+            losat_search=LosatSearchOptions(program="losatp", losatp_mode="similarity_groups")
+        ),
+        layout=LinearMultiRecordOptions(multi_record_positions=("#1@3", "#2@1", "#3@2")),
+    )
+
+    assert {
+        (comparison.query_record_index, comparison.subject_record_index)
+        for comparison in result.metadata.linear_comparisons
+    } == {(0, 2), (1, 2)}
+
+
+@pytest.mark.linear
 @pytest.mark.parametrize("mode", ("similarity_groups", "pairwise"))
 def test_cli_protein_modes_with_multi_record_rows_draw_adjacent_row_links(
     monkeypatch: pytest.MonkeyPatch,

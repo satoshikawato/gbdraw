@@ -1441,9 +1441,8 @@ export const linearWindowsPayload = (seq, { arranged, ordinal, record }) => {
 
 /**
  * The windows a Linear drawing's request writes for a card (`linearWindowsPayload` with the drawing's Record Layout,
- * the card's number among all its cards, and the record the card draws, `recordOf`), for every reader of a card's
- * windows outside the request build: the drawn-unit plan of Generate, of the draft request and of the LOSAT job
- * estimate, and the wrap estimate.
+ * the card's number among all its cards, and the record the card draws, `recordOf`), for the readers of a card's
+ * windows outside the request build that read one card: the wrap estimate and the cards' own window views.
  * @template {Pick<RequestLinearSeq, 'region_start' | 'region_end' | 'region_reverse' | 'windows'>} C
  * @param {{ linearRecordLayoutEnabled?: { value: unknown }, linearSeqs: readonly C[] }} drawing
  * @param {(card: C) => CardRecordFacts} recordOf
@@ -1453,6 +1452,18 @@ export const linearDrawingWindowsOf = (drawing, recordOf) => (card) => linearWin
   arranged: Boolean(drawing.linearRecordLayoutEnabled?.value), ordinal: drawing.linearSeqs.indexOf(card) + 1,
   record: recordOf(card)
 });
+
+/**
+ * Where a Linear drawing's request places its drawn cards (`linearRecordPlacements`, the request's own owner): each
+ * card's windows and grid row, which the drawn-unit plan reads (`planLinearUnits` of Generate, of the draft request,
+ * of the LOSAT job estimate and of Inherit): Python numbers the units and says which unit pairs the drawing displays.
+ * @template {RequestLinearSeq} C
+ * @param {Parameters<typeof linearRecordPlacements>[0] & { linearSeqs: readonly C[] }} drawing
+ * @param {(card: C) => CardRecordFacts} recordOf
+ * @returns {(cards: readonly C[]) => { windows: CanonicalRecord['windows'], gridRow: number | null }[]}
+ */
+export const linearDrawingUnitPlaces = (drawing, recordOf) => (cards) => linearRecordPlacements(drawing, cards, recordOf)
+  .map(({ windows, gridRow }) => ({ windows, gridRow }));
 
 /**
  * The record-wide reverse complement a Linear card's request record writes beside `windows`, its windows as

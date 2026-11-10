@@ -8,7 +8,9 @@ import test from 'node:test';
 import { createLinearSeq } from '../../gbdraw/web/js/services/drawing/inputs.js';
 import { buildLosatJobSpecs, linearComparisonEdgeKey } from '../../gbdraw/web/js/services/linear-comparisons.js';
 import { losatSearchSequences } from '../../gbdraw/web/js/services/linear-sources.js';
-import { linearWindowsPayload, requireLinearComparisonPlanSnapshot } from '../../gbdraw/web/js/services/session-request.js';
+import {
+  linearDrawingUnitPlaces, linearWindowsPayload, requireLinearComparisonPlanSnapshot
+} from '../../gbdraw/web/js/services/session-request.js';
 import {
   linearUnitPlanPayload,
   planLinearUnitSearch,
@@ -22,6 +24,14 @@ import {
 import { pythonLinearUnitPlan } from './helpers/linear-unit-plan.mjs';
 
 const pythonPlan = pythonLinearUnitPlan;
+/**
+ * The places the request writes for the drawn cards (`linearDrawingUnitPlaces`, the request's own owner), with the
+ * Record Layout's rows when `rows` is given.
+ * @param {{ uid: string, row: number }[] | null} [rows]
+ */
+const placesOf = (rows = null) => (cards) => linearDrawingUnitPlaces(
+  { linearRecordLayoutEnabled: { value: rows !== null }, linearRecordRows: rows ?? [], linearSeqs: cards },
+  () => ({ length: null, id: '', count: 1 }))(cards);
 
 const window = (start, end, reverseComplement = false, column = null) => ({ start, end, reverseComplement, column });
 const cases = [
@@ -79,11 +89,10 @@ for (const testCase of cases) {
   test(`the Web asks for and searches Python's unit plan: ${testCase.id}`, async () => {
     const { cards } = testCase;
     const resolution = resolutionOf(testCase, cards);
-    const windowsOf = (card) => linearWindowsPayload(card, { arranged: true, ordinal: 1, record: { length: null, id: '' } });
-    const payload = linearUnitPlanPayload(cards, resolution, windowsOf);
+    const payload = linearUnitPlanPayload(cards, resolution, placesOf());
     assert.deepEqual(payload.pairs, testCase.pairs);
     const plan = pythonPlan(payload);
-    const search = await planLinearUnitSearch(cards, resolution, windowsOf, async (asked) => {
+    const search = await planLinearUnitSearch(cards, resolution, placesOf(), async (asked) => {
       assert.deepEqual(asked, payload);
       return { result: plan };
     });
@@ -110,6 +119,7 @@ for (const testCase of cases) {
       assert.equal(search.recordKeys[index], unit.recordKey);
       assert.equal(search.windowOf[index], unit.windowOf);
       assert.equal(search.windows[index], unit.window);
+      assert.equal(search.gridPairs, plan.gridPairs);
       if (unit.windowOf === null) assert.equal(search.sequences[index], card);
       else assert.deepEqual(search.sequences[index], { ...card, uid: unit.unitKey });
     });
@@ -125,8 +135,7 @@ for (const testCase of cases) {
 
 test('a reply that does not plan the records and pairs asked is refused', () => {
   const [testCase] = cases;
-  const asked = linearUnitPlanPayload(testCase.cards, resolutionOf(testCase, testCase.cards),
-    (card) => linearWindowsPayload(card, { arranged: true, ordinal: 1, record: { length: null, id: '' } }));
+  const asked = linearUnitPlanPayload(testCase.cards, resolutionOf(testCase, testCase.cards), placesOf());
   const plan = pythonPlan(asked);
   const refused = (result) => assert.throws(() => readLinearUnitPlan(result, asked),
     (error) => error.code === 'RESULT_INVALID' && error.operation === 'planLinearUnits');
@@ -134,7 +143,27 @@ test('a reply that does not plan the records and pairs asked is refused', () => 
   refused({ units: plan.units.slice(0, 2), pairs: plan.pairs });
   refused({ ...plan, pairs: [{ pair: 0, queryUnit: 2, subjectUnit: 0 }] });
   refused({ ...plan, pairs: [{ pair: 1, queryUnit: 0, subjectUnit: 2 }] });
+  refused({ units: plan.units, pairs: plan.pairs });
+  refused({ ...plan, gridPairs: [{ queryUnit: 2, subjectUnit: 0 }] });
+  refused({ ...plan, gridPairs: [{ queryUnit: 0, subjectUnit: plan.units.length }] });
   assert.equal(readLinearUnitPlan(plan, asked), plan);
+});
+
+// OV-3248: which unit pairs a drawing displays is Python's (`grid_display_pairs`), whatever wrote its rows. The Web
+// sends the rows its request writes (the Record Layout's, without columns) and reads the reply; it derives no pair.
+test('the Web reads the unit pairs a grid displays from the unit plan of Python', async () => {
+  const cards = ['a', 'b', 'c'].map((uid) => createLinearSeq({ uid }));
+  const pairs = { pairs: [['a', 'c'], ['b', 'c']].map(([queryRecordKey, subjectRecordKey]) => (
+    { queryRecordKey, subjectRecordKey, source: 'losat' })) };
+  const resolution = resolutionOf(pairs, cards);
+  const rows = [{ uid: 'a', row: 1 }, { uid: 'b', row: 1 }, { uid: 'c', row: 2 }];
+  const searchOf = async (places) => planLinearUnitSearch(cards, resolution, places,
+    async (asked) => ({ result: pythonPlan(asked) }));
+  assert.deepEqual(linearUnitPlanPayload(cards, resolution, placesOf(rows)).records.map(({ gridRow }) => gridRow), [1, 1, 2]);
+  assert.deepEqual((await searchOf(placesOf(rows))).gridPairs,
+    [{ queryUnit: 0, subjectUnit: 2 }, { queryUnit: 1, subjectUnit: 2 }]);
+  // Without the Record Layout every record takes its own row, in card order: no grid.
+  assert.equal((await searchOf(placesOf())).gridPairs, null);
 });
 
 // OV-3003: Inherit of a saved LOSATP pipeline that names unit pairs (Find in other files keeps only the window pairs
@@ -145,7 +174,7 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
     createLinearSeq({ uid: 'a', windows: [window(1, 150), window(151, 300)] }),
     createLinearSeq({ uid: 'b', windows: [window(10, 90), window(200, 280)] })
   ];
-  const windowsOf = (card) => linearWindowsPayload(card, { arranged: true, ordinal: 1, record: { length: null, id: '' } });
+  const windowsOf = (card) => linearWindowsPayload(card, { arranged: false, ordinal: 1, record: { length: null, id: '' } });
   const settings = { proteinBlastpMaxHits: 3, proteinBlastpCandidateLimit: null };
   const saved = (pairs, records = cards, mode = 'pairwise') => savedComparisonSource({
     renderRequest: {
@@ -161,7 +190,7 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
   /** @type {unknown[]} */
   const asked = [];
   const search = (source, layout = []) => inheritedPipelineSearch({
-    source, cards, windowsOf,
+    source, cards, placesOf: placesOf(),
     runHelper: async (payload) => {
       asked.push(payload);
       return { result: pythonPlan(payload) };
@@ -174,7 +203,9 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
   assert.ok(inherited);
   assert.deepEqual(inherited.pipeline.settings, settings);
   // Python plans the units of the drawn cards; the Web derives no unit itself.
-  assert.deepEqual(asked, [{ records: cards.map((card) => ({ recordKey: card.uid, windows: windowsOf(card) })), pairs: [] }]);
+  assert.deepEqual(asked, [{
+    records: cards.map((card) => ({ recordKey: card.uid, windows: windowsOf(card), gridRow: null })), pairs: []
+  }]);
   const { resolution, sequences } = inherited.unitSearch;
   assert.equal(resolution.valid, true, resolution.error);
   assert.equal(resolution.hasLosatIntent, true);

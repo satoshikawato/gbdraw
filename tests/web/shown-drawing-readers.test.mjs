@@ -12,10 +12,11 @@ globalThis.window = {
 
 const { createShownDrawingReaders } = await import('../../gbdraw/web/js/app/shown-drawing-readers.js');
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
-const { linearCardWindowPlanRecords, linearDrawingWindowsOf } = await import('../../gbdraw/web/js/services/session-request.js');
+const { linearCardWindowPlanRecords, linearDrawingUnitPlaces, linearDrawingWindowsOf } = await import(
+  '../../gbdraw/web/js/services/session-request.js');
 /** The request ports of the readers; no card here has several windows, so the window plan is never asked for. */
 const requestPorts = {
-  windowsOf: linearDrawingWindowsOf, cardWindowPlanRecords: linearCardWindowPlanRecords,
+  windowsOf: linearDrawingWindowsOf, unitPlacesOf: linearDrawingUnitPlaces, cardWindowPlanRecords: linearCardWindowPlanRecords,
   planCardWindows: async () => ({ result: null }), recordDisplayRows: () => []
 };
 

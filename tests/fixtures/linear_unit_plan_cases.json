@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "description": "The drawn units of a Linear request and the unit pairs of its record pairs, as Python plans them for the Web's comparison searches (gbdraw/web_support/linear_units.py plan_linear_units). Python checks the plan (tests/test_web_linear_units.py); the Web checks the searches and request indexes it runs from that plan (tests/web/linear-units.test.mjs).",
+  "description": "The drawn units of a Linear request, the unit pairs of its record pairs and the unit pairs the drawing displays when its records stand in a grid (rows that are not one unit each in unit order), as Python plans them for the Web's comparison searches (gbdraw/web_support/linear_units.py plan_linear_units). Python checks the plan (tests/test_web_linear_units.py); the Web checks the searches and request indexes it runs from that plan (tests/web/linear-units.test.mjs).",
   "cases": [
     {
       "id": "two-windows-against-a-whole-record",
@@ -21,11 +21,13 @@
               "reverseComplement": true,
               "column": null
             }
-          ]
+          ],
+          "gridRow": null
         },
         {
           "recordKey": "b",
-          "windows": []
+          "windows": [],
+          "gridRow": null
         }
       ],
       "pairs": [
@@ -77,6 +79,16 @@
             "queryUnit": 1,
             "subjectUnit": 2
           }
+        ],
+        "gridPairs": [
+          {
+            "queryUnit": 0,
+            "subjectUnit": 2
+          },
+          {
+            "queryUnit": 1,
+            "subjectUnit": 2
+          }
         ]
       }
     },
@@ -99,7 +111,8 @@
               "reverseComplement": false,
               "column": 2
             }
-          ]
+          ],
+          "gridRow": null
         },
         {
           "recordKey": "b",
@@ -116,7 +129,8 @@
               "reverseComplement": false,
               "column": null
             }
-          ]
+          ],
+          "gridRow": null
         },
         {
           "recordKey": "c",
@@ -127,7 +141,8 @@
               "reverseComplement": true,
               "column": null
             }
-          ]
+          ],
+          "gridRow": null
         }
       ],
       "pairs": [
@@ -231,6 +246,32 @@
             "queryUnit": 3,
             "subjectUnit": 4
           }
+        ],
+        "gridPairs": [
+          {
+            "queryUnit": 0,
+            "subjectUnit": 2
+          },
+          {
+            "queryUnit": 0,
+            "subjectUnit": 3
+          },
+          {
+            "queryUnit": 1,
+            "subjectUnit": 2
+          },
+          {
+            "queryUnit": 1,
+            "subjectUnit": 3
+          },
+          {
+            "queryUnit": 2,
+            "subjectUnit": 4
+          },
+          {
+            "queryUnit": 3,
+            "subjectUnit": 4
+          }
         ]
       }
     },
@@ -240,15 +281,18 @@
       "records": [
         {
           "recordKey": "a",
-          "windows": []
+          "windows": [],
+          "gridRow": null
         },
         {
           "recordKey": "b",
-          "windows": []
+          "windows": [],
+          "gridRow": null
         },
         {
           "recordKey": "c",
-          "windows": []
+          "windows": [],
+          "gridRow": null
         }
       ],
       "pairs": [
@@ -295,7 +339,8 @@
             "queryUnit": 2,
             "subjectUnit": 1
           }
-        ]
+        ],
+        "gridPairs": null
       }
     },
     {
@@ -311,11 +356,13 @@
               "reverseComplement": true,
               "column": null
             }
-          ]
+          ],
+          "gridRow": null
         },
         {
           "recordKey": "b",
-          "windows": []
+          "windows": [],
+          "gridRow": null
         }
       ],
       "pairs": [
@@ -351,7 +398,132 @@
             "queryUnit": 0,
             "subjectUnit": 1
           }
+        ],
+        "gridPairs": null
+      }
+    },
+    {
+      "id": "two-records-above-one-arranged-in-the-web",
+      "description": "Rows set in the Web's Record Layout (rows, no columns): a and b in row 1, c in row 2. The drawing displays every pair of units in adjacent rows, a-c and b-c, as a records table of the same rows does (OV-3248).",
+      "records": [
+        {
+          "recordKey": "a",
+          "windows": [],
+          "gridRow": 1
+        },
+        {
+          "recordKey": "b",
+          "windows": [],
+          "gridRow": 1
+        },
+        {
+          "recordKey": "c",
+          "windows": [],
+          "gridRow": 2
+        }
+      ],
+      "pairs": [
+        {
+          "queryRecordKey": "a",
+          "subjectRecordKey": "c",
+          "source": "losat"
+        },
+        {
+          "queryRecordKey": "b",
+          "subjectRecordKey": "c",
+          "source": "losat"
+        }
+      ],
+      "plan": {
+        "units": [
+          {
+            "unitKey": "a",
+            "recordKey": "a",
+            "windowOf": null,
+            "window": null
+          },
+          {
+            "unitKey": "b",
+            "recordKey": "b",
+            "windowOf": null,
+            "window": null
+          },
+          {
+            "unitKey": "c",
+            "recordKey": "c",
+            "windowOf": null,
+            "window": null
+          }
+        ],
+        "pairs": [
+          {
+            "pair": 0,
+            "queryUnit": 0,
+            "subjectUnit": 2
+          },
+          {
+            "pair": 1,
+            "queryUnit": 1,
+            "subjectUnit": 2
+          }
+        ],
+        "gridPairs": [
+          {
+            "queryUnit": 0,
+            "subjectUnit": 2
+          },
+          {
+            "queryUnit": 1,
+            "subjectUnit": 2
+          }
         ]
+      }
+    },
+    {
+      "id": "one-record-per-row-in-a-grid",
+      "description": "Grid rows that hold one record each, in record order (the rows close up: 1 and 3): the comparisons join consecutive units, as without rows.",
+      "records": [
+        {
+          "recordKey": "a",
+          "windows": [],
+          "gridRow": 1
+        },
+        {
+          "recordKey": "b",
+          "windows": [],
+          "gridRow": 3
+        }
+      ],
+      "pairs": [
+        {
+          "queryRecordKey": "a",
+          "subjectRecordKey": "b",
+          "source": "losat"
+        }
+      ],
+      "plan": {
+        "units": [
+          {
+            "unitKey": "a",
+            "recordKey": "a",
+            "windowOf": null,
+            "window": null
+          },
+          {
+            "unitKey": "b",
+            "recordKey": "b",
+            "windowOf": null,
+            "window": null
+          }
+        ],
+        "pairs": [
+          {
+            "pair": 0,
+            "queryUnit": 0,
+            "subjectUnit": 1
+          }
+        ],
+        "gridPairs": null
       }
     }
   ]

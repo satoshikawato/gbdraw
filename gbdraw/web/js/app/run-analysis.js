@@ -9,7 +9,7 @@
 /** @import { ParsedSequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
-/** @import { LinearUnitPlace, LinearUnitPlanPayload, LinearUnitSearch, LinearUnitWindow, LinearUnitWindowsOf } from '../services/linear-units.js' */
+/** @import { LinearCardPlacesOf, LinearUnitPlace, LinearUnitPlanPayload, LinearUnitSearch, LinearUnitWindow } from '../services/linear-units.js' */
 /** @import { CommittedCanonicalSession, RequestRecordDisplayRow } from '../services/session-request.js' */
 /** @import { LiveRedrawLegend } from './legend/entry-actions.js' */
 /** @import { LabelCapacityNotice } from '../services/label-fit.js' */
@@ -78,6 +78,7 @@ import {
   readCanonicalResourceText,
   requestLabelProjection,
   requireLinearComparisonPlanSnapshot,
+  linearDrawingUnitPlaces,
   linearDrawingWindowsOf,
   savedPipelineSearchDrawing
 } from '../services/session-request.js';
@@ -113,7 +114,6 @@ import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-i
 import {
   buildLosatJobSpecs,
   effectiveCollinearSearchScope,
-  canonicalGridDisplayPairs,
   linearComparisonEdgeKey,
   numberLosatDisplayPairs,
   resolveLinearComparisonPlan
@@ -1038,18 +1038,18 @@ const losatUnitPairFilename = (cardPair, cardPairDefault, query, subject) => win
  * @param {readonly LinearSeq[]} cards The cards this Generate draws (`drawnLinearSeqs`), in request order.
  * @param {LinearComparisonResolution} draftPlan
  * @param {boolean} inherit Whether Generate's Inherit runs the drawing's saved comparison.
- * @param {LinearUnitWindowsOf} windowsOf The windows the request writes for a card.
+ * @param {LinearCardPlacesOf} placesOf The places the request writes for the cards.
  * @param {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} runHelper Runs `planLinearUnits`.
  * @returns {Promise<{ unitSearch: LinearUnitSearch, inherited: InheritedPipelineSearch | null }>}
  */
-const linearSearchOf = async (drawing, cards, draftPlan, inherit, windowsOf, runHelper) => {
+const linearSearchOf = async (drawing, cards, draftPlan, inherit, placesOf, runHelper) => {
   const inherited = inherit ? await inheritedPipelineSearch({
-    source: drawing.importedComparisonIntent.source, cards, windowsOf, runHelper,
+    source: drawing.importedComparisonIntent.source, cards, placesOf, runHelper,
     requirePlan: requireLinearComparisonPlanSnapshot,
     plan: { sequences: drawing.linearSeqs, recordsOff: drawing.recordsOff,
       layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [] }
   }) : null;
-  return { unitSearch: inherited?.unitSearch ?? await generateUnitSearch(cards, draftPlan, windowsOf, runHelper), inherited };
+  return { unitSearch: inherited?.unitSearch ?? await generateUnitSearch(cards, draftPlan, placesOf, runHelper), inherited };
 };
 
 // Every LOSAT run's executor: the parallel runner, or the one a browser test installs.
@@ -3586,7 +3586,7 @@ export const createRunAnalysis = ({
         // writes is a unit's (OV-2738); an inherited pipeline searches with its own settings (OV-3003).
         const { unitSearch, inherited } = await linearSearchOf(drawing, linearSeqs, /** @type {LinearComparisonResolution} */ (
           activeComparisonPlanSnapshot), useSavedComparison,
-        linearDrawingWindowsOf(drawing, catalogRecordOf),
+        linearDrawingUnitPlaces(drawing, catalogRecordOf),
         (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload));
         const searchDrawing = inherited ? savedPipelineSearchDrawing(drawing, inherited.pipeline) : drawing;
         if (inherited) requestDrawing = savedPipelineSearchDrawing(requestDrawing, inherited.pipeline);
@@ -4392,15 +4392,12 @@ export const createRunAnalysis = ({
             if (batch.searchContext) cacheMetadata.searchContext = batch.searchContext;
             preparedJobs.push({ spec, losatArgs, cacheMetadata, batch });
           }
-          // CLI Sessions can specify a complete two-dimensional row layout.
-          // For collinearity, every pair across adjacent rows is displayed;
-          // the Web comparison-plan edges alone do not represent those pairs.
-          const canonicalGridPair = useCollinearBlastp && drawing.linearRecordLayoutEnabled.value
-            ? canonicalGridDisplayPairs(unitSeqs, drawing.linearRecordRows)
-            : null;
-          const hasCanonicalGridRows = canonicalGridPair !== null;
+          // When the drawing's units stand in a grid, Collinear displays every pair of units in adjacent rows,
+          // whatever wrote the rows: Python's unit plan says which (`gridPairs`, the rule the CLI drawing and the
+          // derived identity read; OV-3248).
+          const gridPairs = useCollinearBlastp ? unitSearch.gridPairs : null;
           const pairNumbers = numberLosatDisplayPairs(
-            preparedJobs.map(({ spec }) => spec), unitResolution.edges, canonicalGridPair
+            preparedJobs.map(({ spec }) => spec), unitResolution.edges, gridPairs
           );
           const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
           // The converter settings. The derived key and the converter read these same values.
@@ -4421,7 +4418,7 @@ export const createRunAnalysis = ({
             collinearInferOrthogroups,
             orthogroupMembershipMode,
             orthogroupMemberMaxHits,
-            explicitDisplayPairs: hasCanonicalGridRows
+            explicitDisplayPairs: gridPairs !== null
           };
           // The records the converter reads: every record for similarity groups and Collinear.
           const converterRecordIndexes = useDerivedProteinPayloadCache

@@ -248,6 +248,38 @@ def record_pairs_between_adjacent_rows(
     )
 
 
+def grid_display_pairs(rows_by_record: Sequence[int]) -> tuple[tuple[int, int], ...] | None:
+    """The record pairs a Linear drawing displays when its rows do not stand one record each in record order: every
+    pair of records in adjacent rows (``record_pairs_between_adjacent_rows``), whatever wrote the rows (a records
+    table, the Web's Record Layout, the windows of a record sharing its row). None when each row holds one record and
+    the rows follow the records (``rows_by_record`` is 0, 1, 2, ...): the adjacent-row pairs are then the consecutive
+    records, which a drawing without rows joins. The one rule for the CLI drawing, the Web's unit plan and the derived
+    LOSATP identity (OIC-015)."""
+
+    if tuple(rows_by_record) == tuple(range(len(rows_by_record))):
+        return None
+    return record_pairs_between_adjacent_rows(rows_by_record)
+
+
+def drawn_unit_rows(grid_rows: Sequence[int | None], unit_records: Sequence[object]) -> tuple[int, ...]:
+    """The zero-based row of each drawn unit of a Linear request that names no row positions, in unit order: its
+    grid row when the request places its records (the rows close up), else the row of its record, one row per record
+    in record order, which the windows of a record share (D-01). ``unit_records`` names the record each unit draws.
+
+    A request places every record or none (``InputPlace``); a partial placement is refused."""
+
+    if len(grid_rows) != len(unit_records):
+        raise ValidationError("Each drawn unit needs its grid row and its record.")
+    placed = [row for row in grid_rows if row is not None]
+    if placed and len(placed) != len(grid_rows):
+        raise ValidationError("If one Linear record has grid_row, every record must have it.")
+    if placed:
+        numbers = {row: index for index, row in enumerate(sorted(set(placed)))}
+        return tuple(numbers[row] for row in placed)
+    records = {record: index for index, record in enumerate(dict.fromkeys(unit_records))}
+    return tuple(records[record] for record in unit_records)
+
+
 @dataclass(frozen=True)
 class LinearHorizontalLayout:
     """Where each record sits along its row: x, width and the shared bp scale.
@@ -588,6 +620,8 @@ __all__ = [
     "parse_record_row_position",
     "COMPARISON_FRAME_DECIMALS",
     "comparison_frame_px",
+    "drawn_unit_rows",
+    "grid_display_pairs",
     "linear_comparison_frame",
     "place_record_vertically",
     "resolve_record_row_positions",

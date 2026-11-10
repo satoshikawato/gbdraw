@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
+const { pythonLinearUnitPlan } = await import(pathToFileURL(join(repoRoot, 'tests', 'web', 'helpers', 'linear-unit-plan.mjs')));
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-losat-cache-'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 // losat-cache.js reads the generated schema constants, the typed-result shapes (checked with contract-shape.js),
@@ -887,7 +888,7 @@ assert.throws(
 // asynchronous I/O is controlled so an exception/cancel occurs while the loan
 // is active, rather than after the loop has already released its index.
 const {
-  LINEAR_COMPARISON_MODES, buildLosatJobSpecs, canonicalGridDisplayPairs, numberLosatDisplayPairs,
+  LINEAR_COMPARISON_MODES, buildLosatJobSpecs, numberLosatDisplayPairs,
   resolveLinearComparisonPlan
 } = await import(pathToFileURL(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'linear-comparisons.js')));
 const runSource = await readFile(join(repoRoot, 'gbdraw/web/js/app/run-analysis.js'), 'utf8');
@@ -1069,7 +1070,7 @@ await exercisePairLoop({failure: 'cancel'});
 // card, and the Run Info registration gives each one its own generated file,
 // named for its card and holding its pair.
 {
-  const gridCell = (uid, row) => ({ uid, row, canonicalRow: row, canonicalColumn: 1, canonicalCardinality: 'exactly_one' });
+  const gridCell = (uid, row) => ({ uid, row });
   const linearSeqs = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
   const linearRecordRows = [gridCell('b', 1), gridCell('c', 2), gridCell('a', 3)];
   const comparisonResolution = resolveLinearComparisonPlan({
@@ -1084,9 +1085,13 @@ await exercisePairLoop({failure: 'cancel'});
     useProteinBlastp: false, useCollinearBlastp: true,
     // Without windows, the units are the cards and the unit plan is the card plan (OV-2738).
     linearSeqs, unitResolution: comparisonResolution,
-    pairNumbers: numberLosatDisplayPairs(
-      specs, comparisonResolution.edges, canonicalGridDisplayPairs(linearSeqs, linearRecordRows)
-    ),
+    // Rows out of record order: Python's unit plan displays every adjacent-row pair (`gridPairs`), a->c and b->c.
+    pairNumbers: numberLosatDisplayPairs(specs, comparisonResolution.edges, pythonLinearUnitPlan({
+      records: linearSeqs.map(({ uid }) => ({
+        recordKey: uid, windows: [], gridRow: linearRecordRows.find((row) => row.uid === uid).row
+      })),
+      pairs: []
+    }).gridPairs),
     preparedJobs: specs.map((spec) => ({
       spec, losatArgs: [], cacheMetadata: { search: `${spec.queryUid}->${spec.subjectUid}` }, batch: {}
     })),

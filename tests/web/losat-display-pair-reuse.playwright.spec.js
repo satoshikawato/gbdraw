@@ -253,6 +253,33 @@ test('Turning off a CLI grid reconverts LOSATP Collinear blocks and draws the fr
   expect(rows.paths).toEqual(fresh.paths);
 });
 
+// OV-3248: a grid arranged in Record Layout writes rows without columns. It displays
+// every record pair of adjacent rows, as the same grid from a records table does.
+test('A grid arranged in the Web draws LOSATP Collinear blocks between every record pair of adjacent rows', async ({ page }) => {
+  test.setTimeout(420000);
+  await installProteinExecutor(page);
+  await openApp(page);
+  await showDrawing(page, { kind: 'linear' });
+  const sources = [['GridA', [1, 121, 241]], ['GridB', [31, 151, 271]], ['GridC', [61, 181, 271]]];
+  for (const [index, [recordId, starts]] of sources.entries()) {
+    if (index > 0) await page.getByRole('button', { name: 'Add sequence' }).first().click();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Choose GenBank / DDBJ File' }).nth(index).click();
+    await (await chooser).setFiles({
+      name: `${recordId}.gbk`, mimeType: 'text/plain', buffer: Buffer.from(makeGenbank(recordId, starts))
+    });
+  }
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(3);
+  await chooseLosatp(page, 'collinear');
+  await page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches', exact: true }).check();
+  await page.getByRole('combobox', { name: 'Collinear search between' }).selectOption('all');
+  await openLayoutControls(page);
+  await page.getByLabel('Arrange linear records in rows').check();
+  await setRows(page, [1, 1, 2]);
+  // GridA and GridB share row 1; GridC sits in row 2.
+  expect((await generate(page)).links).toEqual(['0->2 1-330 61-360', '1->2 31-360 61-360']);
+});
+
 // OV-2368: a CDS across a circular record's origin reaches the converter with its
 // arc, so a link or block that uses it covers the arc, as one row on each side of
 // the origin, and never the whole record.

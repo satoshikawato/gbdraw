@@ -22,7 +22,7 @@ const {
   removeCardWindow, UNKNOWN_CARD_RECORD, catalogCardRecord
 } = await import('../../gbdraw/web/js/services/linear-card-windows.js');
 const {
-  linearCardRequestedCircular, linearCardWindowPlanRecords, linearDrawingWindowsOf, linearWindowsPayload
+  linearCardRequestedCircular, linearCardWindowPlanRecords, linearDrawingUnitPlaces, linearDrawingWindowsOf, linearWindowsPayload
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const {
   layoutCellKey, linearLayoutCells, linearLayoutPlaces, moveLinearLayoutCell, placeNewLayoutWindow, placeRecordAtRowEnd, setLinearRecordRow
@@ -398,8 +398,8 @@ test('the card owns every write of its windows: orientation, Reset Settings and 
 
 test('Up and Down on a window cell change only the places, so the unit indexes stored comparisons hold stay (F7)', () => {
   const { cards, entries } = arrangedLayout();
-  const unitsOf = () => pythonLinearUnitPlan(linearUnitPlanPayload(cards, { edges: [] },
-    (card) => linearWindowsPayload(card, { arranged: true, ordinal: 1, record: UNKNOWN_CARD_RECORD })));
+  const unitsOf = () => pythonLinearUnitPlan(linearUnitPlanPayload(cards, { edges: [] }, linearDrawingUnitPlaces(
+    { linearRecordLayoutEnabled: { value: true }, linearRecordRows: entries, linearSeqs: cards }, () => UNKNOWN_CARD_RECORD)));
   const before = unitsOf();
   moveLinearLayoutCell(cards, entries, { uid: 'a', window: 1 }, -1);
   assert.notDeepEqual(cards[0].windows.map(({ column }) => column), [null, null]);

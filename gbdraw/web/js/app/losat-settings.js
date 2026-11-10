@@ -10,7 +10,7 @@ import { losatThreadingPrecondition } from '../services/losat.js';
 import { t, tn } from '../utils/i18n.js';
 /** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
 /** @import { LinearSeq } from '../state.js' */
-/** @import { LinearUnitPlanPayload, LinearUnitSearch, LinearUnitWindowsOf } from '../services/linear-units.js' */
+/** @import { LinearUnitPlanPayload, LinearUnitSearch, LinearCardPlacesOf } from '../services/linear-units.js' */
 
 const { computed, ref, watch, onMounted } = window.Vue;
 
@@ -90,11 +90,12 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  */
 
 /**
- * How the estimate plans drawn units: the Worker helper that plans them, and the windows a drawing's request writes for
- * a card (`linearDrawingWindowsOf` of services/config.js).
+ * How the estimate plans drawn units: the Worker helper that plans them, and the places a drawing's request writes for
+ * its drawn cards (`linearDrawingUnitPlaces` of services/config.js).
  * @typedef {object} LosatUnitPlanPorts
  * @property {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} planLinearUnits
- * @property {() => LinearUnitWindowsOf} shownWindowsOf The windows each card of the shown drawing writes in its request.
+ * @property {() => LinearCardPlacesOf} shownPlacesOf The places the drawn cards of the shown drawing write in its
+ *   request.
  */
 
 /**
@@ -105,14 +106,14 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  * @param {(drawing: LosatSettingsDrawing) => LinearComparisonResolution} readResolution
  * @param {LosatUnitPlanPorts} ports
  */
-const watchLosatUnitPlan = (state, readResolution, { planLinearUnits, shownWindowsOf }) => {
+const watchLosatUnitPlan = (state, readResolution, { planLinearUnits, shownPlacesOf }) => {
   const unitPlanKey = computed(() => {
     const drawing = state.activeDrawing();
     const resolution = readResolution(drawing);
     const drawn = drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff);
     if (resolution.valid === false || !resolution.hasLosatIntent || !drawsSeveralUnits(drawn)) return '';
     try {
-      return JSON.stringify(linearUnitPlanPayload(drawn, resolution, shownWindowsOf()));
+      return JSON.stringify(linearUnitPlanPayload(drawn, resolution, shownPlacesOf()));
     } catch {
       return 'refused'; // A window Generate refuses while it is typed: no plan, as when the helper fails.
     }
@@ -125,7 +126,7 @@ const watchLosatUnitPlan = (state, readResolution, { planLinearUnits, shownWindo
     let search = null;
     try {
       search = await planLinearUnitSearch(drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff),
-        readResolution(drawing), shownWindowsOf(), planLinearUnits);
+        readResolution(drawing), shownPlacesOf(), planLinearUnits);
     } catch {
       search = null;
     }
