@@ -565,14 +565,14 @@ def test_a_region_of_a_circular_batch_compares_each_diagrams_own_size_class(tmp_
     ],
     ids=["both", "long-only", "short-only"],
 )
-def test_a_size_reset_names_the_value_the_compared_diagram_drew(
+def test_a_size_reset_names_the_hand_set_value_of_the_compared_diagrams_size_class(
     tmp_path: Path, kind: str, leaves: dict[str, int]
 ) -> None:
     # OV-3254: the 5 kb diagram of a batch draws the label font of the short size class, the 300 kb one that of the
-    # long class; a canvas of both draws the long class's. A diagram draws the hand-set value of its class, or its
-    # Auto value (14 short, 8 long) where only the other class is set by hand (OV-3263). A new drawing names the
-    # value the diagram it comes from drew, whether the font returns to Auto or is kept, in the Python API and in the
-    # Web's Returned-to-Auto list; with sizes not adapted, that value is kept.
+    # long class; a canvas of both draws the long class's. A new drawing names the hand-set value the diagram it comes
+    # from drew, whether the font returns to Auto or is kept, in the Python API and in the Web's Returned-to-Auto
+    # list; with sizes not adapted, that value is kept. OV-3263: where only one class is set by hand, the diagram of
+    # the other drew its Auto value, and the one hand-set value is named, never an Auto value.
     from gbdraw.api.requests import CircularBatchRequest, RenderOutputRequest
 
     # One input and one output per record, as the Web holds a batch.
@@ -587,25 +587,26 @@ def test_a_size_reset_names_the_value_the_compared_diagram_drew(
         if kind == "batch"
         else CircularDiagramRequest(records=records, options=options)
     )
-    drew_long = leaves.get("labels.font_size.long", 8.0)
-    drew = leaves.get("labels.font_size.short", 14.0) if kind == "batch" else drew_long
+    only = next(iter(leaves.values()))
+    hand_set_long = leaves.get("labels.font_size.long", only)
+    hand_set = leaves.get("labels.font_size.short", only) if kind == "batch" else hand_set_long
     small = [RegionSelection("small", 1, 5_000)]
     region = derive_region_request(source, small, mode="linear")
-    assert [(item.setting, item.explicit) for item in region.adaptation.reset] == [("labels.font_size", drew)]
+    assert [(item.setting, item.explicit) for item in region.adaptation.reset] == [("labels.font_size", hand_set)]
     kept = derive_region_request(source, small, mode="linear", adapt_sizes=False).adaptation
-    assert (kept.reset, kept.kept["labels.font_size"]) == ((), drew)
+    assert (kept.reset, kept.kept["labels.font_size"]) == ((), hand_set)
     # The Web draws part of a Circular record in Linear.
     reply = _web_region(source, [{"recordKey": "small", "start": 1, "end": 4_000}], tmp_path)[2]
     assert reply["mode"] == "linear"
-    assert [(item["setting"], item["explicit"]) for item in reply["returnedToAuto"]] == [("labels.font_size", drew)]
+    assert [(item["setting"], item["explicit"]) for item in reply["returnedToAuto"]] == [("labels.font_size", hand_set)]
     # The whole 5 kb record in Circular: kept from the batch (its diagram's Auto is the new drawing's), returned to
-    # Auto from the canvas; either way the value named is the one drawn.
+    # Auto from the canvas; either way the hand-set value is named.
     circular = derive_region_request(source, small, mode="circular").adaptation
     named = {**circular.kept, **{item.setting: item.explicit for item in circular.reset}}
-    assert (bool(circular.reset), named["labels.font_size"]) == (kind == "canvas", drew)
+    assert (bool(circular.reset), named["labels.font_size"]) == (kind == "canvas", hand_set)
     # From both diagrams of the batch, which may draw different values: the first diagram's, in the source's order.
     both = derive_region_request(source, [RegionSelection("big", 1, 5_000), *small], mode="linear")
-    assert [(item.setting, item.explicit) for item in both.adaptation.reset] == [("labels.font_size", drew_long)]
+    assert [(item.setting, item.explicit) for item in both.adaptation.reset] == [("labels.font_size", hand_set_long)]
 
 
 def test_each_diagram_of_a_circular_batch_draws_its_density_track_at_its_own_window(cfg, tmp_path: Path) -> None:

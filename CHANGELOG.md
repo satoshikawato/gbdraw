@@ -46,10 +46,7 @@ write-up of a release.
   in a new drawing from a region of a Circular batch, the list of sizes that
   return to Auto now shows the value the record's own diagram drew: the short
   value for the 5 kb record of a 300 kb + 5 kb batch, not the long one
-  (OV-3254). In the Python API, where a size is set by hand for only one of
-  short and long records, a diagram of the other kind draws its Auto value,
-  and the new drawing now names that value instead of the hand-set one
-  (OV-3263).
+  (OV-3254).
 - Changed: regions of both records of a Circular drawing (20 kb of a 50 kb
   record and a whole 5 kb record) drawn together in one Linear drawing now
   return a hand-set window to Auto, since the 5 kb record drew with
