@@ -192,7 +192,6 @@ from .record_planning import (
     _source_details,
     _source_key,
     effective_record_presentation,
-    unit_presentation,
     resolve_anchor_feature,
     alignment_record_keys,
     project_similarity_alignment_centers,
@@ -1632,6 +1631,14 @@ def _record_collection_preparation_key(
     return tuple(_region_preparation_key(region) for region in value.regions)
 
 
+def _relabelled(presentation: RecordPresentation, labelled: RecordPresentation) -> RecordPresentation:
+    """``presentation`` with the label and subtitle of ``labelled``."""
+
+    if (presentation.label, presentation.subtitle) == (labelled.label, labelled.subtitle):
+        return presentation
+    return replace(presentation, label=labelled.label, subtitle=labelled.subtitle)
+
+
 def _coerce_resolved_collection(
     request: DiagramRequest,
     value: ResolvedRecordCollection | Sequence[SeqRecord],
@@ -1641,13 +1648,17 @@ def _coerce_resolved_collection(
     if isinstance(value, ResolvedRecordCollection):
         # Cached records represent selection/RC/crop, not display intent. Rebind
         # transient context (display options, label and subtitle) without
-        # changing records, source membership or keys.
+        # changing records, source membership, keys or places: the resolver
+        # placed each record (a File card's records by ``numbered_places``).
         rebound = tuple(
             replace(
                 item,
                 display=request.records[item.input_index].display,
-                presentation=unit_presentation(
-                    request.records[item.input_index].presentation, request.record_options, item
+                presentation=_relabelled(
+                    item.presentation,
+                    effective_record_presentation(
+                        request.records[item.input_index].presentation, request.record_options, item.place
+                    ),
                 ),
             )
             for item in value.provenance

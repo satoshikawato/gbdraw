@@ -24,12 +24,12 @@ from typing import Literal, TypedDict, cast, is_typeddict
 from gbdraw.api.record_planning import (
     ResolvedWindow,
     comparison_unit_pairs,
+    numbered_places,
     record_drawn_windows,
     refuse_file_comparison_of_windows,
-    unit_grid_column,
 )
 from gbdraw.api.request_render import grid_placement_order
-from gbdraw.api.requests import RecordPresentation
+from gbdraw.api.requests import InputPlace, RecordPresentation, expanded_record_key
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.regions import window_drawn_reverse
@@ -236,17 +236,32 @@ def plan_card_windows(records: Sequence[object]) -> CardWindowPlan:
     row of its own), read by the row's captions (``plan_row_windows``)."""
 
     units: list[tuple[CardWindowRecordInput, int | None, RecordUnit, RecordPresentation]] = []
-    for position, record in enumerate(records):
-        card, windows = _card_record(record, position)
+    cards = [_card_record(record, position) for position, record in enumerate(records)]
+    # Each card at the place the drawing gives it: a placed file card drawn whole takes a column per record.
+    places = numbered_places([
+        InputPlace.at(
+            card["gridRow"], card["gridColumn"], [window.span.column for window in windows if window is not None],
+            card["drawnRecords"],
+        )
+        for card, windows in cards
+    ])
+    for (card, windows), place in zip(cards, places, strict=True):
         # A file card drawn whole draws each of its records as a unit of its own; a record drawn whole without a known
         # length takes a one-base span, which no number or omitted length reads.
         many = card["drawnRecords"] > 1
         drawn = (
-            [(f"{card['recordKey']}:{index + 1}" if many else card["recordKey"], None) for index in range(card["drawnRecords"])]
+            [
+                (expanded_record_key(card["recordKey"], index + 1) if many else card["recordKey"], None,
+                 place.record_column(index))
+                for index in range(card["drawnRecords"])
+            ]
             if windows == (None,)
-            else [(card["recordKey"], window) for window in windows]
+            else [
+                (card["recordKey"], window, place.window_columns[at] if place.window_columns else place.column)
+                for at, window in enumerate(windows)
+            ]
         )
-        for identity, window in drawn:
+        for identity, window, column in drawn:
             length = card["sourceLength"] or 1
             span = (1, length) if window is None else (window.span.start, window.span.end)
             reverse = window_drawn_reverse(window is not None and window.span.reverse_complement, card["reverseComplement"])
@@ -255,9 +270,7 @@ def plan_card_windows(records: Sequence[object]) -> CardWindowPlan:
                 span=span, reverse=reverse, source_length=length, circular=card["circular"],
                 is_window=window is not None, window_index=None if window is None or len(windows) < 2 else window.index,
             )
-            placement = RecordPresentation(
-                grid_row=card["gridRow"], grid_column=unit_grid_column(card["gridColumn"], window)
-            )
+            placement = RecordPresentation(grid_row=card["gridRow"], grid_column=column)
             units.append((card, None if window is None else window.index, unit, placement))
     positioned = [(index, placement) for index, (*_, placement) in enumerate(units) if placement.grid_row is not None]
     if positioned:
@@ -298,9 +311,61 @@ def plan_card_windows_json(records_json: str) -> str:
     return json.dumps(plan_card_windows(json.loads(str(records_json))))
 
 
+class RecordPlaceInput(TypedDict):
+    """Where a request record stands before its records expand (``renderRequest.records[]``): its grid row and
+    column, the column of each of its windows, and how many records it draws (a file drawn whole: each record of the
+    file; any other record: one)."""
+
+    gridRow: int | None
+    gridColumn: int | None
+    windowColumns: list[int | None]
+    drawnRecords: int
+
+
+class RecordPlace(TypedDict):
+    """Where the drawing places a request record: the column of each record or window it draws, in drawing order
+    (``InputPlace.drawn_columns`` after ``numbered_places``); its row stays the one the request writes."""
+
+    columns: list[int | None]
+
+
+def _positive_whole_number(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 1
+
+
+def plan_record_places(records: Sequence[object]) -> list[RecordPlace]:
+    """The columns the drawing gives the records of ``records`` (in request order): a placed file drawn whole takes
+    one column per record and moves the later columns of its row (``numbered_places``). The Source recipe writes a
+    records table row per drawn record at these columns."""
+
+    places: list[InputPlace] = []
+    for record in records:
+        if not isinstance(record, Mapping):
+            raise _protocol_error("A record of a place plan must be an object.")
+        row, column, windows, drawn = (
+            record.get("gridRow"), record.get("gridColumn"), record.get("windowColumns"), record.get("drawnRecords")
+        )
+        if (
+            any(value is not None and not _positive_whole_number(value) for value in (row, column))
+            or not isinstance(windows, list)
+            or any(value is not None and not _positive_whole_number(value) for value in windows)
+            or not _positive_whole_number(drawn)
+            or (windows and drawn != 1)
+        ):
+            raise _protocol_error("A record of a place plan needs whole-number places and how many records it draws.")
+        places.append(InputPlace.at(cast(int | None, row), cast(int | None, column), windows, cast(int, drawn)))
+    return [{"columns": list(place.drawn_columns())} for place in numbered_places(places)]
+
+
+def plan_record_places_json(records_json: str) -> str:
+    """JSON boundary of the diagram Worker."""
+
+    return json.dumps(plan_record_places(json.loads(str(records_json))))
+
+
 def describe_card_window_plan() -> dict[str, dict[str, Shape]]:
-    """The request and the answer of :func:`plan_card_windows_json` as named shapes of :mod:`gbdraw.contract_shapes`
-    (tools/generate_web_contracts.py)."""
+    """The requests and the answers of :func:`plan_card_windows_json` and :func:`plan_record_places_json` as named
+    shapes of :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py)."""
 
     types_: dict[str, Shape] = {}
 
@@ -312,7 +377,7 @@ def describe_card_window_plan() -> dict[str, dict[str, Shape]]:
             return ref(hint.__name__)
         return None
 
-    for root in (CardWindowRecordInput, CardWindowPlan):
+    for root in (CardWindowRecordInput, CardWindowPlan, RecordPlaceInput, RecordPlace):
         special(root)
     return {"types": types_}
 
@@ -334,4 +399,8 @@ __all__ = [
     "LinearUnitWindow",
     "plan_linear_units",
     "plan_linear_units_json",
+    "RecordPlace",
+    "RecordPlaceInput",
+    "plan_record_places",
+    "plan_record_places_json",
 ]

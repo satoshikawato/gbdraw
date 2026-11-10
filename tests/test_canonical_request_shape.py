@@ -263,10 +263,6 @@ _KNOWN_DIFFERENCES: dict[str, tuple[str, str] | tuple[str, str, tuple[str, ...]]
     "CanonicalRecordWindow.column = another integer": (
         "refused", "a record with one window is placed by its presentation's grid_column; no request encoded has more",
     ),
-    "CanonicalRecordPresentation.gridColumn = another integer": (
-        "refused", "grid_column requires grid_row; no Linear request encoded has a grid row",
-        ("linear:records.[].presentation",),
-    ),
 }
 # The decoder refuses another string, at every position: Python names the
 # values the field takes and the description types it ``string``. The type is

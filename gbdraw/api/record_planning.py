@@ -104,8 +104,9 @@ from .prepared import (
     prepared_resource_identity,
 )
 from .requests import (
-    EXPANDED_RECORD_KEY_SEPARATOR,
     CircularBatchOutputPolicy,
+    InputPlace,
+    expanded_record_key,
     window_unit_key,
     FastaInputSource,
     GenBankInputSource,
@@ -1860,6 +1861,45 @@ def _apply_provenance_annotations(
         record.annotations["gbdraw_source_basename"] = Path(provenance.source_paths[0]).name
 
 
+def numbered_places(places: Sequence[InputPlace]) -> tuple[InputPlace, ...]:
+    """``places`` after each placed input that draws several records whole (a File card, ``RecordCardinality.ALL``)
+    takes one column per record: consecutive columns from its own, in file order (``InputPlace.record_column``), with
+    every later column of its row moved after them (OV-3072). Places without such an input stay as given.
+
+    The one owner of that numbering: the record resolver places the drawn records by it, and the Web's card plan
+    reads its rows by it (``plan_card_windows`` of ``gbdraw.web_support.linear_units``).
+    """
+
+    widened = [(place.row, place.column, place.records - 1) for place in places if place.column is not None and place.records > 1]
+    if not widened:
+        return tuple(places)
+
+    def moved(row: int | None, column: int | None) -> int | None:
+        return None if column is None else column + sum(
+            extra for widened_row, widened_column, extra in widened if widened_row == row and widened_column < column
+        )
+
+    return tuple(
+        place._replace(
+            column=moved(place.row, place.column),
+            window_columns=tuple(moved(place.row, column) for column in place.window_columns),
+        )
+        for place in places
+    )
+
+
+def _placed_input(record_input: RecordInput, place: InputPlace) -> tuple[RecordPresentation, tuple[RecordWindow, ...]]:
+    """The presentation and windows of ``record_input`` at ``place`` (``numbered_places``): the input's own while its
+    place is unchanged."""
+
+    presentation, windows = record_input.presentation, tuple(record_input.windows)
+    if place.window_columns and place.window_columns != tuple(window.column for window in windows):
+        windows = tuple(replace(window, column=column) for window, column in zip(windows, place.window_columns, strict=True))
+    if place.column != presentation.grid_column:
+        presentation = replace(presentation, grid_column=place.column)
+    return presentation, windows
+
+
 @dataclass
 class _PendingRecord:
     """One resolved record before its windows expand: its drawn records so far and how to finish them."""
@@ -2023,6 +2063,7 @@ def resolve_record_inputs(
     cache = {} if parsed_sources is None else parsed_sources
     id_counts: dict[tuple[object, ...], Counter[str]] = {}
     pending: list[_PendingRecord] = []
+    selections: list[tuple[tuple[object, ...], ParsedRecordInputs, tuple[int, ...]]] = []
     for input_index, record_input in enumerate(inputs):
         key = _source_key(record_input.source)
         parsed = cache.get(key)
@@ -2035,18 +2076,24 @@ def resolve_record_inputs(
             )
         if key not in id_counts:
             id_counts[key] = Counter(str(record.id) for record in parsed.records)
-        raw_records = parsed.records
-        selector = record_input.selector
-        source_indexes = _cardinality_indexes(
-            _selected_source_indexes(raw_records, selector),
+        selections.append((key, parsed, _cardinality_indexes(
+            _selected_source_indexes(parsed.records, record_input.selector),
             cardinality=record_input.cardinality,
             input_index=input_index,
-        )
+        )))
+    # Every input's count of records is known: a placed File card takes a column per record (OV-3072).
+    places = numbered_places([
+        InputPlace.of(record_input, len(source_indexes)) for record_input, (*_, source_indexes) in zip(inputs, selections)
+    ])
+    for input_index, (record_input, (key, parsed, source_indexes), place) in enumerate(zip(inputs, selections, places)):
+        raw_records = parsed.records
+        selector = record_input.selector
+        presentation, input_windows = _placed_input(record_input, place)
         source_kind, source_paths = _source_details(record_input.source)
         # A record planned before and unchanged since is still the record of the file it was read from (OV-2923).
         origin = held_record_origin(record_input.source.record) if isinstance(record_input.source, InMemoryRecordSource) else None
         expands = len(source_indexes) > 1
-        for source_record_index in source_indexes:
+        for position, source_record_index in enumerate(source_indexes):
             source_record = raw_records[source_record_index]
             require_record_sequence(source_record, source_paths[0] if source_paths else "the record input")
             types_left_out: tuple[tuple[str, int], ...] = ()
@@ -2059,11 +2106,11 @@ def resolve_record_inputs(
             record = _detached_record(source_record)
             reverse = record_input.presentation.reverse_complement
             units: tuple[SeqRecord, ...] = (record,)
-            if record_input.windows:
+            if input_windows:
                 try:
                     units = crop_record_windows(
                         record,
-                        [window.region() for window in record_input.windows],
+                        [window.region() for window in input_windows],
                         reverse,
                         log=logger,
                         circular=drawn_circular(record_input.display.is_circular, detected_topology(source_record, source_kind)),
@@ -2072,11 +2119,7 @@ def resolve_record_inputs(
                     raise ValidationError(str(exc)) from exc
                 reverse = False
             base_key = record_input.record_key or f"{CLI_RECORD_KEY_PREFIX}{input_index + 1}"
-            record_key = (
-                f"{base_key}{EXPANDED_RECORD_KEY_SEPARATOR}{source_record_index + 1}"
-                if expands
-                else base_key
-            )
+            record_key = expanded_record_key(base_key, source_record_index + 1) if expands else base_key
             item = ResolvedRecordProvenance(
                 resolved_index=len(pending),
                 input_index=input_index,
@@ -2094,7 +2137,10 @@ def resolve_record_inputs(
                 cardinality=record_input.cardinality,
                 selector=selector,
                 region=None,
-                presentation=record_input.presentation,
+                presentation=(
+                    replace(presentation, grid_column=place.record_column(position))
+                    if expands and place.column is not None else presentation
+                ),
                 display=record_input.display,
                 source_length=(source_record.annotations.get("gbdraw_source_length")
                                if source_cropped else len(source_record)),
@@ -2106,7 +2152,7 @@ def resolve_record_inputs(
             for unit in units:
                 _apply_record_key(unit, record_key=record_key)
                 _apply_provenance_annotations(unit, item)
-            pending.append(_PendingRecord(units, item, tuple(record_input.windows), reverse, bool(record_input.windows)))
+            pending.append(_PendingRecord(units, item, input_windows, reverse, bool(input_windows)))
     return _expand_record_windows(pending, record_options or RecordCollectionOptions())
 
 

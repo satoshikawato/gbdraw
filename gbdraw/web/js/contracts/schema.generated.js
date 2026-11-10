@@ -132,7 +132,7 @@ export const FEATURE_INSTANCE_SEPARATOR = '@';
 // gbdraw/api/record_planning.py: CLI_RECORD_KEY_PREFIX
 export const CLI_RECORD_KEY_PREFIX = 'record-';
 
-// gbdraw/api/record_planning.py: EXPANDED_RECORD_KEY_SEPARATOR
+// gbdraw/api/requests.py: EXPANDED_RECORD_KEY_SEPARATOR
 export const EXPANDED_RECORD_KEY_SEPARATOR = ':';
 
 // gbdraw/core/numeric.py: UNSET_NUMBER_SPELLINGS

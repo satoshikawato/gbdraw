@@ -2163,3 +2163,169 @@ test('the Source recipe names compared records by record, not by drawn unit, and
   // Without the unit plan a request that draws a record in several windows cannot be read as records.
   assert.equal((await buildSourceRecipe(plain)).available, false);
 });
+
+// OV-3072: a Linear File card that draws a file of several records whole, placed in a row beside a record drawn in two
+// windows, is written as a records table row per record (#1, #2) at the columns Python numbers (the Worker helper
+// `planRecordPlaces`, here the real `plan_record_places_json`), and the CLI draws the Web Result.
+/**
+ * A Linear request with a placed File card `m` of two records at row 1, column 1, a record `w` in two windows
+ * (columns 2 and 3) in row 1, and a record `c` at row 2, column 1; the Source recipe's place plan is the real Python's.
+ * @param {{ colorRows?: string[][] | null, comparisons?: [number, number][] }} [extra]
+ */
+const placedFileCardSession = async ({ colorRows = null, comparisons = [] } = {}) => {
+  const text = await readFile(join(repoRoot, 'tests', 'fixtures', 'web_batch_two_records.gb'), 'utf8');
+  const [testa, testb] = text.split(/^\/\/\s*$/m).slice(0, 2).map((part) => `${part.trim()}\n//\n`);
+  const at = (gridRow, gridColumn) => ({ ...presentation(), gridRow, gridColumn });
+  const resources = {
+    both: resource('genbank', 'both.gbk', text), one: resource('genbank', 'one.gbk', testa),
+    other: resource('genbank', 'other.gbk', testb)
+  };
+  if (colorRows) {
+    resources.colors = resource('colors-color-table-file', 'specific-colors.tsv', colorRows.map((row) => `${row.join('\t')}\n`).join(''));
+  }
+  if (comparisons.length) {
+    resources.blast = resource('nucleotide-blast', 'blast.tsv', 'TESTA\tTESTB\t100\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n');
+  }
+  const session = canonical({
+    mode: 'linear',
+    records: [
+      { recordKey: 'm', cardinality: 'all', source: { kind: 'genbank', resourceId: 'both' }, selector: null,
+        windows: [], presentation: at(1, 1) },
+      { recordKey: 'w', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'one' }, selector: null,
+        windows: [
+          { start: 1, end: 1000, reverseComplement: false, column: 2 },
+          { start: 2001, end: 3000, reverseComplement: false, column: 3 }
+        ], presentation: at(1, null) },
+      { recordKey: 'c', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'other' }, selector: null,
+        windows: [], presentation: at(2, 1) }
+    ],
+    resources,
+    comparisons: comparisons.map(([query, subject]) => ({
+      kind: 'nucleotideBlast', resourceId: 'blast', queryRecordIndex: query, subjectRecordIndex: subject
+    })),
+    webFiles: { resourceOriginalNames: { both: 'both.gbk', one: 'one.gbk', other: 'other.gbk', blast: 'blast.tsv' } }
+  });
+  session.renderRequest.layout = { recordGapPx: 24, multiRecordPositions: null, recordTranslations: [], similarityAlignment: null };
+  if (colorRows) {
+    session.renderRequest.diagramOptions.selectedFeaturesSet = ['CDS'];
+    session.renderRequest.diagramOptions.colors.colorTableFile = { resourceId: 'colors', representation: 'file' };
+  }
+  const counts = { both: 2, one: 1, other: 1 };
+  /** @type {unknown[]} */
+  const asked = [];
+  const options = {
+    ...session,
+    readResourceRecordCount: (id) => counts[id],
+    planRecordPlaces: async (payload) => {
+      asked.push(payload);
+      return { result: await evaluatePython([
+        'import json',
+        'from gbdraw.web_support.linear_units import plan_record_places_json',
+        'result = json.loads(plan_record_places_json(json.dumps(payload["records"])))'
+      ].join('\n'), payload) };
+    }
+  };
+  return { session, testb, asked, options };
+};
+
+/**
+ * The Web's render of `session` and its comparison with the CLI's `cliSvg` (record keys aside).
+ * @returns {{ equal: boolean, differences: string[], webSvg: string }}
+ */
+const compareWithWebRender = async (session, cliSvg, tag) => {
+  const path = join(tempDir, `web-oracle-${tag}.json`);
+  const webPath = join(tempDir, `web-oracle-${tag}.svg`);
+  await writeFile(path, JSON.stringify(session), 'utf8');
+  const compared = spawnSync(process.env.PYTHON || 'python', ['-c', [
+    'import json, sys, tempfile',
+    'from pathlib import Path',
+    'from gbdraw.web_support.request_render import render_embedded_canonical_web_request',
+    'from tests.utils.svg_compare import compare_svgs',
+    'from tests.utils.web_render_result import web_result_svg',
+    'session = json.loads(Path(sys.argv[1]).read_text())',
+    'with tempfile.TemporaryDirectory() as directory:',
+    '    result = render_embedded_canonical_web_request(',
+    '        session["renderRequest"], resources=session["resources"], workspace=Path(directory) / "web")',
+    '    web = Path(sys.argv[3])',
+    '    web.write_text(web_result_svg(result["results"][0]), encoding="utf-8")',
+    '    compared = compare_svgs(web, Path(sys.argv[2]), ignored_attributes={"data-record-key"})',
+    'print(json.dumps({"equal": bool(compared.equal), "differences": compared.differences}))'
+  ].join('\n'), path, cliSvg, webPath], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: { ...process.env, PYTHONPATH: [repoRoot, process.env.PYTHONPATH].filter(Boolean).join(delimiter) }
+  });
+  assert.equal(compared.status, 0, compared.stderr);
+  return { ...JSON.parse(compared.stdout.trim().split('\n').at(-1)), webSvg: await readFile(webPath, 'utf8') };
+};
+
+test('a placed File card of several records gives a records table row per record that the CLI draws as the Web does', async () => {
+  const { session, asked, options } = await placedFileCardSession();
+  const recipe = await buildSourceRecipe(options);
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  assert.deepEqual(asked, [{ records: [
+    { gridRow: 1, gridColumn: 1, windowColumns: [], drawnRecords: 2 },
+    { gridRow: 1, gridColumn: null, windowColumns: [2, 3], drawnRecords: 1 },
+    { gridRow: 2, gridColumn: 1, windowColumns: [], drawnRecords: 1 }
+  ] }]);
+  const table = recipe.generatedFiles.find(({ slot }) => slot === 'generatedFiles.source_recipe.records_table');
+  const rows = String(table.data).trim().split('\n').map((line) => line.split('\t'));
+  const header = rows[0];
+  const cells = (row) => Object.fromEntries(header.map((column, index) => [column, row[index]]));
+  assert.deepEqual(rows.slice(1).map(cells).map(({ gbk, record_id: id, region, order, row, column }) => (
+    [gbk, id, region, order, row, column])), [
+    ['both.gbk', '#1', '', '1', '1', '1'],
+    ['both.gbk', '#2', '', '2', '1', '2'],
+    ['one.gbk', '', '1-1000', '3', '1', '3'],
+    ['one.gbk', '', '2001-3000', '3', '1', '4'],
+    ['other.gbk', '', '', '4', '2', '1']
+  ]);
+  await assertCliParserAccepts(recipe);
+  const cliSvg = await materializeAndRunRecipe(
+    session, recipe, buildRunInfo({ mode: 'linear', sourceRecipe: recipe }), 'placed file card of several records'
+  );
+  const { equal, differences } = await compareWithWebRender(session, cliSvg, 'placed-file-card');
+  assert.equal(equal, true, differences.join('\n'));
+});
+
+test('a colour rule naming one record of a placed File card names that record\'s row in the Source recipe', async () => {
+  const text = await readFile(join(repoRoot, 'tests', 'fixtures', 'web_batch_two_records.gb'), 'utf8');
+  const [, testb] = text.split(/^\/\/\s*$/m).slice(0, 2).map((part) => `${part.trim()}\n//\n`);
+  const [, second] = await sourceFeatureIds(testb);
+  const { session, options } = await placedFileCardSession({ colorRows: [
+    ['CDS', 'hash', `^${second}@m:2$`, '#ff0000', 'Second of m2'],
+    ['CDS', 'hash', `^${second}@c$`, '#0000ff', 'Second of c']
+  ] });
+  const recipe = await buildSourceRecipe(options);
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  const table = recipe.generatedFiles.find(({ slot }) => slot === 'generatedFiles.source_recipe.specific_colors');
+  // `m:2` is the File card's second record, the records table's second row; `c` is its fourth input (the windows of
+  // `w` share the third).
+  assert.equal(String(table.data), [
+    `CDS\thash\t^${second}@record-2$\t#ff0000\tSecond of m2`,
+    `CDS\thash\t^${second}@record-4$\t#0000ff\tSecond of c`,
+    ''
+  ].join('\n'));
+  const cliSvg = await materializeAndRunRecipe(
+    session, recipe, buildRunInfo({ mode: 'linear', sourceRecipe: recipe }), 'colour rule of a placed file card'
+  );
+  const { equal, differences, webSvg } = await compareWithWebRender(session, cliSvg, 'placed-file-card-colours');
+  assert.equal(equal, true, differences.join('\n'));
+  const filled = (svg, color) => [...svg.matchAll(new RegExp(`<path [^>]*data-gbdraw-feature-id="([^"]+)"[^>]*fill="${color}"`, 'gi'))]
+    .map((match) => match[1]);
+  const cli = await readFile(cliSvg, 'utf8');
+  assert.equal(filled(cli, '#ff0000').length, 1);
+  assert.equal(filled(cli, '#0000ff').length, 1);
+  assert.deepEqual([filled(cli, '#ff0000'), filled(cli, '#0000ff')], [filled(webSvg, '#ff0000'), filled(webSvg, '#0000ff')]);
+});
+
+test('a placed File card of several records with a comparison has no Source recipe yet (OV-3272)', async () => {
+  // The Web's unit plan counts the File card as one unit (m, the two windows of w, c), while Python reads a
+  // comparison's indexes over the drawn records (m:1, m:2, the windows of w, c): without the refusal, this m -> c
+  // comparison would be written as `#1 -> #3`, and the CLI's third record is w.
+  const { options } = await placedFileCardSession({ comparisons: [[0, 3]] });
+  const drawnUnits = { recordKeys: ['m', 'w', 'w', 'c'], windowOf: [null, 'w', 'w', null] };
+  const recipe = await buildSourceRecipe({ ...options, drawnUnits });
+  assert.equal(recipe.available, false);
+  assert.match(recipe.unavailableReason, /a comparison cannot be bound losslessly to its source records/);
+});

@@ -4719,3 +4719,27 @@ def test_python_card_bindings_keep_the_card_windows_as_the_web_writes_them() -> 
     session_io_module._attach_current_web_file_bindings(payload, {"linearSeqs": [{"uid": "a", "windows": windows}]})
     card = payload["webFiles"]["bindings"]["linearSeqs"][0]
     assert card["windows"] == windows
+
+
+def test_legacy_feature_index_keys_an_all_input_record_with_the_expanded_record_key(monkeypatch) -> None:
+    """The legacy feature index names each record of a several-record ALL input
+    with the key the resolver gives it (``expanded_record_key``), so a change of
+    the separator moves both together."""
+
+    import gbdraw.api.requests as requests_module
+
+    monkeypatch.setattr(requests_module, "EXPANDED_RECORD_KEY_SEPARATOR", "|")
+    legacy = {
+        "records": [{"recordKey": "card", "cardinality": "all"}],
+        "features": [
+            {"fileIdx": 0, "record_idx": index, "stable_feature_id": f"hash-{index}"}
+            for index in (0, 1)
+        ],
+    }
+
+    index = session_io_module._legacy_feature_index(legacy, "linear")
+
+    assert [json.loads(key)[1] for key, *_ in index] == [
+        requests_module.expanded_record_key("card", 1),
+        requests_module.expanded_record_key("card", 2),
+    ] == ["card|1", "card|2"]

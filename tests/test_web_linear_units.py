@@ -264,3 +264,29 @@ def test_card_window_plan_counts_each_record_a_file_card_draws_whole() -> None:
     assert [entry["number"] for entry in shared["windows"]] == [3, 4]
     apart = plan_card_windows([_card("m", [], None, False, drawn=2), {**windowed, "gridRow": None}])
     assert [entry["number"] for entry in apart["windows"]] == [1, 2]
+    # A placed file card between the windows takes a column per record (OV-3072): the windows are 1 and 4.
+    placed = plan_card_windows([
+        _card("a", [(1, 100, False, 1), (301, 400, False, 3)], 10_000, False, row=1),
+        _card("m", [], None, False, row=1, column=2, drawn=2),
+    ])
+    assert [entry["number"] for entry in placed["windows"]] == [1, 4]
+
+
+def test_plan_record_places_numbers_a_placed_file_drawn_whole_and_moves_the_later_columns_of_its_row() -> None:
+    """OV-3072: the columns a Source recipe's records table writes are the drawing's (``numbered_places``)."""
+    import json
+
+    from gbdraw.web_support.linear_units import plan_record_places, plan_record_places_json
+
+    records = [
+        {"gridRow": 1, "gridColumn": 1, "windowColumns": [], "drawnRecords": 3},
+        {"gridRow": 1, "gridColumn": None, "windowColumns": [2, 3], "drawnRecords": 1},
+        {"gridRow": 2, "gridColumn": 1, "windowColumns": [], "drawnRecords": 1},
+        {"gridRow": 1, "gridColumn": 4, "windowColumns": [None], "drawnRecords": 1},
+    ]
+    assert plan_record_places(records) == [
+        {"columns": [1, 2, 3]}, {"columns": [4, 5]}, {"columns": [1]}, {"columns": [6]},
+    ]
+    assert json.loads(plan_record_places_json(json.dumps(records[2:3]))) == [{"columns": [1]}]
+    with pytest.raises(ValidationError):
+        plan_record_places([{"gridRow": 1, "gridColumn": 1, "windowColumns": [2, 3], "drawnRecords": 2}])

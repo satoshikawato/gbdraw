@@ -1229,6 +1229,12 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     fileRoles: [],
     run: (pyodide, payload) => callJsonHelper(pyodide, 'plan_card_windows_json', [jsonArgument(payload.records, [])])
   },
+  // The columns a Source recipe's records table gives a placed file drawn whole, one per record (OV-3072).
+  [DIAGRAM_HELPER_OPERATIONS.PLAN_RECORD_PLACES]: {
+    keys: ['records'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'plan_record_places_json', [jsonArgument(payload.records, [])])
+  },
   [DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS]: {
     keys: ['records', 'pairs'],
     fileRoles: [],

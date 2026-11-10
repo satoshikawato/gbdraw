@@ -2335,10 +2335,11 @@ def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]
     ``biologicalFeatures`` are every source feature read again. A feature's
     input is its request record (Linear: ``fileIdx``; Circular: one file) and
     ``record_idx`` its record in that input. Identities are the renderer's:
-    the record key, ``<recordKey>:<n>`` for each record of an ALL input with
-    several records, and the source hash, ``~<source index>`` when the record
+    the record key, ``expanded_record_key`` for each record of an ALL input
+    with several records, and the source hash, ``~<source index>`` when the record
     has it twice.
     """
+    from .api.requests import expanded_record_key
 
     fields = legacy if isinstance(legacy, Mapping) else {}
     linear = mode == "linear"
@@ -2422,7 +2423,7 @@ def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]
             and (linear or len(records) == 1)
             and record_counts.get(input_index, 0) > 1
         ):
-            return f"{record_key}:{record_index + 1}"
+            return expanded_record_key(record_key, record_index + 1)
         return record_key
 
     offsets: dict[int, int] = {}
