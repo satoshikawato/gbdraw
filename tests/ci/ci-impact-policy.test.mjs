@@ -164,7 +164,7 @@ test('a version-dependent path or the label runs the dev-tier Core matrix on the
   const gzip = classifyChanges([{ status: 'M', paths: ['gbdraw/io/rsyncable_gzip.py'] }]);
   assert.deepEqual(gzip.capabilities, ['python-versions', 'python-core']);
   assert.deepEqual(plan(gzip).requiredJobs,
-    ['web-change-budget', 'core-pr', 'core', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']);
+    ['web-change-budget', 'core-pr', 'core', 'gallery', 'examples', 'lint', 'web-contracts-pr', 'web-pr-smoke']);
   const dependencies = classifyChanges([{ status: 'M', paths: ['pyproject.toml'] }]);
   assert.ok(plan(dependencies, { decision: 'full', basis: 'FULL_CHANGE', inheritedEvidence: null })
     .requiredJobs.includes('core'));
@@ -258,6 +258,7 @@ test('profile job registries are exact and centralized', () => {
     'core-pr',
     'recipes-standard',
     'gallery',
+    'examples',
     'lint',
     'web-contracts-pr',
     'web-pr-smoke',
@@ -271,6 +272,7 @@ test('profile job registries are exact and centralized', () => {
     'core-pr',
     'recipes-standard',
     'gallery',
+    'examples',
     'lint',
     'web-contracts-pr',
     'web-pr-smoke'
@@ -281,6 +283,7 @@ test('profile job registries are exact and centralized', () => {
     'core',
     'recipes-standard',
     'gallery',
+    'examples',
     'lint',
     'web-contracts-pr',
     'web-pr-smoke',
@@ -353,17 +356,17 @@ const jobsForPaths = (changes) => {
 test('representative PR routes require the changed subsystem and cross-layer smoke', () => {
   for (const [path, expected] of [
     ['README.md', ['recipes-standard']],
-    ['gbdraw/render/drawers/linear/features.py', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']],
+    ['gbdraw/render/drawers/linear/features.py', ['web-change-budget', 'core-pr', 'gallery', 'examples', 'lint', 'web-contracts-pr', 'web-pr-smoke']],
     ['gbdraw/web/js/app/label-editor.js', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance']],
-    ['gbdraw/web/js/services/session-request.js', ['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance']],
-    ['gbdraw/web/gallery/examples.json', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance']],
-    ['gbdraw/web/js/services/losat.js', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance']]
+    ['gbdraw/web/js/services/session-request.js', ['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'examples', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance']],
+    ['gbdraw/web/gallery/examples.json', ['web-change-budget', 'gallery', 'examples', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance']],
+    ['gbdraw/web/js/services/losat.js', ['web-change-budget', 'core-pr', 'gallery', 'examples', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance']]
   ]) assert.deepEqual(jobsForPaths([{ status: 'M', paths: [path] }]), expected, path);
 });
 
 test('mixed capabilities and both rename endpoints contribute independent required jobs', () => {
   const paths = ['gbdraw/render/drawers/linear/features.py', 'gbdraw/web/gallery/examples.json'];
-  const expected = ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance'];
+  const expected = ['web-change-budget', 'core-pr', 'gallery', 'examples', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance'];
   for (const changes of [
     paths.map((path) => ({ status: 'M', paths: [path] })),
     [{ status: 'R100', paths }],

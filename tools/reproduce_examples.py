@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 import argparse
+import binascii
+import hashlib
+import inspect
 import json
 import math
+import shlex
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
+import time
 from collections import defaultdict
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -22,6 +30,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from tools import test_data  # noqa: E402
 from tools.reproduce_examples_manifest import (  # noqa: E402
+    FIGURES_WITHOUT_INPUTS,
     BlastPreparation,
     CliRecipe,
     CompositePanel,
@@ -45,6 +54,66 @@ ALIASES = {
 }
 
 
+# The PNG text chunk that names what a generated PNG was rasterized from. The pixels depend on the
+# machine's FreeType and fonts, so `--check` compares this digest for PNGs, never their bytes.
+PNG_SOURCE_KEY = "gbdraw-example-source"
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def source_digest(parts: list[bytes]) -> str:
+    """sha256 over length-prefixed parts, so no two part lists share a digest."""
+    digest = hashlib.sha256()
+    for part in parts:
+        digest.update(struct.pack(">Q", len(part)))
+        digest.update(part)
+    return digest.hexdigest()
+
+
+def png_with_source_digest(png: bytes, digest: str) -> bytes:
+    """``png`` with a ``PNG_SOURCE_KEY`` tEXt chunk right after IHDR, before the image data, so it
+    is read without decoding the image."""
+    if png[:8] != _PNG_SIGNATURE or png[12:16] != b"IHDR":
+        raise ValueError("Not a PNG.")
+    data = PNG_SOURCE_KEY.encode("latin-1") + b"\0" + digest.encode("ascii")
+    chunk = struct.pack(">I", len(data)) + b"tEXt" + data + struct.pack(">I", binascii.crc32(b"tEXt" + data))
+    end_of_ihdr = 8 + 12 + struct.unpack(">I", png[8:12])[0]
+    return png[:end_of_ihdr] + chunk + png[end_of_ihdr:]
+
+
+def png_source_digest(png: bytes) -> str | None:
+    """The ``PNG_SOURCE_KEY`` digest a PNG carries before its image data, or None."""
+    if png[:8] != _PNG_SIGNATURE:
+        return None
+    offset = 8
+    prefix = PNG_SOURCE_KEY.encode("latin-1") + b"\0"
+    while offset + 8 <= len(png):
+        length, kind = struct.unpack(">I4s", png[offset : offset + 8])
+        if kind == b"IDAT":
+            return None
+        data = png[offset + 8 : offset + 8 + length]
+        if kind == b"tEXt" and data.startswith(prefix):
+            return data[len(prefix) :].decode("ascii")
+        offset += 12 + length
+    return None
+
+
+def rasterized_svg(svg_bytes: bytes) -> bytes:
+    """The SVG bytes gbdraw hands to CairoSVG for ``svg_bytes`` (its layout-measured text runs)."""
+    from gbdraw.render.export import prepare_svg_for_cairosvg
+
+    return prepare_svg_for_cairosvg(svg_bytes)
+
+
+def tracked_input_path(project_root: Path, filename: str) -> Path | None:
+    """An input file the repository (or the test-data Release) places under examples/ or
+    tests/test_inputs/."""
+    for directory in (project_root / "examples", project_root / "tests" / "test_inputs"):
+        candidate = directory / filename
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Reproduce README/docs/palette example figures for gbdraw.",
@@ -65,8 +134,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=PROJECT_ROOT / "_reproduced",
-        help="Root directory for reproduced outputs (default: %(default)s).",
+        default=None,
+        help=(
+            "Root directory for reproduced outputs (default: _reproduced, or a temporary "
+            "directory with --check). '.' writes the tracked files in place."
+        ),
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help=(
+            "Render the figures and compare each with the tracked file (an SVG byte for byte, a "
+            "PNG by the digest of what it was rasterized from); list every figure that differs "
+            "and the command that refreshes it, and exit 1."
+        ),
+    )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help="Figures rendered at once, each in its own process (default: %(default)s).",
     )
     parser.add_argument(
         "--list",
@@ -96,10 +183,7 @@ class Reproducer:
         skip_existing: bool = False,
     ) -> None:
         self.project_root = project_root
-        self.examples_dir = project_root / "examples"
-        self.test_inputs_dir = project_root / "tests" / "test_inputs"
         self.output_root = output_root
-        self.support_dir = output_root / "_support_assets"
         self.figures = figures
         self.skip_existing = skip_existing
         self.support_assets = get_support_assets()
@@ -115,9 +199,16 @@ class Reproducer:
         self._active_inspect: set[str] = set()
         self._tmpdir = tempfile.TemporaryDirectory(prefix="reproduce_examples_")
         self.temp_root = Path(self._tmpdir.name)
+        # Intermediate inputs stay out of the output root, which may be the repository itself.
+        self.support_dir = self.temp_root / "_support_assets"
 
     def close(self) -> None:
         self._tmpdir.cleanup()
+
+    def mark_rendered(self, figure_ids: set[str]) -> None:
+        """Treat figures another process already rendered into the output root as done."""
+        for figure_id in figure_ids:
+            self._render_state[figure_id] = "existing"
 
     def output_path_for(self, figure_id: str) -> Path:
         return self.output_root / self.figures[figure_id].output_path
@@ -149,6 +240,25 @@ class Reproducer:
             "missing_inputs": missing_entries,
         }
 
+    def merge_report(self, payload: dict[str, Any]) -> None:
+        """Fold the report of a Reproducer that rendered other figures into this one."""
+        for key, target in (
+            ("generated", self.generated),
+            ("skipped_missing_inputs", self.skipped_missing_inputs),
+            ("failed", self.failed),
+        ):
+            target.extend(figure_id for figure_id in payload[key] if figure_id not in target)
+        for alias in payload["aliases_used"]:
+            self.aliases_used[(alias["requested"], alias["resolved_to"])].update(alias["figures"])
+        for missing in payload["missing_inputs"]:
+            for figure_id in missing["figures"]:
+                self.add_missing(
+                    missing["filename"],
+                    figure_id,
+                    could_derive=missing["could_derive_if_base_inputs_present"],
+                    base_inputs=tuple(missing["base_inputs"]),
+                )
+
     def write_report(self, report_path: Path) -> None:
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(self.report_payload(), indent=2, sort_keys=False) + "\n")
@@ -179,11 +289,11 @@ class Reproducer:
         self.aliases_used[(requested, resolved_str)].add(figure_id)
 
     def _existing_input_path(self, filename: str) -> Path | None:
-        for directory in (self.examples_dir, self.test_inputs_dir, self.support_dir):
-            candidate = directory / filename
-            if candidate.exists():
-                return candidate
-        return None
+        tracked = tracked_input_path(self.project_root, filename)
+        if tracked is not None:
+            return tracked
+        candidate = self.support_dir / filename
+        return candidate if candidate.exists() else None
 
     def _alias_input_path(self, filename: str, figure_id: str) -> Path | None:
         alias_target = ALIASES.get(filename)
@@ -415,7 +525,8 @@ class Reproducer:
             cmd.extend(["-b", *[str(path) for path in resolved["blast_files"]]])
         for flag, paths in resolved["file_args"]:
             cmd.extend([flag, *[str(path) for path in paths]])
-        cmd.extend(["-o", str(output_prefix), "-f", fmt])
+        # A rerun into the same root, or a refresh in place, replaces the earlier output.
+        cmd.extend(["-o", str(output_prefix), "-f", fmt, "--overwrite"])
         cmd.extend(resolved["extra_args"])
         return cmd
 
@@ -435,8 +546,16 @@ class Reproducer:
             return True
 
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        output_prefix = target_path.with_suffix("")
-        cmd = self._build_command(recipe, resolved, output_prefix, target_path.suffix.lstrip("."))
+        fmt = target_path.suffix.lstrip(".")
+        # The CLI also writes the SVG it rasterizes; a PNG renders beside it in the temporary root
+        # and reaches the target with that SVG's digest.
+        output_prefix = (
+            self.temp_root / "cli_png" / figure_id / target_path.stem
+            if fmt == "png"
+            else target_path.with_suffix("")
+        )
+        output_prefix.parent.mkdir(parents=True, exist_ok=True)
+        cmd = self._build_command(recipe, resolved, output_prefix, fmt)
         result = subprocess.run(
             cmd,
             cwd=str(self.project_root),
@@ -446,6 +565,17 @@ class Reproducer:
         )
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip() or result.stdout.strip() or f"gbdraw {recipe.subcommand} failed")
+        if fmt == "png":
+            digest = source_digest(
+                [
+                    b"cli-png",
+                    repr(recipe).encode("utf-8"),
+                    rasterized_svg(output_prefix.with_suffix(".svg").read_bytes()),
+                ]
+            )
+            target_path.write_bytes(
+                png_with_source_digest(output_prefix.with_suffix(".png").read_bytes(), digest)
+            )
         return True
 
     def _run_session_variant_recipe(
@@ -553,7 +683,11 @@ class Reproducer:
             return max(width, 1), max(height, 1)
         return (1000, 1000)
 
-    def _load_image(self, source_path: Path, target_size: tuple[int, int]) -> Image.Image:
+    def _load_image(
+        self, source_path: Path, target_size: tuple[int, int], sources: list[bytes]
+    ) -> Image.Image:
+        """A panel image fitted to ``target_size``; appends what it was rasterized from to ``sources``."""
+        sources.append(repr(target_size).encode("ascii"))
         if source_path.suffix.lower() == ".svg":
             from gbdraw.render.export import convert_svg_with_cairosvg, get_cairosvg
 
@@ -565,8 +699,11 @@ class Reproducer:
             scale = min(target_size[0] / src_width, target_size[1] / src_height)
             render_width = max(1, int(round(src_width * scale)))
             render_height = max(1, int(round(src_height * scale)))
+            svg_bytes = source_path.read_bytes()
+            sources.append(repr((render_width, render_height)).encode("ascii"))
+            sources.append(rasterized_svg(svg_bytes))
             png_bytes = convert_svg_with_cairosvg(
-                source_path.read_bytes(),
+                svg_bytes,
                 "png",
                 cairosvg_module=cairosvg_module,
                 url=str(source_path),
@@ -575,7 +712,9 @@ class Reproducer:
             )
             image = Image.open(BytesIO(png_bytes)).convert("RGBA")
         else:
-            image = Image.open(source_path).convert("RGBA")
+            raster = source_path.read_bytes()
+            sources.append((png_source_digest(raster) or hashlib.sha256(raster).hexdigest()).encode("ascii"))
+            image = Image.open(BytesIO(raster)).convert("RGBA")
         fitted = image.copy()
         fitted.thumbnail(target_size, RESAMPLING.LANCZOS)
         canvas = Image.new("RGBA", target_size, (255, 255, 255, 0))
@@ -590,6 +729,7 @@ class Reproducer:
         figure_id: str,
         panel_index: int,
         target_size: tuple[int, int],
+        sources: list[bytes],
         *,
         dry_run: bool,
     ) -> Image.Image | None:
@@ -598,7 +738,7 @@ class Reproducer:
                 return None if not self.inspect_figure(panel.figure_id) else Image.new("RGBA", target_size, (255, 255, 255, 0))
             if not self.render_figure(panel.figure_id):
                 return None
-            return self._load_image(self.output_path_for(panel.figure_id), target_size)
+            return self._load_image(self.output_path_for(panel.figure_id), target_size, sources)
         if panel.recipe is None:
             raise RuntimeError(f"Composite panel {panel_index} in {figure_id} has no source")
         prep_map = {prep.output_filename: prep for prep in panel.preparations}
@@ -609,7 +749,7 @@ class Reproducer:
         panel_path = panel_dir / f"panel_{panel_index}.svg"
         if not self._run_cli_recipe(panel.recipe, figure_id, prep_map, panel_path, dry_run=False):
             return None
-        return self._load_image(panel_path, target_size)
+        return self._load_image(panel_path, target_size, sources)
 
     def _render_grid_composite(
         self,
@@ -623,14 +763,15 @@ class Reproducer:
             raise RuntimeError(f"Composite recipe for {figure_id} is missing grid settings")
         if dry_run:
             for index, panel in enumerate(recipe.panels):
-                image = self._render_panel_source(panel, figure_id, index, recipe.tile_size, dry_run=True)
+                image = self._render_panel_source(panel, figure_id, index, recipe.tile_size, [], dry_run=True)
                 if image is None:
                     return False
             return True
 
         panel_images: list[Image.Image] = []
+        sources: list[bytes] = []
         for index, panel in enumerate(recipe.panels):
-            image = self._render_panel_source(panel, figure_id, index, recipe.tile_size, dry_run=False)
+            image = self._render_panel_source(panel, figure_id, index, recipe.tile_size, sources, dry_run=False)
             if image is None:
                 return False
             panel_images.append(image)
@@ -648,8 +789,7 @@ class Reproducer:
             left = recipe.padding + col * (recipe.tile_size[0] + recipe.gap)
             top = recipe.padding + row * (recipe.tile_size[1] + recipe.gap)
             background.paste(image, (left, top), image)
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        background.convert("RGB").save(target_path)
+        self._save_composite(recipe, background, target_path, sources)
         return True
 
     def _render_social_preview(
@@ -668,6 +808,7 @@ class Reproducer:
                 for panel in recipe.panels
             )
         canvas = Image.new("RGBA", recipe.canvas_size, recipe.background)
+        sources: list[bytes] = []
         for index, panel in enumerate(recipe.panels):
             if panel.figure_id is None or panel.box is None:
                 raise RuntimeError(f"social_preview panel {index} for {figure_id} must reference a figure and a box")
@@ -675,11 +816,24 @@ class Reproducer:
                 return False
             box_width = panel.box[2]
             box_height = panel.box[3]
-            image = self._load_image(self.output_path_for(panel.figure_id), (box_width, box_height))
+            image = self._load_image(self.output_path_for(panel.figure_id), (box_width, box_height), sources)
             canvas.paste(image, (panel.box[0], panel.box[1]), image)
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        canvas.convert("RGB").save(target_path)
+        self._save_composite(recipe, canvas, target_path, sources)
         return True
+
+    def _save_composite(
+        self, recipe: CompositeRecipe, image: Image.Image, target_path: Path, sources: list[bytes]
+    ) -> None:
+        """Write a composite PNG with the digest of its recipe, the code that builds composites,
+        and what each panel was rasterized from."""
+        code = "".join(inspect.getsource(function) for function in _composite_code())
+        digest = source_digest(
+            [b"composite", repr(recipe).encode("utf-8"), code.encode("utf-8"), *sources]
+        )
+        buffer = BytesIO()
+        image.convert("RGB").save(buffer, format="PNG")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_bytes(png_with_source_digest(buffer.getvalue(), digest))
 
     def _render_composite(
         self,
@@ -795,44 +949,264 @@ def print_list_status(reproducer: Reproducer, figure_ids: list[str]) -> None:
         print(f"{figure_id}\t{status}\t{reproducer.figures[figure_id].output_path}")
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-    # Large inputs live in the test-data Release; a missing one is reported per figure below.
-    test_data.fetch()
-    figures = build_figure_specs()
-    selected_ids = select_figures(figures, args.group, args.figure)
-    output_root = args.output_root if args.output_root.is_absolute() else PROJECT_ROOT / args.output_root
-    missing_report = args.missing_report
-    if missing_report is None:
-        missing_report = output_root / "missing_inputs.json"
-    elif not missing_report.is_absolute():
-        missing_report = PROJECT_ROOT / missing_report
+def _composite_code() -> tuple[Any, ...]:
+    """The functions whose code decides a composite's pixels beyond its panels' SVGs."""
+    return (
+        Reproducer._svg_size,
+        Reproducer._load_image,
+        Reproducer._render_panel_source,
+        Reproducer._render_grid_composite,
+        Reproducer._render_social_preview,
+        Reproducer._save_composite,
+    )
 
+
+@dataclass(frozen=True)
+class FigureRun:
+    """What one process reports after rendering one figure (and the figures it depends on)."""
+
+    figure_id: str
+    report: dict[str, Any]
+    error: str | None
+    seconds: float
+
+
+def _render_one(
+    figures: dict[str, FigureSpec],
+    figure_id: str,
+    output_root: Path,
+    rendered: frozenset[str],
+    skip_existing: bool,
+) -> FigureRun:
     reproducer = Reproducer(
         project_root=PROJECT_ROOT,
         output_root=output_root,
         figures=figures,
-        skip_existing=args.skip_existing,
+        skip_existing=skip_existing,
     )
+    started = time.monotonic()
+    error = None
     try:
-        if args.list:
-            print_list_status(reproducer, selected_ids)
-            exit_code = 0 if all(reproducer.inspect_figure(figure_id) for figure_id in selected_ids) else 1
-        else:
-            exit_code = 0
-            for figure_id in selected_ids:
-                try:
-                    if not reproducer.render_figure(figure_id):
-                        exit_code = 1
-                except Exception as exc:
-                    print(f"{figure_id}: {exc}", file=sys.stderr)
-                    exit_code = 1
-        if reproducer.skipped_missing_inputs or reproducer.failed:
-            exit_code = 1
-        reproducer.write_report(missing_report)
-        return exit_code
+        reproducer.mark_rendered(set(rendered))
+        reproducer.render_figure(figure_id)
+    except Exception as exc:
+        error = str(exc) or type(exc).__name__
     finally:
         reproducer.close()
+    return FigureRun(figure_id, reproducer.report_payload(), error, time.monotonic() - started)
+
+
+class _InlineExecutor:
+    """Runs each submitted call at once, so one process takes the same path as a pool."""
+
+    def __enter__(self) -> _InlineExecutor:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+    def submit(self, fn: Any, /, *args: Any) -> Future[FigureRun]:
+        future: Future[FigureRun] = Future()
+        future.set_result(fn(*args))
+        return future
+
+
+def _input_bytes(spec: FigureSpec) -> int:
+    """The bytes of the inputs a figure reads, once per panel: the order the pool starts them in,
+    so the figures that take longest do not start last."""
+    size = 0
+    for filename in spec.required_inputs:
+        path = tracked_input_path(PROJECT_ROOT, filename) or ALIASES.get(filename)
+        if path is not None and path.is_file():
+            size += path.stat().st_size
+    return size * (len(spec.recipe.panels) if isinstance(spec.recipe, CompositeRecipe) else 1)
+
+
+def _panel_figures(spec: FigureSpec) -> set[str]:
+    if not isinstance(spec.recipe, CompositeRecipe):
+        return set()
+    return {panel.figure_id for panel in spec.recipe.panels if panel.figure_id}
+
+
+def render_figures(
+    figures: dict[str, FigureSpec],
+    figure_ids: list[str],
+    output_root: Path,
+    *,
+    jobs: int,
+    skip_existing: bool = False,
+) -> list[FigureRun]:
+    """Render each figure in its own Reproducer, ``jobs`` at a time; a composite starts after
+    the selected figures it is built from, and reuses their outputs."""
+    selected = set(figure_ids)
+    waiting = sorted(figure_ids, key=lambda figure_id: -_input_bytes(figures[figure_id]))
+    running: dict[Future[FigureRun], str] = {}
+    finished: set[str] = set()
+    rendered: set[str] = set()
+    runs: list[FigureRun] = []
+    executor = ProcessPoolExecutor(max_workers=jobs) if jobs > 1 else _InlineExecutor()
+    with executor:
+        while waiting or running:
+            for figure_id in [
+                figure_id
+                for figure_id in waiting
+                if (_panel_figures(figures[figure_id]) & selected) <= finished
+            ]:
+                waiting.remove(figure_id)
+                future = executor.submit(
+                    _render_one, figures, figure_id, output_root, frozenset(rendered), skip_existing
+                )
+                running[future] = figure_id
+            if not running:
+                raise RuntimeError(f"Cyclic figure dependency among: {', '.join(waiting)}")
+            done, _ = wait(running, return_when=FIRST_COMPLETED)
+            for future in done:
+                run = future.result()
+                del running[future]
+                finished.add(run.figure_id)
+                rendered.update(run.report["generated"])
+                runs.append(run)
+                status = "failed" if run.error else (
+                    "generated" if run.figure_id in run.report["generated"] else "not rendered"
+                )
+                print(f"{run.figure_id}: {status} in {run.seconds:.1f} s", flush=True)
+    return runs
+
+
+def refresh_command(figure_ids: list[str]) -> str:
+    arguments = ["python", "tools/reproduce_examples.py", "--output-root", "."]
+    for figure_id in figure_ids:
+        arguments.extend(["--figure", figure_id])
+    return shlex.join(arguments)
+
+
+def _same_output(tracked: bytes, generated: bytes) -> bool:
+    generated_digest = png_source_digest(generated)
+    if generated_digest is not None:
+        return png_source_digest(tracked) == generated_digest
+    return tracked == generated
+
+
+def check_outputs(
+    figures: dict[str, FigureSpec],
+    figure_ids: list[str],
+    output_root: Path,
+    reproducer: Reproducer,
+    errors: dict[str, str],
+    *,
+    tracked_root: Path = PROJECT_ROOT,
+) -> bool:
+    """Compare every rendered figure with its tracked file and print the result: an SVG byte for
+    byte, a PNG by the source digest it carries (a tracked PNG without one is stale)."""
+    same: list[str] = []
+    stale: list[str] = []
+    problems: list[str] = []
+    not_checked: list[str] = []
+    for figure_id in figure_ids:
+        spec = figures[figure_id]
+        if figure_id in errors:
+            problems.append(f"{figure_id}: rendering failed: {errors[figure_id]}")
+        elif figure_id not in reproducer.generated:
+            missing = sorted(
+                filename
+                for filename, entry in reproducer.missing_inputs.items()
+                if figure_id in entry["figures"]
+            )
+            if figure_id in FIGURES_WITHOUT_INPUTS:
+                not_checked.append(f"{figure_id}: {FIGURES_WITHOUT_INPUTS[figure_id]}")
+            else:
+                problems.append(f"{figure_id}: not rendered; missing inputs: {', '.join(missing) or 'none reported'}")
+        elif figure_id in FIGURES_WITHOUT_INPUTS:
+            problems.append(
+                f"{figure_id}: renders now; remove it from FIGURES_WITHOUT_INPUTS in "
+                "tools/reproduce_examples_manifest.py"
+            )
+        else:
+            tracked = tracked_root / spec.output_path
+            generated = output_root / spec.output_path
+            if tracked.is_file() and _same_output(tracked.read_bytes(), generated.read_bytes()):
+                same.append(figure_id)
+            else:
+                stale.append(figure_id)
+    print(
+        f"\nExamples check: {len(same)} match, {len(stale)} differ, "
+        f"{len(problems)} failed, {len(not_checked)} not checked."
+    )
+    if stale:
+        print("\nThese tracked files differ from what the generator renders now:")
+        for figure_id in stale:
+            tracked = tracked_root / figures[figure_id].output_path
+            state = "" if tracked.is_file() else " (not tracked yet)"
+            print(f"  {figures[figure_id].output_path}{state}")
+        print(
+            "\nReview the rendered figures, then refresh the tracked files with:\n  "
+            + refresh_command(stale)
+        )
+    if problems:
+        print("\nThese figures could not be checked:")
+        for line in problems:
+            print(f"  {line}")
+    if not_checked:
+        print("\nNot checked, because their inputs are not available (FIGURES_WITHOUT_INPUTS):")
+        for line in not_checked:
+            print(f"  {line}")
+    return not stale and not problems
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    if args.check and (args.list or args.skip_existing):
+        raise SystemExit("--check renders every selected figure; it takes neither --list nor --skip-existing.")
+    if args.jobs < 1:
+        raise SystemExit("--jobs must be at least 1.")
+    # Large inputs live in the test-data Release; a missing one is reported per figure below.
+    test_data.fetch()
+    figures = build_figure_specs()
+    selected_ids = select_figures(figures, args.group, args.figure)
+    with tempfile.TemporaryDirectory(prefix="reproduce_examples_check_") as check_root:
+        if args.output_root is None:
+            output_root = Path(check_root) if args.check else PROJECT_ROOT / "_reproduced"
+        elif args.output_root.is_absolute():
+            output_root = args.output_root
+        else:
+            output_root = PROJECT_ROOT / args.output_root
+        missing_report = args.missing_report
+        if missing_report is None:
+            missing_report = output_root / "missing_inputs.json"
+        elif not missing_report.is_absolute():
+            missing_report = PROJECT_ROOT / missing_report
+
+        reproducer = Reproducer(
+            project_root=PROJECT_ROOT,
+            output_root=output_root,
+            figures=figures,
+            skip_existing=args.skip_existing,
+        )
+        try:
+            if args.list:
+                print_list_status(reproducer, selected_ids)
+                ok = all(reproducer.inspect_figure(figure_id) for figure_id in selected_ids)
+            else:
+                runs = render_figures(
+                    figures,
+                    selected_ids,
+                    output_root,
+                    jobs=args.jobs,
+                    skip_existing=args.skip_existing,
+                )
+                errors = {run.figure_id: run.error for run in runs if run.error}
+                for run in runs:
+                    reproducer.merge_report(run.report)
+                for figure_id, error in errors.items():
+                    print(f"{figure_id}: {error}", file=sys.stderr)
+                if args.check:
+                    ok = check_outputs(figures, selected_ids, output_root, reproducer, errors)
+                else:
+                    ok = not errors and not reproducer.skipped_missing_inputs and not reproducer.failed
+            reproducer.write_report(missing_report)
+            return 0 if ok else 1
+        finally:
+            reproducer.close()
 
 
 if __name__ == "__main__":  # pragma: no cover
