@@ -524,9 +524,10 @@ class _SequenceTable:
             return
         if not run:
             totals = totals.sum(axis=0, keepdims=True)
-        chunk_offsets = np.arange(0, len(raw), _CHUNK_BYTES) if run else np.zeros(1, dtype=np.int64)
-        self.offsets.extend((offset + chunk_offsets).tolist())
-        self.sizes.extend(np.minimum(_CHUNK_BYTES if run else len(raw), len(raw) - chunk_offsets).tolist())
+        # File offsets stay Python ints: numpy's default integer is 32 bits in Pyodide, and a file passes 2 GiB.
+        chunk_offsets = range(offset, offset + len(raw), _CHUNK_BYTES) if run else range(offset, offset + 1)
+        self.offsets.extend(chunk_offsets)
+        self.sizes.extend(min(_CHUNK_BYTES, offset + len(raw) - start) if run else len(raw) for start in chunk_offsets)
         self.starts.extend((self.length + np.cumsum(totals[:, BASES]) - totals[:, BASES]).tolist())
         self.kinds.extend(bytes((kind,)) * len(chunk_offsets))
         self.alphabets.extend(_alphabets(totals).tobytes())
