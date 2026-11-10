@@ -414,22 +414,24 @@ drawing the whole figure again. The rows depend on which labels do not fit:
 Each row gives the mildest value that fits, or says that none fits within its
 limit. When nothing was drawn and a row has no value that fits, it gives the
 mildest value that leaves no overlapping labels, if there is one, and says how
-many leader pairs still cross or labels still cover the definition text. Such
-a row comes after the others; running again with it draws the figure with the
-warning. The label rows answer for the labels they move: they leave out the
-region label warnings the figure already has, up to as many of each kind, and
-a value that adds a region label warning does not fit. When the figure of a
-row's first value keeps a region label warning, the next two values of that
+many leader pairs still cross or labels still cover the definition text, and
+which region label warnings the figure is drawn with. Such a row comes after
+the others; running again with it draws the figure with the warning. The label
+rows answer for the labels they move: they leave out the region label warnings
+each record of the figure already has, up to as many of each kind, and a value
+that adds a region label warning to a record does not fit. When the figure of
+a row's first value keeps a region label warning, the next two values of that
 row are tried, and the first whose whole figure fits is the row; otherwise the
 first value is offered the same way as a row that leaves crossings and names
-the region label warnings the figure keeps. The CLI lists such a row after the
-rows that fit; the Web app's **Choose a fix** keeps the report's order and
-first selects a row that fits, when there is one. With several records, one
-value must fit every record. The outer-label rows do not move inner, embedded,
-or radial labels. For inner, embedded, or radial labels, the switches are
-tried first; the smaller font is then the first font size, going down from
-the current one, at which the figure fits apart from the region label
-warnings it already has, so a smaller size than the one offered may not fit.
+the region label warnings the figure is drawn with. The CLI lists such a row
+after the rows that fit; the Web app's **Choose a fix** keeps the report's
+order and first selects a row that fits, when there is one. With several
+records, one value must fit every record. The outer-label rows do not move
+inner, embedded, or radial labels. For inner, embedded, or radial labels, the
+switches are tried first; the smaller font is then the first font size, going
+down from the current one, at which the figure fits apart from the region
+label warnings it already has, so a smaller size than the one offered may not
+fit.
 
 When the figure is drawn anyway, gbdraw searches for 5 seconds, every row's
 first value before any row's next values, and names the rows it did not

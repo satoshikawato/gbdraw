@@ -872,16 +872,17 @@ into the `[Unreleased]` list below.
   cleared the leader crossings, and computing them redrew the figure about 120
   times (17-52 s in the Web app; the CLI offered no fix within its 5 s). These
   fixes now answer only for the labels they move: they leave out the region
-  label warnings the figure already had, and a value that adds one still does
-  not fit. When the first value that clears those labels keeps the region
+  label warnings each record already had, and a value that adds one still
+  does not fit. When the first value that clears those labels keeps the region
   warning, the next two values of the fix are tried and the first whose whole
   figure fits is offered; otherwise the fix is offered with a note such as
-  "the figure keeps 1 region label overlap" (about 11 redraws in place of
+  "the figure is drawn with 1 region label overlap" (about 11 redraws in place of
   120). The CLI lists such fixes after the fixes that fit and tries every
   fix's first value before any next value; the Web app's **Choose a fix**
   keeps its order and first selects a fix that fits. A Linear "separate
   overlapping features" fix, or a fix offered when nothing was drawn, whose
-  figure keeps a region label warning now says so too (OV-3105, OV-3108).
+  figure is drawn with a region label warning (one the figure had or one the
+  fix adds) now says so too (OV-3105, OV-3108).
 - Fixed: a Circular region label whose letters still met a feature label's
   letters after it moved along its region (for example "Integration" over
   "integrase" on lambda with `--labels out`) was drawn over them. The

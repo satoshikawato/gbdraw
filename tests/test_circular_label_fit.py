@@ -610,7 +610,7 @@ def _fit_assembly(fit_for: Callable[[Mapping[str, object]], LabelFit]):
     def verify(values: Mapping[str, object]) -> LabelFitVerification:
         calls.append(dict(values))
         fit = fit_for(values)
-        return LabelFitVerification(label_fit_outcome([fit]), (1000.0, 900.0), fit)
+        return LabelFitVerification(label_fit_outcome([fit]), (1000.0, 900.0), fit, record_fits={0: fit})
 
     return verify, calls
 
@@ -663,13 +663,16 @@ def test_the_notice_row_words_crossings_and_the_definition_text() -> None:
     assert row_note(row(LabelFit(0, 1))) == "1 leader pair still crosses"
     assert row_note(row(LabelFit(0, 0, 2))) == "2 labels still cover the definition text"
     assert row_note(row(LabelFit(0, 3, 1))) == "3 leader pairs still cross and 1 label still covers the definition text"
-    # OV-3108: a row whose figure keeps a region label warning names each kind, in the figure's count words.
-    assert row_note(row(LabelFit(0, 0, region_overlaps=1))) == "the figure keeps 1 region label overlap"
+    # OV-3108, D-115: a row whose figure is drawn with region label warnings names each kind in the figure's count
+    # words, the same whether the drawn figure had it or the row's values add it.
+    assert row_note(row(LabelFit(0, 0, region_overlaps=1))) == "the figure is drawn with 1 region label overlap"
     assert row_note(row(LabelFit(0, 2, region_overlaps=2, region_cuts=1, region_cuts_left_out=1))) == (
-        "2 leader pairs still cross and the figure keeps 2 region label overlaps, 1 region label cut,"
+        "2 leader pairs still cross and the figure is drawn with 2 region label overlaps, 1 region label cut,"
         " 1 region label left out: no letter fits its circle"
     )
-    assert row_note(row(LabelFit(0, 0, region_track_overlaps=1))) == "the figure keeps 1 region label on another track"
+    assert row_note(row(LabelFit(0, 0, region_track_overlaps=1))) == (
+        "the figure is drawn with 1 region label on another track"
+    )
 
 
 def test_the_region_label_warnings_have_one_list_of_fields() -> None:
@@ -768,7 +771,7 @@ def _region_case(
     return layout, full
 
 
-REGION_NOTE = "the figure keeps 1 region label overlap"
+REGION_NOTE = "the figure is drawn with 1 region label overlap"
 
 
 def test_label_rows_answer_for_the_labels_they_move_and_say_which_region_warning_stays() -> None:
@@ -914,6 +917,45 @@ def test_a_label_row_leaves_out_only_the_region_label_warnings_the_figure_alread
     )
 
 
+def test_a_region_label_warning_a_value_moves_to_another_record_does_not_count_as_kept() -> None:
+    """D-115: on a canvas of two records, the region label warnings a label row leaves out are each record's own, per
+    field: a value that clears record 0's region label overlap but gives record 1 one does not fit."""
+
+    def outer(values: Mapping[str, object]) -> LabelFit:
+        y = values.get(Y_OFFSET_PATH, 1.0)
+        assert isinstance(y, float)
+        return FITS if y >= 1.025 - 1e-9 else LabelFit(0, 10)
+
+    def record_fits(values: Mapping[str, object]) -> dict[int, LabelFit]:
+        # From Y 1.025 to below 1.1 the region label overlap moves from record 0 to record 1.
+        y = values.get(Y_OFFSET_PATH, 1.0)
+        assert isinstance(y, float)
+        moved = 1.025 - 1e-9 <= y < 1.1 - 1e-9
+        return {
+            0: dataclasses.replace(outer(values), region_overlaps=0 if moved else 1),
+            1: LabelFit(0, 0, region_overlaps=1 if moved else 0),
+        }
+
+    def verify(values: Mapping[str, object]) -> LabelFitVerification:
+        fits = record_fits(values)
+        fit = sum(fits.values(), FITS)
+        return LabelFitVerification(label_fit_outcome([fit]), (1000.0, 900.0), fit, record_fits=fits)
+
+    first = dataclasses.replace(
+        _layout("P1", _p1_like), font_size=17.0,
+        kind_fits={"circular_outer": outer({}), "circular_region": LabelFit(0, 0, region_overlaps=1)},
+        label_counts={"circular_outer": 71, "circular_region": 1}, probe=outer,
+    )
+    with pytest.warns(LabelLeadersCrossWarning):
+        checked = check_circular_label_fit([first], verify, warn_search_seconds=600.0)
+    assert checked is not None
+    rows = {row.kind: row for row in checked[0].rows}
+    assert (rows["outward_vertical"].status, rows["outward_vertical"].values) == (
+        "found_with_notice", {Y_OFFSET_PATH: 1.1}
+    )
+    assert rows["outward_vertical"].remaining == LabelFit(0, 0, region_overlaps=1)
+
+
 def test_every_row_gets_its_first_value_before_any_row_tries_its_next_values(monkeypatch: pytest.MonkeyPatch) -> None:
     """D-110: the bounded search takes every row's first value first, then the next values of the rows whose figure
     keeps a region label warning (OV-3110) while the bound allows; without a bound, and row by row as the Web asks,
@@ -1025,7 +1067,7 @@ def test_linear_labels_on_stacked_features_stop_with_the_separate_features_row()
         "found_with_notice", {SEPARATE_FEATURES_PATH: True}, LabelFit(0, 2)
     )
 
-    # OV-3108: separated features whose figure keeps a region label over other labels say so.
+    # OV-3108: separated features whose figure is drawn with a region label over other labels say so.
     def region(values: Mapping[str, object]) -> LabelFitVerification:
         return LabelFitVerification("warn", (500.0, 200.0), LabelFit(0, 0, region_overlaps=1))
 

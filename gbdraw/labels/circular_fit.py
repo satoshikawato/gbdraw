@@ -56,6 +56,7 @@ from .fit import (
     DEFINITION_ROW_KINDS,
     FITS,
     OFFERED_ROW_STATUSES,
+    REGION_WARNING_FIELDS,
     FONT_LIMIT_PT,
     FONT_SIZE_PATHS,
     LabelCapacityRecord,
@@ -446,8 +447,8 @@ class CircularLabelFitSearch:
         self._outer_only = all(layout.outer_only for layout in label_layouts)
         label_layouts = label_layouts or list(self.layouts)
         self._verify_assembly = verify
-        # The region label warnings the figure already has: a label row leaves out only these (D-112).
-        self._figure_fit = sum((layout.fit for layout in self.layouts), FITS)
+        # The region label warnings each record already has: a label row leaves out only these (D-112, D-115).
+        self._record_fits = {layout.record_index: layout.fit for layout in self.layouts}
         # A verification starts only if one more, as long as the last, ends before the deadline; the first one
         # starts whenever the deadline has not passed (OV-2527: a full first assembly is no estimate of it).
         self._verification_seconds = 0.0
@@ -539,7 +540,7 @@ class CircularLabelFitSearch:
             started = time.monotonic()
             self._verifications[key] = self._verify_assembly(values)
             self._verification_seconds = time.monotonic() - started
-        return _row_verification(kind, self._verifications[key], self._figure_fit)
+        return _row_verification(kind, self._verifications[key], self._record_fits)
 
     # --- rows ---
 
@@ -802,13 +803,25 @@ class CircularLabelFitSearch:
         return None
 
 
+def _kept_region_warnings(record_fits: Mapping[int, LabelFit], had: Mapping[int, LabelFit]) -> LabelFit:
+    """The region label warnings each record keeps of those it had: per record and field, at most its count in
+    ``had`` (D-112, D-115). A warning that moves to another record, or one more of a kind, is not kept."""
+
+    kept = FITS
+    for index, fit in record_fits.items():
+        before = had.get(index, FITS)
+        kept += LabelFit(0, 0, **{name: min(fit.count(name), before.count(name)) for name in REGION_WARNING_FIELDS})
+    return kept
+
+
 def _row_verification(
-    kind: LabelFitRowKind, verification: LabelFitVerification, figure_fit: LabelFit
+    kind: LabelFitRowKind, verification: LabelFitVerification, had: Mapping[int, LabelFit]
 ) -> LabelFitVerification:
     """A full assembly as one row reads it: the label rows answer for the labels they move, not for the region
-    label warnings the figure already had (``figure_fit``, up to its count of each, D-112; ``_UNMOVED_LABEL_KINDS``;
-    ``_with_region_notice`` says which warning stays, OV-3105), so a value that adds one does not fit; the definition
-    rows answer for the definition text over a track (D-12); an assembly that stops is read as it is."""
+    label warnings each record already had (``had``, by record index, up to its count of each, D-112, D-115;
+    ``_UNMOVED_LABEL_KINDS``; ``_with_region_notice`` says which warning stays, OV-3105), so a value that adds one
+    does not fit; the definition rows answer for the definition text over a track (D-12); an assembly that stops is
+    read as it is."""
 
     fit = verification.fit
     if verification.outcome == "stop" or fit is None:
@@ -816,7 +829,10 @@ def _row_verification(
     if kind in DEFINITION_ROW_KINDS:
         outcome: LabelFitOutcome = "fits" if fit.definition_track_overlaps == 0 else "warn"
     else:
-        outcome = label_fit_outcome([replace(fit.without_region_warnings(figure_fit), definition_track_overlaps=0)])
+        outcome = label_fit_outcome([replace(
+            fit.without_region_warnings(_kept_region_warnings(verification.record_fits, had)),
+            definition_track_overlaps=0,
+        )])
     return replace(verification, outcome=outcome)
 
 

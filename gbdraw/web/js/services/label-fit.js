@@ -20,10 +20,10 @@ import { LABEL_FIT_OFFERED_ROW_STATUSES } from '../contracts/schema.generated.js
 /**
  * @typedef {'found' | 'found_with_notice' | 'not_found' | 'not_computed'} LabelFitRowStatus
  * `found_with_notice`: the row leaves no overlapping labels but leaves crossing
- * leaders or labels over the definition text (LP-D57), or a Circular label row
- * fits the labels it moves while the figure keeps region label warnings it had
- * (OV-3105, D-112), so the figure draws with the notice bar; its `note` says
- * what it leaves.
+ * leaders, labels over the definition text or region label warnings (LP-D57),
+ * or a Circular label row fits the labels it moves while each record keeps
+ * region label warnings it already had (OV-3105, D-112, D-115), so the figure
+ * draws with the notice bar; its `note` says what the figure is drawn with.
  */
 /** @typedef {string & { readonly labelFitRowKind: unique symbol }} LabelFitRowKind A Python row kind, such as `outward_vertical`. */
 /** @typedef {string & { readonly configPath: unique symbol }} ConfigPath A dotted config path, such as `labels.spacing.circular`. */

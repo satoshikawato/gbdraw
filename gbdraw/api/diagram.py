@@ -3758,10 +3758,12 @@ def _checked_circular_drawing(
                 raise
             return unfit
         layouts = _circular_label_layouts(verified)
+        record_fits = {layout.record_index: layout.fit for layout in layouts}
         return LabelFitVerification(
             outcome=circular_label_outcome(layouts),
             canvas_size=drawing_size(verified),
-            fit=sum((layout.fit for layout in layouts), FITS),
+            fit=sum(record_fits.values(), FITS),
+            record_fits=record_fits,
         )
 
     larger: Callable[[float | None], LargerFigure] | None = None

@@ -17,7 +17,7 @@ from __future__ import annotations
 import math
 import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol, TypeAlias, TypeGuard, get_args
 
 from ..exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
@@ -65,10 +65,11 @@ LabelFitRowKind: TypeAlias = Literal[
 # The rows that answer for the Circular centre definition text over a track (D-12), not for the labels.
 DEFINITION_ROW_KINDS: frozenset[LabelFitRowKind] = frozenset({"smaller_definition_font", "narrow_tracks"})
 # ``found``: ``values`` fit; ``found_with_notice``: ``values`` leave no
-# overlapping labels but leave crossing leaders or labels over the definition
-# text (LP-D57; offered only when nothing was drawn), or a Circular label row
-# fits the labels it moves while its figure keeps region label warnings it
-# already had (OV-3105, D-112), so the figure draws with the notice; ``not_found``: no value
+# overlapping labels but leave crossing leaders, labels over the definition
+# text or region label warnings (LP-D57; offered only when nothing was drawn),
+# or a Circular label row fits the labels it moves while each record keeps
+# region label warnings it already had (OV-3105, D-112, D-115), so the figure
+# draws with the notice; ``not_found``: no value
 # within the lever's limit (``reason`` says which); ``not_computed``: the
 # bounded search stopped first.
 LabelFitRowStatus: TypeAlias = Literal["found", "found_with_notice", "not_found", "not_computed"]
@@ -547,7 +548,9 @@ class LabelFitVerification:
 
     ``outcome`` is :func:`label_fit_outcome` over every record (an assembly
     that raised stops); ``canvas_size`` is the figure's size, ``fit`` its
-    labels' fit over every record, and ``reason`` why the assembly failed
+    labels' fit over every record, ``record_fits`` each Circular record's fit
+    by its drawn index (``record_index``; the label rows compare region label
+    warnings record by record, D-115), and ``reason`` why the assembly failed
     when it raised.
     """
 
@@ -555,6 +558,7 @@ class LabelFitVerification:
     canvas_size: tuple[float, float] | None
     fit: LabelFit | None = None
     reason: str | None = None
+    record_fits: Mapping[int, LabelFit] = field(default_factory=dict)
 
     @property
     def fits(self) -> bool:
@@ -786,8 +790,9 @@ def row_note(row: LabelFitRow) -> str | None:
             _counted(remaining.definition_overlaps, "label still covers", "labels still cover")
             + " the definition text"
         )
+    # Region label warnings are named the same whether the figure had them or the row's values add them (D-115).
     if region_counts := _region_counts(remaining):
-        notes.append("the figure keeps " + ", ".join(region_counts))
+        notes.append("the figure is drawn with " + ", ".join(region_counts))
     return " and ".join(notes) or None
 
 

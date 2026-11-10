@@ -461,7 +461,7 @@ test('rows Generate did not search are computed one after another when the dialo
 // draws with the notice. The first row that fits is selected until the user chooses a row; a choice stays for
 // that opening of the dialog.
 test('a row that fits is selected over a row with the notice, until the user chooses a row', async () => {
-  const regionNote = 'the figure keeps 1 region label overlap';
+  const regionNote = 'the figure is drawn with 1 region label overlap';
   const notice = (kind) => row(kind, 'found_with_notice', { values: { [Y_OFFSET]: 1.025 }, note: regionNote,
     canvasSize: { width: 1693, height: 939 } });
   const arrived = { outward_both: notice('outward_both'), outward_vertical: notice('outward_vertical'),
