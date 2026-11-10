@@ -1345,8 +1345,7 @@
       "vector": "tests/fixtures/feature_density_slot_vectors.json",
       "reason": "The Web shows and edits a custom stack before any Generate and sends the Circular size shortcuts as an explicit stack, so it builds the default stacks itself; without the rows Python inserts, Use custom stack and the shortcuts drop the tracks (OV-3174). Vectors generated from with_feature_density_slots pin the Web copy.",
       "retireWhen": "the Web asks the Python owner (Worker) for the default stack instead of building it",
-      "source": "euk-feasibility-20261108 E4 (#1836 review r1 finding 2, D-57)",
-      "pending": true
+      "source": "euk-feasibility-20261108 E4 (#1836 review r1 finding 2, D-57)"
     },
     {
       "id": "concern:similarity-alignment-reset-binding",
