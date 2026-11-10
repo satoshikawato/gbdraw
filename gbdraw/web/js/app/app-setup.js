@@ -2522,7 +2522,8 @@ export const createAppSetup = () => {
     clearActiveRuntime: previewRuntime.clearActiveRuntime, getResultIdentity: previewRuntime.getResultIdentity,
     presentSelectedResult: previewRuntime.presentSelectedResult,
     rememberResultInventory: legendActions.rememberResultInventory, artifactSlotsSwap: artifactSlots.swap,
-    captureArtifactSlot: historySnapshots.captureArtifactSlot, installArtifactSlot: historySnapshots.installArtifactSlot
+    captureArtifactSlot: historySnapshots.captureArtifactSlot, installArtifactSlot: historySnapshots.installArtifactSlot,
+    adoptShownSetInventory: legendActions.adoptShownSetInventory
   });
   // The operations on the drawing list, each one project step (R11, R16-2).
   const drawingList = createDrawingList({
@@ -2588,12 +2589,11 @@ export const createAppSetup = () => {
   // Session Load: the loaded Session's artifact slots, before its preview
   // mounts. `opening` is the shown drawing's slot when its set is not the
   // committed one; each `stashed` slot waits in its drawing. The stash starts
-  // again with the loaded Session.
+  // again with the loaded Session. The Legend owner takes the shown set's inventory.
   /** @param {LoadedArtifactSlots} slots */
   const installLoadedArtifactSlots = ({ opening, stashed }) => {
     artifactSlots.replaceLoaded(stashed);
-    if (!opening) return;
-    historySnapshots.installArtifactSlot(opening, { drawing: state.drawingOf(opening.drawingId) });
+    if (opening) historySnapshots.installArtifactSlot(opening, { drawing: state.drawingOf(opening.drawingId) });
     rememberShownResultInventory(opening);
   };
 

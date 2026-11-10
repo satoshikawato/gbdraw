@@ -242,7 +242,10 @@ test('the slot store keeps a hidden drawing\'s artifact through its named operat
   const circular = modeDrawing(state, 'circular');
   const linear = modeDrawing(state, 'linear');
   const store = createArtifactSlotStore();
-  const circularSlot = createArtifactSlot({ drawing: circular, values: { results: [{ name: 'c.svg' }] } });
+  const circularSlot = createArtifactSlot({ drawing: circular, values: { results: [{ name: 'c.svg' }] }, legendInventory: ['CDS'] });
+  assert.deepEqual(circularSlot.legendInventory, ['CDS']);
+  // OV-3282: a slot without a Result holds no Legend inventory, whatever it was given.
+  assert.deepEqual(createArtifactSlot({ drawing: linear, values: { results: [] }, legendInventory: ['CDS'] }).legendInventory, []);
   assert.equal(store.swap(circularSlot, 'linear'), null, 'a drawing with no artifact yet has no slot');
   assert.deepEqual(store.kept(), [circularSlot]);
   const linearSlot = createArtifactSlot({ drawing: linear, values: { results: [{ name: 'l.svg' }] } });

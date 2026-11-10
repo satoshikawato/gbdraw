@@ -59,6 +59,7 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  *   Keeps the departing slot and takes the arriving drawing's, or null.
  * @property {() => Readonly<ArtifactSlot>} captureArtifactSlot The displayed artifact as a slot.
  * @property {(slot: Readonly<ArtifactSlot> | null, options: { drawing: DrawingIdentity }) => void} installArtifactSlot
+ * @property {() => void} adoptShownSetInventory The Legend owner's: a drawing showing no Result has no inventory.
  */
 
 /**
@@ -72,18 +73,19 @@ export const createDrawingSwitch = ({
   ruleWritePending, suspendSpecificRulePatternDrafts, clearFeatureSelection, rememberDepartingResultProjection,
   auxiliaryImportFailureOnArrival, resetModeTransientUi, installShownDrawing, dismissNotice, switchDrawingSearch,
   rebindAnnotationRecords, clearActiveRuntime, getResultIdentity, presentSelectedResult, rememberResultInventory,
-  artifactSlotsSwap, captureArtifactSlot, installArtifactSlot
+  artifactSlotsSwap, captureArtifactSlot, installArtifactSlot, adoptShownSetInventory
 }) => {
   // E1: shows the artifact of drawing `nextId`. Keeps the displayed one in
   // the departing drawing's slot and installs the arriving slot, or an empty
   // one. The Legend owner
   // keeps each Result's inventory (OV-47): the arriving Result's goes to it,
   // and the binder adopts it when the Result is displayed, as for a batch
-  // Result. A drawing without a Result arrives with none (OV-3282).
-  /** @param {Readonly<ArtifactSlot> | null} slot An installed slot (null: the drawing's empty slot). */
+  // Result. The owner then gives a drawing showing no Result none (OV-3282).
+  /** @param {Readonly<ArtifactSlot> | null} slot The installed slot; null: none (an empty slot, or the set a Load restored). */
   const rememberShownResultInventory = (slot) => {
-    const shown = slot ? results.value[Number(selectedResultIndex.value) || 0] : undefined;
-    rememberResultInventory(shown && getResultIdentity(shown), [...(slot?.legendInventory ?? [])]);
+    const shown = results.value[Number(selectedResultIndex.value) || 0];
+    if (shown && slot) rememberResultInventory(getResultIdentity(shown), [...slot.legendInventory]);
+    adoptShownSetInventory();
   };
   /**
    * The displayed artifact is kept under the drawing it belongs to, which is

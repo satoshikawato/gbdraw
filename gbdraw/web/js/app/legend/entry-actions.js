@@ -50,6 +50,7 @@ import {
 /** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
 import { diffLegendIntents, legendColorCopies, legendRowRules } from '../../services/specific-color-rules.js';
 import { rekeyLegendRowIds } from '../../services/legend-draft-rows.js';
+import { resultSetInventory } from '../../services/artifact-slot.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
 
 /** @param {unknown} value */
@@ -831,18 +832,17 @@ export const createLegendEntryActions = ({
     return inventory;
   };
 
-  // E1: a drawing's Result keeps the inventory it was drawn with while another
-  // drawing is shown, and a loaded one arrives with its saved one. It arrives
-  // with the one it left with, which followed every live edit made while it
-  // was shown (a Legend rename takes the row's place in it, OV-348), so it
-  // replaces a stored copy; `adoptResultInventory` adopts it when the Result is
-  // displayed. A drawing arriving without a Result (no `identity`) displays
-  // none, so the displayed inventory is none (OV-3282).
+  // E1: a Result of another drawing keeps the inventory it was drawn with; a
+  // loaded one arrives with its saved one. It arrives with the one it left
+  // with, which followed its live edits (OV-348), so it replaces the stored
+  // copy; `adoptResultInventory` adopts it when the Result is displayed.
   /** @param {string | undefined} identity @param {readonly PythonLegendKey[]} inventory */
   const rememberResultInventory = (identity, inventory) => {
-    if (!identity) originalLegendOrder.value = [];
-    else inventoryByResult.set(identity, [...inventory]);
+    if (!identity || !Array.isArray(inventory)) return;
+    inventoryByResult.set(identity, [...inventory]);
   };
+  // After an artifact install (a switch, a Load): a drawing showing no Result has no inventory (OV-3282).
+  const adoptShownSetInventory = () => { originalLegendOrder.value = resultSetInventory(results.value, originalLegendOrder.value); };
 
   // `originalLegendOrder` is the displayed Result's inventory: after a Result
   // is displayed and after a History restore wrote another Result's value.
@@ -1042,6 +1042,7 @@ export const createLegendEntryActions = ({
   return {
     adoptRestoredLegend,
     adoptResultInventory,
+    adoptShownSetInventory,
     captureResultInventory,
     deleteLegendEntry,
     extractLegendEntries,

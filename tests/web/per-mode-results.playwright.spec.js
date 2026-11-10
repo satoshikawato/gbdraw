@@ -489,6 +489,17 @@ test('a Session with one Result opens on the drawing shown at Save; the other dr
   await showMode(page, 'linear');
   await expectEmptyPreview(page, 'linear');
   expect(await shownInventory(page)).toEqual([]);
+  // A setting edit there and its Undo: the History step restores no inventory.
+  await page.locator('summary[aria-label="Labels"]').press('Enter');
+  const labels = page.locator('#linear-show-labels');
+  const before = await labels.inputValue();
+  await labels.focus();
+  await labels.selectOption(before === 'none' ? 'all' : 'none');
+  await labels.press('Tab');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Change setting');
+  await history(page, 'undo');
+  await expect(labels).toHaveValue(before);
+  expect(await shownInventory(page)).toEqual([]);
 
   const path = info.outputPath('one.gbdraw-session.json.gz');
   const saved = await save(page, path, { title: '' });
@@ -499,6 +510,9 @@ test('a Session with one Result opens on the drawing shown at Save; the other dr
   expect(savedDrawing(saved, 'linear').editorState.legend.originalOrder).toEqual([]);
   savedDrawing(saved, 'linear').editorState.legend.originalOrder = circularInventory;
   writeFileSync(path, gzipSync(JSON.stringify(saved)));
+  // The drawing with the Result gets its own inventory back.
+  await showMode(page, 'circular');
+  expect(await shownInventory(page)).toEqual(circularInventory);
 
   const fresh = await freshPage(browser);
   try {

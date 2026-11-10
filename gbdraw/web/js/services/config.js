@@ -3243,17 +3243,6 @@ const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedF
   );
 };
 
-// OV-3282: a saved Result set's generated Legend inventory is its Results':
-// a set without a Result has none. An older writer gave such a set the
-// inventory of the Result shown before it, which Load does not read.
-/**
- * @template {{ originalOrder: readonly PythonLegendKey[] }} Legend
- * @param {Legend} legend The set's generated Legend inventory and colors.
- * @param {readonly unknown[]} results The set's Results.
- * @returns {Legend}
- */
-const savedSetLegend = (legend, results) => (results.length > 0 ? legend : { ...legend, originalOrder: [] });
-
 // One drawing's saved Result set of a current Session as the artifact slot
 // of that drawing, built off-line during
 // Load: its Results admitted with its catalog (or the Results Load already
@@ -3318,7 +3307,7 @@ const buildLoadedArtifactSlot = (set, {
       originalLegendColors: keptLegend.originalColors,
       originalSvgStroke: editorState.originalSvgStroke
     },
-    legendInventory: savedSetLegend(keptLegend, results).originalOrder,
+    legendInventory: keptLegend.originalOrder,
     matchSequenceOwner: state.matchSequenceRegistry?.buildSourceOwner?.([
       ...(features.sequenceSources || []), ...restoredSequenceSources
     ]) || null,
@@ -8437,7 +8426,7 @@ const importSessionDocument = async (e, options = {}) => {
     const shownGroupIds = applyOrthogroupArtifactData(loadedOrthogroupState, { catalogFeatureState: currentCatalogFeatureState });
     if (groupNamesDrawingId !== null) installGroupNames(state.drawingOf(groupNamesDrawingId), loadedOrthogroupState, shownGroupIds);
     storedGroupNames.forEach(({ id, names, groupIds }) => installGroupNames(state.drawingOf(id), names, groupIds));
-    applyEditorArtifactData({ ...artifactEditorState, legend: savedSetLegend(rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(committedSetDrawingId)), committedImportedResults) });
+    applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(committedSetDrawingId)) });
     if (legacyFeatureRecoveryPlan) {
       applySessionFeatureRecoveryPlan(legacyFeatureRecoveryPlan);
     }

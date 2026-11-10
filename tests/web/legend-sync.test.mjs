@@ -659,10 +659,16 @@ const mockLegendEntry = (caption, color, x) => {
   actions.rememberResultInventory('result-3', ['A', 'Coding', 'Own']);
   actions.adoptResultInventory('result-3');
   assert.deepEqual(state.originalLegendOrder.value, ['A', 'Coding', 'Own']);
-  // OV-3282: a drawing shown without a Result has no inventory; each Result
-  // keeps its own for when it is displayed again.
-  actions.rememberResultInventory(undefined, []);
+  // OV-3282: after an artifact install, a drawing showing a Result keeps the
+  // displayed inventory and one showing none has none; each Result keeps its
+  // own for when it is displayed again.
+  actions.adoptShownSetInventory();
+  assert.deepEqual(state.originalLegendOrder.value, ['A', 'Coding', 'Own']);
+  const shownResults = state.results.value;
+  state.results.value = [];
+  actions.adoptShownSetInventory();
   assert.deepEqual(state.originalLegendOrder.value, []);
+  state.results.value = shownResults;
   actions.adoptResultInventory('result-3');
   assert.deepEqual(state.originalLegendOrder.value, ['A', 'Coding', 'Own']);
 }
