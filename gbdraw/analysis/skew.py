@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import NamedTuple
 
 import numpy as np
@@ -13,6 +13,7 @@ from Bio.Seq import MutableSeq, Seq
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.windows import SlidingWindows, sliding_windows
+from gbdraw.io.record_sequences import sequence_spans, sequence_view
 from gbdraw.mode_profiles import validate_dinucleotide
 
 
@@ -28,9 +29,11 @@ _TOP_BYTE = np.uint64(56)
 _EIGHT = np.arange(8)
 
 
-def _prefix_counts_at(segments: Sequence[bytes], bases: Sequence[int], positions: np.ndarray) -> np.ndarray:
-    """Row ``i``, column ``k``: ``b"".join(segments)[:p].count(bases[i])`` for each position ``p = positions[k]``
-    (0 to the joined length).
+def _prefix_counts_at(
+    segments: Sequence[Seq | MutableSeq | bytes], bases: Sequence[int], positions: np.ndarray
+) -> np.ndarray:
+    """Row ``i``, column ``k``: the count of ``bases[i]`` in the first ``p`` counted bases (:func:`counted_bases`) of
+    the segments read one after the other, for each position ``p = positions[k]`` (0 to their joined length).
 
     The segments are read once for every base together, a chunk at a time and never joined: the positions are
     sorted once, each chunk takes the positions that fall in it, and each base's mask of the chunk is read as
@@ -50,10 +53,11 @@ def _prefix_counts_at(segments: Sequence[bytes], bases: Sequence[int], positions
     before = np.zeros(size // 8 + 1, dtype=np.int64)
     offset = 0
     for segment in segments:
-        sequence = np.frombuffer(segment, dtype=np.uint8)
-        for start in range(0, len(sequence), _COUNT_CHUNK):
-            chunk = sequence[start : start + _COUNT_CHUNK]
+        start = 0
+        for counted in counted_bases(segment):
+            chunk = np.frombuffer(counted, dtype=np.uint8)
             first = offset + start
+            start += len(chunk)
             lo, hi = np.searchsorted(wanted, (first, first + len(chunk)), side="left")
             word, place = np.divmod((wanted[lo:hi] - first).astype(np.intp), 8)
             in_word = _EIGHT < place[:, None]
@@ -68,7 +72,8 @@ def _prefix_counts_at(segments: Sequence[bytes], bases: Sequence[int], positions
                 partial = np.count_nonzero(chunk_mask.view(np.uint8).reshape(-1, 8)[word] & in_word, axis=1)
                 counts[row, lo:hi] = running[row] + before[word] + partial
                 running[row] += before[count]
-        offset += len(sequence)
+            del chunk, counted  # one chunk is held at a time, also while the next one is read
+        offset += len(segment)
     counts[:, np.searchsorted(wanted, length, side="left") :] = running[:, None]
     prefix = np.empty_like(counts)
     prefix[:, order] = counts
@@ -88,33 +93,36 @@ _COUNTED_BASES = _counting_table()
 _UNKNOWN_BASE = ord("N")
 
 
-def counted_sequence(seq: object) -> bytes:
-    """The bases as every GC and skew count reads them, as one bytes copy.
+def counted_bases(seq: Seq | MutableSeq | bytes) -> Iterator[bytes]:
+    """The bases as every GC and skew count reads them, ``_COUNT_CHUNK`` at a time, in order.
 
     Case is ignored, so soft-masked FASTA bases count, and U is counted as T
     (D-26). The known bases are A, C, G and T; every other byte (N, the other
     IUPAC codes, a gap) is an unknown base and reads as N, which no content or
-    skew value counts (OV-2799). The copy is made once by ``bytes.translate``;
-    callers count it directly and do not encode a str of it.
+    skew value counts (OV-2799). Each chunk is a slice of ``seq`` read through
+    ``bytes.translate``, so a count holds one chunk, never a copy of the sequence.
     """
 
-    raw = bytes(seq) if isinstance(seq, (Seq, MutableSeq, bytes, bytearray)) else str(seq).encode("ascii")
-    return raw.translate(_COUNTED_BASES)
+    # ``map`` keeps no chunk it has handed on, so a reader holds one chunk and the next one's read only.
+    return map(_count_translated, sequence_spans(seq, _COUNT_CHUNK))
 
 
-def _counted_bases(windows: SlidingWindows) -> list[bytes]:
-    """The counted bases the windows read, one segment per source piece, in local order.
+def _count_translated(span: bytes) -> bytes:
+    return span.translate(_COUNTED_BASES)
+
+
+def _window_pieces(windows: SlidingWindows) -> list[Seq | MutableSeq]:
+    """The bases the windows read, one view of the source per source piece, in local order.
 
     A piece read against the source (a reverse complement) is read as its reverse complement, as the record's own
-    bases are. A piece that is the whole source is counted without a slice copy.
+    bases are (:func:`gbdraw.io.record_sequences.sequence_view`, a chunk at a time).
     """
 
     sequence = windows.source.sequence
-    segments: list[bytes] = []
-    for piece in windows.pieces:
-        bases = sequence if piece.length == len(sequence) else sequence[piece.low : piece.low + piece.length]
-        segments.append(counted_sequence(bases if piece.direction > 0 else bases.reverse_complement()))
-    return segments
+    return [
+        sequence_view(sequence, piece.low, piece.low + piece.length, strand=piece.direction)
+        for piece in windows.pieces
+    ]
 
 
 def skew_df(record: SeqRecord, window: int, step: int, nt: str, *, circular: bool) -> DataFrame:
@@ -138,7 +146,7 @@ def skew_df(record: SeqRecord, window: int, step: int, nt: str, *, circular: boo
         )
 
     windows = sliding_windows(record, window, step, circular=circular)
-    segments = _counted_bases(windows)
+    segments = _window_pieces(windows)
     bounds = np.concatenate([windows.starts, windows.ends]) - windows.pieces[0].local
     samples = windows.samples
     prefix = _prefix_counts_at(segments, (ord(counted[0]), ord(counted[1]), _UNKNOWN_BASE), bounds)
@@ -194,7 +202,7 @@ def deviation_scale(series: Series) -> DeviationScale | None:
 
 __all__ = [
     "DeviationScale",
-    "counted_sequence",
+    "counted_bases",
     "deviation_scale",
     "skew_df",
 ]

@@ -43,7 +43,7 @@ from os import PathLike, fspath
 from typing import IO, Literal, TypeVar
 
 from Bio import BiopythonParserWarning
-from Bio.Seq import Seq, SequenceDataAbstractBaseClass
+from Bio.Seq import MutableSeq, Seq, SequenceDataAbstractBaseClass, _dna_complement_table, _rna_complement_table
 from Bio.SeqRecord import SeqRecord
 
 from ..exceptions import InputFileError
@@ -383,39 +383,89 @@ class _SequenceTable:
         return pieces[0] if len(pieces) == 1 else b"".join(pieces)
 
 
-class RecordSequence(SequenceDataAbstractBaseClass):
-    """A record's sequence, read from its input file on demand (``Seq(RecordSequence(...))``).
+# What a record sequence reads: the sequence table of a record in its input file, or bases held in memory.
+_Bases = _SequenceTable | bytes
+# The bases a whole-sequence reader (a count, a digest, a comparison) takes at a time.
+_SPAN_BASES = 1 << 20
 
-    ``len`` is known without reading; a slice reads only its bases; ``bytes()`` of the
+
+class RecordSequence(SequenceDataAbstractBaseClass):
+    """A record's sequence, or a view of one, read on demand (``Seq(RecordSequence(...))``).
+
+    It reads ``pieces`` of its bases (a record's sequence table in its input file,
+    or bases held in memory) one after the other: a crop is one piece, two turns
+    of a circular record two. On the reverse strand it reads them backwards; every
+    byte read goes through ``translate`` (the complement table of a reverse
+    complement), when it has one. ``len`` is known without reading; a slice reads
+    only its bases and returns them (a plain ``Seq`` slice); ``bytes()`` of the
     whole reads them all. A copy is the same object: the bases never change.
+    Views are made by :func:`sequence_view` and :func:`two_turns`, never here.
     """
 
-    __slots__ = ("_table",)
+    __slots__ = ("_bases", "_pieces", "_ends", "_reverse", "_translate")
 
-    def __init__(self, table: _SequenceTable) -> None:
-        self._table = table
+    def __init__(
+        self, bases: _Bases, pieces: tuple[tuple[int, int], ...] | None = None, *,
+        reverse: bool = False, translate: bytes | None = None,
+    ) -> None:
+        self._bases = bases
+        self._pieces = ((0, len(bases) if isinstance(bases, bytes) else bases.length),) if pieces is None else pieces
+        self._ends = tuple(itertools.accumulate(stop - start for start, stop in self._pieces))
+        self._reverse = reverse
+        self._translate = translate
         super().__init__()
 
     def __len__(self) -> int:
-        return self._table.length
+        return self._ends[-1] if self._ends else 0
+
+    def _forward_pieces(self, start: int, stop: int) -> tuple[tuple[int, int], ...]:
+        """The pieces of the bases that local positions ``start``..``stop - 1`` read, in forward order."""
+
+        if self._reverse:
+            length = len(self)
+            start, stop = length - stop, length - start
+        pieces: list[tuple[int, int]] = []
+        index = bisect.bisect_right(self._ends, start)
+        position = start
+        while position < stop:
+            low = self._ends[index - 1] if index else 0
+            first, last = self._pieces[index]
+            end = min(stop, self._ends[index])
+            pieces.append((first + position - low, first + end - low))
+            position = end
+            index += 1
+        return tuple(pieces)
+
+    def _read(self, start: int, stop: int) -> bytes:
+        """Local positions ``start``..``stop - 1`` (``0 <= start <= stop <= len``)."""
+
+        if start >= stop:
+            return b""
+        bases = self._bases
+        reads = [bases[first:last] if isinstance(bases, bytes) else bases.read(first, last)
+                 for first, last in self._forward_pieces(start, stop)]
+        data = reads[0] if len(reads) == 1 else b"".join(reads)
+        if self._translate is not None:
+            data = data.translate(self._translate)
+        return data[::-1] if self._reverse else data
 
     def __getitem__(self, key: int | slice) -> int | bytes:
-        length = self._table.length
+        length = len(self)
         if isinstance(key, slice):
             start, stop, step = key.indices(length)
             if step == 1:
-                return self._table.read(start, stop)
+                return self._read(start, stop)
             indexes = range(start, stop, step)
             if not indexes:
                 return b""
             low = min(indexes[0], indexes[-1])
-            data = self._table.read(low, max(indexes[0], indexes[-1]) + 1)
+            data = self._read(low, max(indexes[0], indexes[-1]) + 1)
             end = indexes.stop - low
             return data[indexes.start - low: end if end >= 0 else None: step]
         index = key + length if key < 0 else key
         if not 0 <= index < length:
             raise IndexError("sequence index out of range")
-        return self._table.read(index, index + 1)[0]
+        return self._read(index, index + 1)[0]
 
     def __copy__(self) -> RecordSequence:
         return self
@@ -428,7 +478,90 @@ class RecordSequence(SequenceDataAbstractBaseClass):
         return bytes, (bytes(self),)
 
     def __bytes__(self) -> bytes:
-        return self._table.read(0, self._table.length)
+        return self._read(0, len(self))
+
+
+def _viewed(seq: Seq | MutableSeq) -> RecordSequence | None:
+    """``seq``'s bases as a record sequence a view can read, or ``None`` when they cannot be read so.
+
+    A record sequence is itself; bases held as ``bytes`` are read in place.
+    Bases that may change (a ``MutableSeq``) and a sequence that is not defined
+    everywhere are left to Biopython's own slices and reverse complements.
+    """
+
+    data = getattr(seq, "_data", None)
+    if isinstance(data, RecordSequence):
+        return data
+    if isinstance(seq, Seq) and type(data) is bytes:
+        return RecordSequence(data)
+    return None
+
+
+def _then(first: bytes | None, second: bytes | None) -> bytes | None:
+    """The translate table that maps as ``first`` and then ``second`` (``None``: each byte as itself)."""
+
+    if first is None or second is None:
+        return first if second is None else second
+    composed = first.translate(second)
+    return None if composed == _IDENTITY else composed
+
+
+_IDENTITY = bytes(range(256))
+
+
+def sequence_view(
+    seq: Seq | MutableSeq, start: int = 0, stop: int | None = None, *, strand: Literal[1, -1] = 1, rna: bool = False,
+) -> Seq:
+    """Bases ``start``..``stop - 1`` of ``seq``, on the reverse strand when ``strand`` is -1, read from ``seq``.
+
+    The one way gbdraw cuts, reverse-complements and reads round a sequence
+    without copying it: a crop, a reverse-complemented record, a window piece.
+    The result reads ``seq``'s bases on demand; a view of a view reads the first
+    sequence's bases. Its bytes equal ``seq[start:stop]``, and on the reverse
+    strand Biopython's ``reverse_complement()`` of them (``reverse_complement_rna()``
+    when ``rna``), byte for byte; ``start`` and ``stop`` are read as that slice reads them.
+    """
+
+    length = len(seq)
+    start, stop, _ = slice(start, stop).indices(length)  # read as ``seq[start:stop]`` reads them
+    stop = max(start, stop)
+    data = _viewed(seq)
+    if data is None:
+        piece = seq[start:stop]
+        if strand < 0:
+            piece = piece.reverse_complement_rna() if rna else piece.reverse_complement()
+        return piece if isinstance(piece, Seq) else Seq(piece)
+    if strand > 0 and start == 0 and stop == length and isinstance(seq, Seq):
+        return seq
+    complement = (_rna_complement_table if rna else _dna_complement_table) if strand < 0 else None
+    return Seq(RecordSequence(
+        data._bases, data._forward_pieces(start, stop), reverse=data._reverse != (strand < 0),
+        translate=_then(data._translate, complement),
+    ))
+
+
+def two_turns(seq: Seq | MutableSeq) -> Seq:
+    """``seq`` read twice round (a circular record across its origin), read from ``seq``: its bytes equal ``seq + seq``."""
+
+    data = _viewed(seq)
+    if data is None:
+        turns = seq + seq
+        return turns if isinstance(turns, Seq) else Seq(turns)
+    return Seq(RecordSequence(data._bases, data._pieces * 2, reverse=data._reverse, translate=data._translate))
+
+
+def sequence_spans(seq: Seq | MutableSeq | bytes, size: int = _SPAN_BASES) -> Iterator[bytes]:
+    """``seq``'s bases ``size`` at a time, in order: a reader of a whole sequence holds one span at a time."""
+
+    for start in range(0, len(seq), size):
+        yield bytes(seq[start:start + size])
+
+
+def same_bases(left: Seq | MutableSeq, right: Seq | MutableSeq) -> bool:
+    """Whether two sequences hold the same bases, read a span at a time."""
+
+    return len(left) == len(right) and all(
+        a == b for a, b in zip(sequence_spans(left), sequence_spans(right), strict=True))
 
 
 def _uniform_run(buf: bytes, start: int, end: int) -> tuple[int, int, bytes]:
@@ -995,9 +1128,9 @@ def sequence_files_unchanged(records: Iterable[SeqRecord]) -> bool:
     checked: set[int] = set()
     for record in records:
         data = getattr(record.seq, "_data", None)
-        if not isinstance(data, RecordSequence):
+        if not isinstance(data, RecordSequence) or isinstance(data._bases, bytes):
             continue
-        source = data._table.source
+        source = data._bases.source
         if source.key in checked:
             continue
         if not source.unchanged():
@@ -1023,5 +1156,9 @@ __all__ = [
     "read_fasta_records",
     "read_flat_records",
     "read_gff3_text",
+    "same_bases",
     "sequence_files_unchanged",
+    "sequence_spans",
+    "sequence_view",
+    "two_turns",
 ]

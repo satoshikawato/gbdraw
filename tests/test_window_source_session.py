@@ -369,6 +369,26 @@ def test_a_session_redraws_an_edited_crop_from_its_source_with_the_edits(spec: s
     assert replay == live
 
 
+def test_an_edited_reverse_complemented_crop_of_an_rna_record_is_saved_on_its_source(tmp_path: Path) -> None:
+    """A reverse-complemented crop of an RNA record is complemented as RNA; its edits are written on its source,
+    whose window is complemented as the crop was (OV-3332: it was compared as DNA and saved as its own bytes)."""
+
+    record = _record("src", "linear")
+    record.seq = Seq(str(record.seq).replace("T", "U"))
+    record.annotations["molecule_type"] = "ss-RNA"
+    crop = apply_region_specs([record], parse_region_specs(["src:20001-40000:rc"]))[0]
+    assert "U" in str(crop.seq)
+    _edit(crop)
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(crop), record_key="r"),),
+        options=LinearDiagramOptions(config_overrides=_TRACKS), output=_output(tmp_path),
+    )
+    live, replay = _replayed(request, tmp_path)
+    [saved] = _saved_records(tmp_path)
+    assert saved["windows"] == [{"start": 20001, "end": 40000, "reverseComplement": True, "column": None}]
+    assert replay == live
+
+
 def _flanked_source() -> SeqRecord:
     """A circular 60 kb record with a CDS across base 20,000, a CDS joined across the origin, and one inside 20-40 kb."""
 

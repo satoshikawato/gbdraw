@@ -8,21 +8,22 @@ import numpy as np
 import pytest
 from Bio.Seq import MutableSeq, Seq
 
-from gbdraw.analysis.skew import _prefix_counts_at, counted_sequence
+from gbdraw.analysis import skew
+from gbdraw.analysis.skew import _prefix_counts_at, counted_bases
 
 
 @pytest.mark.parametrize(
     "seq",
-    ["acgtuACGTUnN-", Seq("acgtuACGTUnN-"), MutableSeq("acgtuACGTUnN-"), b"acgtuACGTUnN-"],
+    [Seq("acgtuACGTUnN-"), MutableSeq("acgtuACGTUnN-"), b"acgtuACGTUnN-"],
 )
-def test_counted_sequence_is_one_bytes_copy_with_case_ignored_and_u_as_t(seq: object) -> None:
+def test_counted_bases_read_case_ignored_and_u_as_t(seq: object) -> None:
     # Every byte other than A, C, G, T and U is an unknown base and reads as N (OV-2799).
-    assert counted_sequence(seq) == b"ACGTTACGTTNNN"
+    assert b"".join(counted_bases(seq)) == b"ACGTTACGTTNNN"
 
 
-def test_counted_sequence_rejects_non_ascii_like_the_encoder_it_replaces() -> None:
-    with pytest.raises(UnicodeEncodeError):
-        counted_sequence("ACGTé")
+def test_counted_bases_are_read_a_chunk_at_a_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(skew, "_COUNT_CHUNK", 4)
+    assert list(counted_bases(Seq("acgtuACGTUnN-"))) == [b"ACGT", b"TACG", b"TTNN", b"N"]
 
 
 def test_prefix_counts_read_unsorted_duplicate_and_out_of_range_positions() -> None:
