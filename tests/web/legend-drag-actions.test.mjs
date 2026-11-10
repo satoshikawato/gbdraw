@@ -135,7 +135,8 @@ const dragFixture = () => {
     layoutRepositionMode: ref(true),
     zoom: ref(1),
     skipCaptureBaseConfig: ref(false),
-    activeDrawing: () => ({ canvasPadding: null })
+    activeDrawing: () => ({ canvasPadding: null }),
+    sessionOperationAvailability: () => null
   };
   return { legend, state, svg };
 };

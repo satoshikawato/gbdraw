@@ -118,7 +118,7 @@ export const createFeatureEditHistory = ({
   // An explicit removal of the edits Python reported unresolved (R2).
   const removeUnmatchedFeatureEdits = undoableAction(msg('Remove unmatched feature edits'), () => {
     const drawing = state.activeDrawing();
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     return removeUnresolvedFeatureEdits({
       featureEdits: drawing.slices.featureEdits, notices: featureIdentityNotices.value

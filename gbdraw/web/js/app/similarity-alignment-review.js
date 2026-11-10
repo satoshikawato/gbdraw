@@ -151,7 +151,7 @@ export const createSimilarityAlignmentTakeover = ({
     document.getElementById('similarity-alignment-dialog-title')?.focus();
   };
   const applySimilarityAlignmentDialog = async (reset = false) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!reset) similarityAlignmentApplying = true;
     let outcome;

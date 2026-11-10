@@ -246,6 +246,12 @@ const generatedDrawingProperty = (fixture) => (Object.hasOwn(fixture, 'generated
   generatedDrawingId: { value: { value: firstDrawingId('circular') }, configurable: true, writable: true }
 });
 
+// The Session busy check every owner calls before an edit, which state.js
+// always has: no Session operation runs unless the fixture names its own.
+const sessionAvailabilityProperty = (fixture) => ('sessionOperationAvailability' in fixture ? {} : {
+  sessionOperationAvailability: { value: () => null, configurable: true, writable: true }
+});
+
 // The fixture with the drawing store that services and owners read
 // (`state.drawingOf`, `state.drawingList()`, `state.activeDrawing()`): the
 // fixture is the drawing of both modes, so a member the test replaces later is
@@ -256,6 +262,7 @@ export const withDrawings = (fixture) => Object.defineProperties(withSliceHandle
   ...storeProperties(fixture, fixture),
   ...(Object.hasOwn(fixture, 'id') ? {} : { id: { value: firstDrawingId('circular'), configurable: true } }),
   ...generatedDrawingProperty(fixture),
+  ...sessionAvailabilityProperty(fixture),
   activeDrawing: { value: () => fixture, configurable: true }
 });
 
@@ -264,5 +271,6 @@ export const withDrawings = (fixture) => Object.defineProperties(withSliceHandle
 export const withModeDrawings = (fixture, { circular, linear }) => Object.defineProperties(fixture, {
   ...storeProperties(withSliceHandles(circular), withSliceHandles(linear)),
   ...generatedDrawingProperty(fixture),
+  ...sessionAvailabilityProperty(fixture),
   activeDrawing: { value: () => (fixture.mode?.value === 'linear' ? linear : circular), configurable: true }
 });
