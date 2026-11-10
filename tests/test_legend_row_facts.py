@@ -39,8 +39,8 @@ from gbdraw.diagrams.circular.assemble import _circular_legend_slots, _sync_lege
 from gbdraw.diagrams.linear.assemble import _sync_legend_table_for_linear_slots
 from gbdraw.legend.table import LegendTable, _generated_legend_rows
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, _decode_track_slots
-from gbdraw.tracks.circular import parse_circular_track_slots
-from gbdraw.tracks.linear import default_linear_track_slots, parse_linear_track_slots
+from gbdraw.tracks.circular import normalize_circular_track_slots, parse_circular_track_slots
+from gbdraw.tracks.linear import default_linear_track_slots, normalize_linear_track_slots, parse_linear_track_slots
 from tests.utils.web_render_result import web_result_svg
 
 _COLOR_COLUMNS = ["feature_type", "qualifier_key", "value", "color", "caption"]
@@ -428,7 +428,7 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
     )
     if case["mode"] == "circular":
         table = _sync_legend_table_for_circular_slots(
-            table, slots=legend_slot_sources(parse_circular_track_slots(entries)), gc=gc_config, skew=skew_config,
+            table, slots=legend_slot_sources(normalize_circular_track_slots(parse_circular_track_slots(entries))), gc=gc_config, skew=skew_config,
             depth=None, depth_tracks=depth_tracks,
         )
     else:
@@ -440,7 +440,7 @@ def test_track_slot_legend_rows_are_the_rows_the_web_reads_from_the_slots(case):
         for key, entry in defaults.items():
             table.add_default_track(key, {"fill": entry["fill"]})
         table = _sync_legend_table_for_linear_slots(
-            table, slots=legend_slot_sources(parse_linear_track_slots(entries)), gc=gc_config, skew=skew_config,
+            table, slots=legend_slot_sources(normalize_linear_track_slots(parse_linear_track_slots(entries))), gc=gc_config, skew=skew_config,
             depth_tracks=depth_tracks,
         )
     assert [[key, row["fill"]] for key, row in table.items()] == [[key, fill] for key, _, _, fill in case["rows"]]

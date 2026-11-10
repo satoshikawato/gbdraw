@@ -492,14 +492,19 @@ for (const [name, mode, slots, axis, stack, coveredOfItsZ = []] of [
   ['circular overlay across the Axis', 'circular', ['features:features', 'y:content@z=1',
     'a:annotations@set_id=a,side=overlay,anchor_slot=oc,to_slot=t,z=1', 'oc:content@side=outside', 'x:skew@side=outside,z=1', 't:skew'],
   3, [['a', 'overlay'], ['oc', 'outside'], ['x', 'outside'], ['features', 'inside'], ['y', 'inside'], ['t', 'inside']], ['y', 'x']],
-  // The Legend lists the entries of Annotations rows in the stack's order: the span `a` stays after `b`, written before
-  // it, although the row after `a` lies on the other side.
+  // The span `a` keeps its place after `b`, written before it, although the row after `a` lies on the other side:
+  // region labels keep off the labels of the slots before theirs.
   ['linear overlay after an Annotations row', 'linear', ['features:features', 'b:annotations@set_id=b,side=below,z=1',
     'a:annotations@set_id=a,side=overlay,anchor_slot=features,to_slot=sk,z=1', 'up:skew@side=above', 'sk:skew@side=below'],
   1, [['up', 'above'], ['features', 'below'], ['b', 'below'], ['a', 'overlay'], ['sk', 'below']], ['b']],
   ['circular overlay after an Annotations row', 'circular', ['features:features', 'b:annotations@set_id=b,side=inside,z=1',
     'a:annotations@set_id=a,side=overlay,anchor_slot=features,to_slot=sk,z=1', 'up:skew@side=outside', 'sk:skew'],
-  1, [['up', 'outside'], ['features', 'inside'], ['b', 'inside'], ['a', 'overlay'], ['sk', 'inside']], ['b']]
+  1, [['up', 'outside'], ['features', 'inside'], ['b', 'inside'], ['a', 'overlay'], ['sk', 'inside']], ['b']],
+  // Rows written out of side order: the Legend lists them by side in the CLI as in the Web (OV-3187).
+  ['circular track rows out of side order', 'circular', ['features:features', 'gc:content', 'sk:skew@side=outside'],
+    1, [['sk', 'outside'], ['features', 'inside'], ['gc', 'inside']]],
+  ['linear Annotations rows out of side order', 'linear', ['features:features', 'b:annotations@set_id=b,side=below',
+    'r:annotations@set_id=r,side=above'], 1, [['r', 'above'], ['features', 'below'], ['b', 'below']]]
 ]) test(`Session CLI ${name} stack without an Axis index draws its region set where the CLI drew it`, async ({ browser }, testInfo) => {
   test.setTimeout(900_000);
   await fs.writeFile(testInfo.outputPath('regions.tsv'), [
@@ -507,7 +512,7 @@ for (const [name, mode, slots, axis, stack, coveredOfItsZ = []] of [
     'regions\thead\tline\t1\t9500\tHead genes\tRegion set', 'regions\ttail\tline\t9600\t19000\tTail genes\tRegion set',
     ...Object.entries({
       hl: 'hl\th1\thighlight\t20000\t26000\t\tHighlight set', a: 'a\ta1\thighlight\t1000\t9000\t\tAlpha set',
-      b: 'b\tb1\thighlight\t5000\t12000\t\tBeta set'
+      b: 'b\tb1\thighlight\t5000\t12000\t\tBeta set', r: 'r\tr1\thighlight\t14000\t20000\t\tRho set'
     })
       .filter(([set]) => slots.some((slot) => slot.includes(`set_id=${set},`))).map(([, row]) => row)
   ].join('\n') + '\n');

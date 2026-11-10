@@ -337,13 +337,13 @@ def test_a_stamp_is_refused_for_a_changed_type_and_carried_to_a_copy_only_while_
     assert compute_source_feature_hash(feature, record) == stamped
 
     copy_of = SeqFeature(location=SimpleLocation(10, 20, strand=1), type="CDS")
-    _copy_source_feature_identity(feature, copy_of, fallback_index=1, coord_base=1, coord_step=1)
+    _copy_source_feature_identity(feature, copy_of, index=1, coord_base=1, coord_step=1, period=None)
     assert getattr(copy_of, _STAMP_ATTR).location is copy_of.location
     assert compute_source_feature_hash(copy_of, record) == stamped
 
     feature.location = SimpleLocation(150, 450, strand=1)
     stale_copy = SeqFeature(location=feature.location, type="CDS")
-    _copy_source_feature_identity(feature, stale_copy, fallback_index=1, coord_base=1, coord_step=1)
+    _copy_source_feature_identity(feature, stale_copy, index=1, coord_base=1, coord_step=1, period=None)
     assert not hasattr(stale_copy, _STAMP_ATTR)
 
 

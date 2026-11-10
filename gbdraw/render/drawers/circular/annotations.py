@@ -59,6 +59,14 @@ from gbdraw.render.drawers.annotation_marks import (
     mark_reach,
     past_span_edge,
 )
+from gbdraw.render.drawers.label_backing import (
+    BackedRegionLabel,
+    SectorBacking,
+    TurnedBacking,
+    region_label_front,
+    sector_backing,
+    turned_backing,
+)
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
@@ -143,6 +151,10 @@ class CircularAnnotationLabel:
     (``italic_markup_runs`` of the region's label). A ``cut`` label is curved
     text longer than its circle, drawn as the start of its runs and an ellipsis;
     one cut so far that no letter is left keeps no letter (``keeps_no_letter``).
+    A ``backed`` label is drawn in front of the leader lines behind its letters
+    on its ``backing_shape`` (``CIR-RGN-FRONT``, as Linear's ``RGN-FRONT``;
+    OV-3156): Linear's rounded box turned with straight text, an annular
+    sector for curved text (``label_backing``); ``backing`` is its convex parts.
     """
 
     annotation_id: str
@@ -158,6 +170,22 @@ class CircularAnnotationLabel:
     height: float
     arc: CircularLabelArc | None = None
     cut: bool = False
+    backing_shape: TurnedBacking | SectorBacking | None = None
+
+    @property
+    def backed(self) -> bool:
+        return self.backing_shape is not None
+
+    @property
+    def backing(self) -> tuple[Polygon, ...]:
+        return () if self.backing_shape is None else self.backing_shape.parts
+
+    @property
+    def footprint(self) -> tuple[Polygon, ...]:
+        """What the drawn label covers, which later labels keep clear of: its letters, and its backing when it has
+        one (as Linear's ``LinearAnnotationLabel.footprint``)."""
+
+        return (*self.parts, *self.backing)
 
     @property
     def ink_bounds(self) -> Aabb:
@@ -391,7 +419,7 @@ class CircularLabelObstacles:
     made_way: tuple[RegionLabelPlace, ...] = ()
 
     def with_labels(self, labels: Sequence[CircularAnnotationLabel]) -> CircularLabelObstacles:
-        return replace(self, labels=(*self.labels, *(CircularObstacleLabel(label.parts) for label in labels)))
+        return replace(self, labels=(*self.labels, *(CircularObstacleLabel(label.footprint) for label in labels)))
 
 
 def _box(points: Sequence[Point]) -> Aabb:
@@ -416,14 +444,22 @@ class _IndexedLabel(NamedTuple):
 
 class _Overlaps(NamedTuple):
     """What a label's letters overlap with no clearance kept (``_ObstacleIndex.overlaps``): the obstacle labels, by
-    their index (the warning counts them), whether the letters meet a feature label's letters, not only its leader (OV-3017), and whether they meet the
-    letters of a region label placed before them.
-
+    their index (the warning counts them), whether the letters meet a feature label's letters, not only its leader
+    (OV-3017), whether they meet the letters (or backing) of a region label placed before them, and whether they meet
+    a feature label's leader (OV-3156).
     """
 
     met: frozenset[int]
     feature_letters: bool
     region_letters: bool
+    feature_leaders: bool
+
+    @property
+    def only_leaders(self) -> bool:
+        """Whether only feature labels' leader lines run behind the letters: the label may be backed in front of
+        them (CIR-RGN-FRONT)."""
+
+        return self.feature_leaders and not (self.feature_letters or self.region_letters)
 
 
 class _ObstacleIndex:
@@ -459,7 +495,7 @@ class _ObstacleIndex:
     def add(self, label: CircularAnnotationLabel) -> None:
         """Count ``label`` as an obstacle from now on, as ``CircularLabelObstacles.with_labels`` would."""
 
-        self._add(CircularObstacleLabel(label.parts))
+        self._add(CircularObstacleLabel(label.footprint))
 
     def conflicts(self, label: CircularAnnotationLabel) -> int:
         return sum(int(parts) + segments for parts, segments in self._hits(label, self._obstacles.clearance))
@@ -470,6 +506,7 @@ class _ObstacleIndex:
             frozenset(at for at, (_obstacle, (parts, segments)) in enumerate(hits) if parts or segments),
             any(obstacle.feature and parts for obstacle, (parts, _segments) in hits),
             any(not obstacle.feature and parts for obstacle, (parts, _segments) in hits),
+            any(obstacle.feature and segments > 0 for obstacle, (_parts, segments) in hits),
         )
 
     def _hits(self, label: CircularAnnotationLabel, kept: float) -> list[tuple[bool, int]]:
@@ -505,6 +542,54 @@ class _ObstacleIndex:
             )
 
         return [(meets_parts(obstacle), segments_met(obstacle)) for obstacle in self._labels]
+
+
+def _origin_distance(polygon: Sequence[Point]) -> float:
+    """How near the circle centre a convex polygon that does not hold it comes."""
+
+    def to_segment(a: Point, b: Point) -> float:
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        length = dx * dx + dy * dy
+        t = 0.0 if length == 0.0 else max(0.0, min(1.0, -(a[0] * dx + a[1] * dy) / length))
+        return math.hypot(a[0] + t * dx, a[1] + t * dy)
+
+    return min(to_segment(polygon[at], polygon[(at + 1) % len(polygon)]) for at in range(len(polygon)))
+
+
+def _backed(label: CircularAnnotationLabel, *, outward: bool) -> CircularAnnotationLabel:
+    """``label`` on its backing (CIR-RGN-FRONT, ``label_backing``): its letters padded as Linear's, but toward its
+    mark no further than ``label_offset`` (the gap the letters keep from the mark), so it never covers its mark."""
+
+    near, far = label.ink_radii
+    if label.arc is not None:
+        anchor = math.atan2(label.y, label.x)
+        turns = [
+            anchor + (math.atan2(y, x) - anchor + math.pi) % (2.0 * math.pi) - math.pi for part in label.parts for x, y in part
+        ]
+        edge = near - label.label_offset if outward else far + label.label_offset
+        return replace(label, backing_shape=sector_backing(near, far, min(turns), max(turns), label.font_size, edge=edge))
+    # Straight text: its ink box in its own frame (turned back about its centre), and the direction of the centre
+    # in that frame (toward the mark when outward).
+    turn = math.radians(label.rotation)
+    cos, sin = math.cos(turn), math.sin(turn)
+    ink = _box([
+        (label.x + (x - label.x) * cos + (y - label.y) * sin, label.y - (x - label.x) * sin + (y - label.y) * cos)
+        for x, y in label.parts[0]
+    ])
+    toward = (-label.x * cos - label.y * sin, label.x * sin - label.y * cos)
+    if not outward:
+        toward = (-toward[0], -toward[1])
+
+    def clear_of_mark(polygon: Sequence[Point]) -> bool:
+        if outward:
+            return _origin_distance(polygon) >= near - label.label_offset - 1e-6
+        return max(math.hypot(x, y) for x, y in polygon) <= far + label.label_offset + 1e-6
+
+    shape = turned_backing(
+        ink, label.font_size, rotation=label.rotation, center=(label.x, label.y), toward=toward, clear=clear_of_mark
+    )
+    return replace(label, backing_shape=shape)
+
 
 def _reach(label: CircularAnnotationLabel, inner_radius_px: float, outer_radius_px: float, outward: bool) -> float:
     """How far a label's letters, ``label_offset`` beyond them included, reach past its slot's band on its side."""
@@ -582,8 +667,11 @@ def circular_annotation_labels(
     A label sits at its region's midpoint. With ``obstacles``, a label whose
     letters meet one, or a label of this track placed before it, moves along
     its region (``_along_region``) within the room the default places take, to
-    a place where it keeps a letter. A label whose letters still meet a
-    feature label's letters there is reported
+    a place where it keeps a letter. A label whose letters meet only leader
+    lines there is drawn in front of them on a backing (``_backed``,
+    CIR-RGN-FRONT) unless the backing would cover another label's letters or
+    backing. A label whose letters still meet a feature label's letters there
+    is reported
     (``CircularAnnotationLabels.over_feature_letters``); a label the feature
     labels then made way for is drawn at that place
     (``CircularLabelObstacles.made_way``, CIR-RGN-YIELD). A label whose cut
@@ -674,6 +762,13 @@ def circular_annotation_labels(
                 join_origin=track.join_origin,
             )
             met = index.overlaps(label)
+        if met.only_leaders:
+            # Only leader lines run behind the letters: the label is drawn in front of them on a backing that covers
+            # no other label's letters or backing (CIR-RGN-FRONT), and a leader behind it is no conflict.
+            backed = _backed(label, outward=outward)
+            behind = index.overlaps(replace(label, parts=backed.backing))
+            if not (behind.feature_letters or behind.region_letters):
+                label, met = backed, met._replace(met=frozenset())
         overlapped[annotation.id] = met.met
         if met.feature_letters:
             over_letters.append(RegionLabelPlace(annotation.id, place))
@@ -1470,7 +1565,7 @@ def circular_annotation_track_content(
                         item_group.add(cap_path)
 
         label = labels_by_id.get(annotation.id)
-        if label is not None:
+        if label is not None and not label.backed:  # else in front of the leaders (circular_region_label_front_content)
             item_group.add(_label_text(label, font_family, definitions, str(item_group.attribs["id"])))
         group.add(item_group)
     clip_paths: list[BaseElement] = []
@@ -1486,6 +1581,33 @@ def circular_annotation_track_content(
         clip_paths.append(clip_path)
         group.attribs["clip-path"] = f"url(#{clip_id})"
     return GroupContent.of(group, (*definitions.values(), *clip_paths))
+
+
+def circular_region_label_front_content(
+    track: ResolvedAnnotationTrack,
+    *,
+    record_index: int,
+    font_family: str,
+    labels: Sequence[CircularAnnotationLabel],
+    dom_group_id: str,
+) -> GroupContent | None:
+    """The track's backed labels in front of the record's leader lines (CIR-RGN-FRONT, OV-3156), around the circle
+    centre; ``None`` when it has none. Each label is drawn on its ``backing_shape``, white at 70 % opacity
+    (``region_label_front``, as in Linear); a curved label's path goes into the content's definitions."""
+
+    definitions: dict[str, BaseElement] = {}
+    backed: list[BackedRegionLabel] = []
+    for label in labels:
+        if label.backing_shape is None:
+            continue
+        item_id = annotation_dom_id(
+            record_index=record_index, slot_id=track.slot_id, set_id=track.set_id, annotation_id=label.annotation_id
+        )
+        backed.append(
+            BackedRegionLabel(item_id, label.backing_shape.element(), _label_text(label, font_family, definitions, item_id))
+        )
+    group = region_label_front(dom_group_id, backed)
+    return None if group is None else GroupContent.of(group, tuple(definitions.values()))
 
 
 __all__ = [
@@ -1507,4 +1629,5 @@ __all__ = [
     "circular_annotation_labels_across_centre",
     "circular_annotation_track_content",
     "circular_annotation_track_ink",
+    "circular_region_label_front_content",
 ]

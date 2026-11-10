@@ -239,7 +239,7 @@ FUNCTION_LINES: dict[str, int] = {
     "gbdraw/api/options.py::_ModeDiagramOptions.__post_init__": 165,
     "gbdraw/circular.py::_get_args": 604,
     "gbdraw/circular.py::run_circular_from_namespace": 567,
-    "gbdraw/diagrams/circular/assemble.py::_draw_resolved_circular_slot": 240,
+    "gbdraw/diagrams/circular/assemble.py::_draw_resolved_circular_slot": 230,
     "gbdraw/diagrams/circular/assemble.py::_try_shift_labels_away_from_legend": 155,
     "gbdraw/diagrams/circular/assemble.py::add_record_on_circular_canvas": 634,
     "gbdraw/diagrams/circular/assemble.py::circular_labels": 228,

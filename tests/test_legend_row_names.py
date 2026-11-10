@@ -18,7 +18,7 @@ from gbdraw.annotations.legend import sync_annotation_legend_entries
 from gbdraw.annotations.models import HatchStyle, RegionAnnotationStyle
 from gbdraw.legend.circular_layout import build_circular_legend_layout
 from gbdraw.legend.sources import depth_legend_sources, legend_slot_sources
-from gbdraw.tracks.linear import LinearTrackSlot
+from gbdraw.tracks.linear import LinearTrackSlot, normalize_linear_track_slots
 from gbdraw.legend.table import (
     LegendTable,
     drawn_legend_names,
@@ -125,10 +125,10 @@ def test_depth_tracks_with_one_label(fills, keys, drawn):
     table = sync_depth_track_legend_entries(
         LegendTable(),
         depth_legend_sources(_depth_track(index, fill) for index, fill in enumerate(fills)),
-        slots=legend_slot_sources(
+        slots=legend_slot_sources(normalize_linear_track_slots([
             LinearTrackSlot(id=f"depth_{index + 1}", renderer="depth", params={"track_index": index})
             for index in range(len(fills))
-        ),
+        ])),
     )
     assert list(table) == keys
     assert [names.drawn for names in table.names().values()] == drawn
@@ -156,7 +156,7 @@ def test_annotation_rows_follow_the_rule_and_keep_their_keys():
     slot = LinearTrackSlot(id="islands", renderer="annotations", params={"set_id": "islands"})
     table = LegendTable()
     table.add("Island", solid("#ff0000", "gray", 1))
-    table = sync_annotation_legend_entries(table, bundle, legend_slot_sources([slot]))
+    table = sync_annotation_legend_entries(table, bundle, legend_slot_sources(normalize_linear_track_slots([slot])))
 
     # The legend swatch draws no opacity, so the second source shares the first's row.
     assert list(table) == ["Island", "Island (2)", "Island (4)"]
@@ -187,7 +187,7 @@ def test_only_a_legend_label_draws_an_annotation_color_in_the_legend():
             )
             for fill, legend_label in annotations
         ))
-        return list(sync_annotation_legend_entries(LegendTable(), bundle, legend_slot_sources([slot])))
+        return list(sync_annotation_legend_entries(LegendTable(), bundle, legend_slot_sources(normalize_linear_track_slots([slot]))))
 
     assert rows(("#ff0000", None)) == rows(("#00ff00", None)) == []
     assert len(rows(("#ff0000", "Island"), ("#00ff00", "Island"))) == 2

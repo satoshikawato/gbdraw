@@ -8,7 +8,8 @@
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { test, expect } = require('@playwright/test');
-const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp, settleLive } = require('./helpers/app-lifecycle.cjs');
+const { expectLiveEqualsGenerate } = require('./helpers/live-generate-parity.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
@@ -419,4 +420,52 @@ test('a region label drawn in front of the leader lines selects its annotation',
   await front.locator('text').click();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.selectedAnnotation?.id)).toBe('r0');
   await expect(annotationsPanel(page).locator('.border-blue-400')).toHaveCount(1);
+});
+
+// CIR-RGN-FRONT (OV-3156): on lambda with labels Out, only leader lines run behind "Replication" and
+// "Lysis", so they are drawn in front of them on a white rounded backing, outside their annotations'
+// groups, as in Linear, and the notice counts no region label. A click on one selects its annotation's row, a
+// colour edit redraws it at once, and Generate then draws the same figure.
+test('a Circular region label drawn in front of the leader lines selects its annotation', async ({ page }) => {
+  test.setTimeout(600000);
+  await openWithOuterLabels(page, { name: 'lambda.gb', text: LAMBDA() });
+  const rows = [['head', 1, 9500, 'Head genes'], ['tail', 9600, 19000, 'Tail genes'], ['b2', 22000, 27000, 'b2 region'],
+    ['int', 27500, 29500, 'Integration'], ['early', 33000, 38000, 'Early left'], ['repl', 38500, 40500, 'Replication'],
+    ['lysis', 44000, 46500, 'Lysis']];
+  const tsv = ['set_id\tid\tmark\tstart\tend\tlabel\tlabel_orientation\tlabel_font_size',
+    ...rows.map(([id, start, end, label]) => `regions\t${id}\tline\t${start}\t${end}\t${label}\thorizontal\t14`), ''].join('\n');
+  await annotationsPanel(page).locator('input[type=file]')
+    .setInputFiles({ name: 'regions.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(tsv) });
+  await page.waitForFunction(() => window.__GBDRAW_APP__.annotationSets.length === 1);
+  await generateAndWaitForResult(page);
+  await expect(page.getByTestId('label-fit-notice').filter({ hasText: 'Region labels' })).toHaveCount(0);
+  const front = page.locator('.origin-top svg [data-gbdraw-region-label-for]');
+  await expect(front).toHaveCount(2);
+  expect(await front.evaluateAll((items) => items.map((item) => [
+    item.closest('svg').querySelector(`[id="${item.getAttribute('data-gbdraw-region-label-for')}"]`)
+      ?.getAttribute('data-gbdraw-annotation-id'),
+    item.firstElementChild.tagName, item.firstElementChild.getAttribute('fill-opacity'),
+    item.firstElementChild.getAttribute('rx'), item.querySelector('text')?.textContent
+  ]))).toEqual([['repl', 'rect', '0.7', '2.52', 'Replication'], ['lysis', 'rect', '0.7', '2.52', 'Lysis']]);
+  // The letters on top of the backing are what the pointer meets over the label.
+  const replication = front.filter({ hasText: 'Replication' }).locator('text');
+  const box = await replication.boundingBox();
+  expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-gbdraw-region-label-for]')
+    ?.textContent, { x: box.x + box.width / 2, y: box.y + box.height / 2 })).toBe('Replication');
+  await annotationsPanel(page).evaluate((details) => { details.open = true; });
+  await replication.hover();
+  await replication.click();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectedAnnotation?.id)).toBe('repl');
+  const row = annotationsPanel(page).locator('.border-blue-400');
+  await expect(row).toHaveCount(1);
+  await expect(row.getByLabel('Annotation label', { exact: true })).toHaveValue('Replication');
+  // A colour applies at once (PD-OI-103): the live redraw keeps both labels in front, and Generate draws the same
+  // figure (R3).
+  await row.getByLabel('Annotation fill color', { exact: true }).fill('#cc3311');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.annotationSets[0].annotations
+    .find((item) => item.id === 'repl')?.style?.fill)).toBe('#cc3311');
+  await settleLive(page);
+  await expect(front).toHaveCount(2);
+  await expectLiveEqualsGenerate(page, { label: 'Circular region label in front of the leader lines' });
+  await expect(front).toHaveCount(2);
 });

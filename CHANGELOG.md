@@ -98,6 +98,30 @@ write-up of a release.
   from with those edits (OV-3034). The GC content, GC skew and Depth lines of a
   crop of a circular record hold their last value up to 12 o'clock, as those of
   a record that is not circular do.
+- Fixed: a feature added to a crop given in memory no longer stops the figure
+  with "duplicate source feature indexes" when the crop keeps other features
+  (OV-3141). A feature moved inside such a crop now has the ID of its new place
+  in the figure, as in the replay of its Session (OV-3142). A crop whose
+  feature cut at an end was moved or retyped is saved as its source with the
+  edit, so its replay keeps the crop's subtitle, width and every feature ID
+  (OV-3246). A crop that holds a copy of a feature it cut now draws, and its
+  Session replays it as drawn (OV-3247). A feature copied into a crop from
+  another crop of the same record is a feature added at its place, with the
+  ID and paint order its replay gives it (OV-3256). An edited crop across the
+  origin is saved as its source with the edits, so it replays as drawn, with
+  its subtitle, width, feature IDs and partial feature ends (OV-3262). A crop
+  of a crop across the origin that runs across the origin or lies past it now
+  draws, also reverse-complemented (OV-3270). A reverse-complemented crop of a
+  reverse-complemented crop, back in its source's orientation, lists its
+  features in source order, so its replay paints overlapping features as the
+  figure does (OV-3271).
+- Changed: a crop given in memory and edited since its cut draws its features
+  in the order its Session replay draws them, the figure Save Session and Load
+  already gave: a crop in source order, with added features after the kept
+  ones, and a reverse-complemented crop by start. The Legend lists the feature
+  types in that order, and overlapping features are painted in that order.
+  The order of the crop's feature list no longer sets either; a whole record
+  and a crop as cut still draw in list order (OV-3229).
 - Changed: the Auto GC content and GC skew window is now at most a tenth of the
   drawn length, and the Auto step at most a tenth of the Auto window, so figures
   shorter than 10 kb keep about a hundred samples: a 671 bp region uses a 67 bp
@@ -233,10 +257,11 @@ write-up of a release.
   (Linear) after the features row was drawn inside or below it. Load now
   places each row on the side the CLI drew it. An Annotations row with no
   `side=` is read as outside (above), and a Linear features row with no
-  `side=` as below, as the CLI draws them. The Web lists the rows by side, so
-  where the CLI's order of writing differs, the Legend can list its entries in
-  another order: the track rows of a Circular Legend, and in both modes the
-  entries of Annotations rows on different sides (OV-3079, OV-3155).
+  `side=` as below, as the CLI draws them. Web Generate lists the Legend
+  entries of such a Session by side, as the CLI now does too (OV-3187); the
+  figure a gbdraw 0.14.5 or earlier CLI saved in it lists them in the order the
+  slots were written, so for a stack written out of side order the Legend order
+  changes at the first Generate (OV-3079, OV-3155).
 - Fixed: in Linear, the labels of a region overlay anchored to the features
   slot (`side=overlay,anchor_slot=features` without `cover_anchor` or
   `to_slot`) could be drawn on the CDS arrows (`layer=foreground` with the
@@ -264,9 +289,20 @@ write-up of a release.
   underlay now paints under, and a foreground overlay over, every other slot,
   whatever order the slots are written in, in the CLI, the Python API, and the
   Web app. Such a CLI stack saved as a Session now draws the same figure on Web
-  Generate, and its overlay rows keep their place in the Legend against the
-  other Annotations rows wherever the stack's sides allow it. Other figures are
-  unchanged (OV-3184, OV-3185).
+  Generate. Other figures are unchanged (OV-3184, OV-3185).
+- Changed: the Legend lists the rows of track slots and annotation slots by
+  side, in both modes: the rows outside (above) the Axis first, then the rows
+  on it, then the rows inside (below), each side in the order the slots are
+  written; an annotation overlay comes right after its `anchor_slot`. Before,
+  the CLI and the Python API listed them in the order the slots were written,
+  so a stack written out of side order, such as
+  `features, gc:content, sk:skew@side=outside`, listed GC content before the
+  GC skew ring that lies outside it, and the same stack in the Web app listed
+  them by side. A default figure (no track stack) also changes where an earlier
+  annotation set draws highlights with a legend label and a later set draws
+  another mark with one: the highlight entries, drawn over the features, now
+  come after the later set's entries, which lie outside them. No Gallery
+  Session, example figure or reference output changes (OV-3187).
 - Fixed (Web app): a Circular Session saved by the CLI with
   `--circular_track_axis_index` and a `features:features` slot with no
   `side=` or `lane_direction=` loaded with the lanes of the track type (split
@@ -655,6 +691,23 @@ write-up of a release.
   another overlap or a leader crossing is not made, and a region label the
   feature labels cannot clear is drawn and warned as before. Figures whose
   region labels meet no feature label's letters are unchanged.
+- Fixed: a Circular region label with feature labels' leader lines running
+  behind its letters was drawn with the lines visible through the letters, and
+  warned (on lambda with `--labels out`, "Replication" and "Lysis"). Such a
+  label is now drawn in front of the leader lines on a white backing at 70 %
+  opacity, padded 0.18 em beyond its letters and stopped before its own mark,
+  as Linear region labels are (a straight label's backing is Linear's rounded
+  box, turned with the letters), and the leader lines behind it no longer
+  count as overlaps: the region label overlaps that lambda warned of go from 7
+  to 0 with `--labels out` and from 4 to 0 with `--labels both`. There, where
+  "Lysis" was drawn, its backing would cover a feature label's letters, so it
+  is not backed there; the label repair no longer makes way for it, and it
+  takes the next place along its region where it can be backed, about 5 px
+  further. A label whose backing would cover another
+  label's letters or backing is drawn and warned as before. No figure changes
+  size, and figures without leader lines behind region letters are unchanged,
+  in the CLI, the Python API, and the Web app; a click on a backed label still
+  selects its annotation in the Web app (OV-3156).
 - Fixed: a Circular region label drawn along its circle was placed by the
   height of its letters along the ray through its middle, but each letter
   stands upright on the circle, so its corners reach farther from the centre.

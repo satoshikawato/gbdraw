@@ -530,33 +530,23 @@ def _display_feature_svg_id_from_data(data, display_start, display_end, display_
 def _web_feature_view_hash_parts_index(record):
     if record is None:
         return {}
-    from gbdraw.core.record_metadata import _source_feature_index
+    from gbdraw.core.record_metadata import _feature_source_index_map, _iter_source_features
 
+    # Each feature's source feature index comes from its one owner, which the protein manifest reads too.
+    source_indexes = _feature_source_index_map(record.features)
     indexed = {}
-    fallback_index = 0
-
-    def walk(features):
-        nonlocal fallback_index
-        for feature in features or ():
-            source_index = _source_feature_index(feature)
-            resolved_index = fallback_index if source_index is None else source_index
-            fallback_index += 1
-            location = getattr(feature, "location", None)
-            raw_parts = list(getattr(location, "parts", None) or [location])
-            indexed.setdefault(
-                int(resolved_index),
-                tuple(
-                    (
-                        int(part.start),
-                        int(part.end),
-                        int(part.strand) if part.strand in (-1, 1) else None,
-                    )
-                    for part in raw_parts
-                    if part is not None
-                )
+    for feature in _iter_source_features(record.features):
+        location = getattr(feature, "location", None)
+        raw_parts = list(getattr(location, "parts", None) or [location])
+        indexed[source_indexes[id(feature)]] = tuple(
+            (
+                int(part.start),
+                int(part.end),
+                int(part.strand) if part.strand in (-1, 1) else None,
             )
-            walk(getattr(feature, "sub_features", None))
-    walk(record.features)
+            for part in raw_parts
+            if part is not None
+        )
     return indexed
 
 def _web_feature_view_hash_parts(record, source_feature_position):

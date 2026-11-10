@@ -23,7 +23,12 @@ from Bio.Seq import MutableSeq, Seq
 from Bio.SeqRecord import SeqRecord
 from numpy.typing import NDArray
 
-from gbdraw.core.record_metadata import _read_coord_map, record_content_digest
+from gbdraw.core.record_metadata import (
+    _iter_source_features,
+    _read_coord_map,
+    _source_feature_index,
+    record_content_digest,
+)
 
 WINDOW_SOURCE_ANNOTATION = "gbdraw_window_source"
 
@@ -44,6 +49,11 @@ class WindowSource:
     # The crop's ``record_content_digest`` when it was cut, while it is a crop of ``record`` as cut: ``None`` when
     # it was cut from a crop changed since that crop was cut.
     crop_digest: str | None = None
+    # The source feature indexes of the features the crop was cut with (``keep_window_source``): the one owner of which
+    # features the crop cut. A feature that carries any other index (one copied from another crop of ``record``, say)
+    # is a feature added to the crop, live and in a Session (``record_metadata._holder_of``, OV-3256). Empty for a
+    # record that is not a crop.
+    cut_indexes: frozenset[int] = frozenset()
 
     @property
     def sequence(self) -> Seq | MutableSeq:
@@ -63,13 +73,17 @@ def keep_window_source(crop: SeqRecord, record: SeqRecord) -> None:
     from ``record``, and mark it as ``record``'s crop as cut.
 
     A crop of a crop reads the first record's bases; it is that record's crop as cut only while the crop it was
-    cut from is.
+    cut from is, and it cut only the features that crop cut.
     """
 
     stored = record.annotations.get(WINDOW_SOURCE_ANNOTATION)
     as_cut = not isinstance(stored, WindowSource) or stored.holds_for(record)
+    carried = (_source_feature_index(feature) for feature in _iter_source_features(crop.features))
+    cut = frozenset(index for index in carried if index is not None)
     crop.annotations[WINDOW_SOURCE_ANNOTATION] = replace(
-        window_source(record), crop_digest=record_content_digest(crop) if as_cut else None
+        window_source(record),
+        crop_digest=record_content_digest(crop) if as_cut else None,
+        cut_indexes=cut & stored.cut_indexes if isinstance(stored, WindowSource) else cut,
     )
 
 

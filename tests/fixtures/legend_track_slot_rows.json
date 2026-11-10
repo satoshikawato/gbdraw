@@ -1857,6 +1857,88 @@
           "#222222"
         ]
       ]
+    },
+    {
+      "name": "circular: a skew slot outside the Axis written after one inside takes the first key, as the Legend lists the slots by side (OV-3187)",
+      "mode": "circular",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#8daf38",
+        "skew_high": "#f6a8f1",
+        "skew_low": "#bd96df"
+      },
+      "slots": [
+        "features:features",
+        "a:dinucleotide_skew@positive_color=#ff0000,negative_color=#0000ff",
+        "b:dinucleotide_skew@side=outside,positive_color=#00ff00,negative_color=#ffff00"
+      ],
+      "rows": [
+        [
+          "GC skew (+)",
+          "skew_high",
+          "b",
+          "#00ff00"
+        ],
+        [
+          "GC skew (-)",
+          "skew_low",
+          "b",
+          "#ffff00"
+        ],
+        [
+          "GC skew (+) (2)",
+          "skew_high",
+          "a",
+          "#ff0000"
+        ],
+        [
+          "GC skew (-) (2)",
+          "skew_low",
+          "a",
+          "#0000ff"
+        ]
+      ]
+    },
+    {
+      "name": "linear: a skew slot above the Axis written after one below takes the first key, as the Legend lists the slots by side (OV-3187)",
+      "mode": "linear",
+      "dinucleotide": "GC",
+      "palette": {
+        "gc_content": "#a0a0a0",
+        "skew_high": "#111111",
+        "skew_low": "#222222"
+      },
+      "slots": [
+        "features:features",
+        "a:dinucleotide_skew@side=below,positive_color=#ff0000,negative_color=#0000ff",
+        "b:dinucleotide_skew@side=above,positive_color=#00ff00,negative_color=#ffff00"
+      ],
+      "rows": [
+        [
+          "GC skew (+)",
+          "skew_high",
+          "b",
+          "#00ff00"
+        ],
+        [
+          "GC skew (-)",
+          "skew_low",
+          "b",
+          "#ffff00"
+        ],
+        [
+          "GC skew (+) (2)",
+          "skew_high",
+          "a",
+          "#ff0000"
+        ],
+        [
+          "GC skew (-) (2)",
+          "skew_low",
+          "a",
+          "#0000ff"
+        ]
+      ]
     }
   ]
 }

@@ -201,6 +201,7 @@ from ...render.drawers.circular.annotations import (
     circular_annotation_labels_across_centre,
     circular_annotation_track_content,
     circular_annotation_track_ink,
+    circular_region_label_front_content,
 )
 from ...render.group_content import GroupKey, GroupKind, place_content
 from ...layout.linear_multi_record import record_key_at
@@ -2729,6 +2730,54 @@ def _draw_circular_feature_density_slot(
     )
 
 
+def _draw_circular_annotation_slot(
+    canvas: Drawing,
+    resolved_slot: CircularResolvedSlot,
+    *,
+    gb_record: SeqRecord,
+    cfg: GbdrawConfig,
+    canvas_config: CircularCanvasConfigurator,
+    annotation_layout: ResolvedAnnotationTrack | None,
+    annotation_labels: Sequence[CircularAnnotationLabel],
+    annotation_record_index: int,
+    record_key: str,
+) -> Drawing:
+    """Draw one record's annotation slot, then its backed labels in front of the record's leader lines, which are
+    drawn before every slot (CIR-RGN-FRONT, OV-3156)."""
+
+    if annotation_layout is None:
+        return canvas
+    dom_group_id = track_slot_svg_id(resolved_slot.id, renderer="annotations")
+    font_family = str(cfg.objects.text.font_family)
+    content = render_stage(
+        "annotation_content",
+        circular_annotation_track_content,
+        annotation_layout,
+        record_id=str(gb_record.id),
+        record_index=annotation_record_index,
+        record_length=len(gb_record.seq),
+        ring=_annotation_ring(resolved_slot),
+        font_family=font_family,
+        params=annotation_track_params_from_mapping(resolved_slot.params),
+        labels=annotation_labels,
+        dom_group_id=dom_group_id,
+        semantic_slot_id=str(resolved_slot.id),
+    )
+    group = place_content(canvas, content, GroupKey(record_key, GroupKind.ANNOTATIONS, str(resolved_slot.id)))
+    canvas.add(center_group_on_canvas(group, canvas_config))
+    front = circular_region_label_front_content(
+        annotation_layout,
+        record_index=annotation_record_index,
+        font_family=font_family,
+        labels=annotation_labels,
+        dom_group_id=dom_group_id,
+    )
+    if front is not None:
+        front_group = place_content(canvas, front, GroupKey(record_key, GroupKind.LABEL_TEXT, str(resolved_slot.id)))
+        canvas.add(center_group_on_canvas(front_group, canvas_config))
+    return canvas
+
+
 def _draw_resolved_circular_slot(
     canvas: Drawing,
     resolved_slot: CircularResolvedSlot,
@@ -2770,27 +2819,17 @@ def _draw_resolved_circular_slot(
         return canvas
 
     if renderer == "annotations":
-        annotation_layout = (annotation_track_layouts or {}).get(resolved_slot.id)
-        if annotation_layout is None:
-            return canvas
-        params = annotation_track_params_from_mapping(resolved_slot.params)
-        content = render_stage(
-            "annotation_content",
-            circular_annotation_track_content,
-            annotation_layout,
-            record_id=str(gb_record.id),
-            record_index=annotation_record_index,
-            record_length=len(gb_record.seq),
-            ring=_annotation_ring(resolved_slot),
-            font_family=str(cfg.objects.text.font_family),
-            params=params,
-            labels=annotation_labels.get(resolved_slot.id, ()),
-            dom_group_id=track_slot_svg_id(resolved_slot.id, renderer=renderer),
-            semantic_slot_id=str(resolved_slot.id),
+        return _draw_circular_annotation_slot(
+            canvas,
+            resolved_slot,
+            gb_record=gb_record,
+            cfg=cfg,
+            canvas_config=canvas_config,
+            annotation_layout=(annotation_track_layouts or {}).get(resolved_slot.id),
+            annotation_labels=annotation_labels.get(resolved_slot.id, ()),
+            annotation_record_index=annotation_record_index,
+            record_key=record_key,
         )
-        group = place_content(canvas, content, GroupKey(record_key, GroupKind.ANNOTATIONS, str(resolved_slot.id)))
-        canvas.add(center_group_on_canvas(group, canvas_config))
-        return canvas
 
     if renderer == "features":
         base_width = circular_track_width_px(
@@ -4171,13 +4210,15 @@ def _circular_legend_slots(
     if slots is not None or not depth_tracks:
         return slots
     return legend_slot_sources(
-        default_circular_track_slots(
-            show_ticks=False,
-            show_depth=True,
-            depth_track_count=max(int(track.track_index) for track in depth_tracks) + 1,
-            show_gc=show_gc,
-            show_skew=show_skew,
-            dinucleotide=str(gc.dinucleotide),
+        normalize_circular_track_slots(
+            default_circular_track_slots(
+                show_ticks=False,
+                show_depth=True,
+                depth_track_count=max(int(track.track_index) for track in depth_tracks) + 1,
+                show_gc=show_gc,
+                show_skew=show_skew,
+                dinucleotide=str(gc.dinucleotide),
+            )
         )
     )
 
@@ -4247,6 +4288,15 @@ def build_circular_legend_table(
     return apply_legend_row_edits(legend_table, edits)
 
 
+def circular_legend_slot_sources(
+    slots: Sequence[CircularTrackSlot] | None, axis_index: int | None
+) -> tuple[LegendSlotSource, ...] | None:
+    """The slot list after annotation planning, in the Legend's order: normalized with its Axis index, so each slot
+    has the side it is drawn on (``legend_slot_sources``)."""
+
+    return legend_slot_sources(normalize_circular_track_slots_with_axis(slots, axis_index)) if slots is not None else None
+
+
 def circular_legend_table(
     records: Sequence[SeqRecord],
     sources: LegendSources,
@@ -4256,15 +4306,14 @@ def circular_legend_table(
     depth_df: DataFrame | None,
     depth_tracks: Sequence[DepthTrackData] | None,
     depth_track_count_value: int,
-    circular_track_slots: list[CircularTrackSlot] | None,
+    slots: tuple[LegendSlotSource, ...] | None,
     annotations: ResolvedAnnotationBundle | None,
     conservation_legend: Sequence[ConservationLegendSource],
     conservation_min_identity: float,
 ) -> LegendTable:
     """Call the ``legend_table`` stage with the legend-only parts of the drawing settings.
 
-    ``circular_track_slots`` is the slot list after annotation planning;
-    annotation rows read it normalized.
+    ``slots`` are the drawing's slots in the Legend's order (``circular_legend_slot_sources``).
     """
 
     conservation = profile.config.objects.conservation
@@ -4280,12 +4329,8 @@ def circular_legend_table(
         has_depth_frame=depth_df is not None,
         depth_tracks=depth_legend_sources(depth_tracks) if depth_tracks is not None else None,
         depth_track_count_value=depth_track_count_value,
-        slots=legend_slot_sources(circular_track_slots),
-        annotation_slots=(
-            legend_slot_sources(normalize_circular_track_slots(circular_track_slots))
-            if circular_track_slots is not None and annotations is not None
-            else None
-        ),
+        slots=slots,
+        annotation_slots=slots if annotations is not None else None,
         annotations=annotations,
         conservation_legend=tuple(conservation_legend),
         conservation_colors=(conservation.min_color, conservation.max_color),
@@ -4355,7 +4400,7 @@ def _assemble_circular_record(
             depth_df=record.depth_df,
             depth_tracks=record.depth_tracks,
             depth_track_count_value=resolved_depth_track_count,
-            circular_track_slots=planned.slots,
+            slots=circular_legend_slot_sources(planned.slots, planned.circular_track_axis_index),
             annotations=planned.annotations,
             conservation_legend=conservation_legend_sources(record.conservation_tracks),
             conservation_min_identity=record.conservation_min_identity,
@@ -4386,6 +4431,7 @@ __all__ = [
     "CircularAssemblyResult",
     "add_record_on_circular_canvas",
     "build_circular_legend_table",
+    "circular_legend_slot_sources",
     "kept_annotation_measures",
     "plan_circular_annotation_slots",
 ]
