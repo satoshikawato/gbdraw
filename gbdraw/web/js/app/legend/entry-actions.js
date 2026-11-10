@@ -831,17 +831,17 @@ export const createLegendEntryActions = ({
     return inventory;
   };
 
-  // E1: a Result of the other diagram mode keeps the inventory it was drawn
-  // with while that mode is not shown; a Result loaded from a Session's
-  // `otherModeResult` arrives with its saved one. The inventory a Result
-  // arrives with is the one it left with, which followed every live edit made
-  // while it was shown (a Legend rename takes the row's place in it, OV-348),
-  // so it replaces a stored copy; `adoptResultInventory` adopts it when the
-  // Result is displayed.
+  // E1: a drawing's Result keeps the inventory it was drawn with while another
+  // drawing is shown, and a loaded one arrives with its saved one. It arrives
+  // with the one it left with, which followed every live edit made while it
+  // was shown (a Legend rename takes the row's place in it, OV-348), so it
+  // replaces a stored copy; `adoptResultInventory` adopts it when the Result is
+  // displayed. A drawing arriving without a Result (no `identity`) displays
+  // none, so the displayed inventory is none (OV-3282).
   /** @param {string | undefined} identity @param {readonly PythonLegendKey[]} inventory */
   const rememberResultInventory = (identity, inventory) => {
-    if (!identity || !Array.isArray(inventory)) return;
-    inventoryByResult.set(identity, [...inventory]);
+    if (!identity) originalLegendOrder.value = [];
+    else inventoryByResult.set(identity, [...inventory]);
   };
 
   // `originalLegendOrder` is the displayed Result's inventory: after a Result

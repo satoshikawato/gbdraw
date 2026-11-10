@@ -6,8 +6,8 @@
 // PD-OI-066, OIPC-C06, OIPC-C07.
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
-const { mkdirSync, readFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
+const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
+const { gunzipSync, gzipSync } = require('node:zlib');
 const { answerChoicePrompt, answerSessionTitle, evaluateWithRetainedPromise, expectNoLoadRepairDialog, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
@@ -84,6 +84,12 @@ const shown = (page) => page.evaluate(async () => {
     content: result?.content || '',
     hasSvg: Boolean(state.svgContainer.value?.querySelector('svg'))
   };
+});
+
+// The displayed Result's Legend inventory (`originalLegendOrder`): none while no Result is shown (OV-3282).
+const shownInventory = (page) => page.evaluate(async () => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  return [...state.originalLegendOrder.value];
 });
 
 const expectEmptyPreview = async (page, mode) => {
@@ -471,29 +477,41 @@ test('Save writes every Result and a fresh Load shows each mode\'s own Result', 
   }
 });
 
+// OV-3282: the drawing without a Result has no Legend inventory, shown, saved, or
+// loaded from a file an older writer gave the other drawing's inventory.
 test('a Session with one Result opens on the drawing shown at Save; the other drawing keeps its Result', async ({ page, browser }, info) => {
   test.setTimeout(240_000);
   await openBothSources(page);
   await generate(page);
   const circular = await shown(page);
+  const circularInventory = await shownInventory(page);
+  expect(circularInventory).not.toEqual([]);
   await showMode(page, 'linear');
   await expectEmptyPreview(page, 'linear');
+  expect(await shownInventory(page)).toEqual([]);
 
-  const saved = await save(page, info.outputPath('one.gbdraw-session.json.gz'), { title: '' });
+  const path = info.outputPath('one.gbdraw-session.json.gz');
+  const saved = await save(page, path, { title: '' });
   expect(saved.ui.activeDrawingId).toBe('linear');
   expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
+  expect(savedDrawing(saved, 'circular').editorState.legend.originalOrder).toEqual(circularInventory);
   expect(savedDrawing(saved, 'linear').results ?? []).toEqual([]);
+  expect(savedDrawing(saved, 'linear').editorState.legend.originalOrder).toEqual([]);
+  savedDrawing(saved, 'linear').editorState.legend.originalOrder = circularInventory;
+  writeFileSync(path, gzipSync(JSON.stringify(saved)));
 
   const fresh = await freshPage(browser);
   try {
-    await load(fresh, info.outputPath('one.gbdraw-session.json.gz'));
+    await load(fresh, path);
     // A Session 49 opens the drawing shown at Save (PD-OI-090): the Linear drawing, which has no Result.
     expect((await shown(fresh)).mode).toBe('linear');
     await expectEmptyPreview(fresh, 'linear');
+    expect(await shownInventory(fresh)).toEqual([]);
     await showMode(fresh, 'circular');
     const loaded = await shown(fresh);
     expect(loaded).toMatchObject({ mode: 'circular', generatedDrawingId: 'circular', count: 1, mounted: true });
     expect(await drawing(fresh, loaded.content)).toEqual(await drawing(page, circular.content));
+    expect(await shownInventory(fresh)).toEqual(circularInventory);
   } finally {
     await fresh.context().close();
   }

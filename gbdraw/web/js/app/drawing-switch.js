@@ -79,11 +79,11 @@ export const createDrawingSwitch = ({
   // one. The Legend owner
   // keeps each Result's inventory (OV-47): the arriving Result's goes to it,
   // and the binder adopts it when the Result is displayed, as for a batch
-  // Result.
-  /** @param {Readonly<ArtifactSlot>} slot An installed slot. */
+  // Result. A drawing without a Result arrives with none (OV-3282).
+  /** @param {Readonly<ArtifactSlot> | null} slot An installed slot (null: the drawing's empty slot). */
   const rememberShownResultInventory = (slot) => {
-    const shown = results.value[Number(selectedResultIndex.value) || 0];
-    if (shown) rememberResultInventory(getResultIdentity(shown), [...slot.legendInventory]);
+    const shown = slot ? results.value[Number(selectedResultIndex.value) || 0] : undefined;
+    rememberResultInventory(shown && getResultIdentity(shown), [...(slot?.legendInventory ?? [])]);
   };
   /**
    * The displayed artifact is kept under the drawing it belongs to, which is
@@ -95,7 +95,7 @@ export const createDrawingSwitch = ({
     clearActiveRuntime();
     const arriving = artifactSlotsSwap(captureArtifactSlot(), arrivingDrawing.id);
     installArtifactSlot(arriving, { drawing: arrivingDrawing });
-    if (arriving) rememberShownResultInventory(arriving);
+    rememberShownResultInventory(arriving);
     return arriving;
   };
 

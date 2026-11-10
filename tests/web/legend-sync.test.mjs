@@ -659,6 +659,12 @@ const mockLegendEntry = (caption, color, x) => {
   actions.rememberResultInventory('result-3', ['A', 'Coding', 'Own']);
   actions.adoptResultInventory('result-3');
   assert.deepEqual(state.originalLegendOrder.value, ['A', 'Coding', 'Own']);
+  // OV-3282: a drawing shown without a Result has no inventory; each Result
+  // keeps its own for when it is displayed again.
+  actions.rememberResultInventory(undefined, []);
+  assert.deepEqual(state.originalLegendOrder.value, []);
+  actions.adoptResultInventory('result-3');
+  assert.deepEqual(state.originalLegendOrder.value, ['A', 'Coding', 'Own']);
 }
 
 {
