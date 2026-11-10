@@ -10,5 +10,6 @@
   "decompressedSha256": "875fb45e05a78460f26ed34d61d3aca8d29360bf5462c658aaa3355236357342",
   "compression": "gzip -n -9",
   "sessionVersion": 51,
-  "requestSchema": 10
+  "requestSchema": 10,
+  "rewritten": "large-inputs d5 PR2 S3 (2026-11-10): each drawing's editorState.featureCatalog promoted from schema 5 to 6 (sequences dropped, /translation restored) by d5/impl/rewrite_v51_catalogs.py in that task folder, which applies gbdraw.web_support.feature_catalog.promote_legacy_feature_catalog; resources copied unchanged"
 }
