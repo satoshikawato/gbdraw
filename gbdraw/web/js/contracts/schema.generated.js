@@ -259,6 +259,9 @@ export const WRITTEN_RESOURCE_MEDIA_TYPES = Object.freeze({
 // gbdraw/session_io.py: INPUT_FILE_MEDIA_TYPE
 export const INPUT_FILE_MEDIA_TYPE = 'application/octet-stream';
 
+// gbdraw/session_io.py: WINDOW_LOSAT_FILENAMES_SESSION_VERSION
+export const WINDOW_LOSAT_FILENAMES_SESSION_VERSION = 51;
+
 // gbdraw/annotations/planning.py: AUTOMATIC_ANNOTATION_LANE_SIDES
 /** @type {Readonly<Record<'circular' | 'linear', string>>} */
 export const AUTOMATIC_ANNOTATION_LANE_SIDES = Object.freeze({

@@ -382,7 +382,6 @@ const cloneLinearComparisonPlanMetadata = (plan = {}) => ({
   mode: String(plan?.mode || 'none'),
   defaultSource: String(plan?.defaultSource || 'losat'),
   edges: (Array.isArray(plan?.edges) ? plan.edges : []).map((edge) => ({
-    windowLosatFilenames: { ...edge?.windowLosatFilenames },
     id: String(edge?.id || ''),
     queryUid: String(edge?.queryUid || ''),
     subjectUid: String(edge?.subjectUid || ''),
@@ -390,7 +389,9 @@ const cloneLinearComparisonPlanMetadata = (plan = {}) => ({
     fileActive: edge?.fileActive === true,
     losatFilenameActive: edge?.losatFilenameActive === true,
     source: String(edge?.source || 'upload'),
-    losatFilename: String(edge?.losatFilename || '')
+    losatFilename: String(edge?.losatFilename || ''),
+    // Only an edge with window-pair names holds the field (`WindowLosatFilenames`).
+    ...(edge?.windowLosatFilenames ? { windowLosatFilenames: { ...edge.windowLosatFilenames } } : {})
   }))
 });
 

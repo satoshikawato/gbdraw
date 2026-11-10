@@ -4903,6 +4903,30 @@ def test_current_comparison_plan_admits_window_pair_names() -> None:
     )
     with gzip.open(saved, "rt", encoding="utf-8") as handle:
         validate_session(json.load(handle))
-    for bad in ({"a~w1->b": ""}, {"a~w1->b": 3}, ["mine.tsv"]):
-        with pytest.raises(ValidationError, match="windowLosatFilenames"):
+    for bad in ({"a~w1->b": ""}, {" ": "mine.tsv"}, {"a~w1->b": 3}, ["mine.tsv"]):
+        with pytest.raises(ValidationError, match="windowLosatFilenames") as excinfo:
             validate_session(_session_with_plan_edge({"windowLosatFilenames": bad}))
+        assert excinfo.value.diagnostic == {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
+
+
+def test_session_50_plan_edge_with_window_pair_names_is_refused() -> None:
+    """OV-2742: no Session 46-50 writer wrote window-pair names, so such a file is refused."""
+    payload = build_mode_scoped_session_json(
+        SessionBuildContext(mode="linear", output_prefix="out", render_formats=("svg",)),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 11, 10),
+        canonical_request=_canonical_request("linear"),
+    )
+    assert payload["version"] == 50
+    edge = {
+        "id": "edge-a-b", "queryUid": "a", "subjectUid": "b", "included": True, "fileActive": False,
+        "losatFilenameActive": False, "source": "losat", "losatFilename": "",
+    }
+    payload["modes"] = {"linear": {"config": {"form": {}, "adv": {}, "linearComparisonPlan": {
+        "mode": "adjacent", "defaultSource": "losat", "edges": [edge],
+    }}}}
+    validate_session(payload)
+    edge["windowLosatFilenames"] = {"a~w1->b": "mine.tsv"}
+    with pytest.raises(ValidationError, match="unknown field\\(s\\): windowLosatFilenames"):
+        validate_session(payload)

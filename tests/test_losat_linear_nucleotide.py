@@ -379,9 +379,12 @@ def test_losat_plan_diagnostics(tmp_path: Path, case: str, match: str) -> None:
 
 def test_losat_with_blast_files_is_a_plan_error() -> None:
     from gbdraw.api import LinearDiagramOptions
-    from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
+    from gbdraw.comparisons.linear_losat import NucleotideLosatRecord, resolve_linear_nucleotide_losat
 
-    records = read_genbank([LAMBDA, DE3])
+    records = [
+        NucleotideLosatRecord(record=record, source_id=key, record_key=f"record-{index + 1}", label=key, window=None, input_index=index)
+        for index, (record, key) in enumerate(zip(read_genbank([LAMBDA, DE3]), ("a", "b")))
+    ]
     with pytest.raises(ValidationError) as excinfo:
         resolve_linear_nucleotide_losat(
             LinearDiagramOptions(
@@ -390,11 +393,6 @@ def test_losat_with_blast_files_is_a_plan_error() -> None:
             ),
             records=records,
             rows_by_record=(0, 1),
-            source_ids=("a", "b"),
-            record_keys=("record-1", "record-2"),
-            record_labels=("a", "b"),
-            record_windows=(None, None),
-            input_indexes=(0, 1),
         )
     assert _diagnostic(excinfo)["reason"] == "LOSAT_PLAN"
 

@@ -255,6 +255,7 @@ import {
 import {
   missingUploadPairsToResolve
 } from '../services/linear-comparisons.js';
+import { catalogUnitPlaces } from '../services/linear-units.js';
 import { addAnnotationSet as addSearchSetToDrawing } from '../services/drawing/annotation-sets.js';
 import { createSequenceSearch } from './sequence-search.js';
 import { resultRecordBinding } from '../services/sequence-search.js';
@@ -3274,7 +3275,8 @@ export const createAppSetup = () => {
     sessionOperationAvailability, shownDrawingOfMode, runUndoable: history.runUndoable,
     clearAlignmentForMutation: similarityAlignmentActions.clearForMutation,
     linearRecordsFor: linearRecordSelector.recordsFor, linearRecordStatusFor: linearRecordSelector.statusFor,
-    rebindAnnotationRecords, applyLinearSeqMutation
+    rebindAnnotationRecords, applyLinearSeqMutation,
+    shownUnitPlaces: () => catalogUnitPlaces(state.featureCatalog.value)
   });
   const { setCircularInputType, setLinearInputType } = createInputTypeEdits({
     sessionOperationAvailability, shownDrawingOfMode, changeRecordSources, discoverDrawingRecords,

@@ -265,6 +265,14 @@ test('a record drawn in two windows searches each window against the other recor
   await expect(name).toHaveValue('second-window');
   expect(readFileSync(await loadedDownload.path(), 'utf8').trim()).not.toBe('');
   expect(await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value)).toBe(generations);
+  // A window-pair name goes with its window: Remove window 1 leaves R2c one window, so no window pair is left to name;
+  // one Undo brings back the window and its name.
+  const windowNames = () => page.evaluate(() => window.__GBDRAW_APP__.linearComparisonPlan.edges
+    .flatMap(({ windowLosatFilenames = {} }) => Object.values(windowLosatFilenames)));
+  await page.evaluate(() => { const app = window.__GBDRAW_APP__; app.removeLinearCardWindow(app.linearSeqs[0], 0); });
+  await expect.poll(windowNames).toEqual([]);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(windowNames).toEqual(['second-window']);
 });
 
 // OV-2739: a window across the origin of a circular record is searched as Python crops it (PD-OI-122, ":origin"):

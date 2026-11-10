@@ -6,7 +6,7 @@
 // searches over the units: every index a search writes into the request is a unit index, as Python reads it. The Web
 // derives no unit and no pair itself.
 /** @import { LinearSeq } from './drawing/inputs.js' */
-/** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
+/** @import { LinearComparisonResolution, LinearComparisonResolvedEdge, WindowLosatFilenames } from './linear-comparisons.js' */
 /** @import { CanonicalRecordWindow } from '../contracts/request.generated.js' */
 import { linearComparisonEdgeKey } from './linear-comparisons.js';
 import { linearSeqRecordKey } from './record-draw-selection.js';
@@ -163,6 +163,39 @@ export const catalogUnitPlaces = (catalog) => {
 export const searchUnitPlaces = (search) => unitPlacesOf(search.unitKeys, search);
 
 /**
+ * The window-pair names of a record pair after Remove window `removed` (1-based) of the record `recordKey`, which
+ * leaves it `windowsLeft` windows (OV-2742): a name stays with its window or goes. The removed window's names go; a
+ * later window's name moves to the unit key of the window before it; and when one window is left, every name of the
+ * record's windows goes (its unit is then the record drawn whole). `places` are the drawn Result's units, whose keys
+ * Python formed; a name whose units it does not know is kept as it is.
+ * @param {WindowLosatFilenames} names
+ * @param {ReadonlyMap<string, LinearUnitPlace>} places
+ * @param {string} recordKey
+ * @param {number} removed
+ * @param {number} windowsLeft
+ * @returns {WindowLosatFilenames}
+ */
+export const windowLosatFilenamesAfterRemoval = (names, places, recordKey, removed, windowsLeft) => {
+  const unitKeys = [...places.keys()];
+  const pairOf = new Map(unitKeys.flatMap((query) => unitKeys.map((subject) => (
+    /** @type {[string, [string, string]]} */ ([linearComparisonEdgeKey(query, subject), [query, subject]])))));
+  const unitAt = new Map([...places].map(([unitKey, place]) => [`${place.recordKey}\n${place.window}`, unitKey]));
+  /** @param {string} unitKey @returns {string | null} */
+  const moved = (unitKey) => {
+    const place = places.get(unitKey);
+    if (place === undefined || place.recordKey !== recordKey || place.window === null) return unitKey;
+    if (windowsLeft < 2 || place.window === removed) return null;
+    return place.window < removed ? unitKey : unitAt.get(`${recordKey}\n${place.window - 1}`) ?? null;
+  };
+  return Object.fromEntries(Object.entries(names).flatMap(([edgeKey, name]) => {
+    const pair = pairOf.get(edgeKey);
+    if (pair === undefined) return [[edgeKey, name]];
+    const [query, subject] = pair.map(moved);
+    return query === null || subject === null ? [] : [[linearComparisonEdgeKey(query, subject), name]];
+  }));
+};
+
+/**
  * Whether a LOSAT cache-info row is a window pair of the drawn Result (OV-2742, OV-2918): one of its two units is a
  * window of a record drawn in several (`places`, the Result's units), and each unit is such a window or a record drawn
  * whole, of a record `drawn` names. Its indexes count that Result's units, so a reorder or a Load keeps it as saved.
@@ -184,14 +217,14 @@ export const isDrawnWindowPairRow = (entry, places, drawn) => {
 
 /**
  * One window pair of a card pair (`LinearWindowPair`): the edge key of its LOSAT cache-info row (the pair of drawn
- * units Generate searched), the row's file name, and each side's window number (null for a card drawn whole).
- * @typedef {{ edgeKey: string, filename: string, queryWindow: number | null, subjectWindow: number | null }} LinearWindowPair
+ * units Generate searched) and each side's window number (null for a card drawn whole).
+ * @typedef {{ edgeKey: string, queryWindow: number | null, subjectWindow: number | null }} LinearWindowPair
  */
 /**
  * The window pairs of each card pair, by the card pair's edge key (its two records' keys): the cache-info rows whose
  * two units `places` knows and at least one of which is one of several windows, in row order. A row whose two units
  * are cards drawn whole is the card pair's own row, which the card reads by its edge key.
- * @param {readonly { edgeKey?: string, queryUid?: string, subjectUid?: string, filename: string }[]} entries
+ * @param {readonly { edgeKey?: string, queryUid?: string, subjectUid?: string }[]} entries
  * @param {ReadonlyMap<string, LinearUnitPlace>} places
  * @returns {Map<string, LinearWindowPair[]>}
  */
@@ -204,7 +237,7 @@ export const linearWindowPairsByCardEdge = (entries, places) => {
     if (!entry.edgeKey || !query || !subject || (query.window === null && subject.window === null)) return;
     const cardEdge = linearComparisonEdgeKey(query.recordKey, subject.recordKey);
     byCard.set(cardEdge, [...(byCard.get(cardEdge) ?? []), {
-      edgeKey: entry.edgeKey, filename: entry.filename, queryWindow: query.window, subjectWindow: subject.window
+      edgeKey: entry.edgeKey, queryWindow: query.window, subjectWindow: subject.window
     }]);
   });
   return byCard;

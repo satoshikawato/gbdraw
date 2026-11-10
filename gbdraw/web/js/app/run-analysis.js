@@ -116,7 +116,8 @@ import {
   canonicalGridDisplayPairs,
   linearComparisonEdgeKey,
   numberLosatDisplayPairs,
-  resolveLinearComparisonPlan
+  resolveLinearComparisonPlan,
+  windowLosatFilenamesOf
 } from '../services/linear-comparisons.js';
 import { catalogUnitPlaces, generateUnitSearch, searchUnitPlaces } from '../services/linear-units.js';
 import {
@@ -4228,7 +4229,7 @@ export const createRunAnalysis = ({
           const fallback = losatCardPairName(searchDrawing, losatCards, Number(edge?.queryIndex), Number(edge?.subjectIndex),
             queryEntry.recordId, subjectEntry.recordId);
           return normalizeLosatFilename(
-            edge?.windowLosatFilenames[spec.edgeKey] ?? '',
+            (edge ? windowLosatFilenamesOf(edge)[spec.edgeKey] : undefined) ?? '',
             losatUnitPairFilename(edge ?? null, fallback, unitPlaces.get(spec.queryUid), unitPlaces.get(spec.subjectUid))
           );
         };

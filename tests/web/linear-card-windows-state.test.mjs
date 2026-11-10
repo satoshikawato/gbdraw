@@ -85,7 +85,7 @@ const recordEditsOfApp = () => {
   return createLinearRecordEdits({
     sessionOperationAvailability: () => null, shownDrawingOfMode, runUndoable: (_label, action) => { action(); return true; },
     clearAlignmentForMutation: () => {}, linearRecordsFor: () => [], linearRecordStatusFor: () => ({}),
-    rebindAnnotationRecords: () => {}, applyLinearSeqMutation
+    rebindAnnotationRecords: () => {}, applyLinearSeqMutation, shownUnitPlaces: () => new Map()
   });
 };
 const storedComparisons = () => INPUTS_SLICE.capture(modeDrawing(state, 'linear').slices.inputs).files.linearCanonicalComparisons;

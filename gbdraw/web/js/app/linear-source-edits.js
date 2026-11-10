@@ -11,9 +11,10 @@
 import { createLinearSeq, normalizeLinearSeqList, replaceLinearSeqs } from '../services/drawing/inputs.js';
 import { padDepthFileSlots } from '../services/depth-track-state.js';
 import { inputSourceFiles } from '../services/input-types.js';
-import { reconcileLinearComparisonPlan } from '../services/linear-comparisons.js';
+import { reconcileLinearComparisonPlan, setWindowLosatFilenames, windowLosatFilenamesOf } from '../services/linear-comparisons.js';
+import { windowLosatFilenamesAfterRemoval } from '../services/linear-units.js';
 import { placeNewLayoutWindow, planLinearSourceRowMove, reconcileLinearRecordLayout } from '../services/linear-record-layout.js';
-import { addCardWindow, cardWindowEditKind, editCardWindow, removeCardWindow } from '../services/linear-card-windows.js';
+import { addCardWindow, cardWindowEditKind, cardWindowList, editCardWindow, removeCardWindow } from '../services/linear-card-windows.js';
 import {
   groupLinearSourceRecords,
   inferredDefinitionForRecord,
@@ -22,7 +23,7 @@ import {
   moveLinearSourceGroup,
   planLinearSourceRemoval
 } from '../services/linear-sources.js';
-import { pruneRecordsOff, wholeRecordCardWindows } from '../services/record-draw-selection.js';
+import { linearSeqRecordKey, pruneRecordsOff, wholeRecordCardWindows } from '../services/record-draw-selection.js';
 import { msg, t } from '../utils/i18n.js';
 import { linearDepthLogicalWidth, linearDepthSources } from './depth-tracks.js';
 import { askTrackSourceRemoval } from './track-slot-edits.js';
@@ -35,6 +36,8 @@ import { askTrackSourceRemoval } from './track-slot-edits.js';
 /** @import { DepthFileSlots, DepthSourceLoss } from '../services/depth-track-state.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { RecordSelectorStatus } from './linear-record-selector.js' */
+/** @import { LinearUnitPlace } from '../services/linear-units.js' */
+/** @import { LinearComparisonPlan } from '../services/linear-comparisons.js' */
 
 const { computed, nextTick } = window.Vue;
 
@@ -467,6 +470,7 @@ export const createLinearSourceMoves = ({
  * @property {(drawing: DrawingState, sequence: LinearSeq | undefined) => RecordSelectorStatus} linearRecordStatusFor
  * @property {() => void} rebindAnnotationRecords
  * @property {ApplyLinearSeqMutation} applyLinearSeqMutation
+ * @property {() => ReadonlyMap<string, LinearUnitPlace>} shownUnitPlaces The drawn units of the shown Linear Result.
  */
 
 /**
@@ -476,7 +480,7 @@ export const createLinearSourceMoves = ({
  */
 export const createLinearRecordEdits = ({
   sessionOperationAvailability, shownDrawingOfMode, runUndoable, clearAlignmentForMutation, linearRecordsFor,
-  linearRecordStatusFor, rebindAnnotationRecords, applyLinearSeqMutation
+  linearRecordStatusFor, rebindAnnotationRecords, applyLinearSeqMutation, shownUnitPlaces
 }) => {
   /** @param {LinearSeq} sequence @param {unknown} value */
   const setLinearRecordSelector = (sequence, value) => {
@@ -548,9 +552,20 @@ export const createLinearRecordEdits = ({
     if (placed) drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...placed.entries);
     return true;
   });
-  /** Remove of window `index`; the last window stays. @param {LinearSeq} sequence @param {number} index */
+  /**
+   * Remove of window `index`; the last window stays. A name typed on a window pair stays with its window or goes with
+   * it, in the same History step (OV-2742).
+   * @param {LinearSeq} sequence @param {number} index
+   */
   const removeLinearCardWindow = (sequence, index) => changeLinearCardWindows(
-    msg('Remove window'), sequence, (card) => removeCardWindow(card, index)
+    msg('Remove window'), sequence, (card, drawing) => {
+      if (!removeCardWindow(card, index)) return false;
+      const recordKey = linearSeqRecordKey(card, drawing.linearSeqs.indexOf(sequence));
+      const places = shownUnitPlaces();
+      /** @type {LinearComparisonPlan} */ (drawing.linearComparisonPlan).edges.forEach((edge) => setWindowLosatFilenames(edge, windowLosatFilenamesAfterRemoval(
+        windowLosatFilenamesOf(edge), places, recordKey, index + 1, cardWindowList(card).length)));
+      return true;
+    }
   );
 
   /** @param {LinearSeq} seq */

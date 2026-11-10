@@ -15,7 +15,10 @@ globalThis.window = {
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { linearComparisonEdgeKey } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { linearWindowsPayload } = await import('../../gbdraw/web/js/services/session-request.js');
-const { catalogUnitPlaces, isDrawnWindowPairRow, linearWindowPairsByCardEdge, planLinearUnitSearch, searchUnitPlaces } = await import('../../gbdraw/web/js/services/linear-units.js');
+const {
+  catalogUnitPlaces, isDrawnWindowPairRow, linearWindowPairsByCardEdge, planLinearUnitSearch, searchUnitPlaces,
+  windowLosatFilenamesAfterRemoval
+} = await import('../../gbdraw/web/js/services/linear-units.js');
 const { windowPairLosatFilename } = await import('../../gbdraw/web/js/services/losat-cache.js');
 const { createLinearComparisonView, createLinearLayoutReaders } = await import('../../gbdraw/web/js/app/linear-comparison-panel.js');
 const { pythonLinearUnitPlan } = await import('./helpers/linear-unit-plan.mjs');
@@ -77,15 +80,15 @@ test('each window pair of a card pair is listed under the card pair, with its wi
   assert.deepEqual([...byCard.keys()], [linearComparisonEdgeKey('a', 'b'), linearComparisonEdgeKey('b', 'c')]);
   assert.deepEqual(windowNumbers(byCard.get(linearComparisonEdgeKey('a', 'b'))), [[1, 1], [1, 2], [2, 1], [2, 2]]);
   assert.deepEqual(windowNumbers(byCard.get(linearComparisonEdgeKey('b', 'c'))), [[1, null], [2, null]]);
-  // Each window pair is its own cache-info row, with its own file name.
-  assert.deepEqual(byCard.get(linearComparisonEdgeKey('b', 'c')).map(({ edgeKey, filename }) => [edgeKey, filename]),
-    cacheInfo.slice(4).map(({ edgeKey, filename }) => [edgeKey, filename]));
+  // Each window pair is its own cache-info row.
+  assert.deepEqual(byCard.get(linearComparisonEdgeKey('b', 'c')).map(({ edgeKey }) => edgeKey),
+    cacheInfo.slice(4).map(({ edgeKey }) => edgeKey));
 });
 
-// OV-2742: Generate names each pair's row by its units' places (the units it searches, as Python planned them, which
-// are the units of the Result it draws): the window pairs of one card pair get names of their own, and a pair of
-// cards drawn whole keeps its card pair's name.
-test('each window pair of a card pair has a file name of its own; a pair without windows keeps its card pair\'s name', async () => {
+// OV-2742: Generate places the units it searches as Python planned them, which are the units of the Result it draws,
+// and the suffix rule over those places gives each window pair of one card pair a name of its own while a pair of
+// cards drawn whole keeps its card pair's name. (Generate's own naming is pinned by the Playwright case.)
+test('Generate places its searched units as the Result does, and the suffix rule names each window pair apart', async () => {
   const cards = [
     createLinearSeq({ uid: 'a', windows: [span(1, 150), span(151, 300)] }),
     createLinearSeq({ uid: 'b', windows: [span(10, 90), span(200, 280)] }),
@@ -105,6 +108,30 @@ test('each window pair of a card pair has a file name of its own; a pair without
   ]);
   // A name typed on the card pair is the stem of its window pairs' names, not each one's whole name.
   assert.equal(windowPairLosatFilename('mine.TSV', 2, null), 'mine.w2.tsv');
+});
+
+// OV-2742: a name typed on a window pair stays with its window when Remove window renumbers the windows after it,
+// and goes with its window, or with every window of the record when one is left.
+test('Remove window moves each window-pair name with its window and drops the removed window\'s', async () => {
+  const cards = [
+    createLinearSeq({ uid: 'a', windows: [span(1, 100), span(101, 200), span(201, 300)] }),
+    createLinearSeq({ uid: 'b' })
+  ];
+  const { catalog } = await generated(cards, [['a', 'b']]);
+  const places = catalogUnitPlaces(catalog);
+  const [w1, w2, w3] = [...places.keys()].slice(0, 3);
+  const pair = (unit) => linearComparisonEdgeKey(unit, 'b');
+  const names = { [pair(w1)]: 'first.tsv', [pair(w2)]: 'second.tsv', [pair(w3)]: 'third.tsv', 'x->y': 'kept.tsv' };
+  // Remove window 1: window 2 is now window 1, window 3 window 2; a name of units the Result does not know stays.
+  assert.deepEqual(windowLosatFilenamesAfterRemoval(names, places, 'a', 1, 2),
+    { [pair(w1)]: 'second.tsv', [pair(w2)]: 'third.tsv', 'x->y': 'kept.tsv' });
+  // Remove window 2: window 1 keeps its name.
+  assert.deepEqual(windowLosatFilenamesAfterRemoval(names, places, 'a', 2, 2),
+    { [pair(w1)]: 'first.tsv', [pair(w2)]: 'third.tsv', 'x->y': 'kept.tsv' });
+  // One window left: the record is drawn whole, so no window pair of it is left to name.
+  assert.deepEqual(windowLosatFilenamesAfterRemoval({ [pair(w1)]: 'first.tsv' }, places, 'a', 2, 1), {});
+  // Another record's windows are not this record's.
+  assert.deepEqual(windowLosatFilenamesAfterRemoval(names, places, 'b', 1, 2), names);
 });
 
 test('a card pair whose cards draw one unit each lists no window pair (its row is the card pair\'s own)', async () => {

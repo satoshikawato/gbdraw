@@ -13,7 +13,7 @@ request carries no search intent, so Session replay needs no LOSAT.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import io
 import logging
 import re
@@ -129,23 +129,30 @@ def losat_edge_filename(
     return f"{left}.{right}.{program}{'.' + windows if windows else ''}.tsv"
 
 
+@dataclass(frozen=True)
+class NucleotideLosatRecord:
+    """One drawn record a Linear nucleotide search reads, with what names and groups it.
+
+    ``source_id`` identifies its source file (one genome); ``record_key`` is the key the Web uses as its sequence UID;
+    ``label`` names its raw TSVs; ``window`` is its window number when it is one of several windows of a record, else
+    ``None``; ``input_index`` is the record input it came from (its translation table).
+    """
+
+    record: SeqRecord
+    source_id: object
+    record_key: str
+    label: str
+    window: int | None
+    input_index: int
+
+
 def resolve_linear_nucleotide_losat(
     options: LinearDiagramOptions,
     *,
-    records: Sequence[SeqRecord],
+    records: Sequence[NucleotideLosatRecord],
     rows_by_record: Sequence[int],
-    source_ids: Sequence[object],
-    record_keys: Sequence[str],
-    record_labels: Sequence[str],
-    record_windows: Sequence[int | None],
-    input_indexes: Sequence[int],
 ) -> tuple[LinearDiagramOptions, tuple[Mapping[str, Any], ...]]:
-    """Run the requested nucleotide searches and return resolved options.
-
-    ``source_ids`` identify each record's source file (one genome), and
-    ``record_keys`` are the record keys the Web uses as sequence UIDs.
-    ``record_windows`` is each record's window number when it is one of several windows of a record, else ``None``.
-    """
+    """Run the requested nucleotide searches over the drawn ``records`` and return resolved options."""
 
     search = options.losat_search
     if search is None or search.program not in NUCLEOTIDE_LOSAT_PROGRAMS:
@@ -168,7 +175,7 @@ def resolve_linear_nucleotide_losat(
             f"{search.program.upper()} found no record pair to compare: place records "
             "in two or more rows, or list pairs."
         )
-    gencodes = _record_gencodes(search, input_indexes)
+    gencodes = _record_gencodes(search, [item.input_index for item in records])
     runtime = search.runtime
     if search.program == "losatn" and search.losatn_task != "megablast":
         require_losat_task_support(
@@ -187,15 +194,15 @@ def resolve_linear_nucleotide_losat(
 
     def record_fasta(index: int) -> str:
         if index not in fasta_by_record:
-            fasta_by_record[index] = losat_search_frame_fasta(records[index])
+            fasta_by_record[index] = losat_search_frame_fasta(records[index].record)
         return fasta_by_record[index]
 
     jobs = plan_losat_jobs(
-        source_ids=source_ids,
+        source_ids=[item.source_id for item in records],
         specs=pairs,
         build_args=lambda query, subject: losat_cache_args(spec, search_args(query, subject)),
     )
-    batches = prepare_losat_batches(jobs, uids=record_keys, record_fasta=record_fasta)
+    batches = prepare_losat_batches(jobs, uids=[item.record_key for item in records], record_fasta=record_fasta)
     cache = LosatRawCache()
     texts: dict[tuple[int, int], tuple[str, str]] = {}
     searched: dict[tuple[int, int], tuple[dict[str, object], Mapping[str, object] | None]] = {}
@@ -262,8 +269,8 @@ def resolve_linear_nucleotide_losat(
             entry,
             runtime=runtime_record,
             filename=losat_edge_filename(
-                record_labels[query], record_labels[subject], search.program,
-                record_windows[query], record_windows[subject],
+                records[query].label, records[subject].label, search.program,
+                records[query].window, records[subject].window,
             ),
         )
 
@@ -286,6 +293,7 @@ def resolve_linear_nucleotide_losat(
 
 __all__ = [
     "NUCLEOTIDE_LOSAT_PROGRAMS",
+    "NucleotideLosatRecord",
     "losat_edge_filename",
     "resolve_linear_nucleotide_losat",
 ]

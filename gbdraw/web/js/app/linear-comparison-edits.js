@@ -21,7 +21,9 @@ import {
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan,
   setComparisonEdgeFile,
-  swapComparisonEdgeFile
+  setWindowLosatFilenames,
+  swapComparisonEdgeFile,
+  windowLosatFilenamesOf
 } from '../services/linear-comparisons.js';
 import {
   moveLinearLayoutCell,
@@ -74,7 +76,7 @@ const sameLinearComparisonEdge = (left, right) => (
   left?.source === right?.source &&
   left?.file === right?.file &&
   left?.losatFilename === right?.losatFilename &&
-  JSON.stringify(left?.windowLosatFilenames) === JSON.stringify(right?.windowLosatFilenames)
+  JSON.stringify(left?.windowLosatFilenames ?? {}) === JSON.stringify(right?.windowLosatFilenames ?? {})
 );
 
 // OV-380: a pair set to a source that has no data yet (Upload BLAST TSV
@@ -620,10 +622,10 @@ export const createLinearComparisonGapEdits = ({
     const listed = new Set(windowPairEdgeKeysOf(cardEdgeKey));
     updateResolvedLosatFilenameDraft(drawing, cardEdgeKey, (edge) => {
       const name = String(value || '').trim();
-      edge.windowLosatFilenames = Object.fromEntries([
-        ...Object.entries(edge.windowLosatFilenames).filter(([key]) => key !== windowPairEdgeKey && listed.has(key)),
+      setWindowLosatFilenames(edge, Object.fromEntries([
+        ...Object.entries(windowLosatFilenamesOf(edge)).filter(([key]) => key !== windowPairEdgeKey && listed.has(key)),
         ...(name ? [[windowPairEdgeKey, name]] : [])
-      ]);
+      ]));
     });
   });
   /** @param {string} edgeKey */

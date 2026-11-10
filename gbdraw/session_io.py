@@ -134,6 +134,9 @@ FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION = 48
 # From version 50 a Session lists its drawings in ``drawings``
 # (gbdraw.session_drawings owns the layout).
 DRAWINGS_SESSION_MIN_VERSION = 51
+# The first Session whose Linear comparison-plan edges may hold `windowLosatFilenames`, the names typed on the
+# window pairs of a record pair (OV-2742). The Web drops the field from an older file on Load.
+WINDOW_LOSAT_FILENAMES_SESSION_VERSION = 51
 # The newest mode-scoped (46-50) layout: a Session 46-50 moves from it to
 # drawings, and Python's writers build a new document in it before that move
 # (gbdraw.session_drawings.drawings_document_from_mode_scoped).
@@ -1411,6 +1414,58 @@ def _validate_current_retired_active_config_paths(
             )
 
 
+def _validate_comparison_plan_edge(
+    edge: object,
+    allowed_fields: set[str],
+    edge_ids: set[str],
+) -> None:
+    """Check one edge of a current Web comparison plan and add its ID to ``edge_ids``."""
+
+    if not isinstance(edge, Mapping):
+        raise ValidationError(
+            "Each config.linearComparisonPlan edge must be an object."
+        )
+    unknown = sorted(str(field) for field in edge if field not in allowed_fields)
+    if unknown:
+        raise ValidationError(
+            "config.linearComparisonPlan edge contains retired or unknown "
+            f"field(s): {', '.join(unknown)}."
+        )
+    edge_id = str(edge.get("id") or "").strip()
+    query_uid = str(edge.get("queryUid") or "").strip()
+    subject_uid = str(edge.get("subjectUid") or "").strip()
+    if not edge_id or not query_uid or not subject_uid:
+        raise ValidationError(
+            "Current comparison-plan edges require stable IDs and endpoint UIDs."
+        )
+    if edge_id in edge_ids:
+        raise ValidationError(
+            f"Current comparison-plan edge ID is duplicated: {edge_id}."
+        )
+    edge_ids.add(edge_id)
+    if (
+        type(edge.get("included")) is not bool
+        or type(edge.get("fileActive")) is not bool
+        or type(edge.get("losatFilenameActive")) is not bool
+        or edge.get("source") not in {"losat", "upload"}
+        or not isinstance(edge.get("losatFilename"), str)
+    ):
+        raise ValidationError(
+            "Current comparison-plan edge metadata is invalid."
+        )
+    # The Web checks an entry with `isWindowLosatFilenameEntry` (services/linear-comparisons.js).
+    window_names = edge.get("windowLosatFilenames", {})
+    if not isinstance(window_names, Mapping) or not all(
+        isinstance(key, str) and key.strip() and isinstance(name, str) and name.strip()
+        for key, name in window_names.items()
+    ):
+        raise ValidationError(
+            "config.linearComparisonPlan edge windowLosatFilenames must map "
+            "unit edge keys to file names.",
+            diagnostic=_SESSION_FIELDS_INVALID,
+        )
+
+
 def _validate_current_comparison_authority(
     session: Mapping[str, Any],
     version: int,
@@ -1517,52 +1572,12 @@ def _validate_current_comparison_authority(
         "losatFilenameActive",
         "source",
         "losatFilename",
-        # Session 51: the names typed on the window pairs of a record pair, by unit edge key.
-        *(("windowLosatFilenames",) if version >= DRAWINGS_SESSION_MIN_VERSION else ()),
+        # The names typed on the window pairs of a record pair, by unit edge key (OV-2742).
+        *(("windowLosatFilenames",) if version >= WINDOW_LOSAT_FILENAMES_SESSION_VERSION else ()),
     }
     edge_ids: set[str] = set()
     for edge in edges:
-        if not isinstance(edge, Mapping):
-            raise ValidationError(
-                "Each config.linearComparisonPlan edge must be an object."
-            )
-        unknown = sorted(str(field) for field in edge if field not in allowed_edge_fields)
-        if unknown:
-            raise ValidationError(
-                "config.linearComparisonPlan edge contains retired or unknown "
-                f"field(s): {', '.join(unknown)}."
-            )
-        edge_id = str(edge.get("id") or "").strip()
-        query_uid = str(edge.get("queryUid") or "").strip()
-        subject_uid = str(edge.get("subjectUid") or "").strip()
-        if not edge_id or not query_uid or not subject_uid:
-            raise ValidationError(
-                "Current comparison-plan edges require stable IDs and endpoint UIDs."
-            )
-        if edge_id in edge_ids:
-            raise ValidationError(
-                f"Current comparison-plan edge ID is duplicated: {edge_id}."
-            )
-        edge_ids.add(edge_id)
-        if (
-            type(edge.get("included")) is not bool
-            or type(edge.get("fileActive")) is not bool
-            or type(edge.get("losatFilenameActive")) is not bool
-            or edge.get("source") not in {"losat", "upload"}
-            or not isinstance(edge.get("losatFilename"), str)
-        ):
-            raise ValidationError(
-                "Current comparison-plan edge metadata is invalid."
-            )
-        window_names = edge.get("windowLosatFilenames", {})
-        if not isinstance(window_names, Mapping) or not all(
-            isinstance(key, str) and key.strip() and isinstance(name, str) and name.strip()
-            for key, name in window_names.items()
-        ):
-            raise ValidationError(
-                "config.linearComparisonPlan edge windowLosatFilenames must map "
-                "unit edge keys to file names."
-            )
+        _validate_comparison_plan_edge(edge, allowed_edge_fields, edge_ids)
 
     bound_ids: set[str] = set()
     for binding in comparison_bindings:

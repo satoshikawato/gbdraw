@@ -53,7 +53,9 @@ command line and the Python API, and the Web app loads it without that field, li
 A Session 51 Linear drawing keeps the raw LOSAT file names typed on the window pairs of a pair of records (a record
 drawn in several windows) in that pair's `config.linearComparisonPlan` edge, as `windowLosatFilenames`, keyed by the
 window pair. A Session without the key reads as no typed names: each window pair takes its default name, the pair's
-name with the window numbers (`A.B.losatn.w2.tsv`), which the command line's `--losat_output_dir` also writes.
+name with the window numbers (`A.B.losatn.w2.tsv`), which the command line's `--losat_output_dir` also writes. The
+key is Session 51's: the command line and the Python API refuse a Session 46-50 that holds it, and the Web app loads
+such a file without it, listed in the Load dialog.
 Each record of a Session 51 drawing's saved track-slot geometry
 (`runMetadata.trackSlotGeometry.records[]`) also carries its `recordKey` and its
 `axis` (with `axis.source.isCircular`, whether a selected span may cross the
