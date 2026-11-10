@@ -194,6 +194,9 @@ in the same change.
 | Fold state of the Linear File cards | `js/services/linear-sources.js` (`setLinearSourceFolded`, `restoreFoldedLinearSources`); the set is `linearFoldedSources` in `js/state.js` |
 | The File card shell that the Linear and the Circular input lists share: the card, its fold to one header line, the file chip, the moves and Remove, and what the header line says of a card's files | `js/app/file-card.js` (`FileCard`, `fileCardLine`, `chosenFileName`) |
 | The Circular File cards: their list, the Add files zone (several files of one pick or drop become cards), the card header and records lines, replace, remove and reorder as the user sees them, the fold state, and the read error that names its card | `js/app/circular-file-cards.js` (`createCircularFileCards`); the edits are the source card writers of `js/app/circular-record-controls.js`, passed in as ports |
+| A Linear File card's windows: the one list its Region block and Windows list edit, the card's orientation (`orientLinearCard`), and the span that a Start, End and "Across the origin" give | `js/services/linear-card-windows.js` (`cardWindowList`, `orientLinearCard`, `windowSpanOf`) |
+| What the card and Record Layout show of the shown drawing's windows: each window's fields, its circled number, the length across the origin and the bases left out between two windows (the numbers are Python's) | `js/app/linear-card-window-readers.js`; the Worker helper `planCardWindows` and its typed request and answer are `js/contracts/card-windows.generated.js`, written by `tools/generate_web_contracts.py` from `describe_card_window_plan()` in `gbdraw/web_support/linear_units.py` |
+| What a text, number or color field shows while the user types and when a commit ends (the directive `v-committed-value`, written in place of `:value` on every typed field) | `js/app/committed-value.js` (`settleCommittedField`) |
 | Legend entry point | `js/app/legend.js` |
 | Legend helpers | `js/app/legend/` |
 | Legend/diagram positioning | `js/app/legend-layout.js`, `js/app/legend-layout/` |
@@ -547,9 +550,13 @@ and the Python owner `ring_rows_in_search_frame` converts them to F before they
 become ring tables. Every comparison
 table is read in F, and only the Python planner projects orientation to V.
 Human-readable coordinates (popups, FASTA headers) lead with Src. The Linear
-orientation owner is the File card's `region_reverse`, written by
-`app/record-display-options.js`; `services/record-display-model.js`
-(`effectiveRecordReverseComplement`) derives the effective orientation.
+orientation owner is the File card's window list (its Reverse complement
+only where the card lists no window), written through `orientLinearCard`
+(`services/linear-card-windows.js`, over `orientedCropForm`);
+`services/record-display-model.js` (`effectiveRecordReverseComplement`)
+derives the effective orientation. In Python, `RecordInput.oriented` writes
+it and `window_drawn_reverse` (`gbdraw/io/regions.py`) decides how a window
+is drawn.
 
 Reuse compares every input that is knowable without extraction as data; an
 invalidation event is only an optimization. LOSAT job planning is one pure plan

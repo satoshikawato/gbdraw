@@ -120,7 +120,7 @@ gbdraw/
     _build_support.py          Build-time helpers: package data, the browser wheel and the Pyodide asset config.
     _web_assets.py             The vendored Web assets: their files, source URLs, versions and notices.
     circular.py                The gbdraw circular command: its arguments, Session replay and the Circular request.
-    cli.py                     The gbdraw command: it dispatches to the circular, linear, render, setup-losat and gui subcommands.
+    cli.py                     The gbdraw command: it dispatches to the circular, linear, render, locate, setup-losat and gui subcommands.
     cli_utils/                 CLI module with shared argument definitions and utilities.
     crop_genbank.py            Crop a GenBank record to a region and shift its features; also runs as a script.
     linear.py                  The gbdraw linear command: its arguments, Session replay and the Linear request.

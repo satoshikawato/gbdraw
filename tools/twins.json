@@ -1347,6 +1347,107 @@
       "retireWhen": "the Web asks the Python owner (Worker) for the default stack instead of building it",
       "source": "euk-feasibility-20261108 E4 (#1836 review r1 finding 2, D-57)",
       "pending": true
+    },
+    {
+      "id": "concern:similarity-alignment-reset-binding",
+      "concern": "Which record of a request a stored similarity-alignment reset receipt binds",
+      "pythonOwner": [
+        "gbdraw/session_io.py:region_binding"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-active-config-contract.js:resetBinding",
+        "gbdraw/web/js/services/session-active-config-contract.js:readStoredSimilarityAlignmentResetReceipt"
+      ],
+      "vector": null,
+      "reason": "Python binds the receipt to the record's selector and region when it loads a stored request; the Web reads the same receipt in its own stored-request reader so Load needs no Worker.",
+      "retireWhen": "the Web reads stored requests through the Python decoder",
+      "source": "review of the multi-contig-locus campaign (record windows); the twin is on dev with no shared vector"
+    },
+    {
+      "id": "concern:record-draws-several-units",
+      "concern": "Whether a record is drawn as several windows",
+      "pythonOwner": [
+        "gbdraw/api/record_planning.py:record_drawn_windows"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/linear-units.js:drawsSeveralUnits"
+      ],
+      "vector": null,
+      "reason": "The Web decides from the card's window list before Python plans the request; a record with two or more windows is several units on both sides.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "review of the multi-contig-locus campaign (record windows); the twin is on dev with no shared vector"
+    },
+    {
+      "id": "concern:catalog-record-units",
+      "concern": "The drawn units (windows) a feature catalog item's record belongs to",
+      "pythonOwner": [
+        "gbdraw/render/interactive_svg.py:catalog_record_units"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/linear-units.js:catalogUnitRecords"
+      ],
+      "vector": null,
+      "reason": "Python writes the unit numbers into the interactive SVG catalog; the Web groups the catalog's records by window before a drawing exists.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "review of the multi-contig-locus campaign (record windows); the twin is on dev with no shared vector"
+    },
+    {
+      "id": "concern:region-text",
+      "concern": "The text of a region (start, end and the reverse mark) in popups and run info",
+      "pythonOwner": [
+        "gbdraw/io/regions.py:region_text"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/app/run-info.js:regionText",
+        "gbdraw/web/js/app/preview-item-popup.js:regionText"
+      ],
+      "vector": null,
+      "reason": "Python writes the text into FASTA headers and logs; the Web writes it in its popups and run info with no Worker call.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "review of the multi-contig-locus campaign (record windows); the twin is on dev with no shared vector"
+    },
+    {
+      "id": "concern:unit-coordinate-map-base",
+      "concern": "Where a window's coordinate map starts (its start, or its end when the unit is reversed)",
+      "pythonOwner": [
+        "gbdraw/web_support/similarity_alignment.py:_RecordFact._unit_offset"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/record-display-model.js"
+      ],
+      "vector": null,
+      "reason": "Python's alignment offset follows the crop's coordinate-map base rule that the crop and the Web's windows share.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "review of the multi-contig-locus campaign (record windows); the twin is on dev with no shared vector"
+    },
+    {
+      "id": "concern:linear-presentation-reverse",
+      "concern": "Whether a record's presentation reverse is set: only for a record without windows",
+      "pythonOwner": [
+        "gbdraw/api/requests.py:RecordInput.oriented"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-request.js:linearPresentationReverse",
+        "gbdraw/web/js/services/record-display-model.js:cropFormRecord"
+      ],
+      "vector": null,
+      "reason": "A card with windows holds its orientation on the windows and a card without on its record; the Web writes the request in that form and Python reads it so.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "review of the multi-contig-locus campaign (record windows); the twin is on dev with no shared vector"
+    },
+    {
+      "id": "concern:all-split-record-selector",
+      "concern": "The selector of the n-th record of a file that an ALL input expanded to",
+      "pythonOwner": [
+        "gbdraw/api/request_render.py:_record_analysis_selector"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-request.js"
+      ],
+      "vector": null,
+      "reason": "Python names the record `#n` from its plan; the Web numbers the cards of a split file the same way (a node test pins the Web's number to Python's).",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "review of the multi-contig-locus campaign (record windows); the twin is on dev with no shared vector"
     }
   ]
 }
