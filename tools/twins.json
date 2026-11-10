@@ -6,14 +6,15 @@
       "id": "vector:tests/fixtures/auto_size_vectors.json",
       "concern": "Auto size values by record length (size class)",
       "pythonOwner": [
-        "gbdraw/auto_sizes.py:auto_setting_values"
+        "gbdraw/auto_sizes.py:auto_setting_values",
+        "gbdraw/auto_sizes.py:record_auto_values"
       ],
       "jsOwner": [
         "gbdraw/web/js/services/track-slot-display.js:sizeClassForRecordLengths",
         "gbdraw/web/js/app/auto-value-display.js:createAutoValueDisplay"
       ],
       "vector": "tests/fixtures/auto_size_vectors.json",
-      "reason": "The Web shows the automatic value before Generate; the vector pins its size class to Python's (the Web reads the label font size) and its GC content axis tick font beside a depth axis (gcAxisTickFonts: the font of the first Depth row's series, at that row's width when Use custom stack is on).",
+      "reason": "The Web shows the automatic value before Generate; the vector pins its size class to Python's (the Web reads the label font size) and its GC content axis tick font beside a depth axis (gcAxisTickFonts: the font of the first Depth row's series, at that row's width when Use custom stack is on). Each record's Auto window, step, Depth window, Depth step and scale interval (recordValues: a Circular record at its own length, a Linear drawing's records at the longest) pin the Web window and interval notes.",
       "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
@@ -1447,6 +1448,35 @@
       "reason": "Python names the record `#n` from its plan; the Web numbers the cards of a split file the same way (a node test pins the Web's number to Python's).",
       "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
       "source": "review of the multi-contig-locus campaign (record windows); the twin is on dev with no shared vector"
+    },
+    {
+      "id": "vector:tests/fixtures/linear_comparison_plan_edge_cases.json",
+      "concern": "Admission of a Linear comparison-plan edge (its fields, metadata and windowLosatFilenames entries)",
+      "pythonOwner": [
+        "gbdraw/session_io.py:_validate_comparison_plan_edge"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-authority.js:validateLinearComparisonPlan",
+        "gbdraw/web/js/services/linear-comparisons.js:isWindowLosatFilenameEntry"
+      ],
+      "vector": "tests/fixtures/linear_comparison_plan_edge_cases.json",
+      "reason": "Python admission and the Web Save check (and Load's entry check) decide the same edge shape; the cases pin both.",
+      "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
+      "source": "review of #1845 (2026-11-10)"
+    },
+    {
+      "id": "concern:linear-adjacent-row-pairs",
+      "concern": "Every record pair of adjacent rows of a Linear layout (the Adjacent comparison plan's edges)",
+      "pythonOwner": [
+        "gbdraw/layout/linear_multi_record.py:record_pairs_between_adjacent_rows"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/linear-comparisons.js:adjacentRowPairs"
+      ],
+      "vector": null,
+      "reason": "The Web writes the Adjacent plan's edges before Generate asks the Worker for its unit plan; Generate displays a grid pair only when such an edge gave it a search, so if the JS rows (normalizeLinearComparisonRows) and the gridRow of linearRecordPlacements disagree, the pair's ribbon is dropped without a refusal.",
+      "retireWhen": "the Web takes the plan's adjacent edges from the Python unit plan (Worker) instead of its own copy",
+      "source": "review of PR #1883 (OV-3248); the twin is on dev with no shared vector"
     }
   ]
 }
