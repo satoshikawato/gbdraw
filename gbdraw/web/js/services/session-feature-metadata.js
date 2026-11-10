@@ -1,19 +1,7 @@
 // @ts-check
+import { ANNOTATION_WARNING_CODES, ANNOTATION_WARNING_FIELDS } from '../contracts/schema.generated.js';
 /** @import { FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
-
-/**
- * One annotation warning of the Result metadata, as Python writes it.
- * @typedef {object} AnnotationWarning
- * @property {string} code
- * @property {string} setId
- * @property {string} annotationId
- * @property {string} recordId
- * @property {number} recordIndex
- * @property {number} missingCount
- * @property {string} message
- * @property {number} resultIndex
- * @property {string} resultName
- */
+/** @import { SessionAnnotationWarning } from '../contracts/session.generated.js' */
 
 /**
  * A rendered feature as the SVG draws it: the rendered id, the stable
@@ -45,14 +33,13 @@
 /**
  * @param {unknown} warnings
  * @param {{ readonly [index: number]: { readonly name?: unknown } | null | undefined } | null | undefined} results The Results the warnings name, read by index: an unvalidated value too.
- * @returns {AnnotationWarning[]}
+ * @returns {SessionAnnotationWarning[]}
  */
 export const validateAnnotationWarnings = (warnings, results) => {
   if (warnings === undefined) return [];
-  const fields = ['code', 'setId', 'annotationId', 'recordId', 'recordIndex',
-    'missingCount', 'message', 'resultIndex', 'resultName'];
-  const codes = new Set(['feature_selector_unmatched', 'empty_span',
-    'out_of_bounds_skipped', 'out_of_bounds_clipped']);
+  const fields = ANNOTATION_WARNING_FIELDS;
+  /** @type {ReadonlySet<unknown>} */
+  const codes = new Set(ANNOTATION_WARNING_CODES);
   if (!Array.isArray(warnings) || warnings.some((warning) => (
     (warning === null || typeof warning !== 'object' || Array.isArray(warning))
     || Object.keys(warning).length !== fields.length

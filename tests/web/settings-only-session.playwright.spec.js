@@ -258,7 +258,9 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   expect(await page.locator('.origin-top svg').count()).toBe(0);
   const inactiveSave = await save(page, testInfo, 'inactive-source');
   expect(savedDrawing(inactiveSave.document, 'circular').renderRequest).toEqual(promoted);
-  expect(savedDrawing(inactiveSave.document, 'circular').runMetadata).toEqual(runMetadata);
+  // Save writes every notice list, as the gbdraw command does (`build_run_metadata`).
+  expect(savedDrawing(inactiveSave.document, 'circular').runMetadata)
+    .toEqual({ ...runMetadata, featureIdentityNotices: [], comparisonWarnings: [] });
   expect(inactiveSave.document.drawings.map(drawing => drawing.id)).toEqual(['circular']);
   expect(inactiveSave.document.ui.activeDrawingId).toBe('circular');
   await loadFile(page, inactiveSave.file);

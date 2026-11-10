@@ -104,6 +104,14 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("OTHER_MODE_RESULT_EDITOR_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_EDITOR_FIELDS"),
     ("OTHER_MODE_RESULT_LEGEND_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_LEGEND_FIELDS"),
     ("OTHER_MODE_RESULT_RUN_METADATA_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_RUN_METADATA_FIELDS"),
+    # The rows of the run notice lists in `runMetadata`: their keys and the values of their fixed fields.
+    ("ANNOTATION_WARNING_FIELDS", "gbdraw.session_io", "ANNOTATION_WARNING_FIELDS"),
+    ("ANNOTATION_WARNING_CODES", "gbdraw.session_io", "ANNOTATION_WARNING_CODES"),
+    ("COMPARISON_WARNING_FIELDS", "gbdraw.session_io", "COMPARISON_WARNING_FIELDS"),
+    ("COMPARISON_WARNING_CODES", "gbdraw.session_io", "COMPARISON_WARNING_CODES"),
+    ("FEATURE_IDENTITY_NOTICE_FIELDS", "gbdraw.session_io", "FEATURE_IDENTITY_NOTICE_FIELDS"),
+    ("FEATURE_IDENTITY_NOTICE_STATUSES", "gbdraw.session_io", "FEATURE_IDENTITY_NOTICE_STATUSES"),
+    ("FEATURE_IDENTITY_NOTICE_KINDS", "gbdraw.session_io", "FEATURE_IDENTITY_NOTICE_KINDS"),
     ("CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS", "gbdraw.session_io", "CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS"),
     # The file slots of a Circular File card (a `circularSources` row) besides its uid, in the card's order.
     ("CIRCULAR_SOURCE_FILE_SLOTS", "gbdraw.session_io", "CIRCULAR_SOURCE_FILE_SLOTS"),

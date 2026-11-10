@@ -70,6 +70,7 @@ const { circularSourceInputs } = await import('../../gbdraw/web/js/services/inpu
 const { getResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
 const { resolveComparisonThresholds } = await import('../../gbdraw/web/js/mode-profiles.js');
 const { isCardRow } = await import('../../gbdraw/web/js/services/file-imports.js');
+const { readRegionAxisRecords } = await import('../../gbdraw/web/js/services/region-axis.js');
 // The Generate's reuse test of stored protein results is module-private; a
 // copy of run-analysis.js that exports it imports the same modules.
 const runAnalysisUrl = pathToFileURL(path.join(process.cwd(), 'gbdraw/web/js/app/run-analysis.js'));
@@ -145,6 +146,10 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
         assert.deepEqual(getCommittedCanonicalRenderRequest(), view.renderRequest);
         assert.ok(state.results.value.length > 0);
+        // OV-3240: each drawn record's axis loads with the Result, so Select region needs no Generate.
+        const axes = readRegionAxisRecords(state.trackSlotResolvedGeometry.value, 0);
+        assert.deepEqual(axes.map(({ recordKey, axis }) => [recordKey, axis.kind]),
+          view.renderRequest.records.map(({ recordKey }) => [recordKey, mode]), phase);
         if (label === 'single') assert.equal(state.activeDrawing().form.labels_mode, 'out');
         assert.equal(view.renderRequest.diagramOptions.output.legend, legend);
         assert.equal(state.activeDrawing().form.legend, legend);
@@ -818,6 +823,89 @@ const nextGenerate = async () => {
   if (inherit) inheritSavedComparison({ candidate, source: drawing.importedComparisonIntent.source });
   return candidate;
 };
+
+// The run metadata a Session holds: the shown drawing's `runMetadata`, parsed, nothing stripped.
+const runMetadataOf = (bytes) => {
+  const session = JSON.parse(bytes);
+  return savedDrawingView(session, session.ui.activeDrawingId).runMetadata;
+};
+// A Web Save of the loaded Session.
+const webSaveRunMetadata = async (title) => {
+  const saved = await exportSession(title);
+  assert.equal(saved.status, 'saved', saved.error?.message);
+  return runMetadataOf(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())));
+};
+
+// OV-3244: a Session the gbdraw command saved holds the run notices a Web Save holds (an annotation that draws no
+// feature, an edit of a feature outside the crop, comparison rows whose IDs name no drawn record), so a Load shows
+// them without Generate. A CLI re-save of it holds them too, and a Web Save of either writes the same `runMetadata`
+// (one shape, `gbdraw.api.run_metadata.build_run_metadata`).
+await test('a CLI Session and its CLI re-save show the run notices at Load without Generate, and a Web Save writes the same runMetadata', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-notices-'));
+  try {
+    const table = async (name, text) => {
+      const file = path.join(directory, name);
+      await writeFile(file, text, 'utf8');
+      return file;
+    };
+    const annotations = await table('annotations.tsv',
+      'set_id\tid\tmark\trecord\tfeature_selector\tlabel\ns\tmissing\tband\t#1\tgene=PRIVATE-MISSING\tMissing\n');
+    const overrides = await table('overrides.tsv',
+      'record\tfeature_selector\tlabel_visibility\tlabel_text\nNC_001416.1\tprotein_id=NP_040580.1\ton\tFirst gene\n');
+    const blast = await table('blast.tsv', 'contig_A\tcontig_B\t99.0\t1000\t0\t0\t2001\t3000\t1\t1000\t1e-100\t1800.0\n');
+    let input = ['--gbk', lambda, mito, '-b', blast, '--annotation_table', annotations,
+      '--feature_override_table', overrides, '--region', 'NC_001416.1:20000-30000'];
+    for (const phase of ['fresh', 'replay']) {
+      const output = path.join(directory, phase);
+      const file = `${output}.gbdraw-session.json.gz`;
+      execFileSync('python', ['-m', 'gbdraw.cli', 'linear', ...input, '-o', output, '--session_output', file], {
+        cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+      });
+      const bytes = gunzipSync(await readFile(file));
+      const result = await load(bytes);
+      assert.equal(result.status, 'ok', result.error?.stack);
+      assert.deepEqual(await webSaveRunMetadata(`notices-${phase}`), runMetadataOf(bytes), phase);
+      assert.deepEqual(state.annotationWarnings.value.map(({ code, recordId, resultIndex }) => [code, recordId, resultIndex]),
+        [['feature_selector_unmatched', 'NC_001416.1', 0]], phase);
+      assert.deepEqual(state.featureIdentityNotices.value.map(({ recordKey, status, kinds }) => [recordKey, status, kinds]),
+        [['record-1', 'crop_excluded', ['label_visibility', 'label_text']]], phase);
+      assert.deepEqual(state.comparisonWarnings.value.map(({ code, exampleIds }) => [code, exampleIds]),
+        [['comparison_record_id_unmatched', ['contig_A', 'contig_B']]], phase);
+      input = ['--session', file];
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// With no notice, the gbdraw command and a Web Save both write the three notice lists empty. A Session that omits
+// them (a Web Save before both wrote one shape) loads them as empty lists, and its Web Save writes them.
+await test('a CLI Session without notices and its Web Save write the same runMetadata; a Session that omits the lists loads them empty', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-no-notices-'));
+  try {
+    const file = path.join(directory, 'plain.gbdraw-session.json.gz');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', mito, '-o', path.join(directory, 'plain'),
+      '--session_output', file], { cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000 });
+    const bytes = gunzipSync(await readFile(file));
+    const cli = runMetadataOf(bytes);
+    assert.deepEqual(Object.keys(cli).sort(), ['annotationWarnings', 'comparisonWarnings', 'featureIdentityNotices', 'trackSlotGeometry']);
+    assert.deepEqual([cli.annotationWarnings, cli.featureIdentityNotices, cli.comparisonWarnings], [[], [], []]);
+    assert.equal((await load(bytes)).status, 'ok');
+    assert.deepEqual(await webSaveRunMetadata('no-notices'), cli);
+
+    const older = JSON.parse(bytes);
+    const olderRun = older.drawings.find(entry => entry.id === older.ui.activeDrawingId).runMetadata;
+    delete olderRun.featureIdentityNotices;
+    delete olderRun.comparisonWarnings;
+    delete olderRun.annotationWarnings;
+    assert.equal((await load(Buffer.from(JSON.stringify(older)))).status, 'ok');
+    assert.deepEqual([state.annotationWarnings.value, state.featureIdentityNotices.value, state.comparisonWarnings.value], [[], [], []]);
+    assert.ok(readRegionAxisRecords(state.trackSlotResolvedGeometry.value, 0).length > 0);
+    assert.deepEqual(await webSaveRunMetadata('omitted-lists'), cli);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 // The narrowing settings around the centre definition (`--no_track_narrowing`,
 // `--track_narrowing_min_px`) have no Web control yet. A CLI Session carries

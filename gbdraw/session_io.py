@@ -86,9 +86,13 @@ from .session_contract import (
     SessionOtherModeEditorState,
     SessionOtherModeLegend,
     SessionOtherModeResult,
+    SessionAnnotationWarning,
+    SessionComparisonWarning,
+    SessionFeatureIdentityNotice,
     SessionOtherModeUi,
     SessionRunMetadata,
     keys_of,
+    literal_values,
 )
 from .tracks.circular import _LEGACY_SPACING_PARAM, _migrate_legacy_circular_track_slot_spec
 from .web_support.mode_scoped_settings import (
@@ -178,6 +182,15 @@ OTHER_MODE_RESULT_UI_FIELDS = keys_of(SessionOtherModeUi)
 OTHER_MODE_RESULT_EDITOR_FIELDS = keys_of(SessionOtherModeEditorState)
 OTHER_MODE_RESULT_LEGEND_FIELDS = keys_of(SessionOtherModeLegend)
 OTHER_MODE_RESULT_RUN_METADATA_FIELDS = keys_of(SessionRunMetadata)
+# The rows of the run notice lists in ``runMetadata``: their keys and the values of their fixed fields, which
+# ``_validate_other_mode_run_metadata`` and the Web's validators take.
+ANNOTATION_WARNING_FIELDS = keys_of(SessionAnnotationWarning)
+ANNOTATION_WARNING_CODES = literal_values(SessionAnnotationWarning, "code")
+COMPARISON_WARNING_FIELDS = keys_of(SessionComparisonWarning)
+COMPARISON_WARNING_CODES = literal_values(SessionComparisonWarning, "code")
+FEATURE_IDENTITY_NOTICE_FIELDS = keys_of(SessionFeatureIdentityNotice)
+FEATURE_IDENTITY_NOTICE_STATUSES = literal_values(SessionFeatureIdentityNotice, "status")
+FEATURE_IDENTITY_NOTICE_KINDS = literal_values(SessionFeatureIdentityNotice, "kinds")
 # Web file binding slots (``webFiles.bindings``, schema 2): the five file
 # cards, which every drawing binds, and the slots of each diagram mode's inputs
 # in a Session 51 drawing. A Circular drawing's input files are its File cards,
@@ -299,6 +312,10 @@ class SessionBuildContext:
     source_session: Mapping[str, Any] | None = None
     cli_invocation_args: tuple[str, ...] = ()
     file_bindings: tuple[SessionFileBinding | Mapping[str, Any], ...] = ()
+    # What the run reported beside its Results (``gbdraw.api.run_metadata``,
+    # the producer of what a Web Save writes); the Session keeps it as it is,
+    # in place of any ``runMetadata`` a source Session held.
+    run_metadata: SessionRunMetadata | None = None
 
 
 def _feature_catalog_key(feature: Mapping[str, Any]) -> tuple[int, str] | None:
@@ -1724,23 +1741,6 @@ def _validate_other_mode_result(session: Mapping[str, Any], version: int) -> Non
         raise ValidationError("Session otherModeResult editorState and ui hold only that Result set's fields.", diagnostic=_OTHER_MODE_RESULT_INVALID)
 
 
-_ANNOTATION_WARNING_FIELDS = frozenset(
-    {"code", "setId", "annotationId", "recordId", "recordIndex", "missingCount", "message", "resultIndex", "resultName"}
-)
-_ANNOTATION_WARNING_CODES = frozenset(
-    {"feature_selector_unmatched", "empty_span", "out_of_bounds_skipped", "out_of_bounds_clipped"}
-)
-_COMPARISON_WARNING_FIELDS = frozenset(
-    {
-        "code", "queryRecordIndex", "subjectRecordIndex", "queryRecordId", "subjectRecordId",
-        "rowCount", "exampleIds", "message", "resultIndex", "resultName",
-    }
-)
-_FEATURE_IDENTITY_NOTICE_FIELDS = frozenset({"biologicalFeatureId", "kinds", "recordKey", "resultIndex", "status"})
-_FEATURE_IDENTITY_NOTICE_STATUSES = frozenset({"crop_excluded", "absent", "unresolved"})
-_FEATURE_IDENTITY_NOTICE_KINDS = frozenset({"placement", "feature_visibility", "label_visibility", "label_text"})
-
-
 def _index(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
@@ -1761,8 +1761,8 @@ def _validate_other_mode_run_metadata(run_metadata: Any, results: list[Any]) -> 
 
     for warning in run_metadata.get("annotationWarnings", []):
         if (
-            not isinstance(warning, Mapping) or set(warning) != _ANNOTATION_WARNING_FIELDS
-            or warning["code"] not in _ANNOTATION_WARNING_CODES
+            not isinstance(warning, Mapping) or set(warning) != ANNOTATION_WARNING_FIELDS
+            or warning["code"] not in ANNOTATION_WARNING_CODES
             or not all(isinstance(warning[key], str) for key in ("setId", "annotationId", "recordId", "message", "resultName"))
             or not warning["setId"] or not warning["annotationId"]
             or not all(_index(warning[key]) for key in ("recordIndex", "missingCount", "resultIndex"))
@@ -1772,8 +1772,8 @@ def _validate_other_mode_run_metadata(run_metadata: Any, results: list[Any]) -> 
             raise ValidationError("Annotation warnings do not match the successful Result metadata schema.", diagnostic=_OTHER_MODE_RESULT_INVALID)
     for warning in run_metadata.get("comparisonWarnings", []):
         if (
-            not isinstance(warning, Mapping) or set(warning) != _COMPARISON_WARNING_FIELDS
-            or warning["code"] != "comparison_record_id_unmatched"
+            not isinstance(warning, Mapping) or set(warning) != COMPARISON_WARNING_FIELDS
+            or warning["code"] not in COMPARISON_WARNING_CODES
             or not all(isinstance(warning[key], str) for key in ("queryRecordId", "subjectRecordId", "message", "resultName"))
             or not warning["message"]
             or not isinstance(warning["exampleIds"], list)
@@ -1785,12 +1785,12 @@ def _validate_other_mode_run_metadata(run_metadata: Any, results: list[Any]) -> 
             raise ValidationError("Comparison warnings do not match the successful Result metadata schema.", diagnostic=_OTHER_MODE_RESULT_INVALID)
     for notice in run_metadata.get("featureIdentityNotices", []):
         if (
-            not isinstance(notice, Mapping) or set(notice) != _FEATURE_IDENTITY_NOTICE_FIELDS
+            not isinstance(notice, Mapping) or set(notice) != FEATURE_IDENTITY_NOTICE_FIELDS
             or not isinstance(notice["recordKey"], str) or not notice["recordKey"]
             or not isinstance(notice["biologicalFeatureId"], str) or not notice["biologicalFeatureId"]
-            or notice["status"] not in _FEATURE_IDENTITY_NOTICE_STATUSES
+            or notice["status"] not in FEATURE_IDENTITY_NOTICE_STATUSES
             or not isinstance(notice["kinds"], list) or not notice["kinds"]
-            or not all(kind in _FEATURE_IDENTITY_NOTICE_KINDS for kind in notice["kinds"])
+            or not all(kind in FEATURE_IDENTITY_NOTICE_KINDS for kind in notice["kinds"])
             or not _index(notice["resultIndex"]) or notice["resultIndex"] >= len(results)
         ):
             raise ValidationError("runMetadata.featureIdentityNotices contains an invalid notice.", diagnostic=_OTHER_MODE_RESULT_INVALID)
@@ -5889,6 +5889,10 @@ def build_session_json(
         {"name": name or f"Result {index + 1}", "content": content}
         for index, (name, content) in enumerate(svg_results)
     ]
+    if context.run_metadata is not None:
+        payload["runMetadata"] = _json_clone(context.run_metadata)
+    else:
+        payload.pop("runMetadata", None)
     editor_state = payload.get("editorState")
     editor_state = (
         dict(editor_state) if isinstance(editor_state, Mapping) else {}

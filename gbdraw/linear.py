@@ -139,10 +139,7 @@ from .cli_utils.session import (
     save_session_sidecar_if_requested,
     read_stored_font_size_options,
 )
-from .render.track_slot_metadata import (
-    build_track_slot_geometry_run_metadata,
-    collect_track_slot_geometry_records,
-)
+from .api.run_metadata import RenderedResult, build_run_metadata
 from .render.output_paths import preflight_output_paths
 from .session import (
     SessionDocument,
@@ -1935,14 +1932,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     log_input_summary(render_result.input_summary)
     if render_result.linear_metadata is not None and render_result.linear_metadata.wrap is not None:
         logger.info(render_result.linear_metadata.wrap.message)
-    canvas = render_result.drawing
     interactive_context = render_result.interactive_context
     rendered_svg = make_rendered_svg(out_file_prefix, request_path.name)
-    track_slot_geometry_records = collect_track_slot_geometry_records(
-        canvas,
-        result_index=0,
-        result_name=rendered_svg.svg_path.name,
-    )
 
     return DiagramRunResult(
         mode="linear",
@@ -1965,10 +1956,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         protein_identity_manifest=render_result.protein_identity_manifest,
         legacy_protein_raw_candidates=legacy_protein_raw_candidates,
         legacy_protein_derived_evidence=legacy_protein_derived_evidence,
-        run_metadata=build_track_slot_geometry_run_metadata(
-            mode="linear",
-            records=track_slot_geometry_records,
-        ),
+        run_metadata=build_run_metadata("linear", [RenderedResult(render_result, rendered_svg.result_name)]),
         # A Session stores the protein results this render computed (OV-1068).
         canonical_request=(
             stored_protein_result_request(render_result.request, render_result.linear_metadata)

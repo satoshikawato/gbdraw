@@ -22,7 +22,15 @@ from __future__ import annotations
 import re
 from typing import Any, Literal, NewType, TypedDict, get_type_hints
 
-from .features.overrides import FeatureVisibilityMode, LabelVisibilityMode
+from .annotations.models import AnnotationWarningCode
+from .contract_shapes import ResolvedTrackSlotGeometry, shape_of_hint
+from .features.overrides import (
+    FeatureEditKind,
+    FeatureIdentityNoticeStatus,
+    FeatureVisibilityMode,
+    LabelVisibilityMode,
+)
+from .linear_comparison import ComparisonWarningCode
 from .web_support.mode_scoped_settings import (
     DIAGRAM_MODES,
     LOSAT_EXECUTION_FIELDS,
@@ -47,17 +55,58 @@ class SessionResult(TypedDict):
     content: str
 
 
+class SessionAnnotationWarning(TypedDict):
+    """A region annotation that a Result does not draw whole (``ResolutionWarning``)."""
+
+    code: AnnotationWarningCode
+    setId: str
+    annotationId: str
+    recordId: str
+    recordIndex: int
+    missingCount: int
+    message: str
+    resultIndex: int
+    resultName: str
+
+
+class SessionFeatureIdentityNotice(TypedDict):
+    """An identity-addressed feature edit that a Result does not draw (``FeatureIdentityNotice``)."""
+
+    recordKey: str
+    biologicalFeatureId: str
+    status: FeatureIdentityNoticeStatus
+    kinds: list[FeatureEditKind]
+    resultIndex: int
+
+
+class SessionComparisonWarning(TypedDict):
+    """Comparison table rows whose sequence IDs name no drawn record (``ComparisonRecordIdWarning``)."""
+
+    code: ComparisonWarningCode
+    queryRecordIndex: int
+    subjectRecordIndex: int
+    queryRecordId: str
+    subjectRecordId: str
+    rowCount: int
+    exampleIds: list[str]
+    message: str
+    resultIndex: int
+    resultName: str
+
+
 class SessionRunMetadata(TypedDict, total=False):
-    """What a Generate reported beside its Results.
+    """What a render reported beside its Results, as
+    :func:`gbdraw.api.run_metadata.build_run_metadata` builds it for every
+    surface.
 
     The rows are checked by ``_validate_other_mode_run_metadata`` and by the
     Web's warning and notice validators.
     """
 
-    trackSlotGeometry: object
-    annotationWarnings: list[object]
-    featureIdentityNotices: list[object]
-    comparisonWarnings: list[object]
+    trackSlotGeometry: ResolvedTrackSlotGeometry
+    annotationWarnings: list[SessionAnnotationWarning]
+    featureIdentityNotices: list[SessionFeatureIdentityNotice]
+    comparisonWarnings: list[SessionComparisonWarning]
 
 
 class _CliInvocationRequired(TypedDict):
@@ -327,6 +376,20 @@ def keys_of(cls: type) -> frozenset[str]:
     """The keys a declared object may hold."""
 
     return frozenset(get_type_hints(cls))
+
+
+def literal_values(cls: type, key: str) -> tuple[str, ...]:
+    """The values a declared key takes, in their declared order, read from its JSON shape
+    (:func:`~gbdraw.contract_shapes.shape_of_hint`, the owner the admission description uses): those of its
+    literal, or of its items' when it is an array."""
+
+    shape = shape_of_hint(get_type_hints(cls)[key])
+    if shape["kind"] == "array":
+        shape = shape["items"]
+    values = tuple(shape["values"]) if shape["kind"] == "literal" else ()
+    if not values or not all(isinstance(value, str) for value in values):
+        raise TypeError(f"{cls.__name__}.{key} is not typed by a string Literal.")
+    return values
 
 
 def describe_session_document() -> dict[str, Any]:
@@ -600,8 +663,12 @@ __all__ = [
     "SessionOtherModeLegend",
     "SessionOtherModeResult",
     "SessionOtherModeUi",
+    "SessionAnnotationWarning",
+    "SessionComparisonWarning",
+    "SessionFeatureIdentityNotice",
     "SessionRunMetadata",
     "describe_session_admission",
     "describe_session_document",
     "keys_of",
+    "literal_values",
 ]

@@ -238,7 +238,7 @@ FUNCTION_LINES: dict[str, int] = {
     "gbdraw/api/diagram.py::assemble_linear_diagram_from_records": 483,
     "gbdraw/api/options.py::_ModeDiagramOptions.__post_init__": 165,
     "gbdraw/circular.py::_get_args": 604,
-    "gbdraw/circular.py::run_circular_from_namespace": 567,
+    "gbdraw/circular.py::run_circular_from_namespace": 558,
     "gbdraw/diagrams/circular/assemble.py::_draw_resolved_circular_slot": 230,
     "gbdraw/diagrams/circular/assemble.py::_try_shift_labels_away_from_legend": 155,
     "gbdraw/diagrams/circular/assemble.py::add_record_on_circular_canvas": 634,
@@ -263,7 +263,7 @@ FUNCTION_LINES: dict[str, int] = {
     "gbdraw/layout/similarity_alignment.py::resolve_similarity_alignment": 236,
     "gbdraw/legend/circular_layout.py::build_circular_legend_layout": 168,
     "gbdraw/linear.py::_get_args": 869,
-    "gbdraw/linear.py::run_linear_from_namespace": 538,
+    "gbdraw/linear.py::run_linear_from_namespace": 529,
     "gbdraw/render/drawers/circular/annotations.py::circular_annotation_track_content": 141,
     "gbdraw/render/drawers/linear/annotations.py::linear_annotation_track_content": 161,
     "gbdraw/render/interactive_svg.py::enrich_svg": 194,
@@ -272,7 +272,7 @@ FUNCTION_LINES: dict[str, int] = {
     "gbdraw/session_io.py::_attach_current_web_file_bindings": 172,
     "gbdraw/session_io.py::_migrate_legacy_linear_comparison_draft": 320,
     "gbdraw/session_io.py::_validate_current_comparison_authority": 178,
-    "gbdraw/session_io.py::build_session_json": 181,
+    "gbdraw/session_io.py::build_session_json": 168,
     "gbdraw/session_migration.py::project_session_adjunct_for_current_write": 182,
     "gbdraw/session_request_codec.py::_decode_canonical_request": 157,
     "gbdraw/session_request_codec.py::_decode_comparisons": 167,
@@ -283,7 +283,7 @@ FUNCTION_LINES: dict[str, int] = {
     "gbdraw/web_support/feature_catalog.py::_normalized_matches": 181,
     "gbdraw/web_support/feature_catalog.py::select_feature_catalog_item": 381,
     "gbdraw/web_support/feature_metadata.py::extract_features_from_records_payload": 209,
-    "gbdraw/web_support/request_render.py::_render_canonical_web_request": 190,
+    "gbdraw/web_support/request_render.py::_render_canonical_web_request": 131,
 }
 
 FUNCTION_PARAMETERS: dict[str, int] = {

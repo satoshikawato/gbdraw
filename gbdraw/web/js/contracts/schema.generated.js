@@ -166,6 +166,34 @@ export const OTHER_MODE_RESULT_LEGEND_FIELDS = Object.freeze(['originalColors', 
 /** @type {readonly string[]} */
 export const OTHER_MODE_RESULT_RUN_METADATA_FIELDS = Object.freeze(['annotationWarnings', 'comparisonWarnings', 'featureIdentityNotices', 'trackSlotGeometry']);
 
+// gbdraw/session_io.py: ANNOTATION_WARNING_FIELDS
+/** @type {readonly string[]} */
+export const ANNOTATION_WARNING_FIELDS = Object.freeze(['annotationId', 'code', 'message', 'missingCount', 'recordId', 'recordIndex', 'resultIndex', 'resultName', 'setId']);
+
+// gbdraw/session_io.py: ANNOTATION_WARNING_CODES
+/** @type {readonly ['feature_selector_unmatched', 'empty_span', 'out_of_bounds_skipped', 'out_of_bounds_clipped']} */
+export const ANNOTATION_WARNING_CODES = Object.freeze(['feature_selector_unmatched', 'empty_span', 'out_of_bounds_skipped', 'out_of_bounds_clipped']);
+
+// gbdraw/session_io.py: COMPARISON_WARNING_FIELDS
+/** @type {readonly string[]} */
+export const COMPARISON_WARNING_FIELDS = Object.freeze(['code', 'exampleIds', 'message', 'queryRecordId', 'queryRecordIndex', 'resultIndex', 'resultName', 'rowCount', 'subjectRecordId', 'subjectRecordIndex']);
+
+// gbdraw/session_io.py: COMPARISON_WARNING_CODES
+/** @type {readonly ['comparison_record_id_unmatched']} */
+export const COMPARISON_WARNING_CODES = Object.freeze(['comparison_record_id_unmatched']);
+
+// gbdraw/session_io.py: FEATURE_IDENTITY_NOTICE_FIELDS
+/** @type {readonly string[]} */
+export const FEATURE_IDENTITY_NOTICE_FIELDS = Object.freeze(['biologicalFeatureId', 'kinds', 'recordKey', 'resultIndex', 'status']);
+
+// gbdraw/session_io.py: FEATURE_IDENTITY_NOTICE_STATUSES
+/** @type {readonly ['crop_excluded', 'absent', 'unresolved']} */
+export const FEATURE_IDENTITY_NOTICE_STATUSES = Object.freeze(['crop_excluded', 'absent', 'unresolved']);
+
+// gbdraw/session_io.py: FEATURE_IDENTITY_NOTICE_KINDS
+/** @type {readonly ['placement', 'feature_visibility', 'label_visibility', 'label_text']} */
+export const FEATURE_IDENTITY_NOTICE_KINDS = Object.freeze(['placement', 'feature_visibility', 'label_visibility', 'label_text']);
+
 // gbdraw/session_io.py: CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS
 /** @type {readonly string[]} */
 export const CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = Object.freeze(['biologicalFeatures', 'extractedFeatures', 'featureCatalog', 'featureRecordIds', 'featureSelectorSafetyScope']);

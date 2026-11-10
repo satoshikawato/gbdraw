@@ -87,9 +87,16 @@ source base each drawn base shows (`source`: `anchorBase`, `recordBase`, `step`,
 `isCircular`, whether a selected span may cross the record's origin: the record is circular and has no region
 applied, the annotation resolver's rule).
 Python writes them (`gbdraw/render/track_slot_metadata.py`); the Web app's Select region reads them
-(`services/region-axis.js`). The Session shape keeps `trackSlotGeometry` opaque (`unknown`), so the generated
-contracts and the version do not change. A saved Result without them loads as before, and Select region stays off
-until the next Generate; no reader adds them. Fixture: `tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.*`.
+(`services/region-axis.js`). The Session shape keeps each geometry record opaque (`Record<string, unknown>`), so
+the version does not change. A saved Result without them loads as before, and Select region stays off until the next
+Generate; no reader adds them. Fixture: `tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.*`.
+
+A drawing's `runMetadata` is declared once, in `SessionRunMetadata` (`gbdraw/session_contract.py`): the geometry's
+header and the rows of `annotationWarnings`, `featureIdentityNotices` and `comparisonWarnings`. One function builds it
+(`gbdraw/api/run_metadata.py`), and every writer stores it as built: a Web Save, and the gbdraw command's run and
+re-save of a Session. Each writes the three notice lists, empty when there is no notice, and `trackSlotGeometry` when
+a Result has one. This adds no field and keeps the version: a Session that omits a list (an earlier Web Save writes
+only `annotationWarnings` when the others are empty) loads it as an empty list, as before.
 
 Measured against `main`'s build (0.14.5, 033a3aa89, Session 50): `load_session_document` on each of the four
 `tests/fixtures/sessions/drawings-*.v51.*` fixtures raises `SessionVersionError`: "Session version 51 is newer

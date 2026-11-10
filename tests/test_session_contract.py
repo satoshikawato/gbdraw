@@ -173,6 +173,23 @@ def test_an_unknown_key_in_each_closed_object_is_a_violation() -> None:
             "addedCaptions": {}, "colorOverrides": {}, "deletedEntries": [], "entries": [], "strokeOverrides": {},
         },
     }
+    # One run notice of each kind, so that each row type is reached; no stored Session holds one.
+    result = {"resultIndex": 0, "resultName": edited["results"][0]["name"]}
+    edited["runMetadata"] |= {
+        "annotationWarnings": [{
+            "code": "feature_selector_unmatched", "setId": "s", "annotationId": "a", "recordId": "NC_012920.1",
+            "recordIndex": 0, "missingCount": 1, "message": "No feature matches.", **result,
+        }],
+        "featureIdentityNotices": [{
+            "recordKey": "record-1", "biologicalFeatureId": "feature-1", "status": "absent", "kinds": ["label_text"],
+            "resultIndex": 0,
+        }],
+        "comparisonWarnings": [{
+            "code": "comparison_record_id_unmatched", "queryRecordIndex": 0, "subjectRecordIndex": 1,
+            "queryRecordId": "a", "subjectRecordId": "b", "rowCount": 1, "exampleIds": ["a"],
+            "message": "No drawn record.", **result,
+        }],
+    }
     validate_session(edited)
     sessions = [edited, *(
         _with_current_request(session)
@@ -219,6 +236,30 @@ def test_the_validators_read_their_field_sets_from_the_declaration() -> None:
     for part, whole in (("SessionOtherModeUi", "SessionUi"), ("SessionOtherModeEditorState", "SessionEditorState")):
         assert set(TYPES[part]["fields"]) <= set(TYPES[whole]["fields"])
         assert not TYPES[part]["open"] and TYPES[whole]["open"]
+
+
+def test_the_run_notice_validators_read_their_rows_from_the_declaration() -> None:
+    """The keys and the fixed values each run notice validator takes (Python here, the Web through the generated
+    contract) are the row TypedDict's: its keys and the values of its ``Literal`` fields, in the producer's order."""
+
+    for fields, codes, row in (
+        (session_io.ANNOTATION_WARNING_FIELDS, session_io.ANNOTATION_WARNING_CODES, "SessionAnnotationWarning"),
+        (session_io.COMPARISON_WARNING_FIELDS, session_io.COMPARISON_WARNING_CODES, "SessionComparisonWarning"),
+    ):
+        assert fields == keys_of(getattr(session_contract, row)) == set(TYPES[row]["fields"])
+        assert TYPES[row]["fields"]["code"] == {"kind": "literal", "values": list(codes)}
+    notice = TYPES["SessionFeatureIdentityNotice"]["fields"]
+    assert session_io.FEATURE_IDENTITY_NOTICE_FIELDS == keys_of(session_contract.SessionFeatureIdentityNotice)
+    assert notice["status"] == {"kind": "literal", "values": list(session_io.FEATURE_IDENTITY_NOTICE_STATUSES)}
+    assert notice["kinds"] == {
+        "kind": "array", "items": {"kind": "literal", "values": list(session_io.FEATURE_IDENTITY_NOTICE_KINDS)},
+    }
+    assert session_io.ANNOTATION_WARNING_CODES == (
+        "feature_selector_unmatched", "empty_span", "out_of_bounds_skipped", "out_of_bounds_clipped",
+    )
+    assert session_io.FEATURE_IDENTITY_NOTICE_KINDS == (
+        "placement", "feature_visibility", "label_visibility", "label_text",
+    )
 
 
 def test_a_mode_slice_is_described_from_the_registry() -> None:

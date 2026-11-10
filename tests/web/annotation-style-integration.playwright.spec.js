@@ -293,7 +293,7 @@ for (const width of [1440, 390]) {
 import json,sys,xml.etree.ElementTree as E
 from pathlib import Path
 from gbdraw.session import materialize_session,render_session
-from gbdraw.render.track_slot_metadata import collect_track_slot_geometry_records,build_track_slot_geometry_run_metadata
+from gbdraw.api.run_metadata import RenderedResult,build_run_metadata
 with materialize_session(sys.argv[1],output_directory=sys.argv[2]) as session:
  rendered=render_session(session)
  # The Circular Gallery Session keeps its command line's grouping: one diagram per record.
@@ -303,7 +303,7 @@ with materialize_session(sys.argv[1],output_directory=sys.argv[2]) as session:
  Path(sys.argv[2],'native.svg').write_text(svg)
  root=E.fromstring(svg)
  captions={n.get('data-legend-key'):next((p.get('fill') for p in n.iter() if p.tag.endswith('path') and p.get('fill') not in (None,'none')),None) for n in root.iter() if n.get('data-legend-key')}
- geometry=build_track_slot_geometry_run_metadata(mode=result.mode,records=collect_track_slot_geometry_records(drawing,result_index=0,result_name=result.output_paths[0].name))['trackSlotGeometry']
+ geometry=build_run_metadata(result.mode,[RenderedResult(result,result.output_paths[0].name)])['trackSlotGeometry']
  print(json.dumps({'geometry':geometry,'captions':captions,'rules':result.request.options.colors.color_table['caption'].tolist(),'warnings':[w.code for w in result.annotation_warnings],'skippedMark':'SKIPPED-INTEGRATION' in svg}))
 `, activePath, testInfo.outputPath('native')], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 }));
         expect(native.geometry).toEqual(final.geometry);
