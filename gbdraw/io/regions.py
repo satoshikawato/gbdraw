@@ -29,6 +29,7 @@ from ..exceptions import ValidationError
 from ..crop_genbank import check_start_end_coords, crop_and_shift_features
 from ..layout.record_transform import detected_topology, drawn_circular
 from .record_select import RecordSelector, record_index_number, reverse_records
+from .record_sequences import sequence_view, two_turns
 
 logger = logging.getLogger(__name__)
 
@@ -305,7 +306,7 @@ def _origin_crossing_view(record: SeqRecord, spec: RegionSpec, *, circular: bool
         source_indexes[id(copy)] = index
         turns.append(copy)
     view = SeqRecord(
-        record.seq + record.seq,
+        two_turns(record.seq),
         id=record.id,
         name=record.name,
         description=record.description,
@@ -438,9 +439,9 @@ def _crop_record_to_region(
             len(record.seq),
         )
 
-    new_seq = source.seq[start_0:end_0]
+    # The crop reads its bases from the record it is cut from (a view, not a copy).
     new_record = SeqRecord(
-        new_seq,
+        sequence_view(source.seq, start_0, end_0),
         id=record.id,
         name=record.name,
         description=record.description,

@@ -10,18 +10,22 @@ import pandas as pd
 from pandas import DataFrame
 
 from gbdraw.exceptions import ValidationError
-from gbdraw.analysis.skew import counted_sequence
+from Bio.Seq import MutableSeq, Seq
+
+from gbdraw.analysis.skew import counted_bases
 
 
-def calculate_gc_percent(seq: object) -> float:
-    """Calculate GC percentage for a sequence-like object, counted as the GC track counts: over its known bases
-    (A, C, G, T), 0 when it has none (OV-2799)."""
+def calculate_gc_percent(seq: Seq | MutableSeq | bytes) -> float:
+    """Calculate GC percentage for a sequence, counted as the GC track counts: over its known bases (A, C, G, T),
+    0 when it has none (OV-2799). The bases are read a chunk at a time (:func:`counted_bases`)."""
 
-    sequence = counted_sequence(seq)
-    known = len(sequence) - sequence.count(b"N")
+    gc_count = 0
+    known = 0
+    for chunk in counted_bases(seq):
+        gc_count += chunk.count(b"G") + chunk.count(b"C")
+        known += len(chunk) - chunk.count(b"N")
     if not known:
         return 0.0
-    gc_count = sequence.count(b"G") + sequence.count(b"C")
     return round(100.0 * gc_count / known, 2)
 
 
