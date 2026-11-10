@@ -252,7 +252,7 @@ export const createRecordDisplayControls = ({
   let committedRows = [];
   /** @type {Record<string, any> | null} */
   let boundRequest = null;
-  /** @type {RecordDisplaySource[]} */
+  /** @type {(RecordDisplaySource & { drawingId: DrawingId })[]} */
   let boundSources = [];
   // The record sources of one drawing, each named by that drawing's ID: a
   // Circular drawing's source cards with its crop and orientation, a Linear
@@ -354,7 +354,7 @@ export const createRecordDisplayControls = ({
     return orientations.map((orientation) => {
       const records = request?.mode === 'linear'
         ? request.records.filter((/** @type {CommittedRecord} */ record) => record.recordKey === orientation.recordKey) : [];
-      const inputs = sources.value.filter(source => source.scope === 'linear'
+      const inputs = sourcesOf(drawing).filter(source => source.scope === 'linear'
         && source.sourceUid === orientation.recordKey);
       // The card of the one input, in the drawing's rows.
       const sequence = inputs.length === 1
@@ -416,11 +416,14 @@ export const createRecordDisplayControls = ({
     if (!request) { committedRows = []; boundRequest = null; return; }
     if (request !== boundRequest) {
       boundRequest = request;
-      boundSources = sources.value.map(({ scope, sourceUid, source, paired }) => ({ scope, sourceUid, source, paired }));
+      // The committed request is the shown drawing's: its cards, by drawing and uid (another drawing, one that Find in
+      // other files created, can hold cards of the same uids; OV-3375).
+      boundSources = sourcesOf(state.activeDrawing())
+        .map(({ drawingId, scope, sourceUid, source, paired }) => ({ drawingId, scope, sourceUid, source, paired }));
     }
     committedRows = allRows.value.filter((row) => row.scope === request.mode
-      && boundSources.some((source) => source.scope === row.scope && source.sourceUid === row.sourceUid
-        && source.source === row.source && source.paired === row.paired)).flatMap((row) => {
+      && boundSources.some((source) => source.drawingId === row.drawingId && source.scope === row.scope
+        && source.sourceUid === row.sourceUid && source.source === row.source && source.paired === row.paired)).flatMap((row) => {
       const selected = request.records.find((/** @type {CommittedRecord} */ record) => {
         const selector = record.selector;
         const matchesSelector = !selector || (selector.kind === 'recordIndex'
@@ -696,7 +699,7 @@ export const createRecordDisplayControls = ({
       refreshCommittedRows();
       // The committed request is the adopted canonical request: its `records` is always set.
       return { request: /** @type {CommittedRecordRequest | null} */ (getCommittedRequest()),
-        sources: sources.value, boundSources, matchesSavedSource };
+        sources: sourcesOf(state.activeDrawing()), boundSources, matchesSavedSource };
     },
     // The drawn records of the committed request, each with its File card
     // (`sourceUid`) and its request record (`canonicalRecordKey`).

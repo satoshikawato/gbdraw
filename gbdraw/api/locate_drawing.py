@@ -73,15 +73,16 @@ class LocateNewDrawing:
 
 
 def _record_input(record: LocateDrawnRecord, row: int, label: str | None, files: Mapping[str, LocateFile]) -> RecordInput:
-    """One record of the drawing as the records table gives it: a whole record or one window by its
-    presentation, several windows by their own orientation and column."""
+    """One record of the drawing as the records table gives it: a whole record placed and oriented by its
+    presentation, one window placed by the presentation and oriented on the window (``RecordInput.oriented``, the
+    form the Web's File cards write back), several windows by their own orientation and column."""
 
     file = files.get(record.file_key)
     if file is None:
         raise ValidationError(f"Locate has no File {record.file_key!r}.", diagnostic={"code": "INPUT_INVALID"})
     first = record.windows[0]
     several = len(record.windows) > 1
-    return RecordInput(
+    drawn = RecordInput(
         source=file.source,
         selector=parse_record_selector(record.record_id),
         windows=(
@@ -89,14 +90,10 @@ def _record_input(record: LocateDrawnRecord, row: int, label: str | None, files:
             else () if record.whole
             else (RecordWindow(first.start, first.end),)
         ),
-        presentation=RecordPresentation(
-            label=label,
-            reverse_complement=not several and first.reverse_complement,
-            grid_row=row,
-            grid_column=None if several else first.column,
-        ),
+        presentation=RecordPresentation(label=label, grid_row=row, grid_column=None if several else first.column),
         record_key=record.record_key,
     )
+    return drawn if several else drawn.oriented(first.reverse_complement)
 
 
 def locate_record_inputs(drawing: LocateDrawing, files: Mapping[str, LocateFile]) -> tuple[RecordInput, ...]:

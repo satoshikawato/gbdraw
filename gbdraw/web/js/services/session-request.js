@@ -162,6 +162,7 @@ import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { UNKNOWN_CARD_RECORD, wholeRecordWindow, windowSpanOf } from './linear-card-windows.js';
 /** @import { CardRecordFacts } from './linear-card-windows.js' */
+/** @import { DrawingId } from './drawing-view.js' */
 /** @import { LayoutEntry } from './linear-record-layout.js' */
 /** @import { CardWindowRecordInput } from '../contracts/card-windows.generated.js' */
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
@@ -1785,7 +1786,7 @@ export const linearRecordGridRows = (drawing, seqs) => {
  * a card that lists windows has no one record of known length, or a window is one Generate refuses: the cards then
  * show no number and no omitted length.
  * @template {RequestLinearSeq} C
- * @param {Parameters<typeof linearRecordPlacements>[0] & { recordDisplayDrafts?: RecordDisplayDraft[] }} drawing
+ * @param {Parameters<typeof linearRecordPlacements>[0] & { id: DrawingId, recordDisplayDrafts?: RecordDisplayDraft[] }} drawing
  * @param {readonly C[]} seqs The drawn cards, in request order.
  * @param {(seq: C) => CardRecordFacts & { circular: boolean }} recordOf
  * @param {RequestRecordDisplayRow[]} recordDisplayRows
@@ -4746,8 +4747,9 @@ const buildKeptTrackParts = ({ drawing, filesData, recordCount, resolvedCircular
 const splitMemberGridRow = (cardRow, cardIndex, arranged) => (arranged ? cardRow ?? cardIndex + 1 : null);
 
 /**
- * A record display row as the request writer reads it (`buildRecordDisplayRows`): its record ID is text.
- * @typedef {RecordDisplayRow & { recordId: string }} RequestRecordDisplayRow
+ * A record display row as the request writer reads it (`buildRecordDisplayRows`): its record ID is text, and it
+ * names the drawing whose card it reads (`allRows` of app/record-display-options.js).
+ * @typedef {RecordDisplayRow & { recordId: string, drawingId: DrawingId }} RequestRecordDisplayRow
  */
 /**
  * A record of the record plan as the request writer reads its display: its selector, its windows and its own
@@ -4756,15 +4758,18 @@ const splitMemberGridRow = (cardRow, cardIndex, arranged) => (arranged ? cardRow
  */
 /**
  * The display and orientation the request writes for one record of the record plan: the display rows of its source
+ * in its drawing (`drawingId`; a drawing Find in other files creates has cards of its source drawing's uids, OV-3376)
  * that its selector selects (`selectedRows`), the transform of each (`transformFor`, its draft's
  * `requestedRecordTransform`), and the transform of the record drawn as one record (`wholeTransform`): its first
  * selected row's, else its own display, else the draft saved for its source and selector. The one owner of a request
  * record's `display` (`projectCanonicalRenderInput`, `linearCardRequestedCircular`).
- * @param {{ mode: string, sourceUid: string, record: RequestDisplayRecord, recordDisplayRows: readonly RequestRecordDisplayRow[],
+ * @param {{ drawingId: DrawingId, mode: string, sourceUid: string, record: RequestDisplayRecord,
+ *   recordDisplayRows: readonly RequestRecordDisplayRow[],
  *   drafts: readonly (RecordDisplayDraftIdentity & Partial<RecordDisplayDraft>)[] }} input
  */
-const requestRecordTransforms = ({ mode, sourceUid, record, recordDisplayRows, drafts }) => {
-  const sourceRows = recordDisplayRows.filter((row) => row.scope === mode && row.sourceUid === sourceUid);
+const requestRecordTransforms = ({ drawingId, mode, sourceUid, record, recordDisplayRows, drafts }) => {
+  const sourceRows = recordDisplayRows.filter((row) => row.drawingId === drawingId && row.scope === mode
+    && row.sourceUid === sourceUid);
   const selector = requestRecordSelector(record);
   const selectedRows = sourceRows.filter((row) => !selector
     || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
@@ -4794,12 +4799,13 @@ const requestRecordTransforms = ({ mode, sourceUid, record, recordDisplayRows, d
  * comparison search's extraction sends it with the card's window, so Python crops a window across the origin as the
  * drawing does (`drawn_circular`, gbdraw/layout/record_transform.py). `windows` are the card's windows as the request
  * writes them (`linearDrawingWindowsOf`).
- * @param {{ drawing: { recordDisplayDrafts?: RecordDisplayDraft[] }, card: RequestLinearSeq, index: number,
+ * @param {{ drawing: { id: DrawingId, recordDisplayDrafts?: RecordDisplayDraft[] }, card: RequestLinearSeq, index: number,
  *   recordDisplayRows: RequestRecordDisplayRow[], windows: CanonicalRecord['windows'] }} input
  * @returns {boolean | null}
  */
 export const linearCardRequestedCircular = ({ drawing, card, index, recordDisplayRows, windows }) => {
   return requestRecordTransforms({
+    drawingId: drawing.id,
     mode: 'linear',
     sourceUid: linearSeqRecordKey(card, index),
     record: {
@@ -4869,7 +4875,7 @@ const projectCanonicalRenderInput = ({
     // The card the record reads: a Linear record card, a Circular source card.
     const sourceUid = recordPlan.recordSources[index];
     const { selectedRows, transformFor, wholeTransform } = requestRecordTransforms({
-      mode, sourceUid, record, recordDisplayRows, drafts
+      drawingId: drawing.id, mode, sourceUid, record, recordDisplayRows, drafts
     });
     if (record.cardinality === 'all' && selectedRows.length > 1) {
       const transforms = selectedRows.map(transformFor);
@@ -5618,23 +5624,33 @@ const cloneCanonicalJsonValue = (value) => (
 // column value. Preserve the engine's row/column render order in the projected
 // record sequence, then retire the unsupported numeric column in the draft.
 /**
- * @template {{ presentation?: UnvalidatedFields<'gridRow' | 'gridColumn'> }} R
+ * The column a request record stands at in its row: its presentation's, else, for a record drawn in several windows,
+ * its first window's (Python's `grid_placement_order` places each window by its own column, D-08), else none.
+ * @param {{ presentation?: UnvalidatedFields<'gridColumn'>, windows?: unknown }} record
+ * @returns {number | null}
+ */
+const requestRecordColumn = (record) => {
+  const own = record?.presentation?.gridColumn;
+  if (own !== null && own !== undefined) return Number.isInteger(Number(own)) ? Number(own) : null;
+  const columns = (Array.isArray(record?.windows) ? record.windows : [])
+    .map((/** @type {{ column?: unknown }} */ window) => window?.column)
+    .filter((column) => Number.isInteger(column));
+  return columns.length > 1 ? Math.min(.../** @type {number[]} */ (columns)) : null;
+};
+/**
+ * @template {{ presentation?: UnvalidatedFields<'gridRow' | 'gridColumn'>, windows?: unknown }} R
  * @param {readonly R[]} [records]
  */
 export const normalizeWebGridColumnOrdering = (records = []) => {
   const source = Array.isArray(records) ? records : [];
   const entries = source.map((record, sourceIndex) => {
     const rawRow = record?.presentation?.gridRow;
-    const rawColumn = record?.presentation?.gridColumn;
     const row = Number(rawRow);
-    const column = Number(rawColumn);
     return {
       record,
       sourceIndex,
       row: rawRow !== null && rawRow !== undefined && Number.isInteger(row) ? row : sourceIndex + 1,
-      column: rawColumn !== null && rawColumn !== undefined && Number.isInteger(column)
-        ? column
-        : sourceIndex + 1
+      column: requestRecordColumn(record) ?? sourceIndex + 1
     };
   });
   const hasColumns = source.some((record) => (

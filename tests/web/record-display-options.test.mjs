@@ -229,6 +229,12 @@ const circularControls = ({ linear = false, discovered = true, oneCard = false, 
   const featureCard = () => circularSources[oneCard ? 0 : 1];
   return { state, actions, controls, feature, makeFile, featureCard, linearDiscovery, history,
     enabled: () => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value),
+    // A committed request that draws the record at `index` in the orientation `reverse`.
+    commitOrientation: (index, reverse) => {
+      committed = { ...committed, renderRequest: { ...committed.renderRequest,
+        records: committed.renderRequest.records.map((record, i) => (i === index
+          ? { ...record, presentation: { ...record.presentation, reverseComplement: reverse } } : record)) } };
+    },
     // The committed request with every record naming one saved resource id.
     recommitSources: (resourceId) => {
       committed = { ...committed, renderRequest: { ...committed.renderRequest,
@@ -245,6 +251,37 @@ const circularControls = ({ linear = false, discovered = true, oneCard = false, 
           ? { ...record, source: { kind: 'genbank', resourceId } } : { ...record })) } };
     } };
 };
+
+// OV-3375: a drawing that Find in other files creates names its cards by the source drawing's record keys, so two
+// drawings hold cards of one uid. The pending-Generate notice compares the committed request with the cards of the
+// drawing that committed it, the shown one, and with no other drawing's.
+/**
+ * Adds a second Linear drawing whose cards have the uids of the shown drawing's, all forward, as the source drawing
+ * of a drawing that Find in other files created.
+ */
+const addSourceDrawingOfSameUids = (state) => {
+  const shown = state.activeDrawing();
+  const source = Object.create(shown, { id: { value: 'linear-2' },
+    linearSeqs: { value: shown.linearSeqs.map((card) => ({ ...card, windows: [], region_reverse: false })) },
+    recordDisplayDrafts: { value: [] } });
+  Object.defineProperties(state, {
+    drawingList: { value: () => [source, shown], configurable: true },
+    drawingOf: { value: (id) => (id === 'linear-2' ? source : shown), configurable: true }
+  });
+  return { shown, source };
+};
+
+test('the pending notice reads the shown drawing\'s cards only, when another drawing has cards of the same uid', () => {
+  const model = circularControls({ linear: true });
+  const { state, controls } = model;
+  state.linearSeqs[1].region_reverse = true;
+  model.commitOrientation(1, true);
+  assert.equal(controls.hasPendingChanges.value, false);
+  const { shown } = addSourceDrawingOfSameUids(state);
+  assert.equal(controls.hasPendingChanges.value, false, 'the source drawing\'s forward card is not the shown one');
+  shown.linearSeqs[1].region_reverse = false;
+  assert.equal(controls.hasPendingChanges.value, true, 'a change of the shown card is pending');
+});
 
 test('manual start and orientation edits clear feature provenance', () => {
   const model = circularControls();
@@ -608,6 +645,20 @@ test('fresh loaded alignment binds canonical sources before discovery and restor
   assert.equal(model.state.linearSeqs[0].region_reverse, true);
   model.state.linearSeqs[0].gb = model.state.inputFiles.registerFile(new File(['replacement'], 'replacement.gb'));
   assert.throws(() => model.controls.captureAlignmentOrientationIntent(model.state, [target]), /source binding changed/);
+});
+
+// OV-3377: Similarity alignment orients the shown drawing's card, found by drawing and uid, when another drawing has
+// a card of the same uid.
+test('alignment orients the shown drawing\'s card when another drawing has a card of the same uid', () => {
+  const model = circularControls({ linear: true });
+  const { shown, source } = addSourceDrawingOfSameUids(model.state);
+  const target = { recordKey: 'record-1', reverseComplement: true };
+  const checkpoint = model.controls.captureAlignmentOrientationIntent(shown, [target]);
+  model.controls.commitAlignmentOrientations(shown, [target]);
+  assert.equal(shown.linearSeqs[0].region_reverse, true);
+  assert.equal(source.linearSeqs[0].region_reverse, false);
+  model.controls.restoreAlignmentOrientationIntent(shown, checkpoint);
+  assert.equal(shown.linearSeqs[0].region_reverse, false);
 });
 
 test('Circular discovery metadata belongs only to the current source and complete input pair', () => {

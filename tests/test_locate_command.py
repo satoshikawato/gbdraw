@@ -38,6 +38,8 @@ from gbdraw.comparisons.locate import (
     LocateOptions,
     LocatePlan,
     LocateSearchResult,
+    LocateWindowChoice,
+    choose_locate_windows,
     finish_locate,
     locate_drawing,
     locate_file_counts,
@@ -316,6 +318,31 @@ def test_the_tables_and_the_new_drawing_give_the_same_records_and_pairs(
     assert derived.options.losat_search is not None
     assert tuple(derived.options.losat_search.pairs or ()) == table_pairs == locate_unit_pairs(drawing)
     assert derived.options.losat_search.losatp_mode == "pairwise"
+
+
+@pytest.mark.parametrize("whole", [False, True], ids=["part-of-a-record", "whole-record"])
+def test_the_new_drawing_writes_a_reversed_window_in_the_form_the_web_cards_write(tmp_path: Path, whole: bool) -> None:
+    # OV-3365, OV-3376: a record drawn in one window carries its orientation on the window, a record drawn whole on
+    # its presentation (``RecordInput.oriented``), as the Web's File cards write it back; the drawn units are reversed.
+    paths = _genomes(tmp_path)
+    plan = _plan(paths, _fake_losat(tmp_path), ("a",))
+    [planned] = plan.files[0].windows
+    assert planned.window.reverse_complement
+    if whole:
+        plan = choose_locate_windows(plan, [LocateWindowChoice(
+            plan.files[0].file_key, planned.window.column or 0, 1, planned.record_length, True)])
+    source = LinearDiagramRequest(records=(RecordInput(GenBankInputSource(str(paths["ref"]))),))
+    files = {str(path): LocateFile(GenBankInputSource(str(path)), path.name) for path in paths.values()}
+    derived = derive_locate_request(source, plan, files).request
+    target = derived.records[1]
+
+    assert [record == record.oriented(record.is_reversed) for record in derived.records] == [True, True]
+    assert target.is_reversed
+    assert [window.reverse_complement for window in target.windows] == ([] if whole else [True])
+    assert target.presentation.reverse_complement is whole
+    units = resolve_request_records(derived)
+    assert [str(record.id) for record in units.records][1] == "A1"
+    assert len(units.records[1]) == (planned.record_length if whole else planned.window.end - planned.window.start + 1)
 
 
 def test_the_new_drawing_carries_the_edits_of_the_reference_record(tmp_path: Path) -> None:

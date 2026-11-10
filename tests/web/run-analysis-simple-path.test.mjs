@@ -2245,7 +2245,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       blastpMode: state.activeDrawing().losat.blastp.mode
     });
     state.activeDrawing().linearSeqs.find(({uid})=>uid==='middle').region_reverse=true;
-    recordDisplayRows.value = [{ scope: 'linear', sourceUid: 'middle',
+    recordDisplayRows.value = [{ scope: 'linear', drawingId: state.activeDrawing().id, sourceUid: 'middle',
       key: JSON.stringify(['middle', '#1']), selector: '#1', recordId: 'MIDDLE', recordLength: 8,
       reverse: true, cropped: false, detectedTopology: 'linear' }];
     const linearResult = result('lazy-linear.svg', 'lazy-linear');

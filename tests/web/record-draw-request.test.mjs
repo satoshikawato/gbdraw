@@ -69,7 +69,7 @@ const comparisonPlanSnapshot = resolveLinearComparisonPlan({
 const filesData = await serializeActiveRenderFiles(state, drawing, comparisonPlanSnapshot);
 assert.deepEqual(filesData.linearSeqs.map((seq) => seq.uid), ['a', 'c']);
 const recordDisplayRows = ['a', 'b', 'c'].map((uid) => ({
-  key: JSON.stringify([uid, '#1']), scope: 'linear', sourceUid: uid, selector: '#1', recordId: uid,
+  key: JSON.stringify([uid, '#1']), scope: 'linear', drawingId: drawing.id, sourceUid: uid, selector: '#1', recordId: uid,
   recordLength: 100, detectedTopology: 'linear', reverse: false, cropped: false
 }));
 const { renderRequest } = buildCanonicalRenderRequest({
@@ -92,6 +92,28 @@ assert.deepEqual(renderRequest.records.map((record) => record.presentation.rever
 const requested = renderRequest.diagramOptions.annotations.sets[0].annotations.map((item) => item.id);
 assert.deepEqual(requested, ['on-c']);
 assert.deepEqual(drawing.annotationSets[0].annotations.map((item) => item.id), ['on-c', 'off-b']);
+
+// OV-3376: a drawing that Find in other files creates reuses its source drawing's card uids, so the record display
+// rows of every drawing hold rows of the same card uid. The request reads only the rows of the drawing it is built
+// for: card c drawn whole and reversed here stays reversed although the other drawing draws it forward.
+{
+  drawing.recordDisplayDrafts.splice(0, Infinity);
+  const reversed = modeDrawing(state, 'linear').linearSeqs.find((seq) => seq.uid === 'c');
+  reversed.region_reverse = true;
+  const rowOf = (drawingId, uid, reverse) => ({
+    key: JSON.stringify([uid, '#1']), scope: 'linear', drawingId, sourceUid: uid, selector: '#1', recordId: uid,
+    recordLength: 100, detectedTopology: 'linear', reverse, cropped: false
+  });
+  const otherDrawingRows = ['a', 'b', 'c'].map((uid) => rowOf('other-drawing', uid, false));
+  const ownRows = ['a', 'b', 'c'].map((uid) => rowOf(drawing.id, uid, uid === 'c'));
+  const { renderRequest: crossDrawing } = buildCanonicalRenderRequest({
+    state, drawing, filesData, comparisonPlanSnapshot, recordDisplayRows: [...otherDrawingRows, ...ownRows],
+    omittedAnnotationRecordKeys: ['catalog-b']
+  });
+  assert.deepEqual(crossDrawing.records.map((record) => [record.recordKey, record.presentation.reverseComplement]),
+    [['a', false], ['c', true]]);
+  reversed.region_reverse = false;
+}
 
 // Review F7: an error of a drawn card names its card number, OFF cards counted.
 // Card 1 (a) is OFF; card 3 (c) reads two records and has a crop without a record.

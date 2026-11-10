@@ -4,9 +4,9 @@
 // cards on a phone; Create adds a new Linear drawing right after the source as one project step, which
 // Generate draws and Undo removes. The fixture is five MIBiG cluster records (five Files) of one Linear drawing.
 const { test, expect } = require('@playwright/test');
-const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { generateAndWaitForResult, evaluateWithRetainedPromise, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
-const { drawingIds, drawingTab, shownDrawing } = require('./helpers/drawing-bar.cjs');
+const { drawingIds, drawingTab, showDrawing, shownDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -204,4 +204,102 @@ test('Linear: the drawing Create makes with several windows of one record draws 
   const order = (pairs) => pairs.map((pair) => pair.join(':')).sort();
   expect(order(drawn.pairs)).toEqual(order(savedPairs));
   expect(drawn.ribbons).toBeGreaterThan(0);
+});
+
+// The pVA1 plasmid of two Vibrio parahaemolyticus strains (NZ_CP065372.1, 20-082A3; NZ_CP046414.1, 19-021-D1, stored
+// from another start) and three contigs of a draft assembly (CAVP11, GCF_019780985.1: NZ_JABKAY010000079.1, 80 and 86)
+// that hold the same plasmid in pieces, some of them reverse-complemented.
+const VIBRIO = {
+  '20-082A3': { file: 'tests/test_inputs/NZ_CP065372.1.gbk', length: 67093 },
+  '19-021-D1': { file: 'tests/test_inputs/NZ_CP046414.1.gbk', length: 68848 },
+  contigs: 'tests/test_inputs/CAVP11_contigs_79_80_86.gbk'
+};
+
+/**
+ * One Linear drawing of a reference plasmid, the other plasmid and the contigs; Find in other files with the whole
+ * reference plasmid (cut at `start` when the span crosses the origin), Search, Create, then Generate of the new drawing.
+ * Generate succeeds; returns the new drawing's cards, the records its request commits, and whether a change is pending.
+ */
+const findWholePlasmid = async (page, { reference, other, start, end }) => {
+  await routeCrossOriginIsolated(page.context());
+  await openFresh(page);
+  await showDrawing(page, { kind: 'linear' });
+  await page.getByTestId('linear-genbank-1').setInputFiles(VIBRIO[reference].file);
+  await generateAndWaitForResult(page);
+  for (const [index, file] of [[2, VIBRIO[other].file], [3, VIBRIO.contigs]]) {
+    await page.evaluate(() => window.__GBDRAW_APP__.addLinearSeq());
+    await page.getByTestId(`linear-genbank-${index}`).setInputFiles(file);
+  }
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  let last = '';
+  await expect.poll(async () => {
+    const now = await page.evaluate(() => JSON.stringify(document.querySelector('.gbdraw-preview-surface').getBoundingClientRect()));
+    const settled = now === last;
+    last = now;
+    return settled;
+  }, { intervals: [250] }).toBe(true);
+  await page.locator('[data-region-select-toggle]').click();
+  const from = await axisPoint(page, 0, 1);
+  const to = await axisPoint(page, 0, VIBRIO[reference].length);
+  await page.mouse.move(from.x + 1, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x - 1, to.y, { steps: 8 });
+  await page.mouse.up();
+  await page.locator('[data-preview-item-popup="region"] [data-region-find-in-files]').click();
+  const dialog = page.locator('[data-find-files-dialog]');
+  await expect(dialog.locator('[data-find-files-genes]')).toBeVisible({ timeout: 300_000 });
+  const row = dialog.locator('[data-find-files-row]');
+  await row.locator('[data-find-files-start]').fill(String(start));
+  await row.locator('[data-find-files-end]').fill(String(end));
+  const origin = row.locator('[data-find-files-origin]');
+  if ((await origin.isChecked()) !== (start > end)) await origin.click();
+  await expect(dialog.locator('[data-find-files-search]')).toBeEnabled({ timeout: 120_000 });
+  await dialog.locator('[data-find-files-search]').click();
+  await expect.poll(() => status(page), { timeout: 1_200_000 }).toBe('proposal');
+  await dialog.locator('[data-find-files-create]').click();
+  await expect(dialog).toHaveCount(0);
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
+    const result = await window.__GBDRAW_APP__.runAnalysis();
+    return JSON.parse(JSON.stringify({ status: result?.status, code: result?.error?.code ?? null }));
+  });
+  expect(outcome).toEqual({ status: 'ok', code: null });
+  await expect.poll(() => page.evaluate(async () => Boolean((await import('./js/services/config.js'))
+    .getCommittedCanonicalRenderRequest()))).toBe(true);
+  const drawn = await page.evaluate(async () => {
+    const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+    const { state } = await import('./js/state.js');
+    return {
+      cards: state.activeDrawing().linearSeqs.map((card) => ({ id: card.region_record_id, reverse: card.region_reverse,
+        windows: (card.windows || []).map((window) => [window.start, window.end, window.reverseComplement]) })),
+      records: getCommittedCanonicalRenderRequest().records.map((record) => ({ id: record.selector.value,
+        reverse: record.presentation.reverseComplement,
+        windows: record.windows.map((window) => [window.start, window.end, window.reverseComplement]) })),
+      pending: window.__GBDRAW_APP__.recordDisplayControls.hasPendingChanges.value
+    };
+  });
+  return drawn;
+};
+
+// OV-3365, OV-3375: a File of the new drawing draws contig 80 in two (-) windows; the first Generate draws the drawing
+// (the saved comparison's records and the cards are one list), and no change is pending after it.
+test('Linear: the Vibrio whole-plasmid drawing Create makes draws with its first Generate and leaves nothing pending', async ({ page }) => {
+  test.setTimeout(1_800_000);
+  const found = await findWholePlasmid(page, { reference: '20-082A3', other: '19-021-D1', start: 1, end: 67093 });
+  const split = found.cards.find((card) => card.id === 'NZ_JABKAY010000080.1');
+  expect(split.windows.length).toBeGreaterThan(1);
+  // The request draws the record's windows in the order and orientation of its card.
+  expect(found.records.find((record) => record.id === split.id).windows).toEqual(split.windows);
+  expect(found.pending).toBe(false);
+  await expect(page.getByText('changes pending Generate')).toHaveCount(0);
+});
+
+// OV-3376: the proposal draws contig 79 whole and (-) here; Generate draws it reverse-complemented, as its card says.
+test('Linear: a (-) window that covers a whole record is drawn reverse-complemented', async ({ page }) => {
+  test.setTimeout(1_800_000);
+  const found = await findWholePlasmid(page, { reference: '19-021-D1', other: '20-082A3', start: 63090, end: 63089 });
+  const card = found.cards.find((entry) => entry.id === 'NZ_JABKAY010000079.1');
+  expect(card).toEqual({ id: 'NZ_JABKAY010000079.1', reverse: true, windows: [] });
+  expect(found.records.find((record) => record.id === 'NZ_JABKAY010000079.1').reverse).toBe(true);
+  expect(found.pending).toBe(false);
+  await expect(page.getByText('changes pending Generate')).toHaveCount(0);
 });
