@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "description": "autoHints pin the Web Auto hints of the scale interval and the sliding window at every length-tier edge (the Web reads Python's tiers). Auto sizes and the region-drawing size rule, shared by gbdraw.auto_sizes (tests/test_region_drawing.py) and the Web region dialog. Setting keys are those of gbdraw.auto_sizes.auto_setting_values: config override paths without .short/.long, the options window/step/depth_window/depth_step, and circularSlot.<slot>.width. Numbers compare within 1e-9. autoValues and adaptations are the worked examples A-C of the multi-drawing design (region part, section 3.4) plus edge cases; regions use the 16,569 bp human mtDNA record NC_012920. gcAxisTickFonts pin the Auto tick font of a Circular GC content axis beside a depth axis (auto_setting_values with show_depth and the track thicknesses, the Web's GC 'Tick Font Size' note): a Percent axis takes the font of a depth axis drawn with ticks: that of the first Depth row the stack draws, its series' own font when it has one (depthTracks, by series index), sized from the row's width when Use custom stack is on (circularDepthSlots, in stack order; trackThicknessPx.depth is then the unused Depth Width shortcut). objects.depth.tick_font_size is the Auto value of series 0's own font.",
+  "description": "autoHints pin the Web Auto hints of the scale interval and the sliding window at every length-tier edge (the Web reads Python's tiers). Auto sizes and the region-drawing size rule, shared by gbdraw.auto_sizes (tests/test_region_drawing.py) and the Web region dialog. Setting keys are those of gbdraw.auto_sizes.auto_setting_values: config override paths without .short/.long, the options window/step/depth_window/depth_step, and circularSlot.<slot>.width. Numbers compare within 1e-9. recordValues list the Auto values each record of a drawing draws with (gbdraw.auto_sizes.record_auto_values): a Circular record at its own length; auto_setting_values lists such a setting only when every record takes the same value, and the Web hint shows one value only then. autoValues and adaptations are the worked examples A-C of the multi-drawing design (region part, section 3.4) plus edge cases; regions use the 16,569 bp human mtDNA record NC_012920. gcAxisTickFonts pin the Auto tick font of a Circular GC content axis beside a depth axis (auto_setting_values with show_depth and the track thicknesses, the Web's GC 'Tick Font Size' note): a Percent axis takes the font of a depth axis drawn with ticks: that of the first Depth row the stack draws, its series' own font when it has one (depthTracks, by series index), sized from the row's width when Use custom stack is on (circularDepthSlots, in stack order; trackThicknessPx.depth is then the unused Depth Width shortcut). objects.depth.tick_font_size is the Auto value of series 0's own font.",
   "autoValues": [
     {
       "name": "A source: 5 Mb genome, Circular (long)",
@@ -149,6 +149,32 @@
         "labels.font_size": 8,
         "objects.axis.circular.stroke_width": 1
       }
+    },
+    {
+      "name": "Circular canvas of a 50 kb and a 5 kb record: each record its own windows and scale interval",
+      "mode": "circular",
+      "recordLengths": [50000, 5000],
+      "expected": {
+        "labels.font_size": 14
+      },
+      "recordValues": [
+        {"window": 1000, "step": 100, "depth_window": 100, "depth_step": 10, "objects.scale.interval": 5000},
+        {"window": 500, "step": 50, "depth_window": 100, "depth_step": 5, "objects.scale.interval": 1000}
+      ]
+    },
+    {
+      "name": "Linear drawing of a 50 kb and a 5 kb record: the records share the longest record's windows",
+      "mode": "linear",
+      "recordLengths": [50000, 5000],
+      "expected": {
+        "window": 1000,
+        "step": 100,
+        "objects.scale.interval": 10000
+      },
+      "recordValues": [
+        {"window": 1000, "step": 100, "depth_window": 100, "depth_step": 10, "objects.scale.interval": 10000},
+        {"window": 1000, "step": 100, "depth_window": 100, "depth_step": 10, "objects.scale.interval": 10000}
+      ]
     },
     {
       "name": "Circular 75 kb boundary: 74,999 bp is short",

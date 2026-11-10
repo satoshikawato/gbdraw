@@ -147,8 +147,10 @@ A feature density track counts, in each window along a record, the features
 that a query selects (a type, optionally a qualifier and a pattern searched for in its
 value, and a length range), or gives the percentage of the window they
 cover. A feature split into parts counts once. Windows go round the origin of a
-circular record and stop at the ends of a linear one. The window and step
-follow the GC content window unless the track sets its own. A `heatmap` track
+circular record and stop at the ends of a linear one. A track that sets no
+window and step of its own takes the figure's window and step when they are
+set, else the automatic window and step of the longest record in the figure,
+so that the records of one figure share one window. A `heatmap` track
 is one band of colored cells with a gradient row in the Legend; a `histogram`
 track draws like a depth series. With no track list, each track gets a row after
 the features; a track list draws only the tracks its `feature_density` slots

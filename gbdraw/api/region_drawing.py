@@ -37,6 +37,7 @@ from gbdraw.api.options import (
 from gbdraw.api.record_planning import ResolvedRecordCollection, ResolvedRecordProvenance
 from gbdraw.api.request_render import resolve_request_records
 from gbdraw.api.requests import (
+    CircularBatchRequest,
     CircularDiagramRequest,
     DiagramRequest,
     LinearDiagramRequest,
@@ -51,6 +52,8 @@ from gbdraw.auto_sizes import (
     DrawnDepthRow,
     DrawnExtent,
     SettingAdaptation,
+    SIZE_CLASSES,
+    SizeClass,
     adapt_explicit_settings,
 )
 from gbdraw.config.models import GbdrawConfig
@@ -63,7 +66,7 @@ from gbdraw.session import MaterializedSession, SessionDrawingSpec, session_to_r
 from gbdraw.session_drawings import DrawingMode
 from gbdraw.session_request_codec import canonical_depth_tracks
 from gbdraw.tracks.circular import CircularTrackSlot, default_circular_track_slots, parse_circular_track_slots
-from gbdraw.tracks.parsing import depth_slot_track_index
+from gbdraw.tracks.parsing import depth_slot_track_index, feature_density_slot_track_id
 
 _SIZE_OPTIONS = ("window", "step", "depth_window", "depth_step")
 _SIZE_SETTINGS = frozenset(setting for settings in ADAPTABLE_SETTINGS.values() for setting in settings)
@@ -410,15 +413,26 @@ def derive_from_source(
         source_mode,
         tuple(len(record) for record in collection.records),
         depth_rows=_drawn_depth_rows(options, source_tracks, cfg, source_mode),
+        density_window_settings=_drawn_density_window_settings(options, source_mode),
+        separate_records=isinstance(source, CircularBatchRequest),
     )
     target_extent = DrawnExtent(
-        target_mode, derived.lengths, depth_rows=_drawn_depth_rows(options, depth_tracks, cfg, target_mode)
+        target_mode,
+        derived.lengths,
+        depth_rows=_drawn_depth_rows(options, depth_tracks, cfg, target_mode),
+        density_window_settings=_drawn_density_window_settings(options, target_mode),
     )
+    # The source record each drawn unit comes from, by its index there: each record compares its own Auto windows.
+    record_sources: list[int | None] = [None] * len(derived.lengths)
+    for region in selected:
+        for unit in region.units:
+            record_sources[unit] = region.item.resolved_index
     adaptation = adapt_explicit_settings(
-        _explicit_values(options, source_extent.size_class(cfg)),
+        _explicit_values(options),
         source=source_extent,
         target=target_extent,
         cfg=cfg,
+        record_sources=record_sources,
     )
     if not adapt_sizes:
         kept = {**adaptation.kept, **{reset.setting: reset.explicit for reset in adaptation.reset}}
@@ -644,25 +658,25 @@ def _setting_of(path: str) -> str:
     return head if leaf in {"short", "long"} else path
 
 
-def _explicit_values(options: _ModeDiagramOptions, size_class: str) -> dict[str, AutoValue]:
-    """The source's hand-set numbers, keyed as ``auto_setting_values`` is.
+def _explicit_values(options: _ModeDiagramOptions) -> dict[str, dict[SizeClass, AutoValue]]:
+    """The source's hand-set numbers, keyed as ``auto_setting_values`` is, with the value a diagram of each size
+    class draws.
 
-    A short/long pair counts once, with the value of the source's size class.
+    A short/long pair counts once and gives a class only its own leaf: a class without one draws its Auto value.
     """
-    explicit: dict[str, AutoValue] = {}
-    overrides = options.config_overrides or {}
-    for path, value in overrides.items():
+    explicit: dict[str, dict[SizeClass, AutoValue]] = {}
+    for path, value in (options.config_overrides or {}).items():
         if isinstance(value, Real) and not isinstance(value, bool):
             setting = _setting_of(path)
-            chosen = overrides.get(f"{setting}.{size_class}", value) if setting != path else value
-            explicit[setting] = cast(AutoValue, chosen)
+            classes = SIZE_CLASSES if setting == path else tuple(size for size in SIZE_CLASSES if path.endswith(f".{size}"))
+            explicit.setdefault(setting, {}).update(dict.fromkeys(classes, cast(AutoValue, value)))
     for option in _SIZE_OPTIONS:
         value = getattr(options, option)
         if value is not None:
-            explicit[option] = value
+            explicit[option] = dict.fromkeys(SIZE_CLASSES, value)
     for slot in _stated_slots(getattr(options, "tracks", None)) or ():
         if slot.width is not None and slot.width.unit == "px":
-            explicit[f"circularSlot.{slot.id}.width"] = slot.width.value
+            explicit[f"circularSlot.{slot.id}.width"] = dict.fromkeys(SIZE_CLASSES, slot.width.value)
     return explicit
 
 
@@ -706,6 +720,28 @@ def _drawn_depth_rows(
         width = None if slot.width is None or depth_width else slot.width.resolve(cfg.canvas.circular.radius)
         rows.append(DrawnDepthRow(axis, track_index, width, depth_width))
     return tuple(rows)
+
+
+def _drawn_density_window_settings(options: _ModeDiagramOptions, mode: DrawingMode) -> tuple[str, ...]:
+    """The window settings (``window``, ``step``) that a feature density track a drawing of ``options`` in ``mode``
+    draws takes, being one that sets none of its own.
+
+    A stack the request does not state draws every track; a stated Circular stack, which a new Circular drawing
+    carries from a Circular source, only those its enabled ``feature_density`` slots name. A stated Linear stack is
+    read as drawing every track: it is in a Linear source, whose new drawing is Linear or one Circular record, and
+    in each of these drawings the density window is the GC content window (``feature_density_windows``,
+    ``record_sliding_windows``), so the density window compares as the window does.
+    """
+    tracks = options.feature_density_tracks or ()
+    stated = _stated_slots(getattr(options, "tracks", None)) if mode == "circular" else None
+    if stated is not None:
+        named = {
+            feature_density_slot_track_id(slot.id, slot.params)
+            for slot in stated
+            if slot.enabled and slot.renderer == "feature_density"
+        }
+        tracks = tuple(track for track in tracks if track.id in named)
+    return tuple(setting for setting in ("window", "step") if any(getattr(track, setting) is None for track in tracks))
 
 
 def _keeps_feature(by_key: Mapping[str, SourceRegion], record_key: str, feature_id: str) -> bool:

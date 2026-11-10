@@ -108,7 +108,8 @@ from gbdraw.api.options import (
 from gbdraw.auto_sizes import (
     depth_sliding_window,
     determine_length_parameter,
-    sliding_window,
+    feature_density_windows,
+    record_sliding_windows,
 )
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
 from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN, LosatCacheWrite
@@ -822,7 +823,7 @@ def _resolve_circular_window_step(
     step: int | None,
 ) -> tuple[int, int]:
     """Resolve circular window/step with record-length defaults."""
-    auto_window, auto_step = sliding_window(len(record.seq), cfg)
+    [(auto_window, auto_step)] = record_sliding_windows("circular", (len(record.seq),), cfg)
     return (
         int(window) if window is not None else auto_window,
         int(step) if step is not None else auto_step,
@@ -2512,10 +2513,7 @@ def assemble_linear_diagram_from_records(
 
     seq_len_dict = create_dict_for_sequence_lengths(records)
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
-    longest_genome = max(len(record.seq) for record in records)
-
-    # Match legacy CLI behavior: linear window/step are based on the longest genome.
-    auto_window, auto_step = sliding_window(longest_genome, cfg)
+    auto_window, auto_step = record_sliding_windows("linear", [len(record.seq) for record in records], cfg)[0]
     window = auto_window if inputs.window is None else inputs.window
     step = auto_step if inputs.step is None else inputs.step
     resolved_depth_window, resolved_depth_step = _resolve_depth_window_step(
@@ -2606,6 +2604,9 @@ def assemble_linear_diagram_from_records(
         track_inputs=LinearTrackInputs(
             record_depth_tracks=record_depth_tracks,
             feature_density_tracks=tuple(inputs.feature_density_tracks or ()),
+            feature_density_windows=feature_density_windows(
+                [len(record.seq) for record in records], cfg, window=inputs.window, step=inputs.step
+            ),
             linear_track_slots=parsed_linear_track_slots,
             linear_track_axis_index=resolved_linear_track_axis_index,
             annotations=inputs._resolved_annotations if inputs._resolved_annotations is not None else inputs.annotation_options,
@@ -2849,10 +2850,7 @@ def assemble_circular_diagram_from_record(
             cfg.objects.conservation.color_scheme, parsed_circular_track_slots, conservation_tracks
         )
 
-    # Match legacy CLI behavior: circular window/step are based on the record length.
-    auto_window, auto_step = sliding_window(len(gb_record.seq), cfg)
-    window = auto_window if inputs.window is None else inputs.window
-    step = auto_step if inputs.step is None else inputs.step
+    window, step = _resolve_circular_window_step(gb_record, cfg, window=inputs.window, step=inputs.step)
     resolved_depth_window, resolved_depth_step = _resolve_depth_window_step(
         window=int(window),
         step=int(step),
@@ -2995,7 +2993,9 @@ def assemble_circular_diagram_from_record(
             conservation_min_identity=float(identity),
             dinucleotide_dataframes=dinucleotide_dataframes,
             feature_density=context.feature_density if context.feature_density is not None else feature_density_record_layers(
-                [gb_record], inputs.feature_density_tracks, windows=[(int(window), int(step))], transforms=[record_transform])[0],
+                [gb_record], inputs.feature_density_tracks,
+                windows=feature_density_windows([len(gb_record.seq)], cfg, window=inputs.window, step=inputs.step),
+                transforms=[record_transform])[0],
         ),
         CircularTrackInputs(
             circular_track_slots=parsed_circular_track_slots,
@@ -3232,15 +3232,13 @@ def assemble_circular_diagram_from_records(
         parsed_circular_track_slots, inputs, implicit=implicit_track_stack, show_ticks=bool(cfg.objects.scale.show),
         show_depth=show_depth, depth_track_count=depth_track_count(record_depth_tracks), show_gc=show_gc, show_skew=show_skew,
     )
-    # The records share one Legend, so their feature density tracks share one window (the longest record's) and
-    # one scale.
-    density_window = _resolve_circular_window_step(
-        max(records, key=lambda record: len(record.seq)), cfg, window=inputs.window, step=inputs.step
-    )
+    # The records share one Legend, so their feature density tracks share one window and one scale.
     record_feature_density = feature_density_record_layers(
         records,
         inputs.feature_density_tracks,
-        windows=[density_window] * len(records),
+        windows=feature_density_windows(
+            [len(record.seq) for record in records], cfg, window=inputs.window, step=inputs.step
+        ),
         transforms=bind_record_transforms(records, _record_transforms),
     )
     record_scales = _resolve_multi_record_scales(

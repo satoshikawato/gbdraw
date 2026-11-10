@@ -49,6 +49,8 @@ class LinearRecordInputs:
 class LinearTrackInputs:
     """The requested track slots, depth tracks and region annotations, before annotation planning."""
 
+    # Each record's (window, step) for a feature density track that sets none (``feature_density_windows``).
+    feature_density_windows: tuple[tuple[int, int], ...]
     record_depth_tracks: list[list[DepthTrackSpec]] | None = None
     # The feature density tracks: a stack the reader did not write draws each; a written stack those it names.
     feature_density_tracks: tuple[FeatureDensityTrack, ...] = ()

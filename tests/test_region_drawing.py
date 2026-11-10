@@ -41,7 +41,13 @@ from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.region_drawing import derive_region_request
 from gbdraw.api.request_render import resolve_request_records
 from gbdraw.api.requests import DiagramRequest
-from gbdraw.auto_sizes import DrawnExtent, adapt_explicit_settings, auto_setting_values
+from gbdraw.auto_sizes import (
+    SIZE_CLASSES,
+    DrawnExtent,
+    adapt_explicit_settings,
+    auto_setting_values,
+    record_auto_values,
+)
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
 from gbdraw.io.record_select import RecordSelector
@@ -69,12 +75,20 @@ def test_auto_value_vectors(cfg, case: dict[str, Any]) -> None:
     values = auto_setting_values(_extent(case), cfg)
     for setting, expected in case["expected"].items():
         assert values[setting] == pytest.approx(expected, abs=1e-9), setting
+    if "recordValues" in case:
+        # A setting is the drawing's Auto value only when every record takes it.
+        for setting in case["recordValues"][0]:
+            shared = {record[setting] for record in case["recordValues"]}
+            assert values.get(setting) == (shared.pop() if len(shared) == 1 else None), setting
+        records = record_auto_values(_extent(case), cfg)
+        assert [dict(record) for record in records] == case["recordValues"]
 
 
 @pytest.mark.parametrize("case", VECTORS["adaptations"], ids=lambda case: case["name"])
 def test_size_rule_vectors(cfg, case: dict[str, Any]) -> None:
+    # A vector's hand-set values hold no short/long pair with different values: each size class draws them.
     adaptation = adapt_explicit_settings(
-        case["explicit"], source=_extent(case["source"]), target=_extent(case["target"]), cfg=cfg
+        {setting: dict.fromkeys(SIZE_CLASSES, value) for setting, value in case["explicit"].items()}, source=_extent(case["source"]), target=_extent(case["target"]), cfg=cfg
     )
     assert dict(adaptation.kept) == case["expected"]["kept"]
     reset = [
@@ -417,6 +431,239 @@ def test_a_circular_region_drawing_takes_one_record(materialize) -> None:
             [RegionSelection("pair:1", 1, 10), RegionSelection("pair:2", 1, 10)],
             mode="circular",
         )
+
+
+def _circular_records(tmp_path: Path, big: int, small: int) -> list[RecordInput]:
+    """Two circular records, BIG and SMALL (record keys ``pair:1`` and ``pair:2``), in one GenBank file."""
+    from Bio import SeqIO
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    path = tmp_path / f"records_{big}_{small}.gb"
+    SeqIO.write(
+        [
+            SeqRecord(
+                Seq("ACGTTGCA" * (length // 8)), id=name, name=name, description=name,
+                annotations={"molecule_type": "DNA", "topology": "circular"},
+            )
+            for name, length in (("BIG", big), ("SMALL", small))
+        ],
+        path,
+        "genbank",
+    )
+    return [RecordInput(GenBankInputSource(path), record_key="pair", cardinality=RecordCardinality.ALL)]
+
+
+def _circular_canvas_of_50_and_5_kb(tmp_path: Path, **options: Any) -> CircularDiagramRequest:
+    """A Circular drawing of two circular records, 50 kb and 5 kb: each draws its GC content and ticks at its own
+    length (Auto window 1,000 and 500 bp, scale interval 5,000 and 1,000 bp)."""
+    return CircularDiagramRequest(
+        records=_circular_records(tmp_path, 50_000, 5_000), options=CircularDiagramOptions(**options)
+    )
+
+
+def test_a_circular_record_compares_its_own_auto_window_and_scale_interval(tmp_path: Path) -> None:
+    # Each record of a Circular drawing draws at its own length: the 5 kb record with Auto window 500 bp and scale
+    # interval 1,000 bp, not the 50 kb record's 1,000 bp and 5,000 bp. A drawing of the whole 5 kb record has the same
+    # Auto values, so its hand-set values stay (OV-3231: the scale interval follows the same rule).
+    source = _circular_canvas_of_50_and_5_kb(
+        tmp_path, window=300, step=30, config_overrides={"objects.scale.interval": 2_000}
+    )
+    region = derive_region_request(source, [RegionSelection("pair:2", 1, 5_000)])
+    assert region.mode == "circular"
+    assert region.adaptation.reset == ()
+    assert {key: region.adaptation.kept[key] for key in ("window", "step", "objects.scale.interval")} == {
+        "window": 300, "step": 30, "objects.scale.interval": 2_000,
+    }
+    assert (region.request.options.window, region.request.options.step) == (300, 30)
+
+    # The 50 kb record's own Auto values change at 4 kb: they return to Auto, the 4 kb record's values shown.
+    region = derive_region_request(source, [RegionSelection("pair:1", 1, 4_000)], mode="circular")
+    assert {item.setting: (item.source_auto, item.target_auto) for item in region.adaptation.reset} == {
+        "window": (1_000, 400), "step": (100, 40), "objects.scale.interval": (5_000, 1_000),
+    }
+
+
+def _gene_density() -> tuple[Any, ...]:
+    from gbdraw.analysis.feature_density import FeatureDensityTrack
+    from gbdraw.features.query import FeatureQuery
+
+    return (FeatureDensityTrack("d", FeatureQuery("gene")),)
+
+
+def test_a_circular_region_compares_the_feature_density_window_of_the_canvas(tmp_path: Path) -> None:
+    # The records of one Circular canvas share one feature density window, the longest record's (1,000 bp); the
+    # whole 5 kb record drawn alone takes 500 bp, so a hand-set window and step the density track reads return to
+    # Auto, and the reset names the density track's values.
+    source = _circular_canvas_of_50_and_5_kb(tmp_path, window=300, step=30, feature_density_tracks=_gene_density())
+    region = derive_region_request(source, [RegionSelection("pair:2", 1, 5_000)])
+    assert region.mode == "circular"
+    assert {item.setting: (item.source_auto, item.target_auto) for item in region.adaptation.reset} == {
+        "window": (1_000, 500), "step": (100, 50),
+    }
+    # A track with its own window and step reads neither: the hand-set values stay.
+    from gbdraw.analysis.feature_density import FeatureDensityTrack
+    from gbdraw.features.query import FeatureQuery
+
+    own = (FeatureDensityTrack("d", FeatureQuery("gene"), window=2_000, step=200),)
+    source = _circular_canvas_of_50_and_5_kb(tmp_path, window=300, step=30, feature_density_tracks=own)
+    assert derive_region_request(source, [RegionSelection("pair:2", 1, 5_000)]).adaptation.reset == ()
+
+
+@pytest.mark.parametrize(("enabled", "reset"), [(True, {"window": (1_000, 500), "step": (100, 50)}), (False, {})])
+def test_a_circular_region_compares_the_density_window_only_of_drawn_density_tracks(
+    tmp_path: Path, enabled: bool, reset: dict[str, tuple[int, int]]
+) -> None:
+    # A stated stack draws only the feature density tracks its enabled slots name: with the slot disabled, no track
+    # reads the canvas's shared density window, so the hand-set window and step stay (the GC content window of the
+    # 5 kb record is 500 bp in both drawings).
+    from gbdraw.api import CircularRequestTrackOptions, CircularTrackSlot
+
+    slots = (
+        CircularTrackSlot("features", "features"),
+        CircularTrackSlot("density_d", "feature_density", enabled=enabled, params={"track": "d"}),
+        CircularTrackSlot("gc_content", "gc_content"),
+    )
+    source = _circular_canvas_of_50_and_5_kb(
+        tmp_path, window=300, step=30, feature_density_tracks=_gene_density(),
+        tracks=CircularRequestTrackOptions(circular_track_slots=slots),
+    )
+    region = derive_region_request(source, [RegionSelection("pair:2", 1, 5_000)])
+    assert {item.setting: (item.source_auto, item.target_auto) for item in region.adaptation.reset} == reset
+
+
+def test_a_region_of_a_circular_batch_compares_each_diagrams_own_size_class(tmp_path: Path) -> None:
+    # OV-3253: each diagram of a batch takes the size class of its own record. The 5 kb diagram's Auto label font is
+    # the short one, as is that of a drawing of the whole 5 kb record, so the hand-set font stays; the 300 kb
+    # diagram's is the long one, so a drawing of 5 kb of it returns the font to Auto.
+    from gbdraw.api.requests import CircularBatchOutputPolicy, CircularBatchRequest
+
+    batch = CircularBatchRequest(
+        records=_circular_records(tmp_path, 300_000, 5_000),
+        options=CircularDiagramOptions(config_overrides={"labels.font_size.short": 11, "labels.font_size.long": 11}),
+        output_policy=CircularBatchOutputPolicy(output_prefix=str(tmp_path / "o")),
+    )
+    region = derive_region_request(batch, [RegionSelection("pair:2", 1, 5_000)])
+    assert region.adaptation.reset == ()
+    overrides = region.request.options.config_overrides
+    assert {key: overrides[key] for key in ("labels.font_size.short", "labels.font_size.long")} == {
+        "labels.font_size.short": 11, "labels.font_size.long": 11,
+    }
+    region = derive_region_request(batch, [RegionSelection("pair:1", 1, 5_000)], mode="circular")
+    assert [(item.setting, item.source_auto, item.target_auto) for item in region.adaptation.reset] == [
+        ("labels.font_size", 8.0, 14.0)
+    ]
+
+
+@pytest.mark.parametrize("kind", ["batch", "canvas"])
+@pytest.mark.parametrize(
+    "leaves",
+    [
+        {"labels.font_size.short": 10, "labels.font_size.long": 6},
+        {"labels.font_size.long": 6},
+        {"labels.font_size.short": 10},
+    ],
+    ids=["both", "long-only", "short-only"],
+)
+def test_a_size_reset_names_the_hand_set_value_of_the_compared_diagrams_size_class(
+    tmp_path: Path, kind: str, leaves: dict[str, int]
+) -> None:
+    # OV-3254: the 5 kb diagram of a batch draws the label font of the short size class, the 300 kb one that of the
+    # long class; a canvas of both draws the long class's. A new drawing names the hand-set value the diagram it comes
+    # from drew, whether the font returns to Auto or is kept, in the Python API and in the Web's Returned-to-Auto
+    # list; with sizes not adapted, that value is kept. OV-3263: where only one class is set by hand, the diagram of
+    # the other drew its Auto value, and the one hand-set value is named, never an Auto value.
+    from gbdraw.api.requests import CircularBatchRequest, RenderOutputRequest
+
+    # One input and one output per record, as the Web holds a batch.
+    path = _circular_records(tmp_path, 300_000, 5_000)[0].source.path
+    records = [
+        RecordInput(GenBankInputSource(path), selector=RecordSelector(f"#{index + 1}", None, index), record_key=key)
+        for index, key in enumerate(("big", "small"))
+    ]
+    options = CircularDiagramOptions(config_overrides=leaves)
+    source: DiagramRequest = (
+        CircularBatchRequest(records=records, options=options, outputs=(RenderOutputRequest("o1"), RenderOutputRequest("o2")))
+        if kind == "batch"
+        else CircularDiagramRequest(records=records, options=options)
+    )
+    only = next(iter(leaves.values()))
+    hand_set_long = leaves.get("labels.font_size.long", only)
+    hand_set = leaves.get("labels.font_size.short", only) if kind == "batch" else hand_set_long
+    small = [RegionSelection("small", 1, 5_000)]
+    region = derive_region_request(source, small, mode="linear")
+    assert [(item.setting, item.explicit) for item in region.adaptation.reset] == [("labels.font_size", hand_set)]
+    kept = derive_region_request(source, small, mode="linear", adapt_sizes=False).adaptation
+    assert (kept.reset, kept.kept["labels.font_size"]) == ((), hand_set)
+    # The Web draws part of a Circular record in Linear.
+    reply = _web_region(source, [{"recordKey": "small", "start": 1, "end": 4_000}], tmp_path)[2]
+    assert reply["mode"] == "linear"
+    assert [(item["setting"], item["explicit"]) for item in reply["returnedToAuto"]] == [("labels.font_size", hand_set)]
+    # The whole 5 kb record in Circular: kept from the batch (its diagram's Auto is the new drawing's), returned to
+    # Auto from the canvas; either way the hand-set value is named.
+    circular = derive_region_request(source, small, mode="circular").adaptation
+    named = {**circular.kept, **{item.setting: item.explicit for item in circular.reset}}
+    assert (bool(circular.reset), named["labels.font_size"]) == (kind == "canvas", hand_set)
+    # From both diagrams of the batch, which may draw different values: the first diagram's, in the source's order.
+    both = derive_region_request(source, [RegionSelection("big", 1, 5_000), *small], mode="linear")
+    assert [(item.setting, item.explicit) for item in both.adaptation.reset] == [("labels.font_size", hand_set_long)]
+
+
+def test_each_diagram_of_a_circular_batch_draws_its_density_track_at_its_own_window(cfg, tmp_path: Path) -> None:
+    # The renderer's side of the batch comparison of the density window (the test below): the 50 kb diagram samples
+    # per 1 kb, the 5 kb one per 500 bp (the window record_auto_values gives each record of a batch); a canvas of both
+    # samples per 1 kb.
+    import re
+
+    from gbdraw.api import render_request
+    from gbdraw.api.requests import CircularBatchOutputPolicy, CircularBatchRequest, RenderOutputRequest
+
+    records = _circular_records(tmp_path, 50_000, 5_000)
+    options = CircularDiagramOptions(feature_density_tracks=_gene_density())
+    batch = CircularBatchRequest(
+        records=records, options=options, output_policy=CircularBatchOutputPolicy(output_prefix=str(tmp_path / "batch"))
+    )
+    canvas = CircularDiagramRequest(
+        records=records,
+        options=options,
+        output=RenderOutputRequest("canvas", output_directory=str(tmp_path), formats=("svg",)),
+    )
+    windows = [
+        set(re.findall(r"gene per ([0-9.]+ k?bp)", Path(path).read_text()))
+        for request in (batch, canvas)
+        for path in render_request(request).output_paths
+    ]
+    extent = DrawnExtent("circular", (50_000, 5_000), density_window_settings=("window",), separate_records=True)
+    assert [values["feature_density.window"] for values in record_auto_values(extent, cfg)] == [1_000, 500]
+    assert windows == [{"1 kbp"}, {"500 bp"}, {"1 kbp"}]
+
+
+def test_a_region_of_a_circular_batch_compares_each_diagrams_own_density_window(tmp_path: Path) -> None:
+    # In separate diagrams each record draws its feature density track at its own length (500 bp for 5 kb): the
+    # hand-set window and step stay.
+    from gbdraw.api.requests import CircularBatchOutputPolicy, CircularBatchRequest
+
+    canvas = _circular_canvas_of_50_and_5_kb(tmp_path, window=300, step=30, feature_density_tracks=_gene_density())
+    batch = CircularBatchRequest(
+        records=canvas.records, options=canvas.options, output_policy=CircularBatchOutputPolicy(output_prefix=str(tmp_path / "o"))
+    )
+    region = derive_region_request(batch, [RegionSelection("pair:2", 1, 5_000)])
+    assert region.adaptation.reset == ()
+    assert (region.request.options.window, region.request.options.step) == (300, 30)
+
+
+def test_a_linear_region_of_circular_records_compares_each_records_own_auto_window(tmp_path: Path) -> None:
+    # The records of a Linear drawing share the longest record's Auto window (1,000 bp at 20 kb); the 5 kb record
+    # drew its GC content with 500 bp in the Circular source, so a hand-set window returns to Auto.
+    source = _circular_canvas_of_50_and_5_kb(tmp_path, window=300, step=30)
+    region = derive_region_request(source, [RegionSelection("pair:1", 1, 20_000), RegionSelection("pair:2", 1, 5_000)])
+    assert region.mode == "linear"
+    reset = {item.setting: (item.source_auto, item.target_auto) for item in region.adaptation.reset}
+    # The two source records differ: no one source value to name.
+    assert reset == {"window": (None, 1_000), "step": (None, 100)}
+    # From the 50 kb record alone the Auto window is the same.
+    region = derive_region_request(source, [RegionSelection("pair:1", 1, 20_000)])
+    assert region.adaptation.reset == ()
 
 
 def test_circular_track_widths_follow_the_rule(materialize) -> None:

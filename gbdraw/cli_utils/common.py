@@ -899,7 +899,8 @@ def add_feature_density_args(parser: argparse.ArgumentParser) -> None:
         '[qualifier=<name> [value=<regex>]] [min_length=<bp>] [max_length=<bp>] [metric=count|coverage] '
         '[style=heatmap|histogram] [window=<bp>] [step=<bp>] [color=<color>] [caption=<text>]. '
         'count: the features in each window; coverage: the percentage of each window the features cover. '
-        'Window and step default to the GC content window. Repeat the option for more tracks.',
+        'Window and step default to --window and --step, else to the automatic window and step of the longest '
+        'record in the figure. Repeat the option for more tracks.',
         type=str,
         nargs='+',
         action='append')

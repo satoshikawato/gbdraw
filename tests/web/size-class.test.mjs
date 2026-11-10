@@ -391,6 +391,42 @@ test('the scale interval and sliding window hints follow Python at every length-
   }
 });
 
+// Each record of a Circular drawing draws its windows and ticks at its own length (Python's record_auto_values): the
+// hint names a value only when every record takes it, and each record alone shows its own.
+test('the Circular window and scale interval hints follow each record\'s own Auto values', () => {
+  const vectors = JSON.parse(readFileSync(new URL('../fixtures/auto_size_vectors.json', import.meta.url), 'utf8'));
+  const cases = vectors.autoValues.filter((/** @type {{ recordValues?: unknown }} */ entry) => entry.recordValues);
+  assert.ok(cases.some((/** @type {{ mode: string }} */ entry) => entry.mode === 'circular'), 'a Circular vector exists');
+  const hints = /** @type {const} */ ([
+    ['window', 'dinucleotideWindow', 'Auto (by genome size)'],
+    ['step', 'dinucleotideStep', 'Auto (by genome size)'],
+    ['depth_window', 'depthWindow', 'Auto (by genome size)'],
+    ['depth_step', 'depthStep', 'Auto (by genome size)'],
+    ['objects.scale.interval', 'scaleInterval', 'by record length (auto)']
+  ]);
+  for (const entry of cases) {
+    /** @type {Record<string, number>[]} */
+    const records = entry.recordValues;
+    /** @param {number[]} lengths */
+    const display = (lengths) => createAutoValueDisplay(withDrawings({
+      mode: { value: entry.mode }, form: {}, adv: {}
+    }), { circularDiagramLengths: () => [lengths], linearRecordLengths: () => lengths });
+    const whole = display(entry.recordLengths);
+    for (const [setting, field, mixed] of hints) {
+      const values = new Set(records.map((record) => record[setting]));
+      const text = whole.autoValueText(field);
+      if (values.size === 1) assert.equal(shownBp(text), [...values][0], `${entry.name} ${setting}`);
+      else assert.equal(text, mixed, `${entry.name} ${setting}`);
+    }
+    if (entry.mode !== 'circular') continue;
+    entry.recordLengths.forEach((/** @type {number} */ length, /** @type {number} */ index) => {
+      for (const [setting, field] of hints) {
+        assert.equal(shownBp(display([length]).autoValueText(field)), records[index][setting], `${entry.name} ${length} ${setting}`);
+      }
+    });
+  }
+});
+
 // The Depth hint of a set GC window and step is the Depth window and step Python derives from them
 // (whole base pairs: a 25 bp step gives a 2 bp Depth step, not 2.5).
 test('the Depth hints of a set GC window and step are Python\'s whole base pairs', () => {
