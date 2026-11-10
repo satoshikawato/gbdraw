@@ -9,12 +9,13 @@ the number of inputs is not bounded by the files a process may hold open.
 
 from __future__ import annotations
 
-import gc
 import gzip
 import os
+import random
 import shutil
 import subprocess
 import sys
+import tempfile
 import textwrap
 from pathlib import Path
 
@@ -151,8 +152,8 @@ def test_more_inputs_than_open_files_allowed(tmp_path: Path) -> None:
 def test_records_released_while_the_reader_is_locked_do_not_wait_on_it(tmp_path: Path) -> None:
     """Records may be freed at any allocation, inside the reader's locked sections too (by a cyclic collection).
 
-    Their release (closing the file, dropping its cached blocks, removing a gzip
-    copy) must not wait on those locks. The records of two inputs are released
+    Their release (closing the file, dropping its cached blocks) must not wait on
+    those locks. The records of two inputs are released
     here while every lock of the reader is held, once by reference count and once
     by a collection run from inside a read. A subprocess with a timeout turns a
     hang into a failure.
@@ -172,7 +173,7 @@ def test_records_released_while_the_reader_is_locked_do_not_wait_on_it(tmp_path:
             records = read_flat_file_records(path)
             assert str(records[0].seq)  # its file is open, its blocks cached
             return records
-        locks = [record_sequences._OPEN._lock, record_sequences._CACHE._lock, record_sequences._EXPANSIONS_LOCK]
+        locks = [record_sequences._OPEN._lock, record_sequences._CACHE._lock]
         for compressed in (False, True):
             records = records_of(f"held{{compressed}}.gb", compressed)
             for lock in locks:
@@ -192,7 +193,7 @@ def test_records_released_while_the_reader_is_locked_do_not_wait_on_it(tmp_path:
         record_sequences._OPEN.read(records[0].seq._data._bases.source, 0, 10)
         assert str(records[0].seq) == str(read_flat_file_records(source)[0].seq)
         record_sequences._OPEN.read(records[0].seq._data._bases.source, 0, 10)  # releases what is queued
-        assert os.listdir(record_sequences._expansion_directory()) == []  # every gzip copy removed
+        assert not record_sequences._RELEASED
         print("ok")
         """
     )
@@ -205,18 +206,72 @@ def test_records_released_while_the_reader_is_locked_do_not_wait_on_it(tmp_path:
     assert result.stdout.split() == ["ok"]
 
 
-def test_a_gzip_input_is_expanded_once_into_a_file_removed_after_its_records(tmp_path: Path) -> None:
-    path = tmp_path / "a.gb.gz"
-    path.write_bytes(gzip.compress(GENBANK.read_bytes()))
+def test_a_gzip_input_is_read_where_it_is_and_nothing_of_it_is_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The records of a gzip input read the input itself, at offsets through points of its expansion; neither a
+    pass nor a read nor a refusal writes a file (the Web would pay for one in the browser's storage)."""
+
+    from gbdraw.io import input_text
+
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setenv("TMPDIR", str(scratch))
+    monkeypatch.setattr(tempfile, "tempdir", None)
+    path, _ = _first_of_many(tmp_path)
     records = read_flat_file_records(str(path))
-    copies = [Path(table.source.path) for table in (record.seq._data._bases for record in records)]
-    assert copies[0].parent == Path(record_sequences._expansion_directory())
-    assert copies[0].exists() and copies[0] != path
-    assert str(records[0].seq) == _sequence(GENBANK)
-    del records
-    gc.collect()  # the copy is queued for removal; the next read of any input removes it
-    read_flat_file_records(str(GENBANK))
-    assert not copies[0].exists()
+    assert {record.seq._data._bases.source.path for record in records} == {str(path)}
+    assert [str(record.seq) for record in records] == [_sequence(GENBANK)] * 13
+    monkeypatch.setattr(input_text, "MAX_EXPANDED_INPUT_BYTES", 1 << 20)
+    with pytest.raises(InputFileError, match="expands to more than 1 MiB"):
+        read_flat_file_records(str(path))
+    assert list(scratch.iterdir()) == []
+
+
+def test_reads_at_offsets_give_the_bases_of_the_plain_file_in_any_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A read starts from the point before it, or goes on from the last read; every base equals the plain file's."""
+
+    monkeypatch.setattr(record_sequences, "_POINT_BYTES", 96 << 10)
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    monkeypatch.setattr(record_sequences, "_CACHE", record_sequences._BlockCache())
+    path, _ = _first_of_many(tmp_path)
+    (tmp_path / "many.gb").write_bytes(GENBANK.read_bytes() * 13)
+    records = read_flat_file_records(str(path))
+    plain = [str(record.seq) for record in read_flat_file_records(str(tmp_path / "many.gb"))]
+    assert len(records[0].seq._data._bases.source.points) > 5
+    chooser = random.Random(3)
+    for _ in range(400):
+        index = chooser.randrange(13)
+        start = chooser.randrange(len(plain[index]))
+        stop = min(len(plain[index]), start + chooser.choice((1, 900, 70_000)))
+        assert str(records[index].seq[start:stop]) == plain[index][start:stop]
+
+
+def test_reads_in_order_expand_each_byte_of_a_gzip_input_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Short reads in order (the edges of windows) go on from the last read: the input is expanded once more, not
+    once from a point per read."""
+
+    from gbdraw.io import input_text
+
+    monkeypatch.setattr(record_sequences, "_CACHE", record_sequences._BlockCache())
+    path, expanded = _first_of_many(tmp_path)
+    records = read_flat_file_records(str(path))
+    counted = [0]
+    real_read = input_text.GzipExpansion.read
+
+    def read(self, size):
+        data = real_read(self, size)
+        counted[0] += len(data)
+        return data
+
+    monkeypatch.setattr(input_text.GzipExpansion, "read", read)
+    for record in records:
+        table = record.seq._data._bases
+        for row in range(0, len(table.rows().starts) - 1, 7):
+            table.rows().read(row)
+    assert counted[0] <= expanded + record_sequences._BLOCK_BYTES
 
 
 def test_the_parse_pass_reads_each_file_once_in_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -251,14 +306,40 @@ def _first_of_many(tmp_path: Path) -> tuple[Path, int]:
 def test_a_reader_that_stops_after_the_first_record_expands_only_what_it_read(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The copy of a gzip input holds what the parse pass read, so a first-record read expands no more of the file."""
+    """The parse pass expands a gzip input as it reads it, so a first-record read expands no more of the file."""
 
     monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    monkeypatch.setattr(record_sequences, "_POINT_BYTES", 64 << 10)
     path, expanded = _first_of_many(tmp_path)
     (first,) = read_flat_file_records(str(path), first_only=True)
-    copy = Path(first.seq._data._bases.source.path)
     assert str(first.seq) == _sequence(GENBANK)
-    assert copy.stat().st_size < expanded // 4
+    assert first.seq._data._bases.source.points[-1].expanded < expanded // 4
+
+
+@pytest.mark.parametrize("threads", [True, False], ids=["thread", "no-thread"])
+def test_a_gzip_input_expands_ahead_of_its_parse_pass_and_stops_with_it(
+    threads: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The expansion runs on a thread of its own beside the pass (in turn where no thread can start, as in
+    Pyodide); a pass that stops early or is refused stops it."""
+
+    import threading
+
+    from gbdraw.io import input_text
+
+    if not threads:
+        def no_thread(self):
+            raise RuntimeError("can't start new thread")
+
+        monkeypatch.setattr(threading.Thread, "start", no_thread)
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    path, _ = _first_of_many(tmp_path)
+    (first,) = read_flat_file_records(str(path), first_only=True)
+    assert [str(record.seq) for record in [first, *read_flat_file_records(str(path))]] == [_sequence(GENBANK)] * 14
+    monkeypatch.setattr(input_text, "MAX_EXPANDED_INPUT_BYTES", 1 << 20)
+    with pytest.raises(InputFileError, match="expands to more than 1 MiB"):
+        read_flat_file_records(str(path))
+    assert not [thread for thread in threading.enumerate() if thread.name == "gbdraw-gzip-ahead"]
 
 
 def test_the_cap_counts_what_a_reader_expanded_so_far(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -292,19 +373,6 @@ def test_a_cap_refuses_only_the_bytes_past_it_at_any_block_size(tmp_path: Path, 
     assert len(read_flat_file_records(str(path))) == 13  # a file of exactly the cap reads whole
 
 
-def test_a_refused_gzip_pass_leaves_no_bytes_of_its_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from gbdraw.io import input_text
-
-    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
-    monkeypatch.setattr(input_text, "MAX_EXPANDED_INPUT_BYTES", 1 << 20)
-    folder = Path(record_sequences._expansion_directory())
-    before = set(folder.iterdir())
-    path, _ = _first_of_many(tmp_path)
-    with pytest.raises(InputFileError, match="expands to more than 1 MiB"):
-        read_flat_file_records(str(path))
-    assert all(copy.stat().st_size == 0 for copy in set(folder.iterdir()) - before if copy.exists())
-
-
 def _many_with_a_cp1252_byte(tmp_path: Path) -> tuple[Path, bytes]:
     """Thirteen records, the sixth with a byte that is not UTF-8 (é in cp1252) in its definition."""
 
@@ -316,18 +384,18 @@ def _many_with_a_cp1252_byte(tmp_path: Path) -> tuple[Path, bytes]:
     return path, plain
 
 
-def test_a_second_pass_reads_the_copy_and_expands_on_from_where_the_first_stopped(
+def test_a_second_pass_expands_the_input_again_and_its_records_read_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from gbdraw.io import input_text
 
     monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    monkeypatch.setattr(record_sequences, "_POINT_BYTES", 64 << 10)
     monkeypatch.setattr(input_text.locale, "getpreferredencoding", lambda _do_setlocale=True: "cp1252")
     path, plain = _many_with_a_cp1252_byte(tmp_path)
     (tmp_path / "plain.gb").write_bytes(plain)
     records = read_flat_file_records(str(path))
     expected = read_flat_file_records(str(tmp_path / "plain.gb"))
-    assert Path(records[0].seq._data._bases.source.path).read_bytes() == plain
     assert [(r.id, r.description, str(r.seq)) for r in records] == [(r.id, r.description, str(r.seq)) for r in expected]
     assert "café" in records[5].description
 
