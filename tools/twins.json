@@ -242,10 +242,9 @@
     },
     {
       "id": "vector:tests/fixtures/legend_track_slot_rows.json",
-      "concern": "Track-slot Legend rows, slot ids and fills (OV-484), the Depth rows a request draws (OV-1198), and the order by side the Legend lists them in (OV-3187)",
+      "concern": "Track-slot Legend rows, slot ids and fills (OV-484), and the Depth rows a request draws (OV-1198)",
       "pythonOwner": [
         "gbdraw/legend/table.py:_generated_legend_rows",
-        "gbdraw/legend/sources.py:legend_slot_sources",
         "gbdraw/diagrams/circular/assemble.py:_sync_legend_table_for_circular_slots",
         "gbdraw/diagrams/linear/assemble.py:_sync_legend_table_for_linear_slots",
         "gbdraw/analysis/depth_tracks.py:sync_depth_track_legend_entries"
