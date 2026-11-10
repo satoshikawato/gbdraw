@@ -9,6 +9,7 @@ const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPro
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { drawingIds, shownDrawing } = require('./helpers/drawing-bar.cjs');
 const { chooseCoordinates, openRegionDialog } = require('./helpers/region-drawing.cjs');
+const { popupEdit } = require('./helpers/live-generate-parity-steps.cjs');
 
 const root = process.cwd();
 const mito = path.join(root, 'tests/fixtures/sessions/cli-web-mito.gb');
@@ -664,6 +665,57 @@ test('Session CLI scale above the features without a tick label layout draws the
     // The labels start within the label margin past their ticks, outside the feature track.
     expect(labelPaths[0] - tickOuter).toBeGreaterThan(0);
     expect(labelPaths[0] - tickOuter).toBeLessThan(5);
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
+
+// OV-3301: with the scale outside the feature track and its labels outside the ticks, a number a feature label's
+// leader line runs through is drawn in front of it on a backing. The CLI Session, loaded and generated in the Web,
+// draws the CLI's scale with those backings; a label hidden live takes its leader's backing away, as Generate does.
+test('Session CLI scale outside the features backs the numbers a leader runs through, live and from Generate', async ({ browser }, testInfo) => {
+  test.setTimeout(600_000);
+  const hmmt = path.join(root, 'tests/test_inputs/HmmtDNA.gbk');
+  const file = await cli('circular', ['--gbk', hmmt, '-f', 'svg', '--circular_track_order', 'ticks,features,gc_content,gc_skew',
+    '--circular_track_axis_index', '1', '--labels', 'out', '--label_font_size', '10'], testInfo, 'scale-outside');
+  const stored = shownSavedDrawing(await readSession(file));
+  const run = await load(browser, file, { width: 1600, height: 1000 });
+  try {
+    // The scale group's place and paths (4 decimals, as `svgSemantics`), and the features whose leader line enters
+    // a backing (an annular sector drawn clockwise from its first point).
+    const scale = (svg) => run.page.evaluate((text) => {
+      const root = new DOMParser().parseFromString(text, 'image/svg+xml');
+      const round = (value) => value && value.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, (number) => String(Math.round(Number(number) * 1e4) / 1e4));
+      const ticks = root.querySelector('[data-gbdraw-slot-id="ticks"]');
+      const turn = (x, y) => (Math.atan2(y, x) + 2 * Math.PI) % (2 * Math.PI);
+      const backings = [...ticks.querySelectorAll('path[fill-opacity]')].map((item) => {
+        const [x1, y1, outer, , , , , x2, y2, , , inner] = (item.getAttribute('d').match(/-?\d*\.?\d+/g) || []).map(Number);
+        return { inner, outer, start: turn(x1, y1), span: (turn(x2, y2) - turn(x1, y1) + 2 * Math.PI) % (2 * Math.PI) };
+      });
+      const inside = ([x, y]) => backings.some(({ inner, outer, start, span }) => Math.hypot(x, y) >= inner
+        && Math.hypot(x, y) <= outer && (turn(x, y) - start + 2 * Math.PI) % (2 * Math.PI) <= span);
+      const backed = [...root.querySelectorAll('[id="label_leaders"] line')].filter((line) => {
+        const [x1, y1, x2, y2] = ['x1', 'y1', 'x2', 'y2'].map((key) => Number(line.getAttribute(key)));
+        return Array.from({ length: 101 }, (_, i) => [x1 + (x2 - x1) * i / 100, y1 + (y2 - y1) * i / 100]).some(inside);
+      }).map((line) => line.getAttribute('data-label-feature-id'));
+      return {
+        transform: round(ticks.getAttribute('transform')),
+        paths: [...ticks.querySelectorAll('path')].map((item) => round(item.getAttribute('d'))).sort(),
+        backed: [...new Set(backed)].sort()
+      };
+    }, svg);
+    const drawn = await scale(stored.results[0].content);
+    expect(drawn.backed.length).toBeGreaterThan(0);
+    await generateAndWaitForResult(run.page);
+    expect(await scale((await snapshot(run.page)).selected)).toEqual(drawn);
+    await run.page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = true; });
+    await popupEdit(run.page, { biological_feature_id: drawn.backed[0] }, { labelVisibility: 'off' });
+    await settleLive(run.page);
+    const live = await scale((await snapshot(run.page)).selected);
+    expect(live.backed).not.toContain(drawn.backed[0]);
+    await generateAndWaitForResult(run.page);
+    expect(await scale((await snapshot(run.page)).selected)).toEqual(live);
     expect(run.errors).toEqual([]);
   } finally {
     await run.context.close();

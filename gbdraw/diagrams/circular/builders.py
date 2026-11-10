@@ -15,6 +15,7 @@ from svgwrite.container import Group
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
 from ...analysis.conservation import ConservationTrack
+from ...render.drawers.circular.annotations import LeaderSegment
 from ...render.drawers.circular.feature_density import FeatureDensityHeatmapGroup
 from ...features.factory import FeatureBuildResult
 from ...labels.circular_types import CircularLabel
@@ -464,9 +465,9 @@ def tick_group_content(
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
     track_preset: str | None = None,
-    group_id: str,
     slot_id: str,
     record_transform: RecordDisplayTransform | None = None,
+    feature_leaders: tuple[LeaderSegment, ...] = (),
 ) -> GroupContent:
     """The tick group of a tick slot: its ticks and scale labels (a render stage: a Worker transaction reuses a second build)."""
     return render_stage(
@@ -481,9 +482,9 @@ def tick_group_content(
         tick_side=tick_side,
         tick_length_px=tick_length_px,
         track_preset=track_preset,
-        group_id=group_id,
         slot_id=slot_id,
         record_transform=record_transform,
+        feature_leaders=feature_leaders,
     )
 
 
@@ -498,11 +499,11 @@ def add_tick_group_on_canvas(
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
     track_preset: str | None = None,
-    group_id: str,
     slot_id: str,
     record_transform: RecordDisplayTransform | None = None,
+    feature_leaders: tuple[LeaderSegment, ...] = (),
 ) -> Drawing:
-    """Adds the tick group to the canvas."""
+    """Adds the tick group to the canvas; the numbers ``feature_leaders`` run behind are backed (OV-3301)."""
     content = tick_group_content(
         gb_record,
         canvas_config,
@@ -511,9 +512,9 @@ def add_tick_group_on_canvas(
         tick_side=tick_side,
         tick_length_px=tick_length_px,
         track_preset=track_preset,
-        group_id=group_id,
         slot_id=slot_id,
         record_transform=record_transform,
+        feature_leaders=feature_leaders,
     )
     return _add_track_content(canvas, content, canvas_config, group_key, slot_id=None, slot_renderer=None)
 

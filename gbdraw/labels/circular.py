@@ -8,7 +8,8 @@ from __future__ import annotations
 import heapq
 import math
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from functools import cached_property, lru_cache
+from dataclasses import dataclass
+from functools import cached_property, lru_cache, partial
 from typing import Any, Literal, NamedTuple, TypeAlias, get_args
 
 from ..features.coordinates import get_strand
@@ -41,6 +42,7 @@ from ..layout.common import calculate_cds_ratio
 from ..layout.circular import (
     CircularFeatureLayout,
     CircularRadialLayout,
+    CircularTickLayout,
     calculate_feature_position_factors_circular,
     feature_radius_intervals,
 )
@@ -130,6 +132,49 @@ def radial_label_inner_reserve_px(radial_layout: CircularRadialLayout) -> float:
         if float(reserved_band.outer_px) <= feature_inner_radius + 1e-6:
             reserve = max(reserve, float(reserved_band.outer_px))
     return reserve
+
+
+def outer_label_scale_floor_px(radial_layout: CircularRadialLayout) -> float:
+    """The radius outer horizontal labels and their leader elbows keep past: the outer edge of a scale that stands
+    outside the feature track, between the features and their labels (OV-3301). The band is the ticks slot's own
+    reserved band (its ticks and numbers, from the tick geometry owner); 0 when no scale stands there."""
+
+    features = radial_layout.features
+    if features is None:
+        return 0.0
+    feature_outer = float(features.all_band_px.outer_px)
+    return max(
+        (
+            float(slot.reserved_band_px.outer_px)
+            for slot in radial_layout.slots
+            if isinstance(slot.payload, CircularTickLayout)
+            and slot.reserved_band_px is not None
+            and float(slot.reserved_band_px.inner_px) >= feature_outer - 1e-6
+        ),
+        default=0.0,
+    )
+
+
+@dataclass(frozen=True)
+class CircularLabelRadii:
+    """What the labels read of the radial layout besides the feature lanes (``circular_label_radii``)."""
+
+    # Radial outer labels keep past it: the radial layout's content.
+    outer_content_radius_px: float
+    # Radial inner labels keep outside it (``radial_label_inner_reserve_px``).
+    inner_reserve_px: float
+    # Horizontal outer labels and their leader elbows keep past it (``outer_label_scale_floor_px``).
+    outer_floor_px: float = 0.0
+
+
+def circular_label_radii(radial_layout: CircularRadialLayout) -> CircularLabelRadii:
+    """The radii the labels of ``radial_layout`` keep clear of."""
+
+    return CircularLabelRadii(
+        outer_content_radius_px=float(radial_layout.outer_content_radius_px),
+        inner_reserve_px=radial_label_inner_reserve_px(radial_layout),
+        outer_floor_px=outer_label_scale_floor_px(radial_layout),
+    )
 
 
 def _normalize_circular_track_preset(raw: object) -> str:
@@ -2250,6 +2295,28 @@ def _update_inner_label_maximum_middle_radii_against_features(
             label["max_inner_middle_radius_px"] = allowed_radius
 
     return labels
+
+
+def _hold_outer_text_clear(
+    labels: list[CircularLabel], total_length: int, intervals: list[tuple[float, float, float]], clearance_px: float
+) -> list[CircularLabel]:
+    """Raise and enforce the outer labels' text radii against ``intervals`` (feature tracks, a scale)."""
+
+    labels = _update_outer_label_minimum_radii_against_features(
+        labels, total_length, intervals, text_clearance_px=clearance_px
+    )
+    return _enforce_outer_label_minimum_radius(labels, total_length)
+
+
+def _hold_outer_elbows_clear(
+    labels: list[CircularLabel], total_length: int, intervals: list[tuple[float, float, float]], clearance_px: float
+) -> list[CircularLabel]:
+    """Raise and enforce the outer labels' leader elbow radii against ``intervals`` (feature tracks, a scale)."""
+
+    labels = _update_outer_label_minimum_middle_radii_against_features(
+        labels, total_length, intervals, anchor_clearance_px=clearance_px
+    )
+    return _enforce_outer_label_minimum_middle_radius(labels, total_length)
 
 
 def _enforce_outer_label_minimum_radius(labels: list[CircularLabel], total_length: int) -> list[CircularLabel]:
@@ -5255,8 +5322,7 @@ def prepare_label_list(
     outer_arena: tuple[float, float] | None = None,
     feature_track_ratio_factor_override: float | None = None,
     feature_layout: CircularFeatureLayout | None = None,
-    outer_content_radius_px: float | None = None,
-    inner_reserve_px: float = 0.0,
+    room: CircularLabelRadii | None = None,
     track_preset: str | None = None,
     feature_lane_direction: str | None = None,
     label_font_size: float | None = None,
@@ -5274,8 +5340,10 @@ def prepare_label_list(
     overlaps, because such a layout does not fit. Otherwise slight defects of
     the final horizontal layout are repaired locally (LP-D57); ``definition_text``
     is the centre definition's lines, in the labels' coordinates.
-    Radial labels keep past ``outer_content_radius_px`` (the radial layout's
-    content) and outside ``inner_reserve_px`` (``radial_label_inner_reserve_px``).
+    ``room`` (``circular_label_radii``): radial labels keep past its outer
+    content radius and outside its inner reserve; horizontal outer labels and
+    their leader elbows keep past its outer floor, a scale standing between the
+    features and them (OV-3301).
     ``label_filtering``: the compiled maps when the caller holds them.
     With ``record_id`` (a drawn placement, not a probe), horizontal outer and
     inner labels are first read against the room around the map
@@ -5550,8 +5618,8 @@ def prepare_label_list(
         outer_reserved_radius_px = 0.0
         if outer_arena is not None:
             outer_reserved_radius_px = max(float(outer_arena[0]), float(outer_arena[1]))
-        if outer_content_radius_px is not None:
-            outer_reserved_radius_px = max(outer_reserved_radius_px, float(outer_content_radius_px))
+        if room is not None:
+            outer_reserved_radius_px = max(outer_reserved_radius_px, float(room.outer_content_radius_px))
 
         radial_result = place_radial_labels(
             outer_labels,
@@ -5559,7 +5627,7 @@ def prepare_label_list(
             total_length=total_length,
             spacing_px=label_spacing_px,
             outer_reserved_radius_px=outer_reserved_radius_px,
-            inner_reserved_outer_radius_px=float(inner_reserve_px),
+            inner_reserved_outer_radius_px=float(room.inner_reserve_px) if room is not None else 0.0,
         )
         external_labels = [label.copy() for label in radial_result.labels]
         for label in external_labels:
@@ -5633,80 +5701,33 @@ def prepare_label_list(
                 feature_layout=feature_layout,
                 track_preset=track_type,
             )
-            outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
-                outer_labels_rearranged,
-                total_length,
-                feature_outer_radius_intervals,
-                text_clearance_px=effective_text_clearance_px,
-            )
-            outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+        # OV-3301: a scale between the features and the outer labels holds them off as a feature track would.
+        if room is not None and room.outer_floor_px > 0.0:
+            feature_outer_radius_intervals = [
+                *(feature_outer_radius_intervals or ()), (0.0, float(total_length), float(room.outer_floor_px))
+            ]
+        intervals = feature_outer_radius_intervals or []
+        clear_text = partial(
+            _hold_outer_text_clear, total_length=total_length, intervals=intervals, clearance_px=effective_text_clearance_px
+        )
+        clear_elbows = partial(
+            _hold_outer_elbows_clear, total_length=total_length, intervals=intervals, clearance_px=effective_anchor_clearance_px
+        )
+        if feature_outer_radius_intervals is not None:
+            outer_labels_rearranged = clear_text(outer_labels_rearranged)
             for _ in range(2):
-                outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
-                    outer_labels_rearranged,
-                    total_length,
-                )
-                outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
-                    outer_labels_rearranged,
-                    total_length,
-                    feature_outer_radius_intervals,
-                    text_clearance_px=effective_text_clearance_px,
-                )
-                outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
-            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
-                outer_labels_rearranged,
-                total_length,
-            )
-            outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
-                outer_labels_rearranged,
-                total_length,
-                feature_outer_radius_intervals,
-                text_clearance_px=effective_text_clearance_px,
-            )
-            outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
+                outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(outer_labels_rearranged, total_length)
+                outer_labels_rearranged = clear_text(outer_labels_rearranged)
+            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(outer_labels_rearranged, total_length)
+            outer_labels_rearranged = clear_text(outer_labels_rearranged)
             # Final overlap pass, then enforce outer clearances as the final priority.
-            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
-                outer_labels_rearranged,
-                total_length,
-            )
-            outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
-                outer_labels_rearranged,
-                total_length,
-                feature_outer_radius_intervals,
-                text_clearance_px=effective_text_clearance_px,
-            )
-            outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
-            outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
-                outer_labels_rearranged,
-                total_length,
-                feature_outer_radius_intervals,
-                anchor_clearance_px=effective_anchor_clearance_px,
-            )
-            outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
-                outer_labels_rearranged,
-                total_length,
-            )
+            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(outer_labels_rearranged, total_length)
+            outer_labels_rearranged = clear_text(outer_labels_rearranged)
+            outer_labels_rearranged = clear_elbows(outer_labels_rearranged)
             # Reconcile angular overlaps once more after stricter radial clearances.
-            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
-                outer_labels_rearranged,
-                total_length,
-            )
-            outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
-                outer_labels_rearranged,
-                total_length,
-                feature_outer_radius_intervals,
-                text_clearance_px=effective_text_clearance_px,
-            )
-            outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
-            outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
-                outer_labels_rearranged,
-                total_length,
-                feature_outer_radius_intervals,
-                anchor_clearance_px=effective_anchor_clearance_px,
-            )
-            outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
-                outer_labels_rearranged,
-                total_length,
-            )
+            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(outer_labels_rearranged, total_length)
+            outer_labels_rearranged = clear_text(outer_labels_rearranged)
+            outer_labels_rearranged = clear_elbows(outer_labels_rearranged)
         inner_labels_rearranged = []
         if inner_labels_enabled:
             inner_labels_rearranged = rearrange_labels_fc(
@@ -5751,44 +5772,11 @@ def prepare_label_list(
             )
             reanchor_required = False
             if feature_outer_radius_intervals is not None and outer_labels_rearranged:
-                outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
-                    outer_labels_rearranged,
-                    total_length,
-                    feature_outer_radius_intervals,
-                    text_clearance_px=effective_text_clearance_px,
-                )
-                outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
-                outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
-                    outer_labels_rearranged,
-                    total_length,
-                    feature_outer_radius_intervals,
-                    anchor_clearance_px=effective_anchor_clearance_px,
-                )
-                outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
-                    outer_labels_rearranged,
-                    total_length,
-                )
-                outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(
-                    outer_labels_rearranged,
-                    total_length,
-                )
-                outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
-                    outer_labels_rearranged,
-                    total_length,
-                    feature_outer_radius_intervals,
-                    text_clearance_px=effective_text_clearance_px,
-                )
-                outer_labels_rearranged = _enforce_outer_label_minimum_radius(outer_labels_rearranged, total_length)
-                outer_labels_rearranged = _update_outer_label_minimum_middle_radii_against_features(
-                    outer_labels_rearranged,
-                    total_length,
-                    feature_outer_radius_intervals,
-                    anchor_clearance_px=effective_anchor_clearance_px,
-                )
-                outer_labels_rearranged = _enforce_outer_label_minimum_middle_radius(
-                    outer_labels_rearranged,
-                    total_length,
-                )
+                outer_labels_rearranged = clear_text(outer_labels_rearranged)
+                outer_labels_rearranged = clear_elbows(outer_labels_rearranged)
+                outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(outer_labels_rearranged, total_length)
+                outer_labels_rearranged = clear_text(outer_labels_rearranged)
+                outer_labels_rearranged = clear_elbows(outer_labels_rearranged)
                 reanchor_required = True
             if feature_inner_radius_intervals is not None and inner_labels_rearranged:
                 inner_labels_rearranged = _stabilize_inner_label_clearance(
@@ -5846,7 +5834,10 @@ def prepare_label_list(
 __all__ = [
     "minimum_bbox_gap_px",
     "radial_label_inner_reserve_px",
+    "outer_label_scale_floor_px",
     "CircularLabelProbeStopped",
+    "CircularLabelRadii",
+    "circular_label_radii",
     "calculate_angle_degrees",
     "circular_label_defects",
     "circular_label_fits",

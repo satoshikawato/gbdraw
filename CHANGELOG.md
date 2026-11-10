@@ -281,6 +281,15 @@ into the `[Unreleased]` list below.
   (3.1 px at the default 14 pt), and the feature track and the tracks inside it
   move inward by that much. Figures whose tick labels do not face a feature
   track, such as the default stacks, are unchanged (OV-3192).
+- Fixed: in a Circular figure whose scale stands outside the feature track with
+  its labels outside the ticks, the outer feature labels and the bends of their
+  leader lines stood on the scale's numbers, and the leader lines ran through
+  them (for example "8 kbp" of NC_002333.2 in the multi-record recipe). The
+  outer labels and the bends of their leaders now stay outside the numbers.
+  Where a leader line still runs through a number, or passes within a hair of
+  it, on either side of the feature track, the number is drawn in front of the
+  line on a white backing, as region labels are. Figures where no leader line
+  meets a number are unchanged (OV-3301).
 - Fixed: a custom track stack (**Use custom stack** in the Web app,
   `--circular_track_slot` or `--linear_track_slot` on the command line) with no
   Annotations row for a Region Annotation set left the set out of the figure
