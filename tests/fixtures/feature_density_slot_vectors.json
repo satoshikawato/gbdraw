@@ -1,0 +1,1554 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "circular-default0-0tracks",
+      "mode": "circular",
+      "kind": "default",
+      "options": {},
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "ticks",
+            "renderer": "ticks"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-default1-0tracks",
+      "mode": "circular",
+      "kind": "default",
+      "options": {
+        "showDepth": true,
+        "depthTrackCount": 2
+      },
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "ticks",
+            "renderer": "ticks"
+          },
+          {
+            "id": "depth_1",
+            "renderer": "depth"
+          },
+          {
+            "id": "depth_2",
+            "renderer": "depth"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-default2-0tracks",
+      "mode": "circular",
+      "kind": "default",
+      "options": {
+        "showTicks": false,
+        "showGc": false,
+        "showSkew": false
+      },
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-features_first-0tracks",
+      "mode": "circular",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "features",
+          "renderer": "features"
+        },
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "gc_skew",
+          "renderer": "dinucleotide_skew"
+        }
+      ],
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-no_features-0tracks",
+      "mode": "circular",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "gc_skew",
+          "renderer": "dinucleotide_skew"
+        }
+      ],
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-features_last-0tracks",
+      "mode": "circular",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "features",
+          "renderer": "features"
+        }
+      ],
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "features",
+            "renderer": "features"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-already_drawn-0tracks",
+      "mode": "circular",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "features",
+          "renderer": "features"
+        },
+        {
+          "id": "density_old",
+          "renderer": "feature_density",
+          "track": "old",
+          "side": null
+        },
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        }
+      ],
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_old",
+            "renderer": "feature_density",
+            "track": "old",
+            "side": null
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-default0-1tracks",
+      "mode": "circular",
+      "kind": "default",
+      "options": {},
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": null
+          },
+          {
+            "id": "ticks",
+            "renderer": "ticks"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-default1-1tracks",
+      "mode": "circular",
+      "kind": "default",
+      "options": {
+        "showDepth": true,
+        "depthTrackCount": 2
+      },
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": null
+          },
+          {
+            "id": "ticks",
+            "renderer": "ticks"
+          },
+          {
+            "id": "depth_1",
+            "renderer": "depth"
+          },
+          {
+            "id": "depth_2",
+            "renderer": "depth"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-default2-1tracks",
+      "mode": "circular",
+      "kind": "default",
+      "options": {
+        "showTicks": false,
+        "showGc": false,
+        "showSkew": false
+      },
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-features_first-1tracks",
+      "mode": "circular",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "features",
+          "renderer": "features"
+        },
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "gc_skew",
+          "renderer": "dinucleotide_skew"
+        }
+      ],
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": null
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-no_features-1tracks",
+      "mode": "circular",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "gc_skew",
+          "renderer": "dinucleotide_skew"
+        }
+      ],
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": null
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-features_last-1tracks",
+      "mode": "circular",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "features",
+          "renderer": "features"
+        }
+      ],
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-already_drawn-1tracks",
+      "mode": "circular",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "features",
+          "renderer": "features"
+        },
+        {
+          "id": "density_old",
+          "renderer": "feature_density",
+          "track": "old",
+          "side": null
+        },
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        }
+      ],
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_old",
+            "renderer": "feature_density",
+            "track": "old",
+            "side": null
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-default0-2tracks",
+      "mode": "circular",
+      "kind": "default",
+      "options": {},
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": null
+          },
+          {
+            "id": "density_repeats",
+            "renderer": "feature_density",
+            "track": "repeats",
+            "side": null
+          },
+          {
+            "id": "ticks",
+            "renderer": "ticks"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-default1-2tracks",
+      "mode": "circular",
+      "kind": "default",
+      "options": {
+        "showDepth": true,
+        "depthTrackCount": 2
+      },
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": null
+          },
+          {
+            "id": "density_repeats",
+            "renderer": "feature_density",
+            "track": "repeats",
+            "side": null
+          },
+          {
+            "id": "ticks",
+            "renderer": "ticks"
+          },
+          {
+            "id": "depth_1",
+            "renderer": "depth"
+          },
+          {
+            "id": "depth_2",
+            "renderer": "depth"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-default2-2tracks",
+      "mode": "circular",
+      "kind": "default",
+      "options": {
+        "showTicks": false,
+        "showGc": false,
+        "showSkew": false
+      },
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": null
+          },
+          {
+            "id": "density_repeats",
+            "renderer": "feature_density",
+            "track": "repeats",
+            "side": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-features_first-2tracks",
+      "mode": "circular",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "features",
+          "renderer": "features"
+        },
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "gc_skew",
+          "renderer": "dinucleotide_skew"
+        }
+      ],
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": null
+          },
+          {
+            "id": "density_repeats",
+            "renderer": "feature_density",
+            "track": "repeats",
+            "side": null
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-no_features-2tracks",
+      "mode": "circular",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "gc_skew",
+          "renderer": "dinucleotide_skew"
+        }
+      ],
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": null
+          },
+          {
+            "id": "density_repeats",
+            "renderer": "feature_density",
+            "track": "repeats",
+            "side": null
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-features_last-2tracks",
+      "mode": "circular",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "features",
+          "renderer": "features"
+        }
+      ],
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": null
+          },
+          {
+            "id": "density_repeats",
+            "renderer": "feature_density",
+            "track": "repeats",
+            "side": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "circular-already_drawn-2tracks",
+      "mode": "circular",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "features",
+          "renderer": "features"
+        },
+        {
+          "id": "density_old",
+          "renderer": "feature_density",
+          "track": "old",
+          "side": null
+        },
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        }
+      ],
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_old",
+            "renderer": "feature_density",
+            "track": "old",
+            "side": null
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-default0-0tracks",
+      "mode": "linear",
+      "kind": "default",
+      "options": {},
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-default1-0tracks",
+      "mode": "linear",
+      "kind": "default",
+      "options": {
+        "showGc": true,
+        "showSkew": true
+      },
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-default2-0tracks",
+      "mode": "linear",
+      "kind": "default",
+      "options": {
+        "showDepth": true,
+        "depthTrackCount": 2,
+        "showGc": true,
+        "trackLayout": "above"
+      },
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "depth_1",
+            "renderer": "depth"
+          },
+          {
+            "id": "depth_2",
+            "renderer": "depth"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-features_first-0tracks",
+      "mode": "linear",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "features",
+          "renderer": "features"
+        },
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "gc_skew",
+          "renderer": "dinucleotide_skew"
+        }
+      ],
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-no_features-0tracks",
+      "mode": "linear",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "gc_skew",
+          "renderer": "dinucleotide_skew"
+        }
+      ],
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-features_last-0tracks",
+      "mode": "linear",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "features",
+          "renderer": "features"
+        }
+      ],
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "features",
+            "renderer": "features"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-already_drawn-0tracks",
+      "mode": "linear",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "features",
+          "renderer": "features"
+        },
+        {
+          "id": "density_old",
+          "renderer": "feature_density",
+          "track": "old",
+          "side": "below"
+        },
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        }
+      ],
+      "trackIds": [],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_old",
+            "renderer": "feature_density",
+            "track": "old",
+            "side": "below"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-default0-1tracks",
+      "mode": "linear",
+      "kind": "default",
+      "options": {},
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": "below"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-default1-1tracks",
+      "mode": "linear",
+      "kind": "default",
+      "options": {
+        "showGc": true,
+        "showSkew": true
+      },
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": "below"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-default2-1tracks",
+      "mode": "linear",
+      "kind": "default",
+      "options": {
+        "showDepth": true,
+        "depthTrackCount": 2,
+        "showGc": true,
+        "trackLayout": "above"
+      },
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": "below"
+          },
+          {
+            "id": "depth_1",
+            "renderer": "depth"
+          },
+          {
+            "id": "depth_2",
+            "renderer": "depth"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-features_first-1tracks",
+      "mode": "linear",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "features",
+          "renderer": "features"
+        },
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "gc_skew",
+          "renderer": "dinucleotide_skew"
+        }
+      ],
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": "below"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-no_features-1tracks",
+      "mode": "linear",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "gc_skew",
+          "renderer": "dinucleotide_skew"
+        }
+      ],
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": "below"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-features_last-1tracks",
+      "mode": "linear",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "features",
+          "renderer": "features"
+        }
+      ],
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": "below"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-already_drawn-1tracks",
+      "mode": "linear",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "features",
+          "renderer": "features"
+        },
+        {
+          "id": "density_old",
+          "renderer": "feature_density",
+          "track": "old",
+          "side": "below"
+        },
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        }
+      ],
+      "trackIds": [
+        "genes"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_old",
+            "renderer": "feature_density",
+            "track": "old",
+            "side": "below"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-default0-2tracks",
+      "mode": "linear",
+      "kind": "default",
+      "options": {},
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": "below"
+          },
+          {
+            "id": "density_repeats",
+            "renderer": "feature_density",
+            "track": "repeats",
+            "side": "below"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-default1-2tracks",
+      "mode": "linear",
+      "kind": "default",
+      "options": {
+        "showGc": true,
+        "showSkew": true
+      },
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": "below"
+          },
+          {
+            "id": "density_repeats",
+            "renderer": "feature_density",
+            "track": "repeats",
+            "side": "below"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-default2-2tracks",
+      "mode": "linear",
+      "kind": "default",
+      "options": {
+        "showDepth": true,
+        "depthTrackCount": 2,
+        "showGc": true,
+        "trackLayout": "above"
+      },
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": "below"
+          },
+          {
+            "id": "density_repeats",
+            "renderer": "feature_density",
+            "track": "repeats",
+            "side": "below"
+          },
+          {
+            "id": "depth_1",
+            "renderer": "depth"
+          },
+          {
+            "id": "depth_2",
+            "renderer": "depth"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-features_first-2tracks",
+      "mode": "linear",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "features",
+          "renderer": "features"
+        },
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "gc_skew",
+          "renderer": "dinucleotide_skew"
+        }
+      ],
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": "below"
+          },
+          {
+            "id": "density_repeats",
+            "renderer": "feature_density",
+            "track": "repeats",
+            "side": "below"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-no_features-2tracks",
+      "mode": "linear",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "gc_skew",
+          "renderer": "dinucleotide_skew"
+        }
+      ],
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": "below"
+          },
+          {
+            "id": "density_repeats",
+            "renderer": "feature_density",
+            "track": "repeats",
+            "side": "below"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "gc_skew",
+            "renderer": "dinucleotide_skew"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-features_last-2tracks",
+      "mode": "linear",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        },
+        {
+          "id": "features",
+          "renderer": "features"
+        }
+      ],
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          },
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_genes",
+            "renderer": "feature_density",
+            "track": "genes",
+            "side": "below"
+          },
+          {
+            "id": "density_repeats",
+            "renderer": "feature_density",
+            "track": "repeats",
+            "side": "below"
+          }
+        ]
+      }
+    },
+    {
+      "id": "linear-already_drawn-2tracks",
+      "mode": "linear",
+      "kind": "stack",
+      "rows": [
+        {
+          "id": "features",
+          "renderer": "features"
+        },
+        {
+          "id": "density_old",
+          "renderer": "feature_density",
+          "track": "old",
+          "side": "below"
+        },
+        {
+          "id": "gc_content",
+          "renderer": "dinucleotide_content"
+        }
+      ],
+      "trackIds": [
+        "genes",
+        "repeats"
+      ],
+      "expected": {
+        "rows": [
+          {
+            "id": "features",
+            "renderer": "features"
+          },
+          {
+            "id": "density_old",
+            "renderer": "feature_density",
+            "track": "old",
+            "side": "below"
+          },
+          {
+            "id": "gc_content",
+            "renderer": "dinucleotide_content"
+          }
+        ]
+      }
+    }
+  ]
+}
