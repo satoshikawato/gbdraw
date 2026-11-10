@@ -805,6 +805,14 @@ const returnToFreshBoot = async (page, { facts, restorePoint }) => {
       app.selectDrawing(shownAtBoot);
       await window.Vue.nextTick();
     }
+    // Circular Depth files set through their setter. Its removal leaves an
+    // empty series list (`[[]]`); a new drawing holds none (`null`), which the
+    // inputs owner writes as Load does. Reset Settings and the captured
+    // settings below take back the Depth series the files added.
+    const { bindDrawingInputFileTree } = await import('/gbdraw/web/js/services/drawing/inputs.js');
+    for (const circular of state.drawingList().filter((drawing) => drawing.mode === 'circular')) {
+      if (circular.files.c_depth !== null) bindDrawingInputFileTree(state.inputFiles, circular.slices.inputs, 'c_depth', null);
+    }
     await app.resetSettings();
     for (const [drawingId, { config: settings }] of Object.entries(drawings)) {
       config.applyCapturedConfigData(state.drawingOf(drawingId), settings, { resolveTrackPlacements: false });

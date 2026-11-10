@@ -5,7 +5,7 @@
 // in live-generate-parity.playwright.spec.js.
 const { expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
-const { readFileSync, writeFileSync } = require('node:fs');
+const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const {
   evaluateWithRetainedPromise, generateAndWaitForResult, installPageProbe, warmAppTest: test
@@ -1482,15 +1482,19 @@ const PYTHON_NAMED_RESULTS = [{
   ]
 }];
 
-const drawWithPython = (testInfo, { mode, inputs, files = {}, args = [] }) => {
+// Each figure writes its files in its own folder (one test draws them all);
+// a file keeps its name, which a track label may come from.
+const drawWithPython = (testInfo, folder, { mode, inputs, files = {}, args = [] }) => {
+  mkdirSync(testInfo.outputPath(folder), { recursive: true });
+  const output = (name) => testInfo.outputPath(folder, name);
   Object.entries(files).forEach(([name, rows]) => {
-    writeFileSync(testInfo.outputPath(name), `${rows.map((row) => row.join('\t')).join('\n')}\n`);
+    writeFileSync(output(name), `${rows.map((row) => row.join('\t')).join('\n')}\n`);
   });
   execFileSync(process.env.PYTHON || 'python', [
     '-m', 'gbdraw.cli', mode, '--gbk', ...inputs.map((input) => path.resolve(REPO_ROOT, input)),
-    ...args.map((arg) => (arg in files ? testInfo.outputPath(arg) : arg)), '-o', testInfo.outputPath('figure'), '-f', 'svg'
+    ...args.map((arg) => (arg in files ? output(arg) : arg)), '-o', output('figure'), '-f', 'svg'
   ], { cwd: REPO_ROOT, stdio: 'pipe' });
-  return readFileSync(testInfo.outputPath('figure.svg'), 'utf8');
+  return readFileSync(output('figure.svg'), 'utf8');
 };
 
 // A document of the app's origin with its sanitizer and without the app: the
@@ -1528,9 +1532,9 @@ const namedByExecutor = (page, content) => page.evaluate(async (svgText) => {
 test('the naming pass keeps the names Python drew, for each figure', async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   await openExecutorPage(page);
-  for (const figure of PYTHON_NAMED_RESULTS) {
+  for (const [index, figure] of PYTHON_NAMED_RESULTS.entries()) {
     await test.step(`the naming pass keeps the names Python drew: ${figure.name} (${figure.mode})`, async () => {
-      const content = drawWithPython(testInfo, figure);
+      const content = drawWithPython(testInfo, `figure-${index}`, figure);
       const { python, admitted, outcome, named } = await namedByExecutor(page, content);
       const name = `${figure.name} (${figure.mode})`;
       expect(python, `${name}: what Python drew`).toEqual(Array(figure.mode === 'linear' ? 2 : 1).fill(figure.rows));
