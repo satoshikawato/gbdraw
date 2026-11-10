@@ -18,7 +18,7 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
   // Each row is moved as itself, never by its name: two rows may show one name.
   /** @param {DrawingState} drawing @param {readonly LegendRow[]} ordered The listed rows in their new order. */
   const applyLegendEntryOrder = (drawing, ordered) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const entries = drawing.legendEntries.value || [];
     if (ordered.every((entry, index) => entry === entries[index])) return;
@@ -34,7 +34,7 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
   /** @param {number} from @param {number} to */
   const moveLegendEntry = (from, to) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const current = listedRows(drawing);
     if (from === to || from < 0 || to < 0 || from >= current.length || to >= current.length) return;
@@ -50,7 +50,7 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
 
   const sortLegendEntries = (direction = 'asc') => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const current = listedRows(drawing);
     if (current.length < 2) return;
@@ -62,7 +62,7 @@ export const createLegendSortActions = ({ state, showLegendStructure }) => {
 
   const sortLegendEntriesByDefault = () => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const current = listedRows(drawing);
     if (current.length < 2) return;

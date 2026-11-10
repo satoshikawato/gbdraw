@@ -603,7 +603,7 @@ export const createLegendEntryActions = ({
     entries: drawing.legendEntries.value || [],
     dormant: drawing.dormantLegendEntries.value || [],
     deleted: drawing.deletedLegendEntries.value || [],
-    inventory: originalLegendOrder.value || [],
+    inventory: originalLegendOrder.value,
     hidden: readHiddenTrackRows(drawing)
   });
 
@@ -864,7 +864,7 @@ export const createLegendEntryActions = ({
   // row the editor adds under that caption is the editor's (review M1).
   /** @param {DrawingState} drawing @returns {LiveRedrawLegend} */
   const liveRedrawLegend = (drawing) => {
-    const inventory = originalLegendOrder.value || [];
+    const inventory = originalLegendOrder.value;
     const hidden = new Set(readHiddenTrackRows(drawing));
     const svg = svgContainer.value?.querySelector('svg');
     const listing = svg ? listLegendRows(svg, legendIntentOf(drawing)) : null;
@@ -969,7 +969,7 @@ export const createLegendEntryActions = ({
   /** @param {number} idx @param {string} newColor */
   const updateLegendEntryColor = (idx, newColor) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const entry = drawing.legendEntries.value[idx];
     if (!entry?.caption) return false;
@@ -982,7 +982,7 @@ export const createLegendEntryActions = ({
   /** @param {number} idx */
   const deleteLegendEntry = (idx) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     return deleteLegendRow(drawing.slices.paint, idx);
   };
@@ -1016,14 +1016,14 @@ export const createLegendEntryActions = ({
   /** @param {number[] | null} [indexes] Indexes into the deleted list; every row when omitted. */
   const restoreDeletedLegendEntries = (indexes = null) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     /** @type {readonly EntryRecord[]} */
     const deleted = drawing.deletedLegendEntries.value || [];
     const picked = new Set(indexes ?? deleted.map((/** @type {unknown} */ _, /** @type {number} */ index) => index));
     const returning = deleted.filter((/** @type {unknown} */ _, /** @type {number} */ index) => picked.has(index));
     if (!svgContainer.value?.querySelector?.('svg') || returning.length === 0) return false;
-    const inventory = (originalLegendOrder.value || []).map((/** @type {unknown} */ caption) => String(caption || '').trim());
+    const inventory = originalLegendOrder.value.map((/** @type {unknown} */ caption) => String(caption || '').trim());
     const context = displayedLegendRowContext(state, drawing);
     const shown = readLegendRowColors(drawing);
     /** @type {EntryRecord[]} */

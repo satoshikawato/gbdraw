@@ -77,7 +77,7 @@ export const createLegendDragActions = ({
    * @param {number} clientY
    */
   const applyLegendDragPosition = (clientX, clientY) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!legendDragging.value) return;
     const legendGroup = legendDragContext?.binding.legend.targets[0] || null;
@@ -99,7 +99,7 @@ export const createLegendDragActions = ({
 
   /** @param {MouseEvent} e */
   const startLegendDrag = (e) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!isLayoutRepositionModeEnabled()) return;
     if (e.shiftKey) return;
@@ -193,7 +193,7 @@ export const createLegendDragActions = ({
 
   // Moving the Legend group leaves its rows, so the Legend list stays (U3b).
   const resetLegendPosition = () => {
-    if (state.sessionOperationAvailability?.()) return;
+    if (state.sessionOperationAvailability()) return;
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;

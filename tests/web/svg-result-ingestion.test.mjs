@@ -879,7 +879,8 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
     results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
     originalLegendOrder: { value: ['CDS', 'GC content'] }, originalLegendColors: { value: {} },
     legendStrokeOptionsOpen: strokeOptionsOpen,
-    activeDrawing: () => drawing
+    activeDrawing: () => drawing,
+    sessionOperationAvailability: () => null
   };
   const owner = createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
   const strokes = createLegendStrokeActions({ state });

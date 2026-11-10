@@ -29,13 +29,13 @@ export const createLegendStrokeActions = ({ state }) => {
   // That is view state, kept out of the Legend entries, so the click records
   // no History step and the Session does not save it.
   /** @param {StrokedLegendEntry} entry */
-  const isLegendStrokeOptionsOpen = (entry) => Boolean(legendStrokeOptionsOpen?.has(legendEntryKey(entry)));
+  const isLegendStrokeOptionsOpen = (entry) => Boolean(legendStrokeOptionsOpen.has(legendEntryKey(entry)));
   /** @param {StrokedLegendEntry} entry */
   const toggleLegendStrokeOptions = (entry) => {
     const key = legendEntryKey(entry);
-    if (!legendStrokeOptionsOpen?.delete(key)) legendStrokeOptionsOpen?.add(key);
+    if (!legendStrokeOptionsOpen.delete(key)) legendStrokeOptionsOpen.add(key);
   };
-  const closeLegendStrokeOptions = () => legendStrokeOptionsOpen?.clear();
+  const closeLegendStrokeOptions = () => legendStrokeOptionsOpen.clear();
 
   /** @param {PythonLegendKey} key */
   const drawnSwatchStroke = (key) => drawnLegendRowStroke(svgContainer.value?.querySelector?.('svg'), key);
@@ -83,7 +83,7 @@ export const createLegendStrokeActions = ({ state }) => {
 
   /** @param {number} idx @param {string} color */
   const updateLegendEntryStrokeColor = (idx, color) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const normalized = String(color || '').trim();
     return writeStrokeField(idx, 'strokeColor', normalized, (current) => String(current || '').trim() === normalized);
@@ -91,7 +91,7 @@ export const createLegendStrokeActions = ({ state }) => {
 
   /** @param {number} idx @param {string | number} width */
   const updateLegendEntryStrokeWidth = (idx, width) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const widthVal = parseFloat(String(width));
     if (isNaN(widthVal)) return false;
@@ -101,7 +101,7 @@ export const createLegendStrokeActions = ({ state }) => {
   /** @param {number} idx @param {string | null} value null removes the row's stroke color. */
   const setLegendEntryStrokeColorValue = (idx, value) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const row = rowAt(idx);
     if (!row) return false;
@@ -117,7 +117,7 @@ export const createLegendStrokeActions = ({ state }) => {
   /** @param {number} idx */
   const resetLegendEntryStroke = (idx) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const stroked = (rowAt(idx)?.keys || []).filter((key) => Object.hasOwn(drawing.legendStrokeOverrides, key));
     stroked.forEach((key) => setLegendStroke(drawing.slices.paint, key, null));
@@ -126,7 +126,7 @@ export const createLegendStrokeActions = ({ state }) => {
 
   const resetAllStrokes = () => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     return clearStrokes(drawing.slices.paint);
   };
