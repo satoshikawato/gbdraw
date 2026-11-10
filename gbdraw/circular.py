@@ -53,6 +53,7 @@ from .api.requests import (
     CircularBatchOutputPolicy,
     CircularBatchRequest,
     CircularDiagramRequest,
+    DiagramRequest,
     RecordCardinality,
     RenderOutputRequest,
 )
@@ -1204,6 +1205,27 @@ def _log_render_notices(rendered_items: Sequence[RequestRenderResult]) -> None:
         log_input_summary(rendered_item.input_summary, warned=warned)
 
 
+def _drawn_request(request: DiagramRequest) -> DiagramRequest:
+    """The request a run's Session saves: one record drawn as separate diagrams is one single drawing.
+
+    The command has no choice between one drawing and separate drawings; it draws each record of its input on its
+    own canvas unless ``--multi_record_canvas`` asks for a grid. When the records come to one, the Session saves
+    that drawing as the Web saves its one-record drawing, so the Web opens it on that record with its crop in the
+    single-record fields (OV-3297, PD-OI-044). A grid of one record stays a grid. The figure and its file do not
+    change: a batch already draws each of its records as a single-record diagram.
+    """
+
+    if not isinstance(request, CircularBatchRequest) or len(request.records) != 1:
+        return request
+    return CircularDiagramRequest(
+        records=request.records,
+        options=request.options,
+        output=request.outputs[0],
+        grouping="single",
+        record_options=request.record_options,
+    )
+
+
 def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     """Run circular rendering from an already parsed argparse namespace."""
 
@@ -1716,7 +1738,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     else:  # pragma: no cover - render_request exhausts the Circular result union.
         raise ValidationError("Circular request renderer returned an unsupported result.")
 
-    materialized_request = rendered.request
+    materialized_request = _drawn_request(rendered.request)
 
     outputs: list[RenderedSvg] = []
     run_results: list[RenderedResult] = []

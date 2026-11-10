@@ -46,6 +46,7 @@ from gbdraw.render.formats import ACCEPTED_FORMATS
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
 from gbdraw.api.requests import (
+    CircularBatchRequest,
     CircularDiagramRequest,
     GenBankInputSource,
     InMemoryRecordSource,
@@ -94,7 +95,9 @@ from gbdraw.session import (
     SessionVersionError,
     build_session_document,
     load_session_document,
+    save_session_document,
 )
+from gbdraw.api.request_render import render_request
 
 
 def _file_entry(name: str, content: bytes) -> dict:
@@ -4125,15 +4128,90 @@ def test_circular_cli_grid_and_batch_sessions_save_crops_as_source_and_range(
         assert feature_hash.sub(b"f", replay) == feature_hash.sub(b"f", live)
 
 
-def test_circular_cli_batch_of_one_saves_its_crop_on_the_input_file(tmp_path: Path) -> None:
-    """One records-table row with a region is a batch of one record; it reads its input file with the range."""
+def test_circular_cli_one_record_session_is_a_single_drawing(tmp_path: Path) -> None:
+    """One record drawn without --multi_record_canvas is saved as the Web saves a one-record drawing (OV-3297)."""
 
     single, _multi = _varied_cli_session_inputs(tmp_path)
+    session_path = tmp_path / "one.gbdraw-session.json"
+    circular_main(["--gbk", str(single), "-o", str(tmp_path / "one"), "-f", "svg",
+                   "--session_output", str(session_path)])
+
+    session = drawing_view(load_session(session_path))
+    request = session["renderRequest"]
+    [record] = request["records"]
+    assert (request["grouping"], request["output"]["prefix"]) == ("single", "one")
+    assert (record["selector"], record["windows"]) == (None, [])
+    assert _resource_bytes(session, record["source"]["resourceId"]) == single.read_bytes()
+    assert sorted(path.name for path in tmp_path.glob("one*.svg")) == ["one.svg"]
+    [(live, replay)] = _replayed_cli_svgs(session_path, tmp_path, "one")
+    assert replay == live
+
+
+def test_circular_cli_one_records_table_row_saves_its_crop_as_a_single_drawing(tmp_path: Path) -> None:
+    """One records-table row of a two-record file, cropped and reversed, is the Web's one-record crop (OV-3297).
+
+    The Session reads the input file itself with the row's record and range, so the Web opens it on that record
+    with its crop in the single-record fields, and the replay draws the command's figure.
+    """
+
+    _single, multi = _varied_cli_session_inputs(tmp_path)
     table = tmp_path / "records.tsv"
-    table.write_text("gbk\tregion\nsingle.gbk\t201-1500\n", encoding="utf-8")
+    table.write_text(
+        "gbk\trecord_id\tregion\treverse_complement\trecord_label\n"
+        "multi.gbk\tcli_multi_b\t301-1800\t1\tMyB\n",
+        encoding="utf-8",
+    )
     session_path = tmp_path / "one.gbdraw-session.json"
     circular_main(["--records_table", str(table), "-o", str(tmp_path / "one"), "-f", "svg",
                    "--session_output", str(session_path)])
+
+    session = drawing_view(load_session(session_path))
+    request = session["renderRequest"]
+    [record] = request["records"]
+    assert (request["grouping"], request["output"]["prefix"]) == ("single", "one")
+    assert record["selector"] == {"kind": "recordId", "value": "cli_multi_b"}
+    assert record["windows"] == [{"start": 301, "end": 1800, "reverseComplement": True, "column": None}]
+    assert (record["presentation"]["label"], record["presentation"]["reverseComplement"]) == ("MyB", False)
+    assert _resource_bytes(session, record["source"]["resourceId"]) == multi.read_bytes()
+    [(live, replay)] = _replayed_cli_svgs(session_path, tmp_path, "one")
+    assert replay == live
+
+
+@pytest.mark.parametrize(
+    ("grouping", "table_rows", "extra_args"),
+    [
+        ("grid", "single.gbk\t\n", ["--multi_record_canvas"]),
+        ("batch", "multi.gbk\tcli_multi_a\nmulti.gbk\tcli_multi_b\n", []),
+    ],
+    ids=["one-record-grid", "two-record-batch"],
+)
+def test_circular_cli_grid_of_one_and_batch_of_two_keep_their_grouping(
+    tmp_path: Path, grouping: str, table_rows: str, extra_args: list[str]
+) -> None:
+    """Only one record drawn as separate diagrams becomes a single drawing; a grid and a real batch stay."""
+
+    _varied_cli_session_inputs(tmp_path)
+    table = tmp_path / "records.tsv"
+    table.write_text("gbk\trecord_id\n" + table_rows, encoding="utf-8")
+    session_path = tmp_path / "kept.gbdraw-session.json"
+    circular_main(["--records_table", str(table), *extra_args, "-o", str(tmp_path / "kept"), "-f", "svg",
+                   "--session_output", str(session_path)])
+
+    request = drawing_view(load_session(session_path))["renderRequest"]
+    assert request["grouping"] == grouping
+    assert isinstance(request["output"], list) is (grouping == "batch")
+
+
+def test_python_api_batch_of_one_saves_its_crop_on_the_input_file(tmp_path: Path) -> None:
+    """A typed batch of one cropped record stays a batch and reads its input file with the range."""
+
+    single, _multi = _varied_cli_session_inputs(tmp_path)
+    rendered = render_request(CircularBatchRequest(
+        records=(RecordInput(source=GenBankInputSource(single), region=parse_region_spec("201-1500")),),
+        outputs=(RenderOutputRequest(output_prefix="one", output_directory=tmp_path),),
+    ))
+    session_path = tmp_path / "one.gbdraw-session.json"
+    save_session_document(session_path, rendered.request)
 
     session = drawing_view(load_session(session_path))
     [record] = session["renderRequest"]["records"]

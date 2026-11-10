@@ -668,7 +668,8 @@ assert.rejects(
 }
 
 // A Session the CLI writes publishes as the Gallery entry of its command: a
-// Circular batch request with one output per record (OV-267), the resolved
+// Circular request of one record is the single drawing the command saves
+// (OV-3297) with its one output (OV-267), the resolved
 // default colors and the editor tables the CLI stores beside the files it read
 // (OV-266), and a read-only `-b` comparison, which the rebuild inherits as
 // Generate's Inherit does (D-04, OV-268). The published slice holds the CLI's
@@ -696,9 +697,9 @@ assert.rejects(
       assert.equal(features.featureVisibilityManualRules.length, await rows('--feature_visibility_table'), id);
       assert.equal(features.labelOverrideRows.length, await rows('--label_table'), id);
       if (mode === 'circular') {
-        assert.deepEqual([source.renderRequest.grouping, Array.isArray(session.renderRequest.output)], ['batch', true], id);
-        assert.deepEqual(session.renderRequest.output.map((output) => output.interactiveMetadataPolicy),
-          source.renderRequest.output.map((output) => output.interactiveMetadataPolicy), id);
+        assert.deepEqual([source.renderRequest.grouping, session.renderRequest.grouping], ['single', 'single'], id);
+        assert.equal(session.renderRequest.output.interactiveMetadataPolicy,
+          source.renderRequest.output.interactiveMetadataPolicy, id);
       }
       if (id === 'linear_blast') {
         assert.deepEqual(session.renderRequest.comparisons, source.renderRequest.comparisons, id);

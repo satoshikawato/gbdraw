@@ -224,8 +224,8 @@ for (const mode of MODES) {
   });
 }
 
-// The CLI writes a one-record Circular drawing as a batch of one output. Loaded and Generated in the Web, it draws the
-// CLI's SVG and has a Source recipe that the CLI replays to it (OV-3191).
+// The CLI writes a one-record Circular drawing as a single drawing (OV-3297). Loaded and Generated in the Web, it draws
+// the CLI's SVG and has a Source recipe that the CLI replays to it (OV-3191).
 test('a one-record Circular CLI Session draws the CLI SVG on Generate and its Source recipe replays to it', async ({ page }, testInfo) => {
   test.setTimeout(900_000);
   const input = testInfo.outputPath('testa.gb');
@@ -245,6 +245,44 @@ test('a one-record Circular CLI Session draws the CLI SVG on Generate and its So
   for (const [name, expected] of [['web', current.file], ['cli', `${prefix}.svg`]]) {
     const replay = spawnSync(process.env.GBDRAW_PYTHON || 'python', [
       path.resolve('tests/web/helpers/source-recipe-replay.py'), testInfo.outputPath(`replay-${name}`),
+      current.recipe.command, expected, nothing, archive, input
+    ], { encoding: 'utf8', env: replayEnv });
+    expect.soft(replay.status, `${name}: ${current.recipe.command}\n${replay.stdout}${replay.stderr}`).toBe(0);
+  }
+});
+
+// A records-table row that crops and reverses one record of a two-record file: the CLI saves the one record it drew as
+// a single drawing (OV-3297), so Load shows that record in the Record select and its crop in the single-record crop
+// fields, and Generate draws the CLI's SVG.
+test('a CLI Session of one cropped records-table record opens on that record and draws the CLI SVG', async ({ page }, testInfo) => {
+  test.setTimeout(900_000);
+  const input = testInfo.outputPath('two.gb');
+  writeFileSync(input, `${TESTA}${TESTB}`);
+  const table = testInfo.outputPath('records.tsv');
+  writeFileSync(table, 'gbk\trecord_id\tregion\treverse_complement\trecord_label\ntwo.gb\tTESTB\t500-3000\t1\tMyB\n');
+  const prefix = testInfo.outputPath('crop-cli');
+  const cli = spawnSync(process.env.GBDRAW_PYTHON || 'python', ['-m', 'gbdraw.cli', 'circular', '--records_table', table,
+    '-o', prefix, '-f', 'svg', '--labels', 'none', '--save_session'], { encoding: 'utf8', env: replayEnv });
+  expect(cli.status, cli.stderr).toBe(0);
+  await openFresh(page);
+  await loadSessionFile(page, `${prefix}.gbdraw-session.json`);
+  const select = page.getByLabel('Circular record', { exact: true });
+  await expect(select.locator('option:checked')).toHaveText('TESTB (not inspected)');
+  await page.getByRole('button', { name: 'Inspect source records', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordDiscoveryState.status)).toBe('ready');
+  await expect(select.locator('option:checked')).toHaveText('TESTB (4,000 bp)');
+  await expect(page.getByLabel('Circular region start')).toHaveValue('500');
+  await expect(page.getByLabel('Circular region end')).toHaveValue('3000');
+  await expect(page.getByLabel('Circular region start')).toBeEnabled();
+  const current = await generated(page, testInfo, 'cli crop session');
+  expect(current.recipe.available, current.recipe.reason).toBe(true);
+  const archive = await bundle(page, testInfo, 'cli crop session');
+  const nothing = testInfo.outputPath('nothing.svg');
+  writeFileSync(nothing, '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  // The recipe's SVG equals the Web Result, then the CLI's own SVG: so the Result equals the CLI's.
+  for (const [name, expected] of [['web', current.file], ['cli', `${prefix}.svg`]]) {
+    const replay = spawnSync(process.env.GBDRAW_PYTHON || 'python', [
+      path.resolve('tests/web/helpers/source-recipe-replay.py'), testInfo.outputPath(`crop-replay-${name}`),
       current.recipe.command, expected, nothing, archive, input
     ], { encoding: 'utf8', env: replayEnv });
     expect.soft(replay.status, `${name}: ${current.recipe.command}\n${replay.stdout}${replay.stderr}`).toBe(0);
