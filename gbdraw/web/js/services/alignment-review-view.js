@@ -1,9 +1,14 @@
 // @ts-check
-// The Review alignment panel as display values: the "After Apply" strips (where each record, its
-// features and its candidates lie once the chosen genes are lined up) and the cards in their
-// sections. Pure; the figure geometry is measured by the preview's owner
-// (`app/feature-editor/svg-actions.js`) and the choices come from the alignment draft.
-import { msg, t, tm, tn } from '../utils/i18n.js';
+// The Review alignment panel and the Reset alignment dialog as display values: the "After Apply"
+// strips (where each record, its features and its candidates lie once the chosen genes are lined
+// up), the cards in their sections, the direction preview's sentences, and the Reset dialog's
+// direction rows. Pure; the figure geometry is measured by the preview's owner
+// (`app/feature-editor/svg-actions.js`), and the choices, the direction projection and the Reset
+// receipt come from the alignment owner (`app/similarity-alignment.js`).
+import { joinSentences, listText, msg, t, tm, tn, tx } from '../utils/i18n.js';
+import { canonicalRecordReverseComplement } from './record-display-model.js';
+/** @import { CanonicalRecordOrientation } from './record-display-model.js' */
+/** @import { AlignmentResetReceipt } from './session-active-config-contract.js' */
 
 /**
  * A horizontal span in figure units (SVG user units of the mounted Result,
@@ -295,4 +300,199 @@ export const buildAlignmentReviewView = ({ rows, directions, geometry, openedWit
     summary: tn(placed.length, '{count} record', '{count} records')
       + groups.filter(({ title }) => title).map(({ count, cards }) => `, ${count(cards.length)}`).join('') + '.'
   };
+};
+
+/** A feature's arrow as the figure draws it: right-facing, left-facing, or unknown. @typedef {-1 | 1 | null} DisplayedStrand */
+
+/**
+ * A record of the alignment owner's direction projection, as the direction preview reads it.
+ * @typedef {object} ProjectedDirectionLike
+ * @property {string} recordKey
+ * @property {string} status
+ * @property {string | null} exclusion Why Apply leaves the record's direction (or the record) as it is.
+ * @property {DisplayedStrand} beforeArrow
+ * @property {DisplayedStrand} afterArrow
+ * @property {boolean} beforeReverseComplement
+ * @property {boolean} afterReverseComplement
+ */
+
+/**
+ * One record of the Review alignment direction preview, as the cards read it.
+ * @typedef {object} DirectionPreviewRecord
+ * @property {string} recordKey
+ * @property {string} status
+ * @property {string | null} exclusion
+ * @property {DisplayedStrand} afterArrow
+ * @property {boolean} beforeReverseComplement
+ * @property {boolean} afterReverseComplement
+ * @property {boolean} reversed
+ * @property {string} shortLabel
+ * @property {string} label
+ * @property {string} description
+ */
+
+/**
+ * The names of a record of the draft: its label, its accession, its definition.
+ * @typedef {{ recordLabel?: string, recordName?: string, recordDetail?: string }} DraftRecordNames
+ */
+
+/** @param {unknown} arrow */
+const arrowLabel = (arrow) => arrow === 1 ? t('right-facing') : arrow === -1 ? t('left-facing') : t('unknown');
+
+/** @type {Readonly<Record<string, string>>} */
+const directionExclusionLabels = Object.freeze({
+  selection_required: msg('Select an anchor or Skip this record first.'),
+  skipped_by_user: msg('Skipped by user.'),
+  skipped_no_candidate: msg('No usable candidate in this record.'),
+  skipped_unmappable: msg('Candidate center is outside the displayed crop.'),
+  unusable_anchor: msg('The selected anchor cannot be displayed.'),
+  unknown_strand: msg('The selected anchor has no known direction; it is never guessed.')
+});
+
+/** @param {string} code */
+const exclusionReason = (code) => tm(directionExclusionLabels[code] || code);
+
+/**
+ * One record of the direction preview: its names and its before/after statement.
+ * @template {ProjectedDirectionLike} R
+ * @param {R} record
+ * @param {DraftRecordNames & { recordLabel: string }} reference The exact reference's record.
+ * @param {readonly (DraftRecordNames & { recordKey: string })[]} rows
+ */
+const directionRecordView = (record, reference, rows) => {
+  const row = rows.find((entry) => entry.recordKey === record.recordKey);
+  const isReference = record.status === 'reference';
+  const label = isReference ? reference.recordLabel : row?.recordLabel || record.recordKey;
+  const beforeDirection = arrowLabel(record.beforeArrow);
+  const afterDirection = arrowLabel(record.afterArrow);
+  // An anchor of unknown strand still moves its record; only the direction stays (PD-OI-027).
+  const exclusionLabel = record.exclusion
+    ? (record.exclusion === 'unknown_strand'
+      ? t('Direction unchanged: {reason}', { reason: exclusionReason(record.exclusion) })
+      : t('Unchanged: {reason}', { reason: exclusionReason(record.exclusion) }))
+    : '';
+  return { ...record, label, beforeDirection, afterDirection, exclusionLabel,
+    shortLabel: (isReference ? reference.recordDetail || reference.recordName : row?.recordDetail || row?.recordName) || label,
+    reversed: record.beforeReverseComplement !== record.afterReverseComplement,
+    // The accessible before/after statement each card and its Custom select describe.
+    description: (isReference
+      ? t('{label} · exact reference: Current {before}; after Align {after}.', { label, before: beforeDirection, after: afterDirection })
+      : t('{label}: Current {before}; after Align {after}.', { label, before: beforeDirection, after: afterDirection }))
+      + (exclusionLabel ? ` ${exclusionLabel}` : '') };
+};
+
+/**
+ * What Apply does to the records' directions, in sentences.
+ * @param {readonly DirectionPreviewRecord[]} records
+ * @param {{ mode: string }} intent The Review panel's direction choice.
+ */
+const directionEffectText = (records, intent) => {
+  const eligible = records.filter(record => !record.exclusion);
+  const reversed = records.filter(record => record.reversed);
+  // A record still waiting for Select or Skip is counted by the footer, not here.
+  const excluded = records.filter(record => record.exclusion
+    && !['selection_required', 'unknown_strand'].includes(record.exclusion)).length;
+  const unknownStrand = records.filter(record => record.exclusion === 'unknown_strand').length;
+  const reversedText = tn(reversed.length, '{count} record ({names})', '{count} records ({names})',
+    { names: listText(reversed.map(({ shortLabel }) => shortLabel)) });
+  const sameAfter = eligible.length > 0 && eligible.every(({ afterArrow }) => afterArrow === eligible[0].afterArrow)
+    ? (eligible[0].afterArrow === 1 ? 'right' : eligible[0].afterArrow === -1 ? 'left' : '') : '';
+  let effect;
+  if (intent.mode === 'custom') {
+    effect = reversed.length ? t('Reverses {records}.', { records: reversedText }) : t('No record is reversed yet. Choose a direction in each card.');
+  } else if (reversed.length) {
+    // The direction is part of each whole sentence: a bare "right" or "left" is no key.
+    effect = intent.mode === 'left'
+      ? tn(eligible.length, 'Reverses {records} so the chosen feature points left.',
+        'Reverses {records} so the {count} chosen features point left.', { records: reversedText })
+      : tn(eligible.length, 'Reverses {records} so the chosen feature points right.',
+        'Reverses {records} so the {count} chosen features point right.', { records: reversedText });
+  } else if (sameAfter) {
+    effect = joinSentences(t('No record is reversed.'), sameAfter === 'left'
+      ? tn(eligible.length, 'The chosen feature already points left.', 'The {count} chosen features already point left.')
+      : tn(eligible.length, 'The chosen feature already points right.', 'The {count} chosen features already point right.'));
+  } else {
+    effect = joinSentences(t('No record is reversed.'),
+      tn(eligible.length, '{count} chosen feature keeps its current direction.', '{count} chosen features keep their current directions.'));
+  }
+  // Verb agreement lives in the two forms of one key.
+  if (excluded) {
+    effect = joinSentences(effect, tn(excluded, '{count} record unchanged.',
+      '{count} records unchanged.'));
+  }
+  if (unknownStrand) {
+    effect = joinSentences(effect, tn(unknownStrand, '{count} record keeps its direction.',
+      '{count} records keep their direction.'));
+  }
+  return effect;
+};
+
+/**
+ * The note on the reference record's left edge: the reference feature's centre stays fixed (D-11).
+ * @param {string} name The reference feature's name.
+ * @param {number} deltaX How far the reference record moves, in figure units at 100% zoom.
+ */
+const referenceShiftText = (name, deltaX) => {
+  const shift = Math.round(deltaX);
+  if (!shift) return '';
+  return shift > 0
+    ? t('{name} stays where it is; the record\'s left edge moves {px} px (at 100% zoom) to the right.', { name, px: Math.abs(shift).toLocaleString('en-US') })
+    : t('{name} stays where it is; the record\'s left edge moves {px} px (at 100% zoom) to the left.', { name, px: Math.abs(shift).toLocaleString('en-US') });
+};
+
+/**
+ * The direction preview of the Review panel: the projection with each record's names and
+ * statement, the effect of Apply in sentences, and the reference record's shift.
+ * @template {{ records: readonly ProjectedDirectionLike[], reference: { deltaX: number } }} P
+ * @param {object} options
+ * @param {P} options.projected The alignment owner's projection of the draft.
+ * @param {DraftRecordNames & { recordLabel: string, name: string }} options.reference The draft's exact reference.
+ * @param {readonly (DraftRecordNames & { recordKey: string })[]} options.rows The draft's rows.
+ * @param {{ mode: string }} options.intent The Review panel's direction choice.
+ */
+export const describeDirectionPreview = ({ projected, reference, rows, intent }) => {
+  /** @type {DirectionPreviewRecord[]} */
+  const records = projected.records.map((record) => directionRecordView(record, reference, rows));
+  return { ...projected, effect: directionEffectText(records, intent),
+    referenceShift: referenceShiftText(reference.name, projected.reference.deltaX), records };
+};
+
+/** @param {boolean} reversed Whether a record reads opposite to its source file. */
+const recordDirectionWord = (reversed) => reversed ? tx('record direction', 'reverse') : tx('record direction', 'forward');
+
+/**
+ * A record's name for one-line summaries: its accession, else its definition.
+ * @param {{ name?: string, detail?: string } | undefined} names
+ */
+export const shortRecordName = (names) => names?.detail || names?.name || '';
+
+/**
+ * The Reset alignment dialog's direction option: the records the latest Align reversed, each
+ * with its direction now and the one Reset restores, and why the option is unavailable.
+ * @param {object} options
+ * @param {AlignmentResetReceipt | null} options.receipt
+ * @param {{ records: readonly (CanonicalRecordOrientation & { recordKey: string })[] } | null} options.request
+ *   The committed render request.
+ * @param {ReadonlyMap<string, { label: string, name: string, detail: string }>} options.names Record names by record key.
+ */
+export const resetPreviewView = ({ receipt, request, names }) => {
+  const targets = (receipt?.directions || []).map((delta) => {
+    // The receipt is read against the committed request, so each record it names is there.
+    const record = /** @type {CanonicalRecordOrientation} */ (
+      request?.records.find(({ recordKey }) => recordKey === delta.recordKey));
+    const recordName = names.get(delta.recordKey);
+    const current = canonicalRecordReverseComplement(record);
+    return { recordKey: delta.recordKey, label: recordName?.label || t('Unavailable record'),
+      name: shortRecordName(recordName) || t('Unavailable record'),
+      current, restored: delta.before,
+      currentWord: recordDirectionWord(current), restoredWord: recordDirectionWord(delta.before),
+      laterManualEdit: current !== delta.after };
+  });
+  const count = targets.length;
+  return { targets,
+    directionsLabel: count ? tn(count, 'Positions and directions ({count} record)', 'Positions and directions ({count} records)')
+      : t('Positions and directions'),
+    disabledReason: !receipt
+      ? t('Not available: this Session does not record which directions the latest Align changed.')
+      : !count ? t('Not available: the latest Align did not change any record direction.') : '' };
 };

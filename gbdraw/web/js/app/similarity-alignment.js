@@ -5,7 +5,7 @@
  *   CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js'
  */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
-import { joinSentences, listText, msg, t, tm, tn, tx } from '../utils/i18n.js';
+import { msg, t, tm, tn } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { recordTranslationsFor } from '../services/linear-record-layout.js';
@@ -19,7 +19,11 @@ import {
 } from '../services/feature-identity.js';
 import { materializeRecordTranslations } from './legend-layout/composition-actions.js';
 import { isInternalProteinDisplayId, locationPartBound } from '../services/feature-utils.js';
-import { recordsNeedingChoice } from '../services/alignment-review-view.js';
+import { describeDirectionPreview, recordsNeedingChoice, resetPreviewView, shortRecordName } from '../services/alignment-review-view.js';
+import {
+  anchorsAgree, classifyPlanAgainstCatalog, resetSourceMembers, restoredAxisTranslations, restoredPlacement
+} from '../services/alignment-plan-facts.js';
+import { cloneJsonData as cloneJson } from '../services/json-clone.js';
 import { SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { catalogNameIndex } from '../services/feature-catalog.js';
@@ -43,7 +47,7 @@ const { computed, ref, watch } = window.Vue;
  *   sequenceFeature?: FeatureFacts | null
  * }} FeatureFacts
  * @typedef {{ label: string, name: string, detail: string }} RecordNameEntry A record's name for the Review panel and the Reset preview.
- * @typedef {-1 | 1 | null} DisplayedStrand
+ * @typedef {import('../services/alignment-review-view.js').DisplayedStrand} DisplayedStrand
  * @typedef {{ groupId?: unknown, reference?: AliasSource | null, source?: string, mode?: string }} AlignmentStartOptions
  * @typedef {ReturnType<typeof reviewRows>[number]} ReviewRow One record of the Review panel.
  * @typedef {{
@@ -241,22 +245,6 @@ const rationaleLabels = Object.freeze({
   skipped_unmappable: msg('Candidate center outside the displayed crop')
 });
 
-/** @type {Readonly<Record<string, string>>} */
-const directionExclusionLabels = Object.freeze({
-  selection_required: msg('Select an anchor or Skip this record first.'),
-  skipped_by_user: msg('Skipped by user.'),
-  skipped_no_candidate: msg('No usable candidate in this record.'),
-  skipped_unmappable: msg('Candidate center is outside the displayed crop.'),
-  unusable_anchor: msg('The selected anchor cannot be displayed.'),
-  unknown_strand: msg('The selected anchor has no known direction; it is never guessed.')
-});
-
-/** @param {boolean} reversed Whether a record reads opposite to its source file. */
-const recordDirectionWord = (reversed) => reversed ? tx('record direction', 'reverse') : tx('record direction', 'forward');
-
-/** @param {unknown} arrow */
-const arrowLabel = (arrow) => arrow === 1 ? t('right-facing') : arrow === -1 ? t('left-facing') : t('unknown');
-
 // Direct evidence kinds between a candidate and the exact reference (Python edge kinds).
 /** @type {Readonly<Record<string, string>>} */
 const evidenceLabels = Object.freeze({
@@ -273,17 +261,6 @@ const reviewReasonLabels = Object.freeze({
   unique_representative: msg('the only group representative among the candidates'),
   deterministic_candidate_1: msg('the first candidate in a fixed order; none stands out')
 });
-
-/**
- * @template T
- * @param {T} value JSON data
- * @returns {T}
- */
-const cloneJson = (value) => {
-  // Only an `undefined` value comes back `undefined`, so T then includes it.
-  if (value === undefined) return /** @type {T} */ (undefined);
-  return JSON.parse(JSON.stringify(value));
-};
 
 /**
  * @template T
@@ -341,26 +318,6 @@ export const featureNameParts = (anchor, facts = {}, fallback = '') => {
 const featureView = (anchor, displayFacts, fallback = '') => {
   const parts = featureNameParts(anchor, displayFacts.get(anchorKey(anchor)) || {}, fallback);
   return { label: parts.label, name: parts.name, ids: parts.ids.join(' · ') };
-};
-
-// A record's name for one-line summaries: its accession, else its definition.
-/** @param {{ name?: string, detail?: string } | undefined} names */
-const shortRecordName = (names) => names?.detail || names?.name || '';
-
-/**
- * The one catalog feature that a plan anchor names, or null when none or
- * several match. Generate validation and Reset share this lookup.
- * @template {{ recordKey?: unknown, biologicalFeatureId?: unknown, sourceFeatureIndex?: unknown }} T
- * @param {readonly T[]} features
- * @param {AnchorIdentity | null} anchor
- * @returns {T | null}
- */
-const uniqueCatalogFeature = (features, anchor) => {
-  if (!anchor) return null;
-  const matches = features.filter((feature) => feature.recordKey === anchor.recordKey
-    && feature.biologicalFeatureId === anchor.biologicalFeatureId
-    && (anchor.sourceFeatureIndex === null || feature.sourceFeatureIndex === anchor.sourceFeatureIndex));
-  return matches.length === 1 ? matches[0] : null;
 };
 
 // Presentation label or definition plus accession; the display position is
@@ -1172,39 +1129,6 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
   recordKeys
 );
 
-/**
- * @param {AnchorIdentity | null | undefined} left
- * @param {AnchorIdentity | null | undefined} right
- */
-const anchorsAgree = (left, right) => {
-  if (!left || !right) return false;
-  if (
-    left.recordKey !== right.recordKey
-    || left.biologicalFeatureId !== right.biologicalFeatureId
-  ) return false;
-  return /** @type {(keyof AnchorIdentity)[]} */ (['sourceFeatureIndex', 'stableFeatureSvgId']).every((field) => (
-    left[field] === null
-    || left[field] === undefined
-    || right[field] === null
-    || right[field] === undefined
-    || left[field] === right[field]
-  ));
-};
-
-/**
- * One record of the Review alignment direction preview, as the cards read it.
- * @typedef {object} DirectionPreviewRecord
- * @property {string} recordKey
- * @property {string} status
- * @property {string | null} exclusion
- * @property {DisplayedStrand} afterArrow
- * @property {boolean} beforeReverseComplement
- * @property {boolean} afterReverseComplement
- * @property {boolean} reversed
- * @property {string} shortLabel
- * @property {string} label
- * @property {string} description
- */
 
 /**
  * One alignment run that the composition root executes as a candidate (R13):
@@ -1895,27 +1819,10 @@ export const createSimilarityAlignmentActions = ({
     }
   });
 
-  const resetPreview = computed(() => {
-    const receipt = state.similarityAlignmentResetReceipt.value;
-    const request = currentRequest();
-    const names = committedNames.value.records;
-    const targets = (receipt?.directions || []).map((/** @type {AlignmentResetReceipt['directions'][number]} */ delta) => {
-      const record = request?.records.find((/** @type {CommittedRecord} */ {recordKey}) => recordKey === delta.recordKey);
-      const recordName = names.get(delta.recordKey);
-      return {recordKey: delta.recordKey, label: recordName?.label || t('Unavailable record'),
-        name: shortRecordName(recordName) || t('Unavailable record'),
-        current: baseReverseComplement(record), restored: delta.before,
-        currentWord: recordDirectionWord(baseReverseComplement(record)), restoredWord: recordDirectionWord(delta.before),
-        laterManualEdit: baseReverseComplement(record) !== delta.after};
-    });
-    const count = targets.length;
-    return { targets,
-      directionsLabel: count ? tn(count, 'Positions and directions ({count} record)', 'Positions and directions ({count} records)')
-        : t('Positions and directions'),
-      disabledReason: !receipt
-        ? t('Not available: this Session does not record which directions the latest Align changed.')
-        : !count ? t('Not available: the latest Align did not change any record direction.') : '' };
-  });
+  const resetPreview = computed(() => resetPreviewView({ receipt: state.similarityAlignmentResetReceipt.value,
+    // The committed render request (Python's, R7).
+    request: /** @type {Parameters<typeof resetPreviewView>[0]['request']} */ (currentRequest()),
+    names: committedNames.value.records }));
   /** @param {string} [scope] */
   const resetAlignment = async (scope = 'positions') => {
     if (!state.similarityAlignmentPlan?.value) return {status:'noop'};
@@ -1929,30 +1836,15 @@ export const createSimilarityAlignmentActions = ({
       const current = baseline();
       const receipt = await validateSimilarityAlignmentResetReceipt(state.similarityAlignmentResetReceipt.value,
         current.canonical);
-      /** @type {{ recordKey: string, x: number, y: number }[]} */
-      const translations = cloneJson(current.translations);
-      if (receipt?.referenceDeltaX) {
-        const delta = receipt.referenceDeltaX;
-        const reference = translations.find(({recordKey}) => recordKey === delta.recordKey);
-        if (!reference) throw new Error('Alignment reset reference placement is unavailable.');
-        reference.x -= delta.deltaX;
-      }
-      const restore = new Map(scope === 'positions-and-directions'
-        // `resetPreview` rejects this scope above unless the receipt is set.
-        ? /** @type {AlignmentResetReceipt} */ (receipt).directions.map(delta => [delta.recordKey, delta.before]) : []);
-      /** @type {{ recordKey: string, reverseComplement: boolean }[]} */
-      const orientations = current.request.records.map((/** @type {CommittedRecord} */ record) => ({recordKey: record.recordKey,
-        reverseComplement: restore.has(record.recordKey) ? restore.get(record.recordKey) : baseReverseComplement(record)}));
-      if (orientations.some((direction, index) => direction.reverseComplement
-        !== baseReverseComplement(current.request.records[index]))) {
+      // `resetPreview` rejects the directions scope above unless the receipt is set.
+      const placement = restoredPlacement({ translations: current.translations, records: current.request.records,
+        receipt, scope });
+      const { orientations } = placement;
+      let { translations } = placement;
+      if (placement.directionsChange) {
         /** @type {AlignmentPlan} */
         const plan = current.request.layout.similarityAlignment;
-        const catalogFeatures = catalogNameIndex(state.featureCatalog?.value).rows;
-        const members = plan.records.filter(record => record.anchor).map(({anchor}) => {
-          const feature = uniqueCatalogFeature(catalogFeatures, anchor);
-          if (!feature) throw new Error('Alignment Reset source anchor is unavailable or ambiguous.');
-          return {...feature, ...anchor};
-        });
+        const members = resetSourceMembers(plan, catalogNameIndex(state.featureCatalog?.value).rows);
         const request = buildHelperRequest({group:{id:plan.groupId}, members,
           reference:plan.reference, request:current.request, catalog:state.featureCatalog?.value,
           recordCatalog:getRecordCatalog?.(), drawnSeqs:drawnLinearCards(), choices:planChoices(plan)});
@@ -1960,14 +1852,8 @@ export const createSimilarityAlignmentActions = ({
         const helper = await runHelperOperation(resolveOperation, {request,
           projection:{canonicalRequest:current.request,orientations:vector},resources:current.canonical.resources});
         if (expectedActionId !== actionId) return {status:'stale'};
-        const facts = validateSimilarityAlignmentResolution(helper?.result,request).projection;
-        if (!facts || orientations.some(direction => facts.geometryOrientations[direction.recordKey]
-          !== direction.reverseComplement)) throw new Error('Alignment Reset geometry is not validated.');
-        translations.forEach(translation => {
-          // `validateProjection` checked that the facts cover the request's records.
-          const fact = /** @type {ProjectionRecord} */ (facts.records.find(record => record.recordKey === translation.recordKey));
-          translation.y += fact.beforeAxisY - fact.variants[Number(vector[translation.recordKey])].axisY;
-        });
+        translations = restoredAxisTranslations({ translations, vector,
+          projection: validateSimilarityAlignmentResolution(helper?.result,request).projection });
       }
       const canonical = projectCommittedAlignment({committed: current.canonical, plan:null, translations, orientations, starts: []});
       promise = runAlignmentCandidate({canonical, label: scope === 'positions'
@@ -2085,40 +1971,18 @@ export const createSimilarityAlignmentActions = ({
     }
     // The plan is Linear draft state: only a Linear request draws it.
     if (state.mode.value !== 'linear') return { status: 'ok' };
-    // A plan names anchor features, not group membership (PD-OI-028, OV-341):
-    // it is stale only when an anchor feature no longer resolves in the shown
-    // Result's feature catalog. A Result without a catalog (an older Session)
-    // cannot be checked here; the typed render validates every anchor.
-    const catalogFeatures = catalogNameIndex(state.featureCatalog?.value).rows;
-    /** @type {{ recordKey: string, status: string, anchor: AnchorIdentity | null }[]} */
-    const decisions = plan.records;
-    const resolves = (/** @type {AnchorIdentity | null} */ anchor) => (
-      !catalogFeatures.length || uniqueCatalogFeature(catalogFeatures, anchor) !== null);
-    if (!resolves(plan.reference)) {
-      return markStaleReference(t('The alignment reference feature is no longer found in its record.'));
-    }
-    const goneRecordKeys = new Set(decisions
-      .filter(({ status, anchor }) => status === 'aligned' && !resolves(anchor))
-      .map(({ recordKey }) => recordKey));
     const group = getOrthogroupById(plan.groupId);
     const members = group ? getEnrichedOrthogroupMembers(group) : [];
-    const currentAnchors = members.map((member) => {
-      try { return anchorFromSource(member, 'Current Similarity Group member'); } catch (_error) { return null; }
-    }).filter(Boolean);
-    const inGroup = (/** @type {AnchorIdentity | null} */ anchor) => currentAnchors.filter((candidate) => anchorsAgree(candidate, anchor)).length === 1;
-    // A comparison setting regrouped the plan's group, or the group left the
-    // catalog: the typed render still validates every anchor.
-    const regrouped = !inGroup(plan.reference) || decisions.some(({ recordKey, status, anchor }) => (
-      status === 'aligned' && !goneRecordKeys.has(recordKey) && !inGroup(anchor)));
-    if (regrouped && goneRecordKeys.size === 0) {
+    const check = classifyPlanAgainstCatalog({ plan, catalogFeatures: catalogNameIndex(state.featureCatalog?.value).rows,
+      groupAnchors: members.flatMap((member) => {
+        try { return [anchorFromSource(member, 'Current Similarity Group member')]; } catch (_error) { return []; }
+      }) });
+    if (check.kind === 'stale-reference') return markStaleReference(check.reason);
+    if (check.kind === 'current') {
       repair.value = null;
       return { status: 'ok' };
     }
-    // Target repair offers this group's members and keeps the other choices,
-    // so it needs the reference and every remaining target in the group.
-    if (regrouped) {
-      return markStaleReference(t('An aligned target feature is no longer found in its record.'));
-    }
+    const { goneRecordKeys } = check;
     let request;
     try {
       request = buildHelperRequest({
@@ -2210,74 +2074,7 @@ export const createSimilarityAlignmentActions = ({
     // The draft's own response and binding, so the projection is never stale.
     const projected = /** @type {ProjectedDirections} */ (projectDraft());
     const { reference, rows, intent } = draft.value;
-    /** @type {DirectionPreviewRecord[]} */
-    const records = projected.records.map((record) => {
-      const row = rows.find((/** @type {ReviewRow} */ entry) => entry.recordKey === record.recordKey);
-      const isReference = record.status === 'reference';
-      const label = isReference ? reference.recordLabel : row?.recordLabel || record.recordKey;
-      const beforeDirection = arrowLabel(record.beforeArrow);
-      const afterDirection = arrowLabel(record.afterArrow);
-      // An anchor of unknown strand still moves its record; only the direction stays (PD-OI-027).
-      const exclusionReason = (/** @type {string} */ code) => tm(directionExclusionLabels[code] || code);
-      const exclusionLabel = record.exclusion
-        ? (record.exclusion === 'unknown_strand'
-          ? t('Direction unchanged: {reason}', { reason: exclusionReason(record.exclusion) })
-          : t('Unchanged: {reason}', { reason: exclusionReason(record.exclusion) }))
-        : '';
-      return { ...record, label, beforeDirection, afterDirection, exclusionLabel,
-        shortLabel: (isReference ? reference.recordDetail || reference.recordName : row?.recordDetail || row?.recordName) || label,
-        reversed: record.beforeReverseComplement !== record.afterReverseComplement,
-        // The accessible before/after statement each card and its Custom select describe.
-        description: (isReference
-          ? t('{label} · exact reference: Current {before}; after Align {after}.', { label, before: beforeDirection, after: afterDirection })
-          : t('{label}: Current {before}; after Align {after}.', { label, before: beforeDirection, after: afterDirection }))
-          + (exclusionLabel ? ` ${exclusionLabel}` : '') };
-    });
-    const eligible = records.filter(record => !record.exclusion);
-    const reversed = records.filter(record => record.reversed);
-    // A record still waiting for Select or Skip is counted by the footer, not here.
-    const excluded = records.filter(record => record.exclusion
-      && !['selection_required', 'unknown_strand'].includes(record.exclusion)).length;
-    const unknownStrand = records.filter(record => record.exclusion === 'unknown_strand').length;
-    const reversedText = tn(reversed.length, '{count} record ({names})', '{count} records ({names})',
-      { names: listText(reversed.map(({ shortLabel }) => shortLabel)) });
-    const sameAfter = eligible.length > 0 && eligible.every(({ afterArrow }) => afterArrow === eligible[0].afterArrow)
-      ? (eligible[0].afterArrow === 1 ? 'right' : eligible[0].afterArrow === -1 ? 'left' : '') : '';
-    let effect;
-    if (intent.mode === 'custom') {
-      effect = reversed.length ? t('Reverses {records}.', { records: reversedText }) : t('No record is reversed yet. Choose a direction in each card.');
-    } else if (reversed.length) {
-      // The direction is part of each whole sentence: a bare "right" or "left" is no key.
-      effect = intent.mode === 'left'
-        ? tn(eligible.length, 'Reverses {records} so the chosen feature points left.',
-          'Reverses {records} so the {count} chosen features point left.', { records: reversedText })
-        : tn(eligible.length, 'Reverses {records} so the chosen feature points right.',
-          'Reverses {records} so the {count} chosen features point right.', { records: reversedText });
-    } else if (sameAfter) {
-      effect = joinSentences(t('No record is reversed.'), sameAfter === 'left'
-        ? tn(eligible.length, 'The chosen feature already points left.', 'The {count} chosen features already point left.')
-        : tn(eligible.length, 'The chosen feature already points right.', 'The {count} chosen features already point right.'));
-    } else {
-      effect = joinSentences(t('No record is reversed.'),
-        tn(eligible.length, '{count} chosen feature keeps its current direction.', '{count} chosen features keep their current directions.'));
-    }
-    // Verb agreement lives in the two forms of one key.
-    if (excluded) {
-      effect = joinSentences(effect, tn(excluded, '{count} record unchanged.',
-        '{count} records unchanged.'));
-    }
-    if (unknownStrand) {
-      effect = joinSentences(effect, tn(unknownStrand, '{count} record keeps its direction.',
-        '{count} records keep their direction.'));
-    }
-    // D-11: the reference feature centre stays fixed; its record's left edge may move.
-    const shift = Math.round(projected.reference.deltaX);
-    const referenceShift = shift
-      ? (shift > 0
-        ? t('{name} stays where it is; the record\'s left edge moves {px} px (at 100% zoom) to the right.', { name: reference.name, px: Math.abs(shift).toLocaleString('en-US') })
-        : t('{name} stays where it is; the record\'s left edge moves {px} px (at 100% zoom) to the left.', { name: reference.name, px: Math.abs(shift).toLocaleString('en-US') }))
-      : '';
-    return { ...projected, effect, referenceShift, records };
+    return describeDirectionPreview({ projected, reference, rows, intent });
   });
   /** @param {DirectionIntent} intent */
   const setDirectionIntent = (intent) => {

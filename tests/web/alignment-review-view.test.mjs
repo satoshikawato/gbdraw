@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-  ALIGNMENT_REFERENCE_KEY, alignmentOverlayRecords, buildAlignmentReviewView, layoutAlignmentStrips, recordsNeedingChoice
+  ALIGNMENT_REFERENCE_KEY, alignmentOverlayRecords, buildAlignmentReviewView, describeDirectionPreview, layoutAlignmentStrips,
+  recordsNeedingChoice, resetPreviewView
 } from '../../gbdraw/web/js/services/alignment-review-view.js';
 
 const span = (left, right) => ({ left, right });
@@ -223,4 +224,74 @@ test('the figure overlay marks each row by its choice and names a ring without a
       { key: 'only', anchor: rows[1].candidates[0].anchor, name: 'geneB', accessibleName: 'Select geneB, 5..90 bp for Record one' }] },
     { recordKey: 'still', chosenKey: '', needsChoice: false, skipped: true, candidates: [] }
   ]);
+});
+
+// The direction preview and the Reset dialog rows, in English.
+const projectedRecord = (recordKey, overrides = {}) => ({
+  recordKey, status: 'aligned', exclusion: null, beforeArrow: 1, afterArrow: 1,
+  beforeReverseComplement: false, afterReverseComplement: false, ...overrides
+});
+const draftReference = { recordLabel: 'Ref label', recordName: 'REF1', recordDetail: 'Ref detail', name: 'dnaA' };
+const draftRows = [
+  { recordKey: 'b', recordLabel: 'B label', recordName: 'B1', recordDetail: '' },
+  { recordKey: 'c', recordLabel: 'C label', recordName: 'C1', recordDetail: 'C detail' }
+];
+
+test('the direction preview names each record and states what Apply reverses', () => {
+  const projected = { status: 'projected', signature: 'sig', reference: { deltaX: -1234.4 }, records: [
+    projectedRecord('a', { status: 'reference' }),
+    projectedRecord('b', { beforeArrow: -1, afterArrow: 1, afterReverseComplement: true }),
+    projectedRecord('c', { exclusion: 'unknown_strand', beforeArrow: null, afterArrow: null }),
+    projectedRecord('d', { exclusion: 'skipped_by_user', beforeArrow: -1, afterArrow: -1 })
+  ] };
+  const preview = describeDirectionPreview({ projected, reference: draftReference, rows: draftRows, intent: { mode: 'right' } });
+  assert.equal(preview.signature, 'sig', 'the projection is kept');
+  assert.deepEqual(preview.records.map(({ label, shortLabel, reversed }) => [label, shortLabel, reversed]), [
+    ['Ref label', 'Ref detail', false], ['B label', 'B1', true], ['C label', 'C detail', false], ['d', 'd', false]
+  ]);
+  assert.equal(preview.records[0].description, 'Ref label · exact reference: Current right-facing; after Align right-facing.');
+  assert.equal(preview.records[2].description, 'C label: Current unknown; after Align unknown. '
+    + 'Direction unchanged: The selected anchor has no known direction; it is never guessed.');
+  assert.equal(preview.records[3].exclusionLabel, 'Unchanged: Skipped by user.');
+  assert.equal(preview.effect, 'Reverses 1 record (B1) so the 2 chosen features point right. '
+    + '1 record unchanged. 1 record keeps its direction.');
+  assert.equal(preview.referenceShift,
+    'dnaA stays where it is; the record\'s left edge moves 1,234 px (at 100% zoom) to the left.');
+});
+
+test('the direction preview effect follows the intent when nothing is reversed', () => {
+  const describe = (intent, records, deltaX = 0) => describeDirectionPreview({ projected: { reference: { deltaX }, records },
+    reference: draftReference, rows: draftRows, intent });
+  const left = [projectedRecord('a', { status: 'reference', beforeArrow: -1, afterArrow: -1 }),
+    projectedRecord('b', { beforeArrow: -1, afterArrow: -1 })];
+  assert.equal(describe({ mode: 'left' }, left).effect, 'No record is reversed. The 2 chosen features already point left.');
+  assert.equal(describe({ mode: 'custom', byRecordKey: {} }, left).effect,
+    'No record is reversed yet. Choose a direction in each card.');
+  const mixed = [projectedRecord('a', { status: 'reference' }), projectedRecord('b', { beforeArrow: -1, afterArrow: -1 })];
+  assert.equal(describe({ mode: 'keep' }, mixed).effect, 'No record is reversed. 2 chosen features keep their current directions.');
+  assert.equal(describe({ mode: 'keep' }, mixed, 0.4).referenceShift, '', 'a shift that rounds to 0 px is not shown');
+  assert.equal(describe({ mode: 'keep' }, mixed, 2.5).referenceShift,
+    'dnaA stays where it is; the record\'s left edge moves 3 px (at 100% zoom) to the right.');
+});
+
+test('the Reset dialog lists the directions the latest Align changed', () => {
+  const record = (recordKey, reverseComplement) => ({ recordKey, windows: [], presentation: { reverseComplement } });
+  const request = { records: [record('a', false), record('b', true)] };
+  const names = new Map([['b', { label: 'B label', name: 'B1', detail: '' }]]);
+  const receipt = { binding: 'x', referenceDeltaX: null, directions: [
+    { recordKey: 'b', before: false, after: false }, { recordKey: 'a', before: true, after: false }] };
+  const preview = resetPreviewView({ receipt, request, names });
+  assert.deepEqual(preview.targets, [
+    { recordKey: 'b', label: 'B label', name: 'B1', current: true, restored: false,
+      currentWord: 'reverse', restoredWord: 'forward', laterManualEdit: true },
+    { recordKey: 'a', label: 'Unavailable record', name: 'Unavailable record', current: false, restored: true,
+      currentWord: 'forward', restoredWord: 'reverse', laterManualEdit: false }
+  ]);
+  assert.equal(preview.directionsLabel, 'Positions and directions (2 records)');
+  assert.equal(preview.disabledReason, '');
+  const none = resetPreviewView({ receipt: { ...receipt, directions: [] }, request, names });
+  assert.equal(none.directionsLabel, 'Positions and directions');
+  assert.equal(none.disabledReason, 'Not available: the latest Align did not change any record direction.');
+  assert.equal(resetPreviewView({ receipt: null, request, names }).disabledReason,
+    'Not available: this Session does not record which directions the latest Align changed.');
 });
