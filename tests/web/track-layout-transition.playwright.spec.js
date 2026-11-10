@@ -659,59 +659,25 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
-// Two Hide questions on one TOBACCO Load, with Use custom stack off: Hide GC
-// Content first (its Generate is the one at the end, after the stack is turned
-// on), then Hide GC Skew on rows that reach the skew row.
-test('rev 7: Circular Hide GC Content and Hide GC Skew with Use custom stack off ask when they turn off a row another row reaches, and the stack turned on after the choice draws', async ({ browser }) => {
+test('rev 7: Circular Hide GC Content with Use custom stack off asks, and the stack turned on after the choice draws', async ({ browser }) => {
   test.setTimeout(420000);
   const page = await load(browser, TOBACCO);
   try {
-    await test.step('rev 7: Circular Hide GC Content with Use custom stack off asks, and the stack turned on after the choice draws', async () => {
-      await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(false));
-      await openStack(page, 'circular');
-      const box = await reveal(page.getByRole('checkbox', { name: 'Hide GC Content', exact: true }));
-      await exerciseAsk(page, 'circular', {
-        trigger: () => box.click(),
-        title: 'Hide GC content?',
-        cancel: 'Keep GC content',
-        focused: () => box,
-        generates: false,
-        expectAfter: (after) => {
-          expect(after.suppressGc).toBe(true);
-          expect(after.rows).toContain('gc_content:false');
-          expect(after.rows).toContain('plastome_tint:false');
-        }
-      });
-    });
-    await test.step('rev 7: Circular Hide GC Skew with Use custom stack off asks when it turns off a row another row reaches', async () => {
-      await evaluateWithRetainedPromise(page, async () => {
-        const { state } = await import('./js/state.js');
-        await window.__GBDRAW_HISTORY__.runUndoable('Setup', () => {
-          const drawing = state.activeDrawing();
-          drawing.form.suppress_skew = false;
-          // The rows as the editor's normalizer leaves them, so the question has nothing to normalize.
-          const auto = { width: null, radius: null, inner_gap_px: null, outer_gap_px: null };
-          drawing.adv.circular_track_slots.push(
-            { id: 'gc_skew', renderer: 'dinucleotide_skew', enabled: true, side: 'inside', z: 0, params: {}, ...auto },
-            { id: 'mark', renderer: 'annotations', enabled: true, side: 'overlay', z: 1,
-              params: { set_id: 'plastome_tint', anchor_slot: 'gc_skew', layer: 'foreground', marks: ['highlight'], overflow: 'error', show_labels: true }, ...auto }
-          );
-        });
-      });
-      await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(false));
-      await openStack(page, 'circular');
-      const box = await reveal(page.getByRole('checkbox', { name: 'Hide GC Skew', exact: true }));
-      await exerciseAsk(page, 'circular', {
-        trigger: () => box.click(),
-        title: 'Hide GC skew?',
-        cancel: 'Keep GC skew',
-        focused: () => box,
-        expectAfter: (after) => {
-          expect(after.rows).toContain('gc_skew:false');
-          expect(after.rows).toContain('mark:false');
-        },
-        beforeGenerate: () => page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(true))
-      });
+    await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(false));
+    await openStack(page, 'circular');
+    const box = await reveal(page.getByRole('checkbox', { name: 'Hide GC Content', exact: true }));
+    const start = await stackState(page, 'circular');
+    await exerciseAsk(page, 'circular', {
+      trigger: () => box.click(),
+      title: 'Hide GC content?',
+      cancel: 'Keep GC content',
+      focused: () => box,
+      expectAfter: (after) => {
+        expect(after.suppressGc).toBe(true);
+        expect(after.rows).toContain('gc_content:false');
+        expect(after.rows).toContain('plastome_tint:false');
+      },
+      beforeGenerate: () => page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(true))
     });
   } finally { await page.context().close(); }
 });
@@ -963,6 +929,42 @@ test('rev 7: Linear Remove from all records of a File and the per-record uploade
   } finally { await page.context().close(); }
 });
 
+test('rev 7: Circular Hide GC Skew with Use custom stack off asks when it turns off a row another row reaches', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await load(browser, TOBACCO);
+  try {
+    await evaluateWithRetainedPromise(page, async () => {
+      const { state } = await import('./js/state.js');
+      await window.__GBDRAW_HISTORY__.runUndoable('Setup', () => {
+        const drawing = state.activeDrawing();
+        drawing.form.suppress_skew = false;
+        // The rows as the editor's normalizer leaves them, so the question has nothing to normalize.
+        const auto = { width: null, radius: null, inner_gap_px: null, outer_gap_px: null };
+        drawing.adv.circular_track_slots.push(
+          { id: 'gc_skew', renderer: 'dinucleotide_skew', enabled: true, side: 'inside', z: 0, params: {}, ...auto },
+          { id: 'mark', renderer: 'annotations', enabled: true, side: 'overlay', z: 1,
+            params: { set_id: 'plastome_tint', anchor_slot: 'gc_skew', layer: 'foreground', marks: ['highlight'], overflow: 'error', show_labels: true }, ...auto }
+        );
+      });
+    });
+    await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(false));
+    await openStack(page, 'circular');
+    const box = await reveal(page.getByRole('checkbox', { name: 'Hide GC Skew', exact: true }));
+    const start = await stackState(page, 'circular');
+    await exerciseAsk(page, 'circular', {
+      trigger: () => box.click(),
+      title: 'Hide GC skew?',
+      cancel: 'Keep GC skew',
+      focused: () => box,
+      expectAfter: (after) => {
+        expect(after.rows).toContain('gc_skew:false');
+        expect(after.rows).toContain('mark:false');
+      },
+      beforeGenerate: () => page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(true))
+    });
+  } finally { await page.context().close(); }
+});
+
 // Undo of a chosen removal returns the rows that reached it to the
 // Result and to the committed request, and Redo takes them out again; a Save
 // after the Undo holds them. (A row switch has its own cases in
@@ -1029,8 +1031,12 @@ for (const mode of ['circular', 'linear']) {
     try {
       // The Session `after Load` steps load: this drawing, saved before any step.
       await savedSession(page, file);
+      const first = await committedSlotsOf(page, mode);
       for (const route of Object.keys(REACH_UNDO_ROUTES)) {
-        await test.step(reachUndoTitle(mode, route, 'Generate'), () => reachUndoCell(page, mode, route, 'Generate', testInfo));
+        await test.step(reachUndoTitle(mode, route, 'Generate'), async () => {
+          expect(await committedSlotsOf(page, mode), 'every step starts from the first committed request').toEqual(first);
+          await reachUndoCell(page, mode, route, 'Generate', testInfo);
+        });
       }
       await test.step(`rev 7: ${mode} Depth file removal after Generate asks, the row leaves, and the live Result equals Generate`,
         () => reachFileRemovalAfterGenerate(page, mode));
@@ -1068,10 +1074,21 @@ const generateError = async (page) => {
 };
 const depthRowsOf = (state) => state.rows.filter((row) => /^depth(_\d+)?:/.test(row));
 
-// The three starts nest on one page: the first journey ends generated with the
-// file back and the row off, the start of `after a Generate`; that journey's
-// end, saved and loaded, is the start of `after a Load`. The first must stay
-// first: it is the only one with no Generate before it.
+// A drawing with one Depth file whose row is turned off, built as each start
+// built it: `before the first Generate` runs on one such drawing; a second one,
+// generated, is saved for `after a Load` and then runs `after a Generate`.
+const offRowDrawing = async (browser, mode) => {
+  const page = await openReachFixture(browser, mode);
+  await addDepthSeries(page, rev7Depth(mode, 1));
+  await page.evaluate(async (stackMode) => {
+    const { state } = await import('./js/state.js');
+    const app = window.__GBDRAW_APP__;
+    const row = state.activeDrawing().adv[`${stackMode}_track_slots`].find((slot) => slot.id === 'depth');
+    if (stackMode === 'circular') app.setCircularTrackSlotEnabled(row, false); else app.setLinearTrackSlotEnabled(row, false);
+  }, mode);
+  await settleLive(page);
+  return page;
+};
 const offRowJourney = async (current, browser, mode, testInfo) => {
   const steps = await undoCount(current.page);
   const start = await stackState(current.page, mode);
@@ -1108,23 +1125,17 @@ const offRowJourney = async (current, browser, mode, testInfo) => {
 for (const mode of ['circular', 'linear']) {
   test(`rev 7: ${mode} a Depth row turned off stays off without a question when its last file goes and comes back, before the first Generate, after a Generate and after a Load, and Generate draws`, async ({ browser }, testInfo) => {
     test.setTimeout(420000);
-    const current = { page: await openReachFixture(browser, mode) };
+    const current = { page: await offRowDrawing(browser, mode) };
     try {
-      await addDepthSeries(current.page, rev7Depth(mode, 1));
-      await current.page.evaluate(async (stackMode) => {
-        const { state } = await import('./js/state.js');
-        const app = window.__GBDRAW_APP__;
-        const row = state.activeDrawing().adv[`${stackMode}_track_slots`].find((slot) => slot.id === 'depth');
-        if (stackMode === 'circular') app.setCircularTrackSlotEnabled(row, false); else app.setLinearTrackSlotEnabled(row, false);
-      }, mode);
-      await settleLive(current.page);
       const title = (when) => `rev 7: ${mode} a Depth row turned off stays off without a question when its last file goes and comes back, ${when}, and Generate draws`;
       await test.step(title('before the first Generate'), () => offRowJourney(current, browser, mode, testInfo));
-      // Generated, the file present and the row off.
+      await current.page.context().close();
+      current.page = await offRowDrawing(browser, mode);
+      await expectGenerates(current.page);
+      const file = testInfo.outputPath('off.gbdraw-session.json');
+      await savedSession(current.page, file);
       await test.step(title('after a Generate'), () => offRowJourney(current, browser, mode, testInfo));
       await test.step(title('after a Load'), async () => {
-        const file = testInfo.outputPath('off.gbdraw-session.json');
-        await savedSession(current.page, file);
         await current.page.context().close();
         current.page = await load(browser, file);
         expect(depthRowsOf(await stackState(current.page, mode))).toEqual(['depth:false']);
@@ -1214,7 +1225,31 @@ for (const mode of ['circular', 'linear']) {
       expect(await generateError(page)).toBe('DEPTH_INVALID');
     } finally { await page.context().close(); }
   });
-  // `the sentence is left out when it is not true` runs in node: track-slot-row-edits.test.mjs.
+
+  test(`rev 7: ${mode} the sentence is left out when it is not true: a series removal, and the only series' last file`, async ({ browser }) => {
+    test.setTimeout(420000);
+    const page = await openReachFixture(browser, mode);
+    try {
+      await addDepthSeries(page, rev7Depth(mode, 2));
+      const seriesRow = await page.evaluate(async (stackMode) => {
+        const { state } = await import('./js/state.js');
+        return state.activeDrawing().adv[`${stackMode}_track_slots`].find((row) => row.renderer === 'depth' && row.params.track_index === 0).id;
+      }, mode);
+      await addReachRow(page, { id: 'mark', anchor: seriesRow, setId: setIdOf(mode), mode });
+      const section = await openDepthSources(page, mode);
+      await section.getByRole('button', { name: 'Remove series', exact: true }).first().click();
+      await expect(page.locator('[data-choice-prompt]')).toBeVisible();
+      expect(await promptText(page)).not.toContain('stays empty');
+      await page.locator('[data-choice-prompt]').getByRole('button', { name: 'Cancel', exact: true }).click();
+      await removeDepthFile(page, mode);
+      await expect(page.locator('[data-choice-prompt]')).toBeVisible();
+      expect(await promptText(page), 'a second series still has a file').toContain('stays empty');
+      await chooseAsked(page);
+      // The second series' last file, no row reaching it: nothing asks.
+      await removeDepthFile(page, mode);
+      await expectNoQuestion(page);
+    } finally { await page.context().close(); }
+  });
 }
 
 // Generate asks for a file only while it draws Depth: with the stack off, Show Depth.

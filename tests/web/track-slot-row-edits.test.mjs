@@ -1188,41 +1188,6 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
-// The questions of rev 7 in order on one drawing: two series, `mark` reaching
-// the first series' row. The browser cases of track-layout-transition click the
-// same buttons (Remove series, Remove Depth TSV) through this wiring.
-for (const mode of ['circular', 'linear']) {
-  test(`${mode}: rev 7: the sentence is left out when it is not true: a series removal, and the only series' last file`, async () => {
-    const harness = MODES[mode](onSecondRow(mode), { showDepth: true, depthFiles: [depthFile, secondDepthFile] });
-    const drawing = harness.state.activeDrawing();
-    const fileLoss = (files) => (mode === 'circular'
-      ? harness.editor.circularDepthSourceLoss(drawing, files)
-      : harness.editor.linearDepthSourceLoss(drawing, [files]));
-    const ask = (askChoice, request) => askTrackSourceRemoval(depthRemovalPorts(harness, mode, askChoice),
-      { sources: () => [], label: 'Label', ...request });
-    const questions = [];
-    // A series removal: no series stays empty, so no sentence says one does.
-    const seriesLoss = depthSeriesRemovalLoss(harness.slots(), 0, 1);
-    assert.deepEqual(seriesLoss.emptySeries(new Set()), []);
-    assert.equal(await ask(async (request) => { questions.push(request); return 'cancel'; },
-      { kind: 'depth-series', series: 0, loss: seriesLoss, apply: () => assert.fail('no write') }), false);
-    assert.ok(!questions[0].description.includes('stays empty'));
-    // The first series' last file while the second series has one: it says so, and the choice turns `mark` off.
-    const firstLoss = fileLoss([null, secondDepthFile]);
-    assert.equal(await ask(async (request) => { questions.push(request); return 'hide'; },
-      { kind: 'depth-file', loss: firstLoss, apply: (turnOffReaching) => { turnOffReaching(); return 'applied'; } }), 'applied');
-    assert.ok(questions[1].description.includes('stays empty'), 'a second series still has a file');
-    assert.equal(enabledOf(harness).mark, false);
-    // The removal the choice applied: the file and the rows that leave with it.
-    if (mode === 'circular') drawing.files.c_depth = [null, secondDepthFile];
-    else drawing.linearSeqs[0].depth = [null, secondDepthFile];
-    const rows = harness.slots();
-    rows.splice(0, rows.length, ...rows.filter((row) => !firstLoss.leaving.has(row.id)));
-    // The second series' last file, no row reaching it: nothing asks.
-    assert.equal(ask(neverAsked, { kind: 'depth-file', loss: fileLoss([null, null]), apply: () => assert.fail('no write') }), null);
-  });
-}
-
 test('circular: the managed ring rows a comparison change takes out, read by the question and the sync, only while the stack is in use', () => {
   const ring = (id, key) => ({ id, renderer: 'sequence_conservation', enabled: true, side: 'inside', params: { managed: 'circular_conservation', series_key: key } });
   const rows = [...REACH_ROWS.circular(), ring('ring_a', 'a'), ring('ring_b', 'b'), ring('ring_dup', 'a')];
