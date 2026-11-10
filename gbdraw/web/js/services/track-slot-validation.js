@@ -7,6 +7,7 @@ import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.j
 
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
 /** @import { ErrorTextPart } from '../utils/error-normalization.js' */
+/** @import { AnnotationSetRow } from './drawing/annotation-sets.js' */
 
 /**
  * A `{ value, unit }` Width or Radius draft. Both fields are checked on read.
@@ -382,19 +383,20 @@ const annotationSetIdsNamed = (rows) => new Set(rows.map(annotationRowSetId).fil
 
 /**
  * The ids of a drawing's Region Annotation sets, in their order.
- * @param {readonly { id?: unknown }[] | null | undefined} sets
+ * @param {readonly AnnotationSetRow[]} sets
  * @returns {string[]}
  */
-export const annotationSetIdsOf = (sets) => (Array.isArray(sets) ? sets : [])
-  .map((set) => String(set?.id || '').trim()).filter(Boolean);
+export const annotationSetIdsOf = (sets) => sets.map((set) => set.id.trim()).filter(Boolean);
 
 /**
  * The set a new Annotations row of a stack draws, by set id (OV-3153, Owner
  * D-60 of 2026-11-10): the first set, in the sets' order, that no Annotations
  * row of the stack names (`annotationSetIdsNamed`); null when every set has a
- * row (Add track then asks) or there is no set.
+ * row (Add track then asks) or there is no set. A sequence search's set
+ * (`keepHighlightOverlay`, PD-OI-117) that no row names is free like any other:
+ * naming it in a row is how it leaves its automatic overlay.
  * @param {readonly SetNamingRow[]} rows
- * @param {readonly { id?: unknown }[] | null | undefined} sets
+ * @param {readonly AnnotationSetRow[]} sets
  * @returns {string | null}
  */
 export const annotationSetForNewRow = (rows, sets) => {

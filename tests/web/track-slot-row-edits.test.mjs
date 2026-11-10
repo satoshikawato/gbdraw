@@ -454,14 +454,48 @@ for (const mode of ['circular', 'linear']) {
     assert.notEqual(added, -1);
     assert.match(unset.issue(added), /This row needs an annotation set\./);
 
-    // An answer to a stack that changed meanwhile adds nothing.
-    const stale = asking(rows(), twoSets(), (request) => { stale.state.annotationSets.push({ id: 'late', annotations: [] }); return 'again:regions'; });
+    // An answer to sets or a stack that changed while the dialog was open adds nothing.
+    const stale = asking(rows(), twoSets(), () => { stale.state.annotationSets.push({ id: 'late', annotations: [] }); return 'again:regions'; });
     assert.equal(await stale.addTrack('annotations'), false);
     assert.deepEqual(stale.steps, []);
+    const moved = asking(rows(), twoSets(), () => { moved.slots().push(make('spacer_x', 'spacer', {}, laneSide)); return 'again:regions'; });
+    const rowCount = moved.slots().length;
+    assert.equal(await moved.addTrack('annotations'), false);
+    assert.equal(moved.slots().length, rowCount + 1, 'only the row added meanwhile');
+    assert.deepEqual(moved.steps, []);
     // Another renderer never asks.
     const other = asking(rows(), twoSets());
     await other.addTrack('spacer');
     assert.equal(other.asked.length, 0);
+  });
+
+  // A row turned off names its set (it draws it once turned on), and every
+  // sentence of the question stays true: it says the row is off and claims no
+  // second drawing of a set whose rows are all off.
+  test(`${mode}: the question names a turned-off row as off and claims no second drawing of its set`, async () => {
+    const editor = asking([...ROWS[mode](), make('annotations_1', 'annotations', { set_id: 'regions' }, laneSide),
+      make('annotations_2', 'annotations', { set_id: 'tint' }, laneSide)], twoSets());
+    editor.slots().find((slot) => slot.id === 'annotations_1').enabled = false;
+    await editor.addTrack('annotations');
+    const [request] = editor.asked;
+    const number = (id) => editor.slots().findIndex((slot) => slot.id === id) + 1;
+    assert.equal(request.description, `Track row ${number('annotations_1')} (annotations_1) names regions but is turned off. `
+      + `Track row ${number('annotations_2')} (annotations_2) draws tint. Choose what the new Annotations row draws.`);
+    assert.deepEqual(request.actions.map(({ id, detail }) => [id, detail]), [
+      ['again:regions', 'A second row draws regions.'],
+      ['again:tint', 'A second row draws tint; the figure shows it twice.'],
+      ['unset', 'Choose the set later in the new row.']
+    ]);
+  });
+
+  // A sequence search's set (PD-OI-117) with no row is a set without a row:
+  // the new row draws it, which is how it leaves its automatic overlay.
+  test(`${mode}: Add track Annotations gives a sequence search's set without a row to the new row, without asking`, async () => {
+    const sets = [twoSets()[0], { id: 'search_hits', annotations: [{ mark: 'highlight' }], keepHighlightOverlay: true }];
+    const editor = asking([...ROWS[mode](), make('annotations_1', 'annotations', { set_id: 'regions' }, laneSide)], sets);
+    await editor.addTrack('annotations');
+    assert.equal(editor.asked.length, 0);
+    assert.deepEqual(editor.annotationRows().map(([, setId]) => setId).sort(), ['regions', 'search_hits']);
   });
 
   test(`${mode}: a row whose renderer becomes Annotations takes the first set no other row names, or none`, () => {

@@ -9972,7 +9972,8 @@
                     <i v-if="action.icon" class="ph" :class="action.icon" aria-hidden="true"></i>
                     <span class="min-w-0"><span class="block">{{ action.label }}</span><span v-if="action.detail" class="block text-xs font-normal opacity-80">{{ action.detail }}</span></span>
                 </button>
-                <button type="button" data-history-ignore @click="resolveChoicePrompt('cancel')" class="choice-cancel">{{ choicePrompt.cancelLabel }}</button>
+                <!-- Focus starts on Cancel, so that Enter never adds what the options describe -->
+                <button type="button" data-history-ignore data-dialog-initial-focus @click="resolveChoicePrompt('cancel')" class="choice-cancel">{{ choicePrompt.cancelLabel }}</button>
             </div>
             <div v-else class="mt-4 flex flex-wrap justify-end gap-2">
                 <button type="button" data-history-ignore @click="resolveChoicePrompt('cancel')" class="btn btn-secondary btn-sm">{{ choicePrompt.cancelLabel }}</button>

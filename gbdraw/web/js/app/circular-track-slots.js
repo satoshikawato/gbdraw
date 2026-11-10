@@ -1447,8 +1447,8 @@ export const createCircularTrackSlotEditor = ({
       slot.params.nt = normalizeNt(slot.params.nt, normalizeNt(drawing.adv.nt));
     } else if (renderer === 'annotations') {
       slot.side = slot.side === 'overlay' ? 'overlay' : 'outside';
-      slot.params.set_id = String(slot.params.set_id
-        || annotationSetForNewRow(drawing.adv.circular_track_slots.filter((/** @type {CircularTrackSlot} */ row) => row !== slot), drawing.annotationSets) || '');
+      // The row itself names no set yet, so it does not count against one.
+      slot.params.set_id = String(slot.params.set_id || annotationSetForNewRow(drawing.adv.circular_track_slots, drawing.annotationSets) || '');
       slot.params.overflow = 'error';
       slot.params.show_labels = true;
       slot.params.layer = 'foreground';
