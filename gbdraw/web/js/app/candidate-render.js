@@ -113,6 +113,14 @@ const normalizePaint = (value, label) => {
   throw new Error(`Invalid ${label} override in the committed editor state.`);
 };
 
+// A feature's palette fill (`paletteFeatureColor`); null keeps what Python
+// drew, for a palette with neither the type nor a `default`.
+/** @param {Readonly<Record<string, string>>} palette @param {unknown} type */
+const paletteFill = (palette, type) => {
+  const color = paletteFeatureColor(palette, type);
+  return color === undefined ? null : normalizePaint(color, 'feature fill');
+};
+
 /** @param {unknown} value */
 const normalizeStrokeWidth = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -556,9 +564,7 @@ const compilePlanBundle = ({
           operations.featureFills.push({ renderedId, color: null });
           return;
         }
-        // A palette without the type and a `default` keeps what Python drew.
-        const paint = rule ? rule.color : paletteFeatureColor(paletteColors, feature.type);
-        const color = paint === undefined ? null : normalizePaint(paint, 'feature fill');
+        const color = rule ? normalizePaint(rule.color, 'feature fill') : paletteFill(paletteColors, feature.type);
         if (color && !samePaint(color, pythonFill(renderedId, feature))) operations.featureFills.push({ renderedId, color });
       });
     });
