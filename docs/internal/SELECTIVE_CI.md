@@ -104,7 +104,7 @@ registry unions their contributions, then emits unique jobs in registry order.
 | Capability | Representative paths | Selective PR jobs |
 | --- | --- | --- |
 | `metadata` | Existing development-tool allowlist, `.gitignore`, citation/licenses | No test job |
-| `documentation` | Root Markdown and `docs/`, excluding the five exact policy documents below | Recipes |
+| `documentation` | Root Markdown, changelog fragments under `changelog.d/`, and `docs/`, excluding the five exact policy documents below | Recipes |
 | `policy-documentation` | Architecture, Web, Product Impact, Option Integrity, and selective CI policy documents | Web change budget |
 | `python-core` | Known Python core/API/config/I/O owners and data | Architecture, core, examples, lint, Web contracts, browser smoke |
 | `renderer` | Render/SVG/diagram/canvas/features/labels/layout owners | Architecture, core, examples, lint, Web contracts, browser smoke |

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { casesPerFileOf, planShards, readMeasurements } from '../../tools/balance-functional-shards.mjs';
+import { SHARDS_FILE, casesPerFileOf, planShards, readMeasurements } from '../../tools/balance-functional-shards.mjs';
 
 const require = createRequire(import.meta.url);
 const cli = require.resolve('@playwright/test/cli');
@@ -94,6 +94,21 @@ const assignmentProblems = (specFiles, shards) => {
   ];
 };
 
+// A measured spec file that exists but that the functional suite does not list (ignored, or
+// left without cases) would be a measured leaf test that no planned shard runs. The change that
+// ignores or empties it removes its measurement.
+const unlistedMeasurements = (measuredFiles, listedFiles, exists) => measuredFiles
+  .filter((file) => exists(file) && !listedFiles.includes(file))
+  .map((file) => `${file} is measured but not a listed functional spec; remove its measurement`);
+
+test('a measured spec file that exists must be listed by the functional suite', () => {
+  const [a, b, gone] = ['tests/web/a.playwright.spec.js', 'tests/web/b.playwright.spec.js', 'tests/web/gone.playwright.spec.js'];
+  const exists = (file) => file !== gone;
+  assert.deepEqual(unlistedMeasurements([a, gone], [a, b], exists), []);
+  assert.deepEqual(unlistedMeasurements([a, b], [a], exists),
+    [`${b} is measured but not a listed functional spec; remove its measurement`]);
+});
+
 test('the shard assignment check rejects unassigned, duplicated, and unknown spec files', () => {
   const [a, b] = ['tests/web/a.playwright.spec.js', 'tests/web/b.playwright.spec.js'];
   assert.deepEqual(assignmentProblems([a, b], [[a], [b]]), []);
@@ -132,6 +147,13 @@ test('functional CI shards run the planned spec file lists and every acceptance 
   const specFiles = [...casesPerFile.keys()];
   const { shards } = planShards({ casesPerFile, secondsPerCase, shardCount });
   assert.deepEqual(assignmentProblems(specFiles, shards), []);
+  assert.deepEqual(unlistedMeasurements([...secondsPerCase.keys()], specFiles, existsSync), []);
+  // Until the next pull request removes them, the old `shards` lists are what the trusted base
+  // before the planned lists runs on a pull request, so they must be the plan itself.
+  const { shards: transitional } = JSON.parse(readFileSync(SHARDS_FILE, 'utf8'));
+  if (transitional !== undefined) {
+    assert.deepEqual(transitional, shards, 'regenerate the shards key of tests/ci/functional-shards.json');
+  }
   // Playwright file filters are regular expressions, so list each shard to prove
   // that no filter also selects another shard's file.
   const partition = shards.flatMap((files) => collect(

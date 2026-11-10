@@ -210,6 +210,7 @@ export const classifyPath = (path) => {
     return classified('metadata', 'METADATA_DIRECTORY_ALLOWLIST');
   }
   if (ROOT_MARKDOWN.test(path)) return classified('documentation', 'ROOT_MARKDOWN');
+  if (path.startsWith('changelog.d/')) return classified('documentation', 'CHANGELOG_FRAGMENT');
   if (path.startsWith('docs/')) return classified('documentation', 'DOCUMENTATION_TREE');
   if (['pyproject.toml', 'setup.py', 'MANIFEST.in', 'package.json', 'package-lock.json',
     'wrangler.toml', 'gbdraw/_build_support.py'].includes(path)
