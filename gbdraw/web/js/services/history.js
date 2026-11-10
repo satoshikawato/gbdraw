@@ -1467,7 +1467,7 @@ export const createHistoryManager = ({
   /**
    * @template R
    * @param {string} label
-   * @param {() => R | Promise<R>} fn
+   * @param {() => R} fn
    * @param {HistoryStepOptions<Awaited<R>>} [options]
    */
   const runUndoableCheckpoint = (label, fn, options = {}) => {

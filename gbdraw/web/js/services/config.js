@@ -6322,7 +6322,8 @@ const applyFeatureArtifactData = (features = {}) => {
  */
 export const applyFeatureStateData = (drawing, features = {}) => {
   applyFeatureArtifactData(features);
-  state.selectedFeatureRecordIdx.value = Number.isInteger(features.selectedFeatureRecordIdx)
+  state.selectedFeatureRecordIdx.value = typeof features.selectedFeatureRecordIdx === 'number'
+    && Number.isInteger(features.selectedFeatureRecordIdx)
     ? features.selectedFeatureRecordIdx
     : 0;
   applyDrawingFeatureData(drawing, features);
