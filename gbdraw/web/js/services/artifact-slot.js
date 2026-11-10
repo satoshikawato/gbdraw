@@ -85,6 +85,16 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFAC
  */
 
 /**
+ * A drawing's generated Legend inventory is its shown Result set's: a set
+ * without a Result has none (OV-3282). The slot holds it by this rule, and the
+ * Legend owner writes the displayed one by it.
+ * @param {readonly unknown[]} results The Result set.
+ * @param {readonly PythonLegendKey[]} inventory The inventory the set was drawn with.
+ * @returns {PythonLegendKey[]}
+ */
+export const resultSetInventory = (results, inventory) => (results.length > 0 ? [...inventory] : []);
+
+/**
  * A slot of `drawing`'s artifact; a value it is not given is the empty
  * slot's for the drawing's mode.
  * @param {{ drawing: DrawingIdentity, values: ArtifactSlot['values'], legendInventory?: ArtifactSlot['legendInventory'],
@@ -104,7 +114,7 @@ export const createArtifactSlot = ({
     values: Object.freeze(Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
       key, Object.hasOwn(values, key) ? values[key] : ARTIFACT_SLOT_EMPTY[key](drawing.mode, null)
     ]))),
-    legendInventory: Object.freeze([...legendInventory]),
+    legendInventory: Object.freeze(resultSetInventory(Object.hasOwn(values, 'results') ? values.results : [], legendInventory)),
     matchSequenceOwner,
     runtimeState,
     transportIdentity,
