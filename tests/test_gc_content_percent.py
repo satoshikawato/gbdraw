@@ -696,3 +696,37 @@ def test_the_tick_labels_keep_their_margin_from_a_percent_gc_band_that_paints_it
     radii = _tick_label_path_radii(svg)
     assert radii
     assert min(radii) - _percent_outer_edge_px(svg) == pytest.approx(margin if clearance else 0.0, abs=1e-3)
+
+
+@pytest.mark.parametrize(
+    ("words", "drawn"),
+    [([], 1), (["--multi_record_canvas"], 3), (["--one_circle"], 3)],
+    ids=["one-record", "multi-record-canvas", "one-circle"],
+)
+def test_a_cli_render_takes_the_gc_percent_of_each_drawn_record_once(
+    words: list[str], drawn: int, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The definition's facts, GC % included, are built once per record (once per circle on one circle) and handed
+    to every reader: the band the tracks keep clear, the fit probes, the centre text and the drawn group (OV-3043:
+    the GC % of a record was counted once per reader)."""
+
+    import gbdraw.analysis.gc as gc_module
+    from Bio import SeqIO
+    from gbdraw.circular import circular_main
+
+    counted: list[int] = []
+    real = gc_module.known_base_counts
+
+    def known_base_counts(seq):  # type: ignore[no-untyped-def]
+        counted.append(len(seq))
+        return real(seq)
+
+    monkeypatch.setattr(gc_module, "known_base_counts", known_base_counts)
+    records = [SeqRecord(Seq("GCAT" * (3_000 + 500 * index)), id=f"gc{index}", name=f"gc{index}") for index in range(3)]
+    for record in records:
+        record.annotations["molecule_type"] = "DNA"
+    source = tmp_path / "records.gb"
+    SeqIO.write(records if drawn > 1 else records[:1], source, "genbank")
+    circular_main(["--gbk", str(source), *words, "-o", str(tmp_path / "out"), "-f", "svg"])
+
+    assert sorted(counted) == sorted(len(record.seq) for record in records[:drawn])

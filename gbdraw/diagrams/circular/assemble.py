@@ -2149,7 +2149,7 @@ def _slot_width_ratio_factor(
 
 
 def _definition_reserved_radius_px(
-    gb_record: SeqRecord | DefinitionRecordFacts,
+    facts: DefinitionRecordFacts,
     geometry: CircularCanvasGeometry,
     species: str | None,
     strain: str | None,
@@ -2159,7 +2159,6 @@ def _definition_reserved_radius_px(
     definition_profile: CircularDefinitionProfile,
     record_presentation: RecordPresentation | None = None,
 ) -> float:
-    facts = gb_record if isinstance(gb_record, DefinitionRecordFacts) else definition_record_facts(gb_record)
     style = CircularDefinitionStyle.of(cfg, definition_profile)
     definition = DefinitionGroup(
         facts,
@@ -2228,7 +2227,7 @@ class _CentreDefinitionFit:
 def _resolve_radial_layout_fitting_definition(
     resolve_layout: Callable[[float | None], CircularRadialLayout],
     *,
-    gb_record: SeqRecord | DefinitionRecordFacts,
+    facts: DefinitionRecordFacts,
     geometry: CircularCanvasGeometry,
     cfg: GbdrawConfig,
     species: str | None,
@@ -2268,7 +2267,7 @@ def _resolve_radial_layout_fitting_definition(
 
     def band_px(profile: CircularDefinitionProfile) -> float:
         return _definition_reserved_radius_px(
-            gb_record,
+            facts,
             geometry,
             species,
             strain,
@@ -3675,19 +3674,17 @@ def _drawn_units(
 
 class _CircleDrawing(NamedTuple):
     """What one Circular canvas draws round its circle: its records in drawing order, the length the drawing reads
-    as the record's (the circle's display length when records share it), and what the centre definition reads."""
+    as the record's (the circle's display length when records share it), and what the definition says.
+
+    The definition's facts are built here, once per drawing (OV-3043): the record's, or the facts of the circle's
+    records. Every reader takes them: the band the tracks keep clear, the fit probes and the drawn group. A hidden
+    definition reads no GC percent."""
 
     units: tuple[_DrawnUnit, ...]
     display_length: int
-    definition_source: SeqRecord | DefinitionRecordFacts
+    definition_facts: DefinitionRecordFacts
     # Whether the centre definition is drawn: as configured, or, hidden, its count of the records a circle leaves out.
     definition_shown: bool
-
-    def definition_facts(self) -> DefinitionRecordFacts:
-        """The facts the centre definition draws: the record's, or the facts of the circle's records."""
-
-        source = self.definition_source
-        return source if isinstance(source, DefinitionRecordFacts) else definition_record_facts(source)
 
     @classmethod
     def of(
@@ -3700,7 +3697,8 @@ class _CircleDrawing(NamedTuple):
     ) -> _CircleDrawing:
         units = _drawn_units(record, planned, presentation, one_circle)
         if one_circle is None:
-            return cls(units, len(record.gb_record.seq), record.gb_record, definition_shown)
+            facts = definition_record_facts(record.gb_record, gc_percent=definition_shown)
+            return cls(units, len(record.gb_record.seq), facts, definition_shown)
         _refuse_one_circle_inputs(planned.annotation_track_layouts)
         facts = one_circle_definition_facts(one_circle, definition_shown=definition_shown)
         return cls(units, one_circle.display_length, facts, definition_shown or facts.summary_only)
@@ -4170,7 +4168,7 @@ def add_record_on_circular_canvas(
                 center_reserved_radius_explicit=presentation.center_reserved_radius is not None,
                 annotation_label_rooms=rooms,
             ),
-            gb_record=drawing.definition_source,
+            facts=drawing.definition_facts,
             geometry=canvas_config.geometry(),
             cfg=layout_cfg,
             species=presentation.species,
@@ -4187,7 +4185,7 @@ def add_record_on_circular_canvas(
     def centre_definition(text_cfg: GbdrawConfig) -> DefinitionGroup | None:
         if not definition_shown or str(presentation.definition_position) != "center" or str(presentation.definition_profile) == "shared_common":
             return None
-        facts = drawing.definition_facts()
+        facts = drawing.definition_facts
         style = CircularDefinitionStyle.of(text_cfg, presentation.definition_profile)
         return DefinitionGroup(
             facts,
@@ -4535,7 +4533,7 @@ def add_record_on_circular_canvas(
         definition_target_start = len(getattr(canvas, "elements", []))
         canvas = add_record_definition_group_on_canvas(
             canvas,
-            drawing.definition_facts(),
+            drawing.definition_facts,
             canvas_config,
             presentation.species,
             presentation.strain,

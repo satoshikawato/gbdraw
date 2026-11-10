@@ -1997,7 +1997,7 @@ def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
         capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
         if "definition_reserved" not in captured:
             captured["definition_reserved"] = circular_assemble_module._definition_reserved_radius_px(
-                gb_record,
+                circular_assemble_module.definition_record_facts(gb_record),
                 canvas_config.geometry(),
                 None,
                 None,
