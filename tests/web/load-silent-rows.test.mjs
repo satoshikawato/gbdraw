@@ -243,6 +243,25 @@ test('E1b: an unknown field of a stored comparison edge is dropped with a row (E
   await saved();
 });
 
+// OV-2742: the raw LOSAT names typed on the window pairs of a record pair live in that pair's plan edge, keyed by the
+// window pair's unit edge key; Load reads them without a row, drops a blank name with one, and Save writes them again.
+test('a window pair name loads into its record pair plan edge and saves again (OV-2742)', async () => {
+  const edge = (windowLosatFilenames) => ({
+    id: 'e1', queryUid: 'a', subjectUid: 'b', included: true, fileActive: false, losatFilenameActive: false,
+    source: 'losat', losatFilename: '', windowLosatFilenames
+  });
+  const names = { 'a~w2->b': 'second-window.tsv' };
+  const session = BASES.g47L();
+  session.drawings[0].config.linearComparisonPlan.edges = [edge(names)];
+  assert.deepEqual(await load(session), []);
+  assert.deepEqual(modeDrawing(state, 'linear').linearComparisonPlan.edges[0].windowLosatFilenames, names);
+  const [savedEdge] = (await saved()).drawings[0].config.linearComparisonPlan.edges;
+  assert.deepEqual(savedEdge.windowLosatFilenames, names);
+  session.drawings[0].config.linearComparisonPlan.edges = [edge({ ...names, 'a~w1->b': ' ' })];
+  assert.deepEqual(await load(session), ['setting-replaced drawings[0].config.linearComparisonPlan.edges[0].windowLosatFilenames']);
+  assert.deepEqual(modeDrawing(state, 'linear').linearComparisonPlan.edges[0].windowLosatFilenames, names);
+});
+
 test('OV-655, TB23: a single file slot keeps the first file it reads and lists the rest and a malformed entry', async () => {
   let session = BASES.v30();
   const first = session.files.linearSeqs[0].gb;

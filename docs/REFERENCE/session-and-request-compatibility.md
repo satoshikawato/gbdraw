@@ -50,6 +50,10 @@ Save keep the crops, and `config.form.circular_range_fields_record` names the re
 fields hold. A Session without these keys reads as no such crops.
 These five form fields are Session 51's: a Session 46-50 that holds one in a drawing's slice is refused by the
 command line and the Python API, and the Web app loads it without that field, listed in the Load dialog.
+A Session 51 Linear drawing keeps the raw LOSAT file names typed on the window pairs of a pair of records (a record
+drawn in several windows) in that pair's `config.linearComparisonPlan` edge, as `windowLosatFilenames`, keyed by the
+window pair. A Session without the key reads as no typed names: each window pair takes its default name, the pair's
+name with the window numbers (`A.B.losatn.w2.tsv`), which the command line's `--losat_output_dir` also writes.
 Each record of a Session 51 drawing's saved track-slot geometry
 (`runMetadata.trackSlotGeometry.records[]`) also carries its `recordKey` and its
 `axis` (with `axis.source.isCircular`, whether a selected span may cross the

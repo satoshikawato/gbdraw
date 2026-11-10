@@ -115,9 +115,13 @@ const losatFilenameLabel = (label) => String(label ?? '')
  * @param {unknown} leftLabel
  * @param {unknown} rightLabel
  * @param {string} suffix
+ * @param {number | null} [queryWindow] @param {number | null} [subjectWindow] A side's window number when it is one
+ *   of several windows of a record (`windowPairLosatFilename`).
  */
-export const losatEdgeFilename = (leftLabel, rightLabel, suffix) => (
-  `${losatFilenameLabel(leftLabel) || 'seq_1'}.${losatFilenameLabel(rightLabel) || 'seq_2'}.${suffix}.tsv`
+export const losatEdgeFilename = (leftLabel, rightLabel, suffix, queryWindow = null, subjectWindow = null) => (
+  windowPairLosatFilename(
+    `${losatFilenameLabel(leftLabel) || 'seq_1'}.${losatFilenameLabel(rightLabel) || 'seq_2'}.${suffix}.tsv`,
+    queryWindow, subjectWindow)
 );
 
 /**

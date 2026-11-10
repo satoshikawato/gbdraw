@@ -4866,3 +4866,43 @@ def test_legacy_feature_index_keys_an_all_input_record_with_the_expanded_record_
         requests_module.expanded_record_key("card", 1),
         requests_module.expanded_record_key("card", 2),
     ] == ["card|1", "card|2"]
+
+
+def _session_with_plan_edge(edge_extra: dict[str, object]) -> dict:
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures/sessions/drawings-linear-pair-losat.v51.gbdraw-session.json.gz"
+    )
+    with gzip.open(fixture, "rt", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    payload["drawings"][0]["config"]["linearComparisonPlan"]["edges"] = [
+        {
+            "id": "edge-a-b",
+            "queryUid": "a",
+            "subjectUid": "b",
+            "included": True,
+            "fileActive": False,
+            "losatFilenameActive": False,
+            "source": "losat",
+            "losatFilename": "",
+            **edge_extra,
+        }
+    ]
+    return payload
+
+
+def test_current_comparison_plan_admits_window_pair_names() -> None:
+    """OV-2742: a name typed on a window pair is saved in the record pair's plan edge."""
+    validate_session(
+        _session_with_plan_edge({"windowLosatFilenames": {"a~w1->b": "mine.tsv"}})
+    )
+    # A Web Save Session with a typed window-pair name (see its .provenance.json).
+    saved = (
+        Path(__file__).resolve().parent
+        / "fixtures/sessions/web-linear-window-pair-names.v51.gbdraw-session.json.gz"
+    )
+    with gzip.open(saved, "rt", encoding="utf-8") as handle:
+        validate_session(json.load(handle))
+    for bad in ({"a~w1->b": ""}, {"a~w1->b": 3}, ["mine.tsv"]):
+        with pytest.raises(ValidationError, match="windowLosatFilenames"):
+            validate_session(_session_with_plan_edge({"windowLosatFilenames": bad}))

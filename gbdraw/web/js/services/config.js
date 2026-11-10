@@ -938,7 +938,10 @@ const serializeLinearComparisonPlan = (plan) => {
       fileActive: edge.fileActive,
       losatFilenameActive: edge.losatFilenameActive,
       source: edge.source,
-      losatFilename: edge.losatFilename
+      losatFilename: edge.losatFilename,
+      // Written only when a window pair has a typed name, so a plan without one saves as before (OV-2742).
+      ...(Object.keys(edge.windowLosatFilenames).length > 0
+        ? { windowLosatFilenames: { ...edge.windowLosatFilenames } } : {})
     }))
   };
 };

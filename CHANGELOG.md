@@ -483,7 +483,10 @@ write-up of a release.
   file name of its own, the pair's name with the window numbers before
   `.tsv` (for example `A.B.losatn.w2.tsv`); before, every window pair got the
   same name, or the name typed on the pair of records. A pair of records drawn
-  whole keeps its name (OV-2742).
+  whole keeps its name. A name typed on one window pair is now kept through
+  Generate, Save Session and Load, and Undo reverts it in one step. The
+  command line's `--losat_output_dir` writes the same names (it wrote
+  `A.B.losatn.2.tsv` for the second window pair) (OV-2742).
 - Fixed: a Linear record card's window numbers and the bp it reports between
   windows now come from the planner that draws the figure, so they match it
   (the card counted bp between two windows that a third window covers). An

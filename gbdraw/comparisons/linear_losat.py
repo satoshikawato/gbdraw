@@ -110,12 +110,23 @@ def _filename_label(text: str) -> str:
     return re.sub(r"[^\w.-]+", "_", dotted).strip("_")
 
 
-def losat_edge_filename(query_label: str, subject_label: str, program: str) -> str:
-    """Raw TSV name of one edge, as the Web names it (``*.losatn.tsv``)."""
+def losat_edge_filename(
+    query_label: str,
+    subject_label: str,
+    program: str,
+    query_window: int | None = None,
+    subject_window: int | None = None,
+) -> str:
+    """Raw TSV name of one edge, as the Web names it (``*.losatn.tsv``).
+
+    A side drawn in several windows adds its window's number (``w<n>``, joined by ``-``) before ``.tsv``, so the
+    window pairs of one record pair get names of their own (OV-2742).
+    """
 
     left = _filename_label(query_label) or "seq_1"
     right = _filename_label(subject_label) or "seq_2"
-    return f"{left}.{right}.{program}.tsv"
+    windows = "-".join(f"w{window}" for window in (query_window, subject_window) if window is not None)
+    return f"{left}.{right}.{program}{'.' + windows if windows else ''}.tsv"
 
 
 def resolve_linear_nucleotide_losat(
@@ -126,12 +137,14 @@ def resolve_linear_nucleotide_losat(
     source_ids: Sequence[object],
     record_keys: Sequence[str],
     record_labels: Sequence[str],
+    record_windows: Sequence[int | None],
     input_indexes: Sequence[int],
 ) -> tuple[LinearDiagramOptions, tuple[Mapping[str, Any], ...]]:
     """Run the requested nucleotide searches and return resolved options.
 
     ``source_ids`` identify each record's source file (one genome), and
     ``record_keys`` are the record keys the Web uses as sequence UIDs.
+    ``record_windows`` is each record's window number when it is one of several windows of a record, else ``None``.
     """
 
     search = options.losat_search
@@ -249,7 +262,8 @@ def resolve_linear_nucleotide_losat(
             entry,
             runtime=runtime_record,
             filename=losat_edge_filename(
-                record_labels[query], record_labels[subject], search.program
+                record_labels[query], record_labels[subject], search.program,
+                record_windows[query], record_windows[subject],
             ),
         )
 

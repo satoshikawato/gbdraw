@@ -1014,9 +1014,10 @@ const buildLosatFilename = (drawing, leftLabel, rightLabel) => (
 );
 
 /**
- * The raw LOSAT TSV name of a pair of drawn units, the one owner of that name for Generate's cache-info row and the
- * File name field: its card pair's name (the name typed on the card pair, else `cardPairDefault`), with a window
- * pair's window numbers (`windowPairLosatFilename`, OV-2742). A pair of cards drawn whole keeps the card pair's name.
+ * The default raw LOSAT TSV name of a pair of drawn units, the one owner of that name for Generate's cache-info row
+ * and the File name field: its card pair's name (the name typed on the card pair, else `cardPairDefault`), with a
+ * window pair's window numbers (`windowPairLosatFilename`, OV-2742). A pair of cards drawn whole keeps the card pair's
+ * name. A name typed on the window pair itself (`windowLosatFilenames`) replaces it where the pair is named.
  * @param {Pick<LinearComparisonResolvedEdge, 'losatFilename' | 'losatFilenameActive'> | null} cardPair The card
  *   pair's edge, null when the plan has none.
  * @param {string} cardPairDefault
@@ -2430,32 +2431,6 @@ export const createRunAnalysis = ({
       hydrated.text,
       'text/tab-separated-values'
     );
-  };
-
-  /**
-   * The raw TSV file name of a pair's cache-info row (a window pair's own name, OV-2742); an empty name returns to
-   * the default name.
-   * @param {DrawingState} drawing
-   * @param {string} edgeKey
-   * @param {unknown} customName
-   */
-  const setLosatPairFilename = (drawing, edgeKey, customName) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (drawing.mode !== 'linear') return;
-    const entry = getLosatCacheInfoEntry(edgeKey);
-    if (!entry) return;
-    const defaultName = losatPairDefaultName(drawing, entry.edgeKey || edgeKey);
-    const fallbackOrdinal = Number.isInteger(Number(entry.ordinal))
-      ? Number(entry.ordinal)
-      : 0;
-    const filename = normalizeLosatFilename(
-      customName,
-      defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
-    );
-    losatCacheInfo.value = losatCacheInfo.value.map((/** @type {LosatCacheInfoEntry} */ candidate) => (
-      candidate === entry ? { ...candidate, filename } : candidate
-    ));
   };
 
   /** @param {DrawingState} drawing */
@@ -4249,10 +4224,13 @@ export const createRunAnalysis = ({
             (/** @type {LinearComparisonResolvedEdge} */ candidate) => candidate.edgeKey === spec.edgeKey
           );
           // Named by its edge's units' cards: a window pair by the cards whose windows it compares, with its windows'
-          // numbers (OV-2742). A unit edge carries its card pair's typed name.
+          // numbers, unless a name was typed on it (OV-2742). A unit edge carries its card pair's typed names.
           const fallback = losatCardPairName(searchDrawing, losatCards, Number(edge?.queryIndex), Number(edge?.subjectIndex),
             queryEntry.recordId, subjectEntry.recordId);
-          return losatUnitPairFilename(edge ?? null, fallback, unitPlaces.get(spec.queryUid), unitPlaces.get(spec.subjectUid));
+          return normalizeLosatFilename(
+            edge?.windowLosatFilenames[spec.edgeKey] ?? '',
+            losatUnitPairFilename(edge ?? null, fallback, unitPlaces.get(spec.queryUid), unitPlaces.get(spec.subjectUid))
+          );
         };
 
         /**
@@ -6595,7 +6573,6 @@ export const createRunAnalysis = ({
     downloadCliHelperFiles,
     downloadLosatCache,
     downloadLosatPair,
-    setLosatPairFilename,
     clearLosatCache,
     getLosatPairDefaultName
   };

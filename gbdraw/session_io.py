@@ -1517,6 +1517,8 @@ def _validate_current_comparison_authority(
         "losatFilenameActive",
         "source",
         "losatFilename",
+        # Session 51: the names typed on the window pairs of a record pair, by unit edge key.
+        *(("windowLosatFilenames",) if version >= DRAWINGS_SESSION_MIN_VERSION else ()),
     }
     edge_ids: set[str] = set()
     for edge in edges:
@@ -1551,6 +1553,15 @@ def _validate_current_comparison_authority(
         ):
             raise ValidationError(
                 "Current comparison-plan edge metadata is invalid."
+            )
+        window_names = edge.get("windowLosatFilenames", {})
+        if not isinstance(window_names, Mapping) or not all(
+            isinstance(key, str) and key.strip() and isinstance(name, str) and name.strip()
+            for key, name in window_names.items()
+        ):
+            raise ValidationError(
+                "config.linearComparisonPlan edge windowLosatFilenames must map "
+                "unit edge keys to file names."
             )
 
     bound_ids: set[str] = set()

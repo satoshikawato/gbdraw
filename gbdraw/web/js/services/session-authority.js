@@ -694,7 +694,9 @@ const LINEAR_COMPARISON_EDGE_FIELDS = new Set([
   'fileActive',
   'losatFilenameActive',
   'source',
-  'losatFilename'
+  'losatFilename',
+  // Session 51: the names typed on the window pairs of a record pair, by unit edge key (OV-2742).
+  'windowLosatFilenames'
 ]);
 
 /**
@@ -756,6 +758,13 @@ const validateLinearComparisonPlan = (plan) => {
       || typeof edge.losatFilename !== 'string'
     ) {
       throw new Error('Current comparison-plan edge metadata is invalid.');
+    }
+    const windowNames = edge.windowLosatFilenames ?? {};
+    if (!isPlainObject(windowNames)
+      || !Object.entries(windowNames).every(([key, name]) => key.trim() && typeof name === 'string' && name.trim())) {
+      throw new Error(
+        'config.linearComparisonPlan edge windowLosatFilenames must map unit edge keys to file names.'
+      );
     }
   });
   return ids;

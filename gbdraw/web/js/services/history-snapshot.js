@@ -382,6 +382,7 @@ const cloneLinearComparisonPlanMetadata = (plan = {}) => ({
   mode: String(plan?.mode || 'none'),
   defaultSource: String(plan?.defaultSource || 'losat'),
   edges: (Array.isArray(plan?.edges) ? plan.edges : []).map((edge) => ({
+    windowLosatFilenames: { ...edge?.windowLosatFilenames },
     id: String(edge?.id || ''),
     queryUid: String(edge?.queryUid || ''),
     subjectUid: String(edge?.subjectUid || ''),

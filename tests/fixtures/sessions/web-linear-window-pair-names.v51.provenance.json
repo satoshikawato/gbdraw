@@ -1,0 +1,11 @@
+{
+  "purpose": "Positive fixture of Session 51's windowLosatFilenames on a Linear comparison-plan edge (OV-2742): a Web Save Session of R2c drawn in two windows against R3c, with the name 'card-pair' typed on the pair of records and 'second-window' typed on its second window pair. Load reads both names back into the plan, and Generate names the raw TSVs card-pair.w1.tsv and second-window.tsv.",
+  "sourceCommit": "cf7a735472bb0514a9456a92bea4ace0f3d40ae8 with the working-tree change that adds this file",
+  "history": "branch fix/window-pair-names; Session 51 is not on main yet (docs/internal/SESSION_FORMAT_HISTORY.md)",
+  "route": "tests/web/gui-audit-20260930-comparisons.playwright.spec.js, test 'a record drawn in two windows searches each window against the other record': its Save Session download (window-pairs.gbdraw-session.json.gz), decompressed and written again with Python gzip, level 9, mtime 0, no file name",
+  "values": "drawings[0].config.linearComparisonPlan.edges[0]: losatFilename 'card-pair', windowLosatFilenames {'<R2c uid>~w2-><R3c uid>': 'second-window'}; losatCache entries' filename ['card-pair.w1.tsv', 'second-window.tsv']",
+  "decompressedSha256": "48be6c3c24cf2e8579a6fc7ab95f6e78851098b545d948a9aff7f4d41d40d5c3",
+  "compression": "gzip -n -9 (Python gzip, mtime 0, no file name)",
+  "sessionVersion": 51,
+  "requestSchema": 10
+}

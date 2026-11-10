@@ -1740,7 +1740,6 @@ export const createAppSetup = () => {
     downloadCliHelperFiles,
     downloadLosatCache,
     downloadLosatPair: downloadLosatPairOfDrawing,
-    setLosatPairFilename: setLosatPairFilenameOfDrawing,
     clearLosatCache,
     getLosatPairDefaultName: losatPairDefaultNameOfDrawing,
     captureGeneratedArtifactRuntimeState,
@@ -1846,8 +1845,6 @@ export const createAppSetup = () => {
   };
   /** @param {string} edgeKey @param {unknown} customName */
   const downloadLosatPair = (edgeKey, customName) => downloadLosatPairOfDrawing(state.activeDrawing(), edgeKey, customName);
-  /** @param {string} edgeKey @param {unknown} customName */
-  const setLosatPairFilename = (edgeKey, customName) => setLosatPairFilenameOfDrawing(state.activeDrawing(), edgeKey, customName);
   /** @param {string} edgeKey */
   const getLosatPairDefaultName = (edgeKey) => losatPairDefaultNameOfDrawing(state.activeDrawing(), edgeKey);
   // R1 (c), PD-OI-102: a History step, a checkpoint (Reset Settings, a rule
@@ -2798,11 +2795,12 @@ export const createAppSetup = () => {
   const {
     setLinearComparisonLosatFilename, reuseLinearComparisonLosatFilename, deactivateLinearComparisonLosatFilename,
     setResolvedLinearComparisonLosatFilename, reuseResolvedLinearComparisonLosatFilename,
-    deactivateResolvedLinearComparisonLosatFilename, addLinearComparisonBatch, setLinearComparisonGapAction,
-    setLinearComparisonCardFile
+    deactivateResolvedLinearComparisonLosatFilename, setWindowPairLosatFilename, addLinearComparisonBatch,
+    setLinearComparisonGapAction, setLinearComparisonCardFile
   } = createLinearComparisonGapEdits({
     sessionOperationAvailability, shownAction, replaceLinearComparisonPlan, syncLinearRecordLayout,
-    linearComparisonPairForEdgeKey, omitLinearComparisonPairs, setLinearComparisonFile
+    linearComparisonPairForEdgeKey, omitLinearComparisonPairs, setLinearComparisonFile,
+    windowPairEdgeKeysOf: (cardEdgeKey) => (linearLosatWindowPairs.value[cardEdgeKey] ?? []).map(({ edgeKey }) => edgeKey)
   });
   // The saved comparison's choice replaces a plan, which clears the alignment candidate: created once that owner exists.
   const {
@@ -3627,6 +3625,7 @@ export const createAppSetup = () => {
     setResolvedLinearComparisonLosatFilename,
     reuseResolvedLinearComparisonLosatFilename,
     deactivateResolvedLinearComparisonLosatFilename,
+    setWindowPairLosatFilename,
     addLinearComparisonBatch,
     linearRecordRowFor: shownLinearRecordRowFor,
     linearReorderNotice,
@@ -3962,7 +3961,6 @@ export const createAppSetup = () => {
     requestResetColors,
     downloadLosatCache,
     downloadLosatPair,
-    setLosatPairFilename,
     clearLosatCache,
     getLosatPairDefaultName,
     getCircularRecordOrderLabel,

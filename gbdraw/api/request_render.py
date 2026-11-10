@@ -2330,6 +2330,10 @@ def _resolve_nucleotide_losat(
             item.presentation.label or str(record.id)
             for item, record in zip(provenance, collection.records, strict=True)
         ],
+        record_windows=[
+            item.window.index + 1 if item.window is not None and item.window.is_one_of_several else None
+            for item in provenance
+        ],
         input_indexes=[item.input_index for item in provenance],
     )
 

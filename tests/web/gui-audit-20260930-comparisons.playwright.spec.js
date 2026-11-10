@@ -4,6 +4,7 @@
 const { test, expect } = require('@playwright/test');
 const { execFile } = require('node:child_process');
 const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
+const { gunzipSync } = require('node:zlib');
 const path = require('node:path');
 const { promisify } = require('node:util');
 const { CURRENT_SESSION_VERSION, answerSessionTitle, evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
@@ -219,6 +220,16 @@ test('a record drawn in two windows searches each window against the other recor
   const name = windowPairs.nth(1).getByRole('textbox', { name: 'Raw LOSAT filename for #1 window 2 to #2', exact: true });
   await name.fill('second-window');
   await name.press('Enter');
+  // The typed name is one History step; Undo clears it and Redo brings it back.
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(name).toHaveValue('');
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect(name).toHaveValue('second-window');
+  // Generate names the window pair's raw TSV by the typed name and leaves the other window pair's name alone.
+  await generateAndWaitForResult(page);
+  expect(await rowNames()).toEqual(['card-pair.w1.tsv', 'second-window.tsv']);
+  await openFileName(1);
+  await expect(name).toHaveValue('second-window');
   const pending = page.waitForEvent('download', { timeout: 60_000 });
   await windowPairs.nth(1).getByRole('button', { name: 'Save Raw LOSAT TSV for #1 window 2 to #2', exact: true }).click();
   const download = await pending;
@@ -233,6 +244,11 @@ test('a record drawn in two windows searches each window against the other recor
   const saved = page.waitForEvent('download', { timeout: 180_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
   await (await saved).saveAs(file);
+  const savedPlan = JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'))
+    .drawings.find(({ mode }) => mode === 'linear').config.linearComparisonPlan;
+  // The record pair's plan edge keeps the typed name under the second window pair's unit edge key.
+  expect(savedPlan.edges.flatMap(({ windowLosatFilenames = {} }) => Object.entries(windowLosatFilenames)))
+    .toEqual([[expect.stringMatching(/~w2->/), 'second-window']]);
   await openFresh(page);
   await loadSessionFile(page, file);
   await showDrawing(page, { kind: 'linear' });
@@ -245,6 +261,8 @@ test('a record drawn in two windows searches each window against the other recor
   await windowPairs.nth(1).getByRole('button', { name: 'Save Raw LOSAT TSV for #1 window 2 to #2', exact: true }).click();
   const loadedDownload = await reloaded;
   expect(loadedDownload.suggestedFilename()).toBe('second-window.tsv');
+  await openFileName(1);
+  await expect(name).toHaveValue('second-window');
   expect(readFileSync(await loadedDownload.path(), 'utf8').trim()).not.toBe('');
   expect(await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value)).toBe(generations);
 });
