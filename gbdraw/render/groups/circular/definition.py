@@ -20,7 +20,6 @@ from ....core.text import (
     text_runs_ink_offsets,
 )
 from ....layout.spatial import Aabb, union_aabbs
-from ....render_stages import render_stage
 from ....svg.ids import definition_group_svg_id
 from ...drawers.circular.definition import DefinitionDrawer
 
@@ -141,22 +140,19 @@ class DefinitionRecordFacts(NamedTuple):
     summary_only: bool = False
 
 
-def _record_gc_percent(record: SeqRecord) -> float:
-    return calculate_gc_percent(record.seq)
-
-
 def definition_record_facts(record: SeqRecord, *, gc_percent: bool = True) -> DefinitionRecordFacts:
     """The facts a circular definition reads of ``record`` (the GC only when asked).
 
-    The GC percent reads only the record, so it is a render stage keyed by the
-    record's identity: a warm Generate does not count the bases again.
+    A render builds them once per drawn record and hands them to every reader
+    (OV-3043). The GC percent sums the counts the parse pass made
+    (:func:`gbdraw.analysis.gc.calculate_gc_percent`), so it reads no base again.
     """
 
     return DefinitionRecordFacts(
         record_id=str(record.id),
         metadata=infer_record_source_metadata(record),
         length=len(record.seq),
-        gc_percent=render_stage("record_gc_percent", _record_gc_percent, record) if gc_percent else None,
+        gc_percent=calculate_gc_percent(record.seq) if gc_percent else None,
     )
 
 
@@ -215,7 +211,7 @@ class DefinitionGroup:
 
     def __init__(
         self,
-        gb_record: SeqRecord | DefinitionRecordFacts,
+        record_facts: DefinitionRecordFacts,
         geometry: CircularCanvasGeometry,
         *,
         style: CircularDefinitionStyle,
@@ -224,11 +220,7 @@ class DefinitionGroup:
         record_index: int = 0,
         record_count: int = 1,
     ) -> None:
-        self.record_facts: DefinitionRecordFacts = (
-            gb_record
-            if isinstance(gb_record, DefinitionRecordFacts)
-            else definition_record_facts(gb_record)
-        )
+        self.record_facts = record_facts
         self.geometry = geometry
         self.names = DefinitionNameLines("", "", "", "", None) if self.record_facts.summary_only else names
         self.definition_profile: CircularDefinitionProfile = style.profile
