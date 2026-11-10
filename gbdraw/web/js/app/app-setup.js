@@ -4186,12 +4186,10 @@ export const createAppSetup = () => {
     updateLegendEntryColorInPopup,
     defaultColorScopeLine,
     renameLegendEntry,
+    ...legendActions.legendListView,
     // A Legend row delete is one History step of the intent, which Undo and
     // Redo show through the port and lay out as Python does, canvas included
     // (OV-125). The deleted row's stroke leaves its features (OV-293).
-    shownLegendName: legendActions.shownLegendName,
-    shownLegendEntryName: legendActions.shownLegendEntryName,
-    legendEntryMerged: legendActions.legendEntryMerged,
     deleteLegendEntry: editEditorIntent(msg('Delete legend item'), deleteLegendEntry, { domains: [...LEGEND_STRUCTURE_DOMAINS, ...STROKE_DOMAINS] }),
     // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
     // removes them; the palette then reaches the returned rows.

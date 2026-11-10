@@ -49,6 +49,7 @@ import {
 } from '../../services/drawing/paint.js';
 /** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
 import { diffLegendIntents, legendColorCopies, legendRowRules } from '../../services/specific-color-rules.js';
+import { rekeyLegendRowIds } from '../../services/legend-draft-rows.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
 
 /** @param {unknown} value */
@@ -549,14 +550,12 @@ export const createLegendEntryActions = ({
     };
   };
 
-  // Moves the drawing's Legend records, the generated inventory and colors,
-  // and the open Stroke options of each re-keyed row to its new key
-  // (`rekeyLegendRecords`, OV-660); returns `entries`, the list being
-  // written, moved. With `takenBack` (Delete settings takes back the rule
-  // rows that name a feature instance of a turned-off record, which no Result
-  // draws), the records of the `removed` rows go too, with the Legend colors
-  // that copy them (`legendColorCopies`), the moved list is written here, and
-  // the inventory, colors, and Stroke options, which are the Result's, stay.
+  // Moves the drawing's Legend records, the generated inventory and colors, the open Stroke options, and the list
+  // identity (`rekeyLegendRowIds`) of each re-keyed row to its new key (`rekeyLegendRecords`, OV-660); returns
+  // `entries`, the list being written, moved. With `takenBack` (Delete settings takes back the rule rows that name a
+  // feature instance of a turned-off record, which no Result draws), the records of the `removed` rows go too, with
+  // the Legend colors that copy them (`legendColorCopies`), the moved list is written here, and the inventory, colors,
+  // and Stroke options, which are the Result's, stay.
   /**
    * @param {DrawingState} drawing
    * @param {readonly EntryRecord[]} entries
@@ -572,6 +571,7 @@ export const createLegendEntryActions = ({
     const colorOverrides = { ...drawing.legendColorOverrides };
     if (takenBack) legendColorCopies(colorOverrides, takenBack.removed).forEach((key) => { delete colorOverrides[key]; });
     const strokeOptionsOpen = state.legendStrokeOptionsOpen || new Set();
+    rekeyLegendRowIds(moves);
     const moved = rekeyLegendRecords({
       entries: kept(entries),
       deletedEntries: kept(drawing.deletedLegendEntries.value || []),
