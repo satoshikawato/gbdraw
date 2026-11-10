@@ -1151,6 +1151,20 @@ def _free_intervals(
     return intervals
 
 
+def _band_may_fit_interval(intent: _RadialSlotIntent, width_px: float, lower: float, upper: float) -> bool:
+    """Whether some anchor may hold the slot's packing band within ``lower``..``upper`` (OV-2981).
+
+    Every row but feature lanes and ticks packs a band of its width centred on its anchor (``_measure_radial_slot``;
+    feature and tick layouts measure their own bands). The band is cut at the centre only, so an interval that starts
+    off the centre holds it only when it is at least that wide, with the layout's slack at each end. A narrower one
+    is not tried: every place in it would be measured, labels' rooms and all, and left (``None``).
+    """
+
+    if intent.renderer in {"features", "ticks"} or lower <= LAYOUT_EPSILON:
+        return True
+    return max(0.0, float(width_px)) <= upper - lower + 3.0 * LAYOUT_EPSILON
+
+
 def _try_measure_inside_interval(
     intent: _RadialSlotIntent,
     *,
@@ -1167,6 +1181,8 @@ def _try_measure_inside_interval(
     packing_inner_px: float = 0.0,
 ) -> CircularResolvedSlot | None:
     lower, upper = float(interval[0]), float(interval[1])
+    if not _band_may_fit_interval(intent, width_px, lower, upper):
+        return None
     if intent.renderer == "features":
         seeds = [
             upper,

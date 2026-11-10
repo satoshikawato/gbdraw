@@ -372,6 +372,30 @@ def test_the_definition_scan_measures_each_label_room_once(monkeypatch: pytest.M
     assert distinct and len(measured) == len(distinct)
 
 
+def test_an_inside_slot_measures_no_room_between_rings_narrower_than_its_band(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Over the centre definition the gap between its reserve and the feature ring is narrower than the slot: no anchor
+    # holds the band there, so no room is measured there (OV-2981). Each packing of the slot has its room measured
+    # where it is drawn, the gap from the centre that holds it; dev measured 4 to 9 rooms in each narrower gap, one
+    # for each place its tries shifted the slot to.
+    import gbdraw.diagrams.circular.assemble as assemble_module
+
+    record, options = _inside_slot_over_the_definition()
+    bands: dict[int, set[object]] = {}
+    tracks: list[object] = []  # Kept, so no other track takes a measured track's id while the drawing runs.
+    original = assemble_module.circular_annotation_label_room
+
+    def counting(track: object, **kwargs: object) -> object:
+        tracks.append(track)
+        bands.setdefault(id(track), set()).add(kwargs["band"])
+        return original(track, **kwargs)
+
+    monkeypatch.setattr(assemble_module, "circular_annotation_label_room", counting)
+    with pytest.warns(UserWarning, match="definition lines"):
+        gbdraw.draw_circular(record, options=options)
+
+    assert bands and all(len(measured) == 1 for measured in bands.values()), sorted(map(len, bands.values()))
+
+
 def test_the_definition_scan_packs_and_places_each_slot_once_for_the_same_inputs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
