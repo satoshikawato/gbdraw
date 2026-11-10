@@ -787,6 +787,14 @@ class ModeSliceNormalizeRule(TypedDict):
     reason: str
 
 
+class EarlierPaletteRows(TypedDict):
+    """The rows a released palette held that the palette has changed since (OV-3259): Web Load reads them."""
+
+    release: str
+    reason: str
+    palettes: dict[str, dict[str, str]]
+
+
 class ModeSliceDefaults(TypedDict):
     """``gbdraw/data/mode-slice-defaults.json``: each mode's default settings for rule d of the move to drawings.
 
@@ -800,6 +808,7 @@ class ModeSliceDefaults(TypedDict):
     registryRevision: int
     normalize: list[ModeSliceNormalizeRule]
     earlierDefaults: list[ModeSliceDefault]
+    earlierPaletteRows: EarlierPaletteRows
     defaults: dict[DrawingMode, list[ModeSliceDefault]]
 
 

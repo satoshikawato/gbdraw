@@ -8,6 +8,7 @@ const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { deleteLegendRow, generate, history, open, renameRow } = require('./helpers/live-generate-parity-steps.cjs');
+const { load: loadSession, generate: generateLoaded } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -337,4 +338,28 @@ test('a palette row offers and keeps the color it shows after palette edits', as
     return String(getFeatureFillElements(document.querySelector('.origin-top svg'), svgId)[0]?.getAttribute('fill') || '').toLowerCase();
   }), 'a renamed CDS row keeps its features in the color it shows').toBe(nextCds);
   await expectLiveEqualsGenerate(page, { label: 'rename of a palette row after a palette switch' });
+});
+
+// OV-3259: a Session the 0.14.5 Web saved holds its palette's rows in its colors; the misc_feature and default rows
+// still hold the palette's 0.14.5 gray, and its committed request sets no Default colors row. Load reads them as the
+// palette's colors now, so the next Generate draws them as the command-line replay of that request does: no -d.
+test('a Session the 0.14.5 Web saved takes the palette\'s new misc_feature and default colors, and Generate writes no -d', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const page = await loadSession(browser, 'tests/fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw-session.json.gz');
+  try {
+    const rows = () => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const drawing = state.activeDrawing();
+      const pick = (colors) => ({ misc_feature: colors.misc_feature, default: colors.default });
+      return { draft: pick(drawing.currentColors.value), palette: pick(state.paletteDefinitions.value[drawing.selectedPalette.value]) };
+    });
+    const loaded = await rows();
+    expect(loaded.draft).toEqual(loaded.palette);
+    expect(loaded.draft).not.toEqual({ misc_feature: '#d3d3d3', default: '#d3d3d3' });
+    await generateLoaded(page);
+    const args = await page.evaluate(() => window.__GBDRAW_APP__.lastRunInfo.sourceRecipe.commandArgs);
+    expect(args).not.toContain('-d');
+  } finally {
+    await page.context().close();
+  }
 });

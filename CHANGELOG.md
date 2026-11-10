@@ -410,8 +410,12 @@ write-up of a release.
   `misc_feature` and `default` to `#d3d3d3` (`-d/--default_colors colors.tsv`,
   with the two rows `misc_feature<TAB>#d3d3d3` and `default<TAB>#d3d3d3`; in
   the Web, Default colors). A Session whose Default colors table sets those rows
-  keeps its colors. A test now requires the three to differ in every palette
-  (OV-3114).
+  keeps its colors. A Session the Web saved with gbdraw 0.14.5 or earlier, whose
+  table does not set them, follows the new colors at its next Generate, as its
+  command-line replay already does: the Web now reads its saved `misc_feature`
+  and `default` rows at the palette's 0.14.5 color as the palette's own, not as
+  colors the user changed (OV-3259). A test now requires the three to differ in
+  every palette (OV-3114).
 - Fixed: a Circular Legend on the left or right centred the feature rows and
   the whole block of similarity rings and gradient bars each on its own, with
   the ring names at that block's left edge, so the blocks sat apart. Every

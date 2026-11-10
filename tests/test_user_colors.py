@@ -8,6 +8,7 @@ elements need no svgwrite validation.
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 import tempfile
@@ -377,6 +378,31 @@ def test_every_built_in_palette_tells_repeats_misc_features_and_other_types_apar
         and len({colors["repeat_region"].lower(), colors["misc_feature"].lower(), colors["default"].lower()}) < 3
     }
     assert same == {}
+
+
+def test_the_earlier_palette_rows_are_the_v0_14_5_rows_each_palette_has_changed_since() -> None:
+    # OV-3259: Web Load reads a saved row that still holds its palette's 0.14.5
+    # color as the palette's (gbdraw/web/js/utils/color-utils.js
+    # `savedColorsOverPalette`); tools/generate_mode_slice_defaults.mjs holds
+    # those rows. A shallow clone has no tag to compare with.
+    import subprocess
+
+    shown = subprocess.run(
+        ["git", "show", "v0.14.5:gbdraw/data/color_palettes.toml"],
+        cwd=REPO, capture_output=True, text=True, check=False,
+    )
+    if shown.returncode != 0:
+        pytest.skip("the v0.14.5 tag is not in this clone (a shallow CI checkout)")
+    released = color_io.tomllib.loads(shown.stdout)
+    current = color_io.tomllib.loads((REPO / "gbdraw" / "data" / "color_palettes.toml").read_text(encoding="utf-8"))
+    changed = {
+        palette: {key: color for key, color in colors.items() if key in current[palette] and current[palette][key].lower() != color.lower()}
+        for palette, colors in released.items()
+        if isinstance(colors, dict) and palette in current
+    }
+    packaged = json.loads((REPO / "gbdraw" / "data" / "mode-slice-defaults.json").read_text(encoding="utf-8"))
+    assert packaged["earlierPaletteRows"]["release"] == "0.14.5"
+    assert packaged["earlierPaletteRows"]["palettes"] == {palette: rows for palette, rows in changed.items() if rows}
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])

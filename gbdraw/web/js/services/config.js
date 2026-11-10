@@ -7,7 +7,10 @@ import { toRaw } from '../utils/vue-raw.js';
 import { isPlainObject, shapeViolations } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { createDrawingState, state, sessionOperationAvailability } from '../state.js';
-import { normalizeDefaultColor, normalizeOptionalHexColor, normalizePaletteColors, resolveColorToHex } from '../utils/color-utils.js';
+import {
+  normalizeDefaultColor, normalizeOptionalHexColor, normalizePaletteColors, resolveColorToHex, savedColorsOverPalette
+} from '../utils/color-utils.js';
+import { MODE_SLICE_DEFAULTS } from '../mode-slice-defaults.generated.js';
 import {
   captureRightDrawerState,
   resetRightDrawerState,
@@ -17,7 +20,7 @@ import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings }
 import { INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList, bindDrawingInputFileTree, bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList, setConservationBlastsSource } from './drawing/inputs.js';
 import { circularInputComplete, circularSourceInputs, inputSourceFiles } from './input-types.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
-import { FILE_IMPORT_CARDS, userTableRows } from './file-imports.js';
+import { FILE_IMPORT_CARDS, parseColorTable, userTableRows } from './file-imports.js';
 import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
 import { isNoStrokeColor, normalizeLegendColorOverrides, normalizeStrokeOverrideMap, normalizeStrokeWidth } from './style-overrides.js';
@@ -91,6 +94,7 @@ import {
   applyLiveSettingWrites,
   buildCanonicalRenderRequest,
   canonicalLinearRecordLayout,
+  decodeCanonicalResourceText,
   draftFieldsForConfigValues,
   featureEditsOverProjection,
   linearDefinitionVisibilityOf,
@@ -1523,9 +1527,10 @@ const unwrittenSliceFields = (sliceConfig, sliceVersion) => (isPlainObject(slice
 /**
  * @param {DrawingRequestProjection | null} projection Null: the drawing holds no request.
  * @param {Record<string, any> | null | undefined} sliceConfig
+ * @param {SavedPaletteState} [saved] What the drawing's file says of its palette's rows (`savedPaletteRows`).
  * @returns {Record<string, any>}
  */
-const overlayModeSliceConfig = (projection, sliceConfig) => {
+const overlayModeSliceConfig = (projection, sliceConfig, saved) => {
   /** @type {Record<string, any>} */
   const config = projection && isPlainObject(projection.config)
     ? /** @type {Record<string, any>} */ (withoutFieldsAt(cloneJsonData(projection.config), OTHER_MODE_OWN_FIELDS[projection.mode])) : {};
@@ -1542,7 +1547,40 @@ const overlayModeSliceConfig = (projection, sliceConfig) => {
   });
   if (Object.hasOwn(slice, 'colors')) delete config.colorsAreOverrides;
   if (isPlainObject(config.adv)) delete config.adv.losatProgram;
+  if (saved && isPlainObject(config.colors)) config.colors = savedPaletteRows(config.palette, config.colors, saved);
   return config;
+};
+
+/**
+ * What a stored drawing's file says of its palette's rows: its saved `ui`
+ * (the colors its Result shows), and its committed request with the
+ * resources that hold its Default colors table.
+ * @typedef {{ ui: unknown, request: unknown, resources: unknown }} SavedPaletteState
+ */
+/**
+ * A drawing's saved colors with the rows a released writer saved as its
+ * palette's read as the palette's colors now (OV-3259, `savedColorsOverPalette`).
+ * The committed Default colors table is read only when a row may be one.
+ * @param {unknown} configPalette The drawing's palette over its request's projection.
+ * @param {Readonly<Record<string, unknown>>} configColors Its colors there.
+ * @param {SavedPaletteState} saved
+ * @returns {Record<string, unknown>}
+ */
+const savedPaletteRows = (configPalette, configColors, { ui, request, resources }) => {
+  const savedUi = isPlainObject(ui) ? ui : {};
+  const palette = String(configPalette || 'default');
+  const colors = /** @type {UnvalidatedFields<'defaultColors' | 'defaultColorsFile'> | undefined} */ (
+    /** @type {UnvalidatedFields<'diagramOptions', UnvalidatedFields<'colors'>> | undefined} */ (request)?.diagramOptions?.colors);
+  const ref = /** @type {UnvalidatedFields<'resourceId'> | null | undefined} */ (colors?.defaultColorsFile || colors?.defaultColors);
+  return savedColorsOverPalette(configColors, {
+    palette,
+    paletteColors: paletteColorsFromDefinitions(palette),
+    earlier: MODE_SLICE_DEFAULTS.earlierPaletteRows.palettes,
+    committedColors: () => (ref?.resourceId && isPlainObject(resources)
+      ? parseColorTable(decodeCanonicalResourceText(resources, String(ref.resourceId)), { legacyRows: true }).colors : {}),
+    appliedPaletteName: savedUi.appliedPaletteName,
+    appliedPaletteColors: isPlainObject(savedUi.appliedPaletteColors) ? savedUi.appliedPaletteColors : null
+  });
 };
 
 /**
@@ -2670,7 +2708,9 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFa
     /** @type {UnvalidatedFields<'diagramOptions', UnvalidatedFields<'config' | 'configOverrides'>>} */ (request));
   return {
     files: projection.files, comparisonClassification, inputType,
-    restoredConfig: withSavedDefinitionAlignment(overlayModeSliceConfig({ mode, config: projection.config }, storedConfig)),
+    restoredConfig: withSavedDefinitionAlignment(overlayModeSliceConfig({ mode, config: projection.config }, storedConfig, {
+      ui: view.ui, request, resources: view.resources
+    })),
     requestOverrides: overrides.source === 'storedRequest' ? overrides : null,
     requestFeatureEdits: { semanticFeatureState: projection.semanticFeatureState },
     cliOptions: cliOptionsOf(view.cliOptions),
@@ -3018,7 +3058,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   // `readSessionDocument` read each slice's keys and kinds; the reader table reads its settings.
   recordSessionLifecycleEvent('current-draft-validation-start');
   let restoredConfig = canonicalProjection && !settingsOnly
-    ? overlayModeSliceConfig(canonicalProjection, runtimeStoredConfig)
+    ? overlayModeSliceConfig(canonicalProjection, runtimeStoredConfig, { ui: data.ui, request: storedRequest, resources: data.resources })
     : null;
   if (restoredConfig) {
     // As for Sessions 40-44: the stored draft owns the active controls and the

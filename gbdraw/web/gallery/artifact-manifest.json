@@ -72,11 +72,11 @@
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
       "bytes": 277042,
-      "sha256": "288a83f45ecf78163a28963f6fbfd8f87e0b222d8dba581037e0ec316d2ebba5"
+      "sha256": "a5ceef0e915ddae227322d94d032920bce721c39ca3f0212ac8940328ff45f88"
     },
     "gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": {
       "bytes": 261643,
-      "sha256": "9dadef7c6234c1d78b5f8896c0e70e0c934339476b03fef345f578fadf9c1719"
+      "sha256": "85b3dcbd4e83f55d947a87de01b90f2c99994d337e87e5bdd17d175b85a50f07"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
       "bytes": 11841808,
@@ -100,7 +100,7 @@
     },
     "gallery/sessions/lambda_basic_linear.gbdraw-session.json": {
       "bytes": 852409,
-      "sha256": "5379d08df3db08492411b7a71c9c2a25b601eac9aa864a935219a8ae8c740d5a"
+      "sha256": "f384174dcc3af693d4fe7fb085e73d6d61a6d417eb3763df2afa68ac601328f9"
     },
     "gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz": {
       "bytes": 6665668,
