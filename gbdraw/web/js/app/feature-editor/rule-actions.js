@@ -2,7 +2,7 @@
 /** @import { DrawingState } from '../../state.js' */
 /** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
-/** @import { RuleRowColor, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
+/** @import { RuleLegendIntent, RuleRowColor, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { AskChoice, ShowNotice } from '../app-messages.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { msg, t } from '../../utils/i18n.js';
@@ -49,7 +49,7 @@ import {
 } from '../../services/drawing/paint.js';
 /** @import { PatternDraft } from './pattern-drafts.js' */
 /** @import { SpecificRulePreset } from '../../state.js' */
-/** @import { ColorFeature } from './color-actions.js' */
+/** @import { ColorFeature, LegendPlacement } from './color-actions.js' */
 
 // R13: `projectPaletteAndRules` is the composition root's projection of the
 // palette and the specific-color rules (R3); this owner calls it after a rule
@@ -73,16 +73,6 @@ import {
  * The root's way to bring a setting of the settings pane into view and focus
  * it: the pattern field a failed rule write offers for editing.
  * @typedef {(setting: HTMLElement) => unknown} RevealSetting
- */
-
-/**
- * A Legend row a rule commit draws, named by its name and color (the commit
- * allocates its key), and where it goes: with `replaces`, in the place of the
- * row of key `at`, which it replaces with every record stored under that key
- * (a whole row renamed, OV-158); else right after the row of key `at` (a row
- * split off by Keep both, D-29). Without one, a row goes where Python's
- * answer puts it (`legendRowsInOrder`), else where the commit adds it.
- * @typedef {{ name: string, color: string, at: PythonLegendKey, replaces?: boolean }} LegendPlacement
  */
 
 /**
@@ -406,7 +396,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    * `drawing` is the drawing of the action (default: the shown mode's at the
    * call); `isCurrent` is read from the write's turn on. `joinsOpenStep`: the
    * write is part of its caller's open History step and keeps that step's name.
-   * @typedef {{ drawing?: DrawingState, isCurrent?: () => boolean, afterCommit?: (intents: Record<string, any>[]) => void, previousLegendIntents?: Record<string, any>[], legendPlacement?: LegendPlacement | null, joinsOpenStep?: boolean }} CommitSpecificRulesOptions
+   * @typedef {{ drawing?: DrawingState, isCurrent?: () => boolean, afterCommit?: (intents: RuleLegendIntent[]) => void, previousLegendIntents?: Record<string, any>[], legendPlacement?: LegendPlacement | null, joinsOpenStep?: boolean }} CommitSpecificRulesOptions
    */
   /**
    * The write port of the rule table (R13): other owners pass how the next

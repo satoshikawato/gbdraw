@@ -148,9 +148,10 @@ export const createFeatureEditor = ({
   const editorPorts = /** @type {FeatureEditorPorts} */ ({});
   const ruleActions = createFeatureRuleActions({
     state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
-    ports: editorPorts, editDefaultColors, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice,
-    revealSetting
+    ports: editorPorts, editDefaultColors, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice, revealSetting
   });
+  const { commitSpecificRules, countFeaturesMatchingRule, findExistingColorForCaption, findFeaturesWithSameDisplayedLabel, findFeaturesWithSameIndividualLabel, findFeaturesWithSameLegendItem,
+    findMatchingRegexRule, getDisplayedFeatureLabel, effectiveLegendCaptions, getIndividualFeatureLabel, getFeatureQualifier, getLegendRowRules, groupColorRules, reviseColorRules, runWithRuleMatches } = ruleActions;
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
@@ -168,9 +169,9 @@ export const createFeatureEditor = ({
     closeElementSettings
   });
   const colorActions = createFeatureColorActions({
-    state,
-    showEditorIntent,
-    ruleActions,
+    state, showEditorIntent,
+    commitSpecificRules, countFeaturesMatchingRule, findExistingColorForCaption, findFeaturesWithSameDisplayedLabel, findFeaturesWithSameIndividualLabel, findFeaturesWithSameLegendItem,
+    findMatchingRegexRule, getDisplayedFeatureLabel, effectiveLegendCaptions, getIndividualFeatureLabel, getFeatureQualifier, getLegendRowRules, groupColorRules, reviseColorRules, runWithRuleMatches,
     getFeatureElements: featureSvgActions.getFeatureElements,
     getFeatureFillElements: featureSvgActions.getFeatureFillElements,
     closeAfterDialogChoice,
@@ -252,8 +253,7 @@ export const createFeatureEditor = ({
     removeFeature: ruleActions.removeFeature,
     getFeatureShape: ruleActions.getFeatureShape,
     setFeatureShape: ruleActions.setFeatureShape,
-    addSpecificRule: ruleActions.addSpecificRule,
-    commitSpecificRules: ruleActions.commitSpecificRules,
+    addSpecificRule: ruleActions.addSpecificRule, commitSpecificRules,
     ruleWritePending: ruleActions.ruleWritePending,
     importSpecificRules: ruleActions.importSpecificRules,
     removeImportedSpecificRules: ruleActions.removeImportedSpecificRules,
@@ -314,7 +314,7 @@ export const createFeatureEditor = ({
     openPreviewItemPopup: featureSvgActions.openPreviewItemPopup,
     // The legend-entry popup's feature count: the features a Legend row colors.
     /** @param {string} caption */
-    countLegendCaptionFeatures: (caption) => ruleActions.findFeaturesWithSameLegendItem({ svg_id: null }, caption).length,
+    countLegendCaptionFeatures: (caption) => findFeaturesWithSameLegendItem({ svg_id: null }, caption).length,
     previewAlignmentCandidate: featureSvgActions.previewAlignmentCandidate,
     clearAlignmentCandidatePreview: featureSvgActions.clearAlignmentCandidatePreview,
     showAlignmentOverlay: featureSvgActions.showAlignmentOverlay,

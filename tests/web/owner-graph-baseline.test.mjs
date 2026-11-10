@@ -28,12 +28,10 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|featureRecordRotation<-featureRecordRotationAction': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|legendLayout<-previewRuntime': 1,
-  'owner-graph.injection-edge.v1|app/feature-editor.js|colorActions<-ruleActions': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|labelActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|ruleActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|visibilityActions<-rulePreparation': 1,
   // owner-graph.whole-object-port.v1
-  'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|ruleActions': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/label-actions.js|createFeatureLabelActions|rulePreparation': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/rule-actions.js|createFeatureRuleActions|rulePreparation': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/visibility-actions.js|createFeatureVisibilityActions|rulePreparation': 1,

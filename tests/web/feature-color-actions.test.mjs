@@ -167,57 +167,55 @@ const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLege
   }),
   nextTick: async () => {},
   showEditorIntent: (options) => { shownIntents.push(options); },
-  ruleActions: {
-    runWithRuleMatches: (rules, commit) => {
-      preparedRuleSets.push(rules.map((rule) => `${rule.feat}|${rule.qual}|${rule.val}`));
-      return runWithRuleMatchesForActions(rules, commit);
-    },
-    commitSpecificRules: async (build, _label, {afterCommit = () => {}, previousLegendIntents = []} = {}) => {
-      const rules = await build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
-      if (!rules) return false;
-      committedLegendIntents.push(previousLegendIntents);
-      const preparation = createRulePreparation({state:withDrawings({extractedFeatures,biologicalFeatures,manualSpecificRules}),evaluate:evaluatePythonRules});
-      const candidate = await preparation.prepareCandidate(rules);
-      if (!candidate) return false;
-      const drawn = new Set(extractedFeatures.value.map(feature => firstMatchingRule(feature, candidate.rules)));
-      const { intents } = buildLegendIntents(candidate.rules, [], rule => drawn.has(rule));
-      manualSpecificRules.splice(0,manualSpecificRules.length,...candidate.rules);
-      legendEntries.value = intents.map(entry=>({...entry}));
-      for (const feature of extractedFeatures.value) {
-        const rule=firstMatchingRule(feature,manualSpecificRules);
-        if(rule) featureColorOverrides[featureOverrideKey(feature)]={color:rule.color,caption:rule.cap};
-        else delete featureColorOverrides[featureOverrideKey(feature)];
-      }
-      afterCommit(intents);
-      // As `commitOnce`: the fills show after `afterCommit`, at the end of the step.
-      for (const feature of extractedFeatures.value) {
-        const rule=firstMatchingRule(feature,manualSpecificRules);
-        if(rule) applyRulePreviewFill(feature.svg_id, rule.color);
-      }
-      applySpecificRulesCount++;
-      return true;
-    },
-    countFeaturesMatchingRule: () => 0,
-    findExistingColorForCaption: () => null,
-    findFeaturesWithSameDisplayedLabel: (currentFeature, label) => extractedFeatures.value.filter(
-      (feature) =>
-        feature.svg_id !== currentFeature.svg_id &&
-        (feature.displayLabel || feature.product) === label
-    ),
-    findFeaturesWithSameIndividualLabel: () => [],
-    findFeaturesWithSameLegendItem: () => legendSiblings,
-    findMatchingRegexRule: () => matchingRegexRule,
-    getDisplayedFeatureLabel: (feature) => feature.displayLabel || feature.product || '',
-    effectiveLegendCaptions: () => () => 'Core',
-    // The port's answer for this table, whose row `Core` holds every rule captioned `Core` (the key
-    // allocation, which gives one caption in several colors a row per color, has its own fixture).
-    getLegendRowRules: (caption) => manualSpecificRules.filter((rule) => rule.cap === caption),
-    getIndividualFeatureLabel: (feature) => feature.product || '',
-    // FE-09 (rule-actions.js): a feature's single-feature condition is its stable hash.
-    getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureColorRuleHash(feature) }),
-    groupColorRules: groupColorRulesOver(actionsPreparation, (feature) => [feature.displayLabel || feature.product || '', feature.product || '']),
-    reviseColorRules: reviseColorRulesOver(actionsPreparation, (caption) => manualSpecificRules.filter((rule) => rule.cap === caption))
+  runWithRuleMatches: (rules, commit) => {
+    preparedRuleSets.push(rules.map((rule) => `${rule.feat}|${rule.qual}|${rule.val}`));
+    return runWithRuleMatchesForActions(rules, commit);
   },
+  commitSpecificRules: async (build, _label, {afterCommit = () => {}, previousLegendIntents = []} = {}) => {
+    const rules = await build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
+    if (!rules) return false;
+    committedLegendIntents.push(previousLegendIntents);
+    const preparation = createRulePreparation({state:withDrawings({extractedFeatures,biologicalFeatures,manualSpecificRules}),evaluate:evaluatePythonRules});
+    const candidate = await preparation.prepareCandidate(rules);
+    if (!candidate) return false;
+    const drawn = new Set(extractedFeatures.value.map(feature => firstMatchingRule(feature, candidate.rules)));
+    const { intents } = buildLegendIntents(candidate.rules, [], rule => drawn.has(rule));
+    manualSpecificRules.splice(0,manualSpecificRules.length,...candidate.rules);
+    legendEntries.value = intents.map(entry=>({...entry}));
+    for (const feature of extractedFeatures.value) {
+      const rule=firstMatchingRule(feature,manualSpecificRules);
+      if(rule) featureColorOverrides[featureOverrideKey(feature)]={color:rule.color,caption:rule.cap};
+      else delete featureColorOverrides[featureOverrideKey(feature)];
+    }
+    afterCommit(intents);
+    // As `commitOnce`: the fills show after `afterCommit`, at the end of the step.
+    for (const feature of extractedFeatures.value) {
+      const rule=firstMatchingRule(feature,manualSpecificRules);
+      if(rule) applyRulePreviewFill(feature.svg_id, rule.color);
+    }
+    applySpecificRulesCount++;
+    return true;
+  },
+  countFeaturesMatchingRule: () => 0,
+  findExistingColorForCaption: () => null,
+  findFeaturesWithSameDisplayedLabel: (currentFeature, label) => extractedFeatures.value.filter(
+    (feature) =>
+      feature.svg_id !== currentFeature.svg_id &&
+      (feature.displayLabel || feature.product) === label
+  ),
+  findFeaturesWithSameIndividualLabel: () => [],
+  findFeaturesWithSameLegendItem: () => legendSiblings,
+  findMatchingRegexRule: () => matchingRegexRule,
+  getDisplayedFeatureLabel: (feature) => feature.displayLabel || feature.product || '',
+  effectiveLegendCaptions: () => () => 'Core',
+  // The port's answer for this table, whose row `Core` holds every rule captioned `Core` (the key
+  // allocation, which gives one caption in several colors a row per color, has its own fixture).
+  getLegendRowRules: (caption) => manualSpecificRules.filter((rule) => rule.cap === caption),
+  getIndividualFeatureLabel: (feature) => feature.product || '',
+  // FE-09 (rule-actions.js): a feature's single-feature condition is its stable hash.
+  getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureColorRuleHash(feature) }),
+  groupColorRules: groupColorRulesOver(actionsPreparation, (feature) => [feature.displayLabel || feature.product || '', feature.product || '']),
+  reviseColorRules: reviseColorRulesOver(actionsPreparation, (caption) => manualSpecificRules.filter((rule) => rule.cap === caption)),
   getFeatureElements: (_svg, featureId) => featureElementsById.get(featureId) || [],
   getFeatureFillElements: (_svg, featureId) => featureElementsById.get(featureId) || []
 });
@@ -884,23 +882,21 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       addedLegendCaptions: ref(new Set())
     }),
     nextTick: async () => {},
-    ruleActions: {
-      runWithRuleMatches: runWithRuleMatchesOf(resetPreparation, { extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules }),
-      commitSpecificRules: async (next) => {
-        committed.push((await next(resetRules, (row, patch) => ({ ...row, ...patch }))).map((rule) => ({ ...rule })));
-        return true;
-      },
-      effectiveLegendCaptions: () => (feature) => feature.type,
-      getLegendRowRules: (caption) => legendRowRules(caption, { rules: resetRules, pythonRows: new Map() }),
-      getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-      findFeaturesWithSameLegendItem: () => [],
-      findFeaturesWithSameDisplayedLabel: () => [],
-      findFeaturesWithSameIndividualLabel: () => [],
-      getDisplayedFeatureLabel: (feature) => feature.product,
-      getIndividualFeatureLabel: (feature) => feature.product,
-      groupColorRules: groupColorRulesOver(resetPreparation, (feature) => [feature.product]),
-      reviseColorRules: reviseColorRulesOver(resetPreparation, (caption) => legendRowRules(caption, { rules: resetRules, pythonRows: new Map() }))
+    runWithRuleMatches: runWithRuleMatchesOf(resetPreparation, { extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules }),
+    commitSpecificRules: async (next) => {
+      committed.push((await next(resetRules, (row, patch) => ({ ...row, ...patch }))).map((rule) => ({ ...rule })));
+      return true;
     },
+    effectiveLegendCaptions: () => (feature) => feature.type,
+    getLegendRowRules: (caption) => legendRowRules(caption, { rules: resetRules, pythonRows: new Map() }),
+    getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
+    findFeaturesWithSameLegendItem: () => [],
+    findFeaturesWithSameDisplayedLabel: () => [],
+    findFeaturesWithSameIndividualLabel: () => [],
+    getDisplayedFeatureLabel: (feature) => feature.product,
+    getIndividualFeatureLabel: (feature) => feature.product,
+    groupColorRules: groupColorRulesOver(resetPreparation, (feature) => [feature.product]),
+    reviseColorRules: reviseColorRulesOver(resetPreparation, (caption) => legendRowRules(caption, { rules: resetRules, pythonRows: new Map() })),
     getFeatureElements: () => [],
     getFeatureFillElements: () => []
   });
@@ -985,23 +981,21 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
         svgContent: { get value() { derivations.count += 1; return null; } }
       }),
       nextTick: async () => {},
-      ruleActions: {
-        runWithRuleMatches: runWithRuleMatchesOf(renamePreparation, renameState),
-        commitSpecificRules: async (next, _label, options = {}) => {
-          committed.push((await next(rules, (row, patch) => ({ ...row, ...patch }))).map((rule) => ({ ...rule })));
-          commitOptions.push(options);
-          return true;
-        },
-        effectiveLegendCaptions: () => (feature) => feature.legendCaption || rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
-        getLegendRowRules: rowRules,
-        getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-        findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
-        findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: (feature) => feature.product,
-        getIndividualFeatureLabel: (feature) => feature.product,
-        groupColorRules: groupColorRulesOver(renamePreparation, (feature) => [feature.product], rowRules),
-        reviseColorRules: reviseColorRulesOver(renamePreparation, rowRules),
-        ...ruleOverrides
+      runWithRuleMatches: runWithRuleMatchesOf(renamePreparation, renameState),
+      commitSpecificRules: async (next, _label, options = {}) => {
+        committed.push((await next(rules, (row, patch) => ({ ...row, ...patch }))).map((rule) => ({ ...rule })));
+        commitOptions.push(options);
+        return true;
       },
+      effectiveLegendCaptions: () => (feature) => feature.legendCaption || rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
+      getLegendRowRules: rowRules,
+      getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
+      findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
+      findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: (feature) => feature.product,
+      getIndividualFeatureLabel: (feature) => feature.product,
+      groupColorRules: groupColorRulesOver(renamePreparation, (feature) => [feature.product], rowRules),
+      reviseColorRules: reviseColorRulesOver(renamePreparation, rowRules),
+      ...ruleOverrides,
       getFeatureElements: () => [],
       getFeatureFillElements: () => []
     });
@@ -1707,18 +1701,16 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     }),
     nextTick: async () => {},
     showEditorIntent: () => {},
-    ruleActions: {
-      runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(fl1State), evaluate: evaluatePythonRules }), fl1State),
-      commitSpecificRules: async () => true,
-      countFeaturesMatchingRule: () => 0,
-      effectiveLegendCaptions: () => () => 'CDS',
-      getLegendRowRules: () => [],
-      getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-      findMatchingRegexRule: () => null,
-      findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
-      findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: () => '',
-      getIndividualFeatureLabel: () => ''
-    },
+    runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(fl1State), evaluate: evaluatePythonRules }), fl1State),
+    commitSpecificRules: async () => true,
+    countFeaturesMatchingRule: () => 0,
+    effectiveLegendCaptions: () => () => 'CDS',
+    getLegendRowRules: () => [],
+    getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
+    findMatchingRegexRule: () => null,
+    findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
+    findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: () => '',
+    getIndividualFeatureLabel: () => '',
     getFeatureElements: () => [fl1Element],
     getFeatureFillElements: () => [fl1Element]
   });

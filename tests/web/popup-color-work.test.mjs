@@ -111,25 +111,23 @@ const setup = ({
       stages.push('setDefaultColor');
       palette.setDefaultColor(drawing, key, color);
     },
-    ruleActions: {
-      runWithRuleMatches: (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit),
-      commitSpecificRules: async (build) => {
-        stages.push('commitSpecificRules');
-        const built = build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
-        if (!await commit()) return false;
-        manualSpecificRules.splice(0, manualSpecificRules.length, ...await built);
-        return true;
-      },
-      countFeaturesMatchingRule: () => 0, findExistingColorForCaption: () => null,
-      findFeaturesWithSameDisplayedLabel: () => [], findFeaturesWithSameIndividualLabel: () => [],
-      findFeaturesWithSameLegendItem: (feature) => (siblings ? features.filter((other) => other !== feature) : []),
-      findMatchingRegexRule: () => null, getDisplayedFeatureLabel: () => '',
-      getIndividualFeatureLabel: (feature) => feature.qualifiers.product[0],
-      effectiveLegendCaptions: () => () => 'CDS',
-      getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-      groupColorRules: groupColorRulesOver(preparation, (feature) => [feature.qualifiers.product[0]]),
-      getLegendRowRules: () => []
-    }
+    runWithRuleMatches: (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit),
+    commitSpecificRules: async (build) => {
+      stages.push('commitSpecificRules');
+      const built = build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
+      if (!await commit()) return false;
+      manualSpecificRules.splice(0, manualSpecificRules.length, ...await built);
+      return true;
+    },
+    countFeaturesMatchingRule: () => 0, findExistingColorForCaption: () => null,
+    findFeaturesWithSameDisplayedLabel: () => [], findFeaturesWithSameIndividualLabel: () => [],
+    findFeaturesWithSameLegendItem: (feature) => (siblings ? features.filter((other) => other !== feature) : []),
+    findMatchingRegexRule: () => null, getDisplayedFeatureLabel: () => '',
+    getIndividualFeatureLabel: (feature) => feature.qualifiers.product[0],
+    effectiveLegendCaptions: () => () => 'CDS',
+    getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
+    groupColorRules: groupColorRulesOver(preparation, (feature) => [feature.qualifiers.product[0]]),
+    getLegendRowRules: () => []
   });
   // history-wrappers.js: `undoableAction(label, action)`.
   const pick = (color) => history.runUndoable('Change feature color', () => actions.updateClickedFeatureColor(color));

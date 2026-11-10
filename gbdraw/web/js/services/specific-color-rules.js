@@ -664,6 +664,12 @@ export const groupLegendRowKeys = (context) => {
   return (group) => rowOf({ cap: group.name, color: group.color });
 };
 
+/**
+ * A rule's Legend row as a rule commit draws it: its key (`caption`), its name
+ * (the rule's caption) where that is not the key, and its color.
+ * @typedef {{ caption: PythonLegendKey, name?: string, color: string }} RuleLegendIntent
+ */
+
 // The Legend rows of a rule table: one per row key, for the rules `draws`
 // admits (a commit: those a displayed feature takes). The keys are allocated
 // from the whole table, as Python allocates them, whichever rules draw a row.
@@ -676,7 +682,7 @@ export const buildLegendIntents = (rules, rendererRows = [], draws = () => true)
   const legendCaption = createRuleLegendCaptions(rules, rendererRows);
   // An intent is a rule's Legend row: its key (`caption`), its color, and its
   // name (the rule's caption) where that is not the key, as `data-legend-name`.
-  /** @type {Map<PythonLegendKey, { caption: PythonLegendKey, name?: string, color: string }>} */
+  /** @type {Map<PythonLegendKey, RuleLegendIntent>} */
   const byCaption = new Map();
   for (const rule of rules || []) {
     if (!draws(rule)) continue;

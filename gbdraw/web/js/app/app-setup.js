@@ -12,7 +12,7 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
-/** @import { ColorActionsRuleActions } from './feature-editor/color-actions.js' */
+/** @import { CommitSpecificRulesPort } from './feature-editor/color-actions.js' */
 /** @import { LegendRowColorOf } from './candidate-render.js' */
 /** @import { LegacyResultSvgData, LegacyResultSvgTransform, SessionFileInput } from '../services/config.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
@@ -995,7 +995,7 @@ export const createAppSetup = () => {
   specificRuleRestorePorts.retainRulesForRestore = rulePreparation.retain;
   // R13: a Legend row a specific-color rule draws commits its edit through the
   // rule owner; the root registers the port once the feature editor exists.
-  /** @type {{ commitLegendRowRules: ColorActionsRuleActions['commitSpecificRules'] }} */
+  /** @type {{ commitLegendRowRules: CommitSpecificRulesPort }} */
   // Null only until the root registers the port below; the Legend cannot commit a row before that.
   const legendRowRulePorts = { commitLegendRowRules: /** @type {never} */ (null) };
   const legendActions = createLegendManager({
