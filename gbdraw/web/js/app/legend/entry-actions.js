@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
+/** @import { DrawingState, WebState } from '../../state.js' */
 /** @import { LegendRowName } from '../../services/legend-row-names.js' */
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
 /** @import { RuleRowColor } from '../../services/specific-color-rules.js' */
@@ -8,11 +8,11 @@
  * @typedef {{ readonly caption?: string, readonly originalCaption?: string, readonly color?: string,
  *   readonly featureIds?: readonly unknown[], readonly xPos?: number, readonly yPos?: number }} EntryRecord
  */
-/** @typedef {EntryRecord & { caption: string, originalCaption: string }} ListedEntry A row a Result lists, under its caption and its key. */
+/** @typedef {EntryRecord & { caption: string, originalCaption: PythonLegendKey }} ListedEntry A row a Result lists, under its caption and its key. */
 /**
  * A live redraw's Legend inventory rule: the rows of the inventory it keeps though it stops drawing them
  * (`liveRedrawLegend`, read when the redraw is requested).
- * @typedef {{ readonly keep: readonly string[] }} LiveRedrawLegend
+ * @typedef {{ readonly keep: readonly PythonLegendKey[] }} LiveRedrawLegend
  */
 /**
  * Where a rule commit puts a row it splits off: right after the row of key
@@ -21,7 +21,7 @@
  */
 /**
  * The rows a Result lists (`listLegendRows`) and the keys of those that are Python's.
- * @typedef {{ entries: ListedEntry[], generatedCaptions: Set<string> }} LegendRowListing
+ * @typedef {{ entries: ListedEntry[], generatedCaptions: Set<PythonLegendKey> }} LegendRowListing
  */
 import { normalizeOptionalHexColor, resolveColorToHex, toNativeColorInputValue } from '../../utils/color-utils.js';
 import { diagnosticError } from '../../utils/error-normalization.js';
@@ -59,8 +59,6 @@ const normalizedColor = (value) => {
 
 /** @param {EntryRecord | null | undefined} entry */
 const legendCaption = (entry) => String(entry?.caption || '').trim();
-/** @param {EntryRecord | null | undefined} entry */
-const generatedCaption = (entry) => String(entry?.originalCaption || entry?.caption || '').trim();
 // The rows this owner builds from a Result's rows (`listLegendRows`), the
 // rows of the drawing's lists, and rows made from them are Legend rows (the
 // casts: `EntryRecord` is their shape as this owner reads it).
@@ -113,7 +111,8 @@ const placeByInventory = (placed, unplaced, inventory, keyOf) => {
 
 /**
  * @typedef {object} LegendEntryActionsOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Pick<WebState, 'activeDrawing' | 'sessionOperationAvailability' | 'svgContainer' | 'results'
+ *   | 'originalLegendOrder' | 'originalLegendColors' | 'legendStrokeOptionsOpen'>} state
  * @property {(() => string | undefined) | null} [readActiveResultIdentity]
  *   The preview owner's runtime identity of the mounted Result.
  * @property {import('../candidate-render.js').ReadLegendRowColorsPort} readLegendRowColors
@@ -200,14 +199,14 @@ export const createLegendEntryActions = ({
   // identity until they are displayed. `replayedInventoryResults` are the
   // Results a draw replayed an edited order onto: their drawing no longer shows
   // Python's order.
-  /** @type {Map<string, string[]>} */
+  /** @type {Map<string, PythonLegendKey[]>} */
   const inventoryByResult = new Map();
   /** @type {Set<string>} */
   const replayedInventoryResults = new Set();
   // The rows a live redraw stopped drawing (a track it hides), kept for each
   // Result it drew while another was displayed and that has no inventory yet:
   // that Result keeps them when it is first displayed, as the displayed one did.
-  /** @type {Map<string, string[]>} */
+  /** @type {Map<string, PythonLegendKey[]>} */
   const undrawnByResult = new Map();
 
   // The names the displayed Result shows for its Legend rows, by each row's
@@ -269,9 +268,9 @@ export const createLegendEntryActions = ({
     if (!text) return null;
     const lower = text.toLowerCase();
     const drawing = state.activeDrawing();
-    /** @type {EntryRecord[]} */
+    /** @type {readonly EntryRecord[]} */
     const listed = drawing.legendEntries?.value || [];
-    /** @type {EntryRecord[]} */
+    /** @type {readonly EntryRecord[]} */
     const deleted = drawing.deletedLegendEntries?.value || [];
     const drawn = listed.flatMap((entry) => {
       const names = legendRowNames.value.get(legendEntryKey(entry));
@@ -328,7 +327,7 @@ export const createLegendEntryActions = ({
   const adoptRestoredLegend = ({ from = null } = {}) => {
     const drawing = state.activeDrawing();
     const svg = svgContainer.value?.querySelector?.('svg');
-    /** @type {EntryRecord[]} */
+    /** @type {readonly EntryRecord[]} */
     const restored = drawing.legendEntries.value || [];
     if (!svg || results.value.length < 2 || !Array.isArray(from)) return false;
     const mounted = listLegendRows(svg, { entries: restored, dormant: drawing.dormantLegendEntries.value || [], asShown: true });
@@ -340,7 +339,7 @@ export const createLegendEntryActions = ({
     if (mounted.entries.length === fromRows.size && mounted.entries.every((entry) => fromRows.has(shown(entry)))) {
       return false;
     }
-    /** @param {EntryRecord[]} list */
+    /** @param {readonly EntryRecord[]} list */
     const byKey = (list) => new Map(list.filter(legendCaption).map((entry) => [/** @type {string} */ (legendEntryKey(entry)), entry]));
     const before = byKey(from);
     const after = byKey(restored);
@@ -348,11 +347,11 @@ export const createLegendEntryActions = ({
     // this Result's own or an editor row.
     const inventories = [...inventoryByResult.values(), originalLegendOrder.value];
     /** @param {EntryRecord} entry */
-    const editorRow = (entry) => !inventories.some((inventory) => inventory.includes(generatedCaption(entry)));
+    const editorRow = (entry) => !inventories.some((inventory) => inventory.includes(legendEntryKey(entry)));
     const mountedKeys = new Set(mounted.entries.map(legendEntryKey));
     const returning = [...after.values()].filter((entry) => (
       !before.has(legendEntryKey(entry)) && !mountedKeys.has(legendEntryKey(entry))
-      && (originalLegendOrder.value.includes(generatedCaption(entry)) || editorRow(entry))
+      && (originalLegendOrder.value.includes(legendEntryKey(entry)) || editorRow(entry))
     ));
     /** @param {EntryRecord} entry @param {EntryRecord} next */
     const stepColor = (entry, next) => {
@@ -373,7 +372,7 @@ export const createLegendEntryActions = ({
     const orderChanged = [...before.keys()].join('\u0000') !== [...after.keys()].join('\u0000');
     const generatedEntries = restored.filter((entry) => !editorRow(entry));
     const restoresDefault = [...inventoryByResult.values()].some((inventory) => (
-      generatedEntries.every((entry) => inventory.includes(generatedCaption(entry)))
+      generatedEntries.every((entry) => inventory.includes(legendEntryKey(entry)))
       && !isLegendOrderEdited(restored, inventory)
     ));
     if (orderChanged || returning.length > 0) {
@@ -389,7 +388,7 @@ export const createLegendEntryActions = ({
   // The displayed Result's inventory (`originalLegendOrder`, Python's order
   // of its rows) and its stored copy, which `adoptResultInventory` adopts
   // when the Result is displayed again.
-  /** @param {readonly string[]} inventory */
+  /** @param {readonly PythonLegendKey[]} inventory */
   const writeDisplayedInventory = (inventory) => {
     originalLegendOrder.value = [...inventory];
     const identity = readActiveResultIdentity?.() || '';
@@ -572,7 +571,6 @@ export const createLegendEntryActions = ({
     const kept = (list) => (takenBack ? list.filter((entry) => !removed.has(legendEntryKey(entry))) : [...list]);
     const colorOverrides = { ...drawing.legendColorOverrides };
     if (takenBack) legendColorCopies(colorOverrides, takenBack.removed).forEach((key) => { delete colorOverrides[key]; });
-    /** @type {Set<string>} */
     const strokeOptionsOpen = state.legendStrokeOptionsOpen || new Set();
     const moved = rekeyLegendRecords({
       entries: kept(entries),
@@ -581,8 +579,8 @@ export const createLegendEntryActions = ({
       colorOverrides,
       strokeOverrides: { ...drawing.legendStrokeOverrides },
       addedCaptions: [...drawing.addedLegendCaptions.value].filter((caption) => !removed.has(caption)),
-      originalOrder: takenBack ? [] : /** @type {string[]} */ (originalLegendOrder.value),
-      originalColors: takenBack ? {} : /** @type {Record<string, string>} */ (originalLegendColors.value),
+      originalOrder: takenBack ? [] : originalLegendOrder.value,
+      originalColors: takenBack ? {} : originalLegendColors.value,
       strokeOptionsOpen: takenBack ? [] : [...strokeOptionsOpen]
     }, moves);
     rekeyLegendPaint(drawing.slices.paint, {
@@ -631,7 +629,7 @@ export const createLegendEntryActions = ({
     const rows = resultLegendRows(svg);
     if (!rows) return null;
     const known = new Set(inventory);
-    const deletedKeys = new Set(deleted.map(generatedCaption).filter((key) => known.has(key)));
+    const deletedKeys = new Set(deleted.map(legendEntryKey).filter((key) => known.has(key)));
     const hiddenKeys = new Set(hidden);
     /** @param {(entry: EntryRecord) => boolean} test */
     const intentEntry = (test) => entries.find(test) || dormant.find(test);
@@ -640,8 +638,8 @@ export const createLegendEntryActions = ({
     // listed entry names that key.
     /** @param {string} key */
     const renameOf = (key) => {
-      const keyed = entries.filter((entry) => generatedCaption(entry) === key);
-      if (keyed.length === 0) return dormant.find((entry) => generatedCaption(entry) === key);
+      const keyed = entries.filter((entry) => legendEntryKey(entry) === key);
+      if (keyed.length === 0) return dormant.find((entry) => legendEntryKey(entry) === key);
       return known.has(key) ? keyed.find((entry) => legendCaption(entry) !== key) : undefined;
     };
     /** @type {ListedEntry[]} */
@@ -649,7 +647,7 @@ export const createLegendEntryActions = ({
     // Python's rows the Result does not show, e.g. those of a track shown again.
     /** @type {Set<ListedEntry>} */
     const unshown = new Set();
-    /** @type {Set<string>} */
+    /** @type {Set<PythonLegendKey>} */
     const generatedCaptions = new Set();
     // A row without a key record (a rename saved before U3a) is the intent
     // entry with its caption, unless another row of the Result is Python's
@@ -659,11 +657,11 @@ export const createLegendEntryActions = ({
     const namedBy = (row) => {
       // An editor row shows its key; a row of Python's that shows the key of
       // an intent entry is that entry's row.
-      const keyed = intentEntry((each) => generatedCaption(each) === row.shownKey);
+      const keyed = intentEntry((each) => legendEntryKey(each) === row.key);
       if (row.editor || keyed) return row.editor ? keyed || null : null;
       const entry = intentEntry((each) => legendCaption(each) === row.shownKey);
       return entry && (row.editor || !rows.some((other) => (
-        other !== row && (other.recordedKey ?? other.shownKey) === generatedCaption(entry)
+        other !== row && other.key === legendEntryKey(entry)
       ))) ? entry : null;
     };
     rows.forEach((row) => {
@@ -672,7 +670,7 @@ export const createLegendEntryActions = ({
       if (row.editor) {
         if (!named && !asShown) return;
       } else {
-        const key = row.recordedKey ?? (named ? generatedCaption(named) : row.shownKey);
+        const key = named ? legendEntryKey(named) : row.key;
         if (!asShown && deletedKeys.has(key)) return;
         // Python drew the row of a hidden track: it stays in the inventory.
         if (!asShown && hiddenKeys.has(key)) {
@@ -680,8 +678,8 @@ export const createLegendEntryActions = ({
           return;
         }
         const caption = asShown ? row.shownKey : (legendCaption(renameOf(key)) || legendCaption(named) || key);
-        const entry = intentEntry((each) => generatedCaption(each) === key && legendCaption(each) === caption)
-          || intentEntry((each) => generatedCaption(each) === key);
+        const entry = intentEntry((each) => legendEntryKey(each) === key && legendCaption(each) === caption)
+          || intentEntry((each) => legendEntryKey(each) === key);
         generatedCaptions.add(key);
         const item = {
           caption, originalCaption: key, color: row.color, xPos: row.xPos, yPos: row.yPos, featureIds: entry?.featureIds || []
@@ -692,7 +690,7 @@ export const createLegendEntryActions = ({
       }
       listed.push({
         caption: asShown ? row.name : legendCaption(named) || row.name,
-        originalCaption: row.shownKey,
+        originalCaption: row.key,
         color: row.color,
         xPos: row.xPos,
         yPos: row.yPos,
@@ -712,8 +710,8 @@ export const createLegendEntryActions = ({
   // order. Deleted entries keep their place.
   /**
    * @param {DrawingState} drawing
-   * @param {{ inventory: string[], orderEdited: boolean, generatedCaptions: Set<string>, rendered: string[],
-   *   keep: readonly string[] }} drawn
+   * @param {{ inventory: readonly PythonLegendKey[], orderEdited: boolean, generatedCaptions: Set<PythonLegendKey>,
+   *   rendered: PythonLegendKey[], keep: readonly PythonLegendKey[] }} drawn
    */
   const drawnInventory = (drawing, { inventory: previous, orderEdited, generatedCaptions, rendered, keep }) => {
     const inventory = [...previous, ...keep.filter((caption) => !previous.includes(caption))];
@@ -769,10 +767,10 @@ export const createLegendEntryActions = ({
    * @param {DrawingState} drawing
    * @param {SVGSVGElement} svg
    * @param {LegendRowListing} listing The rows the Result lists.
-   * @param {{ inventory: string[], orderEdited: boolean, keep?: readonly string[] }} previous The inventory before
+   * @param {{ inventory: readonly PythonLegendKey[], orderEdited: boolean, keep?: readonly PythonLegendKey[] }} previous The inventory before
    *   the draw, whether the draw replayed an edited order (read when nothing is recorded), and the rows it
    *   keeps though the draw does not draw them.
-   * @returns {string[]}
+   * @returns {PythonLegendKey[]}
    */
   const resultInventory = (drawing, svg, listing, { inventory, orderEdited, keep = [] }) => {
     const recorded = recordedLegendOrder(svg);
@@ -785,7 +783,7 @@ export const createLegendEntryActions = ({
     });
   };
   // The rows of an inventory a Result does not draw.
-  /** @param {readonly string[]} inventory @param {SVGSVGElement} svg @param {LegendRowListing} listing */
+  /** @param {readonly PythonLegendKey[]} inventory @param {SVGSVGElement} svg @param {LegendRowListing} listing */
   const undrawnRows = (inventory, svg, listing) => {
     const drawn = new Set(recordedLegendOrder(svg) || listing.generatedCaptions);
     return inventory.filter((caption) => !drawn.has(caption));
@@ -813,7 +811,7 @@ export const createLegendEntryActions = ({
   /**
    * @param {SVGSVGElement} svg
    * @param {{ resultIdentity?: string, liveResultIdentities?: string[] }} [options]
-   * @returns {string[]} The Result's inventory.
+   * @returns {PythonLegendKey[]} The Result's inventory.
    */
   const captureResultInventory = (svg, { resultIdentity: identity = '', liveResultIdentities = [] } = {}) => {
     const drawing = state.activeDrawing();
@@ -840,7 +838,7 @@ export const createLegendEntryActions = ({
   // while it was shown (a Legend rename takes the row's place in it, OV-348),
   // so it replaces a stored copy; `adoptResultInventory` adopts it when the
   // Result is displayed.
-  /** @param {string | undefined} identity @param {string[]} inventory */
+  /** @param {string | undefined} identity @param {readonly PythonLegendKey[]} inventory */
   const rememberResultInventory = (identity, inventory) => {
     if (!identity || !Array.isArray(inventory)) return;
     inventoryByResult.set(identity, [...inventory]);
@@ -866,7 +864,7 @@ export const createLegendEntryActions = ({
   // row the editor adds under that caption is the editor's (review M1).
   /** @param {DrawingState} drawing @returns {LiveRedrawLegend} */
   const liveRedrawLegend = (drawing) => {
-    const inventory = /** @type {string[]} */ (originalLegendOrder.value || []);
+    const inventory = originalLegendOrder.value || [];
     const hidden = new Set(readHiddenTrackRows(drawing));
     const svg = svgContainer.value?.querySelector('svg');
     const listing = svg ? listLegendRows(svg, legendIntentOf(drawing)) : null;
@@ -1000,7 +998,7 @@ export const createLegendEntryActions = ({
    */
   const withEntryAtDefaultPlace = (entries, entry, inventory) => {
     /** @param {EntryRecord} item */
-    const rank = (item) => inventory.indexOf(generatedCaption(item));
+    const rank = (item) => inventory.indexOf(legendEntryKey(item));
     const own = rank(entry);
     if (own < 0) return [...entries, entry];
     const next = entries.findIndex((item) => rank(item) > own);
@@ -1020,7 +1018,7 @@ export const createLegendEntryActions = ({
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    /** @type {EntryRecord[]} */
+    /** @type {readonly EntryRecord[]} */
     const deleted = drawing.deletedLegendEntries.value || [];
     const picked = new Set(indexes ?? deleted.map((/** @type {unknown} */ _, /** @type {number} */ index) => index));
     const returning = deleted.filter((/** @type {unknown} */ _, /** @type {number} */ index) => picked.has(index));
@@ -1028,6 +1026,7 @@ export const createLegendEntryActions = ({
     const inventory = (originalLegendOrder.value || []).map((/** @type {unknown} */ caption) => String(caption || '').trim());
     const context = displayedLegendRowContext(state, drawing);
     const shown = readLegendRowColors(drawing);
+    /** @type {EntryRecord[]} */
     let entries = [...(drawing.legendEntries.value || [])];
     for (const entry of returning) {
       const key = legendEntryKey(entry);
@@ -1037,7 +1036,7 @@ export const createLegendEntryActions = ({
       entries = withEntryAtDefaultPlace(entries, { ...entry, color }, inventory);
     }
     restoreLegendRows(drawing.slices.paint, picked, listedRowsOf(entries));
-    return returning.map(generatedCaption).filter((key) => inventory.includes(key));
+    return returning.map(legendEntryKey).filter((key) => inventory.includes(key));
   };
 
   return {

@@ -333,7 +333,7 @@ export const editorStateOfLegendEditLeaves = (leaves, svg) => {
     legend: {
       entries: rows.filter((row) => row.pythonShown && !hiddenKeys.has(row.key)).map(entryOf),
       deletedEntries: [...hiddenKeys].flatMap((key) => { const row = rowOf.get(key); return row ? [entryOf(row)] : []; }),
-      originalOrder: [...new Set(pythonOrderedLegendRows(group).map((row) => /** @type {PythonLegendKey} */ (pythonLegendKey(row))))]
+      originalOrder: [...new Set(pythonOrderedLegendRows(group).map(pythonLegendKey))]
     },
     canvasPadding
   };

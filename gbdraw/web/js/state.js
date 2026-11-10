@@ -578,7 +578,8 @@ const settingsPopup = ref(null);
 // Legend Editor state
 // The shown Result's generated Legend inventory: Python's keys of its rows, in the order it drew them.
 const originalLegendOrder = typedRef(/** @type {PythonLegendKey[]} */ ([]));
-const originalLegendColors = ref({}); // Store original colors: { caption: color }
+// The shown Result's generated Legend colors, by Python's key of each row.
+const originalLegendColors = typedRef(/** @type {Record<string, string>} */ ({}));
 
 // The Legend editor rows whose stroke options are shown, by the row's key: app-level
 // view state, which History and the Session do not hold (OV-157).

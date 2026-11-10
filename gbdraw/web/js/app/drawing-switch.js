@@ -14,6 +14,7 @@ import { msg } from '../utils/i18n.js';
 /** @import { DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from '../services/drawing-view.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
+/** @import { PythonLegendKey } from '../services/legend-svg.js' */
 
 const { computed } = window.Vue;
 
@@ -53,7 +54,7 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {() => void} clearActiveRuntime Releases the displayed Result.
  * @property {(result: Record<string, unknown>) => string} getResultIdentity
  * @property {(bindingOptions?: { modeArrival?: boolean }) => unknown} presentSelectedResult
- * @property {(identity: string | undefined, inventory: string[]) => void} rememberResultInventory
+ * @property {(identity: string | undefined, inventory: readonly PythonLegendKey[]) => void} rememberResultInventory
  * @property {(departing: Readonly<ArtifactSlot>, arrivingId: DrawingId) => Readonly<ArtifactSlot> | null} artifactSlotsSwap
  *   Keeps the departing slot and takes the arriving drawing's, or null.
  * @property {() => Readonly<ArtifactSlot>} captureArtifactSlot The displayed artifact as a slot.
