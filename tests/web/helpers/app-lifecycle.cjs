@@ -656,6 +656,13 @@ const WARM_RESTORE_MAX_UNDO = 40;
 // a page that has not generated has none. A global missing here costs speed,
 // not correctness: every case after a Generate falls back, naming the global.
 const GENERATE_GLOBALS = ['__GBDRAW_LAST_LOSAT_TELEMETRY__', '_origPairwiseMin', '_origPairwiseMax'];
+// What a case puts in the page outside the app (a test hook, a counter global,
+// a wrapped browser method) it installs through `installPageProbe`, which keeps
+// the function that takes it out in this page list; the restore runs the list,
+// newest first, before anything else (a held rerender is released before the
+// restore waits for the page). A probe left without its cleanup still shows in
+// the comparison below, so the page then serves no later case.
+const PAGE_PROBE_CLEANUPS = '__GBDRAW_TEST_PROBE_CLEANUPS__';
 // A Session file name (services/config.js `buildSessionFilename`). The app
 // remembers the Session file it downloaded last and asks before it downloads
 // one of that name again; the restore cannot reach that memory, so a page
@@ -730,8 +737,30 @@ const readWarmBaseline = async (page) => ({
   })
 });
 
+// Runs `install(argument)` in the page. `install` puts a probe in the page and
+// returns the function that takes it out again; the warm restore calls that
+// function before the next case, also after a case that failed.
+/**
+ * @template T
+ * @param {import('@playwright/test').Page} page
+ * @param {(argument: T) => () => (void | Promise<void>)} install
+ * @param {T} [argument]
+ */
+const installPageProbe = (page, install, argument) => page.evaluate(`(() => {
+  const cleanup = (${install.toString()})(${JSON.stringify(argument) ?? 'undefined'});
+  if (typeof cleanup !== 'function') throw new Error('a page probe returns its cleanup');
+  (window[${JSON.stringify(PAGE_PROBE_CLEANUPS)}] ||= []).push(cleanup);
+})()`);
+
+const runPageProbeCleanups = (page) => evaluateWithRetainedPromise(page, async (name) => {
+  const cleanups = window[name] || [];
+  delete window[name];
+  for (const cleanup of cleanups.reverse()) await cleanup();
+}, PAGE_PROBE_CLEANUPS);
+
 const returnToFreshBoot = async (page, { facts, restorePoint }) => {
   if (page.url() !== facts.url) return [`the case left the app for ${page.url()}`];
+  await runPageProbeCleanups(page);
   // A focused field holds an open History step; leaving it commits the step.
   await page.evaluate(() => document.activeElement?.blur?.());
   await settleLive(page, { timeout: WARM_RESTORE_TIMEOUT_MS });
@@ -1030,6 +1059,7 @@ module.exports = {
   fetchRoute,
   generateAndWaitForResult,
   getDiagramWorkerActivity,
+  installPageProbe,
   observeNonEditOperation,
   openLinearFileCards,
   openApp,

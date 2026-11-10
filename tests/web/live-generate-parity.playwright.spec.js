@@ -13,7 +13,9 @@
 // use in tests/web/helpers/live-generate-parity-steps.cjs.
 const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { answerSessionTitle, evaluateWithRetainedPromise, expectNoLoadRepairDialog, WARM_APP_PAGE, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
+const {
+  answerSessionTitle, evaluateWithRetainedPromise, expectNoLoadRepairDialog, installPageProbe, WARM_APP_PAGE, warmAppTest: test
+} = require('./helpers/app-lifecycle.cjs');
 const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
@@ -698,11 +700,18 @@ const legendList = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   return app.legendEntries.map((entry) => ({ caption: entry.caption, color: app.legendEntryColor(entry) }));
 });
-// A rerender held until released, so a case does not pass by timing.
-const holdRerenders = (page) => page.evaluate(() => {
+// A rerender held until released, so a case does not pass by timing. The warm
+// restore releases what a case left held (`installPageProbe`).
+const holdRerenders = (page) => installPageProbe(page, () => {
   window.__GBDRAW_TEST_HOOKS__ ||= {};
-  window.__heldRerenders = [];
-  window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => new Promise((resolve) => { window.__heldRerenders.push(resolve); });
+  const held = [];
+  window.__heldRerenders = held;
+  window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => new Promise((resolve) => { held.push(resolve); });
+  return () => {
+    delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+    held.forEach((resolve) => resolve());
+    delete window.__heldRerenders;
+  };
 });
 const releaseRerenders = async (page) => {
   await page.evaluate(() => {
@@ -751,7 +760,13 @@ const RESET_CASES = [
     },
     undoRedo: true,
     resetShowsDrawn: true
-  },
+  }
+];
+// The popup and rule domains: each starts with Reset Settings and a Generate,
+// which return the draft and the Result to what `open` and Reset give, so they
+// run in order on one page. (The Legend row domains above replace or keep rows
+// a Reset of an earlier domain would leave, so each opens its own page.)
+const POPUP_RESET_CASES = [
   {
     // A popup "this feature only" color draws its own Legend row; Reset
     // removes its rule, and the rule owner asks for the rerender (OV-43).
@@ -773,31 +788,42 @@ const RESET_CASES = [
     edit: (page) => popupEdit(page, 'FL1', { labelText: 'FL1-X', labelVisibility: 'on' })
   }
 ];
-for (const { domain, edit, undoRedo, sameDrawing, resetShowsDrawn } of RESET_CASES) {
-  test(`Reset Settings after ${domain} shows what Generate draws`, async ({ page }) => {
+// Reset Settings and a Generate, the edit, Reset Settings, and live = Generate.
+const resetShowsGenerate = async (page, { domain, edit, undoRedo, sameDrawing, resetShowsDrawn }) => {
+  await resetSettings(page);
+  await generate(page);
+  const drawn = await semanticSnapshot(page);
+  await edit(page);
+  const edited = await semanticSnapshot(page);
+  if (sameDrawing) expect(edited, `${domain}: the edit leaves the drawing as Generate drew it`).toEqual(drawn);
+  else expect(edited, `${domain}: the edit shows on the Result`).not.toEqual(drawn);
+  await resetSettings(page);
+  const reset = await semanticSnapshot(page);
+  if (resetShowsDrawn) expect(reset, `${domain}: Reset Settings shows the drawing Generate drew`).toEqual(drawn);
+  if (undoRedo) {
+    await history(page, 'undo');
+    expect(await semanticSnapshot(page), `${domain}: Undo of Reset Settings`).toEqual(edited);
+    await history(page, 'redo');
+    expect(await semanticSnapshot(page), `${domain}: Redo of Reset Settings`).toEqual(reset);
+  }
+  const listed = await legendList(page);
+  await expectLiveEqualsGenerate(page, { label: `Reset Settings after ${domain}` });
+  expect(listed, `${domain}: the Legend list after Reset Settings`).toEqual(await legendList(page));
+};
+for (const resetCase of RESET_CASES) {
+  test(`Reset Settings after ${resetCase.domain} shows what Generate draws`, async ({ page }) => {
     test.setTimeout(120_000);
     await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
-    await resetSettings(page);
-    await generate(page);
-    const drawn = await semanticSnapshot(page);
-    await edit(page);
-    const edited = await semanticSnapshot(page);
-    if (sameDrawing) expect(edited, 'the edit leaves the drawing as Generate drew it').toEqual(drawn);
-    else expect(edited, 'the edit shows on the Result').not.toEqual(drawn);
-    await resetSettings(page);
-    const reset = await semanticSnapshot(page);
-    if (resetShowsDrawn) expect(reset, 'Reset Settings shows the drawing Generate drew').toEqual(drawn);
-    if (undoRedo) {
-      await history(page, 'undo');
-      expect(await semanticSnapshot(page), 'Undo of Reset Settings').toEqual(edited);
-      await history(page, 'redo');
-      expect(await semanticSnapshot(page), 'Redo of Reset Settings').toEqual(reset);
-    }
-    const listed = await legendList(page);
-    await expectLiveEqualsGenerate(page, { label: `Reset Settings after ${domain}` });
-    expect(listed, 'the Legend list after Reset Settings').toEqual(await legendList(page));
+    await resetShowsGenerate(page, resetCase);
   });
 }
+test('Reset Settings after each popup or rule edit shows what Generate draws', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  for (const resetCase of POPUP_RESET_CASES) {
+    await test.step(`Reset Settings after ${resetCase.domain} shows what Generate draws`, () => resetShowsGenerate(page, resetCase));
+  }
+});
 
 // OV-2293: Reset Settings while the other drawing is shown. Generate drew the
 // edit into this drawing's Result, so its bytes lack what the reset draft draws:
@@ -958,9 +984,10 @@ test.describe('a Result displayed after its intent changed', () => {
     await settleLive(page);
     expect(await rerenderRequests(page), 'the display asks for no rerender').toBe(before);
   };
-  const failRerenders = (page) => page.evaluate(() => {
+  const failRerenders = (page) => installPageProbe(page, () => {
     window.__GBDRAW_TEST_HOOKS__ ||= {};
     window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => { throw new Error('forced rerender failure'); };
+    return () => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; };
   });
   const allowRerenders = (page) => page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
   const saveAndLoad = async (page, browser, testInfo, name) => {
@@ -971,6 +998,14 @@ test.describe('a Result displayed after its intent changed', () => {
 
   for (const reflow of ['off', 'on']) {
     const flag = `Auto Reflow ${reflow}`;
+    // Auto Reflow is read only where a live label edit asks for the label reflow
+    // (label-actions.js `queueLabelReflow`) and by the watcher that runs it. The
+    // families under `flagInert` make every such edit before their last Generate,
+    // whose bytes do not depend on it, and none after it, so they run with Auto
+    // Reflow off only; the families around them, which edit live or Undo a
+    // Generate after it, run with both values. The pull-request random walk
+    // draws every edit kind in both states.
+    const flagInert = reflow === 'off';
     test(`a label text cleared live after a Generate asks for no rerender at a Result switch (${flag})`, async ({ page }) => {
       test.setTimeout(240_000);
       await open(page, { mode: 'circular', results: 'batch', reflow });
@@ -1032,48 +1067,50 @@ test.describe('a Result displayed after its intent changed', () => {
         await expectNoRerenderOfDisplay(loaded, () => switchDrawing(loaded, mode));
         await loaded.context().close();
       });
-      test(`Save and Load after Reset Settings from the other drawing draws the hidden feature when its Result is shown (${both})`, async ({ page, browser }, testInfo) => {
-        test.setTimeout(240_000);
-        await openBothDrawings(page, { mode, results: 'single', reflow });
-        await popupEdit(page, 'FL2', { visibility: 'off' });
-        await generate(page);
-        await switchDrawing(page, otherMode(mode));
-        await resetKeepingLabelSettings(page);
-        const loaded = await saveAndLoad(page, browser, testInfo, 'reset-saved');
-        await switchDrawing(loaded, mode);
-        await expectLiveEqualsGenerate(loaded, { label: 'Reset, Save, Load, then the other drawing' });
-        await loaded.context().close();
-      });
-      // What stays until Generate: nothing in a loaded Session says what the bytes
-      // of a Result hold, and a Load alone moves no label.
-      test(`Save and Load after Reset Settings from the other drawing leave a label text until the next Generate (${both})`, async ({ page, browser }, testInfo) => {
-        test.setTimeout(240_000);
-        await openBothDrawings(page, { mode, results: 'single', reflow });
-        await popupEdit(page, feature, { labelText: 'walk label' });
-        await generate(page);
-        await switchDrawing(page, otherMode(mode));
-        await resetKeepingLabelSettings(page);
-        const loaded = await saveAndLoad(page, browser, testInfo, 'reset-saved-label');
-        await expectNoRerenderOfDisplay(loaded, () => switchDrawing(loaded, mode));
-        const drawnTexts = () => loaded.evaluate(() => [...window.__GBDRAW_APP__.svgContainer.querySelectorAll('svg text[data-label-feature-id]')]
-          .map((element) => element.textContent));
-        expect(await drawnTexts(), 'the label text stays').toContain('walk label');
-        await generate(loaded);
-        expect(await drawnTexts(), 'Generate draws the reset text').not.toContain('walk label');
-        await loaded.context().close();
-      });
-      test(`Reset Settings from the other drawing after a Load reaches a label text the Result draws (${both})`, async ({ page, browser }, testInfo) => {
-        test.setTimeout(240_000);
-        await openBothDrawings(page, { mode, results: 'single', reflow });
-        await popupEdit(page, feature, { labelText: 'walk label' });
-        await generate(page);
-        await switchDrawing(page, otherMode(mode));
-        const loaded = await saveAndLoad(page, browser, testInfo, 'reset-after-load-label');
-        await resetKeepingLabelSettings(loaded);
-        await switchDrawing(loaded, mode);
-        await expectLiveEqualsGenerate(loaded, { label: 'a label text in a loaded Result, then Reset from the other drawing' });
-        await loaded.context().close();
-      });
+      if (flagInert) {
+        test(`Save and Load after Reset Settings from the other drawing draws the hidden feature when its Result is shown (${both})`, async ({ page, browser }, testInfo) => {
+          test.setTimeout(240_000);
+          await openBothDrawings(page, { mode, results: 'single', reflow });
+          await popupEdit(page, 'FL2', { visibility: 'off' });
+          await generate(page);
+          await switchDrawing(page, otherMode(mode));
+          await resetKeepingLabelSettings(page);
+          const loaded = await saveAndLoad(page, browser, testInfo, 'reset-saved');
+          await switchDrawing(loaded, mode);
+          await expectLiveEqualsGenerate(loaded, { label: 'Reset, Save, Load, then the other drawing' });
+          await loaded.context().close();
+        });
+        // What stays until Generate: nothing in a loaded Session says what the bytes
+        // of a Result hold, and a Load alone moves no label.
+        test(`Save and Load after Reset Settings from the other drawing leave a label text until the next Generate (${both})`, async ({ page, browser }, testInfo) => {
+          test.setTimeout(240_000);
+          await openBothDrawings(page, { mode, results: 'single', reflow });
+          await popupEdit(page, feature, { labelText: 'walk label' });
+          await generate(page);
+          await switchDrawing(page, otherMode(mode));
+          await resetKeepingLabelSettings(page);
+          const loaded = await saveAndLoad(page, browser, testInfo, 'reset-saved-label');
+          await expectNoRerenderOfDisplay(loaded, () => switchDrawing(loaded, mode));
+          const drawnTexts = () => loaded.evaluate(() => [...window.__GBDRAW_APP__.svgContainer.querySelectorAll('svg text[data-label-feature-id]')]
+            .map((element) => element.textContent));
+          expect(await drawnTexts(), 'the label text stays').toContain('walk label');
+          await generate(loaded);
+          expect(await drawnTexts(), 'Generate draws the reset text').not.toContain('walk label');
+          await loaded.context().close();
+        });
+        test(`Reset Settings from the other drawing after a Load reaches a label text the Result draws (${both})`, async ({ page, browser }, testInfo) => {
+          test.setTimeout(240_000);
+          await openBothDrawings(page, { mode, results: 'single', reflow });
+          await popupEdit(page, feature, { labelText: 'walk label' });
+          await generate(page);
+          await switchDrawing(page, otherMode(mode));
+          const loaded = await saveAndLoad(page, browser, testInfo, 'reset-after-load-label');
+          await resetKeepingLabelSettings(loaded);
+          await switchDrawing(loaded, mode);
+          await expectLiveEqualsGenerate(loaded, { label: 'a label text in a loaded Result, then Reset from the other drawing' });
+          await loaded.context().close();
+        });
+      }
       test(`an Undo of a color rule step keeps what a later Reset from the other drawing asks of the Result (${both})`, async ({ page }) => {
         test.setTimeout(240_000);
         await openBothDrawings(page, { mode, results: 'single', reflow });
@@ -1086,61 +1123,63 @@ test.describe('a Result displayed after its intent changed', () => {
         await resetFromOtherDrawing(page, mode);
         await expectLiveEqualsGenerate(page, { label: 'a checkpoint Undo, then Reset from the other drawing' });
       });
-      test(`an Undo of Reset Settings from the other drawing after its Result was shown draws the edit again (${both})`, async ({ page }) => {
-        test.setTimeout(240_000);
-        await openBothDrawings(page, { mode, results: 'single', reflow });
-        await popupEdit(page, feature, { labelText: 'walk label' });
-        await generate(page);
-        await resetFromOtherDrawing(page, mode);
-        await settleLive(page);
-        await switchDrawing(page, otherMode(mode));
-        await history(page, 'undo');
-        await settleLive(page);
-        await switchDrawing(page, mode);
-        await expectLiveEqualsGenerate(page, { label: 'an Undo of the Reset after the Result was shown' });
-      });
-      test(`an Undo of Reset Settings before its Result was shown asks for no rerender (${both})`, async ({ page }) => {
-        test.setTimeout(240_000);
-        await openBothDrawings(page, { mode, results: 'single', reflow });
-        await popupEdit(page, feature, { labelText: 'walk label' });
-        await generate(page);
-        await switchDrawing(page, otherMode(mode));
-        await resetKeepingLabelSettings(page);
-        await settleLive(page);
-        await history(page, 'undo');
-        await expectNoRerenderOfDisplay(page, () => switchDrawing(page, mode));
-      });
-      for (const [name, text] of [['blank', ''], ['edited', 'bulk label']]) {
-        test(`Reset Settings from the other drawing after a Label TSV ${name} text and a Generate shows what Generate draws (${both})`, async ({ page }) => {
+      if (flagInert) {
+        test(`an Undo of Reset Settings from the other drawing after its Result was shown draws the edit again (${both})`, async ({ page }) => {
           test.setTimeout(240_000);
           await openBothDrawings(page, { mode, results: 'single', reflow });
-          await evaluateWithRetainedPromise(page, (bulkText) => window.__GBDRAW_APP__.loadLabelOverrideTable({
-            target: { files: [new File([`*\t*\tlabel\t^alpha protein$\t${bulkText}\n`], 'labels.tsv', { type: 'text/plain' })] }
-          }), text);
-          await settleLive(page);
+          await popupEdit(page, feature, { labelText: 'walk label' });
           await generate(page);
           await resetFromOtherDrawing(page, mode);
-          await expectLiveEqualsGenerate(page, { label: `a Label TSV ${name} text, then Reset from the other drawing` });
+          await settleLive(page);
+          await switchDrawing(page, otherMode(mode));
+          await history(page, 'undo');
+          await settleLive(page);
+          await switchDrawing(page, mode);
+          await expectLiveEqualsGenerate(page, { label: 'an Undo of the Reset after the Result was shown' });
         });
-      }
-      for (const [name, edit] of [['hidden feature', { visibility: 'off' }], ['label text', { labelText: 'walk label' }]]) {
-        test(`a rerender that failed on a display does not run again at the next display (${name}, ${both})`, async ({ page }) => {
+        test(`an Undo of Reset Settings before its Result was shown asks for no rerender (${both})`, async ({ page }) => {
           test.setTimeout(240_000);
           await openBothDrawings(page, { mode, results: 'single', reflow });
-          await popupEdit(page, 'FL2', edit);
+          await popupEdit(page, feature, { labelText: 'walk label' });
           await generate(page);
           await switchDrawing(page, otherMode(mode));
           await resetKeepingLabelSettings(page);
-          await failRerenders(page);
-          const before = await rerenderRequests(page);
-          await switchDrawing(page, mode);
-          await expect.poll(() => rerenderRequests(page), 'the display asks once').toBe(before + 1);
           await settleLive(page);
-          await allowRerenders(page);
-          expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError), 'the failure is reported').not.toBeNull();
-          await switchDrawing(page, otherMode(mode));
+          await history(page, 'undo');
           await expectNoRerenderOfDisplay(page, () => switchDrawing(page, mode));
         });
+        for (const [name, text] of [['blank', ''], ['edited', 'bulk label']]) {
+          test(`Reset Settings from the other drawing after a Label TSV ${name} text and a Generate shows what Generate draws (${both})`, async ({ page }) => {
+            test.setTimeout(240_000);
+            await openBothDrawings(page, { mode, results: 'single', reflow });
+            await evaluateWithRetainedPromise(page, (bulkText) => window.__GBDRAW_APP__.loadLabelOverrideTable({
+              target: { files: [new File([`*\t*\tlabel\t^alpha protein$\t${bulkText}\n`], 'labels.tsv', { type: 'text/plain' })] }
+            }), text);
+            await settleLive(page);
+            await generate(page);
+            await resetFromOtherDrawing(page, mode);
+            await expectLiveEqualsGenerate(page, { label: `a Label TSV ${name} text, then Reset from the other drawing` });
+          });
+        }
+        for (const [name, edit] of [['hidden feature', { visibility: 'off' }], ['label text', { labelText: 'walk label' }]]) {
+          test(`a rerender that failed on a display does not run again at the next display (${name}, ${both})`, async ({ page }) => {
+            test.setTimeout(240_000);
+            await openBothDrawings(page, { mode, results: 'single', reflow });
+            await popupEdit(page, 'FL2', edit);
+            await generate(page);
+            await switchDrawing(page, otherMode(mode));
+            await resetKeepingLabelSettings(page);
+            await failRerenders(page);
+            const before = await rerenderRequests(page);
+            await switchDrawing(page, mode);
+            await expect.poll(() => rerenderRequests(page), 'the display asks once').toBe(before + 1);
+            await settleLive(page);
+            await allowRerenders(page);
+            expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError), 'the failure is reported').not.toBeNull();
+            await switchDrawing(page, otherMode(mode));
+            await expectNoRerenderOfDisplay(page, () => switchDrawing(page, mode));
+          });
+        }
       }
     }
     test(`Reset Settings with a Result an Undo of a later Generate returned reaches what its bytes drew (${flag})`, async ({ page }) => {
@@ -1213,20 +1252,22 @@ test.describe('a Result displayed after its intent changed', () => {
     });
     // In the drawing shown at the Reset, Reset's redraw applies Label visibility to a
     // batch Result; a failed Reset redraw leaves that to the display's own redraw.
-    for (const [name, change] of [['Off', { labelVisibility: 'off' }], ['On', { labelVisibility: 'on' }]]) {
-      test(`Reset Settings in the same drawing shows a batch Result holding Label visibility ${name} as Generate draws it (${flag})`, async ({ page }) => {
-        test.setTimeout(240_000);
-        await open(page, { mode: 'circular', results: 'batch', reflow });
-        await showResult(page, 1);
-        if (name === 'On') await showNoLabels(page);
-        await popupEdit(page, BATCH_FEATURE, change);
-        await generate(page);
-        await showResult(page, 0);
-        await resetKeepingLabelSettings(page);
-        await settleLive(page);
-        await showResult(page, 1);
-        await expectLiveEqualsGenerate(page, { label: `Label ${name} in a Result shown after Reset Settings with its drawing shown` });
-      });
+    if (flagInert) {
+      for (const [name, change] of [['Off', { labelVisibility: 'off' }], ['On', { labelVisibility: 'on' }]]) {
+        test(`Reset Settings in the same drawing shows a batch Result holding Label visibility ${name} as Generate draws it (${flag})`, async ({ page }) => {
+          test.setTimeout(240_000);
+          await open(page, { mode: 'circular', results: 'batch', reflow });
+          await showResult(page, 1);
+          if (name === 'On') await showNoLabels(page);
+          await popupEdit(page, BATCH_FEATURE, change);
+          await generate(page);
+          await showResult(page, 0);
+          await resetKeepingLabelSettings(page);
+          await settleLive(page);
+          await showResult(page, 1);
+          await expectLiveEqualsGenerate(page, { label: `Label ${name} in a Result shown after Reset Settings with its drawing shown` });
+        });
+      }
     }
     test(`an Undo of a Generate that replaced an unshown Result without a hidden feature draws the feature (${flag})`, async ({ page }) => {
       test.setTimeout(240_000);
@@ -1245,26 +1286,28 @@ test.describe('a Result displayed after its intent changed', () => {
       await showResult(page, 1);
       await expectLiveEqualsGenerate(page, { label: 'a hide in a Result an Undo of a Generate returned, gone before that Generate' });
     });
-    for (const [name, change] of [['hidden feature', { visibility: 'off' }], ['label text', { labelText: 'walk label' }]]) {
-      test(`a rerender that failed on a Result display does not run again at the next display (${name}, ${flag})`, async ({ page }) => {
-        test.setTimeout(240_000);
-        await open(page, { mode: 'circular', results: 'batch', reflow });
-        await showResult(page, 1);
-        await popupEdit(page, BATCH_FEATURE, change);
-        await generate(page);
-        await showResult(page, 0);
-        await resetKeepingLabelSettings(page);
-        await settleLive(page);
-        await failRerenders(page);
-        const before = await rerenderRequests(page);
-        await showResult(page, 1);
-        await expect.poll(() => rerenderRequests(page), 'the display asks once').toBe(before + 1);
-        await settleLive(page);
-        await allowRerenders(page);
-        expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError), 'the failure is reported').not.toBeNull();
-        await expectNoRerenderOfDisplay(page, () => showResult(page, 0));
-        await expectNoRerenderOfDisplay(page, () => showResult(page, 1));
-      });
+    if (flagInert) {
+      for (const [name, change] of [['hidden feature', { visibility: 'off' }], ['label text', { labelText: 'walk label' }]]) {
+        test(`a rerender that failed on a Result display does not run again at the next display (${name}, ${flag})`, async ({ page }) => {
+          test.setTimeout(240_000);
+          await open(page, { mode: 'circular', results: 'batch', reflow });
+          await showResult(page, 1);
+          await popupEdit(page, BATCH_FEATURE, change);
+          await generate(page);
+          await showResult(page, 0);
+          await resetKeepingLabelSettings(page);
+          await settleLive(page);
+          await failRerenders(page);
+          const before = await rerenderRequests(page);
+          await showResult(page, 1);
+          await expect.poll(() => rerenderRequests(page), 'the display asks once').toBe(before + 1);
+          await settleLive(page);
+          await allowRerenders(page);
+          expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError), 'the failure is reported').not.toBeNull();
+          await expectNoRerenderOfDisplay(page, () => showResult(page, 0));
+          await expectNoRerenderOfDisplay(page, () => showResult(page, 1));
+        });
+      }
     }
     test(`a rerender that failed on an edit does not run again when another batch Result is displayed (${flag})`, async ({ page }) => {
       test.setTimeout(240_000);
@@ -1434,23 +1477,28 @@ test.describe('Undo and Redo', () => {
     });
   }
   for (const mode of ['linear', 'circular']) {
-    for (const { domain, edit, edited } of AT_ONCE_CASES) {
-      test(`Undo and Redo of ${domain} apply at once with no rerender, Auto Reflow off (${mode})`, async ({ page }) => {
-        test.setTimeout(180_000);
-        await open(page, { mode, results: 'single', reflow: 'off' });
-        const id = await featureIdOf(page, 'FL2');
-        await edit(page);
-        await settleLive(page);
-        const before = await rerenderRequests(page);
-        await holdRerenders(page);
-        expect(await stepAndRead(page, 'undo', id), 'Undo').toEqual(SHOWN);
-        expect(await stepAndRead(page, 'redo', id), 'Redo').toEqual(edited);
-        expect(await stepAndRead(page, 'undo', id), 'Undo again').toEqual(SHOWN);
-        await releaseRerenders(page);
-        expect(await rerenderRequests(page), 'the steps ask for no rerender').toBe(before);
-        await expectLiveEqualsGenerate(page, { label: `Undo of ${domain}` });
-      });
-    }
+    // One page per mode: each domain's last Undo returns the opened draft, and
+    // its parity Generate draws that draft again, so the next domain starts from
+    // the state `open` left.
+    test(`Undo and Redo of each edit domain apply at once with no rerender, Auto Reflow off (${mode})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, { mode, results: 'single', reflow: 'off' });
+      for (const { domain, edit, edited } of AT_ONCE_CASES) {
+        await test.step(`Undo and Redo of ${domain} apply at once with no rerender`, async () => {
+          const id = await featureIdOf(page, 'FL2');
+          await edit(page);
+          await settleLive(page);
+          const before = await rerenderRequests(page);
+          await holdRerenders(page);
+          expect(await stepAndRead(page, 'undo', id), `${domain}: Undo`).toEqual(SHOWN);
+          expect(await stepAndRead(page, 'redo', id), `${domain}: Redo`).toEqual(edited);
+          expect(await stepAndRead(page, 'undo', id), `${domain}: Undo again`).toEqual(SHOWN);
+          await releaseRerenders(page);
+          expect(await rerenderRequests(page), `${domain}: the steps ask for no rerender`).toBe(before);
+          await expectLiveEqualsGenerate(page, { label: `Undo of ${domain}` });
+        });
+      }
+    });
     // With Auto Reflow on, an Undo of a hide or a Label Off waits for the rerender
     // (OV-2436); the Redo after it applies at once, with the rerender held only
     // for the Redo.
@@ -2033,15 +2081,20 @@ test('each edit kind runs only the compile stages and worker requests of its all
   await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0001$', color: '#c83366', cap: 'CDS' });
   await generate(page);
-  await page.evaluate(() => {
+  await installPageProbe(page, () => {
     window.__workLog = [];
-    const hooks = window.__GBDRAW_TEST_HOOKS__ || {};
-    const metric = hooks.onStructuralMetric;
-    const render = hooks.beforeDiagramGenerationResponse;
+    const hooks = window.__GBDRAW_TEST_HOOKS__;
+    const metric = hooks?.onStructuralMetric;
+    const render = hooks?.beforeDiagramGenerationResponse;
     window.__GBDRAW_TEST_HOOKS__ = {
       ...hooks,
       onStructuralMetric: (event) => { metric?.(event); window.__workLog.push(event); },
       beforeDiagramGenerationResponse: (...args) => { window.__workLog.push({ name: 'render' }); return render?.(...args); }
+    };
+    return () => {
+      if (hooks === undefined) delete window.__GBDRAW_TEST_HOOKS__;
+      else window.__GBDRAW_TEST_HOOKS__ = hooks;
+      delete window.__workLog;
     };
   });
   const observed = [];
@@ -2140,6 +2193,28 @@ test.describe('the warm app page', () => {
     expect(warmPage()).toBe('fresh: page.globals.leftByCase: "<missing>" -> "boolean"');
     await openFresh(page);
     expect((await freshBootView(page)).leftByCase).toBe(null);
+    // A probe the case installs through `installPageProbe`, which it does not take out.
+    await installPageProbe(page, () => {
+      const serialize = XMLSerializer.prototype.serializeToString;
+      XMLSerializer.prototype.serializeToString = function (node) { return serialize.call(this, node); };
+      window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {};
+      window.probedByCase = true;
+      return () => {
+        XMLSerializer.prototype.serializeToString = serialize;
+        delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+        delete window.probedByCase;
+      };
+    });
+  });
+
+  test('the restore takes out a probe the previous case installed, and the next case reuses the page', async ({ page }) => {
+    expect(warmPage()).toBe('reused');
+    await openFresh(page);
+    expect(await page.evaluate(() => ({
+      global: window.probedByCase ?? null,
+      hook: typeof window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse,
+      serializer: /\[native code\]/.test(XMLSerializer.prototype.serializeToString.toString())
+    }))).toEqual({ global: null, hook: 'undefined', serializer: true });
   });
 
   // OV-1001: the app asks before it downloads a Session file of a name it
