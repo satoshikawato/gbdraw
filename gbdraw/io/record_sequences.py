@@ -802,23 +802,37 @@ def _viewed(seq: Seq | MutableSeq) -> RecordSequence | None:
 # The holder of the bytes of each ``Seq`` a view or a count has read, by the identity of the bytes (a copy of a
 # ``Seq`` shares them): kept while the ``Seq`` that first read them lives, which keeps the bytes and so their
 # identity. The weakref callback takes no lock: it may run inside any allocation.
-_HELD: dict[int, tuple[weakref.ref[Seq], _HeldBases]] = {}
+_HELD: dict[int, tuple[_HeldRef, _HeldBases]] = {}
 _HELD_LOCK = threading.Lock()  # one holder per bytes object, so their rows are counted once
+
+
+class _HeldRef(weakref.ref[Seq]):
+    """The ``Seq`` that first read some bytes, with the key of their holder: one object per held record."""
+
+    __slots__ = ("key",)
+
+    key: int
+
+    def __new__(cls, seq: Seq, key: int) -> _HeldRef:
+        ref = super().__new__(cls, seq, _forget)
+        ref.key = key
+        return ref
+
+
+def _forget(ref: weakref.ref[Seq]) -> None:  # takes no lock: it runs as a finalizer
+    assert isinstance(ref, _HeldRef)
+    if _HELD.get(ref.key, (None,))[0] is ref:
+        del _HELD[ref.key]
 
 
 def _held(seq: Seq, data: bytes, rows: _Rows | None = None) -> _HeldBases:
     key = id(data)
-
-    def forget(ref: weakref.ref[Seq], key: int = key) -> None:  # takes no lock: it runs as a finalizer
-        if _HELD.get(key, (None,))[0] is ref:
-            del _HELD[key]
-
     with _HELD_LOCK:
         entry = _HELD.get(key)
         if entry is not None and entry[1].bases is data:
             return entry[1]
         held = _HeldBases(data, rows)
-        _HELD[key] = (weakref.ref(seq, forget), held)
+        _HELD[key] = (_HeldRef(seq, key), held)
         return held
 
 

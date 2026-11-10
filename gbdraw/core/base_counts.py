@@ -156,6 +156,8 @@ class RowCounts:
     """The count rows of one sequence, added in order (:func:`count_rows`): a row begun by some bytes is ended
     by the next."""
 
+    __slots__ = ("_rows",)  # one per record sequence
+
     def __init__(self) -> None:
         self._rows: list[NDArray[np.uint16]] = []
 
