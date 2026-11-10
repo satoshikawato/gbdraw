@@ -7,8 +7,8 @@ spelling after they read it. A line that needs no repair reaches the parser as
 written, so the text is streamed, never held twice. An input file may be
 gzip-compressed, whatever its name: ``open_input_text`` and ``read_input_bytes``
 expand one, told by its first two bytes, and every reader opens its file there;
-the record sequence reader opens its files with ``open_input_bytes``, a gzip one
-expanded first with ``expand_input_copy``.
+the record sequence reader opens its files with ``open_input_bytes``, and expands
+a gzip one with ``open_expanded_input``.
 A gzip input expands to at most ``MAX_EXPANDED_INPUT_BYTES``: a small file can
 hold gigabytes, so reading stops past the cap and names the file. A plain file
 has no cap.
@@ -22,8 +22,6 @@ import io
 import locale
 import os
 import re
-import shutil
-import tempfile
 import zlib
 from collections.abc import Callable, Iterator
 from os import PathLike
@@ -135,29 +133,16 @@ def open_input_bytes(path: str | PathLike[str]) -> IO[bytes]:
     """A plain input file opened for its bytes, unbuffered: read in order, or at offsets.
 
     The record sequence reader (:mod:`gbdraw.io.record_sequences`) opens its files
-    here; a gzip input is first expanded with :func:`expand_input_copy`.
+    here; a gzip input is expanded with :func:`open_expanded_input`.
     """
 
     return open(path, "rb", buffering=0)
 
 
-def expand_input_copy(path: str | PathLike[str], directory: str) -> str:
-    """Expand a gzip input file into a new file in ``directory``, and return its path.
+def open_expanded_input(path: str | PathLike[str]) -> io.BufferedReader | gzip.GzipFile:
+    """A gzip input file's expanded bytes, stopping past ``MAX_EXPANDED_INPUT_BYTES`` as ``open_input_text`` stops."""
 
-    The expansion stops past ``MAX_EXPANDED_INPUT_BYTES`` as ``open_input_text``
-    stops, and leaves no file behind when it fails. Removing the copy is the
-    caller's.
-    """
-
-    with tempfile.NamedTemporaryFile(dir=directory, prefix="input-", delete=False) as copy:
-        try:
-            with _expanded_gzip(path, capped=True) as expanded:
-                shutil.copyfileobj(expanded, copy, 8 * _MIB)
-        except BaseException:
-            copy.close()
-            os.unlink(copy.name)
-            raise
-    return copy.name
+    return _expanded_gzip(path, capped=True)
 
 
 def is_gzip_file(path: str | PathLike[str]) -> bool:
@@ -393,7 +378,7 @@ __all__ = [
     "MAX_EXPANDED_INPUT_BYTES",
     "canonical_feature_type",
     "canonicalize_feature_types",
-    "expand_input_copy",
+    "open_expanded_input",
     "flat_file_format",
     "flat_file_stream",
     "gff3_stream",
