@@ -273,3 +273,75 @@ def test_the_cap_counts_what_a_reader_expanded_so_far(tmp_path: Path, monkeypatc
     assert str(first.seq) == _sequence(GENBANK)
     with pytest.raises(InputFileError, match="expands to more than 1 MiB"):
         read_flat_file_records(str(path))
+
+
+def test_a_cap_refuses_only_the_bytes_past_it_at_any_block_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The cap is byte-exact: a reader that stops within it reads, whatever the block size and the cap."""
+
+    from gbdraw.io import input_text
+
+    path, expanded = _first_of_many(tmp_path)
+    first_record = len(GENBANK.read_bytes())
+    for cap in (first_record + 22_801, first_record + 1):
+        monkeypatch.setattr(input_text, "MAX_EXPANDED_INPUT_BYTES", cap)
+        (first,) = read_flat_file_records(str(path), first_only=True)
+        assert str(first.seq) == _sequence(GENBANK)
+        with pytest.raises(InputFileError, match="expands to more than"):
+            read_flat_file_records(str(path))
+    monkeypatch.setattr(input_text, "MAX_EXPANDED_INPUT_BYTES", expanded)
+    assert len(read_flat_file_records(str(path))) == 13  # a file of exactly the cap reads whole
+
+
+def test_a_refused_gzip_pass_leaves_no_bytes_of_its_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from gbdraw.io import input_text
+
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    monkeypatch.setattr(input_text, "MAX_EXPANDED_INPUT_BYTES", 1 << 20)
+    folder = Path(record_sequences._expansion_directory())
+    before = set(folder.iterdir())
+    path, _ = _first_of_many(tmp_path)
+    with pytest.raises(InputFileError, match="expands to more than 1 MiB"):
+        read_flat_file_records(str(path))
+    assert all(copy.stat().st_size == 0 for copy in set(folder.iterdir()) - before if copy.exists())
+
+
+def _many_with_a_cp1252_byte(tmp_path: Path) -> tuple[Path, bytes]:
+    """Thirteen records, the sixth with a byte that is not UTF-8 (é in cp1252) in its definition."""
+
+    text = GENBANK.read_bytes()
+    odd = text.replace(b"DEFINITION  ", b"DEFINITION  caf\xe9 ", 1)
+    plain = text * 5 + odd + text * 7
+    path = tmp_path / "many.gb.gz"
+    path.write_bytes(gzip.compress(plain))
+    return path, plain
+
+
+def test_a_second_pass_reads_the_copy_and_expands_on_from_where_the_first_stopped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gbdraw.io import input_text
+
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    monkeypatch.setattr(input_text.locale, "getpreferredencoding", lambda _do_setlocale=True: "cp1252")
+    path, plain = _many_with_a_cp1252_byte(tmp_path)
+    (tmp_path / "plain.gb").write_bytes(plain)
+    records = read_flat_file_records(str(path))
+    expected = read_flat_file_records(str(tmp_path / "plain.gb"))
+    assert Path(records[0].seq._data._bases.source.path).read_bytes() == plain
+    assert [(r.id, r.description, str(r.seq)) for r in records] == [(r.id, r.description, str(r.seq)) for r in expected]
+    assert "café" in records[5].description
+
+
+def test_a_gzip_input_replaced_between_two_passes_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from gbdraw.io import input_text
+
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    path, plain = _many_with_a_cp1252_byte(tmp_path)
+
+    def replaced(_do_setlocale: bool = True) -> str:  # asked between the UTF-8 pass and the second pass
+        path.write_bytes(gzip.compress(plain.replace(b"ACCESSION   ", b"ACCESSION   X", 13)))
+        return "cp1252"
+
+    monkeypatch.setattr(input_text.locale, "getpreferredencoding", replaced)
+    with pytest.raises(InputFileError, match="changed after gbdraw read it"):
+        read_flat_file_records(str(path))

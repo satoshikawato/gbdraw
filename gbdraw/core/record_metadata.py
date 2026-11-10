@@ -62,9 +62,6 @@ def held_record_origin(record: SeqRecord) -> RecordOrigin | None:
     return None
 
 
-# The bases ``record_content_digest`` reads at a time.
-
-
 def record_content_digest(record: SeqRecord) -> str:
     """A digest of what ``record`` draws: its names, sequence, features and annotations other than gbdraw's own.
 
