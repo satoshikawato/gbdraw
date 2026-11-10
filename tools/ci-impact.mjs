@@ -13,7 +13,6 @@ import {
 } from './check-promotion-readiness.mjs';
 import { formatJobTimeReport, jobTimes, workflowJobLimits } from './ci-impact-job-times.mjs';
 import {
-  IMPACT_PLAN_SCHEMA_VERSION,
   PR_TREE_BASIS,
   carryForwardVerdicts,
   classifyChanges,
@@ -640,12 +639,11 @@ const validShards = (shards) => Array.isArray(shards) && shards.length > 0
   && shards.every((paths) => Array.isArray(paths) && paths.every((path) => typeof path === 'string' && /^\S+$/.test(path)));
 
 // SELECTIVE_CI.md "Jobs for changed leaf tests": a leaf-test plan runs only the changed specs
-// assigned to the shard; every other plan runs the whole shard. A pull request runs the
-// trusted base's plan, which may use an older schema; such a plan runs the whole shard.
+// assigned to the shard; every other plan runs the whole shard. The helper whose policy made the
+// plan reads it: on a pull request, the trusted base's, as in PR / gate.
 export const functionalShardFiles = ({ plan, shards, shard }) => {
-  const currentSchema = isPlainObject(plan) && plan.schemaVersion === IMPACT_PLAN_SCHEMA_VERSION;
-  if (currentSchema) validateImpactPlan(plan);
-  if (!isPlainObject(plan) || !Array.isArray(plan.requiredJobs) || !plan.requiredJobs.includes('playwright-functional')) {
+  validateImpactPlan(plan);
+  if (!plan.requiredJobs.includes('playwright-functional')) {
     fail('FUNCTIONAL_NOT_REQUIRED', 'The plan does not require functional Playwright.');
   }
   if (!validShards(shards)) fail('INVALID_SHARD_MAP', 'The functional shard map is invalid.');
@@ -653,7 +651,7 @@ export const functionalShardFiles = ({ plan, shards, shard }) => {
     fail('INVALID_SHARD', 'The shard number is outside the shard map.', { shard });
   }
   const assigned = shards[shard - 1];
-  if (!currentSchema || plan.leafTests === null) return Object.freeze([...assigned]);
+  if (plan.leafTests === null) return Object.freeze([...assigned]);
   const changed = new Set(plan.leafTests.filter(({ kind }) => kind === 'functional').map(({ path }) => path));
   return Object.freeze(assigned.filter((path) => changed.has(path)));
 };

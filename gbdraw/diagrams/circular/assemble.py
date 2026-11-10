@@ -175,9 +175,13 @@ from ...annotations import (
 from ...annotations.planning import prepare_annotation_track_slots
 from ...annotations.models import slots_in_paint_order
 from ...render.drawers.circular.depth import DepthDrawer
-from ...render.drawers.circular.feature_density import FeatureDensityHeatmapGroup, feature_density_heatmap_ink
+from ...render.drawers.circular.feature_density import (
+    FeatureDensityHeatmapGroup,
+    feature_density_heatmap_ink,
+    feature_density_paints_band_edges,
+)
 from ...render.drawers.circular.gc_content import GcContentDrawer
-from ...render.groups.circular.conservation import conservation_ring_ink
+from ...render.groups.circular.conservation import conservation_ring_ink, conservation_ring_paints_band_edges
 from ...render.groups.circular.ticks import TickGroup
 from ...render.drawers.circular.gc_skew import SkewDrawer
 from ...render.drawers.circular.annotations import (
@@ -2211,22 +2215,48 @@ def _slot_gc_config_with_axis_font_size(
     return cloned
 
 
+def _edge_painting_slot_ids(
+    slots: Sequence[CircularTrackSlot], configurators: DiagramConfigurators, record: CircularRecordData, cfg: GbdrawConfig
+) -> Iterator[str]:
+    """The slots whose tracks paint their band's edges, each by its drawer's rule: the GC content band in percent
+    mode with its background or border, a conservation ring, a feature density heatmap."""
+
+    gc_paints_edges = GcContentDrawer(configurators.gc).paints_percent_band_edges()
+    for slot in slots:
+        renderer = str(slot.renderer)
+        if renderer == "dinucleotide_content":
+            paints = gc_paints_edges
+        elif renderer == "sequence_conservation":
+            track = conservation_slot_track(slot.params, record.conservation_tracks)
+            paints = track is not None and conservation_ring_paints_band_edges(track, cfg)
+        elif renderer == "feature_density":
+            layer = slot_feature_density_layer(str(slot.id), slot, record.feature_density)
+            paints = layer is not None and feature_density_paints_band_edges(layer)
+        else:
+            paints = False
+        if paints:
+            yield str(slot.id)
+
+
 def _circular_scalar_axes(
     configurators: DiagramConfigurators,
+    record: CircularRecordData,
+    slots: Sequence[CircularTrackSlot],
+    cfg: GbdrawConfig,
     *,
     show_depth_track: bool,
     depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
 ) -> CircularScalarAxes:
     """The axes the radial layout keeps room for: those of the depth tracks when they are drawn, each in its own
-    settings as its slot draws it (``_slot_depth_source``), and the GC content track's in percent mode; and whether
-    the GC content band paints its edges, as its drawer paints them."""
+    settings as its slot draws it (``_slot_depth_source``), and the GC content track's in percent mode; and which of
+    ``record``'s ``slots`` paint their band's edges (``_edge_painting_slot_ids``)."""
 
     gc = configurators.gc
     return CircularScalarAxes.of(
         configurators.depth if show_depth_track else None,
         gc if str(gc.mode).strip().lower() == "percent" else None,
         None if depth_tracks_by_index is None else {index: track.config for index, track in depth_tracks_by_index.items()},
-        gc_content_paints_edges=GcContentDrawer(gc).paints_percent_band_edges(),
+        edge_painting_slot_ids=_edge_painting_slot_ids(slots, configurators, record, cfg),
     )
 
 
@@ -3583,7 +3613,7 @@ def add_record_on_circular_canvas(
     # drawn definition there (D-08 covers the plot title).
     # The scalar axes the radial layout keeps room for; the layout sets the GC axis font they are drawn in.
     scalar_axes = _circular_scalar_axes(
-        configurators, show_depth_track=show_depth_track, depth_tracks_by_index=depth_tracks_by_index
+        configurators, record, layout_slots, cfg, show_depth_track=show_depth_track, depth_tracks_by_index=depth_tracks_by_index
     )
     reserved_definition_profile: CircularDefinitionProfile = (
         "full"

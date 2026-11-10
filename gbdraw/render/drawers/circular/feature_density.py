@@ -47,6 +47,14 @@ class FeatureDensityHeatmapGroup:
         return self.group
 
 
+def feature_density_paints_band_edges(layer: FeatureDensityLayer) -> bool:
+    """Whether the track paints its band's edges: a heatmap's cells fill the band's height; a histogram's bars reach
+    the outer edge only at its highest windows, as a GC content line does. The tick labels next to a heatmap keep
+    their margin from it (OV-3149)."""
+
+    return layer.track.style == "heatmap"
+
+
 def feature_density_heatmap_ink(
     layer: FeatureDensityLayer,
     record_length: int,
@@ -61,4 +69,4 @@ def feature_density_heatmap_ink(
     )
 
 
-__all__ = ["FeatureDensityHeatmapGroup", "feature_density_heatmap_ink"]
+__all__ = ["FeatureDensityHeatmapGroup", "feature_density_heatmap_ink", "feature_density_paints_band_edges"]

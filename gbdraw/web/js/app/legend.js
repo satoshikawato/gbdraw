@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
+/** @import { DrawingState, WebState } from '../state.js' */
 /** @import { LegendRow } from '../services/drawing/paint.js' */
 /** @import { SpecificRuleBuild } from '../services/specific-color-rules.js' */
 import { createLegendDragActions } from './legend/drag-actions.js';
@@ -21,7 +21,7 @@ import { msg } from '../utils/i18n.js';
 
 /**
  * @typedef {object} LegendManagerOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {WebState} state The app state; this root passes it to the Legend entry, sort, stroke, and drag owners.
  * @property {(build: SpecificRuleBuild, label?: string, options?: { drawing?: DrawingState, afterCommit?: () => void }) => Promise<any>} commitLegendRowRules
  *   The rule owner's write of the rule table (`commitSpecificRules`).
  *   The rule owner's commit of the specific-color rules that a Legend row edit changes (R13).

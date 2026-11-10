@@ -14,13 +14,11 @@ import {
 /** @typedef {AliasSource} OrthogroupFeature A Feature record; the alias fields are read, the orthogroup fields written. */
 /** @typedef {AliasSource} OrthogroupMember A member record of a saved orthogroup. */
 /**
- * @typedef {object} OrthogroupGroup
- * @property {unknown} [id]
- * @property {unknown} [members]
- * @property {unknown} [member_count]
- * @property {unknown} [record_coverage_count]
- * @property {unknown} [scope]
- * @property {unknown} [source_record_index]
+ * One Similarity group row, as `state.orthogroups` holds it: the groups of the analysis result, of a Session, or of a
+ * History step, none of them validated, so each field is read as `unknown` (R14). Its id is any of the alias keys
+ * `orthogroupIdStatus` reads; the other fields read are `members`, `member_count`, `record_coverage_count`, `scope`,
+ * `source_record_index`, `name`, `description`, and `nameCandidates`.
+ * @typedef {AliasSource} OrthogroupGroup
  */
 /**
  * The orthogroup fields one Feature takes from its member.

@@ -6,7 +6,8 @@
 // the plan; the composition root passes their members, the Editor drawer's tab, and the review's
 // focus helpers (app/similarity-alignment-review.js) as ports.
 /** @import { DrawingState, WebState } from '../state.js' */
-/** @import { GroupOrId, OrthogroupGroup, OrthogroupMember } from './orthogroups.js' */
+/** @import { GroupOrId } from './orthogroups.js' */
+/** @import { OrthogroupGroup, OrthogroupMember } from '../services/orthogroup-feature-metadata.js' */
 /** @import { AlignmentStartOptions } from './similarity-alignment.js' */
 import { resolveUniqueOrthogroupMemberForFeature } from './orthogroups.js';
 import { groupCountText } from '../services/pairwise-match-popup.js';

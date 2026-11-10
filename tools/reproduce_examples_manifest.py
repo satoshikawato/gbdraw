@@ -54,6 +54,25 @@ UNREFERENCED_FIGURE_RETENTION: dict[str, str] = {
 }
 
 
+# Figures whose source records are in neither the repository nor the test-data Release
+# (tools/test_data.py). `reproduce_examples.py --check` names each one as not checked, and
+# fails once one of them renders, so a figure leaves this list when its inputs arrive.
+FIGURES_WITHOUT_INPUTS: dict[str, str] = {
+    "Escherichia_Shigella_pair": (
+        "Shigella_dysenteriae.gbk is not in the repository or the test-data Release, and its "
+        "comparison needs blastn (BLAST+)."
+    ),
+    "Escherichia_Shigella_multi": (
+        "Shigella_dysenteriae.gbk, Shigella_flexneri.gbk and Shigella_sonnei.gbk are not in the "
+        "repository or the test-data Release, and its comparisons need blastn (BLAST+)."
+    ),
+    "M16-5_fugaku": "M16-5.gb is not in the repository or the test-data Release.",
+    "Pandoravirus_salinus_forest": (
+        "Pandoravirus_salinus.gb is not in the repository or the test-data Release."
+    ),
+}
+
+
 @dataclass(frozen=True)
 class SupportAsset:
     filename: str
@@ -2024,6 +2043,7 @@ __all__ = [
     "CompositePanel",
     "CompositeRecipe",
     "FigureSpec",
+    "FIGURES_WITHOUT_INPUTS",
     "FastaPreparation",
     "FileArgument",
     "MANUALLY_MANAGED_FIGURES",

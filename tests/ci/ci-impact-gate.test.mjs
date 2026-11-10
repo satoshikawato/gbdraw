@@ -87,6 +87,7 @@ test('gate accepts metadata, documentation, and full PR routes', () => {
       'core-pr',
       'recipes-standard',
       'gallery',
+      'examples',
       'lint',
       'web-contracts-pr',
       'web-pr-smoke',

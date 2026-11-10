@@ -257,6 +257,26 @@ Do not update reference outputs merely to make a failing test pass. First
 confirm that the new geometry is intentional and correct; the reference files
 record the project's intended rendering behavior.
 
+The figures under `examples/` come from `tools/reproduce_examples.py`. A pull
+request whose changes can alter rendering runs its `--check` mode in the
+`Examples` CI job, which fails when a tracked figure differs from what the code
+renders now and names the figures and the command that refreshes them. SVGs are
+compared byte for byte; a PNG is compared by the digest of the SVG it was
+rasterized from, which the tool writes into the PNG, so a refresh on your
+machine passes on CI:
+
+```bash
+# 1. List the figures that differ (about 50 CPU-minutes; --jobs runs figures in parallel)
+python tools/reproduce_examples.py --check --jobs 4
+
+# 2. Refresh the ones it names in place, then look at each refreshed figure
+python tools/reproduce_examples.py --output-root . --figure <id> --figure <id>
+git diff --stat -- examples/
+```
+
+When the CI job fails, its `examples-<run>` artifact holds the figures CI
+rendered.
+
 ## Changing documentation
 
 Public documentation has four teaching routes:

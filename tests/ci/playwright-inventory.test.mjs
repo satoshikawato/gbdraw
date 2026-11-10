@@ -111,9 +111,9 @@ test('functional CI shards run the checked-in spec file lists and every acceptan
   const { shards } = JSON.parse(readFileSync(SHARDS_FILE, 'utf8'));
   const matrix = JSON.parse(job.match(/shard: (\[[\d, ]+\])/)[1]);
   assert.deepEqual(matrix, shards.map((_, index) => index + 1));
-  // tools/ci-impact.mjs shard-files reads this shard map and keeps only changed specs for a
-  // leaf-test plan; every other plan runs the shard's whole list.
-  assert.match(job, /run: node tools\/ci-impact\.mjs shard-files \$\{\{ matrix\.shard \}\}\n/);
+  // tools/ci-impact.mjs shard-files (the trusted base's on a pull request) reads this shard map
+  // and keeps only changed specs for a leaf-test plan; every other plan runs the shard's whole list.
+  assert.match(job, /run: node \$\{\{ github\.event_name == 'pull_request' && '\.ci-trusted-base\/' \|\| '' \}\}tools\/ci-impact\.mjs shard-files \$\{\{ matrix\.shard \}\}\n/);
   assert.match(job, /files="\$FUNCTIONAL_SPECS"\n/);
   assert.match(job, /npm run test:web:functional-full -- --reporter=line,github,json \$files\n/);
   assert.doesNotMatch(job, /PWTEST_|--shard/);
