@@ -48,12 +48,15 @@ def _genbank(path: Path, bases: bytes) -> Path:
 
 @pytest.fixture
 def small_rows(monkeypatch: pytest.MonkeyPatch) -> Iterator[int]:
-    """Count rows of 8 raw bytes, so a short sequence has many row edges."""
+    """Count rows of 8 bases, so a short sequence has many row edges, and slices of 64 bytes, so a row and a line
+    cross them."""
 
     rows = 8
-    monkeypatch.setattr(base_counts, "ROW_BYTES", rows)
-    monkeypatch.setattr(base_counts, "_ROW_KEYS", np.arange(base_counts.SLICE_BYTES, dtype=np.uint32) // rows * 256)
-    monkeypatch.setattr(record_sequences, "ROW_BYTES", rows)
+    monkeypatch.setattr(base_counts, "ROW_BASES", rows)
+    monkeypatch.setattr(record_sequences, "ROW_BASES", rows)
+    monkeypatch.setattr(base_counts, "SLICE_BYTES", 64)
+    monkeypatch.setattr(record_sequences, "SLICE_BYTES", 64)
+    monkeypatch.setattr(record_sequences, "_CHUNK_BYTES", 64)
     yield rows
 
 
@@ -90,6 +93,57 @@ def test_counts_of_any_span_equal_a_whole_copy_s_count(held: str, tmp_path: Path
     assert known_base_counts_at(across, inside).tolist() == _oracle(bytes(across), inside)
 
 
+_VARIANTS = Path(__file__).parent / "fixtures" / "input_variants"
+
+
+def _irregular_genbank(path: Path, bases: bytes) -> Path:
+    """Sequence lines in the usual layout, then some that are not (a digit among the letters, which Biopython keeps
+    as a base: read line by line), then the usual again."""
+
+    lines = []
+    for number, start in enumerate(range(0, len(bases), 60)):
+        chunk = bases[start : start + 60].decode()
+        if 10 <= number < 20:
+            lines.append(f"{start + 1:>9} " + " ".join(chunk[i : i + 7] + "7" for i in range(0, len(chunk), 7)))
+        else:
+            lines.append(f"{start + 1:>9} " + " ".join(chunk[i : i + 10] for i in range(0, len(chunk), 10)))
+    length = sum(len(line[10:].replace(" ", "")) for line in lines)
+    head = [f"LOCUS       {'odd':<16}{length:>12} bp    DNA     linear   UNK 01-JAN-1980", "ORIGIN"]
+    path.write_text("\n".join([*head, *lines, "//", ""]))
+    return path
+
+
+def _layouts(tmp_path: Path) -> Iterator[tuple[str, str, str]]:
+    bases = _random_bases(17, 2_345, b"ACGTNacgtuURY")
+    upper = bases.upper()
+    yield "irregular genbank", str(_irregular_genbank(tmp_path / "odd.gb", upper)), "genbank"
+    widths = b"".join(bases[i : i + w] + (b"\r\n" if w % 2 else b"\n") for i, w in zip(range(0, 2_345, 50), [50] * 47))
+    mixed = tmp_path / "mixed.fasta"
+    mixed.write_bytes(b">mixed\n" + bases[:7] + b"\n" + bases[7:300] + b"\n" + widths[300:] + b"\n")
+    yield "fasta of mixed widths and line ends", str(mixed), "fasta"
+    wide = tmp_path / "wide.fasta"
+    wide.write_bytes(b">wide\n" + bases[:1_000] + "\u00e9".encode() + bases[1_000:] + b"\n")
+    yield "fasta with a letter of two bytes", str(wide), "fasta"
+    for name, fmt in (("easyfig72_embl.embl", "genbank"), ("crlf_line_endings.gb", "genbank"),
+                      ("lowercase_sequence_n_runs.gb", "genbank"), ("ggn117_crlf.fasta", "fasta"),
+                      ("clinker67_single_line_fasta.fasta", "fasta"), ("cgview7_multi_record.gbff", "genbank")):
+        yield name, str(_VARIANTS / name), fmt
+
+
+def test_counts_at_every_position_equal_a_copy_in_every_layout(tmp_path: Path, small_rows: int) -> None:
+    """Rows cross lines, chunks, kinds of chunk (a run, lines read line by line) and slices: every count equals the
+    count of a whole copy, at every position, of every record."""
+
+    for name, path, fmt in _layouts(tmp_path):
+        records = read_sequence_file_records(path, fmt)
+        assert records, name
+        for record in records:
+            bases = bytes(record.seq)
+            positions = np.arange(0, len(bases) + 2, dtype=np.int64)
+            assert known_base_counts_at(record.seq, positions).tolist() == _oracle(bases, positions), name
+            assert known_base_counts_at(Seq(bases), positions).tolist() == _oracle(bases, positions), name
+
+
 def test_window_counts_at_row_edges_equal_a_copy_at_any_row_size(tmp_path: Path, small_rows: int) -> None:
     bases = _random_bases(3, 5_000)
     (record,) = read_sequence_file_records(str(_fasta(tmp_path / "w.fasta", bases, width=13)), "fasta")
@@ -123,7 +177,8 @@ def test_a_record_read_from_a_file_is_counted_by_its_parse_pass_and_not_read_aga
     assert read == []  # the whole record's counts are its rows' counts
     positions = np.array([10_000, 150_001, 299_999], dtype=np.int64)
     assert known_base_counts_at(record.seq, positions).tolist() == _oracle(bases, positions)
-    assert len(read) == 3 and max(read) <= base_counts.ROW_BYTES  # one edge row each
+    # 10,000 is a row end, which reads nothing; the others read the bases of their row before them, at most a row.
+    assert len(read) == 2 and max(read) <= base_counts.ROW_BASES + base_counts.ROW_BASES // 61 + 2  # and its line ends
 
 
 # The letter check: the same refusals, with the same letter, from the counts of the parse pass.
@@ -175,7 +230,7 @@ def test_the_letter_check_of_bases_in_memory_reads_the_same_rule() -> None:
 
 
 def test_every_byte_counts_as_the_counting_rule_says() -> None:
-    counts = base_counts.row_counts(bytes(range(256)))[0]
+    counts = base_counts.byte_counts(bytes(range(256)))
     assert counts[base_counts.KNOWN].tolist() == [2, 2, 2, 4]
     assert counts[base_counts.BASES] == 256
     assert counts[base_counts.BEYOND_NUCLEOTIDE] == 256 - len(base_counts.NUCLEOTIDE_CODES)
@@ -208,7 +263,7 @@ def test_a_render_reads_no_whole_file_record_after_its_parse_pass(
     monkeypatch.setattr(record_sequences.RecordSequence, "_read",
                         lambda self, start, stop: whole.append(stop - start) or read(self, start, stop))
     monkeypatch.setattr(record_sequences._SequenceTable, "_row_bases",
-                        lambda self, row: edges.append(len(data := row_bases(self, row))) or data)
+                        lambda self, *args: edges.append(len(data := row_bases(self, *args))) or data)
     monkeypatch.setattr(input_text.GzipExpansion, "read",
                         lambda self, size: expanded.append(len(data := expand(self, size))) or data)
     result = run_gbdraw(["circular", "--fasta", str(path), "-o", str(tmp_path / "out"), "-f", "svg"], cwd=tmp_path)
@@ -217,3 +272,44 @@ def test_a_render_reads_no_whole_file_record_after_its_parse_pass(
     assert sum(edges) <= len(bases)
     text_bytes = len(bases) + len(bases) // 80 + 8
     assert sum(expanded) <= (2 * text_bytes + record_sequences._BLOCK_BYTES if compress else 0)
+
+
+# GD-13: rows of ``ROW_BASES`` bases, so the Auto windows of a record of 1 Mbp or more read no bases.
+
+
+def test_the_auto_window_bounds_of_records_of_1_mbp_or_more_fall_on_row_ends() -> None:
+    """Samples sit at multiples of the step and a window reaches half its width either side
+    (``gbdraw.analysis.windows``), so every bound is a multiple of the row size when both are."""
+
+    from gbdraw.auto_sizes import sliding_window
+    from gbdraw.config.models import GbdrawConfig
+    from gbdraw.config.toml import load_config_toml
+
+    cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+    for length in (1_000_000, 1_234_567, 9_999_999, 10_000_000, 99_999_999, 100_000_000, 248_387_328, 3_000_000_000):
+        window, step = sliding_window(length, cfg)
+        assert step % base_counts.ROW_BASES == 0 and window // 2 % base_counts.ROW_BASES == 0, (length, window, step)
+
+
+@pytest.mark.parametrize("topology", ["linear", "circular"])
+def test_the_auto_windows_of_a_record_of_1_mbp_or_more_read_no_bases(
+    topology: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The window counts are the parse pass's rows summed: no edge row is read, except round the origin of a
+    circular record whose length is not a multiple of the row size (the windows there start ``length - window // 2``
+    into it: two rows at most). The figure is the one dev drew (``tests/reference_outputs`` and the A/B)."""
+
+    from tests.utils.cli_in_process import run_gbdraw
+
+    bases = _random_bases(13, 1_234_567, b"ACGTNacgt")
+    path = _fasta(tmp_path / "m.fasta", bases, width=80)
+    edges: list[int] = []
+    row_bases = record_sequences._SequenceTable._row_bases
+    monkeypatch.setattr(record_sequences._SequenceTable, "_row_bases",
+                        lambda self, *args: edges.append(len(data := row_bases(self, *args))) or data)
+    args = ["circular", "--fasta", str(path), "-o", str(tmp_path / "out"), "-f", "svg"]
+    if topology == "circular":
+        args += ["--record_topology", "circular"]
+    result = run_gbdraw(args, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert sum(edges) == 0 if topology == "linear" else len(edges) <= 12 and sum(edges) <= 12 * base_counts.ROW_BASES

@@ -6,22 +6,27 @@ is an unknown base, which no content or skew value counts (OV-2799). A sequence
 is a nucleotide sequence when it holds IUPAC nucleotide codes only, in either case
 (D-17), and a protein sequence when it holds letters and ``*`` only (PD-OI-117).
 
-Bytes are counted in rows of at most ``ROW_BYTES`` (one histogram of the byte
-values per row, read straight from the bytes, never translated or copied), so a
-count of any span is whole rows summed and its two edge rows counted.
+Bases are counted in rows of ``ROW_BASES`` bases: row ``k`` of a sequence holds
+the counts of its bases ``k * ROW_BASES`` up to the next row (:func:`count_rows`,
+read straight from the bytes, never translated or copied; a byte that is not a
+base, such as a line end, belongs to no row). A count of any span is then whole
+rows summed and the bases of its edge rows counted, and a span whose ends are
+multiples of ``ROW_BASES`` reads no base: the Auto GC windows of a record of
+1 Mbp or more have every bound there (``gbdraw.auto_sizes.sliding_window``).
 :mod:`gbdraw.io.record_sequences` keeps the rows of every record sequence it reads.
 """
 
 from __future__ import annotations
 
+import functools
 import string
-from typing import Final
+from typing import Final, NamedTuple
 
 import numpy as np
 from numpy.typing import NDArray
 
-ROW_BYTES: Final = 4096  # most bytes of one counted row
-SLICE_BYTES: Final = 64 << 10  # the bytes one histogram call reads: whole rows
+ROW_BASES: Final = 1000  # the bases of one count row: rows begin at every multiple of it
+SLICE_BYTES: Final = 64 << 10  # the bytes one histogram call reads
 
 NUCLEOTIDE_CODES: Final = b"ACGTURYSWKMBDHVNacgturyswkmbdhvn"
 PROTEIN_CODES: Final = string.ascii_letters.encode("ascii") + b"*"
@@ -55,28 +60,105 @@ def count_matrix(deleted: bytes = b"") -> NDArray[np.int64]:
 
 BASES_MATRIX: Final = count_matrix()  # bytes that are all bases
 
-# Row ``i`` of a slice adds ``256 * i`` to its bytes' values, so one histogram call counts every row of the slice.
-_ROW_KEYS: Final = (np.arange(SLICE_BYTES, dtype=np.uint32) // ROW_BYTES * 256).astype(np.uint16)
+_LETTER_BYTES: Final = np.frombuffer(b"AaCcGgTtUu", dtype=np.uint8).astype(np.intp)
+_LETTER_COLUMNS: Final = np.array([0, 2, 4, 6])  # where A, C, G and T begin in ``_LETTER_BYTES``
 
 
-def byte_histograms(data: bytes | memoryview) -> NDArray[np.int64]:
-    """Row ``i``: how often each byte value occurs in bytes ``ROW_BYTES * i`` onwards of ``data`` (rows x 256)."""
+class CountedRows(NamedTuple):
+    """What :func:`count_rows` counted in some bytes.
 
+    ``rows`` (A, C, G, T; U as T, either case): row 0 continues the row the bytes begin in (zero when they begin
+    one), then one row per row that begins in them, whose first base is at offset ``starts[j]`` of the bytes;
+    ``histograms`` how often each byte value occurs in each ``SLICE_BYTES`` of them; ``bases`` the bases they hold.
+    """
+
+    rows: NDArray[np.int64]
+    starts: NDArray[np.int64]
+    histograms: NDArray[np.int64]
+    bases: int
+
+
+@functools.lru_cache(maxsize=8)
+def _deletion(deleted: bytes) -> tuple[NDArray[np.bool_], int]:
+    table = np.zeros(256, dtype=bool)
+    table[list(deleted)] = True
+    return table, max(deleted, default=-1)
+
+
+def count_rows(data: bytes | memoryview, before: int, deleted: bytes = b"") -> CountedRows:
+    """Count the bases of ``data`` in rows of ``ROW_BASES``, ``before`` bases of the sequence before it.
+
+    The one producer of count rows. A byte in ``deleted`` is not a base. Each slice is one histogram call whose
+    keys say the row of each byte: a row's first byte is found from the positions of the few bytes that may be
+    deleted (the bytes up to the highest deleted value, then the deletion table), and a row's counts are read
+    from its letters' columns, so the work does not grow with the number of rows.
+    """
+
+    table, top = _deletion(deleted)
+    rows = [np.zeros((1, 4), dtype=np.int64)]
+    starts: list[NDArray[np.int64]] = []
     histograms: list[NDArray[np.int64]] = []
-    for start in range(0, len(data), SLICE_BYTES):
-        size = min(SLICE_BYTES, len(data) - start)
-        values = np.frombuffer(data, dtype=np.uint8, count=size, offset=start)
-        rows = -(-size // ROW_BYTES)
-        histograms.append(np.bincount(_ROW_KEYS[:size] + values, minlength=rows * 256).reshape(rows, 256))
-    if not histograms:
-        return np.zeros((0, 256), dtype=np.int64)
-    return histograms[0] if len(histograms) == 1 else np.concatenate(histograms)
+    bases = before
+    for low in range(0, len(data), SLICE_BYTES):
+        values = np.frombuffer(data, dtype=np.uint8, count=min(SLICE_BYTES, len(data) - low), offset=low)
+        if top >= 0:
+            maybe = np.flatnonzero(values <= top)
+            gone = maybe[table[values[maybe]]]
+        else:
+            gone = maybe = np.zeros(0, dtype=np.intp)
+        firsts = np.arange(-bases % ROW_BASES, len(values) - len(gone), ROW_BASES)
+        # The ``b``-th base of the slice is byte ``b`` plus the deleted bytes before it.
+        begins = firsts + np.searchsorted(gone - np.arange(len(gone)), firsts, side="right") if len(gone) else firsts
+        whole = len(begins) > 0 and begins[0] == 0  # the slice begins a row
+        cuts = begins if whole else np.concatenate(([0], begins))
+        key = np.uint16 if len(cuts) <= 256 else np.intp  # a key: a byte's row in the slice, then its value
+        keys = np.repeat(np.arange(0, len(cuts) * 256, 256, dtype=key), np.diff(cuts, append=len(values)))
+        keys += values
+        pieces = np.bincount(keys, minlength=len(cuts) * 256).reshape(len(cuts), 256)
+        letters = np.add.reduceat(pieces[:, _LETTER_BYTES], _LETTER_COLUMNS, axis=1)
+        if not whole:
+            rows[-1][-1] += letters[0]
+            letters = letters[1:]
+        if len(letters):
+            rows.append(letters)
+        starts.append(begins + low)
+        histograms.append(pieces.sum(axis=0))
+        bases += len(values) - len(gone)
+    return CountedRows(
+        np.concatenate(rows) if len(rows) > 1 else rows[0],
+        np.concatenate(starts) if starts else np.zeros(0, dtype=np.int64),
+        np.stack(histograms) if histograms else np.zeros((0, 256), dtype=np.int64),
+        bases - before,
+    )
 
 
-def row_counts(data: bytes | memoryview, matrix: NDArray[np.int64] = BASES_MATRIX) -> NDArray[np.int64]:
-    """The counts of each row of ``data`` (rows x 7: A, C, G, T, all bases, bases outside each alphabet)."""
+class RowCounts:
+    """The count rows of one sequence, added in order (:func:`count_rows`): a row begun by some bytes is ended
+    by the next."""
 
-    return byte_histograms(data) @ matrix
+    def __init__(self) -> None:
+        self._rows: list[NDArray[np.uint16]] = []
+
+    def add(self, rows: NDArray[np.int64]) -> None:
+        if self._rows:
+            self._rows[-1][-1] += rows[0].astype(np.uint16)
+        else:
+            assert not rows[0].any()  # bytes before the first base hold no letter
+        if len(rows) > 1:
+            self._rows.append(rows[1:].astype(np.uint16))
+
+    def joined(self) -> NDArray[np.uint16]:
+        """Row ``k``: the counts of A, C, G and T in bases ``k * ROW_BASES`` up to the next row (``uint16``)."""
+
+        joined = np.concatenate(self._rows) if self._rows else np.zeros((0, 4), dtype=np.uint16)
+        self._rows = [joined]
+        return joined
+
+
+def byte_counts(data: bytes | memoryview, matrix: NDArray[np.int64] = BASES_MATRIX) -> NDArray[np.int64]:
+    """The counts of all of ``data`` (7 columns: A, C, G, T, all bases, bases outside each alphabet)."""
+
+    return np.bincount(np.frombuffer(data, dtype=np.uint8), minlength=256) @ matrix
 
 
 def alphabet_of(counts: NDArray[np.int64]) -> int:
@@ -138,12 +220,14 @@ __all__ = [
     "OTHER",
     "PROTEIN",
     "PROTEIN_CODES",
-    "ROW_BYTES",
+    "ROW_BASES",
     "SLICE_BYTES",
     "T",
     "alphabet_of",
-    "byte_histograms",
+    "CountedRows",
+    "RowCounts",
+    "byte_counts",
     "count_matrix",
+    "count_rows",
     "known_prefix_counts",
-    "row_counts",
 ]
