@@ -11,8 +11,9 @@
 //
 // Nothing is written into the mounted root (R1; Export and Save read it): the
 // dimming and the bold row are rules of a <style> element beside the Result,
-// and the line and the popup are an overlay over it; both clear when the
-// Result leaves the page and never print. Every value comes from what Python
+// and the line and the popup are an overlay over it; both are in the page only
+// while a hover shows, leave it when the hover ends or the Result leaves the
+// page, and never print. Every value comes from what Python
 // drew: the ring groups, their hits' drawn spans, identities and paint, their
 // radii (`drawn-attributes.generated.js`), the record's axis
 // (`services/region-axis.js`) for the position, and each ring's name as its
@@ -270,8 +271,20 @@ const writeRingHit = ({ swatch, value }, hit) => {
 };
 
 /**
+ * @typedef {object} RingHoverOverlay
+ * @property {HTMLStyleElement} style The rules of the dimming and the bold Legend row.
+ * @property {HTMLDivElement} element The line and the popup, shown only at a ring point.
+ * @property {SVGLineElement} line
+ * @property {HTMLDivElement} popup
+ * @property {HTMLDivElement} heading
+ * @property {HTMLDivElement} list
+ */
+
+/**
  * The overlay beside the Result: the <style> of the dimming, the radial line, and the popup.
+ * It is in the page only while a hover shows (a page without a hover holds none of it).
  * @param {HTMLElement} host
+ * @returns {RingHoverOverlay}
  */
 const createRingHoverOverlay = (host) => {
   const style = document.createElement('style');
@@ -311,20 +324,20 @@ const createRingHoverOverlay = (host) => {
 export const attachRingHover = ({ svg, axisRecords, held, isPreviewTransformActive }) => {
   const host = svg.parentElement?.parentElement?.parentElement;
   if (!(host instanceof HTMLElement)) return () => {};
-  const overlay = createRingHoverOverlay(host);
+  /** @type {RingHoverOverlay | null} */
+  let overlay = null;
   /** @type {MouseEvent | null} */
   let pointer = null;
   let frame = 0;
   let shownStyle = '';
   /** @type {{ rings: DrawnRing[], sourceIndex: string, cells: PopupCells[] }} */
   let shownRows = { rings: [], sourceIndex: '', cells: [] };
-  /** @param {string} css */
-  const showStyle = (css) => {
-    if (css !== shownStyle) overlay.style.textContent = shownStyle = css;
-  };
   const clear = () => {
-    showStyle('');
-    overlay.element.hidden = true;
+    overlay?.style.remove();
+    overlay?.element.remove();
+    overlay = null;
+    shownStyle = '';
+    shownRows = { rings: [], sourceIndex: '', cells: [] };
   };
   // The Result leaves the page (another Result, drawing or mode, a Session reset): the hover goes with it.
   const unmounted = new MutationObserver(() => {
@@ -337,25 +350,27 @@ export const attachRingHover = ({ svg, axisRecords, held, isPreviewTransformActi
     const target = event && svg.isConnected && !held() && !isPreviewTransformActive()
       ? ringHoverTarget(svg, event.target, event.clientX, event.clientY) : null;
     if (!event || !target) return clear();
-    showStyle(ringHoverStyle(target.sourceIndex));
+    const shown = overlay ??= createRingHoverOverlay(host);
+    const css = ringHoverStyle(target.sourceIndex);
+    if (css !== shownStyle) shown.style.textContent = shownStyle = css;
     const box = host.getBoundingClientRect();
     const source = target.kind === 'ring' ? ringPopupSource(svg, target.ring, axisRecords()) : null;
     const point = source ? ringPointAt({ source, clientX: event.clientX, clientY: event.clientY, host: box }) : null;
-    overlay.element.hidden = !point;
+    shown.element.hidden = !point;
     if (!source || !point) return;
     const { rings } = source;
-    Object.entries(point.line).forEach(([name, value]) => overlay.line.setAttribute(name, value.toFixed(1)));
-    overlay.heading.textContent = t('{position} bp', { position: formatGroupedNumber(point.base) });
+    Object.entries(point.line).forEach(([name, value]) => shown.line.setAttribute(name, value.toFixed(1)));
+    shown.heading.textContent = t('{position} bp', { position: formatGroupedNumber(point.base) });
     if (shownRows.sourceIndex !== target.sourceIndex || shownRows.rings.length !== rings.length
       || shownRows.rings.some((ring, index) => ring.element !== rings[index].element || ring.name !== rings[index].name)) {
-      shownRows = { rings, sourceIndex: target.sourceIndex, cells: buildPopupRows(overlay.list, rings, target.sourceIndex) };
+      shownRows = { rings, sourceIndex: target.sourceIndex, cells: buildPopupRows(shown.list, rings, target.sourceIndex) };
     }
     rings.forEach((ring, index) => writeRingHit(shownRows.cells[index], ringHitAt(ring.element, point.position)));
-    const { offsetWidth: width, offsetHeight: height } = overlay.popup;
+    const { offsetWidth: width, offsetHeight: height } = shown.popup;
     const x = event.clientX - box.left + 16;
     const y = event.clientY - box.top + 16;
-    overlay.popup.style.left = `${Math.max(4, x + width > box.width - 4 ? x - width - 32 : x)}px`;
-    overlay.popup.style.top = `${Math.max(4, Math.min(y, box.height - height - 4))}px`;
+    shown.popup.style.left = `${Math.max(4, x + width > box.width - 4 ? x - width - 32 : x)}px`;
+    shown.popup.style.top = `${Math.max(4, Math.min(y, box.height - height - 4))}px`;
   };
   /** @param {Event} event */
   const move = (event) => {
@@ -378,7 +393,6 @@ export const attachRingHover = ({ svg, axisRecords, held, isPreviewTransformActi
     svg.removeEventListener('mousedown', leave);
     if (frame) window.cancelAnimationFrame(frame);
     unmounted.disconnect();
-    overlay.style.remove();
-    overlay.element.remove();
+    clear();
   };
 };
