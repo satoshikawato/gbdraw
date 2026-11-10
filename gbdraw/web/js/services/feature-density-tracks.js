@@ -147,6 +147,16 @@ export const removeFeatureDensityRows = (rows, axisIndex, trackId) => {
 };
 
 /**
+ * A stack row as a feature density track's row edit reads and writes it.
+ * @typedef {{ id: string, renderer: string, enabled?: boolean, side?: string | null, params?: Record<string, unknown> }} FeatureDensityStackRow
+ */
+/**
+ * A change of a stack's rows for one feature density track: it edits `rows` in place and returns the Axis index
+ * that keeps every other row on its side (`insertFeatureDensityRow`, `removeFeatureDensityRows`).
+ * @typedef {(rows: FeatureDensityStackRow[], axisIndex: number | null) => number | null} FeatureDensityRowEdit
+ */
+
+/**
  * The choices of a track's metric and style, and what a track the Web adds starts with (Python's).
  * @typedef {object} FeatureDensityTrackChoices
  * @property {readonly CanonicalFeatureDensityTrack['metric'][]} metrics

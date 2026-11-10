@@ -1377,9 +1377,10 @@ export const createAppSetup = () => {
   const { askingStackPorts, askingRowSwitch, askingRowRemoval } = createAskingStackPorts({
     askChoice, runUndoable: history.runUndoable, busy: sessionOperationAvailability, shownDrawing: () => state.activeDrawing()
   });
-  // The Feature density section (app/feature-density-tracks.js); a track's stack rows go through the mode's normalizer.
+  // The Feature density section (app/feature-density-tracks.js); a track's stack rows change through the feature
+  // placement transition (R10) and the mode's normalizer.
   const featureDensityTrackEditor = createFeatureDensityTrackEditor({
-    shownDrawing: () => state.activeDrawing(), busy: sessionOperationAvailability, askingStackPorts,
+    shownDrawing: () => state.activeDrawing(), busy: sessionOperationAvailability, askingStackPorts, changeTrackLayout,
     normalizeStack: (drawing) => (drawing.mode === 'circular'
       ? circularTrackSlotEditor.normalizeCircularTrackSlots(drawing) : linearTrackSlotEditor.normalizeLinearTrackSlots())
   });

@@ -27,6 +27,9 @@ const setup = (drawing, { answer = 'hide', busy = null } = {}) => {
   const asked = [];
   const steps = [];
   const normalized = [];
+  // The feature placement transition (R10): it records each row change it runs.
+  const transitions = [];
+  const changeTrackLayout = (apply) => { transitions.push(drawing.adv[SLOTS_KEY[drawing.mode]].length); return apply(); };
   const { askingStackPorts } = createAskingStackPorts({
     askChoice: async (question) => { asked.push(question); return answer; },
     runUndoable: (label, fn) => { steps.push(label); return fn(); },
@@ -34,9 +37,9 @@ const setup = (drawing, { answer = 'hide', busy = null } = {}) => {
     shownDrawing: () => drawing
   });
   const editor = createFeatureDensityTrackEditor({
-    shownDrawing: () => drawing, busy: () => busy, askingStackPorts, normalizeStack: (each) => normalized.push(each)
+    shownDrawing: () => drawing, busy: () => busy, askingStackPorts, normalizeStack: (each) => normalized.push(each), changeTrackLayout
   });
-  return { editor, asked, steps, normalized };
+  return { editor, asked, steps, normalized, transitions };
 };
 
 const densityRows = (drawing) => drawing.adv[SLOTS_KEY[drawing.mode]]
@@ -63,10 +66,11 @@ for (const mode of ['circular', 'linear']) {
 
   test(`${mode}: a stack no Session saved gets no row; a drawn or saved stack gets one after the last density row`, () => {
     const drawing = drawingOf(mode);
-    const { editor, normalized } = setup(drawing);
+    const { editor, normalized, transitions } = setup(drawing);
     editor.addFeatureDensityTrack();
     assert.deepEqual(densityRows(drawing), [], 'Use custom stack builds the stack no Session saved again with every track');
     assert.equal(normalized.length, 0);
+    assert.equal(transitions.length, 0, 'no row changes, no transition');
     drawing.adv[`${SLOTS_KEY[mode]}_enabled`] = true;
     editor.addFeatureDensityTrack();
     editor.duplicateFeatureDensityTrack('track');
@@ -74,6 +78,8 @@ for (const mode of ['circular', 'linear']) {
     const rows = drawing.adv[SLOTS_KEY[mode]].map(({ id }) => id);
     assert.equal(rows[rows.indexOf('features') + 1], 'density_track_2', JSON.stringify(rows));
     assert.equal(normalized.length, 2);
+    // Each row change runs inside the feature placement transition (R10), before the row is in the stack.
+    assert.deepEqual(transitions, [rows.length - 2, rows.length - 1]);
     // With Use custom stack off, a stack the user changed (it differs from every stack no Session saved) gets the row.
     const saved = drawingOf(mode);
     saved.adv[SLOTS_KEY[mode]].pop();
@@ -99,7 +105,7 @@ for (const mode of ['circular', 'linear']) {
   test(`${mode}: Remove takes the track and its rows out, and asks when another row reaches them (PD-OI-104)`, async () => {
     const drawing = drawingOf(mode);
     drawing.adv[`${SLOTS_KEY[mode]}_enabled`] = true;
-    const { editor, asked, steps } = setup(drawing);
+    const { editor, asked, steps, transitions } = setup(drawing);
     editor.addFeatureDensityTrack();
     editor.addFeatureDensityTrack();
     const axisBefore = drawing.adv[`${SLOTS_KEY[mode]}_axis_index`];
@@ -107,6 +113,7 @@ for (const mode of ['circular', 'linear']) {
     assert.deepEqual(asked, []);
     assert.deepEqual(drawing.adv.feature_density_tracks.map(({ id }) => id), ['track_2']);
     assert.deepEqual(densityRows(drawing), ['density_track_2:track_2']);
+    assert.equal(transitions.length, 3, 'two Adds and the Remove ran through the feature placement transition (R10)');
     if (axisBefore !== null) assert.ok(drawing.adv[`${SLOTS_KEY[mode]}_axis_index`] <= axisBefore);
     // A row placed over the track's row asks; the chosen removal is its own step and turns that row off.
     drawing.adv[SLOTS_KEY[mode]].push({ id: 'regions', renderer: 'annotations', enabled: true, side: 'overlay', z: -1,

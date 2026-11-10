@@ -11,7 +11,8 @@
 /** @import { CanonicalFeatureDensityTrack } from '../contracts/request.generated.js' */
 /** @import { DrawingState } from '../state.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
-/** @import { FeatureDensityTrackField } from '../services/feature-density-tracks.js' */
+/** @import { FeatureDensityStackRow, FeatureDensityTrackField } from '../services/feature-density-tracks.js' */
+/** @import { ChangeTrackLayout } from './track-slot-edits.js' */
 import { circularFeatureDensitySlot, circularStacksNoSessionSaved } from '../services/circular-track-slot-model.js';
 import { linearFeatureDensitySlot, linearStacksNoSessionSaved } from '../services/linear-track-slot-model.js';
 import {
@@ -21,6 +22,8 @@ import {
 import { isUnsavedDefaultStack, nextNumberedId } from '../services/track-slot-validation.js';
 import { msg } from '../utils/i18n.js';
 import { askTrackSourceRemoval } from './track-slot-edits.js';
+import { editCircularFeatureDensityRows } from './circular-track-slots.js';
+import { editLinearFeatureDensityRows } from './linear-track-slots.js';
 
 /**
  * The words the editor shows for Python's metric and style choices (English, marked; shown with `tm`). A test checks
@@ -32,16 +35,13 @@ export const FEATURE_DENSITY_CHOICE_WORDS = Object.freeze({
 });
 
 /**
- * A stack row as this owner reads and writes it.
- * @typedef {{ id: string, renderer: string, enabled?: boolean, side?: string | null, params?: Record<string, unknown> }} DensityStackRow
- */
-
-/**
  * @typedef {object} FeatureDensityTrackEditorPorts
  * @property {() => DrawingState} shownDrawing
  * @property {() => unknown} busy The session's busy answer; a value stops an edit.
  * @property {(slotsKey: 'circular_track_slots' | 'linear_track_slots') => AskingStackPorts<SwitchedTrackRow>} askingStackPorts
  * @property {(drawing: DrawingState) => void} normalizeStack The mode's stack normalizer, after a row change.
+ * @property {ChangeTrackLayout} changeTrackLayout The feature placement transition (R10): a track's rows change through
+ *   it, in the stack editors' own row writers.
  */
 
 /**
@@ -52,17 +52,17 @@ const tracksOf = (drawing) => drawing.adv.feature_density_tracks;
 
 /** @param {DrawingState} drawing */
 const stackOf = (drawing) => (drawing.mode === 'circular'
-  ? { slotsKey: /** @type {const} */ ('circular_track_slots'), axisKey: /** @type {const} */ ('circular_track_slots_axis_index'),
-      enabled: drawing.adv.circular_track_slots_enabled, makeRow: circularFeatureDensitySlot,
+  ? { slotsKey: /** @type {const} */ ('circular_track_slots'),
+      enabled: drawing.adv.circular_track_slots_enabled, makeRow: circularFeatureDensitySlot, editRows: editCircularFeatureDensityRows,
       unsaved: () => circularStacksNoSessionSaved(drawing.adv.nt, drawing.form.track_type) }
-  : { slotsKey: /** @type {const} */ ('linear_track_slots'), axisKey: /** @type {const} */ ('linear_track_slots_axis_index'),
-      enabled: drawing.adv.linear_track_slots_enabled, makeRow: linearFeatureDensitySlot,
+  : { slotsKey: /** @type {const} */ ('linear_track_slots'),
+      enabled: drawing.adv.linear_track_slots_enabled, makeRow: linearFeatureDensitySlot, editRows: editLinearFeatureDensityRows,
       unsaved: () => linearStacksNoSessionSaved(drawing.adv.nt, drawing.form.linear_track_layout) });
 
 /**
  * @param {FeatureDensityTrackEditorPorts} ports
  */
-export const createFeatureDensityTrackEditor = ({ shownDrawing, busy, askingStackPorts, normalizeStack }) => {
+export const createFeatureDensityTrackEditor = ({ shownDrawing, busy, askingStackPorts, normalizeStack, changeTrackLayout }) => {
   /** @param {DrawingState} drawing @param {string} trackId */
   const trackOf = (drawing, trackId) => tracksOf(drawing).find(({ id }) => id === trackId) ?? null;
 
@@ -73,12 +73,11 @@ export const createFeatureDensityTrackEditor = ({ shownDrawing, busy, askingStac
   const putTrack = (drawing, track, at) => {
     tracksOf(drawing).splice(at, 0, track);
     const stack = stackOf(drawing);
-    const rows = /** @type {DensityStackRow[]} */ (drawing.adv[stack.slotsKey]);
+    const rows = /** @type {FeatureDensityStackRow[]} */ (drawing.adv[stack.slotsKey]);
     if (!stack.enabled && isUnsavedDefaultStack(rows, stack.unsaved())) return;
-    const row = /** @type {DensityStackRow} */ (stack.makeRow(track.id));
+    const row = /** @type {FeatureDensityStackRow} */ (stack.makeRow(track.id));
     row.id = nextNumberedId(featureDensitySlotId(track.id), rows);
-    drawing.adv[stack.axisKey] = insertFeatureDensityRow(rows, drawing.adv[stack.axisKey], row);
-    normalizeStack(drawing);
+    stack.editRows(changeTrackLayout, drawing, (slots, axisIndex) => insertFeatureDensityRow(slots, axisIndex, row), normalizeStack);
   };
 
   /** @param {DrawingState} drawing @param {string} trackId */
@@ -87,11 +86,7 @@ export const createFeatureDensityTrackEditor = ({ shownDrawing, busy, askingStac
     const at = tracks.findIndex(({ id }) => id === trackId);
     if (at < 0) return;
     tracks.splice(at, 1);
-    const stack = stackOf(drawing);
-    drawing.adv[stack.axisKey] = removeFeatureDensityRows(
-      /** @type {DensityStackRow[]} */ (drawing.adv[stack.slotsKey]), drawing.adv[stack.axisKey], trackId
-    );
-    normalizeStack(drawing);
+    stackOf(drawing).editRows(changeTrackLayout, drawing, (slots, axisIndex) => removeFeatureDensityRows(slots, axisIndex, trackId), normalizeStack);
   };
 
   /** Adds a track that counts the first feature type the drawing draws (its Feature Types list; every type when empty). */
@@ -140,7 +135,7 @@ export const createFeatureDensityTrackEditor = ({ shownDrawing, busy, askingStac
     const drawing = shownDrawing();
     if (!trackOf(drawing, trackId)) return undefined;
     const stack = stackOf(drawing);
-    const rows = /** @type {DensityStackRow[]} */ (drawing.adv[stack.slotsKey]);
+    const rows = /** @type {FeatureDensityStackRow[]} */ (drawing.adv[stack.slotsKey]);
     const leaving = new Set(rows
       .filter((row) => row.renderer === 'feature_density' && String(row.params?.track ?? '') === trackId)
       .map(({ id }) => id));
