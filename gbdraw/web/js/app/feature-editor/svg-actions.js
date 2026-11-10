@@ -11,6 +11,7 @@
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { isClickAtPress, placePopupNearPoint, popupBoundsWithin, popupViewportBounds, primaryPressAfter } from '../../utils/popup-bounds.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
+import { getSelectableFeatureTarget } from '../feature-selection.js';
 import {
   formatFeatureLength,
   formatFeatureLocation,
@@ -89,18 +90,47 @@ export {
  */
 
 /**
- * The feature selection owner's reactions to a click or a drag on the preview.
- * @typedef {object} FeatureSelectionPort
- * @property {() => boolean} [consumeSuppressNextClick]
- * @property {(event: Event, svg: Element) => Element | null} [getSelectableFeatureTarget]
- * @property {(selectionId: string) => any} [toggleFeatureSelection]
- * @property {(selectionId: string, options?: { additive?: boolean }) => any} [selectFeatureRange]
- * @property {(options?: { clearStatus?: boolean }) => any} [clearFeatureSelection]
- * @property {(svgId: string) => any} [markPlainFeatureClick]
- * @property {(event: PointerEvent, svg: Element) => boolean} [startMarqueePointer]
- * @property {(event: PointerEvent) => boolean} [moveMarqueePointer]
- * @property {(event: PointerEvent) => boolean} [commitMarqueePointer]
- * @property {() => any} [cancelMarqueePointer]
+ * The selection owner's take of the click that ends a marquee drag: true once after the drag, and that click then
+ * opens, selects and clears nothing.
+ * @typedef {() => boolean} ConsumeSuppressNextClickPort
+ */
+
+/**
+ * The selection owner's reaction to a click on a feature with Ctrl, Cmd or Shift held: it toggles the feature or
+ * selects the range from the anchor, by the modifier keys.
+ * @typedef {(featureId: string, modifiers: { ctrlKey: boolean, metaKey: boolean, shiftKey: boolean }) => void} SelectFeatureByClickPort
+ */
+
+/**
+ * The selection owner's reaction to a plain click on a feature: the selection clears and the feature becomes the
+ * anchor of a later Shift+click range.
+ * @typedef {(featureId: string) => void} MarkPlainFeatureClickPort
+ */
+
+/**
+ * The selection owner's clearing of the selection, on a click on the background of the Result.
+ * @typedef {(options: { clearStatus: boolean }) => void} ClearFeatureSelectionPort
+ */
+
+/**
+ * The selection owner's start of a Shift+drag marquee at a press on the Result: true when it takes the press.
+ * @typedef {(event: PointerEvent, svg: Element) => boolean} StartMarqueePointerPort
+ */
+
+/**
+ * The selection owner's follow of the pointer while a marquee drag runs: true while the marquee is drawn.
+ * @typedef {(event: PointerEvent) => boolean} MoveMarqueePointerPort
+ */
+
+/**
+ * The selection owner's end of a marquee drag at the release: true when a marquee was drawn; it then replaces or adds
+ * the features it covers (possibly none), and the next click is suppressed.
+ * @typedef {(event: PointerEvent) => boolean} CommitMarqueePointerPort
+ */
+
+/**
+ * The selection owner's cancel of a marquee drag when the pointer is cancelled.
+ * @typedef {() => void} CancelMarqueePointerPort
  */
 
 /**
@@ -142,8 +172,14 @@ export {
  * @property {(() => void) | null} [onFeaturePopupOpened] The label owner's sync of its editor when the popup opens.
  * @property {PrepareDrawnFeatureMatchesPort} [prepareDrawnFeatureMatches]
  *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads.
- * @property {FeatureSelectionPort | null} [featureSelection]
- *   The preview owner's projection of feature visibility changes.
+ * @property {ConsumeSuppressNextClickPort} consumeSuppressNextClick
+ * @property {SelectFeatureByClickPort} selectFeatureByClick
+ * @property {MarkPlainFeatureClickPort} markPlainFeatureClick
+ * @property {ClearFeatureSelectionPort} clearFeatureSelection
+ * @property {StartMarqueePointerPort} startMarqueePointer
+ * @property {MoveMarqueePointerPort} moveMarqueePointer
+ * @property {CommitMarqueePointerPort} commitMarqueePointer
+ * @property {CancelMarqueePointerPort} cancelMarqueePointer
  * @property {IsPreviewTransformActivePort} isPreviewTransformActive
  * @property {SubscribePreviewTransformChangesPort} subscribePreviewTransformChanges
  * @property {() => boolean} [previewPopupsHeld] While it holds (the Review alignment panel is open, the popups
@@ -271,7 +307,7 @@ export const createFeatureSvgActions = ({
   // R13: the popup opens once the rule matches `resolveFeatureDrawn` reads are
   // prepared; the composition root injects the visibility owner's preparation.
   prepareDrawnFeatureMatches = () => true,
-  featureSelection = null,
+  consumeSuppressNextClick, selectFeatureByClick, markPlainFeatureClick, clearFeatureSelection, startMarqueePointer, moveMarqueePointer, commitMarqueePointer, cancelMarqueePointer,
   isPreviewTransformActive,
   subscribePreviewTransformChanges,
   previewPopupsHeld = () => false,
@@ -1755,7 +1791,7 @@ export const createFeatureSvgActions = ({
       /** @param {MouseEvent} e */
       const handleClick = (e) => {
         clearPendingMatch();
-        if (featureSelection?.consumeSuppressNextClick?.()) {
+        if (consumeSuppressNextClick()) {
           e.preventDefault();
           e.stopPropagation();
           return;
@@ -1764,21 +1800,16 @@ export const createFeatureSvgActions = ({
         // both the press and the release, so a click away from its primary press
         // opens, selects, and clears nothing, whatever lies under the release.
         if (!isClickAtPress(handlerState.pressPoint, e)) return;
-        const selectableFeatureEl = featureSelection?.getSelectableFeatureTarget?.(e, svg) || null;
-        const modifierSelection = Boolean(e.ctrlKey || e.metaKey);
-        if (modifierSelection || e.shiftKey) {
+        const selectableFeatureEl = getSelectableFeatureTarget(e, svg);
+        if (e.ctrlKey || e.metaKey || e.shiftKey) {
           if (selectableFeatureEl) {
             const selectionId = getFeatureIdentity(selectableFeatureEl);
             e.preventDefault();
             e.stopPropagation();
             hideHoverSummary();
-            if (modifierSelection && !e.shiftKey) {
-              featureSelection?.toggleFeatureSelection?.(selectionId);
-            } else {
-              featureSelection?.selectFeatureRange?.(selectionId, { additive: modifierSelection });
-            }
+            selectFeatureByClick(selectionId, { ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey });
           } else if (isBackgroundPreviewClick(/** @type {Element} */ (e.target), svg)) { // a click on the Result targets an element
-            featureSelection?.clearFeatureSelection?.({ clearStatus: true });
+            clearFeatureSelection({ clearStatus: true });
           }
           return;
         }
@@ -1811,7 +1842,7 @@ export const createFeatureSvgActions = ({
           }
           e.stopPropagation();
           hideHoverSummary();
-          featureSelection?.markPlainFeatureClick?.(svgId);
+          markPlainFeatureClick(svgId);
           if (previewPopupsHeld()) return;
           const feat = ensureFeatureLookup().get(svgId);
           if (feat) {
@@ -1840,7 +1871,7 @@ export const createFeatureSvgActions = ({
           return;
         }
         if (isBackgroundPreviewClick(/** @type {Element} */ (e.target), svg)) { // a click on the Result targets an element
-          featureSelection?.clearFeatureSelection?.({ clearStatus: true });
+          clearFeatureSelection({ clearStatus: true });
           if (previewPopupsHeld()) return;
           if (clickedFeature.value) clickedFeature.value = null;
           if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
@@ -1895,7 +1926,7 @@ export const createFeatureSvgActions = ({
           }
         }
         clearPendingMatch();
-        if (!featureSelection?.startMarqueePointer?.(e, svg)) return;
+        if (!startMarqueePointer(e, svg)) return;
         e.stopPropagation();
       };
 
@@ -1911,7 +1942,7 @@ export const createFeatureSvgActions = ({
       /** @param {PointerEvent} e */
       const handlePointerMove = (e) => {
         handlerState.pressPoint = primaryPressAfter(handlerState.pressPoint, e);
-        if (!featureSelection?.moveMarqueePointer?.(e)) return;
+        if (!moveMarqueePointer(e)) return;
         e.preventDefault();
         e.stopPropagation();
         hideHoverSummary();
@@ -1920,7 +1951,7 @@ export const createFeatureSvgActions = ({
       /** @param {PointerEvent} e */
       const handlePointerUp = (e) => {
         clearPendingMatch();
-        if (!featureSelection?.commitMarqueePointer?.(e)) return;
+        if (!commitMarqueePointer(e)) return;
         e.preventDefault();
         e.stopPropagation();
         hideHoverSummary();
@@ -1928,7 +1959,7 @@ export const createFeatureSvgActions = ({
 
       const handlePointerCancel = () => {
         clearPendingMatch();
-        featureSelection?.cancelMarqueePointer?.();
+        cancelMarqueePointer();
       };
 
       svg.addEventListener('mouseover', handleMouseOver);

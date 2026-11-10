@@ -68,7 +68,11 @@ for (const path of ['services/drawing/feature-edits.js', 'services/drawing/paint
   // feature-placement.js reads the record keys of a drawing from their owner.
   'services/record-draw-selection.js', 'utils/download-names.js', 'contracts/schema.generated.js',
   // feature-identity.js reads a record source's files from the input-type table.
-  'services/input-types.js']) await copyModule(path, path);
+  'services/input-types.js',
+  // svg-actions.js finds the feature a modifier click selects with feature-selection.js, which reads a Shift+click
+  // range on the record axis and holds its gesture.
+  'app/feature-selection.js', 'services/svg-serialization.js', 'services/region-axis.js', 'services/record-options.js',
+  'utils/pointer-gesture.js']) await copyModule(path, path);
 // No admitted catalog: features open as the Result draws them.
 await writeFile(
   join(tempDir, 'services', 'feature-catalog.js'),
@@ -110,11 +114,6 @@ await writeFile(
 await writeFile(
   join(tempDir, 'services', 'feature-sequence-fasta.js'),
   'export const buildFeatureSequenceFastas = () => ({ nucleotideFasta: "", aminoAcidFasta: "" });\n',
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'svg-serialization.js'),
-  'export const serializeCleanSvg = () => "<svg></svg>";\n',
   'utf8'
 );
 await writeFile(
@@ -638,17 +637,18 @@ const featureMap = new Map([
   ['f2', { id: 'f2', rendered_svg_id: 'f2', label: 'Two', orthogroupId: 'OG1', start: 10, end: 20 }]
 ]);
 let selectedFeatureId = '';
-const featureSelection = {
+// The selection owner's ports: a modifier click records the feature it selects.
+const selectionPorts = {
   consumeSuppressNextClick: () => false,
-  getSelectableFeatureTarget: (eventLike, root) => (
-    eventLike?.target?.kind === 'feature' && root.contains(eventLike.target)
-      ? eventLike.target
-      : null
-  ),
-  toggleFeatureSelection(featureId) {
+  selectFeatureByClick(featureId) {
     selectedFeatureId = featureId;
   },
-  markPlainFeatureClick() {}
+  markPlainFeatureClick() {},
+  clearFeatureSelection() {},
+  startMarqueePointer: () => false,
+  moveMarqueePointer: () => false,
+  commitMarqueePointer: () => false,
+  cancelMarqueePointer() {}
 };
 const state = {
   results: ref([{ content: '<svg></svg>' }]),
@@ -682,7 +682,7 @@ const featureActions = createFeatureSvgActions({
   state: withDrawings(state),
   getFeatureColor: () => '#123456',
   getEffectiveLegendCaption: () => '',
-  featureSelection,
+  ...selectionPorts,
   isPreviewTransformActive: featurePanZoom.isPreviewTransformActive,
   subscribePreviewTransformChanges: featurePanZoom.subscribePreviewTransformChanges
 });

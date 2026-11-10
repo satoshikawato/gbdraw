@@ -98,7 +98,10 @@ MOUNT_PREVIEW_SCRIPT = """async ({source, catalog, mode}) => {
   Object.defineProperties(state, {drawings: {value: {circular: state, linear: state}}, activeDrawing: {value: () => state}});
   window.fixtureState = state;
   window.fixtureActions = createFeatureSvgActions({state, getFeatureColor: () => '#123456', getEffectiveLegendCaption: () => '',
-    isPreviewTransformActive: () => false, subscribePreviewTransformChanges: () => () => {}});
+    isPreviewTransformActive: () => false, subscribePreviewTransformChanges: () => () => {},
+    consumeSuppressNextClick: () => false, selectFeatureByClick: () => {}, markPlainFeatureClick: () => {},
+    clearFeatureSelection: () => {}, startMarqueePointer: () => false, moveMarqueePointer: () => false,
+    commitMarqueePointer: () => false, cancelMarqueePointer: () => {}});
   window.fixtureActions.attachSvgFeatureHandlers();
   window.fixtureClipboard = [];
   Object.defineProperty(navigator, 'clipboard', {value: {writeText: async text => window.fixtureClipboard.push(text)}, configurable: true});

@@ -1130,7 +1130,10 @@ export const createAppSetup = () => {
   const previewPopupsHeld = () => previewPopupsHeldNow.value;
   // The records of the shown Result whose axis Python wrote: Select region and Shift+click range selection read them.
   const shownAxisRecords = () => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, Number(selectedResultIndex.value) || 0);
-  const featureSelection = createFeatureSelection({
+  const {
+    consumeSuppressNextClick, selectFeatureByClick, markPlainFeatureClick, clearFeatureSelection, startMarqueePointer, moveMarqueePointer, commitMarqueePointer, cancelMarqueePointer,
+    syncFeatureSelectionClasses, replaceSelectedFeatureIds, featureSelectionMarqueeStyle, featureSelectionToolbarStyle, startToolbarDrag
+  } = createFeatureSelection({
     state, onMounted, onUnmounted, previewPopupsHeld,
     axisRecordOf: (recordKey) => shownAxisRecords().find((record) => record.recordKey === recordKey) ?? null
   });
@@ -1160,7 +1163,7 @@ export const createAppSetup = () => {
     prepareFileLegendEntries: /** @type {any} */ (legendActions.prepareFileLegendEntries),
     moveLegendRecords: legendActions.moveLegendRecords,
     readLegendRowColors,
-    featureSelection,
+    consumeSuppressNextClick, selectFeatureByClick, markPlainFeatureClick, clearFeatureSelection, startMarqueePointer, moveMarqueePointer, commitMarqueePointer, cancelMarqueePointer,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     currentResults: previewRuntime.currentResults,
     getResultIdentity: previewRuntime.getResultIdentity,
@@ -1226,13 +1229,13 @@ export const createAppSetup = () => {
   // A Result switch closes the feature popup through its close owner: the
   // popup belongs to the Result it was opened on (OV-1269).
   watch(selectedResultIndex, () => {
-    featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
+    clearFeatureSelection({ clearStatus: true, syncDom: false });
     closeFeaturePopup();
   });
   watch(svgContent, () => {
     similarityAlignmentPorts.refreshCanvas();
     if (!skipCaptureBaseConfig.value) {
-      featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
+      clearFeatureSelection({ clearStatus: true, syncDom: false });
     }
   });
   watch(() => results.value[selectedResultIndex.value], () => similarityAlignmentPorts.refreshCanvas(), { flush: 'post' });
@@ -2170,7 +2173,7 @@ export const createAppSetup = () => {
         });
         // A replaced document resets transient UI: the selection named features
         // of the previous Session.
-        featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
+        clearFeatureSelection({ clearStatus: true, syncDom: false });
         previewFeatureSearch.resetModeSearches();
         sequenceSearch.reset();
         settingsPaneActions.closeSettingsPopup();
@@ -2473,7 +2476,7 @@ export const createAppSetup = () => {
     followRestoredSpecificRules: featureActions.followRestoredSpecificRules,
     requestAutomaticRerender: featureActions.requestAutomaticRerender,
     redrawShown: featureActions.redrawShown,
-    clearFeatureSelection: featureSelection.clearFeatureSelection,
+    clearFeatureSelection,
     resultPaintDrewPaint: resultPaintRecord.drewPaint,
     resultPaintDrawn: resultPaintRecord.drawn,
     handleMountedResultReady: previewFeatureSearch.handleMountedResultReady,
@@ -2513,7 +2516,7 @@ export const createAppSetup = () => {
     refreshCurrentIntent: history.refreshCurrentIntent, adoptSessionReset: history.adoptSessionReset,
     ruleWritePending: featureActions.ruleWritePending,
     suspendSpecificRulePatternDrafts: featureActions.suspendSpecificRulePatternDrafts,
-    clearFeatureSelection: featureSelection.clearFeatureSelection, rememberDepartingResultProjection,
+    clearFeatureSelection, rememberDepartingResultProjection,
     auxiliaryImportFailureOnArrival, resetModeTransientUi, installShownDrawing, dismissNotice: noticeBanner.dismiss,
     switchDrawingSearch: previewFeatureSearch.switchDrawingSearch, rebindAnnotationRecords,
     clearActiveRuntime: previewRuntime.clearActiveRuntime, getResultIdentity: previewRuntime.getResultIdentity,
@@ -2635,8 +2638,8 @@ export const createAppSetup = () => {
     state, undoableAction, editEditorIntent, runUndoable: history.runUndoable,
     runUndoableCommand: history.runUndoableCommand, resetClickedFeatureFillColor, updateClickedFeatureStroke,
     setClickedFeatureStrokeColorValue, setClickedFeatureStrokeWidthValue, resetClickedFeatureStroke, setFeatureColor,
-    applyColorToSelectedFeatures, syncFeatureSelectionClasses: featureSelection.syncFeatureSelectionClasses,
-    buildSelectedFeaturesVisibilityCommand, clearFeatureSelection: featureSelection.clearFeatureSelection,
+    applyColorToSelectedFeatures, syncFeatureSelectionClasses,
+    buildSelectedFeaturesVisibilityCommand, clearFeatureSelection,
     applyStrokeToSelectedFeatures, openFeatureEditorForFeature, updateClickedFeatureLabelText, handleLabelTextScopeChoice,
     handleHiddenLabelTextChoice, requestLabelTextChangeByFeatureId, requestLabelTextChangeByKey,
     getEditableLabelByFeatureId: featureActions.getEditableLabelByFeatureId, resetAllLabelTextOverrides,
@@ -2714,7 +2717,7 @@ export const createAppSetup = () => {
         if (result?.status === 'ok') {
           featureActions.clearSpecificRulePatternDrafts();
           await rulePreparation.prepare();
-          featureSelection.clearFeatureSelection({ clearStatus: true });
+          clearFeatureSelection({ clearStatus: true });
           if (settingsPaneActions.settingsPane.value.pane === 'preview') settingsPaneActions.showPhonePane('preview');
         } else {
           featureActions.restoreSpecificRulePatternDrafts(patternDrafts);
@@ -3348,7 +3351,7 @@ export const createAppSetup = () => {
     openRegionPopup: (selection, element, anchor) => featureActions.openPreviewItemPopup({ element, item: selection }, anchor),
     closeRegionPopup,
     drawnFeatures: () => toRaw(extractedFeatures.value) ?? [],
-    selectFeatures: (featureIds) => featureSelection.replaceSelectedFeatureIds(new Set(featureIds), { anchorId: featureIds[0] ?? '' }),
+    selectFeatures: (featureIds) => replaceSelectedFeatureIds(new Set(featureIds), { anchorId: featureIds[0] ?? '' }),
     // Binds as a search hit does; the popup is teleported out of the app root (no History adapter): its own step.
     addRegionAnnotation: async ({ recordKey, start, end }) => {
       const drawing = state.activeDrawing();
@@ -4050,10 +4053,7 @@ export const createAppSetup = () => {
     selectedFeatureCount,
     selectedFeatures,
     hasFeatureSelection,
-    featureSelectionMarqueeStyle: featureSelection.featureSelectionMarqueeStyle,
-    featureSelectionToolbarStyle: featureSelection.featureSelectionToolbarStyle,
-    startFeatureSelectionToolbarDrag: featureSelection.startToolbarDrag,
-    clearFeatureSelection: featureSelection.clearFeatureSelection,
+    featureSelectionMarqueeStyle, featureSelectionToolbarStyle, startFeatureSelectionToolbarDrag: startToolbarDrag, clearFeatureSelection,
     openFirstSelectedFeature,
     selectedFeatureBulkColor,
     selectedFeatureBulkCaption,
