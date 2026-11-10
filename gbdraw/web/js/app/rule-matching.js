@@ -11,8 +11,10 @@ import {
 /** @import { FeatureLike } from '../services/feature-utils.js' */
 /** @import { ColorRule, RuleFeature, VisibilityRule } from '../services/rule-matchers.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { DrawingState, LinearSeq } from '../state.js' */
-/** @import { JoinedLegendRow, RuleFeaturePayload, SynthesizeColorRulesRequest, SynthesizedColorRules } from '../contracts/rule-synthesis.generated.js' */
+/** @import { DrawingState, LinearSeq, WebState } from '../state.js' */
+/** @import { RequestProgress } from '../services/diagram-generation.js' */
+/** @import { FeatureVisibilityRule } from '../services/feature-visibility.js' */
+/** @import { ColorRuleCondition, JoinedLegendRow, LabelRuleRow, RuleEvaluationResult, RuleFeaturePayload, SynthesizeColorRulesRequest, SynthesizedColorRules, VisibilityRuleRow } from '../contracts/rule-synthesis.generated.js' */
 
 // A feature of a catalog before schema 5 has no drawn selector values. Where
 // its rendered ID carries its source hash, its record was drawn with the
@@ -146,7 +148,7 @@ export const joinedLegendRow = (drawn, current, rows) => {
 // the one shown when it started. Every owner that runs through the rule
 // preparation reports a failure this way.
 /**
- * @param {{ errorLog?: { value: unknown } }} state The error log ref (state.js).
+ * @param {Partial<Pick<WebState, 'errorLog'>>} state The error log (optional while svg-actions.js passes an untyped state).
  * @param {string} operation
  * @param {() => unknown} run
  * @returns {unknown} What `run` returned; a promise it returned, with the failure reported.
@@ -167,9 +169,9 @@ export const reportRuleRunFailure = (state, operation, run) => {
 // matches are still current (else `stale` answers), and not while a session
 // operation runs. A failed color preparation rejects (`reportRuleRunFailure`).
 /**
- * @param {Record<string, any>} state App state (state.js; not yet typed).
- * @param {() => (boolean | Promise<any>)[]} preparations
- * @param {() => any} commit
+ * @param {Partial<Pick<WebState, 'sessionOperationAvailability'>>} state Optional while svg-actions.js passes an untyped state.
+ * @param {() => (boolean | Promise<unknown>)[]} preparations
+ * @param {() => unknown} commit
  * @param {() => unknown} [stale]
  */
 export const runWhenPrepared = (state, preparations, commit, stale = () => undefined) => {
@@ -181,23 +183,46 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
 };
 
 /**
- * Python's answer to a rule evaluation (R7): per feature, the indexes of the
- * rules it matches and, for color rules, the priority of each match (aligned
- * with the indexes).
- * @typedef {Record<string, any>} RuleEvaluationResult
+ * What the diagram helper `evaluateRules` matches (R7): the feature payloads,
+ * and the rules of one kind in table order. Python's `evaluate_rules_json`
+ * (gbdraw/web_support/rule_matching.py) takes the three as separate
+ * arguments; their types, and its answer `RuleEvaluationResult`, are Python's.
+ * The color rows are `Partial` as the rule table's rows are typed
+ * (`Partial<SpecificColorRule>`); Python reads all three fields.
+ * @typedef {{ features: RuleFeaturePayload[] } & (
+ *   { kind: 'color', rules: readonly Partial<ColorRuleCondition>[] }
+ *   | { kind: 'visibility', rules: readonly VisibilityRuleRow[] }
+ *   | { kind: 'label', rules: readonly LabelRuleRow[] }
+ * )} RuleEvaluationRequest
  */
+/**
+ * The options of one evaluation: the progress observer of a run.
+ * @typedef {{ onProgress?: ((progress: RequestProgress) => void) | null }} RuleEvaluationOptions
+ */
+/**
+ * What `prepareDrawn` resolves to when Generate rejects the visibility rule
+ * table: the evaluation's error.
+ * @typedef {{ error: unknown }} RuleTableRejection
+ */
+/**
+ * The error of a visibility rule table Generate rejects, read from what
+ * `prepareDrawn` resolved to; undefined for any other outcome.
+ * @param {boolean | RuleTableRejection} outcome
+ */
+export const visibilityTableError = (outcome) => (typeof outcome === 'object' ? outcome.error : undefined);
 
 /**
  * @typedef {object} RulePreparationOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<RuleEvaluationResult>} evaluate
+ * @property {Pick<WebState, 'activeDrawing' | 'biologicalFeatures' | 'extractedFeatures' | 'mode' | 'results'
+ *   | 'selectedResultIndex' | 'sessionOperationAvailability' | 'svgResultIdentity'>} state
+ * @property {(payload: RuleEvaluationRequest, options?: RuleEvaluationOptions) => Promise<RuleEvaluationResult>} evaluate
  *   The diagram helper that matches rules against feature payloads (R7).
  * @property {(request: SynthesizeColorRulesRequest) => Promise<SynthesizedColorRules>} synthesize
  *   The diagram helper that writes the rules of a group color edit (OV-244, Owner R-07).
  * @property {{ value: boolean }} [pending] Receives whether a preparation is running.
  * @property {{ value: boolean }} [blocking] Receives whether an edit's preparation is running: one
  *   that is not a `view` preparation (OV-377). Save and Load wait for it.
- * @property {() => Record<string, any>[]} [visibilityRules] The Feature visibility rule rows, in table order.
+ * @property {() => readonly FeatureVisibilityRule[]} [visibilityRules] The Feature visibility rule rows, in table order.
  */
 
 /**
@@ -218,18 +243,18 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  * The rule preparation: every owner that reads rule matches runs through it
  * (R13), as the whole-object `rulePreparation` or as one function of it.
  * @typedef {object} RulePreparation
- * @property {(rules?: readonly Partial<SpecificColorRule>[], options?: Record<string, any>) => boolean | Promise<boolean>} prepare
+ * @property {(rules?: readonly Partial<SpecificColorRule>[], options?: { blocked?: () => boolean, view?: boolean } & RuleEvaluationOptions) => boolean | Promise<boolean>} prepare
  *   True at once when the matches of `rules` are prepared, else a promise of whether they are now.
  *   `options.blocked` says whether a Session operation discards the matches (default: any Session operation);
  *   the other options are the evaluation's.
  * @property {(rules?: readonly Partial<SpecificColorRule>[]) => void} retain
  *   Keeps the rules a History restore replaces, so the next preparation matches them with the restored ones.
- * @property {(options?: { strict?: boolean, view?: boolean }) => boolean | Promise<boolean | { error: any }>} prepareDrawn
+ * @property {(options?: { strict?: boolean, view?: boolean }) => boolean | Promise<boolean | RuleTableRejection>} prepareDrawn
  *   Prepares what `resolveFeatureDrawn` reads; resolves to `{ error }` when Generate rejects the visibility rule table.
  *   `strict` rejects when the color preparation fails and resolves to false when it is stale, as a run does.
  *   `view` marks a preparation that only reads the matches (a popup opening): it does not raise `blocking`.
  * @property {(rules?: readonly Partial<SpecificColorRule>[]) => boolean} isPrepared
- * @property {(rules?: readonly Partial<SpecificColorRule>[], options?: Record<string, any>) => Promise<RuleCandidate | null>} prepareCandidate
+ * @property {(rules?: readonly Partial<SpecificColorRule>[], options?: { asGiven?: boolean } & RuleEvaluationOptions) => Promise<RuleCandidate | null>} prepareCandidate
  *   `options.asGiven` prepares the rules as they are, without writing them as `normalizeSpecificRule` does.
  * @property {(group: GroupColorEdit, rules: readonly SpecificColorRule[]) => Promise<SynthesizedColorRules>} synthesizeGroup
  *   Python's rules for coloring `group.features` as one group over the rule table `rules` and the whole catalog.
@@ -309,7 +334,7 @@ export const createRulePreparation = ({
   // about ten), so the N-sized feature color overrides are stringified at most
   // once per change.
   const computed = globalThis.window?.Vue?.computed ?? ((/** @type {() => string} */ getter) => ({ get value() { return getter(); } }));
-  /** @type {Record<string, (drawing: Record<string, any>) => any>} */
+  /** @type {Record<string, (drawing: DrawingState) => unknown>} */
   const drawingInputReaders = {
     rules: (drawing) => drawing.manualSpecificRules,
     legend: (drawing) => drawing.legendEntries?.value || [],
@@ -380,7 +405,7 @@ export const createRulePreparation = ({
   /** @type {RulePreparation['prepare']} */
   const prepare = (rules = state.activeDrawing().manualSpecificRules, {
     blocked = () => Boolean(state.sessionOperationAvailability?.()), view = false, ...options
-  } = /** @type {{ blocked?: () => boolean, view?: boolean } & Record<string, unknown>} */ ({})) => {
+  } = {}) => {
     const targets = features();
     const draft = [...new Map([...rules, ...retained].map((rule) => [ruleKey(rule), { feat: rule.feat, qual: rule.qual, val: rule.val }])).values()];
     // Empty catalogs still require syntax validation at input boundaries.
@@ -407,7 +432,7 @@ export const createRulePreparation = ({
   // Python in table order, so a table Generate rejects (an invalid regex)
   // fails with Generate's error and row: its matches stay unknown, and the
   // preparation resolves to `{ error }`.
-  /** @returns {boolean | Promise<boolean | { error: any }>} */
+  /** @returns {boolean | Promise<boolean | RuleTableRejection>} */
   const prepareVisibility = (view = false) => {
     const draft = visibilityRules().map((rule) => ({
       recordId: rule.recordId, featureType: rule.featureType, qualifier: rule.qualifier,
@@ -445,7 +470,7 @@ export const createRulePreparation = ({
     const visibility = prepareVisibility(view);
     if (colors === true && visibility === true) return true;
     return Promise.all([strict ? colors : Promise.resolve(colors).catch(() => false), visibility])
-      .then(([current, outcome]) => strict && !current ? false : /** @type {any} */ (outcome)?.error ? outcome : true);
+      .then(([current, outcome]) => strict && !current ? false : visibilityTableError(outcome) ? outcome : true);
   };
   // The rules a commit or a run admits, with their matches prepared: the rows
   // as `normalizeSpecificRule` writes them, each caption as written (gbdraw

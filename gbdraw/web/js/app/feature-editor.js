@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { RulePreparation } from './rule-matching.js' */
+/** @import { RulePreparation, RulePreparationOptions } from './rule-matching.js' */
 /** @import { EditDefaultColorsPort, PreparedFileLegend, RevealSetting, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
 /** @import { CancelMarqueePointerPort, ClearFeatureSelectionPort, CommitMarqueePointerPort, ConsumeSuppressNextClickPort, IsPreviewTransformActivePort, MarkPlainFeatureClickPort, MoveMarqueePointerPort, PrepareDrawnFeatureMatchesPort, SelectFeatureByClickPort, ShowElementSettings, ShownAxisRecordsPort, ShownLegendNamePort, StartMarqueePointerPort, SubscribePreviewTransformChangesPort } from './feature-editor/svg-actions.js' */
@@ -77,7 +77,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   The root's projection of the palette and the rules (R3).
  * @property {() => any} projectFeatureEdits
  *   The root's projection of loaded feature edits onto the displayed Result (R3).
- * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<Record<string, any>>} evaluateLabelRules
+ * @property {RulePreparationOptions['evaluate']} evaluateLabelRules
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
  * @property {ReadUserDefaultColorPort} readUserDefaultColor
  * @property {SetDefaultColorPort} setDefaultColor
