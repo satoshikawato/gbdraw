@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { NoticeHandle, ShowNotice } from '../app-messages.js' */
-/** @import { DrawingState, DiagramMode } from '../../state.js' */
+/** @import { FeaturePopup } from '../../services/feature-popup.js' */
+/** @import { DrawingState, DiagramMode, WebState } from '../../state.js' */
 /** @import { CurrentResultsPort, SvgResultEntry } from '../../services/svg-result-ingestion.js' */
 import { RULE_INPUT_CHANGE_WORDS, diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
@@ -41,7 +42,7 @@ import { joinSentences, msg, t, tm, tn } from '../../utils/i18n.js';
 /** @typedef {{ x: number, y: number }} LabelPoint */
 /** @typedef {{ id: string, x: number, y: number, groupId: string }} FeatureCentroid */
 /** @typedef {{ all: FeatureCentroid[], byGroup: Map<string, FeatureCentroid[]> }} FeatureGeometry */
-/** @typedef {{ key: string, idx: number, text: string, sourceText: string, featureId: string, kind: string, draftText: string }} EditableLabelEntry */
+/** @import { EditableLabelEntry } from '../../services/label-override-table.js' */
 /**
  * The popup's label fields as one Apply reads them.
  * @typedef {{ text: string, sourceText: string, visibility: string, hasEditableLabel: boolean }} LabelPopupEdit
@@ -623,7 +624,12 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
 
 /**
  * @typedef {object} FeatureLabelActionsOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Pick<WebState, 'activeDrawing' | 'autoLabelReflowEnabled' | 'clickedFeature' | 'editableLabels' | 'errorLog'
+ *   | 'extractedFeatures' | 'featureCatalog' | 'hiddenLabelTextDialog' | 'labelOnDialog' | 'labelReflowForceRequestSeq'
+ *   | 'labelReflowLastError' | 'labelReflowProcessing' | 'labelReflowRequestSeq' | 'labelTextScopeDialog' | 'mode'
+ *   | 'processing' | 'resultGenerationKey' | 'results' | 'ruleMatchingPending' | 'selectedResultIndex'
+ *   | 'sessionOperationAvailability' | 'svgContainer'>} state
+ *   The members of the app state (state.js) this owner and the helpers it passes `state` to read.
  * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  * @property {CurrentResultsPort} currentResults
@@ -634,15 +640,19 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
  *   The inputs the rule matches depend on.
  * @property {(value?: any) => { value: any }} ref Vue `ref`
  * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
- * @property {((source: any, callback: (...args: any[]) => void, options?: Record<string, any>) => () => void) | null} [watch] Vue `watch`
- * @property {() => Promise<any>} [nextTick] Vue `nextTick`
- * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
- *   The committed canonical request (Python owns the option fields, R7).
- * @property {((feature: Record<string, any>, mode: string, options?: Record<string, any>) => any) | null} [setFeatureVisibility]
+ * @property {((source: { readonly value: boolean }, callback: (busy: boolean) => void) => () => void) | null} [watch]
+ *   Vue `watch`: this owner watches the label rerender's busy flag.
+ * @property {() => Promise<unknown>} [nextTick] Vue `nextTick`
+ * @property {() => ({
+ *   diagramOptions?: LabelDiagramOptions & NonNullable<Parameters<typeof featureDrawnContext>[1]>['diagramOptions']
+ * } | null)} [getCommittedRequest]
+ *   The committed canonical request (Python owns the option fields, R7): what the label code and the drawn-feature
+ *   resolver read of its diagram options.
+ * @property {((feature: LabelFeature, mode: string, options?: { triggerReflow?: boolean }) => unknown) | null} [setFeatureVisibility]
  *   The visibility owner's transition: Show feature and label sets Feature visibility through it.
  * @property {() => boolean | Promise<boolean | { error: any }>} [prepareDrawnFeatureMatches]
  *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads (Label On asks the blocker of it).
- * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<Record<string, any>>} evaluateLabelRules
+ * @property {import('../rule-matching.js').RulePreparationOptions['evaluate']} evaluateLabelRules
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
  * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there.
  */
@@ -1011,10 +1021,12 @@ export const createFeatureLabelActions = ({
     const editable = Boolean(featureId && featureIdentityKeyOf(clickedFeature.value.feat));
     const shown = { featureId, labelText: entry?.text ?? fallbackText, labelVisibility: normalizeVisibilityMode(row?.labelVisibility) };
     const synced = syncedPopupLabels.get(clickedFeature.value);
-    /** @param {'labelText' | 'labelVisibility'} field */
-    const typed = (field) => Boolean(synced && synced.featureId === featureId
-      && clickedFeature.value[field] !== synced[field] && clickedFeature.value[field] !== shown[field]);
-    const keep = { labelText: typed('labelText'), labelVisibility: typed('labelVisibility') };
+    /** @param {'labelText' | 'labelVisibility'} field @param {FeaturePopup} popup */
+    const typed = (field, popup) => Boolean(synced && synced.featureId === featureId
+      && popup[field] !== synced[field] && popup[field] !== shown[field]);
+    const keep = {
+      labelText: typed('labelText', clickedFeature.value), labelVisibility: typed('labelVisibility', clickedFeature.value)
+    };
     clickedFeature.value.labelKey = entry?.key || '';
     if (!keep.labelText) clickedFeature.value.labelText = shown.labelText;
     clickedFeature.value.labelSourceText = entry?.sourceText ?? fallbackSource;
@@ -1228,7 +1240,7 @@ export const createFeatureLabelActions = ({
     const nextMode = normalizeVisibilityMode(modeRaw);
     const previousMode = normalizeVisibilityMode(rowOf(drawing, feature)?.labelVisibility);
     updateFeatureOverride(drawing.slices.featureEdits, feature, { labelVisibility: nextMode === 'default' ? null : nextMode });
-    if (featureIdentityKeyOf(clickedFeature.value?.feat) === featureIdentityKeyOf(feature)) {
+    if (clickedFeature.value && featureIdentityKeyOf(clickedFeature.value.feat) === featureIdentityKeyOf(feature)) {
       clickedFeature.value.labelVisibility = nextMode;
     }
     return previousMode !== nextMode;
