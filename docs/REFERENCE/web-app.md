@@ -1140,9 +1140,9 @@ loads with it on when the Session has comparison files.
 
 In **Result Preview**, pointing at a comparison ring keeps that ring at its
 full strength and draws every other ring at 35%, makes the ring's Legend name
-bold, draws a line along the pointer's angle from the innermost ring out to the
-outer edge of the features, and shows a box with the position in input-file
-coordinates (for example `1,718 bp`) and the identity of every ring at that
+bold, draws a line along the pointer's angle that spans all the rings and
+reaches the outer edge of the features, and shows a box with the position in
+input-file coordinates (for example `1,718 bp`) and the identity of every ring at that
 position, outermost ring first, each ring named as in the Legend; a ring with
 no match there shows **No hit**. Pointing at a ring's name in the Legend shows
 the same ring and bold name without the line and the box. On the Multi-Record
