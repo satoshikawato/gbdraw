@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -2728,6 +2729,14 @@ def _web_preset_layout(
     return layout
 
 
+@cache
+def _auto_preset_layout(track_type: str, input_filename: str):
+    """The Web preset stack with no radius typed: one read-only (frozen) layout per track type and input."""
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        return _web_preset_layout(monkeypatch, track_type, input_filename)
+
+
 @pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
 @pytest.mark.parametrize(("slot_id", "radius"), [("gc_content", 0.6), ("gc_skew", 0.45)])
 def test_pinned_numeric_row_keeps_unpinned_rows_above_it_in_stack_order(
@@ -2800,7 +2809,7 @@ def test_preset_stack_with_nothing_typed_matches_the_default_stack(
     # instead of keeping their preset anchors.
     default = _capture_circular_radial_layout(monkeypatch, track_type=track_type, input_filename=input_filename)
     monkeypatch.undo()
-    preset_stack = _web_preset_layout(monkeypatch, track_type, input_filename)
+    preset_stack = _auto_preset_layout(track_type, input_filename)
 
     observed = _slot_geometry(preset_stack)
     expected = _slot_geometry(default)
@@ -2821,7 +2830,7 @@ def test_row_pinned_at_its_auto_radius_keeps_the_auto_layout(
     # GX-17: typing a row's Auto radius back gives the Auto layout, also where
     # Auto compressed the numeric rows (MG1655 Tuckin): a pinned row with an
     # Auto width compresses like Auto.
-    auto = _web_preset_layout(monkeypatch, track_type, input_filename)
+    auto = _auto_preset_layout(track_type, input_filename)
     auto_radius = next(slot for slot in auto.slots if slot.id == slot_id).anchor_radius_px
 
     pinned = _web_preset_layout(monkeypatch, track_type, input_filename, **{slot_id: f"{auto_radius!r}px"})

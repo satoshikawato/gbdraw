@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import math
 import re
 import warnings
@@ -683,14 +684,23 @@ def test_linear_above_feature_anchor_is_feature_midpoint() -> None:
         assert label["text_anchor"] == "start"
 
 
-@pytest.mark.linear
-def test_linear_above_feature_negative_strand_is_below_and_rotates_opposite() -> None:
-    labels = _prepare_linear_labels(
+@pytest.fixture(scope="module")
+def mg1655_rotated_split_labels() -> list[dict]:
+    """MG1655 labels above their features, rotated 45 degrees, strands apart: placed once, read by two tests."""
+
+    return _prepare_linear_labels(
         label_placement="above_feature",
         label_rotation=45.0,
         separate_strands=True,
         input_filename="MG1655.gbk",
     )
+
+
+@pytest.mark.linear
+def test_linear_above_feature_negative_strand_is_below_and_rotates_opposite(
+    mg1655_rotated_split_labels: list[dict],
+) -> None:
+    labels = mg1655_rotated_split_labels
     assert labels
 
     negative_labels = [label for label in labels if label["strand"] == "negative"]
@@ -714,18 +724,13 @@ def test_linear_above_feature_negative_strand_is_below_and_rotates_opposite() ->
 
 
 @pytest.mark.linear
-def test_linear_label_drawer_applies_rotation_transform() -> None:
-    labels = _prepare_linear_labels(
-        label_placement="above_feature",
-        label_rotation=45.0,
-        separate_strands=True,
-        input_filename="MG1655.gbk",
-    )
+def test_linear_label_drawer_applies_rotation_transform(mg1655_rotated_split_labels: list[dict]) -> None:
+    labels = mg1655_rotated_split_labels
     assert labels
 
-    # Verify both signs are carried through into SVG transforms.
-    positive_label = next(label for label in labels if label["strand"] == "positive")
-    negative_label = next(label for label in labels if label["strand"] == "negative")
+    # Verify both signs are carried through into SVG transforms. The two labels are copies: the set is shared.
+    positive_label = copy.deepcopy(next(label for label in labels if label["strand"] == "positive"))
+    negative_label = copy.deepcopy(next(label for label in labels if label["strand"] == "negative"))
     positive_label["feature_id"] = "linear-label-positive"
     negative_label["feature_id"] = "linear-label-negative"
 

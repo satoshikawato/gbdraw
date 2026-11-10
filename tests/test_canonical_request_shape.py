@@ -590,7 +590,7 @@ def test_the_decoder_refuses_a_comparison_table_path_at_every_schema(
 
 
 def test_every_described_field_is_held_by_a_request_or_named_by_the_decoder(
-    encoded_requests: dict[str, list[Encoded]],
+    encoded_requests: dict[str, list[Encoded]], stored_requests: StoredRequests
 ) -> None:
     """Removing a field from the description must make some test fail.
 
@@ -600,7 +600,7 @@ def test_every_described_field_is_held_by_a_request_or_named_by_the_decoder(
 
     held: set[str] = set()
     requests = [payload for found in encoded_requests.values() for payload, _resources in found]
-    requests += [request for path in stored_json_files() for request in _stored_requests(load_json(path))]
+    requests += [request for _path, request in stored_requests]
     for payload in requests:
         if _problems(payload, ROOT):
             continue
@@ -677,17 +677,26 @@ def _stored_requests(value: object) -> Iterator[dict[str, Any]]:
             yield from _stored_requests(item)
 
 
-def test_requests_stored_in_current_sessions_match_the_description() -> None:
+StoredRequests = list[tuple[Path, dict[str, Any]]]
+
+
+@pytest.fixture(scope="module")
+def stored_requests() -> StoredRequests:
+    """Each request stored in the stored JSON files, with its file: parsed once for the two tests that read them."""
+
+    return [(path, request) for path in stored_json_files() for request in _stored_requests(load_json(path))]
+
+
+def test_requests_stored_in_current_sessions_match_the_description(stored_requests: StoredRequests) -> None:
     """The Web wrote the Gallery Sessions; the CLI wrote the documentation Sessions."""
 
     modes: list[str] = []
     problems: dict[str, list[str]] = {}
-    for path in stored_json_files():
-        for request in _stored_requests(load_json(path)):
-            modes.append(request["mode"])
-            found = _problems(request, ROOT)
-            if found:
-                problems[str(path.relative_to(REPO_ROOT))] = found
+    for path, request in stored_requests:
+        modes.append(request["mode"])
+        found = _problems(request, ROOT)
+        if found:
+            problems[str(path.relative_to(REPO_ROOT))] = found
     assert problems == {}
     assert modes.count("circular") >= 4 and modes.count("linear") >= 4
 

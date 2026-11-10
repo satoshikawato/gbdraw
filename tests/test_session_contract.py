@@ -68,33 +68,40 @@ def _with_current_request(session: dict[str, Any]) -> dict[str, Any]:
     return session
 
 
-def _stored_sessions() -> Iterator[tuple[str, dict[str, Any]]]:
-    for path in stored_json_files():
-        value = load_json(path)
-        if isinstance(value, dict) and value.get("format") == SESSION_FORMAT:
-            yield str(path.relative_to(REPO_ROOT)), value
+StoredSessions = list[tuple[str, dict[str, Any]]]
 
 
-def test_stored_sessions_of_the_current_version_match_the_description() -> None:
+@pytest.fixture(scope="module")
+def stored_sessions() -> StoredSessions:
+    """Every stored Session by its path, parsed once for the tests of this module, which only read them."""
+
+    return [
+        (str(path.relative_to(REPO_ROOT)), value)
+        for path in stored_json_files()
+        if isinstance(value := load_json(path), dict) and value.get("format") == SESSION_FORMAT
+    ]
+
+
+def test_stored_sessions_of_the_current_version_match_the_description(stored_sessions: StoredSessions) -> None:
     """The Web wrote the Gallery Sessions; the CLI and the Python API wrote the documentation Sessions."""
 
     current = {
         name: _problems(_with_current_request(session))
         if session["version"] == MODE_SCOPED_SESSION_MAX_VERSION
         else _admission_problems(session)
-        for name, session in _stored_sessions()
+        for name, session in stored_sessions
         if session.get("version") in (MODE_SCOPED_SESSION_MAX_VERSION, CURRENT_SESSION_VERSION)
     }
     assert {name: found for name, found in current.items() if found} == {}
     assert len(current) >= 12
 
 
-def test_sessions_that_python_upgrades_match_the_description() -> None:
+def test_sessions_that_python_upgrades_match_the_description(stored_sessions: StoredSessions) -> None:
     """An older Session saved again holds the migrated Web draft in its drawings."""
 
     upgraded = 0
     problems: dict[str, list[str]] = {}
-    for name, session in _stored_sessions():
+    for name, session in stored_sessions:
         # A Session 49 is not upgraded; its band checks it.
         if isinstance(session.get("version"), int) and session["version"] >= CURRENT_SESSION_VERSION:
             continue
@@ -157,7 +164,7 @@ def _closed_objects(value: object, shape: dict[str, Any], path: tuple[str | int,
                 yield from _closed_objects(item, shape["fields"][key], (*path, key))
 
 
-def test_an_unknown_key_in_each_closed_object_is_a_violation() -> None:
+def test_an_unknown_key_in_each_closed_object_is_a_violation(stored_sessions: StoredSessions) -> None:
     edited = _with_current_request(two_mode_session())
     edited["legacyArtifacts"] = {}
     edited["modes"]["circular"].setdefault("features", {})["featureOverrides"] = {
@@ -193,7 +200,7 @@ def test_an_unknown_key_in_each_closed_object_is_a_violation() -> None:
     validate_session(edited)
     sessions = [edited, *(
         _with_current_request(session)
-        for _name, session in _stored_sessions() if session.get("version") == MODE_SCOPED_SESSION_MAX_VERSION
+        for _name, session in stored_sessions if session.get("version") == MODE_SCOPED_SESSION_MAX_VERSION
     )]
     reached: set[str] = set()
     for session in sessions:
@@ -404,9 +411,9 @@ def test_every_supported_version_has_an_admission_band_and_a_base() -> None:
     assert [band["root"] for band in ADMISSION["bands"] if not based & set(band["versions"])] == []
 
 
-def test_stored_sessions_python_accepts_are_inside_their_band() -> None:
+def test_stored_sessions_python_accepts_are_inside_their_band(stored_sessions: StoredSessions) -> None:
     problems = {}
-    for name, session in _stored_sessions():
+    for name, session in stored_sessions:
         try:
             validate_session(session)
         except ValidationError:

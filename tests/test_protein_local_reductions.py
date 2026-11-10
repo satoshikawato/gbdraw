@@ -358,6 +358,9 @@ def test_evidence_is_ranked_once_from_precomputed_ranks(scenario):
     assert sorts == []
 
 
+_CURRENT_COLLINEAR_RESULTS: dict[tuple[object, ...], object] = {}
+
+
 @pytest.mark.parametrize('baseline', ['s076', 's077'])
 @pytest.mark.parametrize('scope', ['adjacent', 'all'])
 @pytest.mark.parametrize('infer', [False, True])
@@ -385,7 +388,11 @@ def test_complete_collinear_result_differential(scope, infer, limit, mode, ancho
                                     encode_canonical_typed_resource('result', result)))
     with baseline_callers():
         expected = run()
-    assert run() == expected
+    # The current code's result does not depend on the baseline: it runs once for both baselines' params.
+    key = (scope, infer, limit, mode, anchor, scenario, reverse)
+    if key not in _CURRENT_COLLINEAR_RESULTS:
+        _CURRENT_COLLINEAR_RESULTS[key] = run()
+    assert _CURRENT_COLLINEAR_RESULTS[key] == expected
     assert benchmark.canonical((ex, tables)) == before
 
 
