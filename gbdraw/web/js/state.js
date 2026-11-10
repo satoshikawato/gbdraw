@@ -80,7 +80,9 @@ const processingStatus = ref('');
 // run ends; the next run that shows the overlay starts without them.
 const labelCapacityNotices = /** @type {{ value: readonly LabelCapacityNotice[] }} */ (ref([]));
 const generationCancelRequested = ref(false);
-const errorLog = ref(null);
+/** @import { UserFacingError } from './utils/error-normalization.js' */
+// The shown alert: the one diagnostic model the app shows (`normalizeUserFacingError`), or none.
+const errorLog = typedRef(/** @type {UserFacingError | null} */ (null));
 const sessionTitle = ref('');
 const sessionSavePending = ref(false);
 const sessionImportPending = typedRef(false);

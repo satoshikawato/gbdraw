@@ -10,6 +10,7 @@
 // the notice banner, and the install of the shown drawing
 // (`installShownDrawing`) as ports.
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
 import { msg } from '../utils/i18n.js';
 /** @import { DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from '../services/drawing-view.js' */
@@ -32,7 +33,7 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {WebState} state
  * @property {{ readonly value: SvgResultEntry[] }} results The displayed drawing's Results.
  * @property {{ readonly value: number | string }} selectedResultIndex
- * @property {{ value: unknown }} errorLog The operation error shown, or null.
+ * @property {WebState['errorLog']} errorLog The operation error shown, or null.
  * @property {{ value: boolean }} failedGeneratePreservedResult Whether "Showing the last successful result" shows.
  * @property {(operation?: string) => SessionBusy | null} sessionOperationAvailability
  * @property {() => HistoryBusy | null} historyAvailability Why History's open step owns the state, or null.
@@ -45,7 +46,7 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {() => unknown} suspendSpecificRulePatternDrafts
  * @property {(options?: { clearStatus?: boolean, syncDom?: boolean }) => unknown} clearFeatureSelection
  * @property {(drawing: DrawingState) => void} rememberDepartingResultProjection
- * @property {(departing: DrawingState, arriving: DrawingState) => unknown} auxiliaryImportFailureOnArrival
+ * @property {(departing: DrawingState, arriving: DrawingState) => UserFacingError | null} auxiliaryImportFailureOnArrival
  *   The arriving drawing's card failure error, or null.
  * @property {() => void} resetModeTransientUi
  * @property {(id: DrawingId) => DrawingState} installShownDrawing The one writer of the shown drawing.
@@ -131,7 +132,7 @@ export const createDrawingSwitch = ({
   // any: read by the switch, the drawing removal, and E1's Generate. Its
   // producers write a `DrawingId`; the normalizer, a leaf, keeps it as text.
   const errorDrawingId = () => /** @type {DrawingId | undefined} */ (
-    normalizeUserFacingError(/** @type {string | Record<string, unknown> | null} */ (errorLog.value))?.context.drawingId);
+    normalizeUserFacingError(errorLog.value)?.context.drawingId);
   // The switch work, steps 1-5, without the gate: `selectDrawing` and a step
   // of the drawing list (`app/drawing-list.js`, which shows a drawing inside
   // its project step, R16-2) call it. Showing the shown drawing does nothing.

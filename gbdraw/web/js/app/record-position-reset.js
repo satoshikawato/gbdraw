@@ -13,6 +13,7 @@ import { recordTranslationsFor } from '../services/linear-record-layout.js';
 import { ref } from '../utils/reactivity.js';
 
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { FeatureAnchorTranslation, RecordPlacementProjection, RecordPlacementRun } from './align-at-feature.js' */
 
@@ -25,7 +26,7 @@ import { ref } from '../utils/reactivity.js';
  * @property {RecordPlacementRun} runPlacement Draws `canonical` and commits it as one History step under `label`
  *   (Align at feature's port).
  * @property {RecordPlacementProjection} projectPlacement
- * @property {(error: Record<string, unknown>) => void} onError Shows why the positions were not reset.
+ * @property {(error: UserFacingError) => void} onError Shows why the positions were not reset.
  */
 
 /**
@@ -48,7 +49,8 @@ export const createRecordPositionReset = ({
 }) => {
   const busy = ref(false);
   /** @param {unknown} cause */
-  const publishError = (cause) => onError(/** @type {Record<string, unknown>} */ (
+  // The value is always truthy, and only a falsy value normalizes to null.
+  const publishError = (cause) => onError(/** @type {UserFacingError} */ (
     normalizeUserFacingError(cause || { code: 'UNKNOWN' }, { operation: 'generate', stage: 'helper' })));
   const reset = async () => {
     if (busy.value) return { status: 'busy' };
