@@ -1764,6 +1764,7 @@ export const createAppSetup = () => {
     prepareLinearRecordCatalog,
     readRecordIdentitySources,
     linearCardRecord,
+    readLinearCardRecords: linearRecordSelector.refresh,
     placeCircularRecordChoices: (drawing) => placeCircularRecordChoices(drawing), // created below, with the record settings
     recordDisplayRows: recordDisplayControls.allRows,
     assertDrawingInputs,
@@ -3224,7 +3225,7 @@ export const createAppSetup = () => {
   });
 
   const { circularIdentitySources, placeCircularRecordChoices, recordSettingsOwners, recordEditData, recordSourceOf } = createRecordSettingsSources({
-    shownDrawingOfMode, linearSourceGroups, linearSourceFileName, linearRecordsFor: linearRecordSelector.recordsFor,
+    shownDrawingOfMode, linearSourceGroups, linearSourceFileName, linearCardRecord,
     linearAnnotationSource, getCircularRecordDiscoveryState, circularAnnotationSourceKey,
     takeBackRuleRows: featureActions.takeBackRuleRows
   });
@@ -3961,6 +3962,7 @@ export const createAppSetup = () => {
     downloadLosatPair,
     clearLosatCache,
     getLosatPairDefaultName,
+    readShownRecords,
     getCircularRecordOrderLabel,
     getCircularRecordRow,
     getCircularRecordRowOptions,

@@ -32,7 +32,7 @@ import {
 } from '../services/feature-placement.js';
 import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
 import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
-import { UNKNOWN_CARD_RECORD, catalogCardRecord } from '../services/linear-card-windows.js';
+import { catalogCardRecord } from '../services/linear-card-windows.js';
 /** @import { CardRecordFacts, LinearRecordCatalogRecords } from '../services/linear-card-windows.js' */
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatJobsByFile, runLosatPairsParallel, runUntilCanceled } from '../services/losat.js';
@@ -1702,8 +1702,10 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
  * @property {((drawing: DrawingState) => void) | null} [placeCircularRecordChoices] Names a Circular drawing's record
  *   choices by identity once its cards are read (record-settings.js), before its Record Order is merged.
- * @property {(drawing: DrawingState, card: LinearSeq) => CardRecordFacts} [linearCardRecord] What a Linear card's
+ * @property {(drawing: DrawingState, card: LinearSeq) => CardRecordFacts} linearCardRecord What a Linear card's
  *   record list says of the records it draws (app/shown-drawing-readers.js): its record ID names its raw LOSAT TSVs.
+ * @property {(drawing: DrawingState) => unknown} readLinearCardRecords The record selector's read of a Linear drawing's
+ *   cards (its `refresh`, which the record list starts too): Save Raw LOSAT TSV awaits it before it names a pair.
  * @property {((drawing: DrawingState) => Promise<RecordIdentitySources>) | null} [readRecordIdentitySources]
  *   The record discovery owner's record lists of a drawing's inputs, awaited (DESIGN A4): the sources
  *   `readDrawingRecordIdentities` returns, from which a request's record identities are read (`drawnRecordIdentities`).
@@ -1761,7 +1763,8 @@ export const createRunAnalysis = ({
   onCircularRecordsDiscovered = null,
   prepareLinearRecordCatalog = null,
   readRecordIdentitySources = null,
-  linearCardRecord = () => UNKNOWN_CARD_RECORD,
+  linearCardRecord,
+  readLinearCardRecords,
   placeCircularRecordChoices = null,
   // The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
   recordDisplayRows = null,
@@ -2294,19 +2297,25 @@ export const createRunAnalysis = ({
   };
 
   /**
-   * The default raw LOSAT TSV name of the pair of `cards` at two indexes (`losatCardPairName`): each card's record ID
-   * is the one its record list read (`linearCardRecord`), for the File name field and Generate alike (OV-3227).
+   * The default raw LOSAT TSV name of the pair of drawn cards whose record keys are `queryKey` and `subjectKey`
+   * (`losatCardPairName`), for the File name field and Generate alike (OV-3227): each card is found by its record key
+   * and numbered by its place among the drawn cards (a unit's index is not its card's number), and its record ID is the
+   * one its record list read (`linearCardRecord`).
    * @param {DrawingState} drawing The drawing that holds the cards; its program names the suffix.
-   * @param {readonly LinearSeq[]} cards
-   * @param {number} queryIndex @param {number} subjectIndex NaN or -1 for a card not found.
+   * @param {readonly LinearSeq[]} cards The drawn cards.
+   * @param {unknown} queryKey @param {unknown} subjectKey A key no drawn card has names its side by its side number.
    */
-  const cardPairDefaultName = (drawing, cards, queryIndex, subjectIndex) => losatCardPairName(
-    buildLosatSuffix(drawing), cards, queryIndex, subjectIndex, (card) => linearCardRecord(drawing, card));
+  const cardPairDefaultName = (drawing, cards, queryKey, subjectKey) => {
+    /** @param {unknown} key */
+    const placeOf = (key) => cards.findIndex((seq, at) => linearSeqRecordKey(seq, at) === key);
+    return losatCardPairName(buildLosatSuffix(drawing), cards, placeOf(queryKey), placeOf(subjectKey),
+      (card) => linearCardRecord(drawing, card));
+  };
   /**
    * The default raw LOSAT TSV name of a pair the Comparison card shows: a card pair by its resolved edge or its
-   * cache-info row, whose indexes count the drawn cards; a window pair by its row, whose units name their records
-   * (the drawn Result's units, OV-2742), so its cards are found by record key, never by the row's unit indexes, and
-   * its name is its card pair's with its windows' numbers, as Generate names it (`losatUnitPairFilename`). '' while
+   * cache-info row; a window pair by its row, whose units name their records (the drawn Result's units, OV-2742).
+   * Its cards are found by record key, never by the row's unit indexes, and a window pair's name is its card pair's
+   * with its windows' numbers, as Generate names it (`losatUnitPairFilename`). '' while
    * the name needs a record ID that is not read yet (a loaded Session's card): Generate reads the records first, so
    * the field shows no name the next Generate would not give (OV-3227).
    * @param {DrawingState} drawing
@@ -2319,14 +2328,8 @@ export const createRunAnalysis = ({
     const query = places.get(String(edge?.queryUid ?? ''));
     const subject = places.get(String(edge?.subjectUid ?? ''));
     const windowPair = Boolean(query?.window || subject?.window);
-    /** @param {LinearUnitPlace | undefined} place @param {string | undefined} uid @param {number | undefined} index */
-    const cardIndex = (place, uid, index) => (windowPair
-      ? drawnSeqs.findIndex((seq, at) => linearSeqRecordKey(seq, at) === (place?.recordKey ?? uid))
-      : Number(index));
     const { name: cardPairName, known } = cardPairDefaultName(
-      drawing, drawnSeqs, cardIndex(query, edge?.queryUid, edge?.queryIndex),
-      cardIndex(subject, edge?.subjectUid, edge?.subjectIndex)
-    );
+      drawing, drawnSeqs, query?.recordKey ?? edge?.queryUid, subject?.recordKey ?? edge?.subjectUid);
     if (!windowPair) return known ? cardPairName : '';
     const cardPair = getResolvedLinearEdge(drawing, linearComparisonEdgeKey(
       query?.recordKey ?? edge?.queryUid, subject?.recordKey ?? edge?.subjectUid));
@@ -2389,6 +2392,9 @@ export const createRunAnalysis = ({
     if (!entry || !cacheMap) return;
     const cached = cacheMap.get(entry.key);
     if (!isCurrentRawLosatCacheEntry(cached)) return;
+    // A pair with no name of its own is named by its cards' record IDs, as Generate names it: read them first (a
+    // loaded Session's cards are read on demand, OV-3227).
+    if (!String(customName || '').trim() && !entry.filename) await readLinearCardRecords(drawing);
     const defaultName = losatPairDefaultName(drawing, entry.edgeKey || edgeKey);
     const fallbackOrdinal = Number.isInteger(Number(entry.ordinal))
       ? Number(entry.ordinal)
@@ -4200,8 +4206,8 @@ export const createRunAnalysis = ({
           // numbers, unless a name was typed on it (OV-2742). A unit edge carries its card pair's typed names. Each
           // card's record ID is the one its record list read, which this Generate awaited, as the File name field
           // reads it (OV-3227).
-          const { name: fallback } = cardPairDefaultName(searchDrawing, losatCards, Number(edge?.queryIndex),
-            Number(edge?.subjectIndex));
+          const { name: fallback } = cardPairDefaultName(searchDrawing, linearSeqs,
+            unitPlaces.get(spec.queryUid)?.recordKey, unitPlaces.get(spec.subjectUid)?.recordKey);
           return normalizeLosatFilename(
             (edge ? windowLosatFilenamesOf(edge)[spec.edgeKey] : undefined) ?? '',
             losatUnitPairFilename(edge ?? null, fallback, unitPlaces.get(spec.queryUid), unitPlaces.get(spec.subjectUid))

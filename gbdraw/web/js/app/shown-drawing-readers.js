@@ -139,7 +139,7 @@ export const createShownDrawingReaders = ({
   /** @param {DrawingState} drawing */
   const linearUnitPlacesOf = (drawing) => unitPlacesOf(drawing, (card) => linearCardRecord(drawing, card));
   const { linearCardWindowView, linearLayoutCellRows } = createLinearCardWindowReaders({
-    state, shownDrawingOfMode, linearSeqRecord, linearSeqDrawnRecords, planCardWindows, cardWindowPlanRecords, recordDisplayRows
+    state, shownDrawingOfMode, linearSeqRecord, linearCardRecord, planCardWindows, cardWindowPlanRecords, recordDisplayRows
   });
   const circularRegionNote = computed(() => {
     const drawing = shownDrawingOfMode('circular');
