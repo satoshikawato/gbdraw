@@ -182,8 +182,10 @@ export const WORK_ALLOWLIST = [
   // rule change asks for the automatic rerender only when the displayed
   // Result cannot show the rows it regroups (a split, or a row another batch
   // Result draws). Captions with one color each send no caption request. An
-  // edit after a rerender or a History restore first matches the rules on the
-  // features of the Result it drew (one `evaluateRules`).
+  // edit after a rerender first matches the rules on the features of the
+  // Result it drew (one `evaluateRules`). A History restore of a Result with a
+  // feature catalog installs the catalog's own features, which keep the rule
+  // matches recorded on them, so an edit after it asks for none (OV-3285).
   {
     kind: 'Legend rename, row without features', stages: ['legend', 'legendFills', 'strokes'], compiles: 1, requests: ['evaluateRules'],
     run: (page) => renameLegendRow(page, 'GC content', 'GC %')

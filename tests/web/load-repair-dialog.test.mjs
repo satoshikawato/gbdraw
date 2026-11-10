@@ -1411,6 +1411,19 @@ test('a blank over a number reads as the field\'s default with no row, in a conf
   assert.equal(modeDrawing(state, 'linear').linearRecordGap.value, 24);
 });
 
+// OV-3351: a configuration file installs over the shown drawing, so a number
+// field the user emptied ('' in the draft) takes the file's value, with no
+// row, whether its default is Auto (null) or a number.
+test('a configuration file applies its numbers over emptied number fields, with no row (OV-3351)', async () => {
+  await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
+  const drawing = () => modeDrawing(state, state.mode.value);
+  Object.assign(drawing().adv, { legend_font_size: '', gc_content_tick_interval: '' });
+  const loaded = await importSession(input({ adv: { legend_font_size: 21, gc_content_tick_interval: 50 } }),
+    { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
+  assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
+  assert.deepEqual([drawing().adv.legend_font_size, drawing().adv.gc_content_tick_interval], [21, 50]);
+});
+
 // OV-823 (BA-OD110): a Session 44 whose GUI-unmanaged font override is now
 // the Font setting, with an `adv` that is no object, adopts the font and lists
 // the `adv` value it drops, in the words a dropped `adv` has elsewhere; Load

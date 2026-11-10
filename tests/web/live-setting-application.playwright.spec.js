@@ -1035,7 +1035,7 @@ test('tobacco: a visibility rule edit during a Legend font size apply equals a G
 // emptying gives the earlier value back to the field and the Result; Redo
 // empties the field again and draws the Auto size.
 test('tobacco: Undo of an emptied Legend font size restores the earlier value and its Result (OV-3351)', async ({ browser }) => {
-  test.setTimeout(900_000);
+  test.setTimeout(120_000);
   const page = await load(browser, TOBACCO);
   try {
     await generateNow(page);

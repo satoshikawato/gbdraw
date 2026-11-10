@@ -356,7 +356,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { CommittedCanonicalSession, LiveSettingItem, LiveSettingWrite, SessionRequestProjection,
  *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
-/** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
+/** @import { FeatureCatalog, FeatureCatalogFeatureState, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { CurrentResultsPort, LegacyResultNormalization, SavedResultEdits, SvgResultCandidate } from './svg-result-ingestion.js' */
 /** @import { DroppedLegendRecord, PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 /** @import { SessionResourceDrawing, SessionResourceSource } from './session-resources.js' */
@@ -4186,7 +4186,7 @@ const groupNameRepairs = (names, groupIds, editsPath, repairs) => (
 /**
  * @param {DrawingState} drawing
  * @param {Record<string, any>} [orthogroupState]
- * @param {{ catalogFeatureState?: Record<string, any> | null }} [options]
+ * @param {{ catalogFeatureState?: FeatureCatalogFeatureState | null }} [options] The restored catalog's features, which carry its groups.
  */
 export const applyOrthogroupStateData = (drawing, orthogroupState = {}, options = {}) => {
   installGroupNames(drawing, orthogroupState, applyOrthogroupArtifactData(orthogroupState, options));
