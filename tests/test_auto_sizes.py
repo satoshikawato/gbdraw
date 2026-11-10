@@ -16,6 +16,7 @@ from gbdraw.auto_sizes import (
     ADAPTABLE_SETTINGS,
     DrawnDepthRow,
     DrawnExtent,
+    SIZE_CLASSES,
     adapt_explicit_settings,
     auto_setting_values,
     circular_tick_intervals,
@@ -477,7 +478,7 @@ def test_a_new_drawing_reads_its_depth_row_at_the_depth_width_it_keeps(cfg: Gbdr
     percent = apply_config_overrides(None, {"objects.gc_content.mode": "percent"})
     rows = (DrawnDepthRow(DepthConfigurator(10, 10, CircularRenderProfile(percent)), 0, depth_width=True),)
     explicit = {"circularSlot.depth.width": 20.0, "objects.gc_content.tick_font_size": 7}
-    by_class = dict.fromkeys(("short", "long"), explicit)
+    by_class = {setting: dict.fromkeys(SIZE_CLASSES, value) for setting, value in explicit.items()}
     source = DrawnExtent("circular", (2_000_000,), depth_rows=rows)
     crop = adapt_explicit_settings(
         by_class, source=source, target=DrawnExtent("circular", (3_000,), depth_rows=rows), cfg=percent

@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from functools import reduce
-from typing import Literal, Protocol
+from typing import Literal, Protocol, get_args
 
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.labels import LINEAR_LABEL_SCOPE_RECORDS, LinearLabelScope
@@ -20,6 +20,7 @@ from gbdraw.mode_profiles import DiagramMode
 
 
 SizeClass = Literal["short", "long"]
+SIZE_CLASSES: tuple[SizeClass, ...] = get_args(SizeClass)
 AutoValue = float | int
 
 # (at most bp, large tick, small tick); longer records use the last pair. Above 10 Mbp the large ticks step
@@ -579,7 +580,8 @@ class SettingReset:
 
     An Auto value of ``None`` means that drawing's mode does not draw the setting, or that the records compared
     take different values: for a setting each record takes for itself (``record_auto_values``), or in the
-    diagrams of a batch source, each at its own size class.
+    diagrams of a batch source, each at its own size class. ``explicit`` is the value the source diagram drew: the
+    hand-set one, or its Auto value where a short/long pair is set by hand only for the other size class.
     """
 
     setting: str
@@ -597,7 +599,7 @@ class SettingAdaptation:
 
 
 def adapt_explicit_settings(
-    explicit: Mapping[SizeClass, Mapping[str, AutoValue]],
+    explicit: Mapping[str, Mapping[SizeClass, AutoValue]],
     *,
     source: DrawnExtent,
     target: DrawnExtent,
@@ -606,9 +608,10 @@ def adapt_explicit_settings(
 ) -> SettingAdaptation:
     """Keep a hand-set size only where its Auto value is the same in ``target``.
 
-    ``explicit`` holds the hand-set values a diagram of each size class draws
-    (a short/long pair gives that class's value), keyed as
-    ``auto_setting_values`` is; each holds the same settings. A setting whose Auto
+    ``explicit`` holds, for each hand-set setting keyed as
+    ``auto_setting_values`` is, the value a diagram of each size class draws:
+    a short/long pair gives a class only the value of its own leaf, and a
+    class it gives none draws its Auto value. A setting whose Auto
     value changes with the size class, a tier or the mode returns to Auto and
     is listed in ``reset``; the other sizes are listed in ``kept``. A value
     that neither drawing lists is not a size and is in neither. The tick fonts
@@ -624,9 +627,10 @@ def adapt_explicit_settings(
     its Auto value. A batch source (``separate_records``) is a diagram per
     record, each at its own size class: the other sizes are compared with the
     diagram of each record the target's records come from. ``kept`` and
-    ``reset`` name the value those source diagrams drew, at their own size
-    class (``DrawnExtent.size_class``); where they drew different values, that
-    of the first of them in the source's order.
+    ``reset`` name the value the first of those source diagrams, in the
+    source's order, drew at its own size class (``DrawnExtent.size_class``):
+    its hand-set value, else its Auto value; a size the source's mode does
+    not draw names its hand-set value of the first class that sets it.
     """
     if record_sources is None:
         record_sources = (None,) * len(target.record_lengths)
@@ -650,9 +654,13 @@ def adapt_explicit_settings(
             if None in record_sources or index in used
         )
 
+    def hand_set(size: SizeClass) -> dict[str, AutoValue]:
+        """The hand-set values a diagram of ``size`` draws."""
+        return {setting: values[size] for setting, values in explicit.items() if size in values}
+
     # The hand-set values each source diagram compared drew, at its own size class; the target draws its own
-    # class's. The values named are the first diagram's: those of every diagram where they agree.
-    source_explicit = tuple(explicit[diagram.size_class(cfg)] for diagram in source_diagrams)
+    # class's.
+    source_explicit = tuple(hand_set(diagram.size_class(cfg)) for diagram in source_diagrams)
 
     def record_keys(setting: str) -> tuple[str, ...]:
         """The per-record Auto values a setting sets: its own and, for the window and step, a density track's."""
@@ -705,7 +713,7 @@ def adapt_explicit_settings(
         for diagram, values in zip(source_diagrams, source_explicit, strict=True)
     )
     target_auto = auto_setting_values(target, cfg)
-    target_explicit = explicit[target.size_class(cfg)]
+    target_explicit = hand_set(target.size_class(cfg))
     unchanged = {setting: value for setting, value in target_explicit.items() if same_auto(setting, target_auto)}
     # The thickness settings never depend on a thickness, so this pass only
     # moves the tick fonts to the thickness and the Depth font the target keeps.
@@ -717,7 +725,16 @@ def adapt_explicit_settings(
     )
     kept: dict[str, AutoValue] = {}
     reset: list[SettingReset] = []
-    for setting, value in source_explicit[0].items():
+
+    def drawn(setting: str) -> AutoValue:
+        """The value the first source diagram compared drew (see the docstring)."""
+        value = source_explicit[0].get(setting, source_autos[0].get(setting))
+        if value is None:
+            return next(explicit[setting][size] for size in SIZE_CLASSES if size in explicit[setting])
+        return value
+
+    for setting in explicit:
+        value = drawn(setting)
         listed = setting in target_auto or any(setting in values for values in source_autos)
         if not listed and setting not in _RECORD_SETTINGS:
             continue
@@ -737,6 +754,7 @@ __all__ = [
     "DrawnExtent",
     "SettingAdaptation",
     "SettingReset",
+    "SIZE_CLASSES",
     "SizeClass",
     "adapt_explicit_settings",
     "auto_setting_values",

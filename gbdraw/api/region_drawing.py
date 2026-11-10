@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields, replace
 from numbers import Real
-from typing import Any, Literal, cast, get_args
+from typing import Any, Literal, cast
 
 from gbdraw.analysis.origin_arcs import location_origin_arc
 from gbdraw.annotations.models import (
@@ -52,6 +52,7 @@ from gbdraw.auto_sizes import (
     DrawnDepthRow,
     DrawnExtent,
     SettingAdaptation,
+    SIZE_CLASSES,
     SizeClass,
     adapt_explicit_settings,
 )
@@ -427,7 +428,7 @@ def derive_from_source(
         for unit in region.units:
             record_sources[unit] = region.item.resolved_index
     adaptation = adapt_explicit_settings(
-        {size: _explicit_values(options, size) for size in get_args(SizeClass)},
+        _explicit_values(options),
         source=source_extent,
         target=target_extent,
         cfg=cfg,
@@ -657,25 +658,25 @@ def _setting_of(path: str) -> str:
     return head if leaf in {"short", "long"} else path
 
 
-def _explicit_values(options: _ModeDiagramOptions, size_class: SizeClass) -> dict[str, AutoValue]:
-    """The source's hand-set numbers, keyed as ``auto_setting_values`` is.
+def _explicit_values(options: _ModeDiagramOptions) -> dict[str, dict[SizeClass, AutoValue]]:
+    """The source's hand-set numbers, keyed as ``auto_setting_values`` is, with the value a diagram of each size
+    class draws.
 
-    A short/long pair counts once, with the value a diagram of ``size_class`` draws.
+    A short/long pair counts once and gives a class only its own leaf: a class without one draws its Auto value.
     """
-    explicit: dict[str, AutoValue] = {}
-    overrides = options.config_overrides or {}
-    for path, value in overrides.items():
+    explicit: dict[str, dict[SizeClass, AutoValue]] = {}
+    for path, value in (options.config_overrides or {}).items():
         if isinstance(value, Real) and not isinstance(value, bool):
             setting = _setting_of(path)
-            chosen = overrides.get(f"{setting}.{size_class}", value) if setting != path else value
-            explicit[setting] = cast(AutoValue, chosen)
+            classes = SIZE_CLASSES if setting == path else tuple(size for size in SIZE_CLASSES if path.endswith(f".{size}"))
+            explicit.setdefault(setting, {}).update(dict.fromkeys(classes, cast(AutoValue, value)))
     for option in _SIZE_OPTIONS:
         value = getattr(options, option)
         if value is not None:
-            explicit[option] = value
+            explicit[option] = dict.fromkeys(SIZE_CLASSES, value)
     for slot in _stated_slots(getattr(options, "tracks", None)) or ():
         if slot.width is not None and slot.width.unit == "px":
-            explicit[f"circularSlot.{slot.id}.width"] = slot.width.value
+            explicit[f"circularSlot.{slot.id}.width"] = dict.fromkeys(SIZE_CLASSES, slot.width.value)
     return explicit
 
 
