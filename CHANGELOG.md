@@ -52,8 +52,8 @@ into the `[Unreleased]` list below.
   (`data-display-start`, `data-display-end`, `data-ring-inner-radius`,
   `data-ring-outer-radius`, `data-ring-legend-name`).
 - Fixed: in the Web app, an SVG export made after a comparison match popup was
-  opened and closed no longer carries an empty `class` attribute on the
-  match.
+  opened and closed, or after a feature was selected and then deselected, no
+  longer carries an empty `class` attribute on the match or the feature.
 - Fixed: in the Python API, a new drawing from a region ignored a Circular
   track slot given as a string (`"depth:depth@width=20px"`): the slot's hand-set
   width was neither kept nor returned to Auto as the same slot given as a
