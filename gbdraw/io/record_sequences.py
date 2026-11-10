@@ -128,13 +128,12 @@ _EDGE_BATCH = 1 << 20  # most bases of edge rows counted together
 
 class _Rows(NamedTuple):
     """Count rows of a sequence's bases (``gbdraw.core.base_counts``): ``counts[j]`` (A, C, G and T, U as T,
-    either case) counts row ``first + j``, bases ``(first + j) * ROW_BASES`` up to the next row or ``end``;
-    ``read(row, size)`` gives the first ``size`` bases of a row."""
+    either case) counts row ``first + j``, bases ``(first + j) * ROW_BASES`` up to the next row or ``end``.
+    They hold no reader of the bases, so a holder that keeps its rows is not kept alive by them."""
 
     counts: NDArray[np.uint16]
     first: int
     end: int
-    read: Callable[[int, int], bytes]
 
 
 def _alphabet(totals: NDArray[np.int64]) -> int:
@@ -214,24 +213,29 @@ class _Reader:
     of its parse pass before the offset (``_SequenceFile.points``), or on from where
     the last read stopped when that is nearer: the last block expanded is kept, so
     reads in order (window edges, a sequence written out) expand each byte once.
+    It refers to its input weakly (a read comes through a record, which holds it), so
+    the input's finalizer runs when its last record goes, while the reader still
+    sits among the open files (OV-3355).
     """
 
     def __init__(self, source: _SequenceFile) -> None:
-        self._source = source
+        self._source = weakref.ref(source)
         self.handle = open_input_bytes(source.path)
         self._expansion: GzipExpansion | None = None
         self._at = 0  # the expanded offset of ``_block``
         self._block = b""
 
     def read_at(self, offset: int, size: int) -> bytes:
-        if not self._source.gzip:
+        source = self._source()
+        assert source is not None  # the record reading holds its input
+        if not source.gzip:
             self.handle.seek(offset)
             return self.handle.read(size)
-        points = self._source.points
+        points = source.points
         point = points[bisect.bisect_right(points, offset, key=_expanded_at) - 1]
         if self._expansion is None or not (self._at <= offset and point.expanded <= self._at + len(self._block)):
             self.handle.seek(point.compressed)
-            self._expansion = GzipExpansion(self.handle.read, self._source.name, start=point, verify=False)
+            self._expansion = GzipExpansion(self.handle.read, source.name, start=point, verify=False)
             self._at, self._block = point.expanded, b""
         pieces: list[bytes] = []
         position, end = offset, offset + size
@@ -495,7 +499,7 @@ class _SequenceTable:
     length: int = 0
     _counts: RowCounts = field(default_factory=RowCounts)
     _row_offsets: list[NDArray[np.uint16]] = field(default_factory=list)
-    _rows: _Rows | None = None
+    _rows: _Rows | None = None  # built once, when the parse pass has added every line (``finish``)
 
     def add(self, offset: int, raw: bytes, kind: int, counted: CountedRows) -> None:
         """Add the raw bytes ``raw`` from file offset ``offset``, of one kind, with what was counted in them
@@ -529,15 +533,19 @@ class _SequenceTable:
             self.alphabets.append(_alphabet(totals[index:index + 1]))
         self.length += counted.bases
 
-    def rows(self) -> _Rows:
-        """The count rows of the whole sequence (joined once, when the parse pass has added them all)."""
+    def finish(self) -> None:
+        """Join the count rows, once the parse pass has added every line, before any reader can ask for them."""
 
-        if self._rows is None:
-            self._row_offsets = [np.concatenate(self._row_offsets) if self._row_offsets else np.zeros(0, np.uint16)]
-            self._rows = _Rows(self._counts.joined(), 0, self.length, self._row_bases)
+        self._row_offsets = [np.concatenate(self._row_offsets) if self._row_offsets else np.zeros(0, np.uint16)]
+        self._rows = _Rows(self._counts.joined(), 0, self.length)
+
+    def rows(self) -> _Rows:
+        """The count rows of the whole sequence."""
+
+        assert self._rows is not None, "a record's rows are read after its parse pass"
         return self._rows
 
-    def _row_bases(self, row: int, size: int) -> bytes:
+    def row_bases(self, row: int, size: int) -> bytes:
         """The first ``size`` bases of count row ``row`` (fewer than a row), read from the file and decoded alone:
         from the row's first base up to the next row's at most."""
 
@@ -618,8 +626,33 @@ class _SequenceTable:
         return pieces[0] if len(pieces) == 1 else b"".join(pieces)
 
 
+class _HeldBases:
+    """Bases held in memory, read as a record's sequence table is read: their count rows are counted once, the
+    first time a count is asked for (``gbdraw.core.base_counts``, on the same rows as a parse pass)."""
+
+    __slots__ = ("bases", "length", "_rows", "_lock")
+
+    def __init__(self, bases: bytes, rows: _Rows | None = None) -> None:
+        self.bases = bases
+        self.length = len(bases)
+        self._rows = rows  # given: the rows a parse pass counted in these bases
+        self._lock = threading.Lock()
+
+    def read(self, start: int, stop: int) -> bytes:
+        return self.bases[start:stop]
+
+    def rows(self) -> _Rows:
+        with self._lock:
+            if self._rows is None:
+                self._rows = _sliced_rows(self.read, 0, self.length)
+            return self._rows
+
+    def row_bases(self, row: int, size: int) -> bytes:
+        return self.bases[row * ROW_BASES: min(self.length, row * ROW_BASES + size)]
+
+
 # What a record sequence reads: the sequence table of a record in its input file, or bases held in memory.
-_Bases = _SequenceTable | bytes
+_Bases = _SequenceTable | _HeldBases
 
 
 class RecordSequence(SequenceDataAbstractBaseClass):
@@ -638,11 +671,11 @@ class RecordSequence(SequenceDataAbstractBaseClass):
     __slots__ = ("_bases", "_pieces", "_ends", "_reverse", "_translate")
 
     def __init__(
-        self, bases: _Bases, pieces: tuple[tuple[int, int], ...] | None = None, *,
+        self, bases: _Bases | bytes, pieces: tuple[tuple[int, int], ...] | None = None, *,
         reverse: bool = False, translate: bytes | None = None,
     ) -> None:
-        self._bases = bases
-        self._pieces = ((0, len(bases) if isinstance(bases, bytes) else bases.length),) if pieces is None else pieces
+        self._bases = _HeldBases(bases) if isinstance(bases, bytes) else bases
+        self._pieces = ((0, self._bases.length),) if pieces is None else pieces
         self._ends = tuple(itertools.accumulate(stop - start for start, stop in self._pieces))
         self._reverse = reverse
         self._translate = translate
@@ -675,8 +708,7 @@ class RecordSequence(SequenceDataAbstractBaseClass):
         if start >= stop:
             return b""
         bases = self._bases
-        reads = [bases[first:last] if isinstance(bases, bytes) else bases.read(first, last)
-                 for first, last in self._forward_pieces(start, stop)]
+        reads = [bases.read(first, last) for first, last in self._forward_pieces(start, stop)]
         data = reads[0] if len(reads) == 1 else b"".join(reads)
         del reads  # each step below holds the bases read and their next form only
         if self._translate is not None:
@@ -718,17 +750,40 @@ class RecordSequence(SequenceDataAbstractBaseClass):
 def _viewed(seq: Seq | MutableSeq) -> RecordSequence | None:
     """``seq``'s bases as a record sequence a view can read, or ``None`` when they cannot be read so.
 
-    A record sequence is itself; bases held as ``bytes`` are read in place.
-    Bases that may change (a ``MutableSeq``) and a sequence that is not defined
-    everywhere are left to Biopython's own slices and reverse complements.
+    A record sequence is itself; bases held as ``bytes`` are read in place, through
+    one holder of those bytes, so their count rows are counted once however often
+    the sequence (or a copy) is viewed or counted. Bases that may change (a ``MutableSeq``) and a
+    sequence that is not defined everywhere are left to Biopython's own slices and
+    reverse complements.
     """
 
     data = getattr(seq, "_data", None)
     if isinstance(data, RecordSequence):
         return data
     if isinstance(seq, Seq) and type(data) is bytes:
-        return RecordSequence(data)
+        return RecordSequence(_held(seq, data))
     return None
+
+
+# The holder of the bytes of each ``Seq`` a view or a count has read, by the identity of the bytes (a copy of a
+# ``Seq`` shares them): kept while the ``Seq`` that first read them lives, which keeps the bytes and so their
+# identity. The weakref callback takes no lock: it may run inside any allocation.
+_HELD: dict[int, tuple[weakref.ref[Seq], _HeldBases]] = {}
+
+
+def _held(seq: Seq, data: bytes, rows: _Rows | None = None) -> _HeldBases:
+    key = id(data)
+    entry = _HELD.get(key)
+    if entry is not None and entry[1].bases is data:
+        return entry[1]
+    held = _HeldBases(data, rows)
+
+    def forget(ref: weakref.ref[Seq], key: int = key) -> None:
+        if _HELD.get(key, (None,))[0] is ref:
+            del _HELD[key]
+
+    _HELD[key] = (weakref.ref(seq, forget), held)
+    return held
 
 
 def _then(first: bytes | None, second: bytes | None) -> bytes | None:
@@ -801,9 +856,10 @@ def _sums_before(counts: NDArray[np.uint16], row: NDArray[np.int64]) -> NDArray[
     return sums[np.searchsorted(marks, row)].T
 
 
-def _counts_at(rows: _Rows, at: NDArray[np.int64]) -> NDArray[np.int64]:
+def _counts_at(rows: _Rows, at: NDArray[np.int64], read: Callable[[int, int], bytes]) -> NDArray[np.int64]:
     """Column ``k``: the counts of A, C, G and T in the rows' bases before ``at[k]`` (within them): the whole rows
-    before it summed, and the bases of its own row before it counted, every edge row read once."""
+    before it summed, and the bases of its own row before it counted, every edge row read once (``read(row,
+    size)``: the first ``size`` bases of a row)."""
 
     grid = at // ROW_BASES
     ended = at >= rows.end
@@ -822,7 +878,7 @@ def _counts_at(rows: _Rows, at: NDArray[np.int64]) -> NDArray[np.int64]:
         while end < len(edge_rows) and size + lengths[end] <= _EDGE_BATCH:
             size += int(lengths[end])
             end += 1
-        bases = b"".join(rows.read(rows.first + int(edge), int(length))
+        bases = b"".join(read(rows.first + int(edge), int(length))
                          for edge, length in zip(edge_rows[group:end], lengths[group:end]))
         begins = np.concatenate(([0], np.cumsum(lengths[group:end])[:-1]))
         low, high = first[group], first[end] if end < len(first) else len(need)
@@ -842,8 +898,7 @@ def _sliced_rows(read: Callable[[int, int], bytes], start: int, stop: int) -> _R
     counts = RowCounts()
     for low in range(first * ROW_BASES, stop, SLICE_BYTES):
         counts.add(count_rows(read(low, min(stop, low + SLICE_BYTES)), low).rows)
-    return _Rows(counts.joined(), first, stop,
-                 lambda row, size: read(row * ROW_BASES, min(stop, row * ROW_BASES + size)))
+    return _Rows(counts.joined(), first, stop)
 
 
 @functools.lru_cache(maxsize=8)
@@ -878,33 +933,31 @@ def known_base_counts_at(seq: Seq | MutableSeq | bytes, positions: NDArray[np.in
 
     The one reader of base counts (``gbdraw.core.base_counts``: either case, U as T). A record
     read from a file reads the rows its parse pass counted: whole rows summed, each edge row read once,
-    so a count reads no whole sequence again. A view reads the rows of the sequence it views, piece by piece, on
-    the reverse strand counted from the other end with the complement's bases. Bases held in memory are counted
-    here, a slice at a time, never translated or copied whole.
+    so a count reads no whole sequence again. Bases held in memory (a ``Seq`` of bytes) are counted once, on the
+    same rows, the first time. A view reads the rows of the sequence it views, piece by piece, on the reverse
+    strand counted from the other end with the complement's bases. Bases that may change (a ``MutableSeq``) are
+    counted at each call, a slice at a time, never translated or copied whole.
     """
 
     positions = np.clip(np.asarray(positions, dtype=np.int64), 0, len(seq))
     data = _viewed(seq) if not isinstance(seq, bytes) else RecordSequence(seq)
     order = None if data is None else _counted_order(data._translate)
     if data is None or order is None:
-        return _counts_at(_sliced_rows(lambda low, high: bytes(seq[low:high]), 0, len(seq)), positions)
+        def read(low: int, high: int) -> bytes:
+            return bytes(seq[low:high])
+
+        return _counts_at(_sliced_rows(read, 0, len(seq)), positions,
+                          lambda row, size: read(row * ROW_BASES, min(len(seq), row * ROW_BASES + size)))
     length = len(data)
     # On the reverse strand the first p bases are the last p read forward: all of them less the first length - p.
     local = np.append(length - positions, length) if data._reverse else positions
     counts = np.zeros((4, len(local)), dtype=np.int64)
     bases = data._bases
-    table_rows = bases.rows() if isinstance(bases, _SequenceTable) else None
-    sliced: dict[tuple[int, int], _Rows] = {}
+    rows = bases.rows()
     low = 0
     for (first, last), end in zip(data._pieces, data._ends):
         inside = first + np.clip(local - low, 0, last - first)
-        rows = table_rows
-        if rows is None:
-            assert isinstance(bases, bytes)
-            rows = sliced.get((first, last))
-            if rows is None:
-                rows = sliced[(first, last)] = _sliced_rows(lambda a, b: bases[a:b], first, last)
-        piece = _counts_at(rows, np.concatenate((inside, [first])))
+        piece = _counts_at(rows, np.concatenate((inside, [first])), bases.row_bases)
         counts += piece[:, :-1] - piece[:, -1:]
         low = end
     if data._reverse:
@@ -926,10 +979,8 @@ def first_base_beyond(seq: Seq | MutableSeq, alphabet: int) -> int | None:
     a slice at a time.
     """
 
-    data = _viewed(seq)
-    if (data is not None and isinstance(data._bases, _SequenceTable) and not data._reverse
-            and data._translate is None and data._pieces == ((0, data._bases.length),)):
-        table = data._bases
+    table = _whole_table(seq)
+    if table is not None:
         beyond = np.flatnonzero(np.frombuffer(bytes(table.alphabets), dtype=np.uint8) > alphabet)
         return int(table.starts[beyond[0]]) if len(beyond) else None
     column = BEYOND_NUCLEOTIDE if alphabet == NUCLEOTIDE else BEYOND_PROTEIN
@@ -1413,6 +1464,7 @@ def _attach(records: list[SeqRecord], slots: list[_Slot]) -> list[SeqRecord]:
         if expected and expected != table.length:
             warnings.warn(f"Expected sequence length {expected}, found {table.length} ({record.id}).",
                           BiopythonParserWarning)
+        table.finish()
         record.seq = Seq(RecordSequence(table))
     return records
 
@@ -1481,6 +1533,16 @@ def _prepend(first: str, rest: Iterator[str]) -> Iterator[str]:
     yield from rest
 
 
+def _whole_table(seq: object) -> _SequenceTable | None:
+    """The sequence table of a record in an input file when ``seq`` reads the whole of it, forward, else ``None``."""
+
+    data = getattr(seq, "_data", None)
+    if (isinstance(data, RecordSequence) and isinstance(data._bases, _SequenceTable) and not data._reverse
+            and data._translate is None and data._pieces == ((0, data._bases.length),)):
+        return data._bases
+    return None
+
+
 def _file_table(seq: object) -> _SequenceTable | None:
     """The sequence table in an input file that ``seq`` reads, or ``None`` when it holds its bases in memory."""
 
@@ -1496,14 +1558,19 @@ def detached_records(records: Iterable[SeqRecord]) -> list[SeqRecord]:
     Records handed to a caller (the public readers) are detached: the caller may
     rewrite or delete the file, which a record sequence would then refuse to read.
     A record that reads its file is copied (a shallow copy, with its own
-    sequence), so records a cache owns stay as they are.
+    sequence), so records a cache owns stay as they are. A whole record keeps the
+    count rows its parse pass counted, so its bases are not counted again.
     """
 
     detached: list[SeqRecord] = []
     for record in records:
         if _file_table(record.seq) is not None:
+            table = _whole_table(record.seq)
+            bases = bytes(record.seq)
             record = copy.copy(record)
-            record.seq = Seq(bytes(record.seq))
+            record.seq = Seq(bases)
+            if table is not None:
+                _held(record.seq, bases, table.rows())
         detached.append(record)
     return detached
 

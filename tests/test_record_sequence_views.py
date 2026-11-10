@@ -247,7 +247,10 @@ def test_views_equal_biopython_slices_and_reverse_complements(held: str, tmp_pat
     for view in (reverse, twice, turns, across):
         data = view._data
         assert isinstance(data, RecordSequence)
-        assert data._bases is (seq._data._bases if isinstance(seq._data, RecordSequence) else seq._data)
+        if isinstance(seq._data, RecordSequence):
+            assert data._bases is seq._data._bases
+        else:  # the bytes of the Seq, through its one holder
+            assert data._bases.bases is seq._data
         expected = bytes(view)
         for key in (slice(2, 50), slice(None, None, -3), slice(-9, None), slice(7, 7), slice(1, 90, 4)):
             assert data[key] == expected[key]

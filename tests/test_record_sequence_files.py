@@ -36,7 +36,7 @@ GENBANK = INPUTS / "NC_001416.gb"
 
 def _reads_its_file(record) -> bool:
     data = getattr(record.seq, "_data", None)
-    return isinstance(data, RecordSequence) and not isinstance(data._bases, bytes)
+    return isinstance(data, RecordSequence) and isinstance(data._bases, record_sequences._SequenceTable)
 
 
 def _sequence(path: Path) -> str:
@@ -269,8 +269,8 @@ def test_reads_in_order_expand_each_byte_of_a_gzip_input_once(tmp_path: Path, mo
     monkeypatch.setattr(input_text.GzipExpansion, "read", read)
     for record in records:
         table = record.seq._data._bases
-        for row in range(0, len(table.rows().starts) - 1, 7):
-            table.rows().read(row)
+        for row in range(0, len(table.rows().counts), 7):
+            table.row_bases(row, record_sequences.ROW_BASES - 1)
     assert counted[0] <= expanded + record_sequences._BLOCK_BYTES
 
 
