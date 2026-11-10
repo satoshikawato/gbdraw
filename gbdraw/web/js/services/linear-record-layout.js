@@ -1,4 +1,12 @@
 // @ts-check
+import { SIMILARITY_ALIGNMENT_PLAN_SCHEMA } from '../contracts/schema.generated.js';
+import { isPlainObject } from '../utils/contract-shape.js';
+/**
+ * @import {
+ *   CanonicalAlignmentAnchorIdentity, CanonicalAlignmentRecordDecision, CanonicalLinearRecordTranslation,
+ *   CanonicalSimilarityAlignmentPlan
+ * } from '../contracts/request.generated.js'
+ */
 /**
  * One record's place in the Linear layout, as the layout writes it.
  * @typedef {{
@@ -30,6 +38,156 @@ export const recordTranslationsFor = (stored, recordKeys) => recordKeys.flatMap(
   const entries = stored.filter((entry) => String(entry?.recordKey) === recordKey);
   return entries.length ? entries : [{ recordKey, x: 0, y: 0 }];
 });
+
+// The request's rules for a Linear layout's alignment plan and record
+// translations of their own. Whether they cover the displayed records is the
+// request's (`canonicalSimilarityAlignment` and `canonicalRecordTranslations`
+// in session-request.js); a configuration file's values are read with these
+// rules alone, before its records are known (OV-3134).
+
+/**
+ * A layout object of a request its reader read: its keys are those of its
+ * description (`readStoredRenderRequest`, or the writer), so no key is
+ * checked here.
+ * @param {unknown} value
+ * @param {string} path
+ * @returns {Record<string, unknown>}
+ */
+const requireCanonicalObject = (value, path) => {
+  if (!isPlainObject(value)) throw new Error(`${path} must be an object.`);
+  return value;
+};
+
+/**
+ * @param {unknown} value
+ * @param {string} path
+ * @returns {string}
+ */
+export const requireCanonicalText = (value, path) => {
+  if (typeof value !== 'string' || !value.trim() || value.includes('\0')) {
+    throw new Error(`${path} must be non-empty text without NUL.`);
+  }
+  return value.trim();
+};
+
+/**
+ * @param {unknown} value
+ * @param {string} path
+ * @returns {CanonicalAlignmentAnchorIdentity}
+ */
+const canonicalAlignmentAnchor = (value, path) => {
+  const anchor = requireCanonicalObject(value, path);
+  if (anchor.sourceFeatureIndex !== null && (
+    // A safe integer is a number.
+    !Number.isSafeInteger(anchor.sourceFeatureIndex) || /** @type {number} */ (anchor.sourceFeatureIndex) < 0
+  )) throw new Error(`${path}.sourceFeatureIndex must be a non-negative integer or null.`);
+  if (anchor.stableFeatureSvgId !== null) {
+    requireCanonicalText(anchor.stableFeatureSvgId, `${path}.stableFeatureSvgId`);
+  }
+  return {
+    recordKey: requireCanonicalText(anchor.recordKey, `${path}.recordKey`),
+    biologicalFeatureId: requireCanonicalText(
+      anchor.biologicalFeatureId,
+      `${path}.biologicalFeatureId`
+    ),
+    // Checked above: null or a non-negative safe integer, and null or text.
+    sourceFeatureIndex: /** @type {number | null} */ (anchor.sourceFeatureIndex),
+    stableFeatureSvgId: anchor.stableFeatureSvgId === null
+      ? null
+      : /** @type {string} */ (anchor.stableFeatureSvgId).trim()
+  };
+};
+
+/** @type {Set<unknown>} */
+const ALIGNED_RATIONALES = new Set(['user_selected', 'only_usable_candidate', 'unique_direct_rbh']);
+/** @type {Set<unknown>} */
+const SKIPPED_RATIONALES = new Set(['skipped_by_user', 'skipped_no_candidate', 'skipped_unmappable']);
+
+/**
+ * A similarity alignment plan by its own rules: its schema, its group, its
+ * anchors, a status with one of its rationales for each record, no record
+ * twice, and exactly one reference decision, the plan's reference.
+ * @param {unknown} value
+ * @param {string} path
+ * @returns {CanonicalSimilarityAlignmentPlan}
+ */
+export const readCanonicalSimilarityAlignmentPlan = (value, path) => {
+  const plan = requireCanonicalObject(value, path);
+  if (plan.schema !== SIMILARITY_ALIGNMENT_PLAN_SCHEMA) throw new Error(`${path}.schema must be ${SIMILARITY_ALIGNMENT_PLAN_SCHEMA}.`);
+  if (!Array.isArray(plan.records) || plan.records.length === 0) {
+    throw new Error(`${path}.records must be a non-empty array.`);
+  }
+  const reference = canonicalAlignmentAnchor(plan.reference, `${path}.reference`);
+  const records = /** @type {unknown[]} */ (plan.records).map((raw, index) => {
+    const decisionPath = `${path}.records[${index}]`;
+    const decision = requireCanonicalObject(raw, decisionPath);
+    const recordKey = requireCanonicalText(decision.recordKey, `${decisionPath}.recordKey`);
+    const anchor = decision.anchor === null
+      ? null
+      : canonicalAlignmentAnchor(decision.anchor, `${decisionPath}.anchor`);
+    if (anchor && anchor.recordKey !== recordKey) {
+      throw new Error(`${decisionPath}.anchor belongs to another record.`);
+    }
+    const valid = decision.status === 'reference'
+      ? anchor !== null && decision.rationale === 'reference'
+      : decision.status === 'aligned'
+        ? anchor !== null && ALIGNED_RATIONALES.has(decision.rationale)
+        : decision.status === 'skipped'
+          ? anchor === null && SKIPPED_RATIONALES.has(decision.rationale)
+          : false;
+    if (!valid) throw new Error(`${decisionPath} contains an invalid plan combination.`);
+    // `valid` holds only for a status with one of its rationales.
+    return {
+      recordKey,
+      status: /** @type {CanonicalAlignmentRecordDecision['status']} */ (decision.status),
+      rationale: /** @type {CanonicalAlignmentRecordDecision['rationale']} */ (decision.rationale),
+      anchor
+    };
+  });
+  const decisionKeys = records.map((decision) => decision.recordKey);
+  if (new Set(decisionKeys).size !== decisionKeys.length) {
+    throw new Error(`${path}.records contains duplicate record keys.`);
+  }
+  const references = records.filter((decision) => decision.status === 'reference');
+  if (references.length !== 1 || references[0].recordKey !== reference.recordKey ||
+      JSON.stringify(references[0].anchor) !== JSON.stringify(reference)) {
+    throw new Error(`${path}.reference must match exactly one reference decision.`);
+  }
+  return {
+    schema: SIMILARITY_ALIGNMENT_PLAN_SCHEMA,
+    groupId: requireCanonicalText(plan.groupId, `${path}.groupId`),
+    reference,
+    records
+  };
+};
+
+/**
+ * Record translations by their own rules: a list of a record key and finite
+ * x and y each, no record twice.
+ * @param {unknown} value
+ * @param {string} path
+ * @returns {CanonicalLinearRecordTranslation[]}
+ */
+export const readCanonicalRecordTranslations = (value, path) => {
+  if (!Array.isArray(value)) throw new Error(`${path} must be an array.`);
+  const translations = value.map((raw, index) => {
+    const itemPath = `${path}[${index}]`;
+    const item = requireCanonicalObject(raw, itemPath);
+    if (!Number.isFinite(item.x) || !Number.isFinite(item.y)) {
+      throw new Error(`${itemPath} x and y must be finite numbers.`);
+    }
+    return {
+      recordKey: requireCanonicalText(item.recordKey, `${itemPath}.recordKey`),
+      x: Number(item.x),
+      y: Number(item.y)
+    };
+  });
+  const keys = translations.map((item) => item.recordKey);
+  if (new Set(keys).size !== keys.length) {
+    throw new Error(`${path} contains duplicate record keys.`);
+  }
+  return translations;
+};
 
 /**
  * A row field that the Web fills from run-time identities, and that a reader

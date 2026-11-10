@@ -1089,6 +1089,59 @@ test('a configuration file with a shape or Linear visibility that is no text, or
   }
 });
 
+// OV-3134: a configuration file's Linear alignment plan and record
+// translations are read with the request's own rules for them; one the
+// request would refuse is dropped and listed, so no record reorder or Generate
+// meets a value that is not a plan. A readable plan of other records loads as
+// it is (Generate's Review repairs a plan that no longer fits the records).
+test('a configuration file drops and lists a Linear alignment plan or record translations the request cannot read (OV-3134)', async () => {
+  const { SIMILARITY_ALIGNMENT_PLAN_SCHEMA } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
+  const anchor = { recordKey: 'r1', biologicalFeatureId: 'bf1', sourceFeatureIndex: 0, stableFeatureSvgId: null };
+  const plan = {
+    schema: SIMILARITY_ALIGNMENT_PLAN_SCHEMA, groupId: 'OG1', reference: anchor,
+    records: [
+      { recordKey: 'r1', status: 'reference', rationale: 'reference', anchor },
+      { recordKey: 'r2', status: 'skipped', rationale: 'skipped_by_user', anchor: null }
+    ]
+  };
+  const translations = [{ recordKey: 'r1', x: 0, y: 0 }, { recordKey: 'r2', x: 12.5, y: 0 }];
+  const shownMode = state.mode.value;
+  installShownDrawing('linear');
+  try {
+    const loadLayout = (linearRecordLayout) => importSession(input({ form: { legend: 'left' }, linearRecordLayout }), {
+      confirmLoadRepairs: async () => true
+    });
+    const readable = await loadLayout({ similarityAlignment: plan, recordTranslations: translations });
+    assert.equal(readable.status, 'legacy', JSON.stringify(readable.error));
+    assert.deepEqual(readable.repairs.filter(({ path }) => path.startsWith('linearRecordLayout')), []);
+    assert.deepEqual(state.similarityAlignmentPlan.value, plan);
+    assert.deepEqual(state.linearRecordTranslations.value, translations);
+
+    const unreadable = await loadLayout({ similarityAlignment: { foo: 1 }, recordTranslations: [translations[0], 5] });
+    assert.equal(unreadable.status, 'legacy', JSON.stringify(unreadable.error));
+    assert.deepEqual(unreadable.repairs.map(({ code, path }) => [code, path]), [
+      ['setting-replaced', 'linearRecordLayout.similarityAlignment'],
+      ['setting-replaced', 'linearRecordLayout.recordTranslations']
+    ]);
+    assert.equal(state.similarityAlignmentPlan.value, null);
+    assert.deepEqual(state.linearRecordTranslations.value, []);
+
+    // A plan whose decisions break the request's rules (a reference with no anchor) is no plan either.
+    const broken = await loadLayout({
+      similarityAlignment: { ...plan, records: [{ ...plan.records[0], anchor: null }, plan.records[1]] },
+      recordTranslations: [translations[0], translations[0]]
+    });
+    assert.deepEqual(broken.repairs.map(({ code, path }) => [code, path]), [
+      ['setting-replaced', 'linearRecordLayout.similarityAlignment'],
+      ['setting-replaced', 'linearRecordLayout.recordTranslations']
+    ]);
+    assert.equal(state.similarityAlignmentPlan.value, null);
+    assert.deepEqual(state.linearRecordTranslations.value, []);
+  } finally {
+    installShownDrawing(shownMode);
+  }
+});
+
 // BA-OD99 (b): in a configuration file, a color rule or a whitelist
 // entry that is no object is dropped and listed before the dialog, and the
 // apply reads the lists with the same readers, so nothing is refused after

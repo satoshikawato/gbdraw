@@ -1,16 +1,4 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const repoRoot = process.cwd();
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-linear-layout-'));
-await cp(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'linear-record-layout.js'),
-  join(tempRoot, 'linear-record-layout.js')
-);
-await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
   linearRecordLayoutHasSharedRow,
@@ -21,7 +9,7 @@ const {
   moveLinearRecordInRow,
   planLinearSourceRowMove,
   setLinearRecordRow
-} = await import(pathToFileURL(join(tempRoot, 'linear-record-layout.js')));
+} = await import('../../gbdraw/web/js/services/linear-record-layout.js');
 
 const sequences = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
 const layout = reconcileLinearRecordLayout(sequences, [{ uid: 'a', row: 1 }, { uid: 'b', row: 1 }]);

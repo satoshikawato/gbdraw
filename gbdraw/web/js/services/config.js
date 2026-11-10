@@ -50,7 +50,7 @@ import {
   readColorRules, readFileImports, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
   featurePlacementsReader, notedLossRepairs, readFeatureOverrides, readPalette, recordsOffReader, resolvedTrackStacks, sessionUiFieldRepairs, sliceFieldRepairs,
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
-  readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
+  readRecordTranslations, readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
 import { cardsTakeLegacyRecordPositions, isFlatRecordSelector, drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
@@ -341,8 +341,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { ActiveWebConfig, AlignmentResetCanonical } from './session-active-config-contract.js' */
 /** @import { SettingLoss, SettingsContainers } from './config-field-readers.js' */
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
-/** @import { CanonicalRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
-/** @import { StoredRecordTranslation } from './linear-record-layout.js' */
+/** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { ProteinFrameSource, StoredDrawing } from './main-session-comparison-frame.js' */
 /** @import { CommittedCanonicalSession, LiveSettingItem, LiveSettingWrite, SessionRequestProjection,
  *   SettingsOnlyProjectionInput } from './session-request.js' */
@@ -3431,16 +3430,11 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   // artifact; only the Linear drawing's settings carry them. A History
   // config step carries neither and leaves them alone (OV-383).
   const ownsAlignment = applyAlignment && mode === 'linear';
-  // The casts: `readList` and `readSimilarityAlignment` admit any list and any
-  // object; the state types them as the page and the request hold them, and
-  // only the request validates them, at Generate (OV-3134).
   if (state.linearRecordTranslations && ownsAlignment) {
-    state.linearRecordTranslations.value = /** @type {StoredRecordTranslation[]} */ (
-      cloneJsonData(readList(linearLayout.recordTranslations).value));
+    state.linearRecordTranslations.value = readRecordTranslations(linearLayout.recordTranslations).value;
   }
   if (state.similarityAlignmentPlan && ownsAlignment) {
-    state.similarityAlignmentPlan.value = /** @type {CanonicalSimilarityAlignmentPlan | null} */ (
-      cloneJsonData(readSimilarityAlignment(linearLayout.similarityAlignment).value));
+    state.similarityAlignmentPlan.value = readSimilarityAlignment(linearLayout.similarityAlignment).value;
   }
   drawing.importedComparisonIntent.action = readImportedComparisonAction(readPlainObject(data.importedComparisonResolution).value.action).value;
   drawing.form.plot_title = String(drawing.form.plot_title || '');
