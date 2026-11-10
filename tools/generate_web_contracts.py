@@ -93,7 +93,7 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     # recipe names the CLI record of its record key.
     ("FEATURE_INSTANCE_SEPARATOR", "gbdraw.features.ids", "FEATURE_INSTANCE_SEPARATOR"),
     ("CLI_RECORD_KEY_PREFIX", "gbdraw.api.record_planning", "CLI_RECORD_KEY_PREFIX"),
-    ("EXPANDED_RECORD_KEY_SEPARATOR", "gbdraw.api.record_planning", "EXPANDED_RECORD_KEY_SEPARATOR"),
+    ("EXPANDED_RECORD_KEY_SEPARATOR", "gbdraw.api.requests", "EXPANDED_RECORD_KEY_SEPARATOR"),
     ("CONFIG_UNSET_NUMBER_SPELLINGS", "gbdraw.core.numeric", "UNSET_NUMBER_SPELLINGS"),
     # The most bytes a gzip input file expands to; the Web stops reading past it.
     ("MAX_EXPANDED_INPUT_BYTES", "gbdraw.io.input_text", "MAX_EXPANDED_INPUT_BYTES"),
