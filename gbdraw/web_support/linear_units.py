@@ -15,12 +15,18 @@ A record card that lists its windows shows each window's circled number in the d
 between two windows of the record that stand next to each other in their row (``plan_card_windows``). Python answers
 from the owners the drawing uses: the row order of the drawn units (``grid_placement_order``) and the row's captions
 (``plan_row_windows``), so the card shows the drawing's own values.
+
+Before its LOSAT searches run, a Generate also sends its drawing's request, as Save writes it, and Python answers
+with the E-value scale of every search between two drawn units (``plan_genome_scales``): the search space of the
+genome pair (LOSATN, TLOSATX) or the proteins of the subject genome (LOSATP), from the owners the command line's
+searches read (``linear_genome_scales``), so the page passes the command line's values and never sums a genome.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Literal, TypedDict, cast, is_typeddict
 
 from gbdraw.api.record_planning import (
@@ -30,15 +36,26 @@ from gbdraw.api.record_planning import (
     record_drawn_windows,
     refuse_file_comparison_of_windows,
 )
-from gbdraw.api.request_render import grid_placement_order
-from gbdraw.api.requests import InputPlace, RecordPresentation, expanded_record_key
+from gbdraw.api.request_render import (
+    GENOME_SCALE_PROGRAMS,
+    GenomeScaleProgram,
+    grid_placement_order,
+    linear_genome_scales,
+)
+from gbdraw.api.requests import InputPlace, LinearDiagramRequest, RecordPresentation, expanded_record_key
+from gbdraw.comparisons.losat_jobs import PER_FILE_WARNING_TEXT
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.regions import window_drawn_reverse
 from gbdraw.layout.linear_multi_record import drawn_unit_rows, grid_display_pairs
 from gbdraw.layout.linear_row_windows import plan_row_windows
 from gbdraw.layout.record_units import RecordUnit
-from gbdraw.session_request_codec import CanonicalRequestDecodingError, _decode_windows
+from gbdraw.session_request_codec import (
+    CanonicalRequestDecodingError,
+    _decode_windows,
+    decode_canonical_request,
+)
+from gbdraw.web_support.request_render import staged_source_names
 
 
 class LinearUnitRecordInput(TypedDict):
@@ -185,6 +202,91 @@ def plan_linear_units_json(records_json: str, pairs_json: str) -> str:
     """JSON boundary of the diagram Worker."""
 
     return json.dumps(plan_linear_units(json.loads(str(records_json)), json.loads(str(pairs_json))))
+
+
+class GenomeScaleWarningParams(TypedDict):
+    """The parameters of a per-file warning (:class:`gbdraw.comparisons.losat_jobs.PerFileWarning`)."""
+
+    first: str
+    second: str
+    space: str
+    limit: str
+
+
+class GenomeScaleWarning(TypedDict):
+    """A unit pair searched per file, its genome pair's search space past what LOSAT reads, and the warning the
+    command line logs for it (Owner decision 2026-11-10): ``text`` is its English text with ``{name}`` parameters
+    (:data:`gbdraw.comparisons.losat_jobs.PER_FILE_WARNING_TEXT`, a catalog key), which the page shows with
+    ``tm(text, params)``."""
+
+    queryUnit: int
+    subjectUnit: int
+    text: str
+    params: GenomeScaleWarningParams
+
+
+class LinearGenomeScales(TypedDict):
+    """The E-value scale of each search between two drawn units of a Linear drawing's LOSAT search: ``recordKeys``,
+    the key of the record each drawn unit draws, in drawing order, and ``scales[q][s]``, the ``-searchsp`` (LOSATN,
+    TLOSATX) or ``-dbsize`` (LOSATP) a search of unit ``q`` against unit ``s`` passes, null for LOSAT's own
+    (PD-OI-018 revision 6). A scale is a decimal string, as the page passes it on unchanged: the product of two
+    genomes of about 95 Mb is past what a JavaScript number holds exactly. ``warnings`` lists the unit pairs searched
+    per file (:class:`GenomeScaleWarning`); the page shows the warnings of the pairs it searches."""
+
+    recordKeys: list[str]
+    scales: list[list[str | None]]
+    warnings: list[GenomeScaleWarning]
+
+
+def plan_genome_scales(
+    request_payload: Mapping[str, object],
+    resource_paths: Mapping[str, str],
+    output_directory: str,
+    program: object,
+    resource_names: Mapping[str, object] | None = None,
+) -> LinearGenomeScales:
+    """The E-value scales of the ``program`` searches (``losatn``, ``tlosatx`` or ``losatp``) of a Linear request
+    (``linear_genome_scales``). A request holds a LOSATP search but no nucleotide one, which the page resolves before
+    it renders, so the page names the program. ``resource_names`` (``resourceManifest[].name``) names the files a
+    warning names, as the input summary does."""
+
+    request = decode_canonical_request(
+        request_payload, resource_paths=resource_paths, output_directory=output_directory,
+    )
+    if not isinstance(request, LinearDiagramRequest) or program not in GENOME_SCALE_PROGRAMS:
+        raise _protocol_error("Genome scales need a Linear request and a LOSAT program.")
+    keys, scale, warning = linear_genome_scales(
+        request,
+        cast(GenomeScaleProgram, program),
+        staged_source_names(resource_names, {key: Path(path) for key, path in resource_paths.items()}),
+    )
+    units = range(len(keys))
+
+    def decimal(query: int, subject: int) -> str | None:
+        value = scale(query, subject)
+        return None if value is None else str(value)
+
+    return {
+        "recordKeys": list(keys),
+        "scales": [[decimal(query, subject) for subject in units] for query in units],
+        "warnings": [
+            {"queryUnit": query, "subjectUnit": subject, "text": PER_FILE_WARNING_TEXT, "params": {
+                "first": found.first, "second": found.second, "space": found.space, "limit": found.limit,
+            }}
+            for query in units for subject in units if (found := warning(query, subject)) is not None
+        ],
+    }
+
+
+def plan_genome_scales_json(
+    request_json: str, resource_paths_json: str, output_directory: str, program: str, resource_names_json: str
+) -> str:
+    """JSON boundary of the diagram Worker."""
+
+    return json.dumps(plan_genome_scales(
+        json.loads(str(request_json)), json.loads(str(resource_paths_json)), str(output_directory), str(program),
+        json.loads(str(resource_names_json)),
+    ))
 
 
 class CardWindowInput(TypedDict):
@@ -397,8 +499,8 @@ def plan_record_places_json(records_json: str) -> str:
 
 
 def describe_card_window_plan() -> dict[str, dict[str, Shape]]:
-    """The requests and the answers of :func:`plan_card_windows_json` and :func:`plan_record_places_json` as named
-    shapes of :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py)."""
+    """The requests and the answers of :func:`plan_card_windows_json` and :func:`plan_record_places_json`, and the
+    answer of :func:`plan_genome_scales_json`, as named shapes of :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py)."""
 
     types_: dict[str, Shape] = {}
 
@@ -410,7 +512,7 @@ def describe_card_window_plan() -> dict[str, dict[str, Shape]]:
             return ref(hint.__name__)
         return None
 
-    for root in (CardWindowRecordInput, CardWindowPlan, RecordPlaceInput, RecordPlace):
+    for root in (CardWindowRecordInput, CardWindowPlan, RecordPlaceInput, RecordPlace, LinearGenomeScales):
         special(root)
     return {"types": types_}
 
@@ -422,6 +524,11 @@ __all__ = [
     "CardWindowPlan",
     "CardWindowRecordInput",
     "describe_card_window_plan",
+    "GenomeScaleWarning",
+    "GenomeScaleWarningParams",
+    "LinearGenomeScales",
+    "plan_genome_scales",
+    "plan_genome_scales_json",
     "plan_card_windows",
     "plan_card_windows_json",
     "LinearDrawnUnit",

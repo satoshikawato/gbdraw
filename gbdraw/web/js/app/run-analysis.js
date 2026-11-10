@@ -41,7 +41,8 @@ import {
 } from '../services/losat-thread-plan.js';
 import { ABSENT_COLLINEAR_INFER_ORTHOGROUPS, DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION, readCollinearMergeOrientation } from '../services/losat-normalization.js';
 import {
-  losatRecordGencode, losatSearchSequences, prepareLosatSourceBatches, splitLosatSourceResult
+  losatRecordGencode, losatSearchSequences, nucleotideLosatArgs, prepareLosatSourceBatches, proteinLosatArgs,
+  splitLosatSourceResult
 } from '../services/linear-sources.js';
 import {
   drawnRecordIdentities, linearSeqRecordKey, offRecordRequestRecords, recordKeyMoves, recordSelectorNumber
@@ -80,6 +81,7 @@ import {
   requireLinearComparisonPlanSnapshot,
   linearDrawingUnitPlaces,
   linearDrawingWindowsOf,
+  linearRecordGridRows,
   savedPipelineSearchDrawing
 } from '../services/session-request.js';
 /** @import { RawSessionResourceDescriptor } from '../services/session-resource-backing.js' */
@@ -119,7 +121,7 @@ import {
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import { windowLosatFilenamesOf } from '../services/linear-comparison-retained.js';
-import { catalogUnitPlaces, generateUnitSearch, searchUnitPlaces } from '../services/linear-units.js';
+import { catalogUnitPlaces, generateUnitSearch, perFileWarningNotice, readGenomeScales, searchUnitPlaces } from '../services/linear-units.js';
 import {
   movedIdentityValues,
   movedRecordEdits,
@@ -482,7 +484,7 @@ export const buildLosatCachePayload = ({
   return payload;
 };
 
-/** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
+/** @import { DraftRequestFacts, LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
 /** @import { LiveSearchSets, LiveSettingWrite } from '../services/session-request.js' */
 /** @import { SearchRecordSelector } from '../services/sequence-search.js' */
 /** @import { UndoneTrackHide } from '../services/setting-application.js' */
@@ -776,12 +778,16 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  * @param {CommittedCanonicalSession | null} options.committedSession The committed Session: its request is of the
  *   current schema (Load reads a stored one to the current schema; Generate and the rerender commit the one they built).
  * @param {readonly LinearSeq[]} options.sequences
+ * @param {readonly (number | null)[]} options.gridRows The row each card's record is written in now
+ *   (`linearRecordGridRows`): a LOSATP search's E-value scale is its subject genome's, and a genome is the files whose
+ *   records share a row, so a moved record declines reuse.
  * @param {ResolvedProteinReuseActive} options.active
  */
 const canReuseResolvedProteinArtifacts = ({
   canonicalComparisons,
   committedSession,
   sequences,
+  gridRows,
   active
 }) => {
   const committedRequest = committedSession?.renderRequest || null;
@@ -818,6 +824,7 @@ const canReuseResolvedProteinArtifacts = ({
     // request does (`createLinearSeq`).
     const [only] = windows.length === 1 ? windows : [null];
     return record.recordKey !== seq.uid
+      || (record.presentation?.gridRow ?? null) !== (gridRows[index] ?? null)
       || String((selector && 'value' in selector ? selector.value : '') || '') !== String(seq.region_record_id || '').trim()
       || (seq.windows.length > 0 || windows.length > 1
         ? seq.windows.map(spanText).join(',') !== windows.map(spanText).join(',')
@@ -998,7 +1005,10 @@ const normalizeLosatFilename = (name, fallback) => {
   const withExt = raw.toLowerCase().endsWith('.tsv') ? raw : `${raw}.tsv`;
   return makeSafeFilename(withExt);
 };
-/** @param {DrawingState} drawing */
+/**
+ * @param {Pick<DrawingState, 'losatProgram'>} drawing
+ * @returns {'losatn' | 'losatp' | 'tlosatx'}
+ */
 const buildLosatSuffix = (drawing) => {
   if (drawing.losatProgram.value === 'blastn') return 'losatn';
   if (drawing.losatProgram.value === 'blastp') return 'losatp';
@@ -1652,6 +1662,12 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
   name: file.name, data: typeof file.buildData === 'function' ? await file.buildData() : file.data
 })));
 /**
+ * What `planGenomeScales` reads besides the drawing: the LOSAT program of its searches and the facts of its draft
+ * request that Generate holds (`DraftRequestFacts` of services/config.js, without the unit planner the app adds).
+ * @typedef {Omit<DraftRequestFacts, 'planLinearUnits'> & { program: 'losatn' | 'losatp' | 'tlosatx' }} GenomeScaleRequest
+ */
+/** @typedef {(drawing: DrawingState, request: GenomeScaleRequest) => Promise<unknown>} PlanGenomeScales */
+/**
  * @typedef {object} RunAnalysisOptions
  * @property {WebState} state App state (state.js).
  * @property {RulePreparation | null} [rulePreparation] The rule owner's preparation, which Generate runs before it draws.
@@ -1695,6 +1711,8 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} resetPreviewViewport The preview owner's viewport reset.
  * @property {(() => ({ code: string, context?: any } | null | undefined)) | null} [validateAnnotationTargets]
  * @property {(() => string[]) | null} [omittedAnnotationRecordKeys] The record-catalog keys of the drawing's OFF records.
+ * @property {PlanGenomeScales | null} [planGenomeScales] The E-value scales of a Linear drawing's LOSAT searches: Python's
+ *   `planGenomeScales` reply for the drawing's draft request (`projectDraftRequest`), unread (`readGenomeScales`).
  * @property {SearchRecordSelector} [searchRecordSelector] How the rows of a Sequence search set name their records in the
  *   shown drawing's committed request, by binding key (`resultRecordBindings`); none by default.
  * @property {((discovered: CircularRecordsDiscovered) => void) | null}
@@ -1759,6 +1777,7 @@ export const createRunAnalysis = ({
   resetPreviewViewport,
   validateAnnotationTargets = null,
   omittedAnnotationRecordKeys = null,
+  planGenomeScales = null,
   searchRecordSelector = () => null,
   onCircularRecordsDiscovered = null,
   prepareLinearRecordCatalog = null,
@@ -1783,6 +1802,11 @@ export const createRunAnalysis = ({
   askChoice = async () => 'cancel',
   showNotice = () => {}
 }) => {
+  // A Generate that searches with LOSAT passes the E-value scales Python plans: the app always gives the planner.
+  const requirePlanGenomeScales = () => {
+    if (!planGenomeScales) throw new Error('The E-value scale planner of LOSAT searches is unavailable.');
+    return planGenomeScales;
+  };
   const {
     processing,
     processingStatus,
@@ -3657,6 +3681,7 @@ export const createRunAnalysis = ({
           && canReuseResolvedProteinArtifacts({
             canonicalComparisons: drawing.files.linearCanonicalComparisons,
             sequences: linearSeqs,
+            gridRows: linearRecordGridRows(drawing, linearSeqs),
             committedSession: typeof getCommittedCanonicalSession === 'function'
               ? getCommittedCanonicalSession()
               : null,
@@ -4213,46 +4238,45 @@ export const createRunAnalysis = ({
           );
         };
 
-        /**
-         * @param {string[]} arr
-         * @param {string} flag
-         * @param {unknown} value
-         */
-        const pushArg = (arr, flag, value) => {
-          if (value === null || value === undefined || value === '') return;
-          if (typeof value === 'number' && !Number.isFinite(value)) return;
-          const valueStr = String(value);
-          if (valueStr.startsWith('-')) {
-            arr.push(`${flag}=${valueStr}`);
-          } else {
-            arr.push(flag, valueStr);
-          }
-        };
-
         const getBlastpCandidateLimit = () => {
           if (!useProteinBlastp) return null;
           return blastpCandidateLimit;
         };
 
+        // The E-value scale of each search (PD-OI-018 revision 6): Python plans it for this drawing's request, from the
+        // owners the command line's searches read, so both pass one value; the page sums no genome.
+        const genomeScales = useLosat ? readGenomeScales(await requirePlanGenomeScales()(requestDrawing, {
+          program: buildLosatSuffix(searchDrawing), linearRecordCatalog, recordDisplayRows: recordDisplayRows?.value || [],
+          omittedAnnotationRecordKeys: requestDrawing.annotationSets.length > 0 ? (omittedAnnotationRecordKeys?.() || []) : []
+        }), unitSearch.recordKeys) : null;
+        const perFileNotice = perFileWarningNotice(showNotice);
+
         /**
+         * A search's arguments, with the E-value scale Python plans for its genomes (`genomeScales`): the search space
+         * of a LOSATN or TLOSATX search's genome pair, the proteins of a LOSATP search's subject genome. An OFF record
+         * (`subjectIdx` past the units) joins a database under the scale of the drawn subject it is searched with
+         * (`drawnSubjectIdx`, `planLosatSourceJobs`).
          * @param {number} queryIdx
          * @param {number} subjectIdx
+         * @param {number} [drawnSubjectIdx]
          */
-        const buildLosatArgs = (queryIdx, subjectIdx) => {
-          /** @type {string[]} */
-          const args = [];
-          if (searchDrawing.losatProgram.value === 'blastn') {
-            pushArg(args, '--task', searchDrawing.losat.blastn.task);
-          } else if (searchDrawing.losatProgram.value === 'tblastx') {
-            pushArg(args, '--query-gencode', losatRecordGencode(losatSeqs[queryIdx]));
-            pushArg(args, '--db-gencode', losatRecordGencode(losatSeqs[subjectIdx]));
-          } else {
-            if (!useOrthogroupBlastp && !useCollinearBlastp) {
-              pushArg(args, '--max-hsps-per-subject', 1);
-            }
-            pushArg(args, '--max-target-seqs', getBlastpCandidateLimit());
+        const buildLosatArgs = (queryIdx, subjectIdx, drawnSubjectIdx = subjectIdx) => {
+          const program = searchDrawing.losatProgram.value;
+          const scale = genomeScales ? genomeScales.scaleOf(queryIdx, drawnSubjectIdx) : null;
+          // A genome pair past what LOSAT reads is searched per file: the banner shows Python's warning, as the CLI logs it.
+          perFileNotice(genomeScales ? genomeScales.warningOf(queryIdx, drawnSubjectIdx) : null);
+          if (program === 'blastn' || program === 'tblastx') {
+            return nucleotideLosatArgs({
+              program,
+              task: searchDrawing.losat.blastn.task,
+              queryGencode: losatRecordGencode(losatSeqs[queryIdx]),
+              dbGencode: losatRecordGencode(losatSeqs[subjectIdx]),
+              searchSpace: scale
+            });
           }
-          return args;
+          return proteinLosatArgs({
+            pairwise: !useOrthogroupBlastp && !useCollinearBlastp, candidateLimit: getBlastpCandidateLimit(), databaseSize: scale
+          });
         };
 
         regionSpecs = losatSeqs.map((seq, idx) => buildRegionSpec(seq, losatCards[idx], unitSearch.windows[idx] ?? null));

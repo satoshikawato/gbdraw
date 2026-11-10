@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "description": "Shared LOSAT job plan and nucleotide raw-key vectors. tests/test_losat_job_plan.py and tests/web/linear-sources.test.mjs run every case; Python gbdraw.comparisons.losat_jobs and Web planLosatSourceJobs/prepareLosatSourceBatches/buildLosatCachePayload must give the same jobs, batch FASTA hashes, searchContext, and raw keys. proteinCases are LOSATP plans (D7): Python losatp_job_specs and Web buildLosatJobSpecs give the same specs, prepare_losat_batches(protein=True) and prepareLosatSourceBatches({protein: true}) the same jobs, and build_protein_losat_cache_key (which the Web calls through its Python helper) the raw keys. Batch sides order records by record key (Web sequence uid); keys are ASCII so code-point and localeCompare order agree. proteinGridCases hold LOSATP 2x2 grid search-order and pair-index vectors that tests/web/linear-comparisons.test.mjs and tests/test_api_request_render.py check.",
+  "description": "Shared LOSAT job plan and nucleotide raw-key vectors. tests/test_losat_job_plan.py and tests/web/linear-sources.test.mjs run every case; Python gbdraw.comparisons.losat_jobs and Web planLosatSourceJobs/prepareLosatSourceBatches/buildLosatCachePayload must give the same jobs, batch FASTA hashes, searchContext, and raw keys. proteinCases are LOSATP plans (D7): Python losatp_job_specs and Web buildLosatJobSpecs give the same specs, prepare_losat_batches(protein=True) and prepareLosatSourceBatches({protein: true}) the same jobs, and build_protein_losat_cache_key (which the Web calls through its Python helper) the raw keys. Batch sides order records by record key (Web sequence uid); keys are ASCII so code-point and localeCompare order agree. proteinGridCases hold LOSATP 2x2 grid search-order and pair-index vectors that tests/web/linear-comparisons.test.mjs and tests/test_api_request_render.py check. searchSpaceCases are one figure each (a records table of the test inputs; {DE3A} and {DE3B} are DE3 split at 20,000 into two files) and the E-value scales Python plans for the Web's searches of the same figure (gbdraw.web_support.linear_units plan_genome_scales; reply.scales[query][subject] is the -searchsp of a LOSATN or TLOSATX search, the -dbsize of a LOSATP one): tests/test_losat_job_plan.py checks that the command line searches with the expected raw-cache args and that Python plans the reply for the command line's own request, and tests/web/linear-sources.test.mjs that the Web builds the expected args from the reply (PD-OI-018 revision 6).",
   "cases": [
     {
       "name": "two single-record files, LOSATN megablast (lambda/DE3 shape)",
@@ -2463,6 +2463,382 @@
           2
         ]
       ]
+    }
+  ],
+  "searchSpaceCases": [
+    {
+      "name": "a whole single-record pair passes no search space",
+      "program": "blastn",
+      "task": "megablast",
+      "table": [
+        "{LAMBDA}\tNC_001416.1\t1\t1\t\tfalse\t",
+        "{DE3}\tNC_042057.1\t2\t1\t\tfalse\t"
+      ],
+      "reply": {
+        "recordKeys": [
+          "record-1",
+          "record-2"
+        ],
+        "scales": [
+          [
+            null,
+            null
+          ],
+          [
+            null,
+            null
+          ]
+        ],
+        "warnings": []
+      },
+      "expected": {
+        "args": [
+          [
+            0,
+            1,
+            [
+              "--task",
+              "megablast"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "name": "a crop searches in its genome pair's space",
+      "program": "blastn",
+      "task": "megablast",
+      "table": [
+        "{LAMBDA}\tNC_001416.1\t1\t1\t1001-30000\tfalse\t",
+        "{DE3}\tNC_042057.1\t2\t1\t\tfalse\t"
+      ],
+      "reply": {
+        "recordKeys": [
+          "record-1",
+          "record-2"
+        ],
+        "scales": [
+          [
+            "2352444004",
+            "2081948350"
+          ],
+          [
+            "2081948350",
+            null
+          ]
+        ],
+        "warnings": []
+      },
+      "expected": {
+        "args": [
+          [
+            0,
+            1,
+            [
+              "--task",
+              "megablast",
+              "--searchsp",
+              "2081948350"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "name": "two windows of a record search in their genome pair's space",
+      "program": "blastn",
+      "task": "megablast",
+      "table": [
+        "{LAMBDA}\tNC_001416.1\t1\t1\t1001-10000\tfalse\tlambda",
+        "{LAMBDA}\tNC_001416.1\t1\t2\t30001-40000\tfalse\tlambda",
+        "{DE3}\tNC_042057.1\t2\t1\t\tfalse\t"
+      ],
+      "reply": {
+        "recordKeys": [
+          "record-1",
+          "record-1",
+          "record-2"
+        ],
+        "scales": [
+          [
+            "2352444004",
+            "2352444004",
+            "2081948350"
+          ],
+          [
+            "2352444004",
+            "2352444004",
+            "2081948350"
+          ],
+          [
+            "2081948350",
+            "2081948350",
+            null
+          ]
+        ],
+        "warnings": []
+      },
+      "expected": {
+        "args": [
+          [
+            0,
+            2,
+            [
+              "--task",
+              "megablast",
+              "--searchsp",
+              "2081948350"
+            ]
+          ],
+          [
+            1,
+            2,
+            [
+              "--task",
+              "megablast",
+              "--searchsp",
+              "2081948350"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "name": "a genome split over two files in one row is one genome",
+      "program": "blastn",
+      "task": "megablast",
+      "table": [
+        "{LAMBDA}\tNC_001416.1\t1\t1\t\tfalse\t",
+        "{DE3A}\tDE3a\t2\t1\t\tfalse\t",
+        "{DE3B}\tDE3b\t2\t2\t\tfalse\t"
+      ],
+      "reply": {
+        "recordKeys": [
+          "record-1",
+          "record-2",
+          "record-3"
+        ],
+        "scales": [
+          [
+            null,
+            "2081948350",
+            "2081948350"
+          ],
+          [
+            "2081948350",
+            "1842555625",
+            "1842555625"
+          ],
+          [
+            "2081948350",
+            "1842555625",
+            "1842555625"
+          ]
+        ],
+        "warnings": []
+      },
+      "expected": {
+        "args": [
+          [
+            0,
+            1,
+            [
+              "--task",
+              "megablast",
+              "--searchsp",
+              "2081948350"
+            ]
+          ],
+          [
+            0,
+            2,
+            [
+              "--task",
+              "megablast",
+              "--searchsp",
+              "2081948350"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "name": "TLOSATX counts a crop's genome pair in translated letters",
+      "program": "tblastx",
+      "task": "",
+      "table": [
+        "{LAMBDA}\tNC_001416.1\t1\t1\t1001-30000\tfalse\t",
+        "{DE3}\tNC_042057.1\t2\t1\t\tfalse\t"
+      ],
+      "reply": {
+        "recordKeys": [
+          "record-1",
+          "record-2"
+        ],
+        "scales": [
+          [
+            "261371889",
+            "231317436"
+          ],
+          [
+            "231317436",
+            null
+          ]
+        ],
+        "warnings": []
+      },
+      "expected": {
+        "args": [
+          [
+            0,
+            1,
+            [
+              "--searchsp",
+              "231317436"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "name": "LOSATP: a whole single-record pair passes no database size",
+      "program": "blastp",
+      "mode": "pairwise",
+      "candidateLimit": null,
+      "table": [
+        "{LAMBDA}\tNC_001416.1\t1\t1\t\tfalse\t",
+        "{DE3}\tNC_042057.1\t2\t1\t\tfalse\t"
+      ],
+      "reply": {
+        "recordKeys": [
+          "record-1",
+          "record-2"
+        ],
+        "scales": [
+          [
+            null,
+            null
+          ],
+          [
+            null,
+            null
+          ]
+        ],
+        "warnings": []
+      },
+      "expected": {
+        "args": [
+          [
+            0,
+            1,
+            [
+              "--max-hsps-per-subject",
+              "1"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "name": "LOSATP: a cropped subject counts its whole genome's proteins",
+      "program": "blastp",
+      "mode": "pairwise",
+      "candidateLimit": null,
+      "table": [
+        "{LAMBDA}\tNC_001416.1\t1\t1\t\tfalse\t",
+        "{DE3}\tNC_042057.1\t2\t1\t1-20000\tfalse\t"
+      ],
+      "reply": {
+        "recordKeys": [
+          "record-1",
+          "record-2"
+        ],
+        "scales": [
+          [
+            null,
+            "12394"
+          ],
+          [
+            "14866",
+            "12394"
+          ]
+        ],
+        "warnings": []
+      },
+      "expected": {
+        "args": [
+          [
+            0,
+            1,
+            [
+              "--max-hsps-per-subject",
+              "1",
+              "--dbsize",
+              "12394"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "name": "LOSATP: a subject split over two files in one row is one database",
+      "program": "blastp",
+      "mode": "pairwise",
+      "candidateLimit": null,
+      "table": [
+        "{LAMBDA}\tNC_001416.1\t1\t1\t\tfalse\t",
+        "{DE3A}\tDE3a\t2\t1\t\tfalse\t",
+        "{DE3B}\tDE3b\t2\t2\t\tfalse\t"
+      ],
+      "reply": {
+        "recordKeys": [
+          "record-1",
+          "record-2",
+          "record-3"
+        ],
+        "scales": [
+          [
+            null,
+            "12394",
+            "12394"
+          ],
+          [
+            "14866",
+            "12394",
+            "12394"
+          ],
+          [
+            "14866",
+            "12394",
+            "12394"
+          ]
+        ],
+        "warnings": []
+      },
+      "expected": {
+        "args": [
+          [
+            0,
+            1,
+            [
+              "--max-hsps-per-subject",
+              "1",
+              "--dbsize",
+              "12394"
+            ]
+          ],
+          [
+            0,
+            2,
+            [
+              "--max-hsps-per-subject",
+              "1",
+              "--dbsize",
+              "12394"
+            ]
+          ]
+        ]
+      }
     }
   ]
 }

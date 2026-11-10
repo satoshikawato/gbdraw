@@ -48,6 +48,8 @@ class RecordOrigin:
     source_record_id: str
     source_record_id_unique: bool
     window_of: str | None = None
+    # The length of every record of the source, each uncropped: the genome a source file is (OV-3143).
+    source_file_length: int | None = None
 
 
 def held_record_origin(record: SeqRecord) -> RecordOrigin | None:

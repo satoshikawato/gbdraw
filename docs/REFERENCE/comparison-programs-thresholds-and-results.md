@@ -159,16 +159,52 @@ with groups OFF, **Search between** changes nothing, and the member limit
 changes the anchors only with the `all` anchor mode, so the Web shows each only
 when it can change the result.
 
-The Web app, the CLI, and the Python API treat one source file as one genome
-when they run LOSATN, TLOSATX, or LOSATP. Records from two different files are
-searched as one job per directed file pair, and the E-value database is the
-subject file. A comparison between two records of the same file searches that
-file without the query record. A requested within-record search (Similarity
-groups, or Collinear with inference ON) searches the record alone. A record
-therefore never searches itself unless that search was requested. Records of
-one multi-record file therefore get the same E-values and raw cache keys in all
-three. Run Info states this scope. Settings shows the job count from the same
-plan that Generate runs.
+The Web app, the CLI, and the Python API search one source file as one job
+side when they run LOSATN, TLOSATX, or LOSATP. Records from two different files
+are searched as one job per directed file pair. A comparison between two
+records of the same file searches that file without the query record. A
+requested within-record search (Similarity groups, or Collinear with inference
+ON) searches the record alone. A record therefore never searches itself unless
+that search was requested. Settings shows the job count from the same plan that
+Generate runs.
+
+In Linear diagrams, LOSATN and TLOSATX E-values use one scale for each pair of
+genomes. Circular comparison rings still compute E-values per searched file.
+In a Linear diagram, files whose records share a row are one genome, and so is
+every file linked to them through other shared rows; a file that shares no row with
+another file is a genome of its own. A genome's length is every record of its
+files, drawn or not and before any crop; for a GFF3 and FASTA pair, every
+sequence of the FASTA file. Every search between two genomes passes their
+lengths multiplied as the search space (`-searchsp`; TLOSATX counts each
+length in amino acids, the bases divided by 3), so a hit has one E-value
+whether its records are drawn cropped, in windows, or from a genome split over
+files. When every drawn record of both genomes is the whole of the one record
+of a one-record file, no search space is passed, and those figures, raw cache
+keys, and Sessions are as before. LOSAT then uses its own search space, which
+it shortens by the expected length of a hit, so the E-values of a genome pair
+drawn whole differ slightly from those of the same genomes drawn cropped or in
+windows. When two genome lengths multiplied are past the largest search space
+LOSAT reads (9,223,372,036,854,775,807, reached by two genomes of about 3 Gb),
+that pair is searched with LOSAT's own search space for each file, and a
+warning names the pair's files. A LOSAT
+without `-searchsp` (v0.1.0, which `gbdraw setup-losat` installs) makes the CLI
+search with the scale of the searched sequences and say so in a warning; one
+scale per genome needs a newer LOSAT or NCBI BLAST+.
+
+In Linear diagrams, LOSATP E-values (Pairwise, Similarity groups, and
+Collinear) use one scale for each subject genome. Every LOSATP search passes the letters of every protein of
+the subject genome as the database size (`-dbsize`): the CDS proteins of every
+record of its files, drawn or not and before any crop, taken by the same rules
+the search uses (the drawing's feature visibility and feature edits). The
+query side counts each protein, as before. A crop, a window, or a genome split
+over files therefore does not change a protein hit's E-value. When every drawn
+record of both genomes is the whole of the one record of a one-record file, no
+database size is passed, and those figures, raw cache keys, and Sessions are as
+before; LOSAT then counts its own database, so these E-values can differ
+slightly from those of the same genomes drawn cropped or in windows. Reading the
+proteins of records that are not drawn takes extra time. A LOSAT without
+`-dbsize` (v0.1.0) makes the CLI search with the old scale and say so in a
+warning. Run Info states these scales.
 
 In the Web app, a Similarity group name or description stays with the exact set
 of member proteins. When regrouping changes the members, the name is kept as a

@@ -3,13 +3,15 @@ import { readCollinearSearchScope } from '../services/losat-normalization.js';
 import { requireCurrentCollinearInferOrthogroups } from '../services/current-option-values.js';
 import { buildLosatJobSpecs } from '../services/linear-comparisons.js';
 import { drawsSeveralUnits, linearUnitPlanPayload, planLinearUnitSearch } from '../services/linear-units.js';
-import { losatRecordGencode, losatSearchSequences, planLosatSourceJobs } from '../services/linear-sources.js';
+import {
+  losatRecordGencode, losatSearchSequences, nucleotideLosatArgs, planLosatSourceJobs, proteinLosatArgs
+} from '../services/linear-sources.js';
 import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { getLosatHardwareThreads, resolveLosatThreadPlan } from '../services/losat-thread-plan.js';
 import { losatThreadingPrecondition } from '../services/losat.js';
 import { t, tn } from '../utils/i18n.js';
 /** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
-/** @import { DrawingState, WebState } from '../state.js' */
+/** @import { DrawingState, LinearSeq, WebState } from '../state.js' */
 /** @import { LinearUnitPlanPayload, LinearUnitSearch, LinearCardPlacesOf } from '../services/linear-units.js' */
 
 const { computed, ref, watch, onMounted } = window.Vue;
@@ -114,6 +116,25 @@ const watchLosatUnitPlan = (state, readResolution, { planLinearUnits, shownPlace
 };
 
 /**
+ * The arguments the job estimate plans a drawing's searches with: Generate's builders with no E-value scale. A scale
+ * is one per genome pair, and a source batch is one, so it never splits a batch; the translation tables of TLOSATX
+ * records do.
+ * @param {LosatSettingsDrawing} drawing
+ * @param {readonly (LinearSeq | undefined)[]} sequences The searched records, by record index.
+ * @returns {(query: number, subject: number) => string[]}
+ */
+const estimateLosatArgs = (drawing, sequences) => (query, subject) => {
+  const program = drawing.losatProgram.value;
+  if (program !== 'blastn' && program !== 'tblastx') {
+    return proteinLosatArgs({ pairwise: drawing.losat.blastp?.mode === 'pairwise', candidateLimit: null, databaseSize: null });
+  }
+  return nucleotideLosatArgs({
+    program, task: drawing.losat.blastn.task, queryGencode: losatRecordGencode(sequences[query]),
+    dbGencode: losatRecordGencode(sequences[subject]), searchSpace: null
+  });
+};
+
+/**
  * @param {{ state: LosatSettingsState } & LosatUnitPlanPorts} options
  */
 export const createLosatSettings = ({ state, ...unitPlanPorts }) => {
@@ -163,9 +184,7 @@ export const createLosatSettings = ({ state, ...unitPlanPorts }) => {
       return planLosatSourceJobs({
         ...search,
         specs,
-        buildArgs: (query, subject) => (program === 'tblastx'
-          ? [losatRecordGencode(search.sequences[query]), losatRecordGencode(search.sequences[subject])]
-          : [])
+        buildArgs: estimateLosatArgs(drawing, search.sequences)
       }).jobs.length;
     } catch {
       return 0;

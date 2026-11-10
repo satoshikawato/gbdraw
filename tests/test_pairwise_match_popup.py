@@ -108,7 +108,8 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .read_text(encoding="utf-8")
         .replace("./linear-comparisons.js", "./linear-comparisons.mjs")
         .replace("./record-draw-selection.js", "./record-draw-selection.mjs")
-        .replace("../utils/error-normalization.js", "./error-normalization.mjs"),
+        .replace("../utils/error-normalization.js", "./error-normalization.mjs")
+        .replace("../utils/i18n.js", "./i18n.mjs"),
         encoding="utf-8",
     )
     (tmp_path / "linear-comparisons.mjs").write_text(

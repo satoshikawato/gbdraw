@@ -1239,6 +1239,23 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     fileRoles: [],
     run: (pyodide, payload) => callJsonHelper(pyodide, 'plan_record_places_json', [jsonArgument(payload.records, [])])
   },
+  // Generate's LOSAT searches pass the E-value scale Python plans for the drawing's draft request, staged as Generate
+  // stages its request (PD-OI-018 revision 6).
+  [DIAGRAM_HELPER_OPERATIONS.PLAN_GENOME_SCALES]: {
+    keys: ['canonicalRequest', 'program'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'plan_genome_scales_json', [
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        String(payload.program),
+        // The file names a per-file warning names, as the input summary names them.
+        jsonArgument(Object.fromEntries(payload.resourceManifest.map(({ resourceId, name }) => [resourceId, name])), {}),
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS]: {
     keys: ['records', 'pairs'],
     fileRoles: [],

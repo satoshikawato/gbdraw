@@ -1020,6 +1020,16 @@ search arguments. Filenames and display labels do not define cache identity.
 Only affected record pairs rerun when one valid cache key changes. A Session
 stores each raw result once: rows that share a cache key, such as two ring
 files with one sequence, share one entry named by the first row.
+A LOSATN or TLOSATX search whose records are not each the whole of its genome
+(a crop, a window, a file of several records, or files linked through a shared
+row) carries its genome pair's search space (`--searchsp`) in its cache
+arguments. A result saved before gbdraw counted E-values per genome has no
+such argument, so it is not reused for that search: Generate searches again
+and the E-values follow the genome pair. A whole one-record pair keeps its key
+and its saved result. A LOSATP search carries its subject genome's protein
+letters (`--dbsize`) in its cache arguments under the same rule, so a LOSATP
+result saved for a crop, a window, a multi-record file, or a multi-file row is
+searched again too.
 
 Pairwise hit limits, Similarity-group member limits, and Collinear block
 settings are derived options. Changing one recomputes the affected derived

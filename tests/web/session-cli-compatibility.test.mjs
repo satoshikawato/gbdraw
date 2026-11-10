@@ -54,7 +54,8 @@ const {
   installShownDrawing
 } = sessionConfig;
 const {
-  CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest, committedFeatureVisibilityMatches, projectCommittedEditorIntent
+  CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest, committedFeatureVisibilityMatches, linearRecordGridRows,
+  projectCommittedEditorIntent
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { inheritSavedComparison } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
 const { validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');
@@ -331,6 +332,7 @@ await test('a CLI Linear protein Session keeps the adjacent LOSATP plan it drew'
       canonicalComparisons: filesData.linearCanonicalComparisons,
       committedSession: getCommittedCanonicalSession(),
       sequences: filesData.linearSeqs,
+      gridRows: linearRecordGridRows(state.activeDrawing(), filesData.linearSeqs),
       active: {
         featureVisibility: '', mode: blastp.mode, candidateLimit: blastp.candidateLimit ?? null,
         ...resolveComparisonThresholds(state.activeDrawing().adv, 'linear'),

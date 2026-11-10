@@ -217,6 +217,31 @@ Session 46-50 writer wrote them, so a Session 46-50 slice that holds one is refu
 a `setting-replaced` row. Python's step of a Session 27-44 through the Session 50 layout writes none of them
 (`mode_slice_of_version`), so the drawing takes their defaults. The rows Sessions 48-50 added carry no `since` yet.
 
+## Unreleased: LOSATN and TLOSATX raw-cache args carry the genome pair's search space
+
+No Session or request version changes. `LOSAT_SEARCH_FLAGS` (generated from `LOSAT_OPTION_FLAGS` in
+`gbdraw/comparisons/losat_runtime.py`) gains `--searchsp`, spelled `-searchsp` for LOSAT. The CLI
+(`gbdraw.comparisons.linear_losat`) and the Web (`buildLosatArgs` in `gbdraw/web/js/app/run-analysis.js`, from
+the Worker helper `planGenomeScales`, which runs `linear_genome_scales` in `gbdraw/api/request_render.py` on the
+drawing's draft request and answers each scale as a decimal string, with the warnings of genome pairs searched
+per file because their search space is past what LOSAT reads) write it into a LOSATN or TLOSATX raw entry's
+`args` when a drawn record of either genome is not the whole of its genome; the value is `genome_search_spaces` in
+`gbdraw/comparisons/losat_jobs.py`. The args
+are part of the raw cache key, so a raw entry an earlier writer stored for such a pair no longer matches and that
+pair is searched again. A whole one-record pair writes no
+`--searchsp` (when every drawn record of both genomes is the whole of a one-record file), so its key and its
+stored entries are unchanged. Readers accept the new word as any other search
+argument; no migration is needed. Vectors: `searchSpaceCases` in `tests/fixtures/losat_job_plan_cases.json`, read
+by `tests/test_losat_job_plan.py` and `tests/web/linear-sources.test.mjs`.
+
+LOSATP raw entries follow the same rule with `--dbsize` (spelled `-dbsize` for LOSAT; PD-OI-018 revision 6): the
+CLI and the Web (the same `planGenomeScales` reply) write it into a LOSATP raw entry's `args` when a drawn record of
+either genome is not the whole of its genome; the value is
+`genome_database_sizes` in `gbdraw/comparisons/losat_jobs.py`, the subject genome's protein letters
+(`source_protein_letters` in `gbdraw/analysis/protein_colinearity.py`), which the request planner computes
+(`_losatp_database_sizes` in `gbdraw/api/request_render.py`). A LOSATP raw entry stored for such a pair before no
+longer matches and is searched again; a whole one-record pair's key is unchanged.
+
 ## Unreleased: request schema 10 stores feature density tracks
 
 Request schema 10 (not on `main` yet, so its number stays) adds the optional

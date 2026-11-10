@@ -91,6 +91,8 @@ const { EXPECTED_WEB_RUNTIME_CAPABILITIES } = await import(
 
 const workerResponses = [];
 const workerHelperResponses = [];
+/** The last `planLinearUnits` reply, Python's. @type {{ units: { recordKey: string }[] } | null} */
+let lastLinearUnitPlan = null;
 const workerMessages = [];
 
 /** The bytes of every resource the page staged, by content token: a held resource is not staged again. */
@@ -202,8 +204,9 @@ class AuditSimplePathWorker {
     }
     if (message.type === 'helper') {
       // The unit plan is Python's (`planLinearUnits`); a test queues no reply for it.
+      if (message.operation === 'planLinearUnits') lastLinearUnitPlan = pythonLinearUnitPlan(message.payload);
       const response = message.operation === 'planLinearUnits'
-        ? { ok: true, result: pythonLinearUnitPlan(message.payload) } : workerHelperResponses.shift();
+        ? { ok: true, result: lastLinearUnitPlan } : workerHelperResponses.shift();
       if (!response) throw new Error(`missing helper worker response for ${message.operation}`);
       Promise.resolve(response).then((payload) => this.emit('message', {
         type: 'helper',
@@ -219,6 +222,17 @@ class AuditSimplePathWorker {
 }
 
 globalThis.Worker = AuditSimplePathWorker;
+
+/**
+ * The E-value scale port of these Generates: every unit of the last unit plan searched as a whole genome (no scale).
+ * Python's scales for a cropped or windowed drawing are pinned by tests/test_genome_search_space.py and the
+ * Playwright LOSAT cases; these tests read the args of whole-genome searches.
+ */
+const planWholeGenomeScales = async () => {
+  if (!lastLinearUnitPlan) throw new Error('planGenomeScales ran before the unit plan');
+  const recordKeys = lastLinearUnitPlan.units.map(({ recordKey }) => recordKey);
+  return { recordKeys, scales: recordKeys.map(() => recordKeys.map(() => null)), warnings: [] };
+};
 
 const {
   afterFrame,
@@ -382,6 +396,7 @@ const createImmediatePreviewRuntime = ({ onEvent = () => {} } = {}) => {
 };
 const immediatePreviewRuntime = createImmediatePreviewRuntime();
 const generatedArtifactHandleOptions = {
+  planGenomeScales: planWholeGenomeScales,
   captureGeneratedArtifactHandle: artifactSnapshots.captureGeneratedArtifactHandle,
   captureGeneratedArtifactOwnerSet: artifactSnapshots.captureGeneratedArtifactOwnerSet,
   installGeneratedArtifactOwnerSet: artifactSnapshots.installGeneratedArtifactOwnerSet,

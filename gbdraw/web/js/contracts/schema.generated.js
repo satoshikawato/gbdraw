@@ -642,7 +642,9 @@ export const LOSAT_SEARCH_FLAGS = Object.freeze({
   "--query-gencode": '-query_gencode',
   "--db-gencode": '-db_gencode',
   "--max-hsps-per-subject": '-max_hsps',
-  "--max-target-seqs": '-max_target_seqs'
+  "--max-target-seqs": '-max_target_seqs',
+  "--searchsp": '-searchsp',
+  "--dbsize": '-dbsize'
 });
 
 // gbdraw/session_request_codec.py: describe_draft_annotation_style()
