@@ -5,6 +5,7 @@ import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.genera
 import { readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
 import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
 import { readLinearSeqWindows } from './drawing/inputs.js';
+import { readCanonicalRecordTranslations, readCanonicalSimilarityAlignmentPlan } from './linear-record-layout.js';
 import {
   changedLeaves, exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, keepsMeaning, nonNegativeNumberOrNull, numberOr, onlyTrue,
   positiveNumberOrNull, textChoice, trueUnlessFalse, truthy
@@ -58,6 +59,7 @@ import { isLabelOverrideRow } from './label-override-table.js';
 import { isCardRow, markedRows } from './file-imports.js';
 
 /** @import { FieldLeaf, FieldReader, FieldReading } from '../utils/field-reading.js' */
+/** @import { CanonicalLinearRecordTranslation, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
 /** @import { CardMarkedRow, FileImports, PriorityRuleRow, WhitelistRuleRow } from './file-imports.js' */
 /** @import { LoadRepair } from '../utils/load-repairs.js' */
 /** @import { ObjectShape } from '../utils/contract-shape.js' */
@@ -783,8 +785,30 @@ export const DEFAULT_LINEAR_RECORD_GAP_PX = /** @type {number} */ (
 export const draftLinearRecordGap = (value) => (isUnsetValue(value) ? DEFAULT_LINEAR_RECORD_GAP_PX : value);
 /** A blank or absent gap reads as the default, as `draftLinearRecordGap` gives it. @type {FieldReader<number>} */
 export const readLinearRecordGap = numberOr(isNonNegative, DEFAULT_LINEAR_RECORD_GAP_PX);
-/** The Linear alignment plan: an object, else unset (OV-578). @type {FieldReader<Record<string, unknown> | null>} */
-export const readSimilarityAlignment = (value) => (isPlainObject(value) ? { value, lost: false } : { value: null, lost: !isUnsetValue(value) });
+/**
+ * A value read with `rule`, which throws for a value it refuses: an unset or
+ * refused value is `fallback`, a refused one with a loss.
+ * @template T
+ * @param {unknown} value
+ * @param {(value: unknown, path: string) => T} rule
+ * @param {T} fallback
+ * @returns {FieldReading<T>}
+ */
+const readByRule = (value, rule, fallback) => {
+  if (isUnsetValue(value)) return { value: fallback, lost: false };
+  try {
+    return { value: rule(value, 'linearRecordLayout'), lost: false };
+  } catch (_error) {
+    return { value: fallback, lost: true };
+  }
+};
+// The Linear alignment plan and record translations are read with the
+// request's rules for them (OV-3134); whether they fit the records drawn is
+// checked at Generate, where Review repairs a plan that no longer does.
+/** The Linear alignment plan, else none (OV-578). @type {FieldReader<CanonicalSimilarityAlignmentPlan | null>} */
+export const readSimilarityAlignment = (value) => readByRule(value, readCanonicalSimilarityAlignmentPlan, null);
+/** The Linear record translations, else none. @type {FieldReader<CanonicalLinearRecordTranslation[]>} */
+export const readRecordTranslations = (value) => readByRule(value, readCanonicalRecordTranslations, []);
 export const readImportedComparisonAction = exactChoice(Object.values(IMPORTED_COMPARISON_ACTIONS), null);
 const readLosatProgramText = exactChoice(['blastn', 'tblastx', 'blastp'], 'blastn');
 /** The label filter, read without case. */
@@ -949,7 +973,7 @@ const valueTables = (scopedDrafts) => Object.freeze([
       row('recordGap', readLinearRecordGap),
       row('rows', readLinearRecordRows),
       row('similarityAlignment', readSimilarityAlignment),
-      row('recordTranslations', readList)
+      row('recordTranslations', readRecordTranslations)
     ]
   },
   { at: 'importedComparisonResolution', rows: [row('action', readImportedComparisonAction)] },

@@ -848,6 +848,12 @@ write-up of a release.
   U+FEFF does not. A record key of U+FEFF alone no longer drops the saved
   diagram settings at Load, and one of U+001C alone now drops them there, with
   a row in the repair dialog, instead of loading and failing at Generate.
+- Fixed: in the Web app, a settings file (or the settings of an older Session)
+  whose Linear similarity alignment plan or record translations break the
+  rules a saved request keeps for them is no longer loaded as it is: the Load
+  dialog lists the field, and Load drops it. Before, the plan was kept, a File
+  move in the Linear drawing stopped with an error, and Generate asked to
+  repair an alignment that was not there (OV-3134).
 - Fixed: the Web app reads a record's `region` in a Session or request saved
   before schema 10 as the command line and the Python API do. A record that
   names its record both on itself and in its `region`, and a `region` with a
