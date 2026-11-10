@@ -13,7 +13,7 @@
        hovered or keyboard-focused button. The entries share the row: 22 px each, down to 17 px before the
        list wraps; the switch stays on the first row. */
     .settings-index { @apply mb-2 flex flex-none items-start rounded-xl border shadow-sm; min-height: 36px; padding: 4px 5px; background-color: var(--ui-surface); border-color: var(--ui-line); }
-    .settings-index > nav { @apply flex min-w-0 flex-wrap; flex: 1 1 0; gap: 1px; }
+    .settings-index > nav { @apply flex min-w-0 flex-wrap; flex: 1 1 0; gap: 1px 0; }
     .settings-index button { @apply relative inline-flex items-center justify-center; height: 26px; border-radius: 6px; font-size: 16px; color: var(--ui-muted); }
     .settings-index > nav > button { flex: 1 1 17px; min-width: 17px; max-width: 22px; }
     .settings-index button:hover { background-color: #f1f5f9; color: var(--ui-text); }
