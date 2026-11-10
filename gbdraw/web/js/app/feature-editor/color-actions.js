@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
+/** @import { DrawingState, LegendRenameRequest, WebState } from '../../state.js' */
 /** @import { KeptLegendRow, LegendCaption, LegendRow } from '../../services/drawing/paint.js' */
 /** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from '../../services/legend-svg.js' */
 /** @import { LegendRowName } from '../../services/legend-row-names.js' */
@@ -121,7 +121,7 @@ import { msg } from '../../utils/i18n.js';
  */
 /**
  * Runs an action once the color rule matches of `rules` are prepared: the rule owner prepares the rules it builds.
- * @typedef {(rules: ColorRule[], commit: () => unknown) => unknown} RunWithRuleMatchesPort
+ * @typedef {(rules: readonly ColorRule[], commit: () => unknown) => unknown} RunWithRuleMatchesPort
  */
 
 /**
@@ -135,13 +135,7 @@ import { msg } from '../../utils/i18n.js';
  * @typedef {(drawing: DrawingState, key: string, color: string) => void} SetDefaultColorPort
  */
 
-/**
- * A feature row of the Features list, as this owner reads it: its type and its
- * rendered id (null for the row-less placeholder of the Legend popup's count),
- * and the label fields Python writes as text, beside the Python fields that rule
- * matching reads by name.
- * @typedef {Readonly<Record<string, unknown>> & { type?: string, svg_id?: string | null, product?: string, gene?: string, locus_tag?: string }} ColorFeature
- */
+/** @typedef {import('../../services/feature-utils.js').ColorFeature} ColorFeature */
 /**
  * A feature, or the feature popup's state that holds it as `feat`.
  * @typedef {ColorFeature & { feat?: ColorFeature | null }} ColorFeatureOrPopup
@@ -151,32 +145,6 @@ import { msg } from '../../utils/i18n.js';
  * @typedef {Partial<SpecificColorRule>} ColorRule
  */
 
-/**
- * A rename of a Legend row from the Legend editor or the feature popup.
- * `oldCaption` is the caption the source shows; `sourceKey` is its row's
- * Python key (the Legend editor's `legendEntryKey`, the popup's effective
- * caption), by which the rules the row draws are read. A renamed row's shown
- * caption is not its key (OV-294 residual, review M1 of 2b96350f).
- * @typedef {object} LegendRenameRequest
- * @property {'popup' | 'legend'} source Where the rename was typed.
- * @property {ColorFeature} [feat] The popup's feature.
- * @property {string} oldCaption
- * @property {PythonLegendKey} sourceKey
- * @property {string} newCaption
- * @property {ColorRuleLegendGroup} [joinGroup] The group picked from the popup's list, which the rename
- *   joins: `newCaption` is its name, and its color comes with it (PD-OI-061 revision 4).
- * @property {string} [currentColor]
- * @property {number} [siblingCount]
- * @property {ColorFeature[]} [features]
- * @property {'single' | 'group' | 'manual' | null} [sourceScope]
- * @property {'merge' | 'keep-both' | null} [targetResolution]
- * @property {string} [finalCaption]
- * @property {string} [finalColor]
- * @property {PythonLegendKey} [keepBothAfter] Keep both of features split off their row: the key of the
- *   target row the new row is placed right after (D-29).
- * @property {PythonLegendKey} [joins] The key of the listed row, not the renamed one, whose name the rename
- *   takes (a join or a Merge): that row keeps its place, so the new rules are not put in the renamed row's.
- */
 /**
  * What a rename collides with: a listed or deleted Legend row, or a color-rule
  * group that draws no row. `caption` and `color` are what a Merge adopts.
@@ -190,7 +158,10 @@ import { msg } from '../../utils/i18n.js';
 
 /**
  * @typedef {object} FeatureColorActionsOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Pick<WebState, 'activeDrawing' | 'appliedPaletteColors' | 'appliedPaletteName' | 'clickedFeature'
+ *   | 'displayedResultMetadata' | 'errorLog' | 'extractedFeatures' | 'featureStyleScopeDialog' | 'legendRenameDialog'
+ *   | 'originalLegendOrder' | 'paletteDefinitions' | 'resetColorDialog' | 'sessionOperationAvailability' | 'svgContainer'
+ *   | 'svgContent'>} state The app state members this owner and the helpers it passes `state` to read.
  * @property {((options: { domains: readonly string[] }) => unknown) | null} [showEditorIntent]
  *   The root's port of the editor intent onto the displayed Result (R1).
  * @property {CommitSpecificRulesPort} commitSpecificRules
@@ -238,7 +209,7 @@ import { msg } from '../../utils/i18n.js';
 /**
  * The name a caption stands for (the Legend owner's `legendRowName`): the name of the row it is the
  * key of, else the caption itself. A caption read as a row is written as this name (OV-640).
- * @typedef {(caption: string) => LegendRowName} LegendRowNamePort
+ * @typedef {(caption: string | null) => LegendRowName} LegendRowNamePort
  */
 
 /**
@@ -349,7 +320,7 @@ export const createFeatureColorActions = ({
   /**
    * @param {DrawingState} drawing
    * @param {readonly unknown[]} args
-   * @param {() => any} run
+   * @param {() => unknown} run
    */
   const withTargetRules = (drawing, args, run) => {
     /** @type {Set<ColorFeature>} */
@@ -460,7 +431,7 @@ export const createFeatureColorActions = ({
 
   /**
    * @param {DrawingState} drawing
-   * @param {Record<string, any>} featureLike
+   * @param {ColorFeatureOrPopup} featureLike
    * @param {{ strokeColor?: string | null, strokeWidth?: number | null, originalStrokeColor?: string | null, originalStrokeWidth?: string | number | null }} [overrides]
    */
   const recordFeatureStrokeOverride = (
@@ -519,7 +490,7 @@ export const createFeatureColorActions = ({
   /**
    * @param {DrawingState} drawing
    * @param {Element} svg
-   * @param {Record<string, any>} feature
+   * @param {ColorFeature} feature
    * @param {string} svgId
    * @returns {{ strokeColor?: unknown, strokeWidth?: unknown } | null}
    */
@@ -571,28 +542,17 @@ export const createFeatureColorActions = ({
   // Without a row, nothing is derived (review L4).
   /** @param {DrawingState} drawing @param {LegendRow | null} entry */
   const listedRowColor = (drawing, entry) => (entry ? displayedLegendRowColors(state, drawing, readDrawnTracks()).listed(entry) : undefined);
-  /** @param {DrawingState} drawing @param {ColorFeature} feat @param {string} caption */
+  /**
+   * @param {DrawingState} drawing @param {ColorFeature} feat @param {string} caption
+   * @returns {string | null}
+   */
   const findExistingCaptionColor = (drawing, feat, caption) => {
-    const existingCaption = findExistingColorForCaption(feat, caption);
-    if (existingCaption?.color) {
-      return {
-        caption: existingCaption.rule?.cap || caption,
-        color: existingCaption.color,
-        rule: existingCaption.rule || null
-      };
-    }
+    const ruleColor = findExistingColorForCaption(feat, caption)?.color;
+    if (ruleColor) return ruleColor;
 
     const legendEntry = findScopeLegendRow(drawing, caption);
     const legendColor = listedRowColor(drawing, legendEntry);
-    if (legendEntry && legendColor) {
-      return {
-        caption: legendEntry.caption,
-        color: legendColor,
-        rule: null
-      };
-    }
-
-    return null;
+    return legendEntry && legendColor ? legendColor : null;
   };
 
   // A dialog's choice closes it once the choice's History step ends.
@@ -613,14 +573,13 @@ export const createFeatureColorActions = ({
     featureStyleScopeDialog.annotationLabelSiblingCount = 0;
     featureStyleScopeDialog.displayLabelOffered = false;
     featureStyleScopeDialog.annotationLabelOffered = false;
-    featureStyleScopeDialog.existingCaptionRule = null;
     featureStyleScopeDialog.existingCaptionColor = null;
     featureStyleScopeDialog.defaultColorType = null;
     featureStyleScopeDialog.replacedDefaultColor = null;
   });
 
   /**
-   * @param {Record<string, any>} feat
+   * @param {ColorFeature} feat
    * @param {string | null} [requestedLegendName]
    */
   const getFeatureStyleScope = (feat, requestedLegendName = null) => {
@@ -673,13 +632,13 @@ export const createFeatureColorActions = ({
 
   /**
    * @param {{
-   *   kind: string,
-   *   feat: Record<string, any>,
-   *   scope: Record<string, any>,
+   *   kind: 'fill' | 'stroke',
+   *   feat: ColorFeature,
+   *   scope: NonNullable<ReturnType<typeof getFeatureStyleScope>>,
    *   color?: string | null,
    *   strokeColor?: string | null,
    *   strokeWidth?: number | null,
-   *   existingCaption?: { caption: string, color: string, rule: Record<string, any> | null } | null,
+   *   existingCaptionColor?: string | null,
    *   defaultColorType?: string | null,
    *   replacedDefaultColor?: string | null
    * }} options
@@ -691,7 +650,7 @@ export const createFeatureColorActions = ({
     color = null,
     strokeColor = null,
     strokeWidth = null,
-    existingCaption = null,
+    existingCaptionColor = null,
     defaultColorType = null,
     replacedDefaultColor = null
   }) => {
@@ -711,8 +670,7 @@ export const createFeatureColorActions = ({
     featureStyleScopeDialog.annotationLabelSiblingCount = scope.annotationLabelSiblingCount;
     featureStyleScopeDialog.displayLabelOffered = scope.displayLabelOffered;
     featureStyleScopeDialog.annotationLabelOffered = scope.annotationLabelOffered;
-    featureStyleScopeDialog.existingCaptionRule = existingCaption?.rule || null;
-    featureStyleScopeDialog.existingCaptionColor = existingCaption?.color || null;
+    featureStyleScopeDialog.existingCaptionColor = existingCaptionColor || null;
     featureStyleScopeDialog.defaultColorType = defaultColorType;
     featureStyleScopeDialog.replacedDefaultColor = replacedDefaultColor;
   };
@@ -769,7 +727,7 @@ export const createFeatureColorActions = ({
   // The popup shows the fill an edit gave its feature; scope dialogs leave it open (OV-1278).
   /** @param {ColorFeature | null | undefined} feat @param {string} color */
   const showClickedFeatureColor = (feat, color) => {
-    if (feat && clickedFeature.value?.svg_id === feat.svg_id) clickedFeature.value.color = color;
+    if (feat && clickedFeature.value && clickedFeature.value.svg_id === feat.svg_id) clickedFeature.value.color = color;
   };
 
   /** @param {ColorFeature | null | undefined} feat @param {string} caption @param {string | null} [color] */
@@ -1245,7 +1203,7 @@ export const createFeatureColorActions = ({
         feat,
         scope,
         color,
-        existingCaption: findExistingCaptionColor(drawing, feat, scope.legendName),
+        existingCaptionColor: findExistingCaptionColor(drawing, feat, scope.legendName),
         // The dialog's line under "Apply to all" (D-15, Q2 B).
         defaultColorType,
         replacedDefaultColor
@@ -1416,7 +1374,7 @@ export const createFeatureColorActions = ({
     }
 
     if (choice === 'rule') {
-      if (matchingRule) await commitRuleWrite(reviseColorRules([matchingRule], { cap: matchingRule.cap, color }, null),
+      if (matchingRule) await commitRuleWrite(reviseColorRules([matchingRule], { cap: matchingRule.cap ?? '', color }, null),
         msg('Change specific color rule'), { drawing, afterCommit: () => showClickedFeatureColor(feat, color) });
     } else if (choice === 'caption') {
       const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
@@ -1628,6 +1586,7 @@ export const createFeatureColorActions = ({
     if (!clickedFeature.value) return;
     if (!svgContainer.value) return;
 
+    /** @type {ColorFeature} */
     const feat = clickedFeature.value.feat;
     if (!feat) return;
 
@@ -1638,9 +1597,10 @@ export const createFeatureColorActions = ({
     }
 
     const caption = getFeatureCaption(feat);
+    const clickedSvgId = clickedFeature.value.svg_id;
 
     const siblings = /** @type {ColorFeature[]} */ (extractedFeatures.value).filter(
-      (f) => getFeatureCaption(f) === caption && f.svg_id !== clickedFeature.value.svg_id
+      (f) => getFeatureCaption(f) === caption && f.svg_id !== clickedSvgId
     );
 
     if (siblings.length > 0) {
@@ -1664,6 +1624,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {string} choice */
   const doResetFillColor = async (drawing, choice) => {
+    /** @type {ColorFeature | undefined} */
     const feature = clickedFeature.value?.feat;
     if (!feature || choice === 'cancel') return false;
     const caption = getEffectiveLegendCaption(feature);
@@ -1709,7 +1670,7 @@ export const createFeatureColorActions = ({
     return true;
   };
 
-  /** @param {DrawingState} drawing @param {unknown} features @param {string} strokeColor @param {unknown} strokeWidth */
+  /** @param {DrawingState} drawing @param {unknown} features @param {string | null} strokeColor @param {unknown} strokeWidth */
   const applyStrokeToSelectedFeatures = (drawing, features, strokeColor, strokeWidth) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1743,7 +1704,7 @@ export const createFeatureColorActions = ({
     return updatedCount > 0;
   };
 
-  /** @param {DrawingState} drawing @param {string} caption @param {string} strokeColor @param {unknown} strokeWidth */
+  /** @param {DrawingState} drawing @param {string} caption @param {string | null} strokeColor @param {unknown} strokeWidth */
   const applyStrokeToLegendEntry = (drawing, caption, strokeColor, strokeWidth) => {
     const targetLegendEntry = findScopeLegendRow(drawing, caption);
     const svg = getCurrentSvg();
@@ -1792,6 +1753,7 @@ export const createFeatureColorActions = ({
       return false;
     }
 
+    /** @type {ColorFeature[]} */
     let targetFeatures = [];
     let legendCaption = '';
     if (choice === 'rule' && matchingRule) {
@@ -1800,7 +1762,10 @@ export const createFeatureColorActions = ({
       ));
       legendCaption = normalizeCaption(matchingRule.cap);
     } else if (choice === 'caption') {
-      targetFeatures = [feat, ...legendRowKeys(getCurrentSvg(), legendName).flatMap((key) => findFeaturesWithSameLegendItem(feat, key))];
+      // An open dialog holds the feature's row (a key) or a typed name (`openFeatureStyleScopeDialog`),
+      // read as a key as the fill choice reads it.
+      targetFeatures = [feat, ...legendRowKeys(getCurrentSvg(), /** @type {PythonLegendKey} */ (legendName))
+        .flatMap((key) => findFeaturesWithSameLegendItem(feat, key))];
       legendCaption = normalizeCaption(legendName);
     } else if (choice === 'displayLabel') {
       targetFeatures = [feat, ...findFeaturesWithSameDisplayedLabel(feat, displayLabel)];
@@ -1820,7 +1785,7 @@ export const createFeatureColorActions = ({
 
   /**
    * @param {DrawingState} drawing
-   * @param {Record<string, any>} feature
+   * @param {ColorFeature} feature
    * @param {string} color
    * @param {LegendRowName | null} [customCaption] The name to caption the feature's rule with.
    */

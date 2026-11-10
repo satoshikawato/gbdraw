@@ -432,31 +432,33 @@ const featurePopupResize = reactive({
   startHeight: 0
 });
 
-// Feature style scope dialog state
-const featureStyleScopeDialog = reactive({
+// Feature style scope dialog state (app/feature-editor/color-actions.js writes it).
+/** @import { ColorFeature } from './services/feature-utils.js' */
+/** @import { ColorRuleLegendGroup, SpecificColorRule } from './services/specific-color-rules.js' */
+const featureStyleScopeDialog = typedReactive({
   show: false,
-  kind: 'fill', // 'fill' | 'stroke'
-  feat: null,
-  color: null,
-  strokeColor: null,
-  strokeWidth: null,
-  matchingRule: null, // Existing regex rule from -t table
+  kind: /** @type {'fill' | 'stroke'} */ ('fill'),
+  feat: /** @type {ColorFeature | null} */ (null),
+  color: /** @type {string | null} */ (null),
+  strokeColor: /** @type {string | null} */ (null),
+  strokeWidth: /** @type {number | null} */ (null),
+  matchingRule: /** @type {Partial<SpecificColorRule> | null} */ (null), // Existing regex rule from -t table
   ruleMatchCount: 0, // Number of features matching the rule
-  legendName: null,
+  legendName: /** @type {string | null} */ (null),
   siblingCount: 0, // Number of other features with same caption
-  displayLabel: null, // Current rendered label text in SVG (edited label)
+  displayLabel: /** @type {string | null} */ (null), // Current rendered label text in SVG (edited label)
   displayLabelSiblingCount: 0, // Number of other features sharing display label
-  annotationLabel: null, // Feature's source annotation label (product/gene/locus_tag)
+  annotationLabel: /** @type {string | null} */ (null), // Feature's source annotation label (product/gene/locus_tag)
   annotationLabelSiblingCount: 0, // Number of other features sharing source annotation label
   // OV-648: whether each label scope selects other features than the Legend
   // item scope (the annotation label also than the display label scope).
   displayLabelOffered: false,
   annotationLabelOffered: false,
-  existingCaptionRule: null, // Existing hash rule for same caption (already colored)
-  existingCaptionColor: null, // Color of existing caption rule
-  defaultColorType: null, // D-15: the feature type whose default color "Apply to all" sets
-  replacedDefaultColor: null, // D-15: the user default color of that type it replaces
-  resolve: null // Promise resolver
+  existingCaptionColor: /** @type {string | null} */ (null), // Color of existing caption rule
+  // D-15: the feature type whose default color "Apply to all" sets
+  defaultColorType: /** @type {string | null} */ (null),
+  // D-15: the user default color of that type it replaces
+  replacedDefaultColor: /** @type {string | null} */ (null)
 });
 
 /**
@@ -483,15 +485,41 @@ const paletteColorsDialog = reactive({
 });
 
 // Reset Color Dialog state
-const resetColorDialog = reactive({
+const resetColorDialog = typedReactive({
   show: false,
   caption: '',
   siblingCount: 0
 });
 
-const legendRenameDialog = reactive({
+/**
+ * A rename of a Legend row from the Legend editor or the feature popup.
+ * `oldCaption` is the caption the source shows; `sourceKey` is its row's
+ * Python key (the Legend editor's `legendEntryKey`, the popup's effective
+ * caption), by which the rules the row draws are read. A renamed row's shown
+ * caption is not its key (OV-294 residual, review M1 of 2b96350f).
+ * @typedef {object} LegendRenameRequest
+ * @property {'popup' | 'legend'} source Where the rename was typed.
+ * @property {ColorFeature} [feat] The popup's feature.
+ * @property {string} oldCaption
+ * @property {PythonLegendKey} sourceKey
+ * @property {string} newCaption
+ * @property {ColorRuleLegendGroup} [joinGroup] The group picked from the popup's list, which the rename
+ *   joins: `newCaption` is its name, and its color comes with it (PD-OI-061 revision 4).
+ * @property {string} [currentColor]
+ * @property {number} [siblingCount]
+ * @property {ColorFeature[]} [features]
+ * @property {'single' | 'group' | 'manual' | null} [sourceScope]
+ * @property {'merge' | 'keep-both' | null} [targetResolution]
+ * @property {string} [finalCaption]
+ * @property {string} [finalColor]
+ * @property {PythonLegendKey} [keepBothAfter] Keep both of features split off their row: the key of the
+ *   target row the new row is placed right after (D-29).
+ * @property {PythonLegendKey} [joins] The key of the listed row, not the renamed one, whose name the rename
+ *   takes (a join or a Merge): that row keeps its place, so the new rules are not put in the renamed row's.
+ */
+const legendRenameDialog = typedReactive({
   show: false,
-  mode: 'scope', // 'scope' | 'target'
+  mode: /** @type {'scope' | 'target'} */ ('scope'),
   // The key of the renamed row and of the target row ('' for a color rule's
   // name that no row shows); the dialog shows each row's drawn name.
   sourceKey: /** @type {PythonLegendKey | ''} */ (''),
@@ -515,7 +543,7 @@ const legendRenameDialog = reactive({
   // D-28: "Keep both" onto a deleted row in the renamed row's color restores
   // that row first, as Merge does: rows of one name and one swatch are one row.
   keepBothRestores: false,
-  pendingRequest: null
+  pendingRequest: /** @type {LegendRenameRequest | null} */ (null)
 });
 
 // Label text scope dialog state
