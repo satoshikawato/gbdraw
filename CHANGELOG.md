@@ -246,8 +246,11 @@ write-up of a release.
   so a stack written out of side order, such as
   `features, gc:content, sk:skew@side=outside`, listed GC content before the
   GC skew ring that lies outside it, and the same stack in the Web app listed
-  them by side. Stacks written in side order, every Web stack, the Gallery and
-  the examples are unchanged (OV-3187).
+  them by side. A default figure (no track stack) also changes where an earlier
+  annotation set draws highlights with a legend label and a later set draws
+  another mark with one: the highlight entries, drawn over the features, now
+  come after the later set's entries, which lie outside them. No Gallery
+  Session, example figure or reference output changes (OV-3187).
 - Fixed (Web app): a Circular Session saved by the CLI with
   `--circular_track_axis_index` and a `features:features` slot with no
   `side=` or `lane_direction=` loaded with the lanes of the track type (split
