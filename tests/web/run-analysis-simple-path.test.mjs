@@ -1777,6 +1777,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       catalog: { mode: 'linear', status: 'ready', records: [] },
       error: ''
     }),
+    // The record selector's read of each card: the record its `region_record_id` names (OV-3227).
+    linearCardRecord: (_drawing, card) => (card.region_record_id
+      ? { length: 8, id: card.region_record_id, count: 1 } : { length: null, id: '', count: null }),
     prepareCandidateCommit: ({
       generationResponse,
       catalogAdmission,
@@ -2494,6 +2497,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       )));
     }
     assert.equal(losatCalls, 3, 'the first Generate searched and the second reused its raw results');
+    // OV-3227: the File name field's default is the name Generate gave each pair, the cards' record IDs.
+    const thirteenNames = state.losatCacheInfo.value.map(({ filename }) => filename);
+    assert.deepEqual(thirteenNames.slice(0, 2), ['REC1.REC2.losatn.tsv', 'REC2.REC3.losatn.tsv']);
+    assert.deepEqual(state.losatCacheInfo.value.map(({ edgeKey }) => runner.getLosatPairDefaultName(state.activeDrawing(), edgeKey)),
+      thirteenNames);
     assert.match(thirteenWatches[0].timing, /FASTA cache hits=1, .*JS FASTA=1, Worker FASTA=0/);
     assert.match(thirteenWatches[1].timing, /FASTA cache hits=14, .*JS FASTA=0, Worker FASTA=0/);
     assert.equal(thirteenWatches[1].fastaDigests, 0);

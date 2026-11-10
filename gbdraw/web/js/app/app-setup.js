@@ -1406,8 +1406,8 @@ export const createAppSetup = () => {
     });
   };
   const {
-    linearRegionNote, linearCardWindowView, linearLayoutCellRows, linearUnitPlacesOf, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
-    committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds, shownLinearWrapLeaf, shownLinearWrapReading
+    linearRegionNote, linearCardWindowView, linearLayoutCellRows, linearUnitPlacesOf, linearCardRecord, circularRegionNote, circularWindowRows, shownInputSummary,
+    drawnLinearRecordLengths, committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds, shownLinearWrapLeaf, shownLinearWrapReading
   } = createShownDrawingReaders({
     state, shownDrawingOfMode, linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor, refreshLinearRecords: linearRecordSelector.refresh,
@@ -1763,6 +1763,7 @@ export const createAppSetup = () => {
     ),
     prepareLinearRecordCatalog,
     readRecordIdentitySources,
+    linearCardRecord,
     placeCircularRecordChoices: (drawing) => placeCircularRecordChoices(drawing), // created below, with the record settings
     recordDisplayRows: recordDisplayControls.allRows,
     assertDrawingInputs,

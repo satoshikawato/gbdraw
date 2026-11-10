@@ -14,6 +14,7 @@ const { createShownDrawingReaders } = await import('../../gbdraw/web/js/app/show
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { linearCardWindowPlanRecords, linearDrawingUnitPlaces, linearDrawingWindowsOf } = await import(
   '../../gbdraw/web/js/services/session-request.js');
+const { losatCardPairName } = await import('../../gbdraw/web/js/services/losat-cache.js');
 /** The request ports of the readers; no card here has several windows, so the window plan is never asked for. */
 const requestPorts = {
   windowsOf: linearDrawingWindowsOf, unitPlacesOf: linearDrawingUnitPlaces, cardWindowPlanRecords: linearCardWindowPlanRecords,
@@ -104,4 +105,41 @@ test('the shown Result names its records by the record IDs it drew them with, el
   assert.deepEqual(readersOf({ geometry: older, records }), { 'card-b:2': name('BGC0000709', true) });
   // Another drawing's Result names none of this drawing's records.
   assert.deepEqual(readersOf({ geometry, records, shown: 'c2' }), {});
+});
+
+// OV-3227: the record ID of a card is the one record its record list (the record selector's read) says it draws, and
+// the default raw LOSAT TSV name of a card pair reads it there, so the File name field and Generate give one name.
+// A card's Definition comes first; a card whose records are not read yet has no name to show.
+test('a card pair is named by its cards\' definitions, else by the record IDs their record lists read', () => {
+  const read = (recordId, recordLength = 9) => ({ recordId, selector: '', recordLength });
+  const multi = [read('contig'), read('contig'), read('NC_2')];
+  const files = new Map([['one-a', [read('NC_000913.3')]], ['one-b', [read('AP009048.1')]], ['multi', multi]]);
+  const drawing = { id: 'd1', mode: 'linear', inputType: { value: 'gb' } };
+  const { linearCardRecord } = createShownDrawingReaders({
+    state: { activeDrawing: () => drawing, inputSummaries: { value: [] }, selectedResultIndex: { value: 0 }, results: { value: [] } },
+    shownDrawingOfMode: () => drawing,
+    linearRecordsFor: (_drawing, seq) => files.get(seq.uid.replace(/~.*$/u, '')) ?? [],
+    linearRecordStatusFor: () => 'ready',
+    refreshLinearRecords: () => ({ busy: true }), committedLinearRecordCards: () => null,
+    getCommittedCanonicalRenderRequest: () => null, ...requestPorts
+  });
+  const card = (uid, fields = {}) => createLinearSeq({ uid, ...fields });
+  const named = (cards, query = 0, subject = 1) => losatCardPairName('losatn', cards, query, subject,
+    (seq) => linearCardRecord(drawing, seq));
+  // (1) Two single-record GenBank cards with empty definitions: their record IDs.
+  assert.equal(linearCardRecord(drawing, card('one-a')).id, 'NC_000913.3');
+  assert.deepEqual(named([card('one-a'), card('one-b')]), { name: 'NC_000913.3.AP009048.1.losatn.tsv', known: true });
+  // (3) A card with a definition keeps its definition.
+  assert.deepEqual(named([card('one-a', { definition: 'E. coli K-12' }), card('one-b')]),
+    { name: 'E.coli.K-12.AP009048.1.losatn.tsv', known: true });
+  // (4) A record of a multi-record file, expanded into its own card, is named by the record its `region_record_id`
+  // selects: the record's ID, also when the file repeats it and the card selects the record by its number.
+  assert.deepEqual(named([card('multi~3', { region_record_id: 'NC_2' }), card('multi~2', { region_record_id: '#2' })]),
+    { name: 'NC_2.contig.losatn.tsv', known: true });
+  // A card whose records are not read yet (a loaded Session's) has no record ID yet: the name is not known, unless
+  // its Definition names it. A card that draws a whole file of several records is named by its number.
+  assert.equal(named([card('one-a'), card('unread')]).known, false);
+  assert.deepEqual(named([card('one-a'), card('unread', { definition: 'Typed' })]),
+    { name: 'NC_000913.3.Typed.losatn.tsv', known: true });
+  assert.deepEqual(named([card('multi'), card('one-b')]), { name: 'seq_1.AP009048.1.losatn.tsv', known: true });
 });

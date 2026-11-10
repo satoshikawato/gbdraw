@@ -11,6 +11,7 @@ import {
 import { DERIVED_RESULT_DESCRIPTION } from '../contracts/derived-result-shape.generated.js';
 import { shapeViolations } from '../utils/contract-shape.js';
 import { LOSAT_WASM_BUILD } from './losat-build.generated.js';
+/** @import { CardRecordFacts } from './linear-card-windows.js' */
 
 // Membership is tested on unvalidated Session values, hence `ReadonlySet<unknown>`.
 /** @type {ReadonlySet<unknown>} */
@@ -123,6 +124,33 @@ export const losatEdgeFilename = (leftLabel, rightLabel, suffix, queryWindow = n
     `${losatFilenameLabel(leftLabel) || 'seq_1'}.${losatFilenameLabel(rightLabel) || 'seq_2'}.${suffix}.tsv`,
     queryWindow, subjectWindow)
 );
+
+/**
+ * The default raw LOSAT TSV name of a pair of cards, the one rule the File name field and Generate read (OV-3227):
+ * each card is named by its Definition, else by the ID of the record it draws (`recordOf`, its record list as the
+ * record selector read it), else by its number (`seq_<n>`). `known` is false while a card named by its record has
+ * no record list yet (a loaded Session's card before its records are read): its record ID is not known until then.
+ * @template {{ definition: string }} C
+ * @param {string} suffix The program's suffix (`losatn`, `tlosatx`, `losatp`).
+ * @param {readonly C[]} cards
+ * @param {number} queryIndex @param {number} subjectIndex NaN or -1 for a card not found.
+ * @param {(card: C) => CardRecordFacts} recordOf
+ * @returns {{ name: string, known: boolean }}
+ */
+export const losatCardPairName = (suffix, cards, queryIndex, subjectIndex, recordOf) => {
+  let known = true;
+  /** @param {number} index @param {number} side */
+  const label = (index, side) => {
+    const found = Number.isInteger(index) && index >= 0;
+    const card = found ? cards[index] : undefined;
+    const definition = String(card?.definition || '').trim();
+    const record = card && !definition ? recordOf(card) : null;
+    if (record?.count === null) known = false;
+    return definition || record?.id || `seq_${found ? index + 1 : side}`;
+  };
+  const name = losatEdgeFilename(label(queryIndex, 1), label(subjectIndex, 2), suffix);
+  return { name, known };
+};
 
 /**
  * The raw TSV name of one pair of drawn units, from its card pair's name (a `.tsv` name): a window pair adds the

@@ -209,9 +209,15 @@ test('a record drawn in two windows searches each window against the other recor
   const [firstName, secondName] = await rowNames();
   expect(firstName).toMatch(/\.losatn\.w1\.tsv$/);
   expect(secondName).toBe(firstName.replace(/\.w1\.tsv$/, '.w2.tsv'));
+  // OV-3227: the File name field of each window pair shows the name Generate gave it, from the cards' record IDs.
+  expect(firstName).toBe('R2c.R3c.losatn.w1.tsv');
+  for (const [row, filename] of [[0, firstName], [1, secondName]]) {
+    await expect(windowPairs.nth(row).getByRole('textbox')).toHaveAttribute('placeholder', filename);
+  }
   // A name typed on the card pair is the stem of its window pairs' names; it does not become every one's name.
   await page.locator('summary[aria-label="Raw LOSAT file name for #1 to #2"]').click();
   const cardPairName = page.getByRole('textbox', { name: 'Raw LOSAT filename for #1 to #2', exact: true });
+  await expect(cardPairName).toHaveAttribute('placeholder', 'R2c.R3c.losatn.tsv');
   await cardPairName.fill('card-pair');
   await cardPairName.press('Enter');
   await generateAndWaitForResult(page);
