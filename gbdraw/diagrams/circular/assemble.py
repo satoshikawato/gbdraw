@@ -72,13 +72,14 @@ from ...labels.label_style import FeatureLabelStyle, label_leader_width_px
 from ...render.drawers.label_backing import feature_label_drawn_parts
 from ...labels.circular import (
     CircularLabelProbeStopped,
+    CircularLabelRadii,
     assign_leader_start_points,
     circular_label_fits,
     circular_label_font_size,
     circular_label_shape,
     minimum_bbox_gap_px,
+    circular_label_radii,
     prepare_label_list,
-    radial_label_inner_reserve_px,
     x_overlap,
     y_overlap,
 )
@@ -93,6 +94,7 @@ from ...labels.fit import (
     LabelFit,
     LabelFitValue,
     LabelKind,
+    LabelShape,
     Polygon,
     RegionLabelWarnings,
     region_rooms_left_out,
@@ -1504,7 +1506,6 @@ def _record_track_ink(
                         profile=sources.profile,
                         radius=float(slot.anchor_radius_px or 0.0),
                         record_transform=record_transform,
-                        group_id=track_slot_svg_id(slot.id, renderer="ticks"),
                         slot_id=str(slot.id),
                         **tick_options,
                     ).ink()
@@ -1561,6 +1562,26 @@ def _feature_label_drawn_parts(label: CircularLabel, total_length: int, style: F
     return feature_label_drawn_parts(circular_label_ink(label, total_length, style), style)
 
 
+def _leader_segments(label: CircularLabel, shape: LabelShape) -> tuple[LeaderSegment, ...]:
+    """The straight parts of a feature label's drawn leader, each with half its label's leader width."""
+
+    return tuple(
+        LeaderSegment(start, end, 0.5 * label_leader_width_px(label)) for start, end in zip(shape.leader, shape.leader[1:])
+    )
+
+
+def _feature_label_leaders(labels: Sequence[CircularLabel], total_length: int) -> tuple[LeaderSegment, ...]:
+    """The record's feature label leaders, drawn before every slot: the scale backs the numbers they run behind
+    (OV-3301)."""
+
+    return tuple(
+        segment
+        for label in labels
+        if not label.get("is_embedded")
+        for segment in _leader_segments(label, circular_label_shape(label, total_length))
+    )
+
+
 def _feature_label_obstacles(
     labels: Sequence[CircularLabel], total_length: int, canvas_config: CircularCanvasConfigurator
 ) -> CircularLabelObstacles:
@@ -1578,10 +1599,7 @@ def _feature_label_obstacles(
         labels=tuple(
             CircularObstacleLabel(
                 (*shape.parts, *drawn),
-                tuple(
-                    LeaderSegment(start, end, 0.5 * label_leader_width_px(label))
-                    for start, end in zip(shape.leader, shape.leader[1:])
-                ),
+                _leader_segments(label, shape),
                 feature=True,
             )
             for label, shape, drawn in shapes
@@ -2524,7 +2542,6 @@ def _slot_tick_options(resolved_slot: CircularResolvedSlot, use_slot_tick_option
 class _TickGroupOptions(_TickOptions):
     radius_override: float
     slot_id: str
-    group_id: str
 
 
 def _tick_group_options(
@@ -2541,7 +2558,6 @@ def _tick_group_options(
         **tick_options,
         "radius_override": float(anchor_radius_px),
         "slot_id": str(resolved_slot.id),
-        "group_id": track_slot_svg_id(resolved_slot.id, renderer="ticks"),
     }
 
 
@@ -2934,19 +2950,17 @@ def _draw_resolved_circular_slot(
 
     if renderer == "ticks":
         tick_group = _tick_group_options(resolved_slot, use_slot_tick_options=use_slot_tick_options)
-        if tick_group is not None:
-            try:
-                canvas = add_tick_group_on_canvas(
-                    canvas,
-                    gb_record,
-                    canvas_config,
-                    group_key=GroupKey(record_key, GroupKind.TICKS, str(resolved_slot.id)),
-                    **tick_group,
-                    record_transform=record_transform,
-                )
-            except ValidationError as error:
-                raise _with_slot_row(error, resolved_slot) from None
-        return canvas
+        if tick_group is None:
+            return canvas
+        leaders = _feature_label_leaders(precalculated_labels or (), len(gb_record.seq))
+        key = GroupKey(record_key, GroupKind.TICKS, str(resolved_slot.id))
+        try:
+            return add_tick_group_on_canvas(
+                canvas, gb_record, canvas_config, group_key=key, **tick_group, record_transform=record_transform,
+                feature_leaders=leaders,
+            )
+        except ValidationError as error:
+            raise _with_slot_row(error, resolved_slot) from None
 
     if renderer == "depth":
         depth_source = _slot_depth_source(resolved_slot, depth_df, depth_config, depth_tracks_by_index)
@@ -3260,11 +3274,10 @@ class _CircularLabelState:
     resolved_feature_anchor_radius_px: float | None
     outer_arena_enabled: bool
     feature_track_ratio_factor_override: float | None
-    # What the labels read of the radial layout: the feature lanes, the content radius radial outer labels keep
-    # past, and the reserve inner radial labels keep outside (``radial_label_inner_reserve_px``, OV-2103).
+    # What the labels read of the radial layout: the feature lanes and the room around them
+    # (``circular_label_radii``: radial labels' content radius and inner reserve, OV-2103; the outer floor, OV-3301).
     feature_layout: CircularFeatureLayout | None
-    outer_content_radius_px: float
-    inner_reserve_px: float
+    label_radii: CircularLabelRadii
     feature_lane_direction: CircularFeatureLaneDirection
     record_transform: RecordDisplayTransform | None
     definition_text: tuple[Aabb, ...]
@@ -3305,8 +3318,7 @@ def _place_circular_labels(
         ),
         feature_track_ratio_factor_override=state.feature_track_ratio_factor_override,
         feature_layout=state.feature_layout,
-        outer_content_radius_px=state.outer_content_radius_px,
-        inner_reserve_px=state.inner_reserve_px,
+        room=state.label_radii,
         track_preset=state.track_preset,
         feature_lane_direction=state.feature_lane_direction,
         _candidate_cache=candidate_caches.setdefault(font_size, {}),
@@ -3349,8 +3361,7 @@ def circular_labels(
     total_length: int,
     geometry: CircularCanvasGeometry,
     resolved_slots: tuple[CircularResolvedSlot, ...],
-    outer_content_radius_px: float,
-    inner_reserve_px: float,
+    label_radii: CircularLabelRadii,
     layout_slots: tuple[CircularTrackSlot, ...],
     feature_slot: CircularTrackSlot | None,
     feature_lane_direction: CircularFeatureLaneDirection,
@@ -3372,9 +3383,8 @@ def circular_labels(
 ) -> CircularLabelPlacement:
     """Place one record's external and embedded labels; radial labels grow the radius (stage ``circular_labels``).
 
-    The labels read the radial layout through its resolved slots, its outer
-    content radius and the inner reserve (``radial_label_inner_reserve_px``),
-    not the centre band (OV-2103). The growth loop replans the radial layout
+    The labels read the radial layout through its resolved slots and
+    ``label_radii`` (``circular_label_radii``), not the centre band (OV-2103). The growth loop replans the radial layout
     with a larger radius until the radial labels fit or growing stops making
     room. It works on copies: the feature layers it is given and the canvas
     configurator are not changed.
@@ -3395,8 +3405,7 @@ def circular_labels(
             outer_arena_enabled=feature_width_override_requested,
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
             feature_layout=slots_feature_layout(resolved_slots),
-            outer_content_radius_px=outer_content_radius_px,
-            inner_reserve_px=inner_reserve_px,
+            label_radii=label_radii,
             feature_lane_direction=feature_lane_direction,
             record_transform=record_transform,
             definition_text=definition_text,
@@ -3537,8 +3546,7 @@ def circular_labels(
             )
             replanned_layout, slots, annotation_tracks = where_drawn.fit.layout, where_drawn.slots, where_drawn.tracks
             resolved_slots = replanned_layout.slots
-            outer_content_radius_px = float(replanned_layout.outer_content_radius_px)
-            inner_reserve_px = radial_label_inner_reserve_px(replanned_layout)
+            label_radii = circular_label_radii(replanned_layout)
             band = _feature_band_overrides(replanned_layout, float(geometry.radius), float(geometry.track_ratio))
             if band is not None:
                 resolved_feature_anchor_radius_px, feature_track_ratio_factor_override = band
@@ -3888,8 +3896,7 @@ def add_record_on_circular_canvas(
             geometry=canvas_config.geometry(),
             # The labels read the centre band only as their inner reserve (OV-2103).
             resolved_slots=radial_layout.slots,
-            outer_content_radius_px=float(radial_layout.outer_content_radius_px),
-            inner_reserve_px=radial_label_inner_reserve_px(radial_layout),
+            label_radii=circular_label_radii(radial_layout),
             layout_slots=tuple(layout_slots),
             feature_slot=feature_slot,
             feature_lane_direction=feature_lane_direction,

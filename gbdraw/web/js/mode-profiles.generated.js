@@ -330,7 +330,11 @@ export const MODE_PROFILE_DATA = deepFreeze({
       "tuckin",
       "middle",
       "spreadout"
-    ]
+    ],
+    "tickLabelLayoutByFeaturePlace": {
+      "after": "label_in_tick_out",
+      "before": "label_out_tick_in"
+    }
   },
   "comparisonDomains": {
     "alignmentLength": {

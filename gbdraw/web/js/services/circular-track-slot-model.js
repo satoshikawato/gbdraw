@@ -88,7 +88,6 @@ const TICK_LABEL_LAYOUTS = [
 export const DEFAULT_TICK_LABEL_LAYOUT = 'label_out_tick_in';
 /** The empty size fields of a Circular slot. */
 export const CIRCULAR_SLOT_SIZE_FIELDS = Object.freeze({ width: null, radius: null, inner_gap_px: null, outer_gap_px: null });
-const DEFAULT_INNER_TICK_LABEL_LAYOUT = 'label_in_tick_out';
 const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = new Set([
   'spacing',
   'strict',
@@ -101,6 +100,10 @@ const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = new Set([
 export const CIRCULAR_TRACK_PRESETS = MODE_PROFILE_DATA.circularTrackPresets.presets;
 /** @type {Readonly<Record<string, string>>} */
 const FEATURE_LANE_DIRECTION_BY_PRESET = MODE_PROFILE_DATA.circularTrackPresets.featureLaneDirection;
+// The label layout of a ticks row by its place relative to the first Features row: `before` it (outside the
+// features) and `after` it, as the preset's own ticks row (Python owns the rule, OV-3189).
+/** @type {Readonly<{ before: string, after: string }>} */
+const TICK_LABEL_LAYOUT_BY_FEATURE_PLACE = MODE_PROFILE_DATA.circularTrackPresets.tickLabelLayoutByFeaturePlace;
 
 /**
  * @param {unknown} value
@@ -250,12 +253,10 @@ export const tickLabelLayoutFromSides = (labelSide, tickSide, fallback = DEFAULT
   return fallback;
 };
 
-const defaultPresetTickLabelLayout = () => DEFAULT_INNER_TICK_LABEL_LAYOUT;
-
 /** @param {unknown} value */
 const isAutoOrientableTickLabelLayout = (value) => {
   const layout = normalizeTickLabelLayout(value);
-  return [DEFAULT_TICK_LABEL_LAYOUT, DEFAULT_INNER_TICK_LABEL_LAYOUT].includes(layout);
+  return [TICK_LABEL_LAYOUT_BY_FEATURE_PLACE.before, TICK_LABEL_LAYOUT_BY_FEATURE_PLACE.after].includes(layout);
 };
 
 /** @param {(CircularTrackSlot | null | undefined)[]} slots Edited in place. */
@@ -266,9 +267,7 @@ const syncDefaultTickLayoutsForFeatureRelation = (slots) => {
     if (!slot || slot.enabled === false || slot.renderer !== 'ticks') return;
     slot.params = cloneParams(slot.params);
     if (!isAutoOrientableTickLabelLayout(slot.params.tick_label_layout)) return;
-    slot.params.tick_label_layout = index > featureIndex
-      ? DEFAULT_INNER_TICK_LABEL_LAYOUT
-      : DEFAULT_TICK_LABEL_LAYOUT;
+    slot.params.tick_label_layout = TICK_LABEL_LAYOUT_BY_FEATURE_PLACE[index > featureIndex ? 'after' : 'before'];
   });
 };
 
@@ -698,7 +697,7 @@ const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset 
     const tickLayout = normalizeTickLabelLayout(params.tick_label_layout);
     return (
       side === 'inside' &&
-      [DEFAULT_TICK_LABEL_LAYOUT, defaultPresetTickLabelLayout()].includes(tickLayout) &&
+      isAutoOrientableTickLabelLayout(tickLayout) &&
       paramsMatchExactly(
         {
           ...params,
@@ -773,7 +772,7 @@ export const createDefaultCircularTrackSlots = ({
       id: 'ticks',
       renderer: 'ticks',
       params: {
-        tick_label_layout: defaultPresetTickLabelLayout()
+        tick_label_layout: TICK_LABEL_LAYOUT_BY_FEATURE_PLACE.after
       }
     }));
   }

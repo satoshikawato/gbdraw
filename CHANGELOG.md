@@ -296,15 +296,35 @@ into the `[Unreleased]` list below.
   facing outward keep the larger of the track gap and the margin, as before.
   Figures whose tick labels face no painted edge, such as GC content in the
   default deviation mode, are unchanged (OV-3116, OV-3149, OV-3150).
+- Fixed: a Circular custom track stack that puts the scale above the feature
+  track without naming a tick label layout (for example
+  `--circular_track_slot ticks:ticks --circular_track_slot features:features`)
+  drew the tick labels inside the ticks, on the feature track and far from
+  their ticks, while the Web app drew them outside. Such a scale now draws its
+  labels outside the ticks, next to them and away from the features, in the
+  CLI, the Python API, and the Web app, so a Session saved by the CLI draws
+  the same figure after Load and Generate. A scale below the feature track,
+  as in every default stack, and a scale that names its layout are unchanged
+  (OV-3189).
 - Fixed: in a Circular figure whose custom track stack puts the scale above
-  the feature track (for example `--circular_track_slot ticks:ticks
-  --circular_track_slot features:features`), the tick labels inside the ticks
+  the feature track with its labels inside the ticks (for example
+  `--circular_track_slot ticks:ticks@tick_label_layout=label_in_tick_out
+  --circular_track_slot features:features`), the tick labels
   stood on the outer edge of the feature track, so letters such as the "p" of
   "kbp" touched the CDS arrows. A feature track now counts as a track that
   paints the edge facing the labels: the labels keep their margin from it
   (3.1 px at the default 14 pt), and the feature track and the tracks inside it
   move inward by that much. Figures whose tick labels do not face a feature
   track, such as the default stacks, are unchanged (OV-3192).
+- Fixed: in a Circular figure whose scale stands outside the feature track with
+  its labels outside the ticks, the outer feature labels and the bends of their
+  leader lines stood on the scale's numbers, and the leader lines ran through
+  them (for example "8 kbp" of NC_002333.2 in the multi-record recipe). The
+  outer labels and the bends of their leaders now stay outside the numbers.
+  Where a leader line still runs through a number, or passes within a hair of
+  it, on either side of the feature track, the number is drawn in front of the
+  line on a white backing, as region labels are. Figures where no leader line
+  meets a number are unchanged (OV-3301).
 - Fixed: a custom track stack (**Use custom stack** in the Web app,
   `--circular_track_slot` or `--linear_track_slot` on the command line) with no
   Annotations row for a Region Annotation set left the set out of the figure
