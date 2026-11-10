@@ -10,7 +10,8 @@ globalThis.window = {
       get value() {
         return getter();
       }
-    })
+    }),
+    reactive: (value) => value
   }
 };
 
@@ -25,6 +26,7 @@ const featureSelectionUrl = pathToFileURL(join(tempDir, 'app', 'feature-selectio
 const serializationUrl = pathToFileURL(join(tempDir, 'services', 'svg-serialization.js'));
 
 const {
+  createFeatureSelection,
   getFeatureSelectionScope,
   normalizeFeatureSelectionId,
   stripFeatureSelectionClasses
@@ -164,5 +166,44 @@ const interactivePairwise = previewMatchButton('Pairwise match 1');
 stripTransientPreviewState(fakeSvg([interactivePairwise]), { stripCursor: false });
 assert.equal(interactivePairwise.getAttribute('role'), 'button');
 
+// A click with Ctrl, Cmd or Shift on a feature: the selection owner's rule. Ctrl or Cmd alone toggles the feature;
+// Shift selects the range from the anchor, replacing the selection, and adds it with Ctrl or Cmd. Four features of one
+// record drawn left to right on a Linear Result.
+{
+  const ref = (value) => ({ value });
+  const ids = ['f1', 'f2', 'f3', 'f4'];
+  const features = ids.map((svg_id) => ({ svg_id, fileIdx: 0, record_idx: 0, record_id: 'REC' }));
+  const elements = ids.map((id, index) => Object.assign(new FakeElement(), {
+    getBoundingClientRect: () => ({ left: index * 20, right: index * 20 + 10, top: 0, bottom: 10 })
+  }));
+  elements.forEach((element, index) => element.setAttribute('data-gbdraw-feature-id', ids[index]));
+  const svg = {
+    querySelectorAll: (selector) => (selector.startsWith('.')
+      ? elements.filter((element) => element.classTokens().includes(selector.slice(1)))
+      : elements)
+  };
+  const state = {
+    selectedFeatureIds: ref(new Set()), selectedFeatureAnchorId: ref(''), featureSelectionStatus: ref(''),
+    featureSelectionSuppressNextClick: ref(false), featureSelectionDrag: { active: false, committed: false },
+    extractedFeatures: ref(features), featuresBySvgId: ref(new Map(features.map((feature) => [feature.svg_id, feature]))),
+    svgContainer: ref({ querySelector: () => svg }), clickedFeature: ref(null),
+    clickedPairwiseMatch: ref(null), mode: ref('linear')
+  };
+  const selection = createFeatureSelection({ state });
+  const click = (id, modifiers) => {
+    selection.selectFeatureByClick(id, { ctrlKey: false, metaKey: false, shiftKey: false, ...modifiers });
+    return [[...state.selectedFeatureIds.value].sort(), state.selectedFeatureAnchorId.value];
+  };
+  assert.deepEqual(click('f1', { ctrlKey: true }), [['f1'], 'f1'], 'Ctrl toggles a feature on');
+  assert.deepEqual(click('f1', { ctrlKey: true }), [[], ''], 'Ctrl again toggles it off');
+  assert.deepEqual(click('f1', { ctrlKey: true }), [['f1'], 'f1']);
+  assert.deepEqual(click('f2', { metaKey: true }), [['f1', 'f2'], 'f2'], 'Cmd toggles a feature on');
+  assert.deepEqual(click('f4', { shiftKey: true }), [['f2', 'f3', 'f4'], 'f2'], 'Shift replaces with the range');
+  assert.deepEqual(click('f1', { shiftKey: true, ctrlKey: true }), [['f1', 'f2', 'f3', 'f4'], 'f2'],
+    'Shift+Ctrl adds the range from the anchor');
+  assert.deepEqual(click('f1', { shiftKey: true }), [['f1', 'f2'], 'f2']);
+  assert.deepEqual(click('f3', { shiftKey: true, metaKey: true }), [['f1', 'f2', 'f3'], 'f2'],
+    'Shift+Cmd adds the range from the anchor');
+}
 
 console.log('feature selection tests passed');
