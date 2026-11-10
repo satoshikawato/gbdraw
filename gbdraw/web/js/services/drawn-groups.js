@@ -26,9 +26,9 @@ export const DINUCLEOTIDE_SKEW_GROUPS = trackGroups(['dinucleotide_skew'], ['ske
 export const DEPTH_GROUPS = trackGroups(['depth'], ['depth']);
 
 // A region annotation's group names its annotation in both modes (its
-// attribute is generated from Python's name); in Linear, the group of a region
-// label drawn in front of the leader lines names that group's id
-// (linear/annotations.py).
+// attribute is generated from Python's name); the group of a region label
+// drawn in front of the leader lines names that group's id, in both modes
+// (`region_label_front` in render/drawers/label_backing.py).
 export const REGION_LABEL_FOR_ATTRIBUTE = 'data-gbdraw-region-label-for';
 export const ANNOTATION_SELECTOR = `[${ANNOTATION_ID_ATTRIBUTE}]`;
 export const REGION_LABEL_FRONT_SELECTOR = `[${REGION_LABEL_FOR_ATTRIBUTE}]`;

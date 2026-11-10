@@ -201,6 +201,7 @@ from ...render.drawers.circular.annotations import (
     circular_annotation_labels_across_centre,
     circular_annotation_track_content,
     circular_annotation_track_ink,
+    circular_region_label_front_content,
 )
 from ...render.group_content import GroupKey, GroupKind, place_content
 from ...layout.linear_multi_record import record_key_at
@@ -2707,6 +2708,54 @@ def _draw_circular_feature_density_slot(
     )
 
 
+def _draw_circular_annotation_slot(
+    canvas: Drawing,
+    resolved_slot: CircularResolvedSlot,
+    *,
+    gb_record: SeqRecord,
+    cfg: GbdrawConfig,
+    canvas_config: CircularCanvasConfigurator,
+    annotation_layout: ResolvedAnnotationTrack | None,
+    annotation_labels: Sequence[CircularAnnotationLabel],
+    annotation_record_index: int,
+    record_key: str,
+) -> Drawing:
+    """Draw one record's annotation slot, then its backed labels in front of the record's leader lines, which are
+    drawn before every slot (CIR-RGN-FRONT, OV-3156)."""
+
+    if annotation_layout is None:
+        return canvas
+    dom_group_id = track_slot_svg_id(resolved_slot.id, renderer="annotations")
+    font_family = str(cfg.objects.text.font_family)
+    content = render_stage(
+        "annotation_content",
+        circular_annotation_track_content,
+        annotation_layout,
+        record_id=str(gb_record.id),
+        record_index=annotation_record_index,
+        record_length=len(gb_record.seq),
+        ring=_annotation_ring(resolved_slot),
+        font_family=font_family,
+        params=annotation_track_params_from_mapping(resolved_slot.params),
+        labels=annotation_labels,
+        dom_group_id=dom_group_id,
+        semantic_slot_id=str(resolved_slot.id),
+    )
+    group = place_content(canvas, content, GroupKey(record_key, GroupKind.ANNOTATIONS, str(resolved_slot.id)))
+    canvas.add(center_group_on_canvas(group, canvas_config))
+    front = circular_region_label_front_content(
+        annotation_layout,
+        record_index=annotation_record_index,
+        font_family=font_family,
+        labels=annotation_labels,
+        dom_group_id=dom_group_id,
+    )
+    if front is not None:
+        front_group = place_content(canvas, front, GroupKey(record_key, GroupKind.LABEL_TEXT, str(resolved_slot.id)))
+        canvas.add(center_group_on_canvas(front_group, canvas_config))
+    return canvas
+
+
 def _draw_resolved_circular_slot(
     canvas: Drawing,
     resolved_slot: CircularResolvedSlot,
@@ -2748,27 +2797,17 @@ def _draw_resolved_circular_slot(
         return canvas
 
     if renderer == "annotations":
-        annotation_layout = (annotation_track_layouts or {}).get(resolved_slot.id)
-        if annotation_layout is None:
-            return canvas
-        params = annotation_track_params_from_mapping(resolved_slot.params)
-        content = render_stage(
-            "annotation_content",
-            circular_annotation_track_content,
-            annotation_layout,
-            record_id=str(gb_record.id),
-            record_index=annotation_record_index,
-            record_length=len(gb_record.seq),
-            ring=_annotation_ring(resolved_slot),
-            font_family=str(cfg.objects.text.font_family),
-            params=params,
-            labels=annotation_labels.get(resolved_slot.id, ()),
-            dom_group_id=track_slot_svg_id(resolved_slot.id, renderer=renderer),
-            semantic_slot_id=str(resolved_slot.id),
+        return _draw_circular_annotation_slot(
+            canvas,
+            resolved_slot,
+            gb_record=gb_record,
+            cfg=cfg,
+            canvas_config=canvas_config,
+            annotation_layout=(annotation_track_layouts or {}).get(resolved_slot.id),
+            annotation_labels=annotation_labels.get(resolved_slot.id, ()),
+            annotation_record_index=annotation_record_index,
+            record_key=record_key,
         )
-        group = place_content(canvas, content, GroupKey(record_key, GroupKind.ANNOTATIONS, str(resolved_slot.id)))
-        canvas.add(center_group_on_canvas(group, canvas_config))
-        return canvas
 
     if renderer == "features":
         base_width = circular_track_width_px(

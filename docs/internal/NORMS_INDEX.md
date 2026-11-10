@@ -259,13 +259,13 @@ are listed under "Cited ids without a record".
 | [PD-OI-094](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-094-linear-file-cards-fold-to-one-line) | Linear File cards fold to one line | ACCEPTED | web.linear.file-card-fold | 1 | — | 0 |
 | [PD-OI-095](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-095-one-naming-rule-for-legend-rows-that-share-a-name) | One naming rule for Legend rows that share a name | ACCEPTED | legend.row-name-multiplicity | 1 | — | 5 |
 | [PD-OI-096](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-096-legend-position-of-a-diagram-mode-at-load) | Legend position of a diagram mode at Load | ACCEPTED | web.legend.position-of-mode | 3 | scenario revision 2 | 1 |
-| [PD-OI-097](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-097-labels-that-do-not-fit) | Labels that do not fit | ACCEPTED | product.circular-outer-label-fit | 25 | scenario revision 24 | 10 |
+| [PD-OI-097](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-097-labels-that-do-not-fit) | Labels that do not fit | ACCEPTED | product.circular-outer-label-fit | 26 | scenario revision 25 | 10 |
 | [PD-OI-098](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-098-font-of-the-diagram-text) | Font of the diagram text | ACCEPTED | diagram-generation.diagram-font | 2 | scenario revision 1 | 1 |
 | [PD-OI-099](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-099-confirm-what-load-cannot-restore-before-it-loads) | Confirm what Load cannot restore before it loads | ACCEPTED | web.session.load-repair-confirmation | 1 | — | 0 |
 | [PD-OI-100](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-100-rich-feature-popup-outside-undo) | Rich Feature Popup outside Undo | ACCEPTED | web.history.rich-feature-popup | 1 | — | 0 |
 | [PD-OI-101](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-101-task-yield-after-the-later-generate-statuses) | Task yield after the later Generate statuses | ACCEPTED | web.generate.later-status-paint-yields | 1 | — | 1 |
 | [PD-OI-102](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-102-live-settings-redraw-the-result-when-a-value-is-committed) | Live settings redraw the Result when a value is committed | ACCEPTED | web.settings.live-application | 1 | — | 8 |
-| [PD-OI-103](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-103-settings-sections-that-apply-live) | Settings sections that apply live | ACCEPTED | web.settings.live-sections | 2 | scenario revision 1 | 13 |
+| [PD-OI-103](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-103-settings-sections-that-apply-live) | Settings sections that apply live | ACCEPTED | web.settings.live-sections | 2 | scenario revision 1 | 14 |
 | [PD-OI-104](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-104-when-the-gc-skew-and-depth-toggles-apply) | When the GC, skew and depth toggles apply | ACCEPTED | web.layout.track-toggle-application | 9 | scenario revision 8 | 17 |
 | [PD-OI-105](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-105-a-click-on-a-drawn-element-shows-its-settings-in-a-popup) | A click on a drawn element shows its settings in a popup | ACCEPTED | web.result.element-settings-entry | 1 | — | 0 |
 | [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language) | Web UI language | ACCEPTED | product.web-ui-language | 6 | scenario revision 5 | 2 |
@@ -657,6 +657,7 @@ are listed under "Cited ids without a record".
   - `tests/web/feature-catalog-reuse.playwright.spec.js`
   - `tests/web/helpers/live-work-allowlist.mjs`
   - `tests/web/history-comparison.playwright.spec.js`
+  - `tests/web/label-fit.playwright.spec.js`
   - `tests/web/linear-multi-record.playwright.spec.js`
   - `tests/web/live-setting-application-g2.playwright.spec.js`
   - `tests/web/live-setting-application-g2.test.mjs`
