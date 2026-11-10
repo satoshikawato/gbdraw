@@ -4563,9 +4563,12 @@ def _encode_comparisons(
     pairs = search.pairs if search is not None else None
     protein_mode = losatp_analysis_mode(search)
     settings = _encode_protein_settings(options)
+    # A request that sets its collinearity parameters (the CLI and the Web
+    # always do) keeps its pipeline settings, as one that changes any other.
     if (
         protein_mode != "none"
         or pairs is not None
+        or options.collinearity_params is not None
         or settings != _encode_protein_settings(_DEFAULT_LINEAR_OPTIONS)
     ):
         result.append(
@@ -4797,8 +4800,10 @@ def _decode_comparisons(
 
 def _encode_pipeline_value(key: str, name: str, value: object) -> Any:
     if name == "collinearity_params":
+        # Unset parameters are the dataclass defaults every reader runs with; one
+        # written form keeps the Web classifier able to project the pipeline.
         if value is None:
-            return None
+            value = LosslessCollinearityParameters()
         if not isinstance(value, LosslessCollinearityParameters):
             raise CanonicalRequestEncodingError(
                 "Unsupported collinearity parameter object."
