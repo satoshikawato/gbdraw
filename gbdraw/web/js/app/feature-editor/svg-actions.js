@@ -34,7 +34,7 @@ import { fillRecordOf, legendEntryKey } from '../../services/drawing/paint.js';
 import { PREVIEW_ITEM_SELECTOR, matchPopupOf, previewItemPopupOf, previewItemTarget } from '../../services/match-frame-popup.js';
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
-import { PREVIEW_MATCH_BUTTON_ATTRIBUTE } from '../../services/preview-affordances.js';
+import { PREVIEW_MATCH_BUTTON_ATTRIBUTE, setClassToken } from '../../services/preview-affordances.js';
 import { ANNOTATION_SELECTOR, REGION_LABEL_FOR_ATTRIBUTE, REGION_LABEL_FRONT_SELECTOR } from '../../services/drawn-groups.js';
 import { ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SET_ID_ATTRIBUTE } from '../../services/drawn-attributes.generated.js';
 import {
@@ -1608,17 +1608,17 @@ export const createFeatureSvgActions = ({
         }
         const next = new Set(selected);
         handlerState.selectedMatchElements.forEach((element) => {
-          if (!next.has(element)) element.classList.toggle('gbdraw-match-selected', false);
+          if (!next.has(element)) setClassToken(element, 'gbdraw-match-selected', false);
         });
         next.forEach((element) => {
-          if (!handlerState.selectedMatchElements.has(element)) element.classList.toggle('gbdraw-match-selected', true);
+          if (!handlerState.selectedMatchElements.has(element)) setClassToken(element, 'gbdraw-match-selected', true);
         });
         handlerState.selectedMatchElements = next;
       };
 
       const clearPendingMatch = () => {
         if (!handlerState.pendingMatchElement) return;
-        matchFragments(handlerState.pendingMatchElement).forEach((element) => element.classList.remove('gbdraw-match-pending'));
+        matchFragments(handlerState.pendingMatchElement).forEach((element) => setClassToken(element, 'gbdraw-match-pending', false));
         handlerState.pendingMatchElement = null;
       };
 
@@ -1627,7 +1627,7 @@ export const createFeatureSvgActions = ({
         if (handlerState.pendingMatchElement === matchElement) return;
         clearPendingMatch();
         handlerState.pendingMatchElement = matchElement;
-        matchFragments(matchElement).forEach((element) => element.classList.add('gbdraw-match-pending'));
+        matchFragments(matchElement).forEach((element) => setClassToken(element, 'gbdraw-match-pending', true));
       };
 
       /** @param {PointerPosition | null | undefined} eventLike */
