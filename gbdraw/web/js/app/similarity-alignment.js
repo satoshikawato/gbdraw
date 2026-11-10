@@ -5,6 +5,7 @@
  *   CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js'
  */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
 import { msg, t, tm, tn } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
@@ -1165,7 +1166,7 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
  * @property {(() => SVGSVGElement | null) | null} [getCurrentSvg]
  * @property {((anchor: Record<string, any>) => any) | null} [previewCandidate]
  * @property {(() => void) | null} [clearCandidatePreview]
- * @property {((error: Record<string, any>) => void) | null} [onError]
+ * @property {((error: UserFacingError) => void) | null} [onError]
  */
 
 /**
@@ -1288,7 +1289,7 @@ export const createSimilarityAlignmentActions = ({
    */
   const publishError = (value, notify = true) => {
     // The value is always truthy (`value || { code: 'UNKNOWN' }`), and only a falsy value normalizes to null.
-    const normalized = /** @type {Record<string, any>} */ (
+    const normalized = /** @type {UserFacingError} */ (
       normalizeUserFacingError(value || { code: 'UNKNOWN' }, { operation: 'align', stage: 'helper' })
     );
     error.value = normalized;
