@@ -203,7 +203,9 @@ export const WORK_ALLOWLIST = [
   { kind: 'History step (Undo of the rule row rename)', stages: [], compiles: 0, requests: [], run: (page) => history(page, 'undo') },
   { kind: 'History step (Redo of the rule row rename)', stages: [], compiles: 0, requests: [], run: (page) => history(page, 'redo') },
   {
-    kind: 'Legend row color, rule row', stages: ['fills', 'rules', 'legendFills', 'strokes'], compiles: 1, requests: ['evaluateRules'],
+    // The Undo and Redo above install the restored catalog's own features,
+    // which hold the rule matches already (OV-3285): a color edit asks for none.
+    kind: 'Legend row color, rule row', stages: ['fills', 'rules', 'legendFills', 'strokes'], compiles: 1, requests: [],
     run: (page) => legendRowColor(page, 'Fifth', '#264653')
   },
   {

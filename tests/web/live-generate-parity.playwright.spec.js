@@ -2121,6 +2121,23 @@ test('each edit kind runs only the compile stages and worker requests of its all
   })));
 });
 
+// OV-3285: the rule row color edit that follows the Undo and Redo of a rule
+// row rename reuses the rule matches on the restored catalog's own features
+// (its WORK_ALLOWLIST row asks for no evaluation); what it shows is what
+// Generate draws.
+test('a rule row color after the Undo and Redo of its rename shows what Generate draws', async ({ page }) => {
+  test.setTimeout(420_000);
+  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0001$', color: '#c83366', cap: 'CDS' });
+  await generate(page);
+  for (const { kind, run, before } of WORK_ALLOWLIST) {
+    if (before) await before(page);
+    await run(page);
+    if (kind === 'Legend row color, rule row') break;
+  }
+  await expectLiveEqualsGenerate(page, { label: 'Rule row color after the Undo and Redo of its rename' });
+});
+
 // OV-200 (PD-OI-066): with Label Rendering = Embedded Only, Python draws no
 // label that does not fit inside its feature. A Feature Edits TSV that turns
 // such a label On, with Auto Reflow off, shows what Generate draws: no label.
