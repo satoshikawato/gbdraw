@@ -289,7 +289,8 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   // A Session 49 Load names a drawing's value by its place in `drawings`.
   const at = id => full.document.drawings.findIndex(drawing => drawing.id === id);
   expect(full.document.drawings.map(drawing => drawing.id)).toEqual(['circular']);
-  const unbound = (slot, id = 'circular') => `Input files: 1 entry of drawings[${at(id)}].webFiles.bindings.${slot} could not be read and was dropped.`;
+  expect(savedDrawing(full.document, 'circular').webFiles.bindings.d_color).toBeNull();
+  const unbound =(slot, id = 'circular') => `Input files: 1 entry of drawings[${at(id)}].webFiles.bindings.${slot} could not be read and was dropped.`;
   const requestDropped = `Saved diagram: the settings of the saved diagram (drawings[${at('circular')}].renderRequest) could not be read.`
     + ' The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.';
   const cases = [
@@ -301,9 +302,10 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     ['retired-config', d => { d.config = structuredClone(savedDrawing(d, 'circular').config); }, 'Session loaded'],
     // A null request of a file that holds Results reads as a missing one (E-OD29).
     ['null-request-with-result', d => { savedDrawing(d, 'circular').renderRequest = null; }, [requestDropped]],
-    // Each drawing binds its own color table, so each saved drawing loses it;
-    // the unused Linear drawing is not saved (R16-8).
-    ['resource', d => { d.resources = {}; }, [requestDropped, unbound('d_color'), unbound('circularSources[0].gb')]]
+    // The Gallery drawing changed none of its palette's colors, so Save binds no
+    // Default colors table and only its GenBank input is lost (OV-3257); the
+    // unused Linear drawing is not saved (R16-8).
+    ['resource', d => { d.resources = {}; }, [requestDropped, unbound('circularSources[0].gb')]]
   ];
   for (const [name, mutate, expected] of cases) {
     const candidate = structuredClone(full.document);

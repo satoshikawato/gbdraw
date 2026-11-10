@@ -27,13 +27,13 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 // `tools/refresh_gallery_sessions.py` names its own interpreter in PYTHON.
 const SPLIT_DRAFT = `
 import json, sys
-from gbdraw.session_io import split_draft_into_modes
+from gbdraw.session_io import mode_split_palette_colors, split_draft_into_modes
 payload = json.load(sys.stdin)
 context = payload['context']
 json.dump(split_draft_into_modes(
     payload['draft'],
     committed_mode=context['committedMode'],
-    palette_colors=context['paletteColors'],
+    palette_colors=mode_split_palette_colors(payload['draft'].get('config')),
 ), sys.stdout)
 `;
 const WRITE_SESSION = `

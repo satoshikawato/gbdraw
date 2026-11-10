@@ -8,6 +8,7 @@ elements need no svgwrite validation.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import sys
@@ -522,3 +523,46 @@ def test_orientation_identity_gradient_names_the_collinear_color_key() -> None:
     with pytest.raises(ValidationError, match=re.escape("'#11223344' for feature type 'collinear_block_plus_min'")) as raised:
         group.resolve_match_fill_color(row, 0.5, "#000000")
     assert raised.value.diagnostic == {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR"}
+
+
+def test_a_cli_session_stores_only_the_default_colors_rows_the_user_gave(tmp_path: Path) -> None:
+    # OV-3302: the CLI saved its Default colors table resolved over the palette,
+    # so every palette row became a row of the Session's table and a later
+    # palette change never reached the Session. It stores the user's rows.
+    import base64
+
+    from tests.utils.session_drawing_view import session_view
+
+    _run_cli(
+        "circular", "--gbk", str(REPO / "tests" / "test_inputs" / "HmmtDNA.gbk"),
+        "-d", _tsv(tmp_path, "colors.tsv", "CDS\t#123456\n"),
+        "-o", str(tmp_path / "out"), "-f", "svg", "--session_output", str(tmp_path / "out.gbdraw-session.json"),
+    )
+    session = session_view(json.loads((tmp_path / "out.gbdraw-session.json").read_text(encoding="utf-8")))
+    colors = session["renderRequest"]["diagramOptions"]["colors"]
+    # A file: its rows apply over the palette; a canonical table would be complete.
+    assert colors["defaultColors"] is None
+    ref = colors["defaultColorsFile"]
+    text = base64.b64decode(session["resources"][ref["resourceId"]]["data"]).decode("utf-8")
+    assert [line.split("\t") for line in text.splitlines() if line.strip()] == [["CDS", "#123456"]]
+
+
+
+@pytest.mark.parametrize("session_path", GALLERY_SESSIONS, ids=lambda path: path.name)
+def test_a_gallery_session_stores_no_palette_row_in_its_default_colors(session_path: Path) -> None:
+    # OV-3257: the Gallery refresh stored each request's Default colors resolved
+    # over the palette, so the palette's rows read as user colors and a later
+    # palette change never reached the Session. A stored table holds only the
+    # rows that differ from its palette.
+    document = load_session_document(session_path).to_dict()
+    for drawing in document["drawings"]:
+        colors = drawing["renderRequest"]["diagramOptions"]["colors"]
+        ref = colors.get("defaultColorsFile") or colors.get("defaultColors")
+        if not ref:
+            continue
+        palette = color_io.packaged_color_palettes()[colors.get("defaultColorsPalette") or "default"]
+        text = base64.b64decode(document["resources"][ref["resourceId"]]["data"]).decode("utf-8")
+        rows = [line.split("\t")[:2] for line in text.splitlines() if "\t" in line]
+        rows = [(key.strip(), color.strip().lower()) for key, color in rows if key.strip() != "feature_type"]
+        assert rows, drawing["id"]
+        assert [key for key, color in rows if color == str(palette.get(key, "")).lower()] == []

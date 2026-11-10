@@ -2253,48 +2253,6 @@ def test_refresh_sets_every_stored_output_prefix() -> None:
     assert refresh_gallery_sessions_module._set_output_prefix(session, "card-id") == 0
 
 
-def test_refresh_resolves_web_default_colors_over_their_palette() -> None:
-    # The Web stores the Default colors rows that differ from the palette; the
-    # CLI replay stores them resolved over it, and `finalize` compares the two
-    # (OV-375). A resolved table is left as it is.
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:
-        import tomli as tomllib
-
-    rows = "CDS\t#d3d3d3\nskew_low\t#ad72e3\n"
-    resource = {
-        "kind": "colors-default-colors-file",
-        "size": len(rows),
-        "encoding": "base64",
-        "data": base64.b64encode(rows.encode()).decode(),
-    }
-    session = {
-        "renderRequest": {
-            "diagramOptions": {
-                "colors": {
-                    "defaultColors": None,
-                    "defaultColorsPalette": "orange",
-                    "defaultColorsFile": {"resourceId": "colors-default-colors-file", "representation": "file"},
-                }
-            }
-        },
-        "resources": {"colors-default-colors-file": resource},
-    }
-    palettes = tomllib.loads(Path("gbdraw/data/color_palettes.toml").read_text(encoding="utf-8"))
-
-    assert refresh_gallery_sessions_module._resolve_default_colors(session) == 1
-    text = base64.b64decode(resource["data"]).decode()
-    assert dict(line.split("\t") for line in text.splitlines()) == {
-        **palettes["orange"],
-        "CDS": "#d3d3d3",
-        "skew_low": "#ad72e3",
-    }
-    assert resource["size"] == len(text.encode())
-    assert refresh_gallery_sessions_module._resolve_default_colors(session) == 0
-    assert refresh_gallery_sessions_module._resolve_default_colors({"renderRequest": {"diagramOptions": {}}}) == 0
-
-
 def test_refresh_stores_one_record_sources_as_exactly_one() -> None:
     # The Web writes `all` for a Linear GenBank file without selector; the CLI
     # replay materializes a one-record file as `exactly_one`, and `finalize`

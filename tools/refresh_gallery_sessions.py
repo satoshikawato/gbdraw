@@ -991,44 +991,6 @@ def _set_output_prefix(session: dict[str, Any], prefix: str) -> int:
     return changed
 
 
-_DEFAULT_COLORS_HEADER = "feature_type\tcolor"
-
-
-def _default_color_rows(text: str) -> dict[str, str]:
-    lines = [line.split("\t", 1) for line in text.splitlines() if line.strip()]
-    return {key.strip(): color.strip() for key, color in lines if f"{key}\t{color}" != _DEFAULT_COLORS_HEADER}
-
-
-def _resolve_default_colors(session: dict[str, Any]) -> int:
-    """Store the request's Default colors resolved over its palette, as the CLI does.
-
-    The Web writes the rows that differ from the palette; the CLI replay writes
-    the palette with those rows applied, and ``finalize`` compares the two
-    (OV-375). Returns 1 when the table changed, else 0.
-    """
-
-    from gbdraw.io.colors import load_default_colors
-
-    colors = session["renderRequest"]["diagramOptions"].get("colors") or {}
-    ref = colors.get("defaultColorsFile") or colors.get("defaultColors")
-    if not ref:
-        return 0
-    resource = session["resources"][ref["resourceId"]]
-    text = base64.b64decode(resource["data"], validate=True).decode("utf-8")
-    with tempfile.NamedTemporaryFile("w", suffix=".tsv", encoding="utf-8") as handle:
-        handle.write(text)
-        handle.flush()
-        table = load_default_colors(handle.name, colors.get("defaultColorsPalette") or "default")
-    resolved = dict(zip(table["feature_type"].astype(str), table["color"].astype(str)))
-    if resolved == _default_color_rows(text):
-        return 0
-    header = f"{_DEFAULT_COLORS_HEADER}\n" if text.startswith(_DEFAULT_COLORS_HEADER) else ""
-    payload = (header + "".join(f"{key}\t{color}\n" for key, color in resolved.items())).encode("utf-8")
-    resource["data"] = base64.b64encode(payload).decode("ascii")
-    resource["size"] = len(payload)
-    return 1
-
-
 def _materialize_one_record_sources(session: dict[str, Any]) -> int:
     """Store the record of a one-record GenBank source as the CLI replay writes it.
 
@@ -1643,7 +1605,7 @@ def _refresh_one_session(
         # `finalize` keeps, so it is set on the input, before `prepare`.
         if _reopen_for_publication(session_path, session) + _set_output_prefix(
             session, gallery_id
-        ) + _resolve_default_colors(session):
+        ):
             publication_input_path = (
                 staging_root / f"canonicalized-{session_path.name}"
             )

@@ -67,16 +67,16 @@
       "sha256": "6cf33964c36537604b54be9c151e0fec943a5dc78a50c93fbc29ec03bfb15cdf"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
-      "bytes": 3019923,
-      "sha256": "309cad1291f62c48dfc4007464539a6d082d326a4e3cf9281060082376f79d79"
+      "bytes": 3019698,
+      "sha256": "2663f033183c7ed0e108cb5d580cd3ab6fa52069beed5abbaad5016f74f0f19e"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
-      "bytes": 277042,
-      "sha256": "a5ceef0e915ddae227322d94d032920bce721c39ca3f0212ac8940328ff45f88"
+      "bytes": 276108,
+      "sha256": "dadca7162e3241e668faf5c00c604e60d6ac8c13ca882b2b0a44c28fb89fdeb9"
     },
     "gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": {
-      "bytes": 261643,
-      "sha256": "85b3dcbd4e83f55d947a87de01b90f2c99994d337e87e5bdd17d175b85a50f07"
+      "bytes": 260503,
+      "sha256": "e32cf3b38a00ab444a116bbcd876abb96ca909451ef53618f3f38edad08120f1"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
       "bytes": 11841808,
@@ -99,12 +99,12 @@
       "sha256": "9bc42b00f69bb8ad3e6f1036cb0f7a3af54219924650a851f86ceea8a0839c00"
     },
     "gallery/sessions/lambda_basic_linear.gbdraw-session.json": {
-      "bytes": 852409,
-      "sha256": "f384174dcc3af693d4fe7fb085e73d6d61a6d417eb3763df2afa68ac601328f9"
+      "bytes": 851207,
+      "sha256": "29eb84d6c6dec7f2ebfb1b1b200672be447426bb4801c941d78b6795f129f3cd"
     },
     "gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz": {
-      "bytes": 6665668,
-      "sha256": "da5234e9b343b294cd9c33d1ee0b87e5fe293dcd7dc4e40cfe0c9e2c314e1e51"
+      "bytes": 6665456,
+      "sha256": "dc7d34da87fbe03fd2ff673ac1843ffa3f95a3deb7047c0283d35f1212cf2f1d"
     },
     "gallery/sessions/tobacco-chloroplast.gbdraw-session.json": {
       "bytes": 1580301,

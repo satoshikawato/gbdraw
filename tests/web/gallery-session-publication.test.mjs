@@ -58,6 +58,15 @@ const {
 });
 
 const sessionRoot = 'gbdraw/web/gallery/sessions';
+const paletteDefinitions = JSON.parse(await readFile('gbdraw/web/gallery/palettes/palettes.json', 'utf8')).palettes;
+// The rows of a published Session's Default colors table.
+const projectedRows = (session) => {
+  const colors = session.renderRequest.diagramOptions.colors;
+  const ref = colors.defaultColorsFile || colors.defaultColors;
+  if (!ref) return {};
+  const text = Buffer.from(session.resources[ref.resourceId].data, 'base64').toString('utf8');
+  return Object.fromEntries(text.split('\n').filter((line) => line.includes('\t')).map((line) => line.split('\t')));
+};
 const examples = JSON.parse(
   await readFile('gbdraw/web/gallery/examples.json', 'utf8')
 );
@@ -98,6 +107,16 @@ for (const name of sessionNames) {
   for (const field of ['config', 'features']) assert.equal(Object.hasOwn(result.session, field), false, name);
   const slice = result.session.modes[mode];
   assert.equal(typeof slice.ui.layoutPreferences, 'object', name);
+  // A slice's colors are complete, as Load reads them: the Default colors rows over the draft palette's colors, not
+  // over the request's rows alone (OV-3257: a Gallery table holds the user's rows only).
+  const sliceColors = slice.config.colors || {};
+  if (Object.keys(sliceColors).length) {
+    const palette = paletteDefinitions[slice.config.palette || 'default'];
+    assert.deepEqual(Object.keys(palette).filter((key) => !Object.hasOwn(sliceColors, key)), [], name);
+    for (const key of ['rRNA', 'tRNA', 'skew_high', 'pairwise_match_max']) {
+      if (!Object.hasOwn(projectedRows(result.session), key)) assert.equal(sliceColors[key].toLowerCase(), palette[key].toLowerCase(), `${name} ${key}`);
+    }
+  }
   // A Session written by the CLI carries no Web draft rows.
   assert.deepEqual(slice.features?.featureOverrides ?? {}, {}, name);
   for (const field of ['featureVisibilityOverrides', 'labelVisibilityOverrides', 'labelTextFeatureOverrides',
@@ -281,20 +300,24 @@ assert.equal((await compareCanonicalRenderRequests({
   actualResources: lambdaPrepared.session.resources
 })).equivalent, true);
 
-const lambdaWithDefaultColorFileAlias = structuredClone(lambdaPrepared.session.renderRequest);
-lambdaWithDefaultColorFileAlias.diagramOptions.colors.defaultColorsFile =
-  lambdaWithDefaultColorFileAlias.diagramOptions.colors.defaultColors;
-lambdaWithDefaultColorFileAlias.diagramOptions.colors.defaultColors = null;
-const lambdaWithDefaultColorFileAliasResources = structuredClone(lambdaPrepared.session.resources);
-lambdaWithDefaultColorFileAliasResources[
-  lambdaWithDefaultColorFileAlias.diagramOptions.colors.defaultColorsFile.resourceId
-].kind = 'default-colors-file';
+// The same Default colors rows as a file or as a canonical table are two requests: a canonical table is complete (a
+// missing type draws the fallback grey), a file applies over the palette (BGC holds a file table).
+const bgcPrepared = await prepareGallerySessionForPublication(await loadSession('BGC0000708-BGC0000713.gbdraw-session.json'));
+const bgcWithCanonicalDefaultColors = structuredClone(bgcPrepared.session.renderRequest);
+bgcWithCanonicalDefaultColors.diagramOptions.colors.defaultColors = {
+  ...bgcWithCanonicalDefaultColors.diagramOptions.colors.defaultColorsFile, representation: 'canonicalTsv'
+};
+bgcWithCanonicalDefaultColors.diagramOptions.colors.defaultColorsFile = null;
+const bgcWithCanonicalDefaultColorsResources = structuredClone(bgcPrepared.session.resources);
+bgcWithCanonicalDefaultColorsResources[
+  bgcWithCanonicalDefaultColors.diagramOptions.colors.defaultColors.resourceId
+].kind = 'canonical-tsv';
 assert.equal((await compareCanonicalRenderRequests({
-  expectedRequest: lambdaPrepared.session.renderRequest,
-  expectedResources: lambdaPrepared.session.resources,
-  actualRequest: lambdaWithDefaultColorFileAlias,
-  actualResources: lambdaWithDefaultColorFileAliasResources
-})).equivalent, true);
+  expectedRequest: bgcPrepared.session.renderRequest,
+  expectedResources: bgcPrepared.session.resources,
+  actualRequest: bgcWithCanonicalDefaultColors,
+  actualResources: bgcWithCanonicalDefaultColorsResources
+})).equivalent, false);
 
 // Overrides stored before the axis label style existed drew numbered ticks:
 // they equal a rebuilt request that states numbered, and differ from range.
