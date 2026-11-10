@@ -7,7 +7,6 @@ import inspect
 import json
 import math
 import shlex
-import shutil
 import struct
 import subprocess
 import sys
@@ -21,7 +20,6 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable
 
-from Bio import SeqIO
 from PIL import Image
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -31,12 +29,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from tools import test_data  # noqa: E402
 from tools.reproduce_examples_manifest import (  # noqa: E402
-    BlastPreparation,
     CliRecipe,
     CompositePanel,
     CompositeRecipe,
     FigureSpec,
-    FastaPreparation,
     SessionVariantRecipe,
     build_figure_specs,
     get_support_assets,
@@ -228,7 +224,6 @@ class Reproducer:
         self.missing_inputs: dict[str, dict[str, Any]] = {}
         self._render_state: dict[str, str] = {}
         self._inspect_state: dict[str, bool] = {}
-        self._prepared_cache: dict[str, Path] = {}
         self._active_render: set[str] = set()
         self._active_inspect: set[str] = set()
         self._tmpdir = tempfile.TemporaryDirectory(prefix="reproduce_examples_")
@@ -262,8 +257,6 @@ class Reproducer:
                 {
                     "filename": filename,
                     "figures": sorted(data["figures"]),
-                    "could_derive_if_base_inputs_present": data["could_derive_if_base_inputs_present"],
-                    "base_inputs": sorted(data["base_inputs"]),
                 }
             )
         return {
@@ -286,37 +279,14 @@ class Reproducer:
             self.aliases_used[(alias["requested"], alias["resolved_to"])].update(alias["figures"])
         for missing in payload["missing_inputs"]:
             for figure_id in missing["figures"]:
-                self.add_missing(
-                    missing["filename"],
-                    figure_id,
-                    could_derive=missing["could_derive_if_base_inputs_present"],
-                    base_inputs=tuple(missing["base_inputs"]),
-                )
+                self.add_missing(missing["filename"], figure_id)
 
     def write_report(self, report_path: Path) -> None:
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(self.report_payload(), indent=2, sort_keys=False) + "\n")
 
-    def add_missing(
-        self,
-        filename: str,
-        figure_id: str,
-        *,
-        could_derive: bool,
-        base_inputs: tuple[str, ...] = (),
-    ) -> None:
-        entry = self.missing_inputs.setdefault(
-            filename,
-            {
-                "figures": set(),
-                "could_derive_if_base_inputs_present": False,
-                "base_inputs": set(),
-            },
-        )
-        entry["figures"].add(figure_id)
-        if could_derive:
-            entry["could_derive_if_base_inputs_present"] = True
-        entry["base_inputs"].update(base_inputs)
+    def add_missing(self, filename: str, figure_id: str) -> None:
+        self.missing_inputs.setdefault(filename, {"figures": set()})["figures"].add(figure_id)
 
     def add_alias_use(self, requested: str, resolved: Path, figure_id: str) -> None:
         resolved_str = str(resolved.relative_to(self.project_root))
@@ -349,39 +319,7 @@ class Reproducer:
             target_path.write_text(content, encoding="utf-8")
         return target_path
 
-    def _base_inputs_for(
-        self,
-        filename: str,
-        preparation_map: dict[str, FastaPreparation | BlastPreparation],
-        seen: set[str] | None = None,
-    ) -> tuple[str, ...]:
-        if seen is None:
-            seen = set()
-        if filename in seen:
-            return ()
-        seen.add(filename)
-        preparation = preparation_map.get(filename)
-        if preparation is None:
-            return (filename,)
-        if isinstance(preparation, FastaPreparation):
-            return self._base_inputs_for(preparation.source_filename, preparation_map, seen)
-        query_inputs = self._base_inputs_for(preparation.query_filename, preparation_map, seen)
-        subject_inputs = self._base_inputs_for(preparation.subject_filename, preparation_map, seen)
-        return tuple(dict.fromkeys(query_inputs + subject_inputs))
-
-    def resolve_input(
-        self,
-        filename: str,
-        figure_id: str,
-        preparation_map: dict[str, FastaPreparation | BlastPreparation],
-        *,
-        dry_run: bool,
-        stack: tuple[str, ...] = (),
-    ) -> Path | None:
-        cached_path = self._prepared_cache.get(filename)
-        if cached_path and cached_path.exists():
-            return cached_path
-
+    def resolve_input(self, filename: str, figure_id: str, *, dry_run: bool) -> Path | None:
         asset_path = self._materialize_support_asset(filename, dry_run)
         if asset_path:
             return asset_path
@@ -394,120 +332,13 @@ class Reproducer:
         if alias:
             return alias
 
-        if filename in preparation_map:
-            return self.ensure_preparation(
-                preparation_map[filename],
-                figure_id,
-                preparation_map,
-                dry_run=dry_run,
-                stack=stack,
-            )
-
-        self.add_missing(filename, figure_id, could_derive=False)
+        self.add_missing(filename, figure_id)
         return None
-
-    def ensure_preparation(
-        self,
-        preparation: FastaPreparation | BlastPreparation,
-        figure_id: str,
-        preparation_map: dict[str, FastaPreparation | BlastPreparation],
-        *,
-        dry_run: bool,
-        stack: tuple[str, ...] = (),
-    ) -> Path | None:
-        if preparation.output_filename in stack:
-            raise RuntimeError(f"Cyclic preparation detected for {preparation.output_filename}")
-
-        target_path = self.support_dir / preparation.output_filename
-        if target_path.exists():
-            self._prepared_cache[preparation.output_filename] = target_path
-            return target_path
-
-        next_stack = stack + (preparation.output_filename,)
-        if isinstance(preparation, FastaPreparation):
-            source_path = self.resolve_input(
-                preparation.source_filename,
-                figure_id,
-                preparation_map,
-                dry_run=dry_run,
-                stack=next_stack,
-            )
-            if source_path is None:
-                self.add_missing(
-                    preparation.output_filename,
-                    figure_id,
-                    could_derive=True,
-                    base_inputs=(preparation.source_filename,),
-                )
-                return None
-            if dry_run:
-                return target_path
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            records = list(SeqIO.parse(str(source_path), "genbank"))
-            if not records:
-                raise RuntimeError(f"No GenBank records found in {source_path}")
-            with target_path.open("w", encoding="utf-8") as handle:
-                SeqIO.write(records, handle, "fasta")
-            self._prepared_cache[preparation.output_filename] = target_path
-            return target_path
-
-        query_path = self.resolve_input(
-            preparation.query_filename,
-            figure_id,
-            preparation_map,
-            dry_run=dry_run,
-            stack=next_stack,
-        )
-        subject_path = self.resolve_input(
-            preparation.subject_filename,
-            figure_id,
-            preparation_map,
-            dry_run=dry_run,
-            stack=next_stack,
-        )
-        if query_path is None or subject_path is None:
-            self.add_missing(
-                preparation.output_filename,
-                figure_id,
-                could_derive=True,
-                base_inputs=self._base_inputs_for(preparation.output_filename, preparation_map),
-            )
-            return None
-        if dry_run:
-            if shutil.which(preparation.tool) is None:
-                return None
-            return target_path
-        if shutil.which(preparation.tool) is None:
-            raise RuntimeError(f"Required BLAST tool not found on PATH: {preparation.tool}")
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        cmd = [
-            preparation.tool,
-            "-query",
-            str(query_path),
-            "-subject",
-            str(subject_path),
-            "-outfmt",
-            preparation.outfmt,
-            "-out",
-            str(target_path),
-        ]
-        result = subprocess.run(
-            cmd,
-            cwd=str(self.project_root),
-            capture_output=True,
-            text=True,
-            timeout=3600,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"{preparation.tool} failed for {preparation.output_filename}: {result.stderr.strip()}")
-        self._prepared_cache[preparation.output_filename] = target_path
-        return target_path
 
     def _resolve_cli_recipe(
         self,
         recipe: CliRecipe,
         figure_id: str,
-        preparation_map: dict[str, FastaPreparation | BlastPreparation],
         *,
         dry_run: bool,
     ) -> dict[str, Any] | None:
@@ -527,14 +358,14 @@ class Reproducer:
         )
         for key, filenames in categories:
             for filename in filenames:
-                path = self.resolve_input(filename, figure_id, preparation_map, dry_run=dry_run)
+                path = self.resolve_input(filename, figure_id, dry_run=dry_run)
                 if path is None:
                     return None
                 resolved[key].append(path)
         for file_arg in recipe.file_args:
             resolved_paths: list[Path] = []
             for filename in file_arg.filenames:
-                path = self.resolve_input(filename, figure_id, preparation_map, dry_run=dry_run)
+                path = self.resolve_input(filename, figure_id, dry_run=dry_run)
                 if path is None:
                     return None
                 resolved_paths.append(path)
@@ -572,12 +403,11 @@ class Reproducer:
         self,
         recipe: CliRecipe,
         figure_id: str,
-        preparation_map: dict[str, FastaPreparation | BlastPreparation],
         target_path: Path,
         *,
         dry_run: bool,
     ) -> bool:
-        resolved = self._resolve_cli_recipe(recipe, figure_id, preparation_map, dry_run=dry_run)
+        resolved = self._resolve_cli_recipe(recipe, figure_id, dry_run=dry_run)
         if resolved is None:
             return False
         if dry_run:
@@ -627,11 +457,7 @@ class Reproducer:
     ) -> bool:
         session_path = self.project_root / recipe.source_session_path
         if not session_path.is_file():
-            self.add_missing(
-                recipe.source_session_path,
-                figure_id,
-                could_derive=False,
-            )
+            self.add_missing(recipe.source_session_path, figure_id)
             return False
         if target_path.suffix.lower() != ".svg":
             raise RuntimeError("Session variant recipes require an SVG target")
@@ -779,13 +605,12 @@ class Reproducer:
             return self._load_image(self.output_path_for(panel.figure_id), target_size, sources)
         if panel.recipe is None:
             raise RuntimeError(f"Composite panel {panel_index} in {figure_id} has no source")
-        prep_map = {prep.output_filename: prep for prep in panel.preparations}
         if dry_run:
-            return None if not self._run_cli_recipe(panel.recipe, figure_id, prep_map, self.temp_root / "dry_run.svg", dry_run=True) else Image.new("RGBA", target_size, (255, 255, 255, 0))
+            return None if not self._run_cli_recipe(panel.recipe, figure_id, self.temp_root / "dry_run.svg", dry_run=True) else Image.new("RGBA", target_size, (255, 255, 255, 0))
         panel_dir = self.temp_root / figure_id
         panel_dir.mkdir(parents=True, exist_ok=True)
         panel_path = panel_dir / f"panel_{panel_index}.svg"
-        if not self._run_cli_recipe(panel.recipe, figure_id, prep_map, panel_path, dry_run=False):
+        if not self._run_cli_recipe(panel.recipe, figure_id, panel_path, dry_run=False):
             return None
         return self._load_image(panel_path, target_size, sources)
 
@@ -899,8 +724,7 @@ class Reproducer:
             if self.skip_existing and target_path.exists():
                 ready = True
             elif isinstance(spec.recipe, CliRecipe):
-                prep_map = {prep.output_filename: prep for prep in spec.preparations}
-                ready = self._run_cli_recipe(spec.recipe, figure_id, prep_map, target_path, dry_run=True)
+                ready = self._run_cli_recipe(spec.recipe, figure_id, target_path, dry_run=True)
             elif isinstance(spec.recipe, SessionVariantRecipe):
                 ready = self._run_session_variant_recipe(
                     spec.recipe,
@@ -932,8 +756,7 @@ class Reproducer:
                 self._render_state[figure_id] = "existing"
                 return True
             if isinstance(spec.recipe, CliRecipe):
-                prep_map = {prep.output_filename: prep for prep in spec.preparations}
-                success = self._run_cli_recipe(spec.recipe, figure_id, prep_map, target_path, dry_run=False)
+                success = self._run_cli_recipe(spec.recipe, figure_id, target_path, dry_run=False)
             elif isinstance(spec.recipe, SessionVariantRecipe):
                 success = self._run_session_variant_recipe(
                     spec.recipe,

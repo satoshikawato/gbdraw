@@ -358,11 +358,10 @@ def test_alias_resolution_and_support_asset_materialization(tmp_path: Path) -> N
         figures=_figure_specs(),
     )
     try:
-        aliased = reproducer.resolve_input("NC_000913.gbk", "ecoli_k12_plot", {}, dry_run=False)
+        aliased = reproducer.resolve_input("NC_000913.gbk", "ecoli_k12_plot", dry_run=False)
         support = reproducer.resolve_input(
             "feature_specific_colors.tsv",
             "MjeNMV_feature_specifc_colors_with_labels",
-            {},
             dry_run=False,
         )
         assert aliased is not None
@@ -371,12 +370,7 @@ def test_alias_resolution_and_support_asset_materialization(tmp_path: Path) -> N
         assert support.exists()
         assert "wsv.*-like protein" in support.read_text()
 
-        label_override = reproducer.resolve_input(
-            "label_override.tsv",
-            "tutorial_3_label_override",
-            {},
-            dry_run=False,
-        )
+        label_override = reproducer.resolve_input("label_override.tsv", "tutorial_3_label_override", dry_run=False)
         assert label_override is not None
         # Intermediate inputs never land in the output root, which may be the repository.
         assert label_override.parent == reproducer.support_dir
@@ -437,9 +431,7 @@ def test_missing_report_structure_for_missing_figure(tmp_path: Path) -> None:
         }
         assert payload["generated"] == []
         assert payload["skipped_missing_inputs"] == [figure_id]
-        missing_entry = next(entry for entry in payload["missing_inputs"] if entry["filename"] == missing_filename)
-        assert missing_entry["figures"] == [figure_id]
-        assert missing_entry["could_derive_if_base_inputs_present"] is False
+        assert payload["missing_inputs"] == [{"filename": missing_filename, "figures": [figure_id]}]
     finally:
         reproducer.close()
 

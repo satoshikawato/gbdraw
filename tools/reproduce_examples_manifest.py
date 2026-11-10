@@ -11,7 +11,6 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
 
 
 FigureGroup = Literal["docs", "palettes", "composites", "readme"]
-BlastTool = Literal["tblastx"]
 CompositeKind = Literal["grid", "contact_sheet", "social_preview"]
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -61,24 +60,6 @@ class SupportAsset:
 
 
 @dataclass(frozen=True)
-class FastaPreparation:
-    output_filename: str
-    source_filename: str
-
-
-@dataclass(frozen=True)
-class BlastPreparation:
-    output_filename: str
-    tool: BlastTool
-    query_filename: str
-    subject_filename: str
-    outfmt: str = "7"
-
-
-Preparation = FastaPreparation | BlastPreparation
-
-
-@dataclass(frozen=True)
 class FileArgument:
     flag: str
     filenames: tuple[str, ...]
@@ -106,7 +87,6 @@ class SessionVariantRecipe:
 class CompositePanel:
     figure_id: str | None = None
     recipe: CliRecipe | None = None
-    preparations: tuple[Preparation, ...] = ()
     box: tuple[int, int, int, int] | None = None
 
 
@@ -133,7 +113,6 @@ class FigureSpec:
     required_inputs: tuple[str, ...]
     recipe: Recipe
     support_assets: tuple[str, ...] = ()
-    preparations: tuple[Preparation, ...] = ()
     description: str = ""
 
 
@@ -250,24 +229,6 @@ def _file_arg(flag: str, *filenames: str) -> FileArgument:
     return FileArgument(flag=flag, filenames=tuple(filenames))
 
 
-def _fasta_prep(output_filename: str, source_filename: str) -> FastaPreparation:
-    return FastaPreparation(output_filename=output_filename, source_filename=source_filename)
-
-
-def _blast_prep(
-    output_filename: str,
-    tool: BlastTool,
-    query_filename: str,
-    subject_filename: str,
-) -> BlastPreparation:
-    return BlastPreparation(
-        output_filename=output_filename,
-        tool=tool,
-        query_filename=query_filename,
-        subject_filename=subject_filename,
-    )
-
-
 def _figure(
     figure_id: str,
     output_path: str,
@@ -275,7 +236,6 @@ def _figure(
     required_inputs: tuple[str, ...],
     recipe: Recipe,
     support_assets: tuple[str, ...] = (),
-    preparations: tuple[Preparation, ...] = (),
     description: str = "",
 ) -> FigureSpec:
     return FigureSpec(
@@ -285,7 +245,6 @@ def _figure(
         required_inputs=required_inputs,
         recipe=recipe,
         support_assets=support_assets,
-        preparations=preparations,
         description=description,
     )
 
@@ -518,27 +477,6 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
             "MejoMJNV.gb",
             "custom_color_table.tsv",
             "modified_default_colors.tsv",
-        ),
-        preparations=(
-            _fasta_prep("MjeNMV.fasta", "MjeNMV.gb"),
-            _fasta_prep("MelaMJNV.fasta", "MelaMJNV.gb"),
-            _fasta_prep("PemoMJNVA.fasta", "PemoMJNVA.gb"),
-            _fasta_prep("PeseMJNV.fasta", "PeseMJNV.gb"),
-            _fasta_prep("PemoMJNVB.fasta", "PemoMJNVB.gb"),
-            _fasta_prep("LvMJNV.fasta", "LvMJNV.gb"),
-            _fasta_prep("TrcuMJNV.fasta", "TrcuMJNV.gb"),
-            _fasta_prep("MellatMJNV.fasta", "MellatMJNV.gb"),
-            _fasta_prep("MeenMJNV.fasta", "MeenMJNV.gb"),
-            _fasta_prep("MejoMJNV.fasta", "MejoMJNV.gb"),
-            _blast_prep("MjeNMV.MelaMJNV.tblastx.out", "tblastx", "MjeNMV.fasta", "MelaMJNV.fasta"),
-            _blast_prep("MelaMJNV.PemoMJNVA.tblastx.out", "tblastx", "MelaMJNV.fasta", "PemoMJNVA.fasta"),
-            _blast_prep("PemoMJNVA.PeseMJNV.tblastx.out", "tblastx", "PemoMJNVA.fasta", "PeseMJNV.fasta"),
-            _blast_prep("PeseMJNV.PemoMJNVB.tblastx.out", "tblastx", "PeseMJNV.fasta", "PemoMJNVB.fasta"),
-            _blast_prep("PemoMJNVB.LvMJNV.tblastx.out", "tblastx", "PemoMJNVB.fasta", "LvMJNV.fasta"),
-            _blast_prep("LvMJNV.TrcuMJNV.tblastx.out", "tblastx", "LvMJNV.fasta", "TrcuMJNV.fasta"),
-            _blast_prep("TrcuMJNV.MellatMJNV.tblastx.out", "tblastx", "TrcuMJNV.fasta", "MellatMJNV.fasta"),
-            _blast_prep("MellatMJNV.MeenMJNV.tblastx.out", "tblastx", "MellatMJNV.fasta", "MeenMJNV.fasta"),
-            _blast_prep("MeenMJNV.MejoMJNV.tblastx.out", "tblastx", "MeenMJNV.fasta", "MejoMJNV.fasta"),
         ),
         recipe=CliRecipe(
             subcommand="linear",
@@ -1928,18 +1866,6 @@ def _palette_figures() -> dict[str, FigureSpec]:
         "AP027132.gb",
         "NZ_CP006932.gb",
     )
-    palette_preparations = (
-        _fasta_prep("AP027078.fasta", "AP027078.gb"),
-        _fasta_prep("AP027131.fasta", "AP027131.gb"),
-        _fasta_prep("AP027133.fasta", "AP027133.gb"),
-        _fasta_prep("AP027132.fasta", "AP027132.gb"),
-        _fasta_prep("NZ_CP006932.fasta", "NZ_CP006932.gb"),
-        _blast_prep("AP027078_AP027131.tblastx.out", "tblastx", "AP027078.fasta", "AP027131.fasta"),
-        _blast_prep("AP027131_AP027133.tblastx.out", "tblastx", "AP027131.fasta", "AP027133.fasta"),
-        _blast_prep("AP027133_AP027132.tblastx.out", "tblastx", "AP027133.fasta", "AP027132.fasta"),
-        _blast_prep("AP027132_NZ_CP006932.tblastx.out", "tblastx", "AP027132.fasta", "NZ_CP006932.fasta"),
-    )
-
     def circular_recipe(palette_name: str) -> CliRecipe:
         return CliRecipe(
             subcommand="circular",
@@ -1976,7 +1902,6 @@ def _palette_figures() -> dict[str, FigureSpec]:
             output_path=f"examples/hepatoplasmataceae_{palette_name}.svg",
             groups=("palettes",),
             required_inputs=palette_base_inputs,
-            preparations=palette_preparations,
             recipe=linear_recipe(palette_name),
             description=f"Linear palette example for {palette_name}.",
         )
@@ -1992,12 +1917,10 @@ def build_figure_specs() -> dict[str, FigureSpec]:
 
 
 __all__ = [
-    "BlastPreparation",
     "CliRecipe",
     "CompositePanel",
     "CompositeRecipe",
     "FigureSpec",
-    "FastaPreparation",
     "FileArgument",
     "MANUALLY_MANAGED_FIGURES",
     "PALETTES_FILE",
