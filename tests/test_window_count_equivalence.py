@@ -11,8 +11,17 @@ import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.analysis.skew import counted_bases, skew_df
+from gbdraw.analysis.skew import skew_df
 from gbdraw.mode_profiles import validate_dinucleotide
+
+
+def _counted(seq: object) -> bytes:
+    """The bases as the counts read them: A, C, G and T in either case, U as T, every other byte as N."""
+
+    table = bytearray(b"N" * 256)
+    for byte, counted in zip(b"ACGTUacgtu", b"ACGTTACGTT"):
+        table[byte] = counted
+    return bytes(seq).translate(bytes(table))
 
 
 def _old_prefix(seq_bytes: bytes, target_base: int) -> list[int]:
@@ -43,7 +52,7 @@ def _old_window_count(prefix, seq_length, *, start, window, total_count) -> int:
 def _old_skew_df(record, window, step, nt) -> pd.DataFrame:
     nt = validate_dinucleotide(nt)
     nt_1, nt_2 = nt.replace("U", "T")
-    seq_bytes = b"".join(counted_bases(record.seq))
+    seq_bytes = _counted(record.seq)
     seq_length = len(seq_bytes)
     content_legend, skew_legend = f"{nt} content", f"{nt} skew"
     cumulative_legend = f"Cumulative {nt} skew, normalized"

@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from collections import Counter
 from collections.abc import Iterator, Sequence, Set as AbstractSet
 from itertools import islice
-import string
+import codecs
 from typing import Callable, List, Dict, Literal
 
 from Bio import SeqIO
@@ -27,10 +27,12 @@ from .input_text import (
     gff3_stream,
     read_input_bytes,
 )
-from .record_sequences import read_fasta_records, read_flat_records, read_gff3_text
+from .record_sequences import first_base_beyond, read_fasta_records, read_flat_records, read_gff3_text, sequence_view
 from .record_select import parse_record_selector, reverse_records, select_record
 from ..exceptions import GbdrawError, InputFileError, ParseError, ValidationError
 
+from gbdraw.core.base_counts import NUCLEOTIDE, NUCLEOTIDE_CODES, PROTEIN, PROTEIN_CODES
+from gbdraw.core.sequence_spans import sequence_spans
 from gbdraw.core.record_metadata import _copy_source_feature_identity, _feature_source_index_map
 from gbdraw.features.source import SourceFeatureCatalog, capture_source_features
 
@@ -47,13 +49,11 @@ _FASTA_WITHOUT_ENTRIES = {"code": "NO_RECORDS", "reason": "FASTA_NO_ENTRIES"}
 _SEQUENCE_UNDEFINED = {"code": "INPUT_UNREADABLE", "reason": "SEQUENCE_UNDEFINED"}
 # A FASTA given without GFF3 is drawn as nucleotide records (D-17): each record has
 # a sequence, and the sequence holds only IUPAC nucleotide codes, in either case.
-_IUPAC_NUCLEOTIDE_CODES = frozenset("ACGTURYSWKMBDHVNacgturyswkmbdhvn")
 # A search query may also be a protein (PD-OI-117): NCBI reads every letter as an
-# amino acid code (B J O U X Z included) and "*" as a stop.
-_PROTEIN_CODES = frozenset(string.ascii_letters + "*")
+# amino acid code (B J O U X Z included) and "*" as a stop. The codes are the
+# counting rule's (``gbdraw.core.base_counts``).
+_CODES = {NUCLEOTIDE: frozenset(NUCLEOTIDE_CODES.decode()), PROTEIN: frozenset(PROTEIN_CODES.decode())}
 SequenceMolecule = Literal["nucleotide", "protein"]
-# Sequences are checked this many letters at a time, never copied whole.
-_VALIDATION_PIECE = 1 << 20
 _FLAT_FILE_KINDS = "GenBank, DDBJ or EMBL flat file"
 # What a file without a record is, by the reason of its NO_RECORDS diagnostic.
 _ABSENCE_MESSAGES = {
@@ -257,7 +257,7 @@ def require_nucleotide_records(records: list[SeqRecord], path: str) -> list[SeqR
     name = os.path.basename(path)
     for position, record in enumerate(records, start=1):
         _require_sequence(record, position, name)
-        letter = _first_letter_outside(record.seq, _IUPAC_NUCLEOTIDE_CODES)
+        letter = _first_letter_outside(record.seq, NUCLEOTIDE)
         if letter is not None:
             raise ValidationError(
                 f"FASTA record {record.id or f'#{position}'} in {name} holds {letter!r}, which is not a nucleotide code: "
@@ -277,13 +277,23 @@ def _require_sequence(record: SeqRecord, position: int, name: str) -> None:
         )
 
 
-def _first_letter_outside(sequence: Seq, codes: frozenset[str]) -> str | None:
-    """The first letter of ``sequence`` that is not in ``codes``, read a piece at a time, or ``None``."""
+def _first_letter_outside(sequence: Seq, alphabet: int) -> str | None:
+    """The first letter of ``sequence`` outside ``alphabet`` (``NUCLEOTIDE`` or ``PROTEIN``), or ``None``.
 
-    for start in range(0, len(sequence), _VALIDATION_PIECE):
-        piece = str(sequence[start:start + _VALIDATION_PIECE])
-        if set(piece) - codes:
-            return next(char for char in piece if char not in codes)
+    The owner of record sequences says where the first one can be from the counts of its parse pass
+    (:func:`first_base_beyond`), so a sequence that holds none is not read again; the letter is read from there,
+    a span at a time (a sequence holds UTF-8 text, so a letter of several bytes is one letter).
+    """
+
+    start = first_base_beyond(sequence, alphabet)
+    if start is None:
+        return None
+    codes = _CODES[alphabet]
+    decoder = codecs.getincrementaldecoder("utf-8")("surrogateescape")
+    for span in sequence_spans(sequence_view(sequence, start)):
+        text = decoder.decode(span)
+        if set(text) - codes:
+            return next(char for char in text if char not in codes)
     return None
 
 
@@ -304,9 +314,9 @@ def load_query_fasta(path: str) -> list[tuple[SeqRecord, SequenceMolecule]]:
     for position, record in enumerate(_read_fasta_file(path), start=1):
         _require_sequence(record, position, name)
         molecule: SequenceMolecule = "nucleotide"
-        if _first_letter_outside(record.seq, _IUPAC_NUCLEOTIDE_CODES) is not None:
+        if first_base_beyond(record.seq, NUCLEOTIDE) is not None:
             molecule = "protein"
-            letter = _first_letter_outside(record.seq, _PROTEIN_CODES)
+            letter = _first_letter_outside(record.seq, PROTEIN)
             if letter is not None:
                 raise ValidationError(
                     f"FASTA record {record.id or f'#{position}'} in {name} holds {letter!r}, which is neither a nucleotide "
