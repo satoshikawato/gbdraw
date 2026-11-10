@@ -1160,8 +1160,7 @@ export const createCircularTrackSlotEditor = ({
       // A stack no Session saved is built from the simple controls, with the feature density rows (OV-3174).
       resetSlotsToPreset(drawing, drawing.form.track_type);
     } else {
-      // The stack it turns on holds the managed comparison ring rows and the rows of the Region Annotation sets it
-      // does not name (D-35).
+      // The stack it turns on holds the managed comparison ring rows and the rows of the Region Annotation sets it does not name (D-35).
       syncConservationSlots(drawing);
       drawing.adv.circular_track_slots_axis_index = prependMissingAnnotationTrackSlots(rows, axisIndexForCurrentSlots(drawing, rows),
         drawing.annotationSets, 'circular', (added) => normalizeCircularTrackSlots(added, drawing.adv.nt, drawing.form.track_type), CIRCULAR_SLOT_SIZE_FIELDS);
