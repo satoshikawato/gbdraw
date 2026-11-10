@@ -618,11 +618,11 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         params: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
         innerGapPx: Object.freeze({
           kind: "union",
-          options: Object.freeze([Object.freeze({kind: "number"}), Object.freeze({kind: "null"})])
+          options: Object.freeze([Object.freeze({kind: "number", minimum: 0}), Object.freeze({kind: "null"})])
         }),
         outerGapPx: Object.freeze({
           kind: "union",
-          options: Object.freeze([Object.freeze({kind: "number"}), Object.freeze({kind: "null"})])
+          options: Object.freeze([Object.freeze({kind: "number", minimum: 0}), Object.freeze({kind: "null"})])
         })
       }),
       optional: Object.freeze([]),

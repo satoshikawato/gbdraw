@@ -1606,6 +1606,51 @@
    "type": "CanonicalAnnotationColor",
    "value": "#abc\u001c",
    "violations": []
+  },
+  {
+   "id": "circular-slot-gap-below-zero",
+   "type": "CanonicalCircularTrackSlot",
+   "value": {
+    "kind": "circularTrackSlot",
+    "id": "gc",
+    "renderer": "dinucleotide_content",
+    "enabled": true,
+    "side": null,
+    "radius": null,
+    "width": null,
+    "z": 0,
+    "params": {},
+    "innerGapPx": -1,
+    "outerGapPx": -0.5
+   },
+   "violations": [
+    {
+     "path": "value.innerGapPx",
+     "reason": "out-of-range"
+    },
+    {
+     "path": "value.outerGapPx",
+     "reason": "out-of-range"
+    }
+   ]
+  },
+  {
+   "id": "circular-slot-gap-of-zero",
+   "type": "CanonicalCircularTrackSlot",
+   "value": {
+    "kind": "circularTrackSlot",
+    "id": "gc",
+    "renderer": "dinucleotide_content",
+    "enabled": true,
+    "side": null,
+    "radius": null,
+    "width": null,
+    "z": 0,
+    "params": {},
+    "innerGapPx": 0,
+    "outerGapPx": 2.5
+   },
+   "violations": []
   }
  ]
 }

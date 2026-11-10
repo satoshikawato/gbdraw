@@ -362,6 +362,22 @@ when it was edited by hand. Vectors: `requestTypes` in `tests/fixtures/contract_
 U+FEFF as a `recordKey` and around an annotation color), run by `tests/test_contract_shape_vectors.py` and
 `tests/web/contract-shape.test.mjs`.
 
+## Unreleased: a Circular track gap below zero reads as Auto at Web Load
+
+No Session or request version changes, and no writer changes. A Circular track slot's `innerGapPx` and `outerGapPx`
+now have the bound `minimum: 0` in `describe_canonical_request()` (`gbdraw/session_request_codec.py`): the domain that
+`CircularRequestTrackOptions` already checks when Python reads a request (`parse_optional_pixel` in
+`gbdraw/tracks/circular.py`, zero allowed), and that the CLI's `--track_slot ...@inner_gap_px=-1` refuses.
+`tools/generate_web_contracts.py` carries it to `request-shape.generated.js` and
+`docs/REFERENCE/schemas/gbdraw-render-request.schema.json`. Before this change, the Web Load
+(`readStoredRenderRequest`) checked only that a gap was a number, and a gap below zero reached the request projection,
+which refused the whole Session with an unrecognized error (OV-3237). The Load now replaces such a gap by its default,
+`null` (Auto), with a `setting-replaced` row, as it does for a gap that is no number. Python, the CLI and
+`gbdraw render --session` still refuse such a request. No gbdraw writer writes a gap below zero; a file holds one
+only when it was edited by hand. Vectors: `circular-slot-gap-below-zero` and `circular-slot-gap-of-zero` in
+`requestTypes` of `tests/fixtures/contract_shape_vectors.json`, run by `tests/test_contract_shape_vectors.py` and
+`tests/web/contract-shape.test.mjs`; Load test: `tests/web/stored-request-read.test.mjs`.
+
 ## Unreleased: a `#+N` record selector reads as record N
 
 No Session or request version changes, and no writer changes. `RECORD_INDEX_SELECTOR_PATTERN`

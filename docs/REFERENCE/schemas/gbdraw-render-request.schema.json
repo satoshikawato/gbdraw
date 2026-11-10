@@ -1298,7 +1298,8 @@
         "innerGapPx": {
           "anyOf": [
             {
-              "type": "number"
+              "type": "number",
+              "minimum": 0
             },
             {
               "type": "null"
@@ -1309,7 +1310,8 @@
         "outerGapPx": {
           "anyOf": [
             {
-              "type": "number"
+              "type": "number",
+              "minimum": 0
             },
             {
               "type": "null"

@@ -6407,7 +6407,11 @@ def describe_canonical_request() -> dict[str, Any]:
     data(AnnotationSet, optional=frozenset({"keep_highlight_overlay"}))
     data(AnnotationOptions, files=frozenset({"table_file"}))
     scalar = data(ScalarSpec)
-    data(CircularTrackSlot, kind="circularTrackSlot")
+    # CircularRequestTrackOptions.__post_init__ reads each gap with parse_optional_pixel (gbdraw.tracks.circular):
+    # pixels, zero allowed.
+    data(CircularTrackSlot, kind="circularTrackSlot", replace={
+        name: bound(CircularTrackSlot, name, minimum=0) for name in ("inner_gap_px", "outer_gap_px")
+    })
     # A Linear slot's height and spacing are pixels (gbdraw.tracks.linear._validate_px_scalar).
     pixels = nullable(named("LinearScalarSpec", obj(
         {**types_[scalar["name"]]["fields"], "unit": literal("px")}

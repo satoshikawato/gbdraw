@@ -526,6 +526,48 @@ test('the schema 5 to 7 promotion leaves a record that is not an object to the r
   }
 });
 
+test('a Circular track gap below zero takes its default with a row, as a gap that is no number does (OV-3237)', async () => {
+  // Python's request reader refuses such a gap (CircularRequestTrackOptions reads it with parse_optional_pixel);
+  // the request description carries that domain, so the Web reader repairs it like any other unreadable gap.
+  const session = gallery('HmmtDNA_ATskew');
+  const at = 'renderRequest.diagramOptions.tracks.circularTrackSlots';
+  for (const [inner, outer] of [[-1, -0.5], ['10', true]]) {
+    const result = readRequest(session, (request) => {
+      Object.assign(request.diagramOptions.tracks.circularTrackSlots[1], { innerGapPx: inner, outerGapPx: outer });
+    });
+    assert.deepEqual(rows(result), [
+      { code: 'setting-replaced', path: `${at}[1].innerGapPx` }, { code: 'setting-replaced', path: `${at}[1].outerGapPx` }
+    ], String(inner));
+    assert.deepEqual(result.value.diagramOptions, session.renderRequest.diagramOptions, String(inner));
+  }
+  // Zero is a gap Python reads.
+  const zero = readRequest(session, (request) => { request.diagramOptions.tracks.circularTrackSlots[1].innerGapPx = 0; });
+  assert.deepEqual(rows(zero), []);
+  // At Load, in the shown drawing and in another one, the gap is listed, never an unrecognized failure.
+  const shown = clone(session);
+  shown.renderRequest.diagramOptions.tracks.circularTrackSlots[1].innerGapPx = -1;
+  const loaded = await load(shown);
+  assert.equal(loaded.result.status, 'ok', JSON.stringify(loaded.result.error));
+  assert.deepEqual(loaded.dialogs.flat(), [
+    `Settings: the value of drawings[0].${at}[1].innerGapPx cannot be used; its default is used.`
+  ]);
+  assert.equal(getCommittedCanonicalSession().renderRequest.diagramOptions.tracks.circularTrackSlots[1].innerGapPx, null);
+  const { drawingOrigin, ...view } = session;
+  const { drawingOrigin: _shownOrigin, ...shownView } = shown;
+  const other = sessionDocumentOfViews([
+    { ...drawingOrigin, view },
+    { id: 'second', name: 'Second', view: shownView }
+  ], drawingOrigin.id);
+  const dialogs = [];
+  const second = await importSession({
+    target: { files: [new File([JSON.stringify(other)], 'session.json', { type: 'application/json' })], value: 'selected' }
+  }, { transformLegacyResultSvg, confirmLoadRepairs: async (dialog) => { dialogs.push(dialog.items); return true; } });
+  assert.equal(second.status, 'ok', JSON.stringify(second.error));
+  assert.deepEqual(dialogs.flat(), [
+    `Settings: the value of drawings[1].${at}[1].innerGapPx cannot be used; its default is used.`
+  ]);
+});
+
 test('a CLI or older Session whose request only loses a part loads with its Results, as before the reader (F2, F3)', async () => {
   for (const name of ['cli-linear-tables.v41', 'cli-linear-tables.v42', 'se08-main-linear-cli.v42',
     'cli-linear-tables.v44', 'scale-interval-zero-circular-cli.v44', 'precomputed-ring-unlabelled-cli.v44']) {
