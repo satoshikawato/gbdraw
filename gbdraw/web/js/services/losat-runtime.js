@@ -78,7 +78,7 @@ export function requireLosatProgram(program) {
 
 /**
  * The failure of a LOSAT run that exited with an error, for every engine (the serial reactor, a WASI command, the
- * threaded worker) and so for every caller (pair comparisons, Sequence search). A pool worker posts what LOSAT
+ * threaded worker) and so for every caller (pair comparisons, Sequence search, Find in other files). A pool worker posts what LOSAT
  * reported (`reportedLosatFailure`) and the page raises the failure again here.
  * @param {string} reported LOSAT's error text: its stderr, or the reactor's error buffer; empty when it wrote none
  * @returns {LosatRunFailure}

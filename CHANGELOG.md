@@ -446,9 +446,9 @@ write-up of a release.
   (for example an option value it refuses) failed with "The operation failed
   without recognized diagnostic information". The error now says that the
   comparison search failed and shows LOSAT's own first error line, on the
-  serial and the threaded engine, for comparisons and Sequence search.
-  Sequence search words the failure for the search and asks to click Search
-  again. A serial run no longer runs every search a second time on the page
+  serial and the threaded engine, for comparisons, Sequence search and Find
+  in other files. The two searches word the failure for the search and ask to
+  click Search again. A serial run no longer runs every search a second time on the page
   after such a failure, and Auto no longer runs it again on the serial engine
   after the threaded engine reported it; Auto still falls back to serial when
   a thread of the threaded engine does not start (OV-3304, OV-3287, OV-3288,

@@ -126,7 +126,7 @@ test('a search whose LOSAT fails shows what LOSAT reported', async () => {
   assert.equal(panel.panel.searchError.code, 'LOSAT_RUNTIME');
   assert.match(panel.panel.searchError.summary, /LOSAT reported: invalid value '9' for '\u2011evalue <REAL>'$/);
   // OV-3288: the search names its own step, not Generate.
-  assert.match(panel.panel.searchError.summary, /^The sequence search could not run or returned unusable output\. Check the queries and the search settings, then click Search again\./);
+  assert.match(panel.panel.searchError.summary, /^The search could not run or returned unusable output\. Check the search settings, then click Search again\./);
   assert.doesNotMatch(panel.panel.searchError.summary, /Generate/);
 });
 

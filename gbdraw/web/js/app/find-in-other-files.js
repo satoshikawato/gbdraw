@@ -11,8 +11,8 @@ import { reactive } from '../utils/reactivity.js';
 import { resolveComparisonThresholds } from '../mode-profiles.js';
 import { formatRecordLength } from '../services/record-options.js';
 import {
-  fileNamesOf, locateLosatJobs, locateOutcomes, readDrawingReply, readFilesReply, readPlanReply, readReferenceReply,
-  readSearchPlanReply, referenceWindowOf, wholeNumber
+  LOCATE_OPERATION, fileNamesOf, locateLosatJobs, locateOutcomes, readDrawingReply, readFilesReply, readPlanReply,
+  readReferenceReply, readSearchPlanReply, referenceWindowOf, wholeNumber
 } from '../services/find-in-other-files.js';
 import { derivedDrawingNotes } from './region-drawing.js';
 import { proposalCountText, proposalView, windowChoices, windowDrafts, windowRefusalText } from './find-in-other-files/proposal.js';
@@ -485,7 +485,7 @@ export const createFindInOtherFiles = ({
     overlay.status(t('Reading the files of the drawing…'));
     const { jobs, sequences } = locateLosatJobs(readSearchPlanReply(
       await overlay.until(step(session.sent, { step: 'search', search: searchInput }))));
-    const results = await overlay.losat({ jobs, sequences, byFile: true });
+    const results = await overlay.losat({ jobs, sequences, byFile: { operation: LOCATE_OPERATION } });
     overlay.status(t('Finding the windows in each file…'));
     return readPlanReply(await overlay.until(step(session.sent, {
       step: 'plan', plan: { search: searchInput, outcomes: locateOutcomes(jobs, results), options }

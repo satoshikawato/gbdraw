@@ -40,7 +40,10 @@ const terminateWorkers = async (workers) => {
   await Promise.allSettled(pending);
 };
 
-// What a thread writes is LOSAT's output; a thread worker that fails is a failure of this host (`hostFailures`).
+// What a thread writes is LOSAT's output. A thread worker's own error event or `type: 'error'` post reaches
+// `hostFailures` only after `wasi.start` has returned and `exitFailure` has classified the run, so it decides nothing:
+// a thread that does not start or fails reaches the run synchronously through its start and slot state (the other
+// `hostFailures` entries) or through the fault channel.
 const attachThreadWorkerOutput = ({ worker, encoder, stdoutChunks, stderrChunks, hostFailures }) => {
   worker.addEventListener('message', (event) => {
     const data = event.data || {};

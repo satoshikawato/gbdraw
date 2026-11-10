@@ -6528,8 +6528,8 @@ export const createRunAnalysis = ({
         /** @type {LosatOverlayRun} */
         const run = {
           signal, status, until,
-          losat: async ({ jobs, sequences, byFile = false }) => {
-            if (byFile) return runLosatJobsByFile(jobs, (job) => execute([job], sequences, () => {}), run);
+          losat: async ({ jobs, sequences, byFile }) => {
+            if (byFile) return runLosatJobsByFile(jobs, (job) => execute([job], sequences, () => {}), run, byFile.operation);
             /** @param {number} completed */
             const progress = (completed) => status(tn(jobs.length, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed, total: jobs.length }));
             progress(0);

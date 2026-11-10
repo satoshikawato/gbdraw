@@ -1102,8 +1102,9 @@ export const prepareLosatRuntime = async ({
  * @property {(text: string) => void} status The overlay's status line.
  * @property {<T>(step: Promise<T>) => Promise<T>} until A step's reply, or Cancel's rejection when Cancel comes first:
  *   a reply that arrives after Cancel is discarded.
- * @property {(plan: { jobs: LosatJob[], sequences: Map<string, string>, byFile?: boolean }) => Promise<LosatJobOutcome[]>} losat
- *   The jobs, with their progress on the status line; `byFile` as `runLosatJobsByFile` runs them.
+ * @property {(plan: { jobs: LosatJob[], sequences: Map<string, string>, byFile?: { operation: string } }) => Promise<LosatJobOutcome[]>} losat
+ *   The jobs, with their progress on the status line; `byFile` as `runLosatJobsByFile` runs them, a failed File's
+ *   reason worded for the run's `operation`.
  */
 
 /**
@@ -1145,9 +1146,10 @@ export const runUntilCanceled = async (signal, write, task) => {
  * @param {readonly LosatJob[]} jobs
  * @param {(job: LosatJob) => Promise<LosatJobResult[]>} execute
  * @param {Pick<LosatOverlayRun, 'signal' | 'status'>} run
+ * @param {string} operation The run's operation, for the wording of a failed File's reason (`normalizeCaughtError`).
  * @returns {Promise<LosatJobOutcome[]>}
  */
-export const runLosatJobsByFile = async (jobs, execute, { signal, status }) => {
+export const runLosatJobsByFile = async (jobs, execute, { signal, status }, operation) => {
   /** @type {LosatJobOutcome[]} */
   const results = [];
   for (const job of jobs) {
@@ -1156,7 +1158,7 @@ export const runLosatJobsByFile = async (jobs, execute, { signal, status }) => {
       results.push(...await execute(job));
     } catch (error) {
       if (signal.aborted) throw error;
-      results.push({ ...job, text: '', error: errorText(normalizeCaughtError(error, { stage: 'losat' }).summaryParts) });
+      results.push({ ...job, text: '', error: errorText(normalizeCaughtError(error, { stage: 'losat', operation }).summaryParts) });
     }
   }
   return results;
