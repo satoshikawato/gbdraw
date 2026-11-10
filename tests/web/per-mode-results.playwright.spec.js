@@ -531,8 +531,9 @@ test('a Session with one Result opens on the drawing shown at Save; the other dr
   }
 });
 
-// §7.7 risk 2: the LOSAT caches and protein manifest stay one shared union, so
-// a Linear BLASTP Result saved while Circular is shown keeps its evidence.
+// §7.7 risk 2: the LOSAT caches stay shared and the protein identity manifest
+// is each drawing's (D-197), so a Linear BLASTP Result saved while Circular is
+// shown keeps its evidence: its searches, and its manifest in its own slot.
 test('a Linear BLASTP Result saved while Circular is shown keeps its comparison cache', async ({ page, browser }, info) => {
   test.setTimeout(360_000);
   const BGC = 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json';
@@ -551,19 +552,22 @@ test('a Linear BLASTP Result saved while Circular is shown keeps its comparison 
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBeGreaterThan(0);
   await settleLive(page);
   await generate(page);
-  expect(await cache(page)).toEqual(loadedCache);
+  // The Circular drawing shows its own (empty) manifest; the Linear one waits in its slot.
+  expect(await cache(page)).toEqual({ ...loadedCache, manifest: 0 });
 
   const saved = await save(page, info.outputPath('blastp.gbdraw-session.json.gz'));
   expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
   expect(savedDrawing(saved, 'linear').renderRequest.mode).toBe('linear');
   expect(savedDrawing(saved, 'linear').losatCache.entries).toHaveLength(loadedCache.entries);
+  expect(Object.keys(savedDrawing(saved, 'linear').proteinIdentityManifest.proteinSets)).toHaveLength(loadedCache.manifest);
 
   const fresh = await freshPage(browser);
   try {
     await load(fresh, info.outputPath('blastp.gbdraw-session.json.gz'));
     expect(await shown(fresh)).toMatchObject({ mode: 'circular', count: 1, mounted: true });
-    expect(await cache(fresh)).toEqual(loadedCache);
+    expect(await cache(fresh)).toEqual({ ...loadedCache, manifest: 0 });
     await showMode(fresh, 'linear');
+    expect(await cache(fresh)).toEqual(loadedCache);
     const restored = await shown(fresh);
     expect(restored).toMatchObject({ mode: 'linear', generatedDrawingId: 'linear', count: 1, mounted: true });
     expect(await drawing(fresh, restored.content)).toEqual(await drawing(page, linear.content));
