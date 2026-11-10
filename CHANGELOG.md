@@ -98,6 +98,11 @@ write-up of a release.
   from with those edits (OV-3034). The GC content, GC skew and Depth lines of a
   crop of a circular record hold their last value up to 12 o'clock, as those of
   a record that is not circular do.
+- Fixed: a feature added to a crop given in memory no longer stops the figure
+  with "duplicate source feature indexes" when the crop keeps other features
+  (OV-3141). A feature moved inside such a crop now has the ID of its new place
+  in the figure, as in the replay of its Session (OV-3142), and the replay
+  draws the crop's features in the figure's order (OV-3229).
 - Changed: the Auto GC content and GC skew window is now at most a tenth of the
   drawn length, and the Auto step at most a tenth of the Auto window, so figures
   shorter than 10 kb keep about a hundred samples: a 671 bp region uses a 67 bp
