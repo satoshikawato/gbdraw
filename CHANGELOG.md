@@ -240,6 +240,14 @@ write-up of a release.
   by the labels' height (lambda with 20 pt labels: 155 to 174 px tall with the
   features below the axis, 136 to 156 px with Middle). Other figures are
   unchanged (OV-3078, OV-3219).
+- Fixed: in Circular, the labels of such a region overlay could be drawn on the
+  CDS arrows (`layer=foreground`) or hidden under them (`layer=underlay`) when
+  the feature lanes reach outside the axis circle (`--track_type spreadout` or
+  `middle`, or feature lanes stacked outward), with no warning. The labels now
+  stand outside the feature lanes, as those of an overlay with `cover_anchor`
+  do. These figures grow by the labels' room (lambda with 20 pt labels: 901 to
+  919 px tall with Spreadout, 857 to 874 px with Middle). Other figures,
+  including the default Tuckin layout, are unchanged (OV-3220).
 - Fixed: a foreground annotation overlay written before another slot of the
   same `z` that it covers (with `to_slot`, or with its own `w` or `h`) was
   painted under that slot, so a GC content or skew plot hid the highlight. An

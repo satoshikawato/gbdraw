@@ -7,7 +7,7 @@ import math
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Collection, Literal, Mapping, Protocol, Sequence, TypedDict, TypeVar
 
-from ...annotations.models import AnnotationTrackParams
+from ...annotations.models import AnnotationTrackParams, overlay_labels_clear_anchor
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasGeometry
 from ...config.models import GbdrawConfig
@@ -70,11 +70,18 @@ SpanExtent = Literal["whole", "draw", "own"]
 
 class AnnotationLabelRoom(Protocol):
     """How far an annotation slot's labels reach beyond its band, gap included: for the band, the axis, the slot's
-    side and params, and whether the band is a span over other slots. ``drops_labels`` says whether the slot at a
-    band leaves out, for want of a letter, a label its lanes draw where they were packed (OV-2848)."""
+    side and params, whether the band is a span over other slots, and the lanes the labels keep off besides the axis
+    circle (``CircularResolvedSlot.label_clear_band_px``). ``drops_labels`` says whether the slot at a band leaves
+    out, for want of a letter, a label its lanes draw where they were packed (OV-2848)."""
 
     def __call__(
-        self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any], covers_slots: bool
+        self,
+        band: RadialBand,
+        axis: CircularAxisLayout,
+        side: str,
+        params: Mapping[str, Any],
+        covers_slots: bool,
+        clears: RadialBand | None = None,
     ) -> float: ...
 
     def drops_labels(self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any]) -> bool: ...
@@ -170,11 +177,15 @@ class PlacementWindow:
 class _SpanLabelRoom:
     """The labels' room of a span overlay past the slot that holds it (``_span_room_holder``), for a band of it."""
 
-    room: Callable[[RadialBand], float]
+    # For a band of the holder and the lanes the labels keep off (None: none).
+    room: Callable[[RadialBand, RadialBand | None], float]
     extent: SpanExtent
     # The overlay's own width (its intent's, never negative), the band its labels start from when it spans nothing
     # ("own"); the final overlay loop draws the same width.
     width_px: float
+    # The labels keep off the glyphs of the holder, the features slot the overlay is anchored to
+    # (``overlay_labels_clear_anchor``).
+    clears_anchor: bool = False
 
 
 @dataclass(frozen=True)
@@ -738,6 +749,7 @@ def _span_label_rooms_by_slot(
     """Each span overlay's label room, keyed by the slot that holds it (``_span_room_holder``)."""
 
     by_id = {intent.slot_id: intent for intent in intents}
+    feature_ids = {intent.slot_id for intent in intents if intent.renderer == "features"}
     span_rooms: dict[str, list[_SpanLabelRoom]] = {}
     for intent in intents:
         annotation = intent.slot.annotation
@@ -749,7 +761,12 @@ def _span_label_rooms_by_slot(
             continue
         extent = _span_extent(annotation)
         span_rooms.setdefault(holder.slot_id, []).append(
-            _SpanLabelRoom(_bound_span_label_room(room, axis, intent.slot, extent), extent, float(intent.width_px))
+            _SpanLabelRoom(
+                _bound_span_label_room(room, axis, intent.slot, extent),
+                extent,
+                float(intent.width_px),
+                overlay_labels_clear_anchor(intent.side, annotation, feature_ids) is not None,
+            )
         )
     return span_rooms
 
@@ -808,10 +825,16 @@ def _span_room_band(resolved: CircularResolvedSlot, extent: SpanExtent, width_px
 
 def _bound_span_label_room(
     room: AnnotationLabelRoom, axis: CircularAxisLayout, overlay: NormalizedCircularTrackSlot, extent: SpanExtent
-) -> Callable[[RadialBand], float]:
+) -> Callable[[RadialBand, RadialBand | None], float]:
     # An overlay that spans nothing places its labels from its own mark, as the drawer does (``spans_slots`` unset).
     covers_slots = extent != "own"
-    return lambda band: room(band, axis, overlay.side, overlay.params, covers_slots)
+    return lambda band, clears: room(band, axis, overlay.side, overlay.params, covers_slots, clears)
+
+
+def _anchor_glyph_band(anchor: CircularResolvedSlot) -> RadialBand | None:
+    """The band of every lane of a features slot an overlay is anchored to, which its labels keep off (OV-3220)."""
+
+    return anchor.packing_band_px or anchor.draw_band_px
 
 
 def _with_span_label_room(intent: _RadialSlotIntent, resolved: CircularResolvedSlot) -> CircularResolvedSlot:
@@ -829,7 +852,7 @@ def _with_span_label_room(intent: _RadialSlotIntent, resolved: CircularResolvedS
         band = _span_room_band(resolved, span.extent, span.width_px)
         if band is None:
             continue
-        room = span.room(band)
+        room = span.room(band, _anchor_glyph_band(resolved) if span.clears_anchor else None)
         if room > LAYOUT_EPSILON:
             reach = max(reach, float(band.outer_px) + room)
     if reserved is None or reach <= float(reserved.outer_px) + LAYOUT_EPSILON:
@@ -2586,6 +2609,14 @@ def _anchored_annotation_overlay(
         draw_band_px=draw_band,
         reserved_band_px=None,
         spans_slots=span_band is not None or (annotation.cover_anchor and anchor_band is not None),
+        label_clear_band_px=(
+            _anchor_glyph_band(anchor)
+            if overlay_labels_clear_anchor(
+                intent.side, annotation, {slot_id for slot_id, slot in by_id.items() if slot.renderer == "features"}
+            )
+            is not None
+            else None
+        ),
         span_keeps_label_room=holder_band is not None
         and float(holder_band.outer_px) >= float(draw_band.outer_px) - LAYOUT_EPSILON,
         strand_bands_px=strand_bands,
