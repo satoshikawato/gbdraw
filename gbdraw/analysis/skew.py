@@ -13,7 +13,8 @@ from Bio.Seq import MutableSeq, Seq
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.windows import SlidingWindows, sliding_windows
-from gbdraw.io.record_sequences import sequence_spans, sequence_view
+from gbdraw.core.sequence_spans import sequence_spans
+from gbdraw.io.record_sequences import sequence_view
 from gbdraw.mode_profiles import validate_dinucleotide
 
 
@@ -81,7 +82,7 @@ def _prefix_counts_at(
 
 
 def _counting_table() -> bytes:
-    """The ``bytes.translate`` table of :func:`counted_sequence`: A, C, G and T in either case read as themselves
+    """The ``bytes.translate`` table of :func:`counted_bases`: A, C, G and T in either case read as themselves
     in upper case, U as T, and every other byte as N."""
     table = bytearray(b"N" * 256)
     for byte, counted in zip(b"ACGTUacgtu", b"ACGTTACGTT"):
