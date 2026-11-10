@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields, replace
 from numbers import Real
-from typing import Any, Literal, cast
+from typing import Any, Literal, cast, get_args
 
 from gbdraw.analysis.origin_arcs import location_origin_arc
 from gbdraw.annotations.models import (
@@ -52,6 +52,7 @@ from gbdraw.auto_sizes import (
     DrawnDepthRow,
     DrawnExtent,
     SettingAdaptation,
+    SizeClass,
     adapt_explicit_settings,
 )
 from gbdraw.config.models import GbdrawConfig
@@ -426,7 +427,7 @@ def derive_from_source(
         for unit in region.units:
             record_sources[unit] = region.item.resolved_index
     adaptation = adapt_explicit_settings(
-        _explicit_values(options, source_extent.size_class(cfg)),
+        {size: _explicit_values(options, size) for size in get_args(SizeClass)},
         source=source_extent,
         target=target_extent,
         cfg=cfg,
@@ -656,10 +657,10 @@ def _setting_of(path: str) -> str:
     return head if leaf in {"short", "long"} else path
 
 
-def _explicit_values(options: _ModeDiagramOptions, size_class: str) -> dict[str, AutoValue]:
+def _explicit_values(options: _ModeDiagramOptions, size_class: SizeClass) -> dict[str, AutoValue]:
     """The source's hand-set numbers, keyed as ``auto_setting_values`` is.
 
-    A short/long pair counts once, with the value of the source's size class.
+    A short/long pair counts once, with the value a diagram of ``size_class`` draws.
     """
     explicit: dict[str, AutoValue] = {}
     overrides = options.config_overrides or {}

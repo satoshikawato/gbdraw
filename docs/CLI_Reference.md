@@ -396,8 +396,9 @@ options:
                         [color=<color>] [caption=<text>]. count: the features
                         in each window; coverage: the percentage of each
                         window the features cover. Window and step default to
-                        the GC content window. Repeat the option for more
-                        tracks.
+                        --window and --step, else to the automatic window and
+                        step of the longest record in the figure. Repeat the
+                        option for more tracks.
   --feature_density_table FEATURE_DENSITY_TABLE
                         Path to a TSV file of feature density tracks: a header
                         line naming the columns (id, type, qualifier, value,
@@ -1036,7 +1037,7 @@ A feature density track shows, in each window along a record, how many features 
 | `min_length`, `max_length` | optional | Bounds in bp on the bases a feature covers (the sum of its parts), inclusive. |
 | `metric` | optional | `count` (default): the features in the window, a feature of several parts counted once. `coverage`: the percentage of the window's bases inside the features. |
 | `style` | optional | `heatmap` (default) or `histogram`. |
-| `window`, `step` | optional | Window and step in bp; empty cells take the GC content window and step. |
+| `window`, `step` | optional | Window and step in bp. Empty cells take `--window` and `--step`, or, when those are not given, the automatic window and step of the longest record in the figure, so that the records of one figure share one window. |
 | `color` | optional | SVG color name or `#RRGGBB`: the heatmap's top color or the histogram's fill (default: the depth fill color). |
 | `caption` | optional | The Legend row's text; by default it states the query and the window, for example `gene per 20 kbp`. |
 
@@ -1575,8 +1576,9 @@ options:
                         [color=<color>] [caption=<text>]. count: the features
                         in each window; coverage: the percentage of each
                         window the features cover. Window and step default to
-                        the GC content window. Repeat the option for more
-                        tracks.
+                        --window and --step, else to the automatic window and
+                        step of the longest record in the figure. Repeat the
+                        option for more tracks.
   --feature_density_table FEATURE_DENSITY_TABLE
                         Path to a TSV file of feature density tracks: a header
                         line naming the columns (id, type, qualifier, value,

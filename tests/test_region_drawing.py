@@ -80,8 +80,9 @@ def test_auto_value_vectors(cfg, case: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize("case", VECTORS["adaptations"], ids=lambda case: case["name"])
 def test_size_rule_vectors(cfg, case: dict[str, Any]) -> None:
+    # A vector's hand-set values hold no short/long pair with different values: each size class draws them.
     adaptation = adapt_explicit_settings(
-        case["explicit"], source=_extent(case["source"]), target=_extent(case["target"]), cfg=cfg
+        dict.fromkeys(("short", "long"), case["explicit"]), source=_extent(case["source"]), target=_extent(case["target"]), cfg=cfg
     )
     assert dict(adaptation.kept) == case["expected"]["kept"]
     reset = [
@@ -548,24 +549,67 @@ def test_a_region_of_a_circular_batch_compares_each_diagrams_own_size_class(tmp_
     ]
 
 
+@pytest.mark.parametrize("kind", ["batch", "canvas"])
+def test_a_size_reset_names_the_value_the_compared_diagram_drew(tmp_path: Path, kind: str) -> None:
+    # OV-3254: the 5 kb diagram of a batch draws the short label font (10), the 300 kb one the long (6); a canvas of
+    # both draws the long one. A Linear drawing of the 5 kb record returns the font to Auto and names the value the
+    # diagram it comes from drew, here and in the Web's Returned-to-Auto list; with sizes not adapted, it is kept.
+    from gbdraw.api.requests import CircularBatchRequest, RenderOutputRequest
+
+    # One input and one output per record, as the Web holds a batch.
+    path = _circular_records(tmp_path, 300_000, 5_000)[0].source.path
+    records = [
+        RecordInput(GenBankInputSource(path), selector=RecordSelector(f"#{index + 1}", None, index), record_key=key)
+        for index, key in enumerate(("big", "small"))
+    ]
+    options = CircularDiagramOptions(config_overrides={"labels.font_size.short": 10, "labels.font_size.long": 6})
+    source: DiagramRequest = (
+        CircularBatchRequest(records=records, options=options, outputs=(RenderOutputRequest("o1"), RenderOutputRequest("o2")))
+        if kind == "batch"
+        else CircularDiagramRequest(records=records, options=options)
+    )
+    drew = 10 if kind == "batch" else 6
+    small = [RegionSelection("small", 1, 5_000)]
+    region = derive_region_request(source, small, mode="linear")
+    assert [(item.setting, item.explicit) for item in region.adaptation.reset] == [("labels.font_size", drew)]
+    kept = derive_region_request(source, small, mode="linear", adapt_sizes=False).adaptation
+    assert (kept.reset, kept.kept["labels.font_size"]) == ((), drew)
+    # The Web draws part of a Circular record in Linear.
+    reply = _web_region(source, [{"recordKey": "small", "start": 1, "end": 4_000}], tmp_path)[2]
+    assert reply["mode"] == "linear"
+    assert [(item["setting"], item["explicit"]) for item in reply["returnedToAuto"]] == [("labels.font_size", drew)]
+    # From both diagrams of the batch, which drew different values: the first diagram's, in the source's order.
+    both = derive_region_request(source, [RegionSelection("big", 1, 5_000), *small], mode="linear")
+    assert [(item.setting, item.explicit) for item in both.adaptation.reset] == [("labels.font_size", 6)]
+
+
 def test_each_diagram_of_a_circular_batch_draws_its_density_track_at_its_own_window(cfg, tmp_path: Path) -> None:
-    # The renderer's side of the batch comparison above: the 50 kb diagram samples per 1 kb, the 5 kb one per 500 bp
-    # (the window record_auto_values gives each record of a batch); a canvas of both samples per 1 kb.
+    # The renderer's side of the batch comparison of the density window (the test below): the 50 kb diagram samples
+    # per 1 kb, the 5 kb one per 500 bp (the window record_auto_values gives each record of a batch); a canvas of both
+    # samples per 1 kb.
     import re
 
     from gbdraw.api import render_request
-    from gbdraw.api.requests import CircularBatchOutputPolicy, CircularBatchRequest
+    from gbdraw.api.requests import CircularBatchOutputPolicy, CircularBatchRequest, RenderOutputRequest
 
+    records = _circular_records(tmp_path, 50_000, 5_000)
+    options = CircularDiagramOptions(feature_density_tracks=_gene_density())
     batch = CircularBatchRequest(
-        records=_circular_records(tmp_path, 50_000, 5_000),
-        options=CircularDiagramOptions(feature_density_tracks=_gene_density()),
-        output_policy=CircularBatchOutputPolicy(output_prefix=str(tmp_path / "batch")),
+        records=records, options=options, output_policy=CircularBatchOutputPolicy(output_prefix=str(tmp_path / "batch"))
     )
-    result = render_request(batch)
-    windows = [set(re.findall(r"gene per ([0-9.]+ k?bp)", Path(path).read_text())) for path in result.output_paths]
+    canvas = CircularDiagramRequest(
+        records=records,
+        options=options,
+        output=RenderOutputRequest("canvas", output_directory=str(tmp_path), formats=("svg",)),
+    )
+    windows = [
+        set(re.findall(r"gene per ([0-9.]+ k?bp)", Path(path).read_text()))
+        for request in (batch, canvas)
+        for path in render_request(request).output_paths
+    ]
     extent = DrawnExtent("circular", (50_000, 5_000), density_window_settings=("window",), separate_records=True)
     assert [values["feature_density.window"] for values in record_auto_values(extent, cfg)] == [1_000, 500]
-    assert windows == [{"1 kbp"}, {"500 bp"}]
+    assert windows == [{"1 kbp"}, {"500 bp"}, {"1 kbp"}]
 
 
 def test_a_region_of_a_circular_batch_compares_each_diagrams_own_density_window(tmp_path: Path) -> None:

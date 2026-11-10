@@ -477,12 +477,13 @@ def test_a_new_drawing_reads_its_depth_row_at_the_depth_width_it_keeps(cfg: Gbdr
     percent = apply_config_overrides(None, {"objects.gc_content.mode": "percent"})
     rows = (DrawnDepthRow(DepthConfigurator(10, 10, CircularRenderProfile(percent)), 0, depth_width=True),)
     explicit = {"circularSlot.depth.width": 20.0, "objects.gc_content.tick_font_size": 7}
+    by_class = dict.fromkeys(("short", "long"), explicit)
     source = DrawnExtent("circular", (2_000_000,), depth_rows=rows)
     crop = adapt_explicit_settings(
-        explicit, source=source, target=DrawnExtent("circular", (3_000,), depth_rows=rows), cfg=percent
+        by_class, source=source, target=DrawnExtent("circular", (3_000,), depth_rows=rows), cfg=percent
     )
     assert crop.kept == explicit and crop.reset == ()
-    linear = adapt_explicit_settings(explicit, source=source, target=DrawnExtent("linear", (3_000,)), cfg=percent)
+    linear = adapt_explicit_settings(by_class, source=source, target=DrawnExtent("linear", (3_000,)), cfg=percent)
     assert {item.setting: (item.source_auto, item.target_auto) for item in linear.reset} == {
         "circularSlot.depth.width": (auto_setting_values(source, percent)["circularSlot.depth.width"], None),
         "objects.gc_content.tick_font_size": (5.0, 8.0),

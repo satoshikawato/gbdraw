@@ -71,7 +71,8 @@ _INVALID_TRACK = {"code": "INPUT_INVALID"}
 @dataclass(frozen=True)
 class FeatureDensityTrack:
     """One feature density track: which features (``query``), what per window (``metric``), how it is drawn
-    (``style``), and its window and step in bases (``None``: the GC content window of the record)."""
+    (``style``), and its window and step in bases (``None``: the drawing's window and step, else the Auto window
+    and step of the longest record in the diagram, which its records share; ``feature_density_windows``)."""
 
     id: str
     query: FeatureQuery

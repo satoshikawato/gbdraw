@@ -38,11 +38,18 @@ write-up of a release.
 - Fixed: a region of a Circular batch (each record a diagram of its own) now
   keeps a hand-set window, step or size wherever that record's own diagram
   has the same Auto value; before, the batch was compared as one drawing at
-  its longest record, so the window returned to Auto beside a density track
-  and a hand-set label font returned to Auto for the whole 5 kb record of a
-  300 kb + 5 kb batch (OV-3253).
-- Changed: regions of both records drawn in one Linear drawing (20 kb and
-  5 kb) now return a hand-set window to Auto, since the 5 kb record drew with
+  its longest record, so a hand-set window, step or scale interval returned
+  to Auto for a region of the 5 kb record of a 50 kb + 5 kb batch, and a
+  hand-set label font for the whole 5 kb record of a 300 kb + 5 kb batch
+  (OV-3253).
+- Fixed: when a size set by hand for short and long records returns to Auto
+  in a new drawing from a region of a Circular batch, the list of sizes that
+  return to Auto now shows the value the record's own diagram drew: the short
+  value for the 5 kb record of a 300 kb + 5 kb batch, not the long one
+  (OV-3254).
+- Changed: regions of both records of a Circular drawing (20 kb of a 50 kb
+  record and a whole 5 kb record) drawn together in one Linear drawing now
+  return a hand-set window to Auto, since the 5 kb record drew with
   500 bp and the Linear drawing uses 1,000 bp; before, the window was kept. In
   the Python API, a `SettingReset` names `source_auto=None` when the source
   records or batch diagrams it compares take different Auto values. The Web's

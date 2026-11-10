@@ -597,7 +597,7 @@ class SettingAdaptation:
 
 
 def adapt_explicit_settings(
-    explicit: Mapping[str, AutoValue],
+    explicit: Mapping[SizeClass, Mapping[str, AutoValue]],
     *,
     source: DrawnExtent,
     target: DrawnExtent,
@@ -606,7 +606,9 @@ def adapt_explicit_settings(
 ) -> SettingAdaptation:
     """Keep a hand-set size only where its Auto value is the same in ``target``.
 
-    ``explicit`` is keyed as ``auto_setting_values`` is. A setting whose Auto
+    ``explicit`` holds the hand-set values a diagram of each size class draws
+    (a short/long pair gives that class's value), keyed as
+    ``auto_setting_values`` is; each holds the same settings. A setting whose Auto
     value changes with the size class, a tier or the mode returns to Auto and
     is listed in ``reset``; the other sizes are listed in ``kept``. A value
     that neither drawing lists is not a size and is in neither. The tick fonts
@@ -621,7 +623,10 @@ def adapt_explicit_settings(
     with every record of ``source``. It is kept only where every record keeps
     its Auto value. A batch source (``separate_records``) is a diagram per
     record, each at its own size class: the other sizes are compared with the
-    diagram of each record the target's records come from.
+    diagram of each record the target's records come from. ``kept`` and
+    ``reset`` name the value those source diagrams drew, at their own size
+    class (``DrawnExtent.size_class``); where they drew different values, that
+    of the first of them in the source's order.
     """
     if record_sources is None:
         record_sources = (None,) * len(target.record_lengths)
@@ -644,6 +649,10 @@ def adapt_explicit_settings(
             for index, length in enumerate(source.record_lengths)
             if None in record_sources or index in used
         )
+
+    # The hand-set values each source diagram compared drew, at its own size class; the target draws its own
+    # class's. The values named are the first diagram's: those of every diagram where they agree.
+    source_explicit = tuple(explicit[diagram.size_class(cfg)] for diagram in source_diagrams)
 
     def record_keys(setting: str) -> tuple[str, ...]:
         """The per-record Auto values a setting sets: its own and, for the window and step, a density track's."""
@@ -690,13 +699,14 @@ def adapt_explicit_settings(
         auto_setting_values(
             diagram,
             cfg,
-            track_thickness_px=thickness(source.mode, explicit),
-            depth_tick_font_size=explicit.get(depth_font),
+            track_thickness_px=thickness(source.mode, values),
+            depth_tick_font_size=values.get(depth_font),
         )
-        for diagram in source_diagrams
+        for diagram, values in zip(source_diagrams, source_explicit, strict=True)
     )
     target_auto = auto_setting_values(target, cfg)
-    unchanged = {setting: value for setting, value in explicit.items() if same_auto(setting, target_auto)}
+    target_explicit = explicit[target.size_class(cfg)]
+    unchanged = {setting: value for setting, value in target_explicit.items() if same_auto(setting, target_auto)}
     # The thickness settings never depend on a thickness, so this pass only
     # moves the tick fonts to the thickness and the Depth font the target keeps.
     target_auto = auto_setting_values(
@@ -707,7 +717,7 @@ def adapt_explicit_settings(
     )
     kept: dict[str, AutoValue] = {}
     reset: list[SettingReset] = []
-    for setting, value in explicit.items():
+    for setting, value in source_explicit[0].items():
         listed = setting in target_auto or any(setting in values for values in source_autos)
         if not listed and setting not in _RECORD_SETTINGS:
             continue
