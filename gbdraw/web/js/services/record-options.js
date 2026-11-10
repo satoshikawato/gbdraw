@@ -436,29 +436,37 @@ const circularCropRegion = (single, form, record) => {
 };
 
 /**
- * Whether the next Generate of a Circular drawing crops its record
- * (`circularCropRegion`).
- * @param {CircularRequestRecordSetOptions['records']} records the records discovered in the input
+ * The record a Circular drawing offers alone (`isSingleCircularJourney`), which its next Generate draws, with the crop
+ * Generate applies to it (`circularCropRegion`, null when it draws the whole record); null while the drawing offers
+ * several records or draws none. The Topology rows read it (OV-3340).
+ * @template {Partial<CircularListRecord> & { recordId?: unknown, recordLength?: unknown }} T
+ * @param {readonly T[] | null | undefined} records the records discovered in the input
  * @param {CircularRecordDrawing} drawing
  */
-export const circularDrawingCropped = (records, drawing) => {
+export const circularDrawingAloneRecord = (records, drawing) => {
   const recordSet = circularDrawingRecordSet(records, drawing);
-  return circularCropRegion(isSingleCircularJourney(recordSet), drawing.form, recordSet.records[0] ?? null) !== null;
+  const [record] = isSingleCircularJourney(recordSet) ? recordSet.records : [];
+  return record === undefined ? null : { record, crop: circularCropRegion(true, drawing.form, record) };
 };
 
 /**
- * The identities of the records a Circular drawing draws cropped in a grid or batch: those its ranges keep
- * (`circularRecordRange`); none while it offers one record alone, whose crop is the form's (`circularDrawingCropped`).
+ * The records a Circular drawing draws cropped in a grid or batch, by identity: those its ranges keep
+ * (`circularRecordRange`), each with the first window of its range (null for a range of no window); none while it
+ * offers one record alone, whose crop is the form's (`circularDrawingAloneRecord`).
  * @param {CircularRequestRecordSetOptions['records']} records the records discovered in the input
  * @param {CircularRecordDrawing} drawing
- * @returns {Set<string>}
+ * @returns {Map<string, LinearSeqWindow | null>}
  */
 export const circularDrawingCroppedRecords = (records, drawing) => {
   const recordSet = circularDrawingRecordSet(records, drawing);
-  if (isSingleCircularJourney(recordSet) || !drawing.form.circular_record_ranges.length) return new Set();
-  return new Set(recordSet.recordSelectors
-    .filter((entry) => circularRecordRange(drawing.form.circular_record_ranges, recordSet.recordSelectors, entry) !== null)
-    .map((entry) => entry.value));
+  /** @type {Map<string, LinearSeqWindow | null>} */
+  const cropped = new Map();
+  if (isSingleCircularJourney(recordSet) || !drawing.form.circular_record_ranges.length) return cropped;
+  recordSet.recordSelectors.forEach((entry) => {
+    const range = circularRecordRange(drawing.form.circular_record_ranges, recordSet.recordSelectors, entry);
+    if (range !== null) cropped.set(entry.value, range.windows[0] ?? null);
+  });
+  return cropped;
 };
 
 /**

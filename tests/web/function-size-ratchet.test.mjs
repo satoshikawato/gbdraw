@@ -104,7 +104,7 @@ const FUNCTION_STATEMENTS = {
   'app/linear-track-slots.js::createLinearTrackSlotEditor': 649,
   'app/orthogroups.js::createOrthogroupEditor': 340,
   'app/preview-runtime.js::createPreviewRuntime': 382,
-  'app/record-display-options.js::createRecordDisplayControls': 315,
+  'app/record-display-options.js::createRecordDisplayControls': 313,
   'app/record-display/feature-record-rotation.js::createFeatureRecordRotationWorkflow': 165,
   'app/record-selection.js::createRecordSelection': 115,
   'app/region-drawing.js::createRegionDrawing': 94,

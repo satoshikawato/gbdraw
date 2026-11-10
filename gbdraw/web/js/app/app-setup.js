@@ -925,7 +925,7 @@ export const createAppSetup = () => {
    */
   const readingShownLinearCard = (read) => (seq) => read(state.activeDrawing(), seq);
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
-    linearRecordsFor: linearRecordSelector.recordsFor,
+    linearRecordsFor: linearRecordSelector.recordsFor, linearWindowsOf: linearDrawingWindowsOf,
     linearRecordStatusFor: linearRecordSelector.statusFor,
     linearRecordErrorFor: linearRecordSelector.errorFor,
     runUndoable: history.runUndoable,
