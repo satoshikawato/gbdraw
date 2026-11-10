@@ -13,6 +13,5 @@ export const WRAP_ROW_ATTRIBUTE = 'data-gbdraw-wrap-row';
 export const GRADIENT_SCALE_NAME_ATTRIBUTES = Object.freeze({ min: 'data-legend-min-label', max: 'data-legend-max-label' });
 /** A similarity-ring hit's drawn span, in drawn bases: the display index of its first base and of the base after its last. */
 export const HIT_DISPLAY_SPAN_ATTRIBUTES = Object.freeze({ start: 'data-display-start', end: 'data-display-end' });
-/** A similarity ring's drawn radii (px, in its record's frame) and the colour its identity ramp ends in. */
+/** A similarity ring's drawn radii (px, in its record's frame). */
 export const RING_RADIUS_ATTRIBUTES = Object.freeze({ inner: 'data-ring-inner-radius', outer: 'data-ring-outer-radius' });
-export const RING_COLOR_ATTRIBUTE = 'data-ring-color';

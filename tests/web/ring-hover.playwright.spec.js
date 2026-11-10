@@ -62,6 +62,7 @@ const hoverView = (page) => page.evaluate(() => {
     popup: shown ? [...overlay.querySelectorAll('.gbdraw-ring-hover-row')].map((row) => ({
       name: row.querySelector('.gbdraw-ring-hover-name').textContent,
       value: row.querySelector('.gbdraw-ring-hover-value').textContent,
+      swatch: getComputedStyle(row.querySelector('.gbdraw-ring-hover-swatch')).backgroundColor,
       hovered: row.hasAttribute('data-hovered')
     })) : [],
     line: shown ? Number(overlay.querySelector('line').getAttribute('x2')) !== 0 || Number(overlay.querySelector('line').getAttribute('y2')) !== 0 : false
@@ -116,6 +117,9 @@ test('a ring hover dims the other rings, bolds its Legend row, and lists every r
   expect(view.popup.map((row) => row.name)).toEqual(view.rows.map((row) => row.name));
   expect(view.popup.map((row) => row.value)).toEqual(inner === '1' ? ['95.0%', '99.0%'] : ['99.0%', '95.0%']);
   expect(view.popup.filter((row) => row.hovered).length).toBe(1);
+  // Each swatch is the colour the ring is drawn in at the position: a lower identity a lighter one.
+  expect(view.popup.every((row) => row.swatch !== 'rgba(0, 0, 0, 0)')).toBe(true);
+  expect(new Set(view.popup.map((row) => row.swatch)).size).toBe(2);
   // Nothing reaches the Result: the download and the Results Save writes are those without a hover.
   const during = await exported(page);
   expect(during.text).toBe(before.text);

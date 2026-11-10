@@ -44,8 +44,8 @@ into the `[Unreleased]` list below.
   same ring and name without the list. On the Multi-Record Canvas the ring
   stays at full strength in every record. Exports and Sessions are unchanged.
   Comparison rings in SVG output now name each match's drawn span and each
-  ring's radii and colour (`data-display-start`, `data-display-end`,
-  `data-ring-inner-radius`, `data-ring-outer-radius`, `data-ring-color`).
+  ring's radii (`data-display-start`, `data-display-end`,
+  `data-ring-inner-radius`, `data-ring-outer-radius`).
 - Fixed: in the Python API, a new drawing from a region ignored a Circular
   track slot given as a string (`"depth:depth@width=20px"`): the slot's hand-set
   width was neither kept nor returned to Auto as the same slot given as a

@@ -56,18 +56,18 @@ Object.assign(globalThis, {
 });
 
 const {
-  DIMMED_RING_OPACITY, identityText, ringHoverStyle, ringHoverTarget, ringIdentityAt, ringPointAt, ringsOfRecord
+  DIMMED_RING_OPACITY, identityText, ringHitAt, ringHoverStyle, ringHoverTarget, ringPointAt, ringsOfRecord
 } = await import('../../gbdraw/web/js/app/feature-editor/ring-hover.js');
 
 /** Coordinates to a millionth of a pixel. @param {Record<string, number>} line */
 const rounded = (line) => Object.fromEntries(Object.entries(line).map(([key, value]) => [key, Math.round(value * 1e6) / 1e6 || 0]));
 
-const hit = (start, end, identity) => new FakeElement({
-  'data-match-kind': 'homology', 'data-identity': identity, 'data-display-start': start, 'data-display-end': end
+const hit = (start, end, identity, fill = '#8b9cc1') => new FakeElement({
+  'data-match-kind': 'homology', 'data-identity': identity, 'data-display-start': start, 'data-display-end': end, fill
 });
-const ring = (sourceIndex, label, radii, hits, color = '#8b9cc1') => new FakeElement({
+const ring = (sourceIndex, label, radii, hits) => new FakeElement({
   'data-gbdraw-slot-renderer': 'sequence_conservation', 'data-source-index': sourceIndex, 'data-track-label': label,
-  'data-ring-color': color, ...(radii ? { 'data-ring-inner-radius': radii[0], 'data-ring-outer-radius': radii[1] } : {})
+  ...(radii ? { 'data-ring-inner-radius': radii[0], 'data-ring-outer-radius': radii[1] } : {})
 }, { children: hits });
 
 test('a hover dims every other ring of the series to 35% and bolds its Legend row, in the preview only', () => {
@@ -91,20 +91,20 @@ test('the rings of a record are listed outermost first by the radii Python wrote
   assert.deepEqual(ringsOfRecord(old).map((entry) => [entry.name, entry.outer]), [['a', null], ['b', null]]);
 });
 
-test('a ring reads its identity at a drawn position from its hits\' drawn spans, the highest one on top', () => {
-  const drawn = ring('0', 'A', [100, 110], [hit(10, 60, 95), hit(40, 80, 99.5), hit(100, 120, 80)]);
-  assert.equal(ringIdentityAt(drawn, 10), 95);
-  assert.equal(ringIdentityAt(drawn, 50.5), 99.5);
-  assert.equal(ringIdentityAt(drawn, 79.99), 99.5);
+test('a ring reads its identity and drawn colour at a position from its hits\' drawn spans, the highest one on top', () => {
+  const drawn = ring('0', 'A', [100, 110], [hit(10, 60, 95, '#a0b0c0'), hit(40, 80, 99.5, '#8b9cc1'), hit(100, 120, 80, '#e0e4ee')]);
+  assert.deepEqual(ringHitAt(drawn, 10), { identity: 95, color: '#a0b0c0' });
+  assert.deepEqual(ringHitAt(drawn, 50.5), { identity: 99.5, color: '#8b9cc1' });
+  assert.equal(ringHitAt(drawn, 79.99).identity, 99.5);
   // The end is the base after the hit's last one.
-  assert.equal(ringIdentityAt(drawn, 80), null);
-  assert.equal(ringIdentityAt(drawn, 119), 80);
+  assert.equal(ringHitAt(drawn, 80), null);
+  assert.deepEqual(ringHitAt(drawn, 119), { identity: 80, color: '#e0e4ee' });
   assert.equal(identityText(99.5), '99.5%');
   assert.equal(identityText(100), '100.0%');
   assert.equal(identityText(null), 'No hit');
   // A hit without the spans (a Result drawn before Python wrote them) gives no identity.
   const old = ring('0', 'A', null, [new FakeElement({ 'data-match-kind': 'homology', 'data-identity': 99 })]);
-  assert.equal(ringIdentityAt(old, 10), null);
+  assert.equal(ringHitAt(old, 10), null);
 });
 
 test('the position is the source base under the pointer (R5), and the line runs across the rings and the features', () => {
@@ -144,7 +144,7 @@ test('each record of the Multi-Record Canvas reads its own rings and axis; the s
     clientX: 0, clientY: -155, host: { left: 0, top: 0 }
   });
   assert.equal(point.base, 1);
-  assert.equal(ringIdentityAt(second[0], point.position), 97);
+  assert.equal(ringHitAt(second[0], point.position).identity, 97);
   assert.equal(ringHoverTarget(root, second[0].children[0], 0, 0).sourceIndex, first[0].getAttribute('data-source-index'));
 });
 

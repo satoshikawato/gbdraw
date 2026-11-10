@@ -18,10 +18,9 @@ from ....layout.record_coordinates import RecordDisplayTransform, SourceInterval
 # What the Web's ring hover reads (PD-OI-110): the span of the ring a hit's path draws, in drawn bases (display index
 # of its first base, and of the base after its last), so every ring's identity at a position is read from the drawing.
 HIT_DISPLAY_SPAN_ATTRIBUTES = ("data-display-start", "data-display-end")
-# A ring group's drawn radii (px, inner then outer, in the frame its record is drawn in) and the colour its identity
-# ramp ends in: the order of the rings and the radial line, and the swatch of the ring's row in the hover.
+# A ring group's drawn radii (px, inner then outer, in the frame its record is drawn in): the order of the rings and
+# the radial line of the hover.
 RING_RADIUS_ATTRIBUTES = ("data-ring-inner-radius", "data-ring-outer-radius")
-RING_COLOR_ATTRIBUTE = "data-ring-color"
 
 
 def _row_float(row: object, name: str, default: float = 0.0) -> float:
@@ -187,4 +186,4 @@ class ConservationDrawer:
         return tuple(inks)
 
 
-__all__ = ["HIT_DISPLAY_SPAN_ATTRIBUTES", "RING_COLOR_ATTRIBUTE", "RING_RADIUS_ATTRIBUTES", "ConservationDrawer"]
+__all__ = ["HIT_DISPLAY_SPAN_ATTRIBUTES", "RING_RADIUS_ATTRIBUTES", "ConservationDrawer"]

@@ -1000,11 +1000,7 @@ def render_drawn_attributes_module() -> str:
     """The attribute names Python writes on drawn groups that the Web reads in a Result."""
     from gbdraw.legend.metrics import GRADIENT_SCALE_NAME_ATTRIBUTES
     from gbdraw.render.drawers.annotation_marks import ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SET_ID_ATTRIBUTE
-    from gbdraw.render.drawers.circular.conservation import (
-        HIT_DISPLAY_SPAN_ATTRIBUTES,
-        RING_COLOR_ATTRIBUTE,
-        RING_RADIUS_ATTRIBUTES,
-    )
+    from gbdraw.render.drawers.circular.conservation import HIT_DISPLAY_SPAN_ATTRIBUTES, RING_RADIUS_ATTRIBUTES
     from gbdraw.render.drawers.linear.wrap_rows import WRAP_ROW_ATTRIBUTE
 
     minimum, maximum = GRADIENT_SCALE_NAME_ATTRIBUTES
@@ -1026,9 +1022,8 @@ def render_drawn_attributes_module() -> str:
         f"export const GRADIENT_SCALE_NAME_ATTRIBUTES = Object.freeze({{ min: {_scalar(minimum)}, max: {_scalar(maximum)} }});\n"
         "/** A similarity-ring hit's drawn span, in drawn bases: the display index of its first base and of the base after its last. */\n"
         f"export const HIT_DISPLAY_SPAN_ATTRIBUTES = Object.freeze({{ start: {_scalar(span_start)}, end: {_scalar(span_end)} }});\n"
-        "/** A similarity ring's drawn radii (px, in its record's frame) and the colour its identity ramp ends in. */\n"
+        "/** A similarity ring's drawn radii (px, in its record's frame). */\n"
         f"export const RING_RADIUS_ATTRIBUTES = Object.freeze({{ inner: {_scalar(inner_radius)}, outer: {_scalar(outer_radius)} }});\n"
-        f"export const RING_COLOR_ATTRIBUTE = {_scalar(RING_COLOR_ATTRIBUTE)};\n"
     )
 
 

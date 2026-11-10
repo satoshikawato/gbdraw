@@ -11,11 +11,11 @@
 // Nothing is written into the mounted root (R1; Export and Save read it): the
 // dimming and the bold row are rules of a <style> element beside the Result,
 // and the line and the popup are an overlay over it. Every value comes from
-// what Python drew: the ring groups, their hits' drawn spans and identities,
-// their radii and colours (`drawn-attributes.generated.js`), and the record's
-// axis (`services/region-axis.js`) for the position.
+// what Python drew: the ring groups, their hits' drawn spans, identities and
+// fills, their radii (`drawn-attributes.generated.js`), and the record's axis
+// (`services/region-axis.js`) for the position.
 /** @import { CircularAxisGeometry, RegionAxisRecord } from '../../services/region-axis.js' */
-import { HIT_DISPLAY_SPAN_ATTRIBUTES, RING_COLOR_ATTRIBUTE, RING_RADIUS_ATTRIBUTES } from '../../services/drawn-attributes.generated.js';
+import { HIT_DISPLAY_SPAN_ATTRIBUTES, RING_RADIUS_ATTRIBUTES } from '../../services/drawn-attributes.generated.js';
 import { axisPosition, framePoint, regionAxisFrame, sourceBaseAt } from '../../services/region-axis.js';
 import { formatGroupedNumber } from '../../services/record-options.js';
 import { t } from '../../utils/i18n.js';
@@ -35,10 +35,11 @@ const PREVIEW_SURFACE = '.gbdraw-preview-surface';
  * @property {Element} element
  * @property {string} sourceIndex The ring's series (`data-source-index`), the same in every record.
  * @property {string} name The ring's name, as its Legend row shows it.
- * @property {string} color The colour its identity ramp ends in ('' when not written).
  * @property {number | null} inner
  * @property {number | null} outer
  */
+
+/** @typedef {{ swatch: HTMLElement, value: HTMLElement }} PopupCells A popup row's swatch and identity cells. */
 
 /**
  * What the pointer is over: a ring at a position of its record, or a ring's Legend row.
@@ -68,7 +69,6 @@ export const ringsOfRecord = (record) => {
     element,
     sourceIndex: element.getAttribute('data-source-index') ?? '',
     name: element.getAttribute('data-track-label') ?? '',
-    color: element.getAttribute(RING_COLOR_ATTRIBUTE) ?? '',
     inner: numberOrNull(element.getAttribute(RING_RADIUS_ATTRIBUTES.inner)),
     outer: numberOrNull(element.getAttribute(RING_RADIUS_ATTRIBUTES.outer))
   }));
@@ -76,20 +76,21 @@ export const ringsOfRecord = (record) => {
 };
 
 /**
- * A ring's identity at a drawn position: the highest identity of its hits whose drawn span holds it (the one drawn on
- * top), null when no hit does or Python wrote no spans.
+ * A ring's hit at a drawn position: of its hits whose drawn span holds it, the one of highest identity (the one drawn
+ * on top), with that identity and the colour it is drawn in; null when no hit does or Python wrote no spans.
  * @param {Element} ring
  * @param {number} position Bases from display index 0.
- * @returns {number | null}
+ * @returns {{ identity: number, color: string } | null}
  */
-export const ringIdentityAt = (ring, position) => {
+export const ringHitAt = (ring, position) => {
+  /** @type {{ identity: number, color: string } | null} */
   let best = null;
   for (const hit of ring.querySelectorAll(`path[${HIT_DISPLAY_SPAN_ATTRIBUTES.start}]`)) {
     const start = numberOrNull(hit.getAttribute(HIT_DISPLAY_SPAN_ATTRIBUTES.start));
     const end = numberOrNull(hit.getAttribute(HIT_DISPLAY_SPAN_ATTRIBUTES.end));
     const identity = numberOrNull(hit.getAttribute('data-identity'));
     if (start === null || end === null || identity === null || position < start || position >= end) continue;
-    best = best === null ? identity : Math.max(best, identity);
+    if (best === null || identity > best.identity) best = { identity, color: hit.getAttribute('fill') ?? '' };
   }
   return best;
 };
@@ -152,9 +153,9 @@ export const ringHoverTarget = (root, target, clientX, clientY) => {
 
 /**
  * The popup's rows, outermost ring first: built once for a record's rings and the hovered series, so a move rewrites
- * only the identities (the vendored Tailwind runtime rescans every added node, OV-933).
+ * only the swatches and identities (the vendored Tailwind runtime rescans every added node, OV-933).
  * @param {HTMLElement} list @param {DrawnRing[]} rings @param {string} sourceIndex
- * @returns {HTMLElement[]} each row's identity cell
+ * @returns {PopupCells[]}
  */
 const buildPopupRows = (list, rings, sourceIndex) => {
   const values = rings.map((ring) => {
@@ -163,23 +164,26 @@ const buildPopupRows = (list, rings, sourceIndex) => {
     if (ring.sourceIndex === sourceIndex) row.setAttribute('data-hovered', '');
     const swatch = document.createElement('span');
     swatch.className = 'gbdraw-ring-hover-swatch';
-    swatch.style.background = ring.color;
     const name = document.createElement('span');
     name.className = 'gbdraw-ring-hover-name';
     name.textContent = ring.name;
     const value = document.createElement('span');
     value.className = 'gbdraw-ring-hover-value';
     row.append(swatch, name, value);
-    return { row, value };
+    return { row, swatch, value };
   });
   list.replaceChildren(...values.map(({ row }) => row));
-  return values.map(({ value }) => value);
+  return values.map(({ swatch, value }) => ({ swatch, value }));
 };
 
-/** @param {HTMLElement} cell @param {number | null} identity */
-const writeIdentity = (cell, identity) => {
-  cell.textContent = identityText(identity);
-  cell.toggleAttribute('data-no-hit', identity === null);
+/**
+ * A row's swatch and identity: the colour drawn at the position and its identity, or an empty swatch and No hit.
+ * @param {PopupCells} cells @param {{ identity: number, color: string } | null} hit
+ */
+const writeRingHit = ({ swatch, value }, hit) => {
+  swatch.style.background = hit?.color ?? 'transparent';
+  value.textContent = identityText(hit?.identity ?? null);
+  value.toggleAttribute('data-no-hit', hit === null);
 };
 
 /**
@@ -229,7 +233,7 @@ export const attachRingHover = ({ svg, axisRecords, held, isPreviewTransformActi
   let pointer = null;
   let frame = 0;
   let shownStyle = '';
-  /** @type {{ rings: Element[], sourceIndex: string, cells: HTMLElement[] }} */
+  /** @type {{ rings: Element[], sourceIndex: string, cells: PopupCells[] }} */
   let shownRows = { rings: [], sourceIndex: '', cells: [] };
   /** @param {string} css */
   const showStyle = (css) => {
@@ -259,7 +263,7 @@ export const attachRingHover = ({ svg, axisRecords, held, isPreviewTransformActi
       || shownRows.rings.some((element, index) => element !== rings[index].element)) {
       shownRows = { rings: rings.map((ring) => ring.element), sourceIndex: target.sourceIndex, cells: buildPopupRows(overlay.list, rings, target.sourceIndex) };
     }
-    rings.forEach((ring, index) => writeIdentity(shownRows.cells[index], ringIdentityAt(ring.element, point.position)));
+    rings.forEach((ring, index) => writeRingHit(shownRows.cells[index], ringHitAt(ring.element, point.position)));
     const { offsetWidth: width, offsetHeight: height } = overlay.popup;
     const x = event.clientX - box.left + 16;
     const y = event.clientY - box.top + 16;

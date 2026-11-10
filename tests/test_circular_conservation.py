@@ -504,8 +504,6 @@ def test_circular_rings_write_what_the_web_hover_reads() -> None:
         slot = geometry[rings[label].get("data-gbdraw-slot-id")]
         assert inner < outer
         assert outer - inner == pytest.approx(slot["widthPx"])
-    # The ring with its own colour draws it; the other draws the configured top of the identity ramp.
-    assert {label: ring.get("data-ring-color") for label, ring in rings.items()} == {"A": "#e15759", "B": "#8b9cc1"}
 
 
 def test_circular_api_renders_source_colored_conservation_ring() -> None:
