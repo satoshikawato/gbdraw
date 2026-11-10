@@ -38,6 +38,7 @@ import {
   effectiveLinearSlotPlacement,
   enforceSingleLinearOnAxisSlot,
   inferLinearTrackAxisIndexFromSlots,
+  linearStacksNoSessionSaved,
   normalizeColorParam,
   normalizeLinearTrackSlots,
   normalizeNt,
@@ -521,7 +522,7 @@ export const createLinearTrackSlotEditor = ({
     if (!drawing.adv.linear_track_slots_enabled) return;
     const rows = drawing.adv.linear_track_slots;
     // A stack no Session saved is built from the simple controls, with the feature density rows (OV-3174).
-    if (isUnsavedDefaultStack(rows, normalizeLinearTrackSlots([], drawing.adv.nt, drawing.form.linear_track_layout))) return resetLinearTrackSlotsFromSimpleControls();
+    if (isUnsavedDefaultStack(rows, linearStacksNoSessionSaved(drawing.adv.nt, drawing.form.linear_track_layout))) return resetLinearTrackSlotsFromSimpleControls();
     // The stack it turns on holds the rows of the Region Annotation sets it does not name (D-35).
     drawing.adv.linear_track_slots_axis_index = prependMissingAnnotationTrackSlots(rows, axisIndexForCurrentLinearSlots(drawing, rows),
       drawing.annotationSets, 'linear', (added) => normalizeLinearTrackSlots(added, drawing.adv.nt, drawing.form.linear_track_layout));

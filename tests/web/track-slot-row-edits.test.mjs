@@ -35,6 +35,7 @@ const { paramsKeptOnRendererChange } = await import(pathToFileURL(join(tempRoot,
 const { askTrackSourceRemoval, askingAnnotationTrackAdd, askingTrackRowRemoval, askingTrackRowSwitch } = await import(pathToFileURL(join(tempRoot, 'app', 'track-slot-edits.js')));
 const { depthSeriesRemovalLoss, depthSourceLoss, dropInvalidManagedDepthSlots, isDefaultManagedDepthSlot, reconcileManagedDepthSlots } = await import(pathToFileURL(join(tempRoot, 'services', 'depth-track-state.js')));
 const { normalizeLinearTrackSlots, placeLinearStackForGenerate } = await import(pathToFileURL(join(tempRoot, 'services', 'linear-track-slot-model.js')));
+const { createDefaultAdv } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 
 const depthFile = { name: 'a.depth.tsv', size: 1, lastModified: 1 };
 
@@ -1353,5 +1354,20 @@ test('Use custom stack adds feature density rows only to the stack no Session sa
     unsaved.turnOn(true);
     const ids = unsaved.slots().map(({ id }) => id);
     assert.equal(ids[ids.indexOf('features') + 1], 'density_genes', `${mode}: ${JSON.stringify(ids)}`);
+  }
+});
+
+// #1836 CI round 3: a new Linear drawing holds the stack its contract default gives (no GC rows), not the stack a
+// Load reads from an empty list; Use custom stack builds that stack too from the simple controls, so the rows match
+// what the simple stack draws (here GC content and skew on) and a feature density row follows the features row.
+test('Use custom stack builds a new Linear drawing\'s stack from the simple controls, with the feature density rows', () => {
+  for (const normalizeFirst of [false, true]) {
+    const fresh = MODES.linear(createDefaultAdv('linear').linear_track_slots);
+    fresh.state.adv.feature_density_tracks = [{ id: 'genes' }];
+    if (normalizeFirst) fresh.editor.normalizeLinearTrackSlots(fresh.state.activeDrawing());
+    fresh.turnOn(false);
+    fresh.turnOn(true);
+    const ids = fresh.slots().map(({ id }) => id);
+    assert.deepEqual(ids, ['features', 'density_genes', 'gc_content', 'gc_skew'], `normalized first: ${normalizeFirst}`);
   }
 });

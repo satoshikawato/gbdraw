@@ -1155,8 +1155,7 @@ export const createCircularTrackSlotEditor = ({
     drawing.adv.circular_track_slots_enabled = Boolean(enabled);
     if (!drawing.adv.circular_track_slots_enabled) return;
     const rows = drawing.adv.circular_track_slots;
-    if (!Array.isArray(rows) || rows.length === 0
-      || isUnsavedDefaultStack(rows, normalizeCircularTrackSlots([], drawing.adv.nt, drawing.form.track_type))) {
+    if (!Array.isArray(rows) || isUnsavedDefaultStack(rows, [normalizeCircularTrackSlots([], drawing.adv.nt, drawing.form.track_type)])) {
       // A stack no Session saved is built from the simple controls, with the feature density rows (OV-3174).
       resetSlotsToPreset(drawing, drawing.form.track_type);
     } else {

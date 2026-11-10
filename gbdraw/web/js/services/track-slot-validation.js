@@ -1334,20 +1334,20 @@ export const paramsKeptOnRendererChange = (params, renderer) => Object.fromEntri
 );
 
 /**
- * Whether a stored stack is the one the Web makes when a Session saved none (`fallback`, the mode's normalizer of an
- * empty stack): row for row the same ids, renderers, switches, sides and params. Use custom stack builds such a stack
+ * Whether a stored stack is one the Web holds when a Session saved none (`unsaved`, the mode's stacks for that case):
+ * row for row the same ids, renderers, switches, sides and params as one of them. Use custom stack builds such a stack
  * again from the simple controls, with the feature density rows; it adds no row to any other stored stack, so rows a
  * user deleted or turned off do not come back (as PD-OI-058 decides for Depth rows).
  * @typedef {{ id: string, renderer: string, enabled?: boolean, side?: string | null, params?: Record<string, unknown> }} StoredStackRow
  */
 /**
  * @param {readonly StoredStackRow[]} rows
- * @param {readonly StoredStackRow[]} fallback
+ * @param {readonly (readonly StoredStackRow[])[]} unsaved
  * @returns {boolean}
  */
-export const isUnsavedDefaultStack = (rows, fallback) => {
+export const isUnsavedDefaultStack = (rows, unsaved) => {
   const key = (/** @type {readonly StoredStackRow[]} */ list) => JSON.stringify(list.map(({ id, renderer, enabled, side, params }) => [id, renderer, enabled, side, params]));
-  return key(rows) === key(fallback);
+  return unsaved.some((stack) => key(stack) === key(rows));
 };
 
 /**

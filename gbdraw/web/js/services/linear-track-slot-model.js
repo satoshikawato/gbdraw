@@ -346,6 +346,19 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
     .filter((slot) => slot.renderer !== 'features' || (hasFeature && slot.id));
 };
 
+/**
+ * The stacks a drawing holds when no Session saved one: a new drawing's (the default stack of
+ * services/session-active-config-contract.js, which also stands for a stack the Load refuses) and the stack the
+ * Load reads from an empty list (the normalizer's fallback).
+ * @param {string} [nt]
+ * @param {unknown} [trackLayout]
+ * @returns {LinearTrackSlot[][]}
+ */
+export const linearStacksNoSessionSaved = (nt, trackLayout) => [
+  createDefaultLinearTrackSlots(),
+  normalizeLinearTrackSlots([], nt, trackLayout)
+];
+
 /** @param {LinearSlotPlacementInput | null | undefined} slot */
 export const effectiveLinearSlotPlacement = (slot) => {
   if (!slot) return 'below';
