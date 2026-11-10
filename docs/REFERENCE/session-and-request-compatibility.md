@@ -209,6 +209,11 @@ own slice, `modes.circular` and `modes.linear`:
 - `editorState`: the Legend edits and per-feature strokes.
 - `ui`: the mode's layout, padding, and pending palette.
 
+A slice holds a row only from the Session version in which a release first wrote it, and the two axis label rows
+(`config.adv.depth_axis_labels`, `config.adv.gc_content_axis_labels`) only from Session 51: `config.adv.font_family`
+from Session 47; `config.fileImports`, `config.adv.label_line` and `config.adv.label_protection` from Session 48;
+`config.adv.show_definition` from Session 49; `config.adv.identity_scale`, `config.adv.italic_gene_labels` and
+`config.form.linear_wrap_length` from Session 50. Every Session that a released gbdraw wrote still loads.
 A field missing from a slice reads as that mode's default. A Session 46 to 50 rejects
 the top-level `config` and `features` of Sessions 44 and older. Reading an
 older Session splits its draft into the two slices. A Session that the CLI or
