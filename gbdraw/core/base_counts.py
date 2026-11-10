@@ -141,10 +141,10 @@ def count_rows(data: bytes | memoryview, before: int, deleted: bytes = b"") -> C
         starts.append(begins + low)
         histograms.append(histogram)
         bases += len(values) - len(gone)
-    return CountedRows(
-        np.concatenate(rows) if len(rows) > 1 else rows[0],
-        np.concatenate(starts) if starts else np.zeros(0, dtype=np.int64),
-        np.stack(histograms) if histograms else np.zeros((0, 256), dtype=np.int64),
+    return CountedRows(  # int64 on every platform: numpy's own integers are 32 bits in Pyodide
+        (np.concatenate(rows) if len(rows) > 1 else rows[0]).astype(np.int64, copy=False),
+        (np.concatenate(starts) if starts else np.zeros(0, dtype=np.int64)).astype(np.int64, copy=False),
+        (np.stack(histograms) if histograms else np.zeros((0, 256), dtype=np.int64)).astype(np.int64, copy=False),
         bases - before,
     )
 
