@@ -499,9 +499,9 @@ class _SequenceTable:
     _row_offsets: list[NDArray[np.uint16]] = field(default_factory=list)
     _rows: _Rows | None = None  # built once, when the parse pass has added every line (``finish``)
 
-    def add(self, offset: int, raw: bytes, kind: int, counted: CountedRows) -> None:
-        """Add the raw bytes ``raw`` from file offset ``offset``, of one kind, with what was counted in them
-        (:func:`gbdraw.core.base_counts.count_rows`: in ``raw`` for a run, in its bases for lines read line by line).
+    def add(self, offset: int, size: int, kind: int, counted: CountedRows) -> None:
+        """Add ``size`` raw bytes from file offset ``offset``, of one kind, with what was counted in them
+        (:func:`gbdraw.core.base_counts.count_rows`: in the bytes for a run, in its bases for lines read line by line).
 
         A run is cut into chunks of ``_CHUNK_BYTES`` raw bytes; lines read line by line join the chunk before them
         up to the usual size.
@@ -515,17 +515,17 @@ class _SequenceTable:
         totals = counted.histograms @ (_RUN_MATRICES[kind] if run else BASES_MATRIX)
         last = len(self.kinds) - 1
         if (not run and last >= 0 and self.kinds[last] == kind
-                and self.offsets[last] + self.sizes[last] == offset and self.sizes[last] + len(raw) <= _CHUNK_BYTES):
-            self.sizes[last] += len(raw)  # lines read line by line stay in chunks of the usual size
+                and self.offsets[last] + self.sizes[last] == offset and self.sizes[last] + size <= _CHUNK_BYTES):
+            self.sizes[last] += size  # lines read line by line stay in chunks of the usual size
             self.alphabets[last] = max(self.alphabets[last], int(_alphabets(totals.sum(axis=0, keepdims=True))[0]))
             self.length += counted.bases
             return
         if not run:
             totals = totals.sum(axis=0, keepdims=True)
         # File offsets stay Python ints: numpy's default integer is 32 bits in Pyodide, and a file passes 2 GiB.
-        chunk_offsets = range(offset, offset + len(raw), _CHUNK_BYTES) if run else range(offset, offset + 1)
+        chunk_offsets = range(offset, offset + size, _CHUNK_BYTES) if run else range(offset, offset + 1)
         self.offsets.extend(chunk_offsets)
-        self.sizes.extend(min(_CHUNK_BYTES, offset + len(raw) - start) if run else len(raw) for start in chunk_offsets)
+        self.sizes.extend(min(_CHUNK_BYTES, offset + size - start) if run else size for start in chunk_offsets)
         self.starts.extend((self.length + np.cumsum(totals[:, BASES]) - totals[:, BASES]).tolist())
         self.kinds.extend(bytes((kind,)) * len(chunk_offsets))
         self.alphabets.extend(_alphabets(totals).tobytes())
@@ -989,8 +989,8 @@ def first_base_beyond(seq: Seq | MutableSeq, alphabet: int) -> int | None:
     return None
 
 
-def _uniform_run(buf: bytes, start: int, end: int) -> tuple[int, int, bytes]:
-    """The longest run of lines of one length from ``start`` (a line start), within ``end``.
+def _uniform_run(buf: bytes, start: int, end: int, most: int) -> tuple[int, int, bytes]:
+    """The longest run of lines of one length from ``start`` (a line start), within ``end`` and ``most`` bytes.
 
     Returns the length of each line with its ending, the number of lines, and the
     ending. ``buf[start:end]`` ends at a line end.
@@ -1006,7 +1006,7 @@ def _uniform_run(buf: bytes, start: int, end: int) -> tuple[int, int, bytes]:
     ending = buf[start:stop].removeprefix(buf[start:stop].rstrip(b"\r\n"))
     if not ending or width > _CHUNK_BYTES:
         return width, 1, ending
-    limit = min(end, start + _CHUNK_BYTES)
+    limit = min(end, start + most)
     column = buf[start + width - 1: limit: width]
     count = len(column) - len(column.lstrip(ending[-1:]))
     if count * width > limit - start:
@@ -1020,24 +1020,28 @@ def _uniform_run(buf: bytes, start: int, end: int) -> tuple[int, int, bytes]:
     return width, max(count, 1), ending
 
 
-def _flat_run_bases(raw: bytes, width: int, count: int, ending: bytes, histogram: NDArray[np.int64]) -> int | None:
-    """The number of bases of a run of GenBank sequence lines laid out as writers do, or ``None``.
+def _flat_run_bases(
+    raw: bytes, start: int, width: int, count: int, ending: bytes, histogram: NDArray[np.int64],
+) -> int | None:
+    """The number of bases of a run of GenBank sequence lines from ``start`` of ``raw`` laid out as writers do, or
+    ``None``.
 
     The layout: up to nine (ten past position 999,999,999) digits or spaces, a
     space, then letters and spaces. Deleting digits and whitespace from such lines
     gives the bases Biopython takes from each line (everything after the
-    coordinate column, spaces removed). ``histogram`` counts each byte value of ``raw``.
+    coordinate column, spaces removed). ``histogram`` counts each byte value of the run.
     """
 
     content = width - len(ending)
     if content < 10:
         return None
-    prefix = 10 if raw[9::width] == b" " * count else 11
-    if prefix == 11 and (content < 11 or raw[10::width] != b" " * count):
+    stop = start + width * count
+    prefix = 10 if raw[start + 9:stop:width] == b" " * count else 11
+    if prefix == 11 and (content < 11 or raw[start + 10:stop:width] != b" " * count):
         return None
     prefix_spaces = 0
     for column in range(prefix - 1):
-        values = raw[column::width]
+        values = raw[start + column:stop:width]
         if values.translate(None, b" " + _DIGITS):
             return None
         prefix_spaces += values.count(b" ")
@@ -1107,10 +1111,12 @@ def _index_lines(table: _SequenceTable, offset: int, raw: bytes, fmt: SequenceFo
     """Add the sequence lines ``raw`` (whole lines from file offset ``offset``) to ``table``, counted as they are read."""
 
     if fmt == "fasta" and raw.isascii():  # one run: chunks from its start, counted in one go
-        table.add(offset, raw, _FASTA_RUN, count_rows(raw, table.length, _FASTA_DELETE))
+        table.add(offset, len(raw), _FASTA_RUN, count_rows(raw, table.length, _FASTA_DELETE))
         return
     position = 0
     encoding = table.source.encoding
+    view = memoryview(raw)
+    lines_until = 0  # a run whose layout failed is taken again in runs of one chunk at most, up to here
     while position < len(raw):
         counted = None
         if fmt == "embl":
@@ -1123,18 +1129,21 @@ def _index_lines(table: _SequenceTable, offset: int, raw: bytes, fmt: SequenceFo
                 stop = _line_aligned(raw, position, stop)
                 kind = _FASTA_LINES
             else:
-                counted = count_rows(raw[position:stop], table.length, _FASTA_DELETE)
+                counted = count_rows(view[position:stop], table.length, _FASTA_DELETE)
         else:
-            width, count, ending = _uniform_run(raw, position, len(raw))
+            most = _CHUNK_BYTES if position < lines_until else len(raw)
+            width, count, ending = _uniform_run(raw, position, len(raw), most)
             stop = position + width * count
-            counted = count_rows(raw[position:stop], table.length, _FLAT_DELETE)
+            counted = count_rows(view[position:stop], table.length, _FLAT_DELETE)
             kind = _FLAT_RUN
-            if _flat_run_bases(raw[position:stop], width, count, ending, counted.histograms.sum(axis=0)) is None:
+            if _flat_run_bases(raw, position, width, count, ending, counted.histograms.sum(axis=0)) is None:
+                if position >= lines_until and stop - position > _CHUNK_BYTES:
+                    lines_until = stop
+                    continue
                 kind, counted = _GENBANK_LINES, None
-        piece = raw[position:stop]
         if counted is None:
-            counted = count_rows(_decode_chunk(kind, piece, encoding, warn=True), table.length)
-        table.add(offset + position, piece, kind, counted)
+            counted = count_rows(_decode_chunk(kind, raw[position:stop], encoding, warn=True), table.length)
+        table.add(offset + position, stop - position, kind, counted)
         position = stop
 
 
