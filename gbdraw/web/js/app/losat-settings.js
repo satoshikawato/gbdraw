@@ -9,7 +9,7 @@ import { getLosatHardwareThreads, resolveLosatThreadPlan } from '../services/los
 import { losatThreadingPrecondition } from '../services/losat.js';
 import { t, tn } from '../utils/i18n.js';
 /** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
-/** @import { LinearSeq } from '../state.js' */
+/** @import { DrawingState, WebState } from '../state.js' */
 /** @import { LinearUnitPlanPayload, LinearUnitSearch, LinearCardPlacesOf } from '../services/linear-units.js' */
 
 const { computed, ref, watch, onMounted } = window.Vue;
@@ -53,40 +53,18 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
 };
 
 /**
- * How LOSAT runs (`state.losatExecution`, one app-level setting for both
- * drawings). A thread value is 'safe', 'available', a count, or blank (Auto),
- * as `resolveLosatThreadPlan` reads it.
- * @typedef {object} LosatExecutionValues
- * @property {string} [executionMode]
- * @property {string | number | null} [threadsPerJob]
- * @property {string | number | null} [parallelWorkers]
- * @property {string | number | null} [totalThreadBudget]
+ * The members of `state.js` this module reads. `losatExecution` is how LOSAT
+ * runs, one app-level setting for both drawings; a thread value in it is
+ * 'safe', 'available', a count, or blank (Auto), as `resolveLosatThreadPlan`
+ * reads it.
+ * @typedef {Pick<WebState, 'activeDrawing' | 'losatExecution' | 'losatThreadingStatus'>} LosatSettingsState
  */
 
 /**
- * A drawing's LOSAT search settings this module reads.
- * @typedef {object} LosatSettingsValues
- * @property {{ mode?: string, collinearInferOrthogroups?: boolean, collinearSearchScope?: string }} [blastp]
- */
-
-/**
- * The refs and reactive objects of `state.js` this module reads. A ref is
- * `{ value }` because Vue comes from `window.Vue`, which is `any`.
- * @typedef {object} LosatSettingsState
- * @property {() => LosatSettingsDrawing} activeDrawing
- * @property {LosatExecutionValues} losatExecution
- * @property {{ value?: { state?: string } }} [losatThreadingStatus]
- */
-
-/**
- * The members of a drawing (`DrawingState` of state.js) this module reads.
- * @typedef {object} LosatSettingsDrawing
- * @property {{ value: LinearComparisonResolution }} linearComparisonResolution
- * @property {LosatSettingsValues} losat
- * @property {{ value: string }} losatProgram
- * @property {readonly string[]} [recordsOff]
- * @property {readonly LinearSeq[]} linearSeqs its record rows
- * @property {{ value: boolean }} linearRecordLayoutEnabled whether the Record Layout arranges the rows
+ * The members of a drawing this module reads: its comparison plan as resolved, its LOSAT settings and program, and
+ * its record rows with the records it leaves out.
+ * @typedef {Pick<DrawingState, 'linearComparisonResolution' | 'losat' | 'losatProgram' | 'recordsOff' | 'linearSeqs'>}
+ *   LosatSettingsDrawing
  */
 
 /**
