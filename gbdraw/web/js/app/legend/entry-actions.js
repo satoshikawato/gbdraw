@@ -172,6 +172,13 @@ const inAnsweredLegendOrder = (items, added, legendOrder, keyOf, reorder) => {
   return { items: rows, placed };
 };
 
+// After an artifact install (a switch, a Load): a drawing showing no Result
+// has no inventory (OV-3282). The owner's `adoptShownSetInventory` runs it.
+/** @param {Pick<LegendEntryActionsOptions['state'], 'results' | 'originalLegendOrder'>} state */
+const adoptShownSetInventoryOf = ({ results, originalLegendOrder }) => {
+  originalLegendOrder.value = resultSetInventory(results.value, originalLegendOrder.value);
+};
+
 // The Legend entry owner (U3a, R1): its writers edit the drawing's Legend
 // intent (`legendEntries`, `deletedLegendEntries`, the override stores) and
 // write no row; the editor intent shows the intent on the displayed Result
@@ -841,8 +848,6 @@ export const createLegendEntryActions = ({
     if (!identity || !Array.isArray(inventory)) return;
     inventoryByResult.set(identity, [...inventory]);
   };
-  // After an artifact install (a switch, a Load): a drawing showing no Result has no inventory (OV-3282).
-  const adoptShownSetInventory = () => { originalLegendOrder.value = resultSetInventory(results.value, originalLegendOrder.value); };
 
   // `originalLegendOrder` is the displayed Result's inventory: after a Result
   // is displayed and after a History restore wrote another Result's value.
@@ -1042,7 +1047,7 @@ export const createLegendEntryActions = ({
   return {
     adoptRestoredLegend,
     adoptResultInventory,
-    adoptShownSetInventory,
+    adoptShownSetInventory: adoptShownSetInventoryOf.bind(null, { results, originalLegendOrder }),
     captureResultInventory,
     deleteLegendEntry,
     extractLegendEntries,
