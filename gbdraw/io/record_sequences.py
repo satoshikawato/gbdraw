@@ -1098,6 +1098,15 @@ def _prepend(first: str, rest: Iterator[str]) -> Iterator[str]:
     yield from rest
 
 
+def _file_table(seq: object) -> _SequenceTable | None:
+    """The sequence table in an input file that ``seq`` reads, or ``None`` when it holds its bases in memory."""
+
+    data = getattr(seq, "_data", None)
+    if isinstance(data, RecordSequence) and isinstance(data._bases, _SequenceTable):
+        return data._bases
+    return None
+
+
 def detached_records(records: Iterable[SeqRecord]) -> list[SeqRecord]:
     """The records, each holding its sequence in memory instead of reading it from its input file.
 
@@ -1109,7 +1118,7 @@ def detached_records(records: Iterable[SeqRecord]) -> list[SeqRecord]:
 
     detached: list[SeqRecord] = []
     for record in records:
-        if isinstance(getattr(record.seq, "_data", None), RecordSequence):
+        if _file_table(record.seq) is not None:
             record = copy.copy(record)
             record.seq = Seq(bytes(record.seq))
         detached.append(record)
@@ -1127,10 +1136,10 @@ def sequence_files_unchanged(records: Iterable[SeqRecord]) -> bool:
 
     checked: set[int] = set()
     for record in records:
-        data = getattr(record.seq, "_data", None)
-        if not isinstance(data, RecordSequence) or isinstance(data._bases, bytes):
+        table = _file_table(record.seq)
+        if table is None:
             continue
-        source = data._bases.source
+        source = table.source
         if source.key in checked:
             continue
         if not source.unchanged():
