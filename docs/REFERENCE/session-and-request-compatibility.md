@@ -1052,7 +1052,10 @@ and the E-values follow the genome pair. A whole one-record pair keeps its key
 and its saved result. A LOSATP search carries its subject genome's protein
 letters (`--dbsize`) in its cache arguments under the same rule, so a LOSATP
 result saved for a crop, a window, a multi-record file, or a multi-file row is
-searched again too.
+searched again too. A Circular similarity ring's LOSATN or TLOSATX search
+carries the search space of the reference genome and the ring's genome in its
+cache arguments under the same rule (unless both are one file of one record),
+so a ring result saved before is searched again at the next Generate.
 
 Pairwise hit limits, Similarity-group member limits, and Collinear block
 settings are derived options. Changing one recomputes the affected derived

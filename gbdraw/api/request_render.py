@@ -81,7 +81,7 @@ from gbdraw.annotations import (
 from gbdraw.annotations.planning import annotation_sets_left_out
 from gbdraw.comparisons.circular_losat import (
     resolve_circular_conservation_losat,
-    ring_subject_records,
+    ring_subject_sources,
 )
 from gbdraw.comparisons.linear_losat import (
     NucleotideLosatRecord,
@@ -1988,7 +1988,7 @@ def _resolve_ring_losat(
 
     return resolve_circular_conservation_losat(
         options,
-        subject_records=ring_subject_records(
+        subject_sources=ring_subject_sources(
             (item.source for item in record_inputs), file_records=file_records
         ),
         drawn_records=drawn_records,

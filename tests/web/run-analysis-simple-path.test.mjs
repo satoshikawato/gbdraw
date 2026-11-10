@@ -264,6 +264,7 @@ const {
   buildRunStateData,
   buildUiStateData,
   serializeActiveRenderFiles,
+  serializeFile,
   SESSION_VERSION,
   installShownDrawing
 } = await import('../../gbdraw/web/js/services/config.js');
@@ -400,6 +401,7 @@ const createImmediatePreviewRuntime = ({ onEvent = () => {} } = {}) => {
 const immediatePreviewRuntime = createImmediatePreviewRuntime();
 const generatedArtifactHandleOptions = {
   planGenomeScales: planWholeGenomeScales,
+  serializeInputFile: serializeFile,
   captureGeneratedArtifactHandle: artifactSnapshots.captureGeneratedArtifactHandle,
   captureGeneratedArtifactOwnerSet: artifactSnapshots.captureGeneratedArtifactOwnerSet,
   installGeneratedArtifactOwnerSet: artifactSnapshots.installGeneratedArtifactOwnerSet,
@@ -1589,17 +1591,19 @@ test('a ring comparison file is read once, and a failed read is read again', asy
   const replies = [
     { result: { error: new Error('injected ring read failure') } },
     { result: { fasta: '>ring\nACGT\n', recordLabel: 'Ring' } },
-    { result: { fasta: '>ring\nACGT\n', recordLabel: 'Ring', recordIds: ['ring'] } }
+    { result: { fasta: '>ring\nACGT\n', recordLabel: 'Ring', recordIds: ['ring'], genomeFiles: [{ length: 4, recordLengths: [4] }] } }
   ];
   const runHelperOperation = async (operation) => {
     operations.push(operation);
     return replies.shift();
   };
   await assert.rejects(readComparisonSequence({ files: [file], runHelperOperation }), /injected ring read failure/);
-  // A reply without its record IDs is a protocol error, and it is not kept either.
+  // A reply without its record IDs (or without each file's lengths) is a protocol error, and it is not kept either.
   await assert.rejects(readComparisonSequence({ files: [file], runHelperOperation }), { code: 'HELPER_PROTOCOL' });
   const read = await readComparisonSequence({ files: [file], runHelperOperation });
-  assert.deepEqual(read, { fasta: '>ring\nACGT\n', recordLabel: 'Ring', recordIds: ['ring'] });
+  assert.deepEqual(read, {
+    fasta: '>ring\nACGT\n', recordLabel: 'Ring', recordIds: ['ring'], genomeFiles: [{ length: 4, recordLengths: [4] }]
+  });
   assert.equal(await readComparisonSequence({ files: [file], runHelperOperation }), read);
   assert.deepEqual(operations, ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence']);
 });
@@ -1611,7 +1615,7 @@ test('a ring comparison read is frozen and its digest is kept with it', async ()
   const operations = [];
   const runHelperOperation = async (operation) => {
     operations.push(operation);
-    return { result: { fasta: '>ring\nACGT\n', recordLabel: null, recordIds: ['ring'] } };
+    return { result: { fasta: '>ring\nACGT\n', recordLabel: null, recordIds: ['ring'], genomeFiles: [{ length: 4, recordLengths: [4] }] } };
   };
   const read = await readComparisonSequence({ files: [file], runHelperOperation });
   assert.equal(Object.isFrozen(read), true);
@@ -1634,7 +1638,10 @@ test('a ring comparison genome of two files is one read of both, kept for those 
   const sent = [];
   const runHelperOperation = async (operation, payload) => {
     sent.push([operation, payload.files.map(({ role, bytes }) => [role, new TextDecoder().decode(bytes)])]);
-    return { result: { fasta: `>read${sent.length}\nACGT\n`, recordLabel: null, recordIds: [`read${sent.length}`] } };
+    return { result: {
+      fasta: `>read${sent.length}\nACGT\n`, recordLabel: null, recordIds: [`read${sent.length}`],
+      genomeFiles: payload.files.map(() => ({ length: 4, recordLengths: [4] }))
+    } };
   };
   const both = await readComparisonSequence({ files: [first, second], runHelperOperation });
   assert.deepEqual(sent, [['readComparisonSequence', [['source', '>chr1\nacgt\n'], ['source', '>chr2\nttgg\n']]]]);
@@ -1871,18 +1878,24 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   try {
     const circularResult = result('lazy-circular.svg', 'lazy-circular');
     const helperMessageCount = workerMessages.filter(({ type }) => type === 'helper').length;
-    comparisonTexts.forEach((fasta, index) => workerHelperResponses.push({
+    const ringSequenceReply = (index) => ({
       ok: true,
       result: {
-        fasta,
+        fasta: comparisonTexts[index],
         format: index === 1 ? 'genbank' : 'fasta',
         recordLabel: null,
-        recordIds: [fasta.slice(1).split('\n')[0]]
+        recordIds: [comparisonTexts[index].slice(1).split('\n')[0]],
+        genomeFiles: [{ length: 8, recordLengths: [8] }]
       }
-    }));
+    });
+    workerHelperResponses.push(ringSequenceReply(0));
     // Add Seq reads the first ring file with the same reader before Generate,
     // which reuses that read (OV-1545).
     assert.equal((await readComparisonSequence({ files: [comparisonViews[0]] })).fasta, comparisonTexts[0]);
+    // Generate reads the other rings for their keys, then plans the ring scales: one-record files keep LOSAT's
+    // own scale.
+    workerHelperResponses.push(ringSequenceReply(1), ringSequenceReply(2));
+    workerHelperResponses.push({ ok: true, result: { scales: [null, null, null], warnings: [] } });
     workerHelperResponses.push(ringTablesUnchanged);
     workerResponses.push(response(circularResult, validCatalog(circularResult.name)));
     // A Circular Generate replaces only its own drawing's cache-info rows (#1777 review 8, OV-3201).
@@ -1954,12 +1967,13 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       installShownDrawing('circular');
       state.removeDrawing(copy.id, { takeSlot: () => null });
     }
-    // Every ring file goes through the one Python reader (no JavaScript reader), once; Python then puts the
-    // ring rows in the search frame.
+    // Every ring file goes through the one Python reader (no JavaScript reader), once; Python plans the ring
+    // scales once and then puts the ring rows in the search frame.
     assert.deepEqual(
       workerMessages.filter(({ type }) => type === 'helper').slice(helperMessageCount)
         .map(({ operation }) => operation),
-      ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence', 'convertRingTablesToSearchFrame']
+      ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence', 'planRingScales',
+        'convertRingTablesToSearchFrame']
     );
     assert.equal(workerHelperResponses.length, 0);
     assert.deepEqual(
@@ -2022,7 +2036,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ].join('\n')).join('\n') + '\n'], 'bom-reference.gb');
     setCircularFile(bomReference);
     const helpersBeforeBomReference = workerMessages.filter(({ type }) => type === 'helper').length;
-    // The record list of the new reference, then the subject database.
+    // The record list of the new reference, the subject database, then the ring scales: the reference of two
+    // records gives every ring the search space 16 x 8.
     workerHelperResponses.push(
       { ok: true, result: { records: [
         { selector: '#1', record_id: 'BOMA', record_length: 8 }, { selector: '#2', record_id: 'BOMB', record_length: 8 }
@@ -2030,6 +2045,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       { ok: true, result: { records: [
         { id: 'BOMA', aliases: ['BOMA'], sequence: 'ACGTACGT' }, { id: 'BOMB', aliases: ['BOMB'], sequence: 'CCCCGGGG' }
       ] } },
+      { ok: true, result: { scales: ['128', '128', '128'], warnings: [] } },
       ringTablesUnchanged
     );
     const bomReferenceResult = result('bom-reference.svg', 'bom-reference');
@@ -2039,6 +2055,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       workerMessages.filter(({ type }) => type === 'helper').slice(helpersBeforeBomReference)
         .map(({ operation, payload }) => [operation, payload.format, payload.files?.map(({ role }) => role)]),
       [['listSequenceRecords', 'genbank', ['source']], ['readAllSequenceRecords', 'genbank', ['source']],
+        ['planRingScales', undefined, undefined],
         ['convertRingTablesToSearchFrame', undefined, undefined]]
     );
     assert.equal(workerHelperResponses.length, 0);
@@ -2057,11 +2074,18 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // ring searches.
     state.losatCacheInfo.value = state.losatCacheInfo.value.filter(({ drawingId }) => drawingId !== 'circular-copy');
     const shownRingKeys = () => state.losatCacheInfo.value.filter(({ drawingId }) => drawingId === circularDrawing.id).map(({ key }) => key);
-    /** A Generate of the reference-a drawing with the comparison rings `indexes`. @param {number[]} indexes */
-    const generateRings = async (indexes) => {
+    /**
+     * A Generate of the reference-a drawing with the comparison rings `indexes`; `scales` is Python's reply for a
+     * ring set whose scales were not planned yet (one-record files: LOSAT's own scale). A ring table conversion
+     * held for the frame leaves its reply unread, so each Generate starts from no queued reply.
+     * @param {number[]} indexes @param {(string | null)[] | null} [scales]
+     */
+    const generateRings = async (indexes, scales = null) => {
       circularDrawing.circularConservation.series.splice(0, circularDrawing.circularConservation.series.length,
         ...indexes.map((index) => ringSeries[index]));
       circularDrawing.files.c_conservation_fastas = bound(indexes.map((index) => comparisonViews[index]));
+      workerHelperResponses.splice(0);
+      if (scales) workerHelperResponses.push({ ok: true, result: { scales, warnings: [] } });
       workerHelperResponses.push(ringTablesUnchanged);
       const ringResult = result(`rings-${indexes.join('')}.svg`, `rings-${indexes.join('')}`);
       workerResponses.push(response(ringResult, validCatalog(ringResult.name)));
@@ -2070,8 +2094,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // Back on reference-a after the BOM reference's Generate: its ring searches are still cached.
     await generateRings([0, 1, 2]);
     assert.equal(losatCalls, 0, 'reference-a\'s ring searches outlive the BOM reference\'s Generate');
-    // Ring d removed, then added again.
-    await generateRings([0, 1]);
+    // Ring d removed, then added again. The scales of the two rings are planned once.
+    await generateRings([0, 1], [null, null]);
     const twoRings = shownRingKeys();
     await generateRings([0, 1, 2]);
     assert.equal(losatCalls, 0, 'ring d\'s search outlives the Generate without it');
@@ -3035,7 +3059,7 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
   };
   const oracle = spawnSync(process.env.PYTHON || 'python', ['tests/web/circular-ring-subject-oracle.py'], oracleOptions);
   assert.equal(oracle.status, 0, `Python ring subject oracle failed:\n${oracle.stderr}`);
-  const { query, cases } = JSON.parse(oracle.stdout);
+  const { query, queryReply, cases } = JSON.parse(oracle.stdout);
   const webStates = {
     'records not drawn': { selector: '', multi: true, off: ['#2'], region: [null, null] },
     'single presentation': { selector: '#2', multi: false, off: [], region: [null, null] },
@@ -3104,9 +3128,7 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
     }
   };
   // The ring query is read once, by the Python reader, for every case.
-  workerHelperResponses.push({
-    ok: true, result: { fasta: query, format: 'fasta', recordLabel: null, recordIds: ['QUERY1'] }
-  });
+  workerHelperResponses.push({ ok: true, result: queryReply });
   try {
     for (const [index, testCase] of cases.entries()) {
       const webState = webStates[testCase.name];
@@ -3137,6 +3159,9 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
       if (testCase.name === 'byte order mark') {
         workerHelperResponses.push({ ok: true, result: testCase.helperReply });
       }
+      // The ring scales Python plans for the staged files (PD-OI-018 revision 6): the subject file of several
+      // records searches with the CLI's -searchsp, so the raw cache key below is the CLI's with it.
+      workerHelperResponses.push({ ok: true, result: testCase.ringScales });
       workerHelperResponses.push(ringTableConversion);
       searched = null;
       searchOutput = testCase.rawRows;
@@ -3147,6 +3172,12 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
       assert.equal(workerHelperResponses.length, 0, testCase.name);
       assert.equal(searched?.subject, testCase.cliSubjectFasta, testCase.name);
       assert.deepEqual(searched?.cacheKeys, [testCase.cliCacheKey], testCase.name);
+      assert.deepEqual([...state.losatCache.value.values()].map(({ args }) => args), [testCase.cliArgs], testCase.name);
+      assert(testCase.cliArgs.includes('--searchsp'), testCase.name);
+      // The ring sends the lengths the ring reader answered; the reference is staged as the request names it.
+      const scaleRequest = workerMessages.slice(messagesBefore).find(({ operation }) => operation === 'planRingScales');
+      assert.deepEqual(scaleRequest?.payload.rings, [{ names: [queryFile.name], files: queryReply.genomeFiles }], testCase.name);
+      assert.deepEqual(scaleRequest?.payload.referenceSources, testCase.referenceSources, testCase.name);
       // One conversion per Generate; the request renders (and a Session saves) the CLI's ring rows, and the raw
       // LOSAT cache keeps the search output.
       const caseMessages = workerMessages.slice(messagesBefore);
@@ -4169,4 +4200,23 @@ test('a drawing re-added under its ID does not inherit the old drawing\'s unappl
     installShownDrawing('circular');
     state.removeDrawing(id, { takeSlot: () => null });
   }
+});
+
+test('a gzip Circular reference stages for the LOSAT ring plan with the size of its expanded bytes', async () => {
+  const { gzipSync } = await import('node:zlib');
+  const { requestRecordSources } = await import('../../gbdraw/web/js/services/session-request.js');
+  const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
+  const text = 'LOCUS       REF1                    2000 bp    DNA     circular UNK 01-JAN-1980\n' +
+    `ORIGIN\n        1 ${'acgt'.repeat(500)}\n//\n`;
+  const file = new File([gzipSync(Buffer.from(text))], 'ref.gb.gz', { lastModified: 1 });
+  // The ring planner stages the reference under the ids the Generate's request names it by (planRingScales).
+  // Its descriptors are those Generate's request writes (`serializeFile`), as the page passes them.
+  const reference = await requestRecordSources([{ gb: file, gff: null, fasta: null }], 'genbank', serializeFile);
+  assert.ok(reference);
+  assert.equal(reference.resources['record-1-genbank'].size, Buffer.byteLength(text));
+  const prepared = await createDiagramResourceTransport().prepare({
+    request: reference.sources, resources: reference.resources, retain: true
+  });
+  assert.deepEqual(prepared.resourceManifest.map(({ resourceId, size }) => [resourceId, size]),
+    [['record-1-genbank', Buffer.byteLength(text)]]);
 });

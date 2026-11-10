@@ -3732,11 +3732,13 @@ const sessionViewDescriptor = (file) => {
 export const inputFilePayload = (file) => getResourcePayloadIdentity(file);
 
 /**
+ * The descriptor of a file slot's value: the one owner of what Generate's request and a Session say of a File (its
+ * name, type, size and payload), which a helper's staging of that File reads too (`requestRecordSources`, OV-3364).
  * @param {unknown} file A file slot's value: a `File` or a Session resource view. A value without bytes
  *   (a list included) is rejected by `readFileContentFacts`.
  * @returns {Promise<RawSessionResourceDescriptor | null>}
  */
-const serializeFile = async (file) => {
+export const serializeFile = async (file) => {
   if (!file) return null;
   // A view: each member is read as an unvalidated value.
   const view = /** @type {UnvalidatedFields<'name' | 'type' | 'lastModified'>} */ (file);

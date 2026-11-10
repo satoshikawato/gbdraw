@@ -1271,6 +1271,24 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // A Circular Generate's ring searches pass the search space Python plans for the reference and each ring
+  // (PD-OI-018 revision 6): the reference's record sources are staged under the ids the next Generate's request names
+  // them by, so Python reads the parse that Generate renders; each ring comes as the ring reader's file lengths.
+  [DIAGRAM_HELPER_OPERATIONS.PLAN_RING_SCALES]: {
+    keys: ['program', 'referenceSources', 'rings'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'plan_ring_scales_json', [
+        String(payload.program),
+        jsonArgument(payload.referenceSources, []),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        // The file names a per-file warning names, as the input summary names them.
+        jsonArgument(Object.fromEntries(payload.resourceManifest.map(({ resourceId, name }) => [resourceId, name])), {}),
+        jsonArgument(payload.rings, []),
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS]: {
     keys: ['records', 'pairs'],
     fileRoles: [],

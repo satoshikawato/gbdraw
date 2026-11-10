@@ -572,7 +572,8 @@ def _expected_database(*record_ids: str) -> str:
 
 @pytest.fixture
 def captured_ring_searches(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
-    """The (query, subject) FASTA of every ring search; the search returns no rows."""
+    """The (query, subject) FASTA of every ring search, with a runtime that takes ``-searchsp``; the search returns
+    no rows."""
 
     import gbdraw.comparisons.circular_losat as circular_losat_module
 
@@ -583,6 +584,7 @@ def captured_ring_searches(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, s
         return ""
 
     monkeypatch.setattr(circular_losat_module, "run_losat_search", fake_search)
+    monkeypatch.setattr(circular_losat_module, "losat_takes_genome_scale", lambda *_args, **_kwargs: True)
     return searches
 
 
@@ -634,8 +636,10 @@ def test_ring_database_is_the_whole_reference_file(
     assert [subject for _query, subject in captured_ring_searches] == [expected]
     (entry,) = plan.losat_cache_entries
     assert entry["subjectCanonicalHash"] == sha256_text(expected)
+    # The reference genome is every record of the file, the CON record too (20 bp), whichever records are drawn
+    # (PD-OI-018 revision 6): 260 bp against the 20 bp query.
     assert entry["key"] == nucleotide_losat_cache_key(
-        program="blastn", args=("--task", "megablast"),
+        program="blastn", args=("--task", "megablast", "--searchsp", str(260 * 20)),
         query_hash=sha256_text(">QUERY1\nACGTACGTACGTACGTACGT\n"),
         subject_hash=sha256_text(expected), flow="circular-conservation",
     )
@@ -864,6 +868,7 @@ def whole_file_ring_search(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         return _WHOLE_FILE_RING_ROWS
 
     monkeypatch.setattr(circular_losat_module, "run_losat_search", fake_search)
+    monkeypatch.setattr(circular_losat_module, "losat_takes_genome_scale", lambda *_args, **_kwargs: True)
     return subjects
 
 

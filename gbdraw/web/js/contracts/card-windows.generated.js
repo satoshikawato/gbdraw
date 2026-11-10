@@ -72,6 +72,27 @@
  * @property {string} space
  * @property {string} limit
  */
+/**
+ * @typedef {object} RingGenomeFileLengths
+ * @property {number} length
+ * @property {number[]} recordLengths
+ */
+/**
+ * @typedef {object} RingGenomeInput
+ * @property {string[]} names
+ * @property {RingGenomeFileLengths[]} files
+ */
+/**
+ * @typedef {object} RingGenomeScales
+ * @property {(string | null)[]} scales
+ * @property {RingScaleWarning[]} warnings
+ */
+/**
+ * @typedef {object} RingScaleWarning
+ * @property {number} ring
+ * @property {string} text
+ * @property {GenomeScaleWarningParams} params
+ */
 
 /** The text of a `planGenomeScales` warning (`GenomeScaleWarning.text`), shown with `tm()`: a catalog key. */
 export const GENOME_SCALE_WARNING_TEXT = "The search space of genomes {first} and {second} ({space}) is past the largest LOSAT reads ({limit}), so their E-values are computed per file, not per genome.";

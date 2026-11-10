@@ -238,6 +238,45 @@ class LinearGenomeScales(TypedDict):
     warnings: list[GenomeScaleWarning]
 
 
+class RingGenomeFileLengths(TypedDict):
+    """One file of a ring's comparison genome as the ring reader read it (``read_comparison_sequence_json``):
+    ``length``, the length the file counts in its genome (:func:`gbdraw.io.genome.source_genome_length`), and
+    ``recordLengths``, the length of each of its records, in file order. The ring planner reads them back
+    (``plan_ring_scales_json``), so no ring file is read twice."""
+
+    length: int
+    recordLengths: list[int]
+
+
+class RingGenomeInput(TypedDict):
+    """One ring of a Circular drawing's ring searches as the page sends it to the ring planner: the names of its
+    files, as the user named them, and each file's lengths as the ring reader answered them
+    (:class:`RingGenomeFileLengths`), in the listed order."""
+
+    names: list[str]
+    files: list[RingGenomeFileLengths]
+
+
+class RingScaleWarning(TypedDict):
+    """A ring searched per file, its genome pair's search space past what LOSAT reads, and the warning the command
+    line logs for it (Owner decision 2026-11-10): ``text`` is its English text with ``{name}`` parameters
+    (:data:`gbdraw.comparisons.losat_jobs.PER_FILE_WARNING_TEXT`, a catalog key), which the page shows with
+    ``tm(text, params)``."""
+
+    ring: int
+    text: str
+    params: GenomeScaleWarningParams
+
+
+class RingGenomeScales(TypedDict):
+    """The E-value scale of each ring search of a Circular drawing, in ring order: ``scales[k]`` is the
+    ``-searchsp`` ring ``k``'s search passes, a decimal string, or null for LOSAT's own (PD-OI-018 revision 6);
+    ``warnings`` lists the rings searched per file (:class:`RingScaleWarning`)."""
+
+    scales: list[str | None]
+    warnings: list[RingScaleWarning]
+
+
 def plan_genome_scales(
     request_payload: Mapping[str, object],
     resource_paths: Mapping[str, str],
@@ -500,7 +539,9 @@ def plan_record_places_json(records_json: str) -> str:
 
 def describe_card_window_plan() -> dict[str, dict[str, Shape]]:
     """The requests and the answers of :func:`plan_card_windows_json` and :func:`plan_record_places_json`, and the
-    answer of :func:`plan_genome_scales_json`, as named shapes of :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py)."""
+    answers of :func:`plan_genome_scales_json`, and the ring planner's ring lengths and answers
+    (``gbdraw.web_support.comparison_sequences.plan_ring_scales_json``), as named shapes of
+    :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py)."""
 
     types_: dict[str, Shape] = {}
 
@@ -512,7 +553,10 @@ def describe_card_window_plan() -> dict[str, dict[str, Shape]]:
             return ref(hint.__name__)
         return None
 
-    for root in (CardWindowRecordInput, CardWindowPlan, RecordPlaceInput, RecordPlace, LinearGenomeScales):
+    for root in (
+        CardWindowRecordInput, CardWindowPlan, RecordPlaceInput, RecordPlace, LinearGenomeScales, RingGenomeFileLengths,
+        RingGenomeInput, RingGenomeScales,
+    ):
         special(root)
     return {"types": types_}
 
@@ -542,6 +586,10 @@ __all__ = [
     "plan_linear_units_json",
     "RecordPlace",
     "RecordPlaceInput",
+    "RingGenomeFileLengths",
+    "RingGenomeInput",
+    "RingGenomeScales",
+    "RingScaleWarning",
     "plan_record_places",
     "plan_record_places_json",
 ]

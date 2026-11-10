@@ -24,7 +24,7 @@ from gbdraw.web_support.config_overrides import validate_web_config_overrides_js
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
 from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
 from gbdraw.web_support.legacy_session import legacy_session_to_drawings_json
-from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
+from gbdraw.web_support.comparison_sequences import plan_ring_scales_json, read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 from gbdraw.web_support.locate import locate_web_json
@@ -1793,6 +1793,11 @@ _WEB_JSON_HELPERS = {
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),
     "read_all_sequence_records": (read_all_sequence_records, "readAllSequenceRecords"),
     "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
+    # A Circular Generate's ring searches pass the search space Python plans for their genomes (PD-OI-018 revision 6);
+    # the reference's parse is kept for that Generate's render.
+    "plan_ring_scales_json": (
+        _with_prepared_input_lookup(plan_ring_scales_json, 2, publish_inputs=True), "planRingScales"
+    ),
     "read_feature_override_table_json": (
         _with_prepared_input_lookup(read_feature_override_table_json, 2), "readFeatureOverrideTable"
     ),
