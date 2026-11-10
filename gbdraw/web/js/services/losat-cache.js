@@ -115,10 +115,26 @@ const losatFilenameLabel = (label) => String(label ?? '')
  * @param {unknown} leftLabel
  * @param {unknown} rightLabel
  * @param {string} suffix
+ * @param {number | null} [queryWindow] @param {number | null} [subjectWindow] A side's window number when it is one
+ *   of several windows of a record (`windowPairLosatFilename`).
  */
-export const losatEdgeFilename = (leftLabel, rightLabel, suffix) => (
-  `${losatFilenameLabel(leftLabel) || 'seq_1'}.${losatFilenameLabel(rightLabel) || 'seq_2'}.${suffix}.tsv`
+export const losatEdgeFilename = (leftLabel, rightLabel, suffix, queryWindow = null, subjectWindow = null) => (
+  windowPairLosatFilename(
+    `${losatFilenameLabel(leftLabel) || 'seq_1'}.${losatFilenameLabel(rightLabel) || 'seq_2'}.${suffix}.tsv`,
+    queryWindow, subjectWindow)
 );
+
+/**
+ * The raw TSV name of one pair of drawn units, from its card pair's name (a `.tsv` name): a window pair adds the
+ * numbers of its windows before `.tsv` (`w<n>` for each side drawn in several windows, joined by `-`), so the window
+ * pairs of one card pair have names of their own (OV-2742); a pair of cards drawn whole keeps the card pair's name.
+ * @param {string} cardPairName
+ * @param {number | null} queryWindow @param {number | null} subjectWindow Null for a side drawn whole.
+ */
+export const windowPairLosatFilename = (cardPairName, queryWindow, subjectWindow) => {
+  const windows = [queryWindow, subjectWindow].flatMap((window) => (window === null ? [] : [`w${window}`]));
+  return windows.length === 0 ? cardPairName : `${cardPairName.replace(/\.tsv$/iu, '')}.${windows.join('-')}.tsv`;
+};
 
 /**
  * @param {unknown} value

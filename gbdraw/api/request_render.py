@@ -77,7 +77,7 @@ from gbdraw.annotations import (
 )
 from gbdraw.annotations.planning import annotation_sets_left_out
 from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losat, ring_subject_records
-from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
+from gbdraw.comparisons.linear_losat import NucleotideLosatRecord, resolve_linear_nucleotide_losat
 from gbdraw.comparisons.losat_jobs import losat_record_uids, losat_source_ids, losatp_job_specs
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import (
@@ -2320,19 +2320,24 @@ def _resolve_nucleotide_losat(
         collection.records,
         layout.multi_record_positions if layout is not None else None,
     )
-    provenance = collection.provenance
-    return resolve_linear_nucleotide_losat(
-        options,
-        records=collection.records,
-        rows_by_record=rows_by_record,
-        source_ids=losat_source_ids(collection.records),
-        record_keys=losat_record_uids(collection.records),
-        record_labels=[
-            item.presentation.label or str(record.id)
-            for item, record in zip(provenance, collection.records, strict=True)
-        ],
-        input_indexes=[item.input_index for item in provenance],
-    )
+    records = [
+        NucleotideLosatRecord(
+            record=record,
+            source_id=source_id,
+            record_key=record_key,
+            label=item.presentation.label or str(record.id),
+            window=item.window.index + 1 if item.window is not None and item.window.is_one_of_several else None,
+            input_index=item.input_index,
+        )
+        for item, record, source_id, record_key in zip(
+            collection.provenance,
+            collection.records,
+            losat_source_ids(collection.records),
+            losat_record_uids(collection.records),
+            strict=True,
+        )
+    ]
+    return resolve_linear_nucleotide_losat(options, records=records, rows_by_record=rows_by_record)
 
 
 def resolve_similarity_alignment_plan(

@@ -14,7 +14,7 @@ import { RENDERED_ID_FEATURE_EDIT_FIELDS, migrateSessionFeaturePlacements } from
 import { collectCanonicalResourceIds } from './canonical-resource-references.js';
 import { LOSAT_EXECUTION_FIELDS, MODE_SCOPED_ROWS, SLICE_MODES, validateModeSliceFields } from './mode-scoped-migration.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
+import { isWindowLosatFilenameEntry, normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { SESSION_ADMISSION_DESCRIPTION } from '../contracts/session-shape.generated.js';
 import { repairByDescription } from '../utils/contract-repair.js';
 import { isPlainObject } from '../utils/contract-shape.js';
@@ -694,7 +694,9 @@ const LINEAR_COMPARISON_EDGE_FIELDS = new Set([
   'fileActive',
   'losatFilenameActive',
   'source',
-  'losatFilename'
+  'losatFilename',
+  // Session 51: the names typed on the window pairs of a record pair, by unit edge key (OV-2742).
+  'windowLosatFilenames'
 ]);
 
 /**
@@ -756,6 +758,12 @@ const validateLinearComparisonPlan = (plan) => {
       || typeof edge.losatFilename !== 'string'
     ) {
       throw new Error('Current comparison-plan edge metadata is invalid.');
+    }
+    const windowNames = edge.windowLosatFilenames ?? {};
+    if (!isPlainObject(windowNames) || !Object.entries(windowNames).every(isWindowLosatFilenameEntry)) {
+      throw new Error(
+        'config.linearComparisonPlan edge windowLosatFilenames must map unit edge keys to file names.'
+      );
     }
   });
   return ids;

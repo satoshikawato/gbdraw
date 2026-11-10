@@ -65,7 +65,7 @@ const blockedActions = (linearId) => [
   ['runAnalysis', []], ['cancelGeneration', []],
   ['setLabelFilterMode', ['Whitelist']], ['addWhitelistRule', []],
   ['removeWhitelistRule', [0]], ['removePriorityRule', [0]], ['resetSettings', []], ['resetLayout', []],
-  ['clearLosatCache', []], ['setLosatPairFilename', ['missing', 'changed']],
+  ['clearLosatCache', []], ['setWindowPairLosatFilename', ['missing', 'missing', 'changed']],
   ['inspectCircularSourceRecords', []], ['refreshCircularRecordOrder', []],
   ['setCircularRecordPresentationSelector', ['#999']],
   ['setCircularRecordRow', [0, 4]], ['moveCircularRecordOrderUp', [0]],

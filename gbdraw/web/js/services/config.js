@@ -117,8 +117,11 @@ import {
   normalizeLinearComparisonPlan,
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan,
-  setComparisonEdgeFile
+  setComparisonEdgeFile,
+  windowLosatFilenamesField,
+  withoutWindowLosatFilenames
 } from './linear-comparisons.js';
+import { windowLosatFilenamesOf } from './linear-comparison-retained.js';
 import { foldLoadedLinearSources, groupLinearSourceRecords, restoreFoldedLinearSources } from './linear-sources.js';
 import { buildSessionDrawingResources } from './session-resources.js';
 import { savedDrawingsOf } from './session-drawings.js';
@@ -290,7 +293,8 @@ import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   SESSION_DRAWINGS_LAYOUT,
   SESSION_VERSION,
-  TYPED_DRAFT_SESSION_VERSION
+  TYPED_DRAFT_SESSION_VERSION,
+  WINDOW_LOSAT_FILENAMES_SESSION_VERSION
 } from '../contracts/schema.generated.js';
 import {
   MODE_SCOPED_ROWS,
@@ -938,7 +942,9 @@ const serializeLinearComparisonPlan = (plan) => {
       fileActive: edge.fileActive,
       losatFilenameActive: edge.losatFilenameActive,
       source: edge.source,
-      losatFilename: edge.losatFilename
+      losatFilename: edge.losatFilename,
+      // Written only when a window pair has a typed name, so a plan without one saves as before (OV-2742).
+      ...windowLosatFilenamesField({ ...windowLosatFilenamesOf(edge) })
     }))
   };
 };
@@ -6872,6 +6878,20 @@ const liveFileStateOf = ({ target, linearSeqs, circularSources }) => /** @type {
  * @property {SettingsContainers} settings
  */
 /**
+ * A drawing config of a Session older than window-pair names (Session 51, OV-2742) without them: that file's writers
+ * wrote none. `dropped` lists the plan places it held them at, for the Load dialog (`readStoredDrawingDraft`).
+ * @template {Record<string, unknown> | null} T
+ * @param {T} config
+ * @param {number} version The Session version the config was saved with.
+ * @returns {{ config: T, dropped: string[] }}
+ */
+const withoutOlderWindowLosatFilenames = (config, version) => {
+  if (config === null || version >= WINDOW_LOSAT_FILENAMES_SESSION_VERSION) return { config, dropped: [] };
+  const { plan, dropped } = withoutWindowLosatFilenames(config.linearComparisonPlan);
+  return { config: dropped.length > 0 ? /** @type {T} */ ({ ...config, linearComparisonPlan: plan }) : config, dropped };
+};
+
+/**
  * Reads one stored drawing's draft: its editor edits (the rule rows re-keyed),
  * its config with what its files cannot hold left out, and every loss of it
  * listed in `repairs`. Nothing live changes.
@@ -6906,6 +6926,12 @@ const readStoredDrawingDraft = async (view, repairs) => {
   const storedConfig = withoutFieldsAt(slice.config, unwritten);
   /** @type {Record<string, any>} */
   let config = /** @type {typeof view.config} */ (withoutFieldsAt(view.config, unwritten));
+  // A plan edge's window-pair names are Session 51's (OV-2742): an older file's are dropped with a row.
+  const older = withoutOlderWindowLosatFilenames(config, view.sliceVersion);
+  older.dropped.forEach((edgeAt) => repairs.push(loadRepair({
+    code: 'setting-replaced', path: `${pathIn(at, 'config')}.linearComparisonPlan${edgeAt}`, effect: 'dropped'
+  })));
+  config = older.config;
   // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
   if (Array.isArray(config.rules)) config.rules = savedSpecificRules(config.rules);
   // A Linear drawing's files hold its record rows, a Circular drawing's its conservation rows.
@@ -7678,7 +7704,7 @@ const importSessionDocument = async (e, options = {}) => {
     const sliceDraftConfigOf = (drawingId) => projectedConfigOf(drawingId)
       ?? overlayModeSliceConfig(null, draftPartOf(drawingId).slice.config);
     /** @param {DrawingId} drawingId @returns {Record<string, any> | null} */
-    const draftConfigOf = (drawingId) => sliceDraftConfigOf(drawingId);
+    const draftConfigOf = (drawingId) => withoutOlderWindowLosatFilenames(sliceDraftConfigOf(drawingId), storedDocument.version).config;
     // Each mode's input type (OV-594): the stored one, else its request's
     // (which wins without a row over a stored value of no type), else GenBank.
     // (A settings-only Session's projection holds its own `ui` type.)

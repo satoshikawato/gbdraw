@@ -389,7 +389,9 @@ const cloneLinearComparisonPlanMetadata = (plan = {}) => ({
     fileActive: edge?.fileActive === true,
     losatFilenameActive: edge?.losatFilenameActive === true,
     source: String(edge?.source || 'upload'),
-    losatFilename: String(edge?.losatFilename || '')
+    losatFilename: String(edge?.losatFilename || ''),
+    // Only an edge with window-pair names holds the field (`WindowLosatFilenames`).
+    ...(edge?.windowLosatFilenames ? { windowLosatFilenames: { ...edge.windowLosatFilenames } } : {})
   }))
 });
 

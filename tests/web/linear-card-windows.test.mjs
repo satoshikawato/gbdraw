@@ -28,6 +28,7 @@ const {
   layoutCellKey, linearLayoutCells, linearLayoutPlaces, moveLinearLayoutCell, placeNewLayoutWindow, placeRecordAtRowEnd, setLinearRecordRow
 } = await import('../../gbdraw/web/js/services/linear-record-layout.js');
 const { createLinearRecordEdits } = await import('../../gbdraw/web/js/app/linear-source-edits.js');
+const { linearComparisonEdgeKey } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { windowBases } = await import('../../gbdraw/web/js/services/record-options.js');
 const { RECORD_SETTINGS_DEFAULTS, linearCardHasSettings } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
 const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
@@ -284,8 +285,11 @@ test('Add window places the new window right after the card\'s last cell', () =>
 });
 
 /** A Linear record edits owner over one drawing whose rows `cards` are, with the transition `applied` records. */
-const recordEditsOf = (cards) => {
-  const drawing = { linearSeqs: cards, linearRecordRows: [], linearRecordLayoutEnabled: { value: false } };
+const recordEditsOf = (cards, places = new Map()) => {
+  const drawing = {
+    linearSeqs: cards, linearRecordRows: [], linearRecordLayoutEnabled: { value: false },
+    linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] }
+  };
   const applied = [];
   const steps = [];
   const cleared = [];
@@ -296,6 +300,7 @@ const recordEditsOf = (cards) => {
     clearAlignmentForMutation: (reason) => { cleared.push(String(reason)); },
     linearRecordsFor: () => [],
     linearRecordStatusFor: () => ({}),
+    shownUnitPlaces: () => places,
     rebindAnnotationRecords: () => {},
     applyLinearSeqMutation: (target, items, options) => {
       applied.push({ items: items.map((item) => ({ uid: item.uid, windows: item.windows.length })), options });
@@ -326,6 +331,40 @@ test('Reverse complement turns a window, so it keeps the alignment; Start, End a
   edits.setLinearCardWindow(cards[1], 0, 'end', 2);
   assert.deepEqual(cards[1].windows[0], span(2, 5, true));
   assert.equal(cleared.length, 4);
+});
+
+// OV-2742: Remove window moves the names typed on window pairs with their windows, inside its own History step.
+test('Remove window moves the window-pair names of the plan with their windows', () => {
+  const cards = [createLinearSeq({ uid: 'a', windows: [span(1, 100), span(101, 200), span(201, 300)] }), createLinearSeq({ uid: 'b' })];
+  // The drawn Result's units, as Python keys them (`window_unit_key`).
+  const places = new Map([['a~w1', { recordKey: 'a', window: 1 }], ['a~w2', { recordKey: 'a', window: 2 }],
+    ['a~w3', { recordKey: 'a', window: 3 }], ['b', { recordKey: 'b', window: null }]]);
+  const { drawing, steps, edits } = recordEditsOf(cards, places);
+  drawing.linearComparisonPlan.edges.push({ id: 'e1', queryUid: 'a', subjectUid: 'b', windowLosatFilenames: {
+    [linearComparisonEdgeKey('a~w2', 'b')]: 'second.tsv', [linearComparisonEdgeKey('a~w1', 'b')]: 'first.tsv' } });
+  edits.removeLinearCardWindow(cards[0], 0);
+  assert.deepEqual(steps.map(String), ['Remove window']);
+  assert.deepEqual(drawing.linearComparisonPlan.edges[0].windowLosatFilenames, { [linearComparisonEdgeKey('a~w1', 'b')]: 'second.tsv' });
+  // Down to one window, the record is drawn whole: its window pairs and their names go.
+  edits.removeLinearCardWindow(drawing.linearSeqs[0], 0);
+  edits.removeLinearCardWindow(drawing.linearSeqs[0], 0);
+  assert.equal(Object.hasOwn(drawing.linearComparisonPlan.edges[0], 'windowLosatFilenames'), false);
+});
+
+// OV-2742: with no drawn Result the Web cannot place a window-pair name (Python forms the unit keys), so Remove window
+// drops the edited record's names rather than leave one on another window's span; another record pair keeps its own.
+test('Remove window with no drawn Result drops the edited record\'s window-pair names', () => {
+  const cards = [createLinearSeq({ uid: 'a', windows: [span(1, 100), span(101, 200), span(201, 300)] }),
+    createLinearSeq({ uid: 'b' }), createLinearSeq({ uid: 'c', windows: [span(1, 50), span(51, 100)] })];
+  const { drawing, steps, edits } = recordEditsOf(cards);
+  const othersNames = { [linearComparisonEdgeKey('c~w1', 'b')]: 'other.tsv' };
+  drawing.linearComparisonPlan.edges.push(
+    { id: 'e1', queryUid: 'a', subjectUid: 'b', windowLosatFilenames: { [linearComparisonEdgeKey('a~w3', 'b')]: 'third.tsv' } },
+    { id: 'e2', queryUid: 'c', subjectUid: 'b', windowLosatFilenames: { ...othersNames } });
+  edits.removeLinearCardWindow(cards[0], 0);
+  assert.deepEqual(steps.map(String), ['Remove window']);
+  assert.equal(Object.hasOwn(drawing.linearComparisonPlan.edges[0], 'windowLosatFilenames'), false);
+  assert.deepEqual(drawing.linearComparisonPlan.edges[1].windowLosatFilenames, othersNames);
 });
 
 test('Add window and Remove are one History step each through the record rows\' transition (F7)', () => {

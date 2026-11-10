@@ -19,6 +19,7 @@ const modulePaths = [
   // match-sequences.js reads a catalog's drawn units as their records (`unitRecordsOf`).
   'gbdraw/web/js/services/linear-units.js',
   'gbdraw/web/js/services/linear-comparisons.js',
+  'gbdraw/web/js/services/linear-comparison-retained.js',
   'gbdraw/web/js/services/input-types.js',
   'gbdraw/web/js/services/record-options.js',
   'gbdraw/web/js/services/record-draw-selection.js',

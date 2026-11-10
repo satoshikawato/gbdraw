@@ -1209,6 +1209,7 @@ assert.equal(aliasOperations, 2, 'one normalization per valid feature alias in e
 const { cases: edgeFilenameCases } = JSON.parse(await readFile(
   join(repoRoot, 'tests', 'fixtures', 'losat_edge_filename_cases.json'), 'utf8'
 ));
-for (const { left, right, suffix, expected } of edgeFilenameCases) {
-  assert.equal(cache.losatEdgeFilename(left, right, suffix), expected, JSON.stringify({ left, right }));
+for (const { left, right, suffix, queryWindow = null, subjectWindow = null, expected } of edgeFilenameCases) {
+  assert.equal(cache.losatEdgeFilename(left, right, suffix, queryWindow, subjectWindow), expected,
+    JSON.stringify({ left, right, queryWindow, subjectWindow }));
 }

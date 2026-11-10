@@ -149,7 +149,7 @@ const arrangedDrawing = (uids) => {
 const cardEditsOf = (drawing) => createLinearRecordEdits({
   sessionOperationAvailability: () => null, shownDrawingOfMode: () => drawing,
   runUndoable: (_label, action) => { action(); return true; }, clearAlignmentForMutation: () => {},
-  linearRecordsFor: () => [], linearRecordStatusFor: () => ({}), rebindAnnotationRecords: () => {},
+  linearRecordsFor: () => [], linearRecordStatusFor: () => ({}), rebindAnnotationRecords: () => {}, shownUnitPlaces: () => new Map(),
   applyLinearSeqMutation: (target, items) => { target.linearSeqs.splice(0, Infinity, ...items); }
 });
 /** Up or Down of a Record Layout cell, by the rule of `moveLinearRecordWithinRow` (app/linear-comparison-edits.js). */

@@ -6,7 +6,7 @@
 // searches over the units: every index a search writes into the request is a unit index, as Python reads it. The Web
 // derives no unit and no pair itself.
 /** @import { LinearSeq } from './drawing/inputs.js' */
-/** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
+/** @import { LinearComparisonResolution, LinearComparisonResolvedEdge, WindowLosatFilenames } from './linear-comparisons.js' */
 /** @import { CanonicalRecordWindow } from '../contracts/request.generated.js' */
 import { linearComparisonEdgeKey } from './linear-comparisons.js';
 import { linearSeqRecordKey } from './record-draw-selection.js';
@@ -44,11 +44,12 @@ const FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'planLinearU
 
 /**
  * The searches of one Generate over the drawn units: each unit's card, under the unit's key when it is one of several
- * windows (`sequences`), the card itself (`cards`), the unit's record key, `windowOf` and window (the span its search
- * reads, null for a record drawn whole), and the comparison plan whose edges join units (`resolution`).
+ * windows (`sequences`), the card itself (`cards`), the unit's key, record key, `windowOf` and window (the span its
+ * search reads, null for a record drawn whole), and the comparison plan whose edges join units (`resolution`).
  * @typedef {object} LinearUnitSearch
  * @property {LinearSeq[]} sequences
  * @property {LinearSeq[]} cards
+ * @property {string[]} unitKeys
  * @property {string[]} recordKeys
  * @property {(string | null)[]} windowOf
  * @property {(LinearUnitWindow | null)[]} windows
@@ -126,6 +127,22 @@ export const catalogUnitRecords = (recordKeys, windowOf) => {
  * @typedef {{ recordKey: string, window: number | null }} LinearUnitPlace
  */
 /**
+ * @param {readonly string[]} unitKeys The units, in drawing order.
+ * @param {LinearUnitRecords} units The record each unit draws.
+ * @returns {Map<string, LinearUnitPlace>}
+ */
+const unitPlacesOf = (unitKeys, units) => {
+  /** @type {Map<string, number>} */
+  const counted = new Map();
+  return new Map(unitKeys.map((unitKey, unit) => {
+    const of = units.windowOf[unit];
+    const window = of === null ? null : (counted.get(of) ?? 0) + 1;
+    if (of !== null && window !== null) counted.set(of, window);
+    return [unitKey, { recordKey: units.recordKeys[unit], window }];
+  }));
+};
+
+/**
  * The place of each unit a drawn Result's catalog names, by unit key (`LinearUnitPlace`): its record
  * (`catalogUnitRecords`) and its window number, counted in drawing order, which is the order of the record's window
  * list (Python's `record_drawn_windows`). Empty without a catalog item. Every item names the same units
@@ -135,15 +152,57 @@ export const catalogUnitRecords = (recordKeys, windowOf) => {
  */
 export const catalogUnitPlaces = (catalog) => {
   const [item] = catalog === null ? [] : catalog.items;
-  if (!item) return new Map();
-  const units = catalogUnitRecords(item.recordKeys, item.windowOf);
-  /** @type {Map<string, number>} */
-  const counted = new Map();
-  return new Map(item.recordKeys.map((unitKey, unit) => {
-    const of = units.windowOf[unit];
-    const window = of === null ? null : (counted.get(of) ?? 0) + 1;
-    if (of !== null && window !== null) counted.set(of, window);
-    return [unitKey, { recordKey: units.recordKeys[unit], window }];
+  return item ? unitPlacesOf(item.recordKeys, catalogUnitRecords(item.recordKeys, item.windowOf)) : new Map();
+};
+
+/**
+ * The place of each unit a Generate searches, by unit key (`LinearUnitPlace`), counted as `catalogUnitPlaces` counts
+ * the units of the Result it draws: Python plans both.
+ * @param {Pick<LinearUnitSearch, 'unitKeys' | 'recordKeys' | 'windowOf'>} search
+ */
+export const searchUnitPlaces = (search) => unitPlacesOf(search.unitKeys, search);
+
+/**
+ * The window-pair names of a record pair after Remove window `removed` (1-based) of the record `recordKey`, which
+ * leaves it `windowsLeft` windows (OV-2742): a name stays with its window or goes. The removed window's names go; a
+ * later window's name moves to the unit key of the window before it; and when one window is left, every name of the
+ * record's windows goes (its unit is then the record drawn whole). `places` are the drawn Result's units, whose keys
+ * Python formed. Only the edited record's side of a name is re-keyed; the other side stays as it is, placed or not
+ * (a record left out of the last Generate keeps its own key). The Web cannot form a unit key, so a name none of whose
+ * sides is a unit of the edited record in `places` goes (with no drawn Result, every name). Pass only the names of a
+ * record pair that holds `recordKey`.
+ * @param {WindowLosatFilenames} names
+ * @param {ReadonlyMap<string, LinearUnitPlace>} places
+ * @param {string} recordKey
+ * @param {number} removed
+ * @param {number} windowsLeft
+ * @returns {WindowLosatFilenames}
+ */
+export const windowLosatFilenamesAfterRemoval = (names, places, recordKey, removed, windowsLeft) => {
+  const ownUnits = [...places].filter(([, place]) => place.recordKey === recordKey).map(([unitKey]) => unitKey);
+  /** @param {string} edgeKey @returns {[string, string] | undefined} The two units of a name with an own unit. */
+  const pairOf = (edgeKey) => {
+    for (const unit of ownUnits) {
+      const asQuery = linearComparisonEdgeKey(unit, '');
+      const asSubject = linearComparisonEdgeKey('', unit);
+      if (edgeKey.startsWith(asQuery)) return [unit, edgeKey.slice(asQuery.length)];
+      if (edgeKey.endsWith(asSubject)) return [edgeKey.slice(0, -asSubject.length), unit];
+    }
+    return undefined;
+  };
+  const unitAt = new Map([...places].map(([unitKey, place]) => [`${place.recordKey}\n${place.window}`, unitKey]));
+  /** @param {string} unitKey @returns {string | null} */
+  const moved = (unitKey) => {
+    const place = places.get(unitKey);
+    if (place === undefined || place.recordKey !== recordKey || place.window === null) return unitKey;
+    if (windowsLeft < 2 || place.window === removed) return null;
+    return place.window < removed ? unitKey : unitAt.get(`${recordKey}\n${place.window - 1}`) ?? null;
+  };
+  return Object.fromEntries(Object.entries(names).flatMap(([edgeKey, name]) => {
+    const pair = pairOf(edgeKey);
+    if (pair === undefined) return [];
+    const [query, subject] = pair.map(moved);
+    return query === null || subject === null ? [] : [[linearComparisonEdgeKey(query, subject), name]];
   }));
 };
 
@@ -169,14 +228,14 @@ export const isDrawnWindowPairRow = (entry, places, drawn) => {
 
 /**
  * One window pair of a card pair (`LinearWindowPair`): the edge key of its LOSAT cache-info row (the pair of drawn
- * units Generate searched), the row's file name, and each side's window number (null for a card drawn whole).
- * @typedef {{ edgeKey: string, filename: string, queryWindow: number | null, subjectWindow: number | null }} LinearWindowPair
+ * units Generate searched) and each side's window number (null for a card drawn whole).
+ * @typedef {{ edgeKey: string, queryWindow: number | null, subjectWindow: number | null }} LinearWindowPair
  */
 /**
  * The window pairs of each card pair, by the card pair's edge key (its two records' keys): the cache-info rows whose
  * two units `places` knows and at least one of which is one of several windows, in row order. A row whose two units
  * are cards drawn whole is the card pair's own row, which the card reads by its edge key.
- * @param {readonly { edgeKey?: string, queryUid?: string, subjectUid?: string, filename: string }[]} entries
+ * @param {readonly { edgeKey?: string, queryUid?: string, subjectUid?: string }[]} entries
  * @param {ReadonlyMap<string, LinearUnitPlace>} places
  * @returns {Map<string, LinearWindowPair[]>}
  */
@@ -189,7 +248,7 @@ export const linearWindowPairsByCardEdge = (entries, places) => {
     if (!entry.edgeKey || !query || !subject || (query.window === null && subject.window === null)) return;
     const cardEdge = linearComparisonEdgeKey(query.recordKey, subject.recordKey);
     byCard.set(cardEdge, [...(byCard.get(cardEdge) ?? []), {
-      edgeKey: entry.edgeKey, filename: entry.filename, queryWindow: query.window, subjectWindow: subject.window
+      edgeKey: entry.edgeKey, queryWindow: query.window, subjectWindow: subject.window
     }]);
   });
   return byCard;
@@ -289,6 +348,7 @@ export const linearUnitSearch = (cards, resolution, plan) => {
   return {
     sequences: units.map(({ sequence }) => sequence),
     cards: units.map(({ card }) => card),
+    unitKeys: plan.units.map(({ unitKey }) => unitKey),
     recordKeys: plan.units.map(({ recordKey }) => recordKey),
     windowOf: plan.units.map(({ windowOf }) => windowOf),
     windows: plan.units.map(({ window }) => window),
@@ -351,9 +411,11 @@ export const savedPairsUnitSearch = async (cards, pairs, windowsOf, runHelper, r
  * @param {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} runHelper Runs the Worker helper.
  * @returns {Promise<LinearUnitSearch>}
  */
-export const generateUnitSearch = async (cards, resolution, windowsOf, runHelper) => (resolution.hasComparisonIntent === true
-  ? planLinearUnitSearch(cards, resolution, windowsOf, runHelper)
-  : {
-      sequences: [...cards], cards: [...cards], recordKeys: cards.map((card, index) => linearSeqRecordKey(card, index)),
-      windowOf: cards.map(() => null), windows: cards.map(() => null), resolution
-    });
+export const generateUnitSearch = async (cards, resolution, windowsOf, runHelper) => {
+  if (resolution.hasComparisonIntent === true) return planLinearUnitSearch(cards, resolution, windowsOf, runHelper);
+  const recordKeys = cards.map((card, index) => linearSeqRecordKey(card, index));
+  return {
+    sequences: [...cards], cards: [...cards], unitKeys: recordKeys, recordKeys,
+    windowOf: cards.map(() => null), windows: cards.map(() => null), resolution
+  };
+};

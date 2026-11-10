@@ -1,6 +1,7 @@
 // @ts-check
 import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection.js';
 import { msg } from '../utils/i18n.js';
+import { edgeRetainsUserData, windowLosatFilenamesOf } from './linear-comparison-retained.js';
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
 /** @import { InputFileRef } from './history-files.js' */
 /** @import { CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
@@ -8,6 +9,13 @@ import { msg } from '../utils/i18n.js';
 /**
  * @typedef {'none' | 'adjacent' | 'selected'} LinearComparisonMode
  * @typedef {'losat' | 'upload'} LinearComparisonSource
+ */
+/**
+ * The raw LOSAT TSV names typed on the window pairs of a record pair (OV-2742), by the edge key of each window pair
+ * (`linearComparisonEdgeKey` of its two drawn units' keys, as Generate's cache-info row names it). A window pair
+ * without a typed name is absent, and an edge none of whose window pairs has one holds no `windowLosatFilenames`
+ * (the one form in the plan, its Save, and History).
+ * @typedef {Record<string, string>} WindowLosatFilenames
  */
 /**
  * One draft pair of the Linear comparison plan. `file` names the uploaded
@@ -23,6 +31,7 @@ import { msg } from '../utils/i18n.js';
  * @property {LinearComparisonSource} source
  * @property {InputFileRef | null} file
  * @property {string} losatFilename
+ * @property {WindowLosatFilenames} [windowLosatFilenames]
  */
 /**
  * The options of `createLinearComparisonEdge`; every field may be absent or
@@ -37,6 +46,7 @@ import { msg } from '../utils/i18n.js';
  * @property {unknown} [source]
  * @property {unknown} [file]
  * @property {unknown} [losatFilename]
+ * @property {unknown} [windowLosatFilenames]
  */
 /**
  * @typedef {object} LinearComparisonPlan
@@ -60,6 +70,7 @@ import { msg } from '../utils/i18n.js';
  * @property {boolean} fileActive
  * @property {string} losatFilename
  * @property {boolean} losatFilenameActive
+ * @property {WindowLosatFilenames} [windowLosatFilenames]
  */
 /**
  * @typedef {object} LinearComparisonIssue
@@ -204,7 +215,8 @@ export const createLinearComparisonEdge = ({
   losatFilenameActive = false,
   source = LINEAR_COMPARISON_SOURCES.UPLOAD,
   file = null,
-  losatFilename = ''
+  losatFilename = '',
+  windowLosatFilenames = {}
 } = {}) => ({
   id: cleanUid(id) || createComparisonId(),
   queryUid: cleanUid(queryUid),
@@ -215,8 +227,67 @@ export const createLinearComparisonEdge = ({
   source: normalizeSource(source, LINEAR_COMPARISON_SOURCES.UPLOAD),
   // A binding's ref, or the loaded file of a Load candidate (see the typedef).
   file: /** @type {InputFileRef | null} */ (file || null),
-  losatFilename: String(losatFilename || '')
+  losatFilename: String(losatFilename || ''),
+  ...windowLosatFilenamesField(normalizeWindowLosatFilenames(windowLosatFilenames))
 });
+
+/**
+ * Whether one window-pair name entry holds: a unit edge key and a name, neither blank. The one check of an entry:
+ * Load keeps the entries it holds for, and Save's check refuses a map with any other (`session-authority.js`).
+ * @param {[string, unknown]} entry
+ * @returns {entry is [string, string]}
+ */
+export const isWindowLosatFilenameEntry = (entry) => (
+  entry[0].trim() !== '' && typeof entry[1] === 'string' && entry[1].trim() !== ''
+);
+
+/**
+ * The window-pair names of a stored edge: each entry `isWindowLosatFilenameEntry` holds for; anything else names none.
+ * @param {unknown} value
+ * @returns {WindowLosatFilenames}
+ */
+const normalizeWindowLosatFilenames = (value) => Object.fromEntries(
+  Object.entries(value && typeof value === 'object' && !Array.isArray(value) ? value : {})
+    .filter(isWindowLosatFilenameEntry)
+);
+
+/**
+ * The edge field that holds `names`: absent when no window pair has a name.
+ * @param {WindowLosatFilenames} names
+ * @returns {{ windowLosatFilenames?: WindowLosatFilenames }}
+ */
+export const windowLosatFilenamesField = (names) => (Object.keys(names).length > 0 ? { windowLosatFilenames: names } : {});
+
+/**
+ * Sets an edge's window-pair names in place: an edge without any holds no field.
+ * @param {{ windowLosatFilenames?: WindowLosatFilenames }} edge Changed in place.
+ * @param {WindowLosatFilenames} names
+ */
+export const setWindowLosatFilenames = (edge, names) => {
+  if (Object.keys(names).length > 0) edge.windowLosatFilenames = names;
+  else delete edge.windowLosatFilenames;
+};
+
+/**
+ * A plan of a Session older than `windowLosatFilenames` (Session 51, OV-2742) without that field: its writers wrote
+ * none, so Load drops what such a file holds and lists each edge's (`dropped`, places under the plan).
+ * @param {unknown} plan
+ * @returns {{ plan: unknown, dropped: string[] }}
+ */
+export const withoutWindowLosatFilenames = (plan) => {
+  const edges = plan && typeof plan === 'object' && !Array.isArray(plan)
+    ? /** @type {{ edges?: unknown }} */ (plan).edges : undefined;
+  if (!Array.isArray(edges)) return { plan, dropped: [] };
+  /** @type {string[]} */
+  const dropped = [];
+  const kept = edges.map((edge, index) => {
+    if (!edge || typeof edge !== 'object' || !Object.hasOwn(edge, 'windowLosatFilenames')) return edge;
+    dropped.push(`.edges[${index}].windowLosatFilenames`);
+    const { windowLosatFilenames: _unwritten, ...rest } = edge;
+    return rest;
+  });
+  return { plan: { .../** @type {object} */ (plan), edges: kept }, dropped };
+};
 
 /**
  * An edge's uploaded BLAST TSV, as an upload sets it: a file is the edge's
@@ -262,8 +333,13 @@ const normalizeEdge = (source, index, collect) => {
       collect({ at: `.edges[${index}].${field}`, stored: source[field], used: normalized[field] });
     }
   });
+  // An empty map is the edge without names, which holds no field.
+  if (isStored(source.windowLosatFilenames)
+    && JSON.stringify(source.windowLosatFilenames) !== JSON.stringify(windowLosatFilenamesOf(normalized))) {
+    collect({ at: `.edges[${index}].windowLosatFilenames`, stored: source.windowLosatFilenames, used: normalized.windowLosatFilenames });
+  }
   // A field an edge does not have is not read (E-OD03, E-OD12).
-  Object.keys(source).filter((field) => !Object.hasOwn(normalized, field)).forEach((field) => {
+  Object.keys(source).filter((field) => field !== 'windowLosatFilenames' && !Object.hasOwn(normalized, field)).forEach((field) => {
     collect({ at: `.edges[${index}].${field}`, stored: source[field], used: undefined });
   });
   return normalized;
@@ -518,7 +594,8 @@ const resolvedEdge = ({ edge, queryUid, subjectUid, queryIndex, subjectIndex, so
   file: edge?.file || null,
   fileActive: edge?.fileActive === true,
   losatFilename: String(edge?.losatFilename || ''),
-  losatFilenameActive: edge?.losatFilenameActive === true
+  losatFilenameActive: edge?.losatFilenameActive === true,
+  ...windowLosatFilenamesField(normalizeWindowLosatFilenames(edge?.windowLosatFilenames))
 });
 
 // A selected pair that names an OFF record is left out with its record and
@@ -687,11 +764,6 @@ export const hasActiveLinearLosatIntent = (resolution) => Boolean(resolution?.ha
 /** @param {LinearComparisonResolution | null | undefined} resolution */
 export const hasActiveLinearUploadIntent = (resolution) => Boolean(resolution?.hasUploadIntent);
 
-/** @param {{ file?: unknown, losatFilename?: unknown } | null | undefined} edge */
-const hasRetainedPayload = (edge) => Boolean(
-  edge?.file || String(edge?.losatFilename || '').trim()
-);
-
 /**
  * @param {unknown} plan
  * @param {{ edges?: readonly LinearComparisonResolvedEdge[] } | null | undefined} resolution
@@ -727,7 +799,7 @@ export const materializeResolvedEdgesAsSelectedPlan = (plan, resolution) => {
   normalized.edges.forEach((edge) => {
     const edgeKey = linearComparisonEdgeKey(edge.queryUid, edge.subjectUid);
     if (activeIds.has(edge.id)) return;
-    if (!activeKeys.has(edgeKey) && !hasRetainedPayload(edge)) return;
+    if (!activeKeys.has(edgeKey) && !edgeRetainsUserData(edge)) return;
     selectedEdges.push({ ...edge, included: false });
   });
   return {

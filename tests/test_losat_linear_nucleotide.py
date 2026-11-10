@@ -194,6 +194,29 @@ def test_replayed_session_resaves_losatn_edges_as_nucleotide_blast(tmp_path: Pat
     assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
 
 
+@pytest.mark.linear
+def test_losat_output_dir_names_each_window_pair(tmp_path: Path) -> None:
+    # OV-2742: the CLI named the second window pair of a record pair `<pair>.losatn.2.tsv`, the Web `<pair>.w2.tsv`.
+    losat, _log = _fake_losat(tmp_path)
+    table = tmp_path / "records.tsv"
+    table.write_text(
+        "gbk\trow\tcolumn\tregion\trecord_group\n"
+        f"{LAMBDA}\t1\t1\t1-10000\tg\n"
+        f"{LAMBDA}\t1\t2\t20001-30000\tg\n"
+        f"{DE3}\t2\t1\t\t\n",
+        encoding="utf-8",
+    )
+    raw = tmp_path / "raw"
+    linear_main([
+        "--records_table", str(table), "--losat", "losatn", "--losat_bin", losat,
+        "--losat_output_dir", str(raw), "-o", str(tmp_path / "fig"), "-f", "svg",
+    ])
+    rows = (raw / "comparisons.tsv").read_text(encoding="utf-8").splitlines()[1:]
+    names = [row.split("\t")[0] for row in rows]
+    assert [name.rsplit(".", 2)[-2] for name in names] == ["w1", "w2"], rows
+    assert sorted(path.name for path in raw.iterdir()) == sorted([*names, "comparisons.tsv"])
+
+
 # TLOSATX translation tables.
 
 
@@ -356,9 +379,12 @@ def test_losat_plan_diagnostics(tmp_path: Path, case: str, match: str) -> None:
 
 def test_losat_with_blast_files_is_a_plan_error() -> None:
     from gbdraw.api import LinearDiagramOptions
-    from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
+    from gbdraw.comparisons.linear_losat import NucleotideLosatRecord, resolve_linear_nucleotide_losat
 
-    records = read_genbank([LAMBDA, DE3])
+    records = [
+        NucleotideLosatRecord(record=record, source_id=key, record_key=f"record-{index + 1}", label=key, window=None, input_index=index)
+        for index, (record, key) in enumerate(zip(read_genbank([LAMBDA, DE3]), ("a", "b")))
+    ]
     with pytest.raises(ValidationError) as excinfo:
         resolve_linear_nucleotide_losat(
             LinearDiagramOptions(
@@ -367,10 +393,6 @@ def test_losat_with_blast_files_is_a_plan_error() -> None:
             ),
             records=records,
             rows_by_record=(0, 1),
-            source_ids=("a", "b"),
-            record_keys=("record-1", "record-2"),
-            record_labels=("a", "b"),
-            input_indexes=(0, 1),
         )
     assert _diagnostic(excinfo)["reason"] == "LOSAT_PLAN"
 
@@ -460,7 +482,9 @@ def test_edge_filenames_follow_the_shared_vectors() -> None:
 
     vectors = Path(__file__).parent / "fixtures" / "losat_edge_filename_cases.json"
     for case in json.loads(vectors.read_text(encoding="utf-8"))["cases"]:
-        assert losat_edge_filename(case["left"], case["right"], case["suffix"]) == case["expected"]
+        assert losat_edge_filename(
+            case["left"], case["right"], case["suffix"], case.get("queryWindow"), case.get("subjectWindow")
+        ) == case["expected"]
 
 
 

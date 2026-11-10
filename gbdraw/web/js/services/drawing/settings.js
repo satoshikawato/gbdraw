@@ -14,8 +14,10 @@
 import { reactive, ref } from '../../utils/reactivity.js';
 import { cloneJsonData } from '../json-clone.js';
 import { createSliceHandle, sliceMembers } from './slice-handle.js';
+import { edgeRetainsUserData } from '../linear-comparison-retained.js';
 /** @import { Ref } from '../../utils/reactivity.js' */
 /** @import { SliceHandle } from './slice-handle.js' */
+/** @import { LinearComparisonPlan } from '../linear-comparisons.js' */
 
 const SETTINGS_MEMBERS = /** @type {const} */ ([
   'form', 'adv', 'losat', 'losatProgram', 'circularConservation', 'linearComparisonPlan',
@@ -160,14 +162,17 @@ const install = (slice, data) => {
 };
 
 // Reset Settings: the reset members take their defaults. The comparison plan
-// keeps the edges that hold a file or a LOSAT file name, not included and
-// with their file and name inactive.
+// keeps the edges that hold a file or a LOSAT file name (`edgeRetainsUserData`),
+// not included and with their file and name inactive. Reset returns every card
+// to its whole record (app/reset-settings.js), so no window pair is left and the
+// names typed on window pairs go (OV-2742).
 /** @param {SettingsSlice} slice */
 const reset = (slice) => {
   const defaults = defaultsOf.get(slice)?.() ?? {};
-  const plan = /** @type {ComparisonPlanMember} */ (membersOf(slice).linearComparisonPlan);
+  const plan = /** @type {LinearComparisonPlan} */ (membersOf(slice).linearComparisonPlan);
   const keptEdges = (Array.isArray(plan?.edges) ? plan.edges : [])
-    .filter((edge) => Boolean(Reflect.get(edge, 'file')) || String(Reflect.get(edge, 'losatFilename') || '').trim())
+    .map(({ windowLosatFilenames: _noWindowLeft, ...edge }) => edge)
+    .filter(edgeRetainsUserData)
     .map((edge) => ({ ...edge, included: false, fileActive: false, losatFilenameActive: false }));
   install(slice, Object.fromEntries(RESET_MEMBERS.map((member) => [member, member === 'linearComparisonPlan' && defaults[member]
     ? { .../** @type {object} */ (defaults[member]), edges: keptEdges }

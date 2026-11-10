@@ -9,6 +9,7 @@
 // discovery, and the Comparison card's readers and focus paths as ports. The
 // root creates these edits once the alignment owner exists.
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
+import { edgeRetainsUserData, windowLosatFilenamesOf } from '../services/linear-comparison-retained.js';
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
@@ -20,6 +21,7 @@ import {
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan,
   setComparisonEdgeFile,
+  setWindowLosatFilenames,
   swapComparisonEdgeFile
 } from '../services/linear-comparisons.js';
 import {
@@ -60,19 +62,21 @@ import { effectiveLinearComparisonLayout } from './linear-comparison-panel.js';
 /** @typedef {(edgeKey: string) => LinearComparisonPair | null} LinearComparisonPairForEdgeKey */
 
 /**
- * @param {LinearComparisonEdge | undefined} left
- * @param {LinearComparisonEdge | undefined} right
+ * @param {LinearComparisonEdge} left
+ * @param {LinearComparisonEdge | undefined} right The edge at the same place in the other plan, if it has one.
  */
 const sameLinearComparisonEdge = (left, right) => (
-  left?.id === right?.id &&
-  left?.queryUid === right?.queryUid &&
-  left?.subjectUid === right?.subjectUid &&
-  left?.included === right?.included &&
-  left?.fileActive === right?.fileActive &&
-  left?.losatFilenameActive === right?.losatFilenameActive &&
-  left?.source === right?.source &&
-  left?.file === right?.file &&
-  left?.losatFilename === right?.losatFilename
+  right !== undefined &&
+  left.id === right.id &&
+  left.queryUid === right.queryUid &&
+  left.subjectUid === right.subjectUid &&
+  left.included === right.included &&
+  left.fileActive === right.fileActive &&
+  left.losatFilenameActive === right.losatFilenameActive &&
+  left.source === right.source &&
+  left.file === right.file &&
+  left.losatFilename === right.losatFilename &&
+  JSON.stringify(windowLosatFilenamesOf(left)) === JSON.stringify(windowLosatFilenamesOf(right))
 );
 
 // OV-380: a pair set to a source that has no data yet (Upload BLAST TSV
@@ -177,7 +181,7 @@ const omitPlanEdge = (next, index) => {
   if (index < 0) return;
   const edge = next.edges[index];
   edge.included = false;
-  if (!edge.file && !String(edge.losatFilename || '').trim()) next.edges.splice(index, 1);
+  if (!edgeRetainsUserData(edge)) next.edges.splice(index, 1);
 };
 
 /**
@@ -442,7 +446,7 @@ export const createLinearComparisonPairEdits = ({
   const clearSelectedLinearComparisons = () => shownAction('linear', (drawing) => {
     const next = selectedPlanForEdit(drawing);
     next.edges = next.edges
-      .filter((edge) => edge.file || String(edge.losatFilename || '').trim())
+      .filter(edgeRetainsUserData)
       .map((edge) => ({ ...edge, included: false }));
     replaceLinearComparisonPlan(drawing, next);
   });
@@ -532,16 +536,18 @@ export const createLinearComparisonPairEdits = ({
  * @property {LinearComparisonPairForEdgeKey} linearComparisonPairForEdgeKey
  * @property {(drawing: DrawingState, edgeKeys: string[]) => void} omitLinearComparisonPairs
  * @property {(id: string, file: InputFileCandidate) => unknown} setLinearComparisonFile
+ * @property {(cardEdgeKey: string) => string[]} windowPairEdgeKeysOf The edge keys of the window pairs the shown
+ *   Result lists under a record pair.
  */
 
 /**
- * The LOSAT filename of a pair (by its id, or by the edge key of a resolved pair), Add all pairs, the action of a
- * pair between two rows, and the BLAST TSV chosen on such a pair.
+ * The LOSAT filename of a pair (by its id, or by the edge key of a resolved pair, or of one of its window pairs), Add
+ * all pairs, the action of a pair between two rows, and the BLAST TSV chosen on such a pair.
  * @param {LinearComparisonGapEditsPorts} ports
  */
 export const createLinearComparisonGapEdits = ({
   sessionOperationAvailability, shownAction, replaceLinearComparisonPlan, syncLinearRecordLayout,
-  linearComparisonPairForEdgeKey, omitLinearComparisonPairs, setLinearComparisonFile
+  linearComparisonPairForEdgeKey, omitLinearComparisonPairs, setLinearComparisonFile, windowPairEdgeKeysOf
 }) => {
   /** @param {string} id @param {unknown} value */
   const setLinearComparisonLosatFilename = (id, value) => shownAction('linear', (drawing) => {
@@ -606,6 +612,22 @@ export const createLinearComparisonGapEdits = ({
       edge.losatFilenameActive = Boolean(edge.losatFilename.trim());
     });
   });
+  /**
+   * The name typed on one window pair of a record pair (OV-2742), kept in the record pair's edge by the window pair's
+   * edge key; a blank name returns it to its default. The one writer of these names: it also drops the names of window
+   * pairs the shown Result no longer lists under the record pair (a window removed, or the record drawn whole).
+   * @param {string} cardEdgeKey @param {string} windowPairEdgeKey @param {unknown} value
+   */
+  const setWindowPairLosatFilename = (cardEdgeKey, windowPairEdgeKey, value) => shownAction('linear', (drawing) => {
+    const listed = new Set(windowPairEdgeKeysOf(cardEdgeKey));
+    updateResolvedLosatFilenameDraft(drawing, cardEdgeKey, (edge) => {
+      const name = String(value || '').trim();
+      setWindowLosatFilenames(edge, Object.fromEntries([
+        ...Object.entries(windowLosatFilenamesOf(edge)).filter(([key]) => key !== windowPairEdgeKey && listed.has(key)),
+        ...(name ? [[windowPairEdgeKey, name]] : [])
+      ]));
+    });
+  });
   /** @param {string} edgeKey */
   const reuseResolvedLinearComparisonLosatFilename = (edgeKey) => shownAction('linear', (drawing) => {
     updateResolvedLosatFilenameDraft(drawing, edgeKey, (edge) => {
@@ -661,7 +683,7 @@ export const createLinearComparisonGapEdits = ({
   return {
     setLinearComparisonLosatFilename, reuseLinearComparisonLosatFilename, deactivateLinearComparisonLosatFilename,
     setResolvedLinearComparisonLosatFilename, reuseResolvedLinearComparisonLosatFilename,
-    deactivateResolvedLinearComparisonLosatFilename, addLinearComparisonBatch, setLinearComparisonGapAction,
-    setLinearComparisonCardFile
+    deactivateResolvedLinearComparisonLosatFilename, setWindowPairLosatFilename, addLinearComparisonBatch,
+    setLinearComparisonGapAction, setLinearComparisonCardFile
   };
 };

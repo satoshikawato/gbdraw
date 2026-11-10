@@ -124,6 +124,18 @@ the form cannot hold as stored (`"180 MM"`) with Python's configuration check an
 Load repair row. A sized figure's composition metadata carries `requestedCanvas` (`widthPx`, `heightPx`), so the Web
 re-plan after a Legend edit keeps the requested canvas; an Auto figure's metadata has no such key.
 
+Session 51 also adds `windowLosatFilenames` to an edge of a Linear drawing's `config.linearComparisonPlan` (OV-2742):
+the raw LOSAT file names typed on the window pairs of that pair of records, keyed by the unit edge key
+(`<query unit key>-><subject unit key>`, a unit key `<record key>~w<n>` for a window of a record drawn in several).
+The Web writes the key only when a window pair has a typed name (an edge without one holds no key), Remove window
+moves each name with its window or drops it, and the name edit drops the entries of window pairs that the shown
+Result no longer lists for that record pair. Python admits it from Session 51
+(`WINDOW_LOSAT_FILENAMES_SESSION_VERSION`) as a map of non-empty keys to non-empty names
+(`_validate_comparison_plan_edge` in `gbdraw/session_io.py`) and refuses it in a Session 46 to 50; the Web loads such
+a file without it, with a Load row. No renderer reads it. A Session without the key reads as no typed names, so every window pair takes its default name.
+Session 51 has not reached `main`, so the version does not change. Positive fixture:
+`tests/fixtures/sessions/web-linear-window-pair-names.v51.gbdraw-session.json.gz`.
+
 A Linear request that states no `diagramOptions.output`, or a null `plotTitlePosition`, draws with Python's
 `LinearOutputOptions()` sides: legend `right`, title `bottom` (OV-2491, Owner decision R17-38). The generated
 `ABSENT_LINEAR_OUTPUT` (`schema.generated.js`, from `describe_absent_linear_output()` in

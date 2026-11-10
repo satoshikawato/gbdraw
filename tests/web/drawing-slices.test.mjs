@@ -441,7 +441,9 @@ test('Reset Settings keeps the record layout, the OFF records, and the compariso
     form: { ...before.form, plot_title: 'Edited' }, losatProgram: 'blastp', linearRecordGap: 40,
     linearRecordRows: [{ uid: 'card-a', row: 2 }], recordsOff: ['card-b'],
     linearComparisonPlan: { mode: 'custom', defaultSource: 'upload', edges: [
-      edge('with-file', { file }), edge('with-name', { losatFilename: 'pair.losat' }), edge('empty', { losatFilename: ' ' })
+      edge('with-file', { file }), edge('empty', { losatFilename: ' ' }),
+      edge('with-name', { losatFilename: 'pair.losat', windowLosatFilenames: { 'a~w2->b': 'window.tsv' } }),
+      edge('window-names-only', { windowLosatFilenames: { 'a~w1->b': 'first.tsv' } })
     ] }
   });
   resetSettings(state, modeDrawing(state, 'linear'));
@@ -452,6 +454,10 @@ test('Reset Settings keeps the record layout, the OFF records, and the compariso
   assert.deepEqual(after.linearComparisonPlan.edges.map(({ id, included, fileActive, losatFilenameActive }) => (
     [id, included, fileActive, losatFilenameActive])), [['with-file', false, false, false], ['with-name', false, false, false]]);
   assert.equal(after.linearComparisonPlan.edges[0].file, file, 'an edge keeps its file');
+  // OV-2742: Reset returns every card to its whole record, so no window pair is left to name: the window-pair names go,
+  // and an edge that held only those is not kept.
+  assert.equal(after.linearComparisonPlan.edges[1].losatFilename, 'pair.losat', 'an edge keeps its typed name');
+  assert.deepEqual(after.linearComparisonPlan.edges.filter((kept) => Object.hasOwn(kept, 'windowLosatFilenames')), []);
   settings.install(handle, before);
 });
 

@@ -3933,7 +3933,7 @@
                                                     <button
                                                         type="button"
                                                         :aria-label="t('Save Raw LOSAT TSV for #{from} to #{to}', { from: linearWindowPairSide(pair.queryIndex, windowPair.queryWindow), to: linearWindowPairSide(pair.subjectIndex, windowPair.subjectWindow) })"
-                                                        @click="downloadLosatPair(windowPair.edgeKey, '')"
+                                                        @click="downloadLosatPair(windowPair.edgeKey, pair.resolved?.windowLosatFilenames?.[windowPair.edgeKey] || '')"
                                                         class="btn btn-secondary px-1.5 py-0.5 text-[10px]"
                                                     ><i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}</button>
                                                     <details class="linear-pair-file-name min-w-0 flex-1">
@@ -3942,10 +3942,10 @@
                                                         <input
                                                             :id="`linear-raw-name-${windowPair.edgeKey}`"
                                                             type="text"
-                                                            v-committed-value="windowPair.filename"
+                                                            v-committed-value="pair.resolved?.windowLosatFilenames?.[windowPair.edgeKey] || ''"
                                                             :placeholder="getLosatPairDefaultName(windowPair.edgeKey)"
                                                             :title="getLosatPairDefaultName(windowPair.edgeKey)"
-                                                            @change="setLosatPairFilename(windowPair.edgeKey, $event.target.value)"
+                                                            @change="setWindowPairLosatFilename(pair.edgeKey, windowPair.edgeKey, $event.target.value)"
                                                             :aria-label="t('Raw LOSAT filename for #{from} to #{to}', { from: linearWindowPairSide(pair.queryIndex, windowPair.queryWindow), to: linearWindowPairSide(pair.subjectIndex, windowPair.subjectWindow) })"
                                                             class="form-input form-input-compact min-w-0"
                                                             :disabled="!semanticMutationAvailable">
