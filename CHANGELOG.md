@@ -222,8 +222,10 @@ write-up of a release.
   `--multi_record_position`, `--record_id`, `--region`, and the Web app
   refused it. Both modes' `--multi_record_position` now read one grammar: a
   row with a plus sign (`#2@+1`) and a record ID that holds `@` or is `none`
-  or `-`, which one mode drew and the other refused, now draw in both
-  (OV-2988, OV-3312).
+  or `-`, which one mode drew and the other refused, now draw in both. A word
+  such as `none` or `-` that no record has as its ID names the record when
+  only one is drawn, as it did for a record drawn in windows (OV-2988,
+  OV-3312).
 - Fixed: a record that a Session stores by a record ID that reads like a
   record number (`#2`, `#+2`) now draws that record in the Web app after Load,
   in a Linear card, the Circular Record select and a Circular record range, as

@@ -8,10 +8,10 @@ import { ORGANISM_NAME_RULE } from '../contracts/schema.generated.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import {
-  circularInputComplete, circularSourceInputs, inputTypeOfSourceKind, inputTypeSpec, storedRecordSourceResourceIds
+  circularInputComplete, circularSourceInputs, inputTypeOfSourceKind, inputTypeSpec
 } from './input-types.js';
 import { recordIdentity, recordSelectorNumber, resliceCardRows } from './record-draw-selection.js';
-import { storedRecordIdKey } from './stored-leaf-readings.js';
+import { storedRecordIdOf } from './stored-leaf-readings.js';
 import { sessionResourceReadOwner } from './session-resource-backing.js';
 import { isRecordMajorDepthFileMatrix } from './depth-track-state.js';
 import {
@@ -27,6 +27,7 @@ import {
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { InputTypeSpec } from './input-types.js' */
+/** @import { UnreadStoredRecord } from './stored-leaf-readings.js' */
 /** @import { CircularCardMark, CircularSource, DrawingInputFiles } from './drawing/inputs.js' */
 
 /**
@@ -733,7 +734,7 @@ const fastPathRecords = async (files, parse) => {
 // Worker's FASTA and protein extractions). Each read is kept once per File
 // object (or per GFF3 and FASTA pair) and key, and once per resource for the
 // views of one Session resource (`sessionResourceReadOwner`): an uploaded File
-// and a Session resource never change their bytes. A failed read is not kept; each
+// never changes its bytes, nor does a Session resource once its table is adopted. A failed read is not kept; each
 // reader keeps an error it treats as final in its own state.
 /**
  * @typedef {{ reads: Map<string, Promise<unknown>>, paired: WeakMap<object, FileReads> }} FileReads
@@ -1098,25 +1099,6 @@ export const discoverInputRecords = (spec, primaryFile, pairedFile) => (
 );
 
 /**
- * A record of a stored render request as Load holds it before the request is read: any field may be missing or of
- * another type.
- * @typedef {{ readonly selector?: Readonly<Record<string, unknown>> | null,
- *   readonly source?: Readonly<Record<string, unknown>> | null }} UnreadStoredRecord
- */
-/**
- * The record ID of a stored record whose selector is a record ID that a record text reads as a `#N` (`#2`, `#+2`),
- * with the input type of its source and the source's resource ids; null for any other record.
- * @param {UnreadStoredRecord | null} record
- * @returns {{ recordId: string, spec: Readonly<InputTypeSpec>, resourceIds: string[] } | null}
- */
-const hashLikeRecordIdOf = (record) => {
-  const value = record?.selector?.kind === 'recordId' ? record.selector.value : null;
-  const resourceIds = storedRecordSourceResourceIds(record?.source);
-  if (typeof value !== 'string' || recordSelectorNumber(value) === null || resourceIds.length === 0) return null;
-  return { recordId: value, spec: inputTypeSpec(inputTypeOfSourceKind(record?.source?.kind)), resourceIds };
-};
-
-/**
  * The place (`#k`, its file's record list as Python reads it) of each stored record whose selector is a record ID
  * that a record text reads as a `#N`, by `storedRecordIdKey`: Load gives a Linear card, the Circular Record select
  * and a Circular record range that place, so they draw the record of that ID, as Python does (OV-3311). `unresolved`
@@ -1139,10 +1121,10 @@ export const readStoredRecordIdPlaces = async (requests, fileOf) => {
       ? /** @type {{ readonly records?: unknown }} */ (renderRequest).records : null;
     if (!Array.isArray(records)) continue;
     for (const [index, record] of /** @type {(UnreadStoredRecord | null)[]} */ (records).entries()) {
-      const named = hashLikeRecordIdOf(record);
-      if (!named) continue;
-      const { recordId, spec, resourceIds } = named;
-      const key = storedRecordIdKey(resourceIds, recordId);
+      const named = storedRecordIdOf(record);
+      if (!named || recordSelectorNumber(named.recordId) === null) continue;
+      const { recordId, resourceIds, key } = named;
+      const spec = inputTypeSpec(inputTypeOfSourceKind(record?.source?.kind));
       if (read.has(key)) continue;
       read.add(key);
       const [primaryFile, pairedFile] = resourceIds;

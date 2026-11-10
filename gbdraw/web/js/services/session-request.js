@@ -2,7 +2,7 @@
 import { storedRegionWindows, writeCanonicalRecordReverseComplement } from './record-display-model.js';
 import {
   INPUT_TYPES, inputSourceFiles, inputTypeOfSourceKind, inputTypeSpec,
-  recordSourceFilesOf, recordSourceOf, recordSourceSlotIds
+  recordSourceOf, recordSourceSlotIds
 } from './input-types.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
 import { cardCropWindow } from './drawing/inputs.js';
@@ -163,7 +163,7 @@ import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from './linear-wrap-form.js';
 import { FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH, figureLengthFormValue } from './figure-size-form.js';
 import { featureDensityTrackIds, projectFeatureDensityTracks, requestFeatureDensityTracks } from './feature-density-tracks.js';
-import { NO_STORED_READINGS, storedRecordIdKey } from './stored-leaf-readings.js';
+import { NO_STORED_READINGS, storedRecordIdOf } from './stored-leaf-readings.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
   CONFIG_UNSET_NUMBER_PATHS,
@@ -1491,15 +1491,15 @@ const cropFieldsOfWindows = (record) => {
 /**
  * A request record's selector as a record text: a Linear card's, the Circular Record select's, or a Circular record
  * range's (`canonicalRecordSelector`). A record ID that the text would read as a `#N` (`#2`, `#+2`) takes the place
- * Load read for it in its file (`storedRecordIdKey`, OV-3311), the text the Record select gives such a record, so
+ * Load read for it in its file (`storedRecordIdOf`, OV-3311), the text the Record select gives such a record, so
  * the text names the record of that ID; without one it stays.
  * @param {RequestRecordView | null | undefined} record
  * @param {StoredLeafReadings} readings
  */
 const cardRecordText = (record, readings) => {
   const text = canonicalRecordSelector(record) || '';
-  if (!record || record.selector?.kind !== 'recordId' || recordSourceFilesOf(record.source.kind).length === 0) return text;
-  const place = readings.get(storedRecordIdKey(recordSourceResourceIds(record.source), text));
+  const stored = storedRecordIdOf(record);
+  const place = stored && readings.get(stored.key);
   return typeof place === 'string' ? place : text;
 };
 

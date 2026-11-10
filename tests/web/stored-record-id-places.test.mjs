@@ -7,9 +7,11 @@
 // record Load cannot place gets a Load repair row.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import test from 'node:test';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
@@ -32,6 +34,8 @@ const metrics = [];
 globalThis.__GBDRAW_TEST_HOOKS__ = { onStructuralMetric: (metric) => metrics.push(metric) };
 const decodes = () => metrics.filter(({ name }) => name === 'base64DecodeCount').length;
 
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: { overrides: payload.configOverrides } }));
 const { CANONICAL_REQUEST_SCHEMA, projectCanonicalSessionRequest } = await import('../../gbdraw/web/js/services/session-request.js');
@@ -160,3 +164,19 @@ test('Load of a Session gives the card the place of its stored record ID and dec
   assert.equal(missing.card, '#9');
   assert.ok(missing.repairs.some((item) => item.includes('"#9"') && item.includes('reads like a record number')), JSON.stringify(missing.repairs));
 });
+
+// A Session 31-39 stores its request at the top level; Load reads it the same way.
+// A Session 31-39 stores its request at the top level; Load reads Python's Session 51 of it (with its draft, after
+// reading the draft over the request's projection), and either path gives the card the record's place.
+for (const keepsDraft of [false, true]) {
+  test(`Load of a Session 31 ${keepsDraft ? 'with' : 'without'} its draft gives the card the place of its stored record ID`, async () => {
+    for (const [recordId, place] of [['#2', '#3'], ['#+2', '#4']]) {
+      const session = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', import.meta.url))));
+      session.resources['record-1-genbank'] = descriptor(genbank, 'record-1-genbank-named.gb');
+      for (const field of [...(keepsDraft ? [] : ['config']), 'results', 'orthogroupState']) delete session[field];
+      session.renderRequest.records[0].selector = { kind: 'recordId', value: recordId };
+      assert.equal((await load(session)).card, place, recordId);
+    }
+  });
+}
+
