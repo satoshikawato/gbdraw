@@ -1021,6 +1021,14 @@ export const losatFailureRepeats = (error) => error.code === 'LOSAT_RUNTIME'
   && (error.context.losatMessage !== undefined || error.context.reason === 'TRAP');
 
 /**
+ * The sentence that lists the genetic codes LOSAT reads, as a refused code's Generation Error says it: a Linear card
+ * marks a typed code LOSAT does not read with it before Generate (OV-3326).
+ * @param {string} codes The tables as Python names them (`LOSAT_GENETIC_CODE_TEXT`).
+ * @returns {ErrorTextPart[]}
+ */
+export const losatGeneticCodeHint = (codes) => [{ text: PHRASES.geneticCodes, params: { codes } }];
+
+/**
  * Whether the same Generate would stop on the same comparison setting again: a LOSAT failure that repeats
  * (`losatFailureRepeats`), or a TLOSATX genetic code LOSAT does not read (OV-3326). The failure offers the comparison
  * settings and never Retry, in both modes.

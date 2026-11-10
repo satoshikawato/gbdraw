@@ -57,6 +57,22 @@ def test_ring_gencodes_refuse_a_code_losat_does_not_read() -> None:
     }
 
 
+def test_a_ring_gencode_losatn_never_uses_is_named_as_not_applying_first(tmp_path: Path) -> None:
+    # The program check comes before the table check, as in Linear: one edit fixes the one cause.
+    with pytest.raises(ValidationError) as caught:
+        CircularDiagramOptions(conservation_losat_gencodes=(7,), losat_search=LosatSearchOptions(program="losatn"))
+    assert caught.value.diagnostic["reason"] == "LOSAT_OPTION_PROGRAM"
+    from gbdraw.circular import circular_main
+
+    losat, _log = _never_searched(tmp_path)
+    with pytest.raises(ValidationError) as cli:
+        circular_main([
+            "--gbk", str(LAMBDA), "--conservation_genome", str(LAMBDA), "--losat", "losatn",
+            "--conservation_losat_gencode", "7", "--losat_bin", losat, "-o", str(tmp_path / "ring"), "-f", "svg",
+        ])
+    assert str(cli.value) == "--conservation_losat_gencode does not apply to --losat losatn."
+
+
 def _never_searched(tmp_path: Path) -> tuple[str, Path]:
     log = tmp_path / "searched.log"
     path = tmp_path / "bin" / "losat"

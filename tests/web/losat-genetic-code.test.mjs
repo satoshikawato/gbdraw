@@ -5,9 +5,11 @@ import test from 'node:test';
 
 import { LOSAT_GENETIC_CODES, LOSAT_GENETIC_CODE_TEXT } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import {
-  losatReadsGeneticCode, losatRecordGencode, requireLosatGeneticCode, searchedLosatGencode
+  losatGencodeProblem, losatReadsGeneticCode, losatRecordGencode, requireLosatGeneticCode, searchedLosatGencode
 } from '../../gbdraw/web/js/services/linear-sources.js';
-import { comparisonCauseRepeats, normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
+import {
+  comparisonCauseRepeats, losatGeneticCodeHint, normalizeUserFacingError, renderErrorText
+} from '../../gbdraw/web/js/utils/error-normalization.js';
 
 const refusal = (run) => {
   try {
@@ -33,10 +35,20 @@ test('a Linear card keeps a table LOSAT reads and its default', () => {
   assert.equal(losatRecordGencode({ losat_gencode: 7 }), 7);
 });
 
-// Review S-3: the File card's "Gencode required" mark and Generate's refusal read one rule.
+// One rule says whether LOSAT reads a typed code, for Generate's refusal and the File card's mark.
 test('one rule says whether LOSAT reads a code', () => {
   for (const code of LOSAT_GENETIC_CODES) assert.equal(losatReadsGeneticCode(code), true);
   for (const code of [0, 7, 8, 17, 34, 99, 8.5, Number.NaN]) assert.equal(losatReadsGeneticCode(code), false, String(code));
+});
+
+// The card's mark: an empty field searches with LOSAT's default table 1 and asks for one; a typed code LOSAT does not
+// read shows the tables, in the Generation Error's words.
+test('the card marks an empty LOSAT Gencode and a typed one LOSAT does not read differently', () => {
+  for (const value of [null, undefined, '']) assert.equal(losatGencodeProblem({ losat_gencode: value }), 'empty');
+  assert.equal(losatGencodeProblem({}), 'empty');
+  for (const value of [7, 99, 8.5, '7']) assert.equal(losatGencodeProblem({ losat_gencode: value }), 'unread', String(value));
+  for (const value of [1, 11, '4', 33]) assert.equal(losatGencodeProblem({ losat_gencode: value }), null, String(value));
+  assert.equal(renderErrorText(losatGeneticCodeHint(LOSAT_GENETIC_CODE_TEXT)), 'Genetic codes LOSAT reads: 1–6, 9–16, 21–33.');
 });
 
 for (const code of [7, 99, 8.5]) test(`a Linear card's Gencode ${code} is refused with its card and field`, () => {

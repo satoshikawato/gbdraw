@@ -1407,7 +1407,7 @@ class CircularDiagramOptions(_ModeDiagramOptions):
                 self,
                 "conservation_losat_gencodes",
                 tuple(
-                    _validate_genetic_code(value, field_name="conservation_losat_gencodes")
+                    _validate_positive_int(value, field_name="conservation_losat_gencodes")
                     for value in gencodes
                 ),
             )
@@ -1461,6 +1461,9 @@ class CircularDiagramOptions(_ModeDiagramOptions):
                     "program": search.program,
                 },
             )
+        # A TLOSATX ring's tables, checked once the search is known to read them (as Linear checks its program first).
+        for value in gencodes or ():
+            _validate_genetic_code(value, field_name="conservation_losat_gencodes")
 
         def ring_input_error(message: str, field_name: str) -> ValidationError:
             return ValidationError(

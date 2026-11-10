@@ -1418,20 +1418,63 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   expect(await history()).toEqual(before);
 });
 
+// OV-3326: a TLOSATX genetic code LOSAT does not read. The card lists the tables LOSAT reads beside the typed code
+// (an empty field, which searches with LOSAT's default table 1, asks for one), and the refusal's Show in Comparison
+// focuses that card's LOSAT Gencode, found by the card's identity, with no Retry.
+test('a TLOSATX genetic code LOSAT does not read is marked on its card, and Show in Comparison focuses it', async ({ page }) => {
+  await openLinear(page);
+  await configureLinearRecords(page, [makeGenbank('CodeA'), makeGenbank('CodeB', 'gct')]);
+  const cardUid = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('tblastx');
+    return app.linearSeqs[1].uid;
+  });
+  const options = page.locator(`details[data-linear-record-options="${cardUid}"]`);
+  const mark = options.locator(':scope > summary');
+  const gencode = page.getByRole('spinbutton', { name: 'TLOSATX gencode for sequence 2', exact: true });
+  await options.evaluate((details) => { details.open = true; });
+  await gencode.fill('7');
+  await expect(gencode).toHaveAttribute('aria-invalid', 'true');
+  await expect(mark).toContainText('Genetic codes LOSAT reads: 1–6, 9–16, 21–33.');
+  await expect(mark).not.toContainText('Gencode required');
+  await gencode.fill('');
+  await expect(gencode).not.toHaveAttribute('aria-invalid', 'true');
+  await expect(mark).toContainText('Gencode required');
+  await gencode.fill('11');
+  await expect(gencode).not.toHaveAttribute('aria-invalid', 'true');
+  await expect(mark).not.toContainText('Genetic codes LOSAT reads');
+  await expect(mark).not.toContainText('Gencode required');
+  await options.evaluate((details) => { details.open = false; });
+  await page.evaluate((uid) => {
+    window.__GBDRAW_APP__.errorLog = { code: 'COMPARISON_INPUT', operation: 'generate', stage: 'comparison',
+      context: { reason: 'GENETIC_CODE', field: 'losat_gencode', inputOrdinal: 2, cardUid: uid } };
+  }, cardUid);
+  await page.getByRole('alert', { name: 'Generation Error' }).getByRole('button', { name: 'Show in Comparison', exact: true }).click();
+  await expect(options).toHaveAttribute('open', '');
+  await expect(gencode).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
+});
+
 // OV-3317, OV-3327: Circular's comparison rings have no issue list. A LOSAT failure that repeats (a refusal, a trap)
 // offers Show in Comparison, which opens Pairwise Comparisons, where the LOSAT options and the comparison files are;
-// another comparison error keeps its actions without it.
+// so does a ring or Reference gencode LOSAT does not read (OV-3326). Another comparison error keeps its actions
+// without it.
 test('in Circular, a LOSAT failure that repeats shows Pairwise Comparisons', async ({ page }) => {
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await showDrawing(page, { kind: 'circular' });
   const section = page.locator('[data-setting="pairwise-comparisons"]');
   const show = page.getByRole('alert', { name: 'Generation Error' }).getByRole('button', { name: 'Show in Comparison', exact: true });
-  for (const context of [{ reason: 'FAILED', losatMessage: 'Unknown genetic code 99' }, { reason: 'TRAP' }]) {
+  for (const error of [
+    { code: 'LOSAT_RUNTIME', operation: 'generate', stage: 'losat', context: { reason: 'FAILED', losatMessage: 'Unknown genetic code 99' } },
+    { code: 'LOSAT_RUNTIME', operation: 'generate', stage: 'losat', context: { reason: 'TRAP' } },
+    { code: 'COMPARISON_INPUT', operation: 'generate', stage: 'comparison',
+      context: { reason: 'GENETIC_CODE', field: 'conservation_losat_gencodes', inputOrdinal: 1 } },
+    { code: 'COMPARISON_INPUT', operation: 'generate', stage: 'comparison', context: { reason: 'GENETIC_CODE', field: 'reference_gencode' } }
+  ]) {
     await section.locator(':scope > details').evaluate((details) => { details.open = false; });
-    await page.evaluate((errorContext) => {
-      window.__GBDRAW_APP__.errorLog = { code: 'LOSAT_RUNTIME', operation: 'generate', stage: 'losat', context: errorContext };
-    }, context);
+    await page.evaluate((errorLog) => { window.__GBDRAW_APP__.errorLog = errorLog; }, error);
     await show.click();
     await expect(section.locator(':scope > details')).toHaveAttribute('open', '');
     await expect(section.locator(':scope > details > summary')).toBeFocused();

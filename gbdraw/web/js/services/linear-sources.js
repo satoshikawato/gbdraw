@@ -338,8 +338,9 @@ export const resolveLinearRecordEffectiveSubtitle = (sequence, source = null) =>
 };
 
 /**
- * Whether LOSAT reads a TLOSATX genetic code: one of the NCBI tables in Python's `LOSAT_GENETIC_CODES`. The one rule of
- * Generate's refusal (`requireLosatGeneticCode`) and of the File card's "Gencode required" mark (OV-3326).
+ * Whether LOSAT reads a typed TLOSATX genetic code: one of the NCBI tables in Python's `LOSAT_GENETIC_CODES`. The one
+ * rule for a typed code, of Generate's refusal (`requireLosatGeneticCode`) and of the File card's mark
+ * (`losatGencodeProblem`, OV-3326).
  * @param {number} code
  */
 export const losatReadsGeneticCode = (code) => LOSAT_GENETIC_CODES.includes(code);
@@ -376,6 +377,19 @@ export const losatRecordGencode = (sequence) => {
   if (raw === null || raw === undefined || raw === '') return null;
   const value = Number(raw);
   return Number.isFinite(value) ? value : null;
+};
+
+/**
+ * What a Linear card's LOSAT Gencode lacks under TLOSATX, as the File card marks it: `'empty'` when no table is typed
+ * (the search passes none, so LOSAT uses its default table 1; the card asks for one), `'unread'` when the typed table
+ * is not one LOSAT reads (`losatReadsGeneticCode`; Generate refuses it), else null.
+ * @param {{ losat_gencode?: unknown } | null | undefined} sequence
+ * @returns {'empty' | 'unread' | null}
+ */
+export const losatGencodeProblem = (sequence) => {
+  const code = losatRecordGencode(sequence);
+  if (code === null) return 'empty';
+  return losatReadsGeneticCode(code) ? null : 'unread';
 };
 
 /**
