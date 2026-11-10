@@ -237,3 +237,39 @@ def test_the_parse_pass_reads_each_file_once_in_order(tmp_path: Path, monkeypatc
     read_flat_file_records(str(GENBANK))
     _read_fasta_records(str(_fasta(tmp_path)))
     assert opened == [str(GENBANK), str(tmp_path / "a.fasta")]
+
+
+def _first_of_many(tmp_path: Path) -> tuple[Path, int]:
+    """A gzip file of lambda (177 kB of text) followed by twelve more records: 2.3 MB expanded."""
+
+    text = GENBANK.read_bytes()
+    path = tmp_path / "many.gb.gz"
+    path.write_bytes(gzip.compress(text * 13))
+    return path, len(text) * 13
+
+
+def test_a_reader_that_stops_after_the_first_record_expands_only_what_it_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The copy of a gzip input holds what the parse pass read, so a first-record read expands no more of the file."""
+
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    path, expanded = _first_of_many(tmp_path)
+    (first,) = read_flat_file_records(str(path), first_only=True)
+    copy = Path(first.seq._data._bases.source.path)
+    assert str(first.seq) == _sequence(GENBANK)
+    assert copy.stat().st_size < expanded // 4
+
+
+def test_the_cap_counts_what_a_reader_expanded_so_far(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A file past the cap whose first record lies within it gives that record to a reader that stops there."""
+
+    from gbdraw.io import input_text
+
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    monkeypatch.setattr(input_text, "MAX_EXPANDED_INPUT_BYTES", 1 << 20)
+    path, _ = _first_of_many(tmp_path)
+    (first,) = read_flat_file_records(str(path), first_only=True)
+    assert str(first.seq) == _sequence(GENBANK)
+    with pytest.raises(InputFileError, match="expands to more than 1 MiB"):
+        read_flat_file_records(str(path))
