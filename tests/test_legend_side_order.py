@@ -114,3 +114,25 @@ def test_linear_annotation_entries_follow_the_side_order() -> None:
 )
 def test_overlay_entries_follow_their_anchor(legend, slots, expected) -> None:
     assert _order(legend(*slots), tuple(_SETS.values())) == expected
+
+
+def _draw_circular_default(annotations: AnnotationOptions):
+    return build_circular_diagram(_record(20000), options=CircularDiagramOptions(annotations=annotations))
+
+
+def _draw_linear_default(annotations: AnnotationOptions):
+    return build_linear_diagram([_record(5000)], options=LinearDiagramOptions(annotations=annotations))
+
+
+@pytest.mark.parametrize("draw", [_draw_circular_default, _draw_linear_default], ids=["circular", "linear"])
+def test_default_figure_lists_a_highlight_after_a_later_sets_row(draw) -> None:
+    # No track stack: the default planner draws set A's highlights over the features and set B's band outside them,
+    # so B's row is listed before A's highlights (Owner 2026-11-10, after seeing this change in default figures).
+    span = parse_record_selector("#1")
+    annotations = AnnotationOptions(sets=(
+        AnnotationSet("A", (RegionAnnotation("a1", CoordinateSpan(span, 200, 700), mark="highlight",
+                                             legend_label="A highlight"),)),
+        AnnotationSet("B", (RegionAnnotation("b1", CoordinateSpan(span, 1200, 1700), mark="band",
+                                             legend_label="B band"),)),
+    ))
+    assert _order(_legend_texts(draw(annotations)), ("A highlight", "B band")) == ["B band", "A highlight"]

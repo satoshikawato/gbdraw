@@ -778,9 +778,10 @@ may also carry `fileName`, which is ignored; slot text lowercases keys, so
 an error that names the slot and the parameter; `anchor_slot` and `to_slot`
 belong to annotation slots only.
 
-The Legend lists the rows of the slots in three groups: the GC content, GC
-skew, Depth and similarity-ring rows, then the feature density rows, then the
-annotation rows. Within each group the slots come in the order they lie from
+The Legend lists the rows of the slots in four groups: the GC content, GC
+skew and Depth rows, then the similarity-ring rows (the outermost ring first),
+then the feature density rows, then the annotation rows. Within the GC, Depth,
+feature density and annotation groups the slots come in the order they lie from
 the outer edge: the slots `outside` the Axis, then the slots on it, then the
 slots `inside`, each side in the order the slots are written. An annotation
 slot with `side=overlay` is listed right after its `anchor_slot`, and the
