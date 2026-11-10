@@ -426,28 +426,32 @@ def test_a_circular_region_drawing_takes_one_record(materialize) -> None:
         )
 
 
-def _circular_canvas_of_50_and_5_kb(tmp_path: Path, **options: Any) -> CircularDiagramRequest:
-    """A Circular drawing of two circular records, 50 kb and 5 kb: each draws its GC content and ticks at its own
-    length (Auto window 1,000 and 500 bp, scale interval 5,000 and 1,000 bp)."""
+def _circular_records(tmp_path: Path, big: int, small: int) -> list[RecordInput]:
+    """Two circular records, BIG and SMALL (record keys ``pair:1`` and ``pair:2``), in one GenBank file."""
     from Bio import SeqIO
     from Bio.Seq import Seq
     from Bio.SeqRecord import SeqRecord
 
-    path = tmp_path / "fifty_and_five.gb"
+    path = tmp_path / f"records_{big}_{small}.gb"
     SeqIO.write(
         [
             SeqRecord(
                 Seq("ACGTTGCA" * (length // 8)), id=name, name=name, description=name,
                 annotations={"molecule_type": "DNA", "topology": "circular"},
             )
-            for name, length in (("BIG", 50_000), ("SMALL", 5_000))
+            for name, length in (("BIG", big), ("SMALL", small))
         ],
         path,
         "genbank",
     )
+    return [RecordInput(GenBankInputSource(path), record_key="pair", cardinality=RecordCardinality.ALL)]
+
+
+def _circular_canvas_of_50_and_5_kb(tmp_path: Path, **options: Any) -> CircularDiagramRequest:
+    """A Circular drawing of two circular records, 50 kb and 5 kb: each draws its GC content and ticks at its own
+    length (Auto window 1,000 and 500 bp, scale interval 5,000 and 1,000 bp)."""
     return CircularDiagramRequest(
-        records=[RecordInput(GenBankInputSource(path), record_key="pair", cardinality=RecordCardinality.ALL)],
-        options=CircularDiagramOptions(**options),
+        records=_circular_records(tmp_path, 50_000, 5_000), options=CircularDiagramOptions(**options)
     )
 
 
@@ -497,6 +501,71 @@ def test_a_circular_region_compares_the_feature_density_window_of_the_canvas(tmp
     own = (FeatureDensityTrack("d", FeatureQuery("gene"), window=2_000, step=200),)
     source = _circular_canvas_of_50_and_5_kb(tmp_path, window=300, step=30, feature_density_tracks=own)
     assert derive_region_request(source, [RegionSelection("pair:2", 1, 5_000)]).adaptation.reset == ()
+
+
+@pytest.mark.parametrize(("enabled", "reset"), [(True, {"window": (1_000, 500), "step": (100, 50)}), (False, {})])
+def test_a_circular_region_compares_the_density_window_only_of_drawn_density_tracks(
+    tmp_path: Path, enabled: bool, reset: dict[str, tuple[int, int]]
+) -> None:
+    # A stated stack draws only the feature density tracks its enabled slots name: with the slot disabled, no track
+    # reads the canvas's shared density window, so the hand-set window and step stay (the GC content window of the
+    # 5 kb record is 500 bp in both drawings).
+    from gbdraw.api import CircularRequestTrackOptions, CircularTrackSlot
+
+    slots = (
+        CircularTrackSlot("features", "features"),
+        CircularTrackSlot("density_d", "feature_density", enabled=enabled, params={"track": "d"}),
+        CircularTrackSlot("gc_content", "gc_content"),
+    )
+    source = _circular_canvas_of_50_and_5_kb(
+        tmp_path, window=300, step=30, feature_density_tracks=_gene_density(),
+        tracks=CircularRequestTrackOptions(circular_track_slots=slots),
+    )
+    region = derive_region_request(source, [RegionSelection("pair:2", 1, 5_000)])
+    assert {item.setting: (item.source_auto, item.target_auto) for item in region.adaptation.reset} == reset
+
+
+def test_a_region_of_a_circular_batch_compares_each_diagrams_own_size_class(tmp_path: Path) -> None:
+    # OV-3253: each diagram of a batch takes the size class of its own record. The 5 kb diagram's Auto label font is
+    # the short one, as is that of a drawing of the whole 5 kb record, so the hand-set font stays; the 300 kb
+    # diagram's is the long one, so a drawing of 5 kb of it returns the font to Auto.
+    from gbdraw.api.requests import CircularBatchOutputPolicy, CircularBatchRequest
+
+    batch = CircularBatchRequest(
+        records=_circular_records(tmp_path, 300_000, 5_000),
+        options=CircularDiagramOptions(config_overrides={"labels.font_size.short": 11, "labels.font_size.long": 11}),
+        output_policy=CircularBatchOutputPolicy(output_prefix=str(tmp_path / "o")),
+    )
+    region = derive_region_request(batch, [RegionSelection("pair:2", 1, 5_000)])
+    assert region.adaptation.reset == ()
+    overrides = region.request.options.config_overrides
+    assert {key: overrides[key] for key in ("labels.font_size.short", "labels.font_size.long")} == {
+        "labels.font_size.short": 11, "labels.font_size.long": 11,
+    }
+    region = derive_region_request(batch, [RegionSelection("pair:1", 1, 5_000)], mode="circular")
+    assert [(item.setting, item.source_auto, item.target_auto) for item in region.adaptation.reset] == [
+        ("labels.font_size", 8.0, 14.0)
+    ]
+
+
+def test_each_diagram_of_a_circular_batch_draws_its_density_track_at_its_own_window(cfg, tmp_path: Path) -> None:
+    # The renderer's side of the batch comparison above: the 50 kb diagram samples per 1 kb, the 5 kb one per 500 bp
+    # (the window record_auto_values gives each record of a batch); a canvas of both samples per 1 kb.
+    import re
+
+    from gbdraw.api import render_request
+    from gbdraw.api.requests import CircularBatchOutputPolicy, CircularBatchRequest
+
+    batch = CircularBatchRequest(
+        records=_circular_records(tmp_path, 50_000, 5_000),
+        options=CircularDiagramOptions(feature_density_tracks=_gene_density()),
+        output_policy=CircularBatchOutputPolicy(output_prefix=str(tmp_path / "batch")),
+    )
+    result = render_request(batch)
+    windows = [set(re.findall(r"gene per ([0-9.]+ k?bp)", Path(path).read_text())) for path in result.output_paths]
+    extent = DrawnExtent("circular", (50_000, 5_000), density_window_settings=("window",), separate_records=True)
+    assert [values["feature_density.window"] for values in record_auto_values(extent, cfg)] == [1_000, 500]
+    assert windows == [{"1 kbp"}, {"500 bp"}]
 
 
 def test_a_region_of_a_circular_batch_compares_each_diagrams_own_density_window(tmp_path: Path) -> None:

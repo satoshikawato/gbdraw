@@ -31,17 +31,23 @@ write-up of a release.
   5 kb record beside a 50 kb record returned its hand-set window to Auto
   although its Auto window (500 bp) does not change; the scale interval did
   the same (OV-3231). Each record now compares its own Auto values, in the
-  Python API and the Web. A feature density track that takes the drawing's
-  window still compares the window the records of one canvas share (the
-  longest record's), so with such a track the window returns to Auto as
-  before; in separate diagrams each record compares its own. The other direction changes too: regions of both records drawn in
-  one Linear drawing (20 kb and 5 kb) now return a hand-set window to Auto,
-  since the 5 kb record drew with 500 bp and the Linear drawing uses 1,000 bp;
-  before, the window was kept. In the Python API, a `SettingReset` of the
-  window, step or scale interval names `source_auto=None` when the source
-  records it comes from take different Auto values. The Web's Depth window and
-  step notes now show the value every record shares instead of "Auto (by
-  genome size)" (OV-3232). Figures do not change.
+  Python API and the Web. A feature density track that the drawing draws and
+  that takes its window still compares the window the records of one canvas
+  share (the longest record's), so with such a track the window returns to
+  Auto as before; a density track whose slot is turned off no longer counts.
+- Fixed: a region of a Circular batch (each record a diagram of its own) now
+  keeps a hand-set window, step or size wherever that record's own diagram
+  has the same Auto value; before, the batch was compared as one drawing at
+  its longest record, so the window returned to Auto beside a density track
+  and a hand-set label font returned to Auto for the whole 5 kb record of a
+  300 kb + 5 kb batch (OV-3253).
+- Changed: regions of both records drawn in one Linear drawing (20 kb and
+  5 kb) now return a hand-set window to Auto, since the 5 kb record drew with
+  500 bp and the Linear drawing uses 1,000 bp; before, the window was kept. In
+  the Python API, a `SettingReset` names `source_auto=None` when the source
+  records or batch diagrams it compares take different Auto values. The Web's
+  Depth window and step notes now show the value every record shares instead
+  of "Auto (by genome size)" (OV-3232). Figures do not change.
 - Fixed: in a Linear row that draws several records or several windows of one
   record side by side, a label's leader from a record drawn later could be
   drawn over the letters of a label from a record drawn before it (with

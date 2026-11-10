@@ -2628,7 +2628,7 @@ def _linear_track_plan(
         record_feature_density=feature_density_record_layers(
             records,
             track_inputs.feature_density_tracks,
-            windows=[(int(configurators.gc.window), int(configurators.gc.step))] * len(records),
+            windows=track_inputs.feature_density_windows,
             transforms=bind_record_transforms(records, record_transforms),
         ),
     )

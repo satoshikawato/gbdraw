@@ -2603,6 +2603,9 @@ def assemble_linear_diagram_from_records(
         track_inputs=LinearTrackInputs(
             record_depth_tracks=record_depth_tracks,
             feature_density_tracks=tuple(inputs.feature_density_tracks or ()),
+            feature_density_windows=feature_density_windows(
+                [len(record.seq) for record in records], cfg, window=inputs.window, step=inputs.step
+            ),
             linear_track_slots=parsed_linear_track_slots,
             linear_track_axis_index=resolved_linear_track_axis_index,
             annotations=inputs._resolved_annotations if inputs._resolved_annotations is not None else inputs.annotation_options,
@@ -2989,7 +2992,9 @@ def assemble_circular_diagram_from_record(
             conservation_min_identity=float(identity),
             dinucleotide_dataframes=dinucleotide_dataframes,
             feature_density=context.feature_density if context.feature_density is not None else feature_density_record_layers(
-                [gb_record], inputs.feature_density_tracks, windows=[(int(window), int(step))], transforms=[record_transform])[0],
+                [gb_record], inputs.feature_density_tracks,
+                windows=feature_density_windows([len(gb_record.seq)], cfg, window=inputs.window, step=inputs.step),
+                transforms=[record_transform])[0],
         ),
         CircularTrackInputs(
             circular_track_slots=parsed_circular_track_slots,
@@ -3227,17 +3232,12 @@ def assemble_circular_diagram_from_records(
         show_depth=show_depth, depth_track_count=depth_track_count(record_depth_tracks), show_gc=show_gc, show_skew=show_skew,
     )
     # The records share one Legend, so their feature density tracks share one window and one scale.
-    density_windows = [
-        (
-            int(inputs.window) if inputs.window is not None else auto_window,
-            int(inputs.step) if inputs.step is not None else auto_step,
-        )
-        for auto_window, auto_step in feature_density_windows([len(record.seq) for record in records], cfg)
-    ]
     record_feature_density = feature_density_record_layers(
         records,
         inputs.feature_density_tracks,
-        windows=density_windows,
+        windows=feature_density_windows(
+            [len(record.seq) for record in records], cfg, window=inputs.window, step=inputs.step
+        ),
         transforms=bind_record_transforms(records, _record_transforms),
     )
     record_scales = _resolve_multi_record_scales(

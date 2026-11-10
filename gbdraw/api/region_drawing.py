@@ -64,7 +64,7 @@ from gbdraw.session import MaterializedSession, SessionDrawingSpec, session_to_r
 from gbdraw.session_drawings import DrawingMode
 from gbdraw.session_request_codec import canonical_depth_tracks
 from gbdraw.tracks.circular import CircularTrackSlot, default_circular_track_slots, parse_circular_track_slots
-from gbdraw.tracks.parsing import depth_slot_track_index
+from gbdraw.tracks.parsing import depth_slot_track_index, feature_density_slot_track_id
 
 _SIZE_OPTIONS = ("window", "step", "depth_window", "depth_step")
 _SIZE_SETTINGS = frozenset(setting for settings in ADAPTABLE_SETTINGS.values() for setting in settings)
@@ -407,24 +407,18 @@ def derive_from_source(
         options.config,
         {path: value for path, value in (options.config_overrides or {}).items() if _setting_of(path) not in _SIZE_SETTINGS},
     )
-    # The window settings the feature density tracks take, which the new drawing carries.
-    density_settings = tuple(
-        setting
-        for setting in ("window", "step")
-        if any(getattr(track, setting) is None for track in options.feature_density_tracks or ())
-    )
     source_extent = DrawnExtent(
         source_mode,
         tuple(len(record) for record in collection.records),
         depth_rows=_drawn_depth_rows(options, source_tracks, cfg, source_mode),
-        density_window_settings=density_settings,
+        density_window_settings=_drawn_density_window_settings(options, source_mode),
         separate_records=isinstance(source, CircularBatchRequest),
     )
     target_extent = DrawnExtent(
         target_mode,
         derived.lengths,
         depth_rows=_drawn_depth_rows(options, depth_tracks, cfg, target_mode),
-        density_window_settings=density_settings,
+        density_window_settings=_drawn_density_window_settings(options, target_mode),
     )
     # The source record each drawn unit comes from, by its index there: each record compares its own Auto windows.
     record_sources: list[int | None] = [None] * len(derived.lengths)
@@ -724,6 +718,28 @@ def _drawn_depth_rows(
         width = None if slot.width is None or depth_width else slot.width.resolve(cfg.canvas.circular.radius)
         rows.append(DrawnDepthRow(axis, track_index, width, depth_width))
     return tuple(rows)
+
+
+def _drawn_density_window_settings(options: _ModeDiagramOptions, mode: DrawingMode) -> tuple[str, ...]:
+    """The window settings (``window``, ``step``) that a feature density track a drawing of ``options`` in ``mode``
+    draws takes, being one that sets none of its own.
+
+    A stack the request does not state draws every track; a stated Circular stack, which a new Circular drawing
+    carries from a Circular source, only those its enabled ``feature_density`` slots name. A stated Linear stack is
+    read as drawing every track: it is in a Linear source, whose new drawing is Linear or one Circular record, and
+    in each of these drawings the density window is the GC content window (``feature_density_windows``,
+    ``record_sliding_windows``), so the density window compares as the window does.
+    """
+    tracks = options.feature_density_tracks or ()
+    stated = _stated_slots(getattr(options, "tracks", None)) if mode == "circular" else None
+    if stated is not None:
+        named = {
+            feature_density_slot_track_id(slot.id, slot.params)
+            for slot in stated
+            if slot.enabled and slot.renderer == "feature_density"
+        }
+        tracks = tuple(track for track in tracks if track.id in named)
+    return tuple(setting for setting in ("window", "step") if any(getattr(track, setting) is None for track in tracks))
 
 
 def _keeps_feature(by_key: Mapping[str, SourceRegion], record_key: str, feature_id: str) -> bool:

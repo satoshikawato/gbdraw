@@ -10,7 +10,7 @@ circular track widths, and the Auto value of every such setting of one drawing.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import reduce
 from typing import Literal, Protocol
 
@@ -211,12 +211,6 @@ def depth_sliding_window(window: int, step: int) -> tuple[int, int]:
     return max(_DEPTH_MIN_WINDOW, int(window) // _DEPTH_WINDOW_DIVISOR), max(1, int(step) // _DEPTH_WINDOW_DIVISOR)
 
 
-def _auto_windows(record_lengths: Sequence[int], cfg: GbdrawConfig, *, shared: bool) -> tuple[tuple[int, int], ...]:
-    """Each record's Auto (window, step): the longest record's for every record when ``shared``, else its own."""
-    lengths = (max(record_lengths),) * len(record_lengths) if shared else tuple(record_lengths)
-    return tuple(sliding_window(length, cfg) for length in lengths)
-
-
 def record_sliding_windows(
     mode: DiagramMode, record_lengths: Sequence[int], cfg: GbdrawConfig
 ) -> tuple[tuple[int, int], ...]:
@@ -226,19 +220,24 @@ def record_sliding_windows(
     drawing share one axis, so each takes the longest record's. The one reading of this rule: the renderer, the
     Auto values of a drawing (``record_auto_values``) and the region derivation (``adapt_explicit_settings``).
     """
-    return _auto_windows(record_lengths, cfg, shared=mode == "linear")
+    lengths = (max(record_lengths),) * len(record_lengths) if mode == "linear" else tuple(record_lengths)
+    return tuple(sliding_window(length, cfg) for length in lengths)
 
 
 def feature_density_windows(
-    record_lengths: Sequence[int], cfg: GbdrawConfig, *, separate: bool = False
+    record_lengths: Sequence[int], cfg: GbdrawConfig, *, window: int | None = None, step: int | None = None
 ) -> tuple[tuple[int, int], ...]:
-    """Return the Auto (window, step) each record's feature density tracks draw with when a track sets none.
+    """Return the (window, step) each record of one diagram draws its feature density tracks with when a track
+    sets none, in drawing order.
 
-    The records drawn together, in either mode, share one window, the longest record's, so a track has one window
-    and one Legend scale; records drawn as diagrams of their own (``separate``, a Circular batch) each take their
-    own. The one reading of this rule: the renderer and the Auto values of a drawing (``record_auto_values``).
+    The records of one diagram, in either mode, share one window, so a track has one window and one Legend scale:
+    the drawing's hand-set ``window`` and ``step``, else the longest record's Auto values. Each diagram of a
+    Circular batch is a diagram of one record. The one reading of this rule: the Circular and Linear assemblers and
+    the Auto values of a drawing (``record_auto_values``).
     """
-    return _auto_windows(record_lengths, cfg, shared=not separate)
+    auto_window, auto_step = sliding_window(max(record_lengths), cfg)
+    drawn = (auto_window if window is None else int(window), auto_step if step is None else int(step))
+    return (drawn,) * len(record_lengths)
 
 
 def circular_tick_intervals(length: int) -> tuple[int, int]:
@@ -412,9 +411,9 @@ class DrawnExtent:
 
     ``wrap_row_length`` is a wrapped drawing's row length: sizes and ticks follow what one row shows, the
     windows the whole record. ``depth_rows`` are the depth rows a Circular drawing draws, in stack order.
-    ``density_window_settings`` names the settings (``window``, ``step``) that a feature density track of the
-    drawing takes, being one that sets none of its own. ``separate_records``: each record is a diagram of its own
-    (a Circular batch), so its feature density tracks take its own window.
+    ``density_window_settings`` names the settings (``window``, ``step``) that a feature density track the
+    drawing draws takes, being one that sets none of its own. ``separate_records``: each record is a diagram of its
+    own (a Circular batch), so it takes the sizes and the feature density window of its own length.
     """
 
     mode: DiagramMode
@@ -451,12 +450,16 @@ def record_auto_values(extent: DrawnExtent, cfg: GbdrawConfig) -> tuple[Mapping[
     A Circular record takes them at its own length (``record_sliding_windows``, ``circular_tick_intervals``); the
     records of a Linear drawing share the longest record's windows and the drawn axis's interval. Where a feature
     density track takes the drawing's window or step (``extent.density_window_settings``), the record also lists
-    the Auto value that track draws with (``feature_density_windows``), keyed ``feature_density.window`` and
-    ``feature_density.step``.
+    the Auto value that track draws with (``feature_density_windows``, per diagram: each record of a batch is one),
+    keyed ``feature_density.window`` and ``feature_density.step``.
     """
     records: list[Mapping[str, int]] = []
     windows = record_sliding_windows(extent.mode, extent.record_lengths, cfg)
-    density = feature_density_windows(extent.record_lengths, cfg, separate=extent.separate_records)
+    density = (
+        tuple(window for length in extent.record_lengths for window in feature_density_windows((length,), cfg))
+        if extent.separate_records
+        else feature_density_windows(extent.record_lengths, cfg)
+    )
     for length, (window, step), density_values in zip(extent.record_lengths, windows, density, strict=True):
         interval = (
             circular_tick_intervals(length)[0]
@@ -574,8 +577,9 @@ def auto_setting_values(
 class SettingReset:
     """A hand-set size that returns to Auto because its Auto value differs.
 
-    An Auto value of ``None`` means that drawing's mode does not draw the setting, or, for a setting each record
-    takes for itself (``record_auto_values``), that the records compared take different values.
+    An Auto value of ``None`` means that drawing's mode does not draw the setting, or that the records compared
+    take different values: for a setting each record takes for itself (``record_auto_values``), or in the
+    diagrams of a batch source, each at its own size class.
     """
 
     setting: str
@@ -615,7 +619,9 @@ def adapt_explicit_settings(
     record of ``source`` it comes from (None for a record from elsewhere, and
     no list when none comes from ``source``); a record from elsewhere compares
     with every record of ``source``. It is kept only where every record keeps
-    its Auto value.
+    its Auto value. A batch source (``separate_records``) is a diagram per
+    record, each at its own size class: the other sizes are compared with the
+    diagram of each record the target's records come from.
     """
     if record_sources is None:
         record_sources = (None,) * len(target.record_lengths)
@@ -629,6 +635,15 @@ def adapt_explicit_settings(
     )
     # The source records the target's records come from: the values a reset names.
     from_source = tuple(record for _, records in compared for record in records)
+    # The source diagrams the target's records come from: a batch draws one per record.
+    source_diagrams: tuple[DrawnExtent, ...] = (source,)
+    if source.separate_records:
+        used = {index for index in record_sources if index is not None}
+        source_diagrams = tuple(
+            replace(source, record_lengths=(length,), separate_records=False)
+            for index, length in enumerate(source.record_lengths)
+            if None in record_sources or index in used
+        )
 
     def record_keys(setting: str) -> tuple[str, ...]:
         """The per-record Auto values a setting sets: its own and, for the window and step, a density track's."""
@@ -646,15 +661,17 @@ def adapt_explicit_settings(
     def changed_key(setting: str) -> str | None:
         return next((key for key in record_keys(setting) if not same_record_auto(key)), None)
 
-    def same_auto(setting: str, source_values: Mapping[str, AutoValue], target_values: Mapping[str, AutoValue]) -> bool:
+    def same_auto(setting: str, target_values: Mapping[str, AutoValue]) -> bool:
         if setting in _RECORD_SETTINGS:
             return changed_key(setting) is None
-        return source_values.get(setting) == target_values.get(setting)
+        return all(values.get(setting) == target_values.get(setting) for values in source_autos)
 
     def autos_of(setting: str) -> tuple[AutoValue | None, AutoValue | None]:
-        """The source and target Auto values a reset names: those of the per-record value that changed."""
+        """The source and target Auto values a reset names: those of the per-record value that changed, and the
+        value the source diagrams share (None where they differ)."""
         if setting not in _RECORD_SETTINGS:
-            return source_auto.get(setting), target_auto.get(setting)
+            shared = {values.get(setting) for values in source_autos}
+            return (shared.pop() if len(shared) == 1 else None), target_auto.get(setting)
         key = changed_key(setting) or setting
         return (
             _shared_record_value((record for record in from_source if key in record), key),
@@ -669,16 +686,17 @@ def adapt_explicit_settings(
         }
 
     depth_font = _TICK_FONT_SETTINGS["depth"]
-    source_auto = auto_setting_values(
-        source,
-        cfg,
-        track_thickness_px=thickness(source.mode, explicit),
-        depth_tick_font_size=explicit.get(depth_font),
+    source_autos = tuple(
+        auto_setting_values(
+            diagram,
+            cfg,
+            track_thickness_px=thickness(source.mode, explicit),
+            depth_tick_font_size=explicit.get(depth_font),
+        )
+        for diagram in source_diagrams
     )
     target_auto = auto_setting_values(target, cfg)
-    unchanged = {
-        setting: value for setting, value in explicit.items() if same_auto(setting, source_auto, target_auto)
-    }
+    unchanged = {setting: value for setting, value in explicit.items() if same_auto(setting, target_auto)}
     # The thickness settings never depend on a thickness, so this pass only
     # moves the tick fonts to the thickness and the Depth font the target keeps.
     target_auto = auto_setting_values(
@@ -690,9 +708,10 @@ def adapt_explicit_settings(
     kept: dict[str, AutoValue] = {}
     reset: list[SettingReset] = []
     for setting, value in explicit.items():
-        if setting not in source_auto and setting not in target_auto and setting not in _RECORD_SETTINGS:
+        listed = setting in target_auto or any(setting in values for values in source_autos)
+        if not listed and setting not in _RECORD_SETTINGS:
             continue
-        if same_auto(setting, source_auto, target_auto):
+        if same_auto(setting, target_auto):
             kept[setting] = value
         else:
             reset.append(
