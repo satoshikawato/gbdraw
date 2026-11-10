@@ -668,10 +668,6 @@ there is no candidate fallback. `Web base policy (trusted base)` remains a separ
 
 The redesign PR therefore receives the old base's complete PR route. New selective
 routing can take effect only after reviewed integration into protected `dev`.
-The planned functional shard lists follow the same order: the pull request that
-introduces them keeps the hand-kept `shards` lists in
-`tests/ci/functional-shards.json` for its own run, whose trusted base still reads
-them. No tool reads them once it merges, and the next pull request removes them.
 Additional contract failures also block the old gate's unknown-job validation.
 No branch protection or required external status name changes.
 
