@@ -212,13 +212,18 @@ under "Cited ids without a record".
 - [PD-OI-017](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-017-active-comparison-appearance-controls-remain-reachable): Active comparison appearance controls remain reachable. ACCEPTED, concern `diagram-generation.comparison-appearance-reachability`, scenario revision 1.
 
 - [PD-OI-018](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-018-complete-linear-records-placement-and-comparison-scope): Complete Linear records, placement, and comparison scope. ACCEPTED, concern `diagram-generation.linear-record-universe-and-search-scope`, scenario revision 6, supersedes scenario revision 5.
+  - `tests/fixtures/losat_job_plan_cases.json`
+  - `tests/test_genome_search_space.py`
+  - `tests/test_losat_job_plan.py`
   - `tests/web/contracts/vibrio-full-generation.serial.spec.js`
   - `tests/web/gallery-tutorial.playwright.spec.js`
   - `tests/web/linear-card-windows.test.mjs`
   - `tests/web/linear-multi-record.playwright.spec.js`
   - `tests/web/linear-sources.test.mjs`
+  - `tests/web/losat-display-pair-reuse.playwright.spec.js`
   - `tests/web/losat-settings.test.mjs`
   - `tests/web/losat-thread-fault.test.mjs`
+  - `tests/web/run-analysis-derived-cache.test.mjs`
   - `tests/web/run-info.test.mjs`
 
 - [PD-OI-019](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-019-fresh-web-multi-record-layout-defaults): Fresh Web multi-record layout defaults. ACCEPTED, concern `diagram-generation.web-multi-record-layout-defaults`, scenario revision 1.
