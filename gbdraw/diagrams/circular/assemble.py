@@ -190,11 +190,13 @@ from ...render.drawers.circular.annotations import (
     CircularAnnotationLabels,
     CircularLabelObstacles,
     CircularLabelRoom,
+    CircularLaneLabels,
     CircularObstacleLabel,
     LeaderSegment,
     RegionLabelPlace,
     circular_annotation_label_extent,
     circular_annotation_label_room,
+    circular_annotation_lane_labels,
     circular_annotation_lanes_meeting,
     circular_annotation_mark_past_lane,
     circular_annotation_labels,
@@ -203,7 +205,7 @@ from ...render.drawers.circular.annotations import (
     circular_annotation_track_ink,
     circular_region_label_front_content,
 )
-from ...render.group_content import GroupKey, GroupKind, place_content
+from ...render.group_content import GroupContent, GroupKey, GroupKind, place_content
 from ...layout.linear_multi_record import record_key_at
 from ...render.composition import (
     CompositionPrimary,
@@ -410,14 +412,17 @@ class _ResultsByInputs(Generic[_Kept]):
 @dataclass(eq=False)
 class CircularAnnotationMeasures:
     """The annotation measures one Circular figure's assemblies share (OV-2664): the slots' packings, their label
-    rooms and the drawn labels' places. The label fit check assembles the figure again for each row it verifies (a
-    smaller definition font, for one), and those assemblies pack and place the same slots with the same inputs; a
-    measure whose inputs equal an earlier one's takes its result. Kept while ``kept_annotation_measures`` runs, in a
-    context variable, so no stage key takes it: a stage's inputs still decide its result."""
+    rooms, the drawn labels' places, and the slots' drawn content and paint (OV-3111). The label fit check assembles
+    the figure again for each row it verifies (a smaller definition font, for one), and those assemblies pack, place
+    and draw the same slots with the same inputs, and count the definition lines against the same paint; a measure
+    whose inputs equal an earlier one's takes its result. Kept while ``kept_annotation_measures`` runs, in a context
+    variable, so no stage key takes it: a stage's inputs still decide its result."""
 
     tracks: _ResultsByInputs[ResolvedAnnotationTrack] = field(default_factory=_ResultsByInputs)
     rooms: _ResultsByInputs[_AnnotationLabelRoom] = field(default_factory=_ResultsByInputs)
     labels: _ResultsByInputs[CircularAnnotationLabels] = field(default_factory=_ResultsByInputs)
+    contents: _ResultsByInputs[GroupContent] = field(default_factory=_ResultsByInputs)
+    inks: _ResultsByInputs[tuple[CircularInk, ...]] = field(default_factory=_ResultsByInputs)
 
 
 _KEPT_MEASURES: ContextVar[CircularAnnotationMeasures | None] = ContextVar("gbdraw_circular_annotation_measures", default=None)
@@ -527,6 +532,26 @@ class _CircularAnnotationPacking:
         checks_set_size: bool,
     ) -> ResolvedAnnotationTrack:
         params = annotation_track_params_from_mapping(slot.params)
+        # The two checks of where the lanes are drawn read one placement of the labels for the same track and extent.
+        placements: _ResultsByInputs[CircularLaneLabels] = _ResultsByInputs()
+
+        def placed(track: ResolvedAnnotationTrack, track_params: AnnotationTrackParams, extent_px: float) -> CircularLaneLabels:
+            return placements.get(
+                extent_px,
+                (track, track_params),
+                partial(
+                    circular_annotation_lane_labels,
+                    track,
+                    track_params,
+                    extent_px,
+                    font_family=self.font_family,
+                    record_length=self.record_length,
+                    lanes_from_px=lanes_from_px,
+                    outward=not inside,
+                    clearance_px=self.label_clearance_px,
+                ),
+            )
+
         return layout_annotation_track(
             slot.id,
             params.set_id,
@@ -545,25 +570,8 @@ class _CircularAnnotationPacking:
                 ),
                 reach=circular_annotation_mark_past_lane,
                 bp_per_px={self.record_index: self.record_length / max(1.0, 2.0 * math.pi * self.axis_radius_px)},
-                meet=partial(
-                    circular_annotation_lanes_meeting,
-                    font_family=self.font_family,
-                    record_length=self.record_length,
-                    lanes_from_px=lanes_from_px,
-                    outward=not inside,
-                    clearance_px=self.label_clearance_px,
-                )
-                if drawn
-                else None,
-                across_centre=partial(
-                    circular_annotation_labels_across_centre,
-                    font_family=self.font_family,
-                    record_length=self.record_length,
-                    lanes_from_px=lanes_from_px,
-                    clearance_px=self.label_clearance_px,
-                )
-                if drawn and inside
-                else None,
+                meet=partial(circular_annotation_lanes_meeting, placed=placed) if drawn else None,
+                across_centre=partial(circular_annotation_labels_across_centre, placed=placed) if drawn and inside else None,
             ),
             join_origin=True,
             room_bounds=room_bounds,
@@ -1467,16 +1475,24 @@ def _record_track_ink(
         elif renderer == "annotations":
             annotation_layout = (sources.annotation_track_layouts or {}).get(slot.id)
             if annotation_layout is not None:
-                inks.extend(
-                    circular_annotation_track_ink(
+                ring = _annotation_ring(slot)
+                params = annotation_track_params_from_mapping(slot.params)
+                labels = tuple(annotation_labels.get(slot.id, ()))
+                painted: tuple[CircularInk, ...] = _kept_measure(
+                    lambda measures: measures.inks,
+                    (slot.id, sources.annotation_record_index, record_length),
+                    (annotation_layout, ring, params, labels),
+                    partial(
+                        circular_annotation_track_ink,
                         annotation_layout,
                         record_index=sources.annotation_record_index,
                         record_length=record_length,
-                        ring=_annotation_ring(slot),
-                        params=annotation_track_params_from_mapping(slot.params),
-                        labels=annotation_labels.get(slot.id, ()),
-                    )
+                        ring=ring,
+                        params=params,
+                        labels=labels,
+                    ),
                 )
+                inks.extend(painted)
         elif renderer == "ticks":
             tick_options = _slot_tick_options(slot, sources.use_slot_tick_options)
             if tick_options is not None:
@@ -2708,6 +2724,44 @@ def _draw_circular_feature_density_slot(
     )
 
 
+def _annotation_track_content(
+    track: ResolvedAnnotationTrack,
+    *,
+    record_id: str,
+    record_index: int,
+    record_length: int,
+    ring: AnnotationRing,
+    font_family: str,
+    params: AnnotationTrackParams,
+    labels: Sequence[CircularAnnotationLabel],
+    dom_group_id: str,
+    semantic_slot_id: str,
+) -> GroupContent:
+    """``circular_annotation_track_content``, or the content drawn before with equal inputs while the figure's
+    assemblies share their measures (``CircularAnnotationMeasures``): each label fit row's assembly draws the slot
+    the figure drew."""
+
+    shown = tuple(labels)
+    return _kept_measure(
+        lambda measures: measures.contents,
+        (semantic_slot_id, dom_group_id, record_id, record_index, record_length, font_family),
+        (track, ring, params, shown),
+        partial(
+            circular_annotation_track_content,
+            track,
+            record_id=record_id,
+            record_index=record_index,
+            record_length=record_length,
+            ring=ring,
+            font_family=font_family,
+            params=params,
+            labels=shown,
+            dom_group_id=dom_group_id,
+            semantic_slot_id=semantic_slot_id,
+        ),
+    )
+
+
 def _draw_circular_annotation_slot(
     canvas: Drawing,
     resolved_slot: CircularResolvedSlot,
@@ -2729,7 +2783,7 @@ def _draw_circular_annotation_slot(
     font_family = str(cfg.objects.text.font_family)
     content = render_stage(
         "annotation_content",
-        circular_annotation_track_content,
+        _annotation_track_content,
         annotation_layout,
         record_id=str(gb_record.id),
         record_index=annotation_record_index,

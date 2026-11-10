@@ -34,6 +34,7 @@ from gbdraw.annotations import (
     LabelExtent,
     LabelSizing,
     LaneRoom,
+    ResolvedAnnotationTrack,
     ResolvedRegionAnnotation,
     layout_annotation_track,
 )
@@ -350,6 +351,31 @@ def _inside_slot_over_the_definition() -> tuple[SeqRecord, gbdraw.CircularOption
     return record, options
 
 
+def _inside_slot_whose_rows_draw_it() -> tuple[SeqRecord, gbdraw.CircularOptions]:
+    """150 labelled regions on an inside slot whose inner lanes meet the centre definition: the label fit check
+    verifies smaller definition fonts, and each verified row draws the slot (OV-3111)."""
+
+    record = gbdraw.read_genbank(str(_HMMT))[0]
+    length = len(record.seq)
+    rng = random.Random(1)
+
+    def regions(prefix: str) -> tuple[RegionAnnotation, ...]:
+        drawn = []
+        for index in range(150):
+            start = rng.randint(1, length - 400)
+            drawn.append(
+                RegionAnnotation(f"{prefix}{index}", CoordinateSpan(None, start, start + rng.randint(50, 400)), label=f"{prefix}{index}")
+            )
+        return tuple(drawn)
+
+    regions("o"), regions("p")  # The same seeded stream as the outside sets before it.
+    options = gbdraw.CircularOptions(
+        annotations=AnnotationOptions(sets=(AnnotationSet("s", regions("q")),)),
+        tracks=gbdraw.CircularTrackOptions(slots=("features:features", "s:annotations@side=inside,set_id=s")),
+    )
+    return record, options
+
+
 def test_the_definition_scan_measures_each_label_room_once(monkeypatch: pytest.MonkeyPatch) -> None:
     # The scan lays the tracks out again for each smaller definition font (OV-2664). A slot's label room is measured
     # once for each band, axis and side it is asked for, however often the layouts ask.
@@ -412,7 +438,7 @@ def test_the_definition_scan_packs_and_places_each_slot_once_for_the_same_inputs
     # same rooms is packed once, and its labels drawn at the same radii among the same obstacles are placed once,
     # however many rows the check verifies. Placing a track's labels counts each label against one obstacle index
     # that takes every label placed before it, not an index made again for each label. (The lane packer places a
-    # track's labels among no other obstacles where it packs them, ``circular_annotation_lanes_meeting``.)
+    # track's labels among no other obstacles where it packs them, ``circular_annotation_lane_labels``.)
     import gbdraw.diagrams.circular.assemble as assemble_module
     import gbdraw.render.drawers.circular.annotations as drawer
     from gbdraw.api.diagram import label_fit_report
@@ -460,6 +486,62 @@ def test_the_definition_scan_packs_and_places_each_slot_once_for_the_same_inputs
     assert packed and len(packed) == len(set(packed))
     assert placed and len(placed) == len(set(placed))
     assert len(indexes) == len(placed)
+
+
+@pytest.mark.parametrize("measure", ["circular_annotation_track_content", "circular_annotation_track_ink"])
+def test_the_definition_scan_draws_and_paints_each_slot_once_for_the_same_inputs(
+    monkeypatch: pytest.MonkeyPatch, measure: str
+) -> None:
+    # Each row the scan verifies assembles the figure again (OV-3111): a slot drawn with the same lanes, ring and
+    # labels is drawn once, and its paint, which every count of the definition lines against the tracks reads (the
+    # verified rows' and the probes' before the labels are placed), is built once for the same inputs.
+    import gbdraw.diagrams.circular.assemble as assemble_module
+    from gbdraw.api.diagram import label_fit_report
+
+    record, options = _inside_slot_whose_rows_draw_it()
+    calls: list[tuple[object, ...]] = []
+    original = getattr(assemble_module, measure)
+
+    def counting(track: object, **kwargs: object) -> object:
+        calls.append((track, kwargs["ring"], kwargs["params"], tuple(kwargs["labels"])))
+        return original(track, **kwargs)
+
+    monkeypatch.setattr(assemble_module, measure, counting)
+    with pytest.warns(UserWarning, match="definition line"):
+        drawing = gbdraw.draw_circular(record, options=options)
+
+    report = label_fit_report(drawing._drawing)
+    rows = [row for row in report.rows if row.kind == "smaller_definition_font"] if report is not None else []
+    assert rows and rows[0].status == "found"
+    distinct = [call for index, call in enumerate(calls) if call not in calls[:index]]
+    assert calls and len(calls) == len(distinct), (len(calls), len(distinct))
+
+
+def test_the_lane_packer_places_an_inside_slots_labels_once_for_its_two_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Where the packer draws an inside slot's lanes, it checks which lanes draw two labels over each other and which
+    # labels the drawer draws across the centre onto a mark (OV-3111). Both read the labels placed among the track's
+    # own labels only; for the same lanes, rooms and band they are placed once.
+    import gbdraw.render.drawers.circular.annotations as drawer
+
+    record, options = _inside_slot_over_the_definition()
+    placed: list[tuple[object, ...]] = []
+    place = drawer.circular_annotation_labels
+
+    def counting(track: ResolvedAnnotationTrack, **kwargs: object) -> object:
+        obstacles = kwargs.get("obstacles")
+        if isinstance(obstacles, drawer.CircularLabelObstacles) and not obstacles.labels and not kwargs.get("rings"):
+            placed.append((
+                track.placements, track.lane_rooms, track.without_letters, track.without_room, track.clipped,
+                track.lane_gap_px, kwargs["inner_radius_px"], kwargs["outer_radius_px"], kwargs["side"],
+            ))
+        return place(track, **kwargs)
+
+    monkeypatch.setattr(drawer, "circular_annotation_labels", counting)
+    with pytest.warns(UserWarning, match="definition lines"):
+        gbdraw.draw_circular(record, options=options)
+
+    distinct = [call for index, call in enumerate(placed) if call not in placed[:index]]
+    assert placed and len(placed) == len(distinct), (len(placed), len(distinct))
 
 
 def test_a_curved_label_pushed_to_the_centre_is_measured_within_one_turn() -> None:
