@@ -101,7 +101,10 @@ def _slice_rows(
     begins = firsts + np.searchsorted(gone - np.arange(len(gone)), firsts, side="right") if len(gone) else firsts
     cuts = np.concatenate(([0], begins)) if not len(begins) or begins[0] else begins
     key = np.uint16 if len(cuts) <= 256 else np.intp  # a key: a byte's row in the slice, then its value
-    keys = np.repeat(np.arange(0, len(cuts) * 256, 256, dtype=key), np.diff(cuts, append=len(values)))
+    sizes = np.empty(len(cuts), dtype=np.intp)
+    np.subtract(cuts[1:], cuts[:-1], out=sizes[:-1])
+    sizes[-1] = len(values) - cuts[-1]
+    keys = np.repeat(np.arange(0, len(cuts) * 256, 256, dtype=key), sizes)
     keys += values
     pieces = np.bincount(keys, minlength=len(cuts) * 256).reshape(len(cuts), 256)
     letters = np.add.reduceat(pieces[:, _LETTER_BYTES], _LETTER_COLUMNS, axis=1)
