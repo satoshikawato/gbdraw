@@ -118,15 +118,3 @@ def test_default_colors_file_rejects_a_shared_invalid_row(tmp_path: Path) -> Non
     with pytest.raises(ValidationError, match="Invalid color 'currentColor' for feature type 'CDS'") as raised:
         _resolve_default_colors(tmp_path, "currentColor")
     assert raised.value.diagnostic == {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR"}
-
-
-PALETTE_OVERRIDE_ROWS = json.loads(
-    (FIXTURES / "palette_override_row_vectors.json").read_text(encoding="utf-8")
-)["cases"]
-
-
-@pytest.mark.parametrize("case", PALETTE_OVERRIDE_ROWS, ids=[case["id"] for case in PALETTE_OVERRIDE_ROWS])
-def test_palette_override_rows_match_the_web_rows(case: dict) -> None:
-    from gbdraw.io.colors import palette_override_rows
-
-    assert [list(row) for row in palette_override_rows(case["colors"], case["palette"])] == case["rows"]

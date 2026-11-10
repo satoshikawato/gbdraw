@@ -991,56 +991,6 @@ def _set_output_prefix(session: dict[str, Any], prefix: str) -> int:
     return changed
 
 
-_DEFAULT_COLORS_HEADER = "feature_type\tcolor"
-
-
-def _default_color_rows(text: str) -> dict[str, str]:
-    lines = [line.split("\t", 1) for line in text.splitlines() if line.strip()]
-    return {key.strip(): color.strip() for key, color in lines if f"{key}\t{color}" != _DEFAULT_COLORS_HEADER}
-
-
-def _keep_user_default_colors(session: dict[str, Any]) -> int:
-    """Keep only the user's rows of the request's Default colors table (OV-3257).
-
-    A row equal to its palette's color is the palette's (``palette_override_rows``),
-    so it is left out and a later palette change reaches the Session. A table
-    with no user row is dropped. A canonical table is complete (Python draws
-    its rows only), so its user rows go to a Default colors file, which applies
-    over the palette as a Web Generate's does. Returns 1 when the table
-    changed, else 0.
-    """
-
-    from gbdraw.io.colors import packaged_color_palettes, palette_override_rows
-
-    colors = session["renderRequest"]["diagramOptions"].get("colors") or {}
-    is_file = bool(colors.get("defaultColorsFile"))
-    ref = colors.get("defaultColorsFile") or colors.get("defaultColors")
-    if not ref:
-        return 0
-    resources = session["resources"]
-    stored = resources.pop(ref["resourceId"])
-    rows = _default_color_rows(base64.b64decode(stored["data"], validate=True).decode("utf-8"))
-    palette = packaged_color_palettes().get(colors.get("defaultColorsPalette") or "default", {})
-    user_rows = palette_override_rows(rows, palette)
-    if is_file and user_rows == list(rows.items()):
-        resources[ref["resourceId"]] = stored
-        return 0
-    colors.update(defaultColors=None, defaultColorsFile=None)
-    if user_rows:
-        payload = "".join(f"{feature_type}\t{color}\n" for feature_type, color in user_rows).encode("utf-8")
-        resource_id = ref["resourceId"] if is_file else "colors-default-colors-file"
-        base = stored if is_file else {
-            "kind": resource_id, "name": f"{resource_id}-default-colors.tsv",
-            "type": "application/octet-stream", "lastModified": 0, "encoding": "base64",
-        }
-        resources[resource_id] = {**base, "size": len(payload), "data": base64.b64encode(payload).decode("ascii")}
-        colors["defaultColorsFile"] = {"resourceId": resource_id, "representation": "file"}
-    if not (user_rows and is_file):
-        original_names = (session.get("webFiles") or {}).get("resourceOriginalNames") or {}
-        original_names.pop(ref["resourceId"], None)
-    return 1
-
-
 def _materialize_one_record_sources(session: dict[str, Any]) -> int:
     """Store the record of a one-record GenBank source as the CLI replay writes it.
 
@@ -1655,7 +1605,7 @@ def _refresh_one_session(
         # `finalize` keeps, so it is set on the input, before `prepare`.
         if _reopen_for_publication(session_path, session) + _set_output_prefix(
             session, gallery_id
-        ) + _keep_user_default_colors(session):
+        ):
             publication_input_path = (
                 staging_root / f"canonicalized-{session_path.name}"
             )

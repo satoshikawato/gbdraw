@@ -8,6 +8,7 @@ elements need no svgwrite validation.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import sys
@@ -542,3 +543,24 @@ def test_a_cli_session_stores_only_the_default_colors_rows_the_user_gave(tmp_pat
     ref = colors["defaultColorsFile"] or colors["defaultColors"]
     text = base64.b64decode(session["resources"][ref["resourceId"]]["data"]).decode("utf-8")
     assert [line.split("\t") for line in text.splitlines() if line.strip()] == [["CDS", "#123456"]]
+
+
+
+@pytest.mark.parametrize("session_path", GALLERY_SESSIONS, ids=lambda path: path.name)
+def test_a_gallery_session_stores_no_palette_row_in_its_default_colors(session_path: Path) -> None:
+    # OV-3257: the Gallery refresh stored each request's Default colors resolved
+    # over the palette, so the palette's rows read as user colors and a later
+    # palette change never reached the Session. A stored table holds only the
+    # rows that differ from its palette.
+    document = load_session_document(session_path).to_dict()
+    for drawing in document["drawings"]:
+        colors = drawing["renderRequest"]["diagramOptions"]["colors"]
+        ref = colors.get("defaultColorsFile") or colors.get("defaultColors")
+        if not ref:
+            continue
+        palette = color_io.packaged_color_palettes()[colors.get("defaultColorsPalette") or "default"]
+        text = base64.b64decode(document["resources"][ref["resourceId"]]["data"]).decode("utf-8")
+        rows = [line.split("\t")[:2] for line in text.splitlines() if "\t" in line]
+        rows = [(key.strip(), color.strip().lower()) for key, color in rows if key.strip() != "feature_type"]
+        assert rows, drawing["id"]
+        assert [key for key, color in rows if color == str(palette.get(key, "")).lower()] == []
