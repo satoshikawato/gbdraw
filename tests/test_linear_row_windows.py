@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
+import copy
 from dataclasses import replace
 from pathlib import Path
 
@@ -27,6 +28,8 @@ from gbdraw.api.requests import (
     RecordInput,
     RecordPresentation,
 )
+from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
+from gbdraw.features.source import capture_source_features
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.regions import RecordWindow
 from gbdraw.layout.linear_row_windows import (
@@ -486,12 +489,29 @@ def _stranded_record(record_id: str, length: int, features: list[tuple[int, int,
     return record
 
 
-def _match(query: int, subject: int, query_id: str, subject_id: str) -> LinearComparison:
+def _match(
+    query: int, subject: int, query_id: str, subject_id: str, query_feature: str = ""
+) -> LinearComparison:
+    """One match of bases 100-400 of each side; ``query_feature`` binds its query end to that drawn feature."""
+
     row = [query_id, subject_id, 90.0, 300, 0, 0, 100, 400, 100, 400, 1e-20, 200]
-    return LinearComparison(query, subject, pd.DataFrame([row], columns=COMPARISON_COLUMNS))
+    matches = pd.DataFrame([row], columns=COMPARISON_COLUMNS)
+    if query_feature:
+        matches["query_view_feature_svg_id"] = [query_feature]
+    return LinearComparison(query, subject, matches)
 
 
-def _row_between_ribbons_figure(tmp_path: Path) -> ET.Element:
+# Drawn units of ``_row_between_ribbons_figure``: T, the row's windows C1 (reversed), C2a, C2b, and B.
+_INTO_ROW = ((0, 1, "T", "C1"), (0, 2, "T", "C2"), (0, 3, "T", "C2"))
+_OUT_OF_ROW = ((1, 4, "C1", "B"), (2, 4, "C2", "B"), (3, 4, "C2", "B"))
+
+
+def _row_between_ribbons_figure(
+    tmp_path: Path,
+    comparisons: tuple[LinearComparison, ...] = tuple(_match(*pair) for pair in (*_INTO_ROW, *_OUT_OF_ROW)),
+    overrides: dict[str, object] | None = None,
+    feature_placements: tuple[FeaturePlacementOverride, ...] = (),
+) -> ET.Element:
     """Strands drawn apart; a windowed middle row between two whole records, ribbons above and below it. The row
     holds a reversed window that reaches its contig's start (C1, every feature on the lower strand), then two
     windows of one record (C2): the first without a lower-strand feature, the second without an upper one."""
@@ -523,12 +543,14 @@ def _row_between_ribbons_figure(tmp_path: Path) -> ET.Element:
         ),
         layout=LinearMultiRecordOptions(),
     )
-    comparisons = (
-        _match(0, 1, "T", "C1"), _match(0, 2, "T", "C2"), _match(0, 3, "T", "C2"),
-        _match(1, 4, "C1", "B"), _match(2, 4, "C2", "B"), _match(3, 4, "C2", "B"),
+    options = replace(
+        request.options,
+        linear_comparisons=comparisons,
+        config_overrides={
+            "canvas.strandedness": True, "canvas.show_gc": False, "canvas.show_skew": False, **(overrides or {})
+        },
+        feature_placements=feature_placements,
     )
-    overrides = {"canvas.strandedness": True, "canvas.show_gc": False, "canvas.show_skew": False}
-    options = replace(request.options, linear_comparisons=comparisons, config_overrides=overrides)
     return _render(tmp_path, replace(request, options=options))
 
 
@@ -567,6 +589,14 @@ def test_window_numbers_stand_at_the_upper_left_of_each_window_clear_of_ribbons_
     ]
     row_top = min(y for points in features for _x, y in points)
     row_bottom = max(y for points in features for _x, y in points)
+    # Each number stands at its own window's start: left of it, right of the window before it.
+    spans = [
+        (_translate(windows[index])[0], _translate(windows[index])[0] + float(next(windows[index].iter(f"{SVG}line")).get("x2", "0")))
+        for index in ("1", "2", "3")
+    ]
+    for number, (cx, _cy, r) in enumerate(circles):
+        assert cx + r <= spans[number][0]
+        assert number == 0 or cx - r >= spans[number - 1][1]
     for cx, cy, r in circles:
         # Above the axis, on the row's upper edge, and in no feature's box.
         assert row_top - r <= cy <= row_top < min(axis_y)
@@ -594,3 +624,63 @@ def test_window_numbers_stand_at_the_upper_left_of_each_window_clear_of_ribbons_
     # Every ribbon out of the row starts at one y, below the row's lower lane.
     starts = {round(min(y for _x, y in points), 3) for points in out_of_row}
     assert len(starts) == 1 and min(starts) >= row_bottom
+
+
+def _ribbon_heights(root: ET.Element, subject_row: str) -> list[float]:
+    return [
+        max(y for _x, y in points) - min(y for _x, y in points)
+        for g in root.iter(f"{SVG}g")
+        if g.get("data-subject-row") == subject_row
+        for path in g.iter(f"{SVG}path")
+        for points in [_path_points(g, path)]
+    ]
+
+
+def test_ribbons_from_a_shallow_window_keep_the_comparison_height(tmp_path: Path) -> None:
+    """The rows are spaced from the row's shared edge, where the ribbons attach: ribbons from the one window of the
+    row without a lower-strand feature (C2a) are as tall as the set comparison height, not shorter by the depth of
+    the row's other windows."""
+
+    root = _row_between_ribbons_figure(
+        tmp_path,
+        comparisons=(*(_match(*pair) for pair in _INTO_ROW), _match(*_OUT_OF_ROW[1])),
+        overrides={"canvas.linear.comparison_height": 200},
+    )
+    heights = _ribbon_heights(root, "2")
+    assert heights and all(height == pytest.approx(200.0, abs=0.01) for height in heights)
+
+
+def test_ribbons_bound_to_a_moved_feature_start_on_the_row_edge(tmp_path: Path) -> None:
+    """Strands drawn on the axis. The one feature of window C2a is moved to the lane above the axis, so the ribbons
+    of that window follow its features; a ribbon bound to the feature still starts on the row's lower edge, with
+    the ribbons of the row's other windows, not under that lane (across the axis and the row's lower lane)."""
+
+    source = _stranded_record("C2", 4_000, [(100, 600, 1), (2_100, 2_600, -1)])
+    moved = FeaturePlacementOverride(
+        "c2",
+        capture_source_features(copy.deepcopy(source)).entries[0].biological_feature_id,
+        FeaturePlacementTarget("lane", "above", 1),
+    )
+    on_axis = {"canvas.strandedness": False}
+    plain = _row_between_ribbons_figure(tmp_path / "plain", overrides=on_axis, feature_placements=(moved,))
+    [feature] = [
+        path.get("data-gbdraw-stable-feature-id")
+        for g in plain.iter(f"{SVG}g")
+        if g.get("data-gbdraw-slot-renderer") == "features" and g.get("data-record-index") == "2"
+        for path in g.iter(f"{SVG}path")
+        if path.get("data-gbdraw-stable-feature-id")
+    ]
+    bound = (_match(1, 4, "C1", "B"), _match(2, 4, "C2", "B", query_feature=feature))
+    root = _row_between_ribbons_figure(
+        tmp_path / "bound",
+        comparisons=(*(_match(*pair) for pair in _INTO_ROW), *bound),
+        overrides=on_axis,
+        feature_placements=(moved,),
+    )
+    starts = {
+        g.get("data-query-record-index"): round(min(y for path in g.iter(f"{SVG}path") for _x, y in _path_points(g, path)), 3)
+        for g in root.iter(f"{SVG}g")
+        if g.get("data-query-row") == "1"
+    }
+    assert set(starts) == {"1", "2"}
+    assert starts["2"] == starts["1"]
