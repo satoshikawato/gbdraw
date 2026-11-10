@@ -1022,7 +1022,8 @@ const reachUndoTitle = (mode, route, after) => `rev 7: Undo and Redo of a chosen
 // committed request are back), and the file removal that ends removed runs
 // last. One Save of that drawing serves every after-Load step; each step loads
 // it into a page of its own.
-// The circular case took 80 s locally (2026-11-10); the timeout is five times that.
+// The circular case took 80 to 186 s locally on a shared machine (2026-11-10);
+// the timeout is more than twice the slowest run.
 for (const mode of ['circular', 'linear']) {
   test(`rev 7: reach matrix (${mode}): Depth file, series and row removals a row reaches, after Generate and after Load`, async ({ browser }, testInfo) => {
     test.setTimeout(420000);
