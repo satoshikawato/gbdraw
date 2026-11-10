@@ -364,6 +364,38 @@ def test_a_parse_that_fails_stops_the_expansion_ahead_of_it_while_its_error_is_h
     assert not [thread for thread in threading.enumerate() if thread.name == "gbdraw-gzip-ahead"]
 
 
+@pytest.mark.parametrize("slow", ["reader", "maker"])
+def test_blocks_made_ahead_come_in_order_at_most_the_bound_ahead_with_an_error_after_them(slow: str) -> None:
+    """The thread makes blocks while fewer than ``_AHEAD_BLOCKS`` wait, so a fast maker stops at the bound and a
+    fast reader waits for each block; an error comes after every block made before it."""
+
+    import threading
+    import time
+
+    made: list[int] = []
+    taken: list[int] = []
+    ahead: list[int] = []
+
+    def blocks():
+        for index in range(40):
+            if slow == "maker":
+                time.sleep(0.001)
+            made.append(index)
+            ahead.append(len(made) - len(taken))
+            yield bytes([index])
+        raise ValueError("refused after 40 blocks")
+
+    with pytest.raises(ValueError, match="after 40 blocks"):
+        for block in record_sequences._ahead(blocks()):
+            if slow == "reader":
+                time.sleep(0.001)
+            taken.append(block[0])
+    assert taken == list(range(40))
+    # One block in the reader's hands, the bound waiting, and the one the maker is making.
+    assert max(ahead) <= record_sequences._AHEAD_BLOCKS + 2
+    assert not [thread for thread in threading.enumerate() if thread.name == "gbdraw-gzip-ahead"]
+
+
 def test_the_cap_counts_what_a_reader_expanded_so_far(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A file past the cap whose first record lies within it gives that record to a reader that stops there."""
 
