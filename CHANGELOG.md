@@ -479,6 +479,11 @@ write-up of a release.
   the Start without the box now shows in order with Reverse complement ticked;
   the figure is unchanged. The Comparison card lists each window pair of a
   pair of records, with its own Save Raw LOSAT TSV.
+- Fixed: each window pair of a pair of Linear records now gets a raw LOSAT
+  file name of its own, the pair's name with the window numbers before
+  `.tsv` (for example `A.B.losatn.w2.tsv`); before, every window pair got the
+  same name, or the name typed on the pair of records. A pair of records drawn
+  whole keeps its name (OV-2742).
 - Fixed: a Linear record card's window numbers and the bp it reports between
   windows now come from the planner that draws the figure, so they match it
   (the card counted bp between two windows that a third window covers). An
