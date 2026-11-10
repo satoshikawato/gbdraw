@@ -28,7 +28,7 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.canvas import LINEAR_WRAP_LENGTH_PATH, LinearWrapLength, linear_wrap_length_from_config
 from gbdraw.config.modify import modify_config_dict, raw_config_value, with_config_overrides
 from gbdraw.exceptions import ValidationError
-from gbdraw.analysis.windows import cut_digest
+from gbdraw.analysis.windows import WINDOW_SOURCE_ANNOTATION, WindowSource, cut_content
 from gbdraw.core.numeric import ascii_float, parse_ascii_integer
 from gbdraw.core.record_metadata import (
     WINDOW_OF_ANNOTATION,
@@ -37,7 +37,7 @@ from gbdraw.core.record_metadata import (
     RecordOrigin,
     RecordSourceKind,
     held_record_origin,
-    record_content_digest,
+    RecordContent,
     record_window_span,
     _feature_source_index_map,
     _iter_source_features,
@@ -56,6 +56,7 @@ from gbdraw.io.comparisons import read_comparison_resource
 from gbdraw.io.genome import (
     feature_types_left_out, filter_features_by_type, load_fasta, load_gbks, parse_gff_fasta, require_record_sequence,
 )
+from gbdraw.io.record_sequences import detached_records
 from gbdraw.io.record_select import (
     RecordSelector,
     drawn_record_units,
@@ -317,11 +318,11 @@ class ResolvedRecordProvenance:
         """The key of the record whose window this unit draws (D-01), from this plan or the one before."""
         return self.window.window_of if self.window is not None else self.origin_window_of
 
-    def origin(self, record: SeqRecord, content_digest: str | None = None) -> RecordOrigin:
-        """The origin of ``record``, this unit's planned record, as the projection carries it; ``content_digest`` is
-        the record's ``record_content_digest`` when the caller holds it already."""
+    def origin(self, record: SeqRecord, content: RecordContent | None = None) -> RecordOrigin:
+        """The origin of ``record``, this unit's planned record, as the projection carries it; ``content`` is the
+        record's ``RecordContent`` when the caller holds it already."""
         return RecordOrigin(
-            content_digest=content_digest if content_digest is not None else record_content_digest(record),
+            content=content if content is not None else RecordContent(record),
             source_kind=self.source_kind,
             source_paths=self.source_paths,
             source_record_index=self.source_record_index,
@@ -2002,7 +2003,7 @@ def _expand_record_windows(
             _apply_record_key(unit, record_key=unit_item.record_key)
             _apply_provenance_annotations(unit, unit_item)
             # Since its cut, a unit changed only in gbdraw's annotations, which its digest leaves out.
-            _keep_record_origin(unit, unit_item, cut_digest(unit) if cut else None)
+            _keep_record_origin(unit, unit_item, cut_content(unit) if cut else None)
             records.append(unit)
             provenance.append(unit_item)
     return ResolvedRecordCollection(tuple(records), tuple(provenance))
@@ -2023,20 +2024,56 @@ def reverse_resolved_records(
         (records[index],) = reverse_records((records[index],), True, log=logger)
         _apply_provenance_annotations(records[index], collection.provenance[index])
         # A reversed crop keeps the digest of its reverse complement as cut (``reversed_window_source``).
-        _keep_record_origin(records[index], collection.provenance[index], cut_digest(records[index]))
+        _keep_record_origin(records[index], collection.provenance[index], cut_content(records[index]))
     return ResolvedRecordCollection(tuple(records), collection.provenance)
 
 
 def _keep_record_origin(
-    record: SeqRecord, provenance: ResolvedRecordProvenance, content_digest: str | None = None
+    record: SeqRecord, provenance: ResolvedRecordProvenance, content: RecordContent | None = None
 ) -> None:
     """Keep on ``record``, a planned record now complete, where it was read from (OV-2923).
 
     A later plan of the record, or a Session writer, reads it while the record is unchanged (``held_record_origin``).
-    ``content_digest`` is the record's digest when its caller holds it (a crop's, from its cut).
+    ``content`` is the record's content when its caller holds it (a crop's, from its cut).
     """
 
-    record.annotations[RECORD_ORIGIN_ANNOTATION] = provenance.origin(record, content_digest)
+    record.annotations[RECORD_ORIGIN_ANNOTATION] = provenance.origin(record, content)
+
+
+def records_holding_their_sequences(records: Iterable[SeqRecord]) -> list[SeqRecord]:
+    """Planned records handed to a caller: each holds its sequence (``detached_records``), and a crop the record it
+    was cut from, so the caller may rewrite or delete the input files (OV-3353).
+
+    The contents a reader compares later (where a record was read from, what a crop was when cut) take their digests
+    first, while the files still hold the bases. Crops of one record share one copy of it.
+    """
+
+    sources: dict[int, SeqRecord] = {}
+    held: list[SeqRecord] = []
+    for record in records:
+        _take_digests(record)
+        [copied] = detached_records([record])
+        stored = record.annotations.get(WINDOW_SOURCE_ANNOTATION)
+        if isinstance(stored, WindowSource):
+            if id(stored.record) not in sources:
+                _take_digests(stored.record)
+                [sources[id(stored.record)]] = detached_records([stored.record])
+            if sources[id(stored.record)] is not stored.record:
+                copied = copy.copy(copied)
+                copied.annotations = {
+                    **record.annotations, WINDOW_SOURCE_ANNOTATION: replace(stored, record=sources[id(stored.record)]),
+                }
+        held.append(copied)
+    return held
+
+
+def _take_digests(record: SeqRecord) -> None:
+    origin = record.annotations.get(RECORD_ORIGIN_ANNOTATION)
+    if isinstance(origin, RecordOrigin):
+        origin.content.digest
+    crop_content = cut_content(record)
+    if crop_content is not None:
+        crop_content.digest
 
 
 def _detached_record(record: SeqRecord) -> SeqRecord:
@@ -2794,5 +2831,6 @@ __all__ = [
     "resolve_implicit_record_output_prefix",
     "resolve_linear_options",
     "resolve_record_inputs",
+    "records_holding_their_sequences",
     "reverse_resolved_records",
 ]

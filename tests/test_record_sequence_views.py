@@ -30,7 +30,7 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis import skew
 from gbdraw.analysis.gc import calculate_gc_percent
-from gbdraw.analysis.windows import cut_digest
+from gbdraw.analysis.windows import cut_content
 from gbdraw.core import sequence_spans as sequence_spans_module
 from gbdraw.core.record_metadata import record_content_digest
 from gbdraw.exceptions import InputFileError
@@ -199,7 +199,7 @@ def test_crops_read_the_bases_copies_read(case: tuple[str, str], tmp_path: Path)
             assert bytes(crop.seq) == expected, label
             assert _extracts(crop, crop.seq) == _extracts(crop, Seq(expected)), label
             assert record_content_digest(crop) == _old_digest(crop), label
-            assert cut_digest(crop) == _old_digest(crop), label
+            assert cut_content(crop).digest == _old_digest(crop), label
             assert calculate_gc_percent(crop.seq) == _old_gc_percent(expected), label
             if len(crop.seq):
                 small = max(4, len(crop.seq) // 16)

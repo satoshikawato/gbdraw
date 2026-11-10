@@ -146,7 +146,6 @@ from gbdraw.layout.record_transform import detected_topology
 from gbdraw.layout.record_units import left_off_circle, record_units
 from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
 from gbdraw.mode_profiles import ComparisonThresholds
-from gbdraw.io.record_sequences import detached_records
 from gbdraw.layout.record_placement import (
     FeatureAnchorPlacement,
     parse_record_row_position,
@@ -232,6 +231,7 @@ from .record_planning import (
     project_similarity_alignment_centers,
     project_source_bound_results,
     record_is_reverse_complemented,
+    records_holding_their_sequences,
     resolve_anchor_feature,
     resolve_circular_batch_outputs,
     resolve_circular_options,
@@ -1718,7 +1718,7 @@ def resolve_request_records(request: DiagramRequest) -> ResolvedRecordCollection
 def normalize_request_records(request: DiagramRequest) -> tuple[SeqRecord, ...]:
     """Resolve typed record inputs according to their explicit cardinality."""
 
-    return tuple(detached_records(resolve_request_records(request).records))
+    return tuple(records_holding_their_sequences(resolve_request_records(request).records))
 
 
 def _materialized_record_inputs(
@@ -2852,10 +2852,19 @@ def resolve_request(request: DiagramRequest) -> DiagramRequest:
     """Resolve an unresolved typed request to an exact-one projection.
 
     A Linear ``anchor_feature`` resolves to the record translations it was
-    drawn with (:func:`resolved_plan_request`).
+    drawn with (:func:`resolved_plan_request`). Its records hold their sequences
+    (:func:`records_holding_their_sequences`): the caller may rewrite or delete
+    the input files.
     """
 
-    return resolved_plan_request(plan_request(request))
+    resolved = resolved_plan_request(plan_request(request))
+    planned = [item.source.record for item in resolved.records if isinstance(item.source, InMemoryRecordSource)]
+    held = iter(records_holding_their_sequences(planned))
+    return replace(resolved, records=tuple(
+        replace(item, source=replace(item.source, record=next(held)))
+        if isinstance(item.source, InMemoryRecordSource) else item
+        for item in resolved.records
+    ))
 
 
 def resolved_plan_request(plan: DiagramRequestPlan) -> DiagramRequest:

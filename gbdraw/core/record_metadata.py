@@ -8,6 +8,7 @@ from xml.sax.saxutils import escape
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, NamedTuple, TypedDict, TypeVar
 
+from Bio.Seq import Seq, SequenceDataAbstractBaseClass
 from Bio.SeqFeature import ExactPosition, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
@@ -36,12 +37,12 @@ class RecordOrigin:
     """Where the request planner read a planned record from, kept on the record (``RECORD_ORIGIN_ANNOTATION``).
 
     Only the planner writes it, on each record it finishes (``record_planning._keep_record_origin``).
-    ``content_digest`` is the record's :func:`record_content_digest` then: the origin holds only while the record
-    still has that digest (:func:`held_record_origin`), so a copy of the record keeps it and an edit ends it.
+    ``content`` is the record's :class:`RecordContent` then: the origin holds only while the record still has that
+    content (:func:`held_record_origin`), so a copy of the record keeps it and an edit ends it.
     ``window_of`` is the key of the record whose window the record draws (D-01).
     """
 
-    content_digest: str
+    content: RecordContent
     source_kind: RecordSourceKind
     source_paths: tuple[str, ...]
     source_record_index: int
@@ -57,31 +58,75 @@ def held_record_origin(record: SeqRecord) -> RecordOrigin | None:
     """Where the planner read ``record`` from, while ``record`` is unchanged since; else ``None`` (OV-2923)."""
 
     origin = (getattr(record, "annotations", None) or {}).get(RECORD_ORIGIN_ANNOTATION)
-    if isinstance(origin, RecordOrigin) and origin.content_digest == record_content_digest(record):
+    if isinstance(origin, RecordOrigin) and origin.content.same_as(RecordContent(record)):
         return origin
     return None
 
 
-def record_content_digest(record: SeqRecord) -> str:
-    """A digest of what ``record`` draws: its names, sequence, features and annotations other than gbdraw's own.
+class RecordContent:
+    """What ``record`` draws at one moment: its names, sequence, features and annotations other than gbdraw's own.
 
-    Two records with one digest draw alike. A planned record carries the digest it had when it was planned or cut,
-    so a later edit of the record shows as a different digest (``RecordOrigin``, ``WindowSource``). Qualifiers are
-    read in their order: a copy keeps it, and a reordering that draws alike only ends an origin, which is safe.
+    Its :attr:`digest` (:func:`record_content_digest`) is read only when a reader asks for it. The text is taken
+    at once; a sequence that cannot change (a ``Seq`` over bytes or over its input file) is held, not read, so a
+    record planned or cut and never compared reads no base for it. Two contents of the same held sequence with the
+    same text are the same (:meth:`same_as`) without a read; any others compare their digests. Qualifiers are read
+    in their order: a copy keeps it, and a reordering that draws alike only ends an origin, which is safe.
     """
 
-    digest = hashlib.blake2b(digest_size=16)
-    digest.update(f"{record.id}\0{record.name}\0{record.description}\0".encode())
-    for span in sequence_spans(record.seq):  # a span at a time: the digest holds no copy of the sequence
-        digest.update(span)
-    digest.update(
-        "".join(f"\0{feature.type}\0{feature.location}\0{feature.qualifiers!r}" for feature in record.features).encode()
-    )
-    annotations = getattr(record, "annotations", None) or {}
-    for key in sorted(annotations):
-        if not str(key).startswith("gbdraw_"):
-            digest.update(f"\0{key}\0{annotations[key]}".encode())
-    return digest.hexdigest()
+    __slots__ = ("_head", "_seq", "_tail", "_digest")
+
+    def __init__(self, record: SeqRecord) -> None:
+        self._head = f"{record.id}\0{record.name}\0{record.description}\0".encode()
+        annotations = getattr(record, "annotations", None) or {}
+        self._tail = "".join((
+            *(f"\0{feature.type}\0{feature.location}\0{feature.qualifiers!r}" for feature in record.features),
+            *(f"\0{key}\0{annotations[key]}" for key in sorted(annotations) if not str(key).startswith("gbdraw_")),
+        )).encode()
+        seq = record.seq
+        held = isinstance(seq, Seq) and isinstance(seq._data, (bytes, SequenceDataAbstractBaseClass)) and seq.defined
+        self._seq = seq if held else None
+        self._digest = None if self._seq is not None else self._hash(seq)
+
+    def _hash(self, seq: object) -> str:
+        digest = hashlib.blake2b(self._head, digest_size=16)
+        for span in sequence_spans(seq):  # a span at a time: the digest holds no copy of the sequence
+            digest.update(span)
+        digest.update(self._tail)
+        return digest.hexdigest()
+
+    @property
+    def digest(self) -> str:
+        """The digest of the content: two records with one digest draw alike."""
+
+        if self._digest is None:
+            self._digest = self._hash(self._seq)
+        return self._digest
+
+    def same_as(self, other: RecordContent) -> bool:
+        """Whether ``other`` is this content: the same held sequence and text, else the same digest."""
+
+        if (self._seq is not None and other._seq is not None and self._seq._data is other._seq._data
+                and self._head == other._head and self._tail == other._tail):
+            return True
+        return self.digest == other.digest
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, RecordContent) and self.same_as(other)
+
+    def __hash__(self) -> int:
+        return hash(self.digest)
+
+    def __copy__(self) -> RecordContent:
+        return self  # it holds only bytes and a sequence that cannot change
+
+    def __deepcopy__(self, memo: dict[int, object]) -> RecordContent:
+        return self
+
+
+def record_content_digest(record: SeqRecord) -> str:
+    """A digest of what ``record`` draws now (:class:`RecordContent`)."""
+
+    return RecordContent(record).digest
 
 
 class _SourceFeatureAnchorProfile(NamedTuple):

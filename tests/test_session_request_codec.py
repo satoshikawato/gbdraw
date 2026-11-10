@@ -16,7 +16,7 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.core.record_metadata import RECORD_ORIGIN_ANNOTATION, RecordOrigin, record_content_digest
+from gbdraw.core.record_metadata import RECORD_ORIGIN_ANNOTATION, RecordContent, RecordOrigin
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
@@ -3416,7 +3416,7 @@ def test_in_memory_records_of_one_source_file_share_one_genbank_resource(
         if source is not None:
             # Where the planner read the record (a file no longer at hand).
             item.annotations[RECORD_ORIGIN_ANNOTATION] = RecordOrigin(
-                record_content_digest(item), "genbank", (source,), 0, 1, record_id, True
+                RecordContent(item), "genbank", (source,), 0, 1, record_id, True
             )
         return item
 
