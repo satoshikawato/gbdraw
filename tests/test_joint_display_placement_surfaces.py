@@ -86,7 +86,8 @@ def test_joint_root_typed_cli_intent_and_svg(mode, surface, tmp_path):
     from tests.utils.svg_compare import compare_svgs
     expected_svg = tmp_path / "typed-cli.svg"
     built_cli = build_request_diagram(result.canonical_request)
-    drawing = built_cli.items[0].drawing if mode == "circular" else built_cli.drawing
+    # A one-record Circular command draws one drawing, as Linear does (PD-OI-044).
+    drawing = built_cli.drawing
     expected_svg.write_text(drawing.tostring())
     assert compare_svgs(result.outputs[0].svg_path, expected_svg).equal
 
