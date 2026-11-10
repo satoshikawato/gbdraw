@@ -22,7 +22,6 @@ from collections.abc import Mapping, Sequence
 from typing import Literal, TypedDict, cast, is_typeddict
 
 from gbdraw.api.record_planning import (
-    InputPlace,
     ResolvedWindow,
     comparison_unit_pairs,
     numbered_places,
@@ -30,7 +29,7 @@ from gbdraw.api.record_planning import (
     refuse_file_comparison_of_windows,
 )
 from gbdraw.api.request_render import grid_placement_order
-from gbdraw.api.requests import RecordPresentation, expanded_record_key
+from gbdraw.api.requests import InputPlace, RecordPresentation, expanded_record_key
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.regions import window_drawn_reverse
@@ -330,8 +329,8 @@ class RecordPlace(TypedDict):
     columns: list[int | None]
 
 
-def _whole_number(value: object, *, least: int | None) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool) and (least is None or value >= least)
+def _positive_whole_number(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 1
 
 
 def plan_record_places(records: Sequence[object]) -> list[RecordPlace]:
@@ -347,10 +346,10 @@ def plan_record_places(records: Sequence[object]) -> list[RecordPlace]:
             record.get("gridRow"), record.get("gridColumn"), record.get("windowColumns"), record.get("drawnRecords")
         )
         if (
-            any(value is not None and not _whole_number(value, least=1) for value in (row, column))
+            any(value is not None and not _positive_whole_number(value) for value in (row, column))
             or not isinstance(windows, list)
-            or any(value is not None and not _whole_number(value, least=1) for value in windows)
-            or not _whole_number(drawn, least=1)
+            or any(value is not None and not _positive_whole_number(value) for value in windows)
+            or not _positive_whole_number(drawn)
             or (windows and drawn != 1)
         ):
             raise _protocol_error("A record of a place plan needs whole-number places and how many records it draws.")

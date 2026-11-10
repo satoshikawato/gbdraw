@@ -105,6 +105,7 @@ from .prepared import (
 )
 from .requests import (
     CircularBatchOutputPolicy,
+    InputPlace,
     expanded_record_key,
     window_unit_key,
     FastaInputSource,
@@ -1858,43 +1859,6 @@ def _apply_provenance_annotations(
     if provenance.source_paths:
         record.annotations["gbdraw_source_file"] = provenance.source_paths[0]
         record.annotations["gbdraw_source_basename"] = Path(provenance.source_paths[0]).name
-
-
-class InputPlace(NamedTuple):
-    """Where one record input stands in a Linear grid before its records expand: its row, its column (a record drawn
-    whole or in one window), the columns of its windows (a record drawn in several), and how many records it draws."""
-
-    row: int | None
-    column: int | None
-    window_columns: tuple[int | None, ...]
-    records: int
-
-    @classmethod
-    def at(cls, row: int | None, column: int | None, window_columns: Sequence[int | None], records: int) -> InputPlace:
-        """The place of an input at ``row`` and ``column`` whose windows stand at ``window_columns`` (a record drawn
-        in one window stands at the input's column) and which draws ``records`` records."""
-
-        return cls(row, column, tuple(window_columns) if len(window_columns) > 1 else (), records)
-
-    @classmethod
-    def of(cls, record_input: RecordInput, records: int) -> InputPlace:
-        """The place of ``record_input``, which draws ``records`` records."""
-
-        presentation = record_input.presentation
-        return cls.at(
-            presentation.grid_row, presentation.grid_column, [window.column for window in record_input.windows], records
-        )
-
-    def record_column(self, index: int) -> int | None:
-        """The column of the input's record ``index`` (from 0, in file order)."""
-
-        return None if self.column is None else self.column + index
-
-    def drawn_columns(self) -> tuple[int | None, ...]:
-        """The column of each record or window the input draws, in drawing order: its windows' columns when it draws
-        several, else one column per record (``record_column``)."""
-
-        return self.window_columns or tuple(self.record_column(index) for index in range(self.records))
 
 
 def numbered_places(places: Sequence[InputPlace]) -> tuple[InputPlace, ...]:

@@ -977,3 +977,38 @@ def test_a_file_card_column_is_one_cell_before_its_records_expand() -> None:
             ),
             layout=LinearMultiRecordOptions(),
         )
+
+
+def test_the_placement_check_and_the_planner_read_an_input_place_by_one_rule(monkeypatch) -> None:
+    """The cells the placement check counts are the planner's ``InputPlace``: a record in several windows stands at
+    its windows' columns, not at its presentation's (it has none), so the check and ``numbered_places`` agree."""
+    import gbdraw.api.requests as requests_module
+    from gbdraw.api.record_planning import numbered_places
+
+    asked: list[tuple[object, object, tuple[object, ...]]] = []
+    rule = requests_module.InputPlace.at.__func__
+
+    def spy(cls, row, column, window_columns, records):
+        asked.append((row, column, tuple(window_columns)))
+        return rule(cls, row, column, window_columns, records)
+
+    monkeypatch.setattr(requests_module.InputPlace, "at", classmethod(spy))
+    first, second = _records(100, 400)
+    placed = RecordInput(source=InMemoryRecordSource(first), presentation=RecordPresentation(grid_row=1, grid_column=1))
+    windowed = RecordInput(
+        source=InMemoryRecordSource(second),
+        windows=(RecordWindow(1, 100, column=2), RecordWindow(201, 300, column=3)),
+        presentation=RecordPresentation(grid_row=1),
+    )
+    LinearDiagramRequest(records=(placed, windowed), layout=LinearMultiRecordOptions())
+    assert (1, None, (2, 3)) in asked
+    places = numbered_places([requests_module.InputPlace.of(item, 1) for item in (placed, windowed)])
+    assert [place.drawn_columns() for place in places] == [(1,), (2, 3)]
+    # A window at the placed record's column is a shared cell for both.
+    clashing = RecordInput(
+        source=InMemoryRecordSource(second),
+        windows=(RecordWindow(1, 100, column=1), RecordWindow(201, 300, column=3)),
+        presentation=RecordPresentation(grid_row=1),
+    )
+    with pytest.raises(ValidationError, match="must be unique"):
+        LinearDiagramRequest(records=(placed, clashing), layout=LinearMultiRecordOptions())

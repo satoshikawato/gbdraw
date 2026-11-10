@@ -421,7 +421,8 @@ write-up of a release.
   card of its own. In the Python API, a `RecordCardinality.ALL` input of a
   Linear request may set `grid_column`, read the same way (OV-3072). Run
   Info's Source recipe writes such a card as one records table row per record
-  (`#1`, `#2`, ...) at the places the drawing gives them. "Orient
+  (`#1`, `#2`, ...) at the places the drawing gives them, when the drawing has
+  no comparisons. "Orient
   records from comparisons" no longer fails on a drawing with a record drawn in
   several windows and a reversed record below the top row (OV-3225).
 - Added: a window of a circular record may run across its origin. In the

@@ -241,7 +241,7 @@ import {
 /** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
 /** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
-/** @import { RecipeGeneratedFile, RecipeHelperFile } from './run-info.js' */
+/** @import { RecipeGeneratedFile, RecipeHelperFile, RecordPlacePlanner } from './run-info.js' */
 /** @import { DepthSlotRow } from '../services/depth-track-state.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
@@ -5179,6 +5179,8 @@ export const createRunAnalysis = ({
             generatedFileNameHints.set(slot, name);
           }
         });
+        /** @type {RecordPlacePlanner} */
+        const planRecordPlaces = (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_RECORD_PLACES, payload);
         // Establish source counts before Worker transfer releases the file-content cache.
         sourceRecipe = await buildSourceRecipe(/** @type {any} */ ({
           ...canonical,
@@ -5187,8 +5189,7 @@ export const createRunAnalysis = ({
           readResourceFileBytes: (/** @type {string} */ id) => readCanonicalResourceFileBytes(canonical.resources, id),
           readResourceText: (/** @type {string} */ id) => readCanonicalResourceText(canonical.resources, id),
           drawnUnits: requestDrawnUnits,
-          planRecordPlaces: (/** @type {{ records: unknown[] }} */ payload) => runDiagramHelperOperation(
-            DIAGRAM_HELPER_OPERATIONS.PLAN_RECORD_PLACES, payload)
+          planRecordPlaces
         }));
         throwIfGenerationCanceled();
       }

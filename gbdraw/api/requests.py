@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path, PureWindowsPath
-from typing import Literal, Sequence, TypeAlias, cast
+from typing import Literal, NamedTuple, Sequence, TypeAlias, cast
 
 from Bio.SeqRecord import SeqRecord
 
@@ -520,6 +520,44 @@ def expanded_record_key(card_key: str, position: int) -> str:
 
     return f"{card_key}{EXPANDED_RECORD_KEY_SEPARATOR}{position}"
 
+
+class InputPlace(NamedTuple):
+    """Where one record input stands in a Linear grid before its records expand: its row, its column (a record drawn
+    whole or in one window), the columns of its windows (a record drawn in several), and how many records it draws."""
+
+    row: int | None
+    column: int | None
+    window_columns: tuple[int | None, ...]
+    records: int
+
+    @classmethod
+    def at(cls, row: int | None, column: int | None, window_columns: Sequence[int | None], records: int) -> InputPlace:
+        """The place of an input at ``row`` and ``column`` whose windows stand at ``window_columns`` (a record drawn
+        in one window stands at the input's column) and which draws ``records`` records."""
+
+        return cls(row, column, tuple(window_columns) if len(window_columns) > 1 else (), records)
+
+    @classmethod
+    def of(cls, record_input: RecordInput, records: int) -> InputPlace:
+        """The place of ``record_input``, which draws ``records`` records."""
+
+        presentation = record_input.presentation
+        return cls.at(
+            presentation.grid_row, presentation.grid_column, [window.column for window in record_input.windows], records
+        )
+
+    def record_column(self, index: int) -> int | None:
+        """The column of the input's record ``index`` (from 0, in file order)."""
+
+        return None if self.column is None else self.column + index
+
+    def drawn_columns(self) -> tuple[int | None, ...]:
+        """The column of each record or window the input draws, in drawing order: its windows' columns when it draws
+        several, else one column per record (``record_column``)."""
+
+        return self.window_columns or tuple(self.record_column(index) for index in range(self.records))
+
+
 # A record with several windows draws each as a unit keyed "<record key>~w<window number>" (D-01); a record with one
 # window draws one unit with the record's own key.
 WINDOW_UNIT_KEY_SEPARATOR = "~w"
@@ -758,16 +796,13 @@ def _validate_linear_placements(
     layout: LinearMultiRecordOptions | None,
 ) -> None:
     placements = [record.presentation for record in records]
-    # The cells a record takes: one per window of a record with several (D-08), else its own. A File card's column is
-    # the first of the consecutive columns its records take when they expand (``numbered_places``, OV-3072).
+    # The cells a record takes before its records expand (``InputPlace``): one per window of a record with several
+    # (D-08), else its own. A File card's column is the first of the consecutive columns its records take when they
+    # expand (``numbered_places``, OV-3072).
     cells = [
-        (record.presentation.grid_row, column)
-        for record in records
-        for column in (
-            [window.column for window in record.windows]
-            if len(record.windows) > 1
-            else [record.presentation.grid_column]
-        )
+        (place.row, column)
+        for place in (InputPlace.of(record, 1) for record in records)
+        for column in place.drawn_columns()
     ]
     has_row = any(item.grid_row is not None for item in placements)
     has_column = any(column is not None for _row, column in cells)

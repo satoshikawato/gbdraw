@@ -1029,7 +1029,6 @@ const appendRecordsTable = async (args, records, files, {
   const places = drawnRecords.some((count) => count > 1)
     ? await plannedRecordPlaces(records, drawnRecords, planRecordPlaces)
     : null;
-  const requestedTableRows = requestedRows;
   // The windows of a record drawn in several are table rows that share a record_group value (PD-OI-122).
   const grouped = records.some((record) => record.windows.length > 1);
   const columns = [
@@ -1039,7 +1038,7 @@ const appendRecordsTable = async (args, records, files, {
   const rows = records.flatMap((record, index) => {
     const selector = selectorText(record.selector);
     // Python's columns of the records or windows this record draws, when a file drawn whole takes several.
-    const columns = places?.[index].columns ?? [];
+    const placedColumns = places?.[index].columns ?? [];
     const row = {
       ...Object.fromEntries(options.map((option, part) => [option, files.visibleName(sourcePaths[index][part])])),
       record_label: String(record.presentation?.label || ''),
@@ -1048,15 +1047,15 @@ const appendRecordsTable = async (args, records, files, {
       region: '',
       reverse_complement: record.windows.length ? '0' : (record.presentation?.reverseComplement ? '1' : '0'),
       order: cliPositions[index][0],
-      row: gridCoordinate(record.presentation?.gridRow) || requestedTableRows[index] || '',
-      column: gridCoordinate(columns[0]) || gridCoordinate(record.presentation?.gridColumn) || requestedColumns[index] || '',
+      row: gridCoordinate(record.presentation?.gridRow) || requestedRows[index] || '',
+      column: gridCoordinate(placedColumns[0]) || gridCoordinate(record.presentation?.gridColumn) || requestedColumns[index] || '',
       topology: record.display?.isCircular == null ? '' : record.display.isCircular ? 'circular' : 'linear',
       display_start: record.display?.startCoordinate ?? '',
       ...(grouped ? { record_group: '' } : {})
     };
     if (drawnRecords[index] > 1) {
       return cliPositions[index].map((order, at) => ({
-        ...row, record_id: `#${at + 1}`, order, column: gridCoordinate(columns[at]) || row.column
+        ...row, record_id: `#${at + 1}`, order, column: gridCoordinate(placedColumns[at]) || row.column
       }));
     }
     if (record.windows.length <= 1) {
@@ -1065,7 +1064,7 @@ const appendRecordsTable = async (args, records, files, {
     return record.windows.map((window, at) => ({
       ...row,
       region: regionText(window),
-      column: gridCoordinate(columns[at]) || gridCoordinate(window.column) || row.column,
+      column: gridCoordinate(placedColumns[at]) || gridCoordinate(window.column) || row.column,
       record_group: String(index + 1)
     }));
   });
@@ -2219,7 +2218,8 @@ export const buildSourceRecipe = async ({
     /** @type {string[]} */
     const args = [];
     const { recordsTableUsed, cliPositions } = await appendInputArgs(args, renderRequest, files, planRecordPlaces);
-    // The comparisons name the request's drawn units, which count a file drawn whole as one.
+    // Python reads a comparison's indexes over the drawn records, one per record of a file drawn whole, while the
+    // unit plan (`drawnUnits`) counts that file as one: no comparison can be written for it yet (OV-3272).
     if (cliPositions.some((positions) => positions.length > 1) && (renderRequest.comparisons || []).length > 0) {
       throw recipeUnavailable(msg('a comparison cannot be bound losslessly to its source records.'));
     }
@@ -2228,7 +2228,7 @@ export const buildSourceRecipe = async ({
     if (placements.length || featureOverrides.length) await requireExactRecords(renderRequest, files);
     if (placements.length) {
       const rows = placements.map((row) => ({
-        ...identityTableCells(renderRequest, row, 'placement', cliPositions),
+        ...identityTableCells(renderRequest, row, 'placement'),
         placement: row.placement.kind === 'main' ? 'main' : row.placement.side,
         level: row.placement.kind === 'main' ? '' : row.placement.level
       }));
