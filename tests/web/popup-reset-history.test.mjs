@@ -67,26 +67,24 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
   const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor,
     state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
     getFeatureElements: () => [], getFeatureFillElements: () => [],
-    ruleActions: {
-      runWithRuleMatches: (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit),
-      // The rule owner's commit lands after its own preparation (a later task).
-      commitSpecificRules: async (build) => {
-        stages.push('commitSpecificRules');
-        const rules = await build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        manualSpecificRules.splice(0, manualSpecificRules.length, ...rules);
-        return true;
-      },
-      countFeaturesMatchingRule: () => 0, findExistingColorForCaption: () => null,
-      findFeaturesWithSameDisplayedLabel: () => [], findFeaturesWithSameIndividualLabel: () => [],
-      findFeaturesWithSameLegendItem: () => [], findMatchingRegexRule: () => null, getDisplayedFeatureLabel: () => '',
-      getIndividualFeatureLabel: (feature) => feature.qualifiers.product[0],
-      effectiveLegendCaptions: () => () => 'CDS',
-      getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-      // Python takes the feature's own rules back (PD-OI-069 revision 2).
-      groupColorRules: groupColorRulesOver(preparation),
-      getLegendRowRules: () => []
-    }
+    runWithRuleMatches: (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit),
+    // The rule owner's commit lands after its own preparation (a later task).
+    commitSpecificRules: async (build) => {
+      stages.push('commitSpecificRules');
+      const rules = await build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      manualSpecificRules.splice(0, manualSpecificRules.length, ...rules);
+      return true;
+    },
+    countFeaturesMatchingRule: () => 0, findExistingColorForCaption: () => null,
+    findFeaturesWithSameDisplayedLabel: () => [], findFeaturesWithSameIndividualLabel: () => [],
+    findFeaturesWithSameLegendItem: () => [], findMatchingRegexRule: () => null, getDisplayedFeatureLabel: () => '',
+    getIndividualFeatureLabel: (feature) => feature.qualifiers.product[0],
+    effectiveLegendCaptions: () => () => 'CDS',
+    getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
+    // Python takes the feature's own rules back (PD-OI-069 revision 2).
+    groupColorRules: groupColorRulesOver(preparation),
+    getLegendRowRules: () => []
   });
   assert.equal(await preparation.prepare([savedRule, hashRule]), true);
   stages.length = 0;

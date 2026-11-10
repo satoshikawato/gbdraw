@@ -38,32 +38,81 @@ import {
 } from '../../services/feature-override-identity.js';
 import { msg } from '../../utils/i18n.js';
 
+// R13: the rule owner's lookups and commit of specific-color rules, each a
+// function port this owner declares.
 /**
- * The rule owner's actions this owner reads (a whole-object port, R13).
- * @typedef {object} ColorActionsRuleActions
- * @property {(build: SpecificRuleBuild, label?: string, options?: Record<string, any>) => Promise<any>} commitSpecificRules
- *   The rule owner's one write of the rule table: how the next table follows from the table at the write's turn.
- * @property {(rule: Record<string, any>) => number} countFeaturesMatchingRule
- * @property {(feature: Record<string, any>, caption: string) => { rule: Record<string, any>, color: string } | null} findExistingColorForCaption
- * @property {(feature: Record<string, any>, label?: string | null) => Record<string, any>[]} findFeaturesWithSameDisplayedLabel
- * @property {(feature: Record<string, any>, label?: string | null) => Record<string, any>[]} findFeaturesWithSameIndividualLabel
- * @property {(feature: Record<string, any>, caption?: string | null) => Record<string, any>[]} findFeaturesWithSameLegendItem
- * @property {(feature: Record<string, any>) => Record<string, any> | null} findMatchingRegexRule
- * @property {(feature: Record<string, any>) => string} getDisplayedFeatureLabel
- * @property {() => (feature: Record<string, any>) => PythonLegendKey} effectiveLegendCaptions
- *   The rule owner's reader of a feature's Legend row, by the row's key (never a name to write).
- *   The Legend item of a feature, read for a pass over many features.
- * @property {(feature: Record<string, any>) => string} getIndividualFeatureLabel
- * @property {(feature: Record<string, any>) => { qual: string, val: string } | null} getFeatureQualifier
- * @property {(key: PythonLegendKey) => Record<string, any>[]} getLegendRowRules
- * @property {(features: readonly ColorFeature[], color: string, caption: string, scope: RuleSynthesisScope, joins?: PythonLegendKey | null) => SpecificRuleBuild} groupColorRules
- *   The next rule table of a color edit: Python's rules for coloring exactly `features` (OV-244), before the
- *   first rule of the listed row of key `joins` that the edit joins (OV-2193).
- * @property {(rows: readonly ColorRule[], patch: { cap: string, color: string }, joins: PythonLegendKey | null) => SpecificRuleBuild} reviseColorRules
- *   The next rule table of a rename of a row's rules: `rows` take `patch`, each in its row, unless they join the
- *   listed row of key `joins`, which keeps its place (OV-2193).
- * @property {(rules: Record<string, any>[], commit: () => any) => any} runWithRuleMatches
- *   Runs an action once the color rule matches of `rules` are prepared: the rule owner prepares the rules it builds.
+ * What a rule write of this owner passes: the drawing of the action, the Legend
+ * rows it replaces, where its new row goes, what runs once it commits, and that
+ * it joins its caller's open History step.
+ * @typedef {object} CommitRuleOptions
+ * @property {DrawingState} [drawing]
+ * @property {{ caption: PythonLegendKey, color: string | undefined }[]} [previousLegendIntents]
+ * @property {{ name: string, color: string, at: PythonLegendKey, replaces?: boolean } | null} [legendPlacement]
+ * @property {(intents: { caption: PythonLegendKey, name?: string, color: string }[]) => void} [afterCommit]
+ * @property {boolean} [joinsOpenStep]
+ */
+/**
+ * The rule owner's one write of the rule table: how the next table follows from the table at the write's turn.
+ * @typedef {(build: SpecificRuleBuild, label?: string, options?: CommitRuleOptions) => Promise<unknown>} CommitSpecificRulesPort
+ */
+/**
+ * The number of features a rule colors (none for a `hash` rule).
+ * @typedef {(rule: ColorRule) => number} CountFeaturesMatchingRulePort
+ */
+/**
+ * The rule that gives a caption its color, a `hash` rule first, else null.
+ * @typedef {(feature: ColorFeature, caption: string) => { rule: SpecificColorRule, color: string } | null} FindExistingColorForCaptionPort
+ */
+/**
+ * The other features that show the displayed label `label` (default: the feature's own).
+ * @typedef {(feature: ColorFeature, label?: string | null) => ColorFeature[]} FindFeaturesWithSameDisplayedLabelPort
+ */
+/**
+ * The other features whose annotation label is `label` (default: the feature's own).
+ * @typedef {(feature: ColorFeature, label?: string | null) => ColorFeature[]} FindFeaturesWithSameIndividualLabelPort
+ */
+/**
+ * The other features drawn in the Legend row of key `caption` (default: the feature's row).
+ * @typedef {(feature: ColorFeature, caption?: string | null) => ColorFeature[]} FindFeaturesWithSameLegendItemPort
+ */
+/**
+ * The first rule other than a `hash` rule that colors the feature, or null.
+ * @typedef {(feature: ColorFeature) => ColorRule | null} FindMatchingRegexRulePort
+ */
+/**
+ * The label the feature shows: its edited label text, else its annotation label.
+ * @typedef {(feature: ColorFeature) => string} GetDisplayedFeatureLabelPort
+ */
+/**
+ * The rule owner's reader of a feature's Legend row, by the row's key (never a name to write),
+ * read for a pass over many features.
+ * @typedef {() => (feature: ColorFeature) => PythonLegendKey} EffectiveLegendCaptionsPort
+ */
+/**
+ * The feature's annotation label: its product, gene or locus tag, else its type and range.
+ * @typedef {(feature: ColorFeature) => string} GetIndividualFeatureLabelPort
+ */
+/**
+ * The `hash` qualifier a single-feature rule names the feature by, or null without a stable hash.
+ * @typedef {(feature: ColorFeature) => { qual: string, val: string } | null} GetFeatureQualifierPort
+ */
+/**
+ * The rules the Legend row of key `key` draws.
+ * @typedef {(key: PythonLegendKey) => ColorRule[]} GetLegendRowRulesPort
+ */
+/**
+ * The next rule table of a color edit: Python's rules for coloring exactly `features` (OV-244), before the
+ * first rule of the listed row of key `joins` that the edit joins (OV-2193).
+ * @typedef {(features: readonly ColorFeature[], color: string, caption: string, scope: RuleSynthesisScope, joins?: PythonLegendKey | null) => SpecificRuleBuild} GroupColorRulesPort
+ */
+/**
+ * The next rule table of a rename of a row's rules: `rows` take `patch`, each in its row, unless they join the
+ * listed row of key `joins`, which keeps its place (OV-2193).
+ * @typedef {(rows: readonly ColorRule[], patch: { cap: string, color: string }, joins: PythonLegendKey | null) => SpecificRuleBuild} ReviseColorRulesPort
+ */
+/**
+ * Runs an action once the color rule matches of `rules` are prepared: the rule owner prepares the rules it builds.
+ * @typedef {(rules: ColorRule[], commit: () => unknown) => unknown} RunWithRuleMatchesPort
  */
 
 /**
@@ -135,7 +184,21 @@ import { msg } from '../../utils/i18n.js';
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {((options: { domains: readonly string[] }) => unknown) | null} [showEditorIntent]
  *   The root's port of the editor intent onto the displayed Result (R1).
- * @property {ColorActionsRuleActions} ruleActions The rule owner's lookups and commit of specific-color rules.
+ * @property {CommitSpecificRulesPort} commitSpecificRules
+ * @property {CountFeaturesMatchingRulePort} countFeaturesMatchingRule
+ * @property {FindExistingColorForCaptionPort} findExistingColorForCaption
+ * @property {FindFeaturesWithSameDisplayedLabelPort} findFeaturesWithSameDisplayedLabel
+ * @property {FindFeaturesWithSameIndividualLabelPort} findFeaturesWithSameIndividualLabel
+ * @property {FindFeaturesWithSameLegendItemPort} findFeaturesWithSameLegendItem
+ * @property {FindMatchingRegexRulePort} findMatchingRegexRule
+ * @property {GetDisplayedFeatureLabelPort} getDisplayedFeatureLabel
+ * @property {EffectiveLegendCaptionsPort} effectiveLegendCaptions
+ * @property {GetIndividualFeatureLabelPort} getIndividualFeatureLabel
+ * @property {GetFeatureQualifierPort} getFeatureQualifier
+ * @property {GetLegendRowRulesPort} getLegendRowRules
+ * @property {GroupColorRulesPort} groupColorRules
+ * @property {ReviseColorRulesPort} reviseColorRules
+ * @property {RunWithRuleMatchesPort} runWithRuleMatches
  * @property {(svg: Element, featureId: string) => Element[]} getFeatureElements The mounted elements of a feature.
  * @property {(svg: Element, featureId: string) => Element[]} getFeatureFillElements The mounted fill elements of a feature.
  * @property {(close: () => unknown) => void} [closeAfterDialogChoice]
@@ -209,7 +272,9 @@ const legendNameConflictReason = ({ name, ruleOnly, deleted, mergeAvailable, sam
 export const createFeatureColorActions = ({
   state,
   showEditorIntent = null,
-  ruleActions,
+  // R13: the rule owner's lookups and commit of specific-color rules.
+  commitSpecificRules, countFeaturesMatchingRule, findExistingColorForCaption, findFeaturesWithSameDisplayedLabel, findFeaturesWithSameIndividualLabel, findFeaturesWithSameLegendItem,
+  findMatchingRegexRule, getDisplayedFeatureLabel, effectiveLegendCaptions, getIndividualFeatureLabel, getFeatureQualifier, getLegendRowRules, groupColorRules, reviseColorRules, runWithRuleMatches,
   // R13: the mounted feature element lookups.
   getFeatureElements,
   getFeatureFillElements,
@@ -245,26 +310,10 @@ export const createFeatureColorActions = ({
     originalLegendOrder
   } = state;
 
-  const {
-    countFeaturesMatchingRule,
-    findExistingColorForCaption,
-    findFeaturesWithSameDisplayedLabel,
-    findFeaturesWithSameIndividualLabel,
-    findFeaturesWithSameLegendItem,
-    findMatchingRegexRule,
-    getDisplayedFeatureLabel,
-    effectiveLegendCaptions,
-    getIndividualFeatureLabel,
-    getFeatureQualifier,
-    getLegendRowRules,
-    groupColorRules,
-    reviseColorRules,
-    runWithRuleMatches
-  } = ruleActions;
   // This owner's rule writes are part of its caller's History step (a popup,
   // Features panel, or dialog action): they join it and keep its name.
-  /** @type {ColorActionsRuleActions['commitSpecificRules']} */
-  const commitRuleWrite = (build, label, options) => ruleActions.commitSpecificRules(build, label, { ...options, joinsOpenStep: true });
+  /** @type {CommitSpecificRulesPort} */
+  const commitRuleWrite = (build, label, options) => commitSpecificRules(build, label, { ...options, joinsOpenStep: true });
   /** @param {ColorFeature} feature */
   const getEffectiveLegendCaption = (feature) => effectiveLegendCaptions()(feature);
   /** @param {unknown} value */

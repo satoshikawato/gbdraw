@@ -406,7 +406,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    * `drawing` is the drawing of the action (default: the shown mode's at the
    * call); `isCurrent` is read from the write's turn on. `joinsOpenStep`: the
    * write is part of its caller's open History step and keeps that step's name.
-   * @typedef {{ drawing?: DrawingState, isCurrent?: () => boolean, afterCommit?: (intents: Record<string, any>[]) => void, previousLegendIntents?: Record<string, any>[], legendPlacement?: LegendPlacement | null, joinsOpenStep?: boolean }} CommitSpecificRulesOptions
+   * @typedef {{ drawing?: DrawingState, isCurrent?: () => boolean, afterCommit?: (intents: { caption: PythonLegendKey, name?: string, color: string }[]) => void, previousLegendIntents?: Record<string, any>[], legendPlacement?: LegendPlacement | null, joinsOpenStep?: boolean }} CommitSpecificRulesOptions
    */
   /**
    * The write port of the rule table (R13): other owners pass how the next

@@ -116,17 +116,15 @@ test('"All features with legend item" over K features with K hash rules does O(K
       state, nextTick: async () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
       getFeatureElements: () => [], getFeatureFillElements: () => [],
       readUserDefaultColor: () => null, setDefaultColor: () => assert.fail('the row is drawn by rules'),
-      ruleActions: {
-        runWithRuleMatches: (_, commit) => commit(),
-        commitSpecificRules: async (build) => { committed = await build(rules, (row, patch) => ({ ...row, ...patch })); return true; },
-        countFeaturesMatchingRule: () => 0, findExistingColorForCaption: () => null,
-        findFeaturesWithSameDisplayedLabel: () => [], findFeaturesWithSameIndividualLabel: () => [],
-        findFeaturesWithSameLegendItem: (feature) => features.filter((other) => other !== feature),
-        findMatchingRegexRule: () => null, getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
-        getEffectiveLegendCaption: caption, effectiveLegendCaptions: () => caption,
-        getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-        groupColorRules: groupColorRulesOver(preparation), getLegendRowRules: () => []
-      }
+      runWithRuleMatches: (_, commit) => commit(),
+      commitSpecificRules: async (build) => { committed = await build(rules, (row, patch) => ({ ...row, ...patch })); return true; },
+      countFeaturesMatchingRule: () => 0, findExistingColorForCaption: () => null,
+      findFeaturesWithSameDisplayedLabel: () => [], findFeaturesWithSameIndividualLabel: () => [],
+      findFeaturesWithSameLegendItem: (feature) => features.filter((other) => other !== feature),
+      findMatchingRegexRule: () => null, getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
+      getEffectiveLegendCaption: caption, effectiveLegendCaptions: () => caption,
+      getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
+      groupColorRules: groupColorRulesOver(preparation), getLegendRowRules: () => []
     });
     measured.push(await count_.measure(() => actions.handleColorScopeChoice('caption')));
     assert.equal(committed.length, count);

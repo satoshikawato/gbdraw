@@ -72,7 +72,7 @@ const FUNCTION_LINES = {
   'app/circular-track-slots.js::createCircularTrackSlotEditor': 1456,
   'app/drawing-list.js::createDrawingList': 220,
   'app/feature-editor.js::createFeatureEditor': 252,
-  'app/feature-editor/color-actions.js::createFeatureColorActions': 1622,
+  'app/feature-editor/color-actions.js::createFeatureColorActions': 1608,
   'app/feature-editor/color-actions.js::createFeatureColorActions.continueLegendRenameRequest': 167,
   'app/feature-editor/label-actions.js::createFeatureLabelActions': 1243,
   'app/feature-editor/placement-actions.js::createFeaturePlacementActions': 157,

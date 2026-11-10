@@ -796,20 +796,18 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
       state: withDrawings(state), readDrawnTracks: () => [], getFeatureElements: () => [], getFeatureFillElements: () => [],
       readUserDefaultColor: () => null, setDefaultColor: (_drawing, type, color) => { defaults.push([type, color]); },
       writeLegendRowColor: legend.writeLegendRowColor,
-      ruleActions: {
-        commitSpecificRules: async (build, label, options = {}) => {
-          state.manualSpecificRules = build(state.manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
-          committed.push(label);
-          options.afterCommit?.([]);
-          return true;
-        },
-        getLegendRowRules: (key) => (key === 'Shared' ? state.manualSpecificRules : []),
-        effectiveLegendCaptions: () => () => 'CDS',
-        findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
-        findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
-        getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }), groupColorRules: () => assert.fail('a merged rule row is recolored through its rule'),
-        runWithRuleMatches: (_rules, commit) => commit()
-      }
+      commitSpecificRules: async (build, label, options = {}) => {
+        state.manualSpecificRules = build(state.manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
+        committed.push(label);
+        options.afterCommit?.([]);
+        return true;
+      },
+      getLegendRowRules: (key) => (key === 'Shared' ? state.manualSpecificRules : []),
+      effectiveLegendCaptions: () => () => 'CDS',
+      findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
+      findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
+      getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }), groupColorRules: () => assert.fail('a merged rule row is recolored through its rule'),
+      runWithRuleMatches: (_rules, commit) => commit()
     });
     return { state, popup, committed, defaults };
   };
@@ -1269,12 +1267,19 @@ for (const [kind, later] of Object.entries(afterHeldPattern)) {
 // builds its rules from the table at its turn, so a write never drops a
 // pending Add. A pattern keystroke or a drawer close cancels only pattern
 // commits, never a pending color edit.
+// The rule owner's functions the color owner takes as its fifteen ports, by name.
+const colorRulePorts=({commitSpecificRules,countFeaturesMatchingRule,findExistingColorForCaption,findFeaturesWithSameDisplayedLabel,
+  findFeaturesWithSameIndividualLabel,findFeaturesWithSameLegendItem,findMatchingRegexRule,getDisplayedFeatureLabel,effectiveLegendCaptions,
+  getIndividualFeatureLabel,getFeatureQualifier,getLegendRowRules,groupColorRules,reviseColorRules,runWithRuleMatches})=>({commitSpecificRules,
+  countFeaturesMatchingRule,findExistingColorForCaption,findFeaturesWithSameDisplayedLabel,findFeaturesWithSameIndividualLabel,
+  findFeaturesWithSameLegendItem,findMatchingRegexRule,getDisplayedFeatureLabel,effectiveLegendCaptions,getIndividualFeatureLabel,
+  getFeatureQualifier,getLegendRowRules,groupColorRules,reviseColorRules,runWithRuleMatches});
 const popupFor=(s,ports={})=>{
   Object.assign(s.state,{clickedFeature:{value:null},svgContainer:{value:null},biologicalFeatures:{value:[]},
     featureStyleScopeDialog:{},resetColorDialog:{},legendRenameDialog:{},originalLegendOrder:{value:[]},
     originalLegendColors:{value:{}},deletedLegendEntries:{value:[]},legendStrokeOverrides:{},featureStrokeOverrides:{},
     selectedResultIndex:{value:0},appliedPaletteColors:{value:{CDS:'#cccccc'}}});
-  return createFeatureColorActions({state:s.state,ruleActions:s.actions,getFeatureElements:()=>[],getFeatureFillElements:()=>[],
+  return createFeatureColorActions({state:s.state,...colorRulePorts(s.actions),getFeatureElements:()=>[],getFeatureFillElements:()=>[],
     readUserDefaultColor:()=>null,setDefaultColor:()=>{},writeLegendRowColor:recordLegendRowColor,...ports});
 };
 test('a popup recolor of a rule made while an Add is pending applies after it (OV-444)', () => withDocument(async () => {
