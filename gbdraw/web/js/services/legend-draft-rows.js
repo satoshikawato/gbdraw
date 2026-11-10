@@ -11,6 +11,7 @@ import {
 } from './legend-svg.js';
 import { ruleLegendCaptions } from './specific-color-rules.js';
 import { refitFieldsBeforeStep } from './setting-application.js';
+import { legendEntryKey } from './drawing/paint.js';
 /** @import { PythonLegendKey } from './legend-svg.js' */
 /** @import { SpecificColorRule } from './specific-color-rules.js' */
 /** @import { CanvasPadding } from './drawing/canvas.js' */
@@ -38,6 +39,59 @@ import { refitFieldsBeforeStep } from './setting-application.js';
 
 /** @param {unknown} value */
 const text = (value) => String(value ?? '').trim();
+
+/** @typedef {string & { readonly __brand: 'LegendRowId' }} LegendRowId A Legend list row's identity on this page. */
+
+// The identity of a Legend list row on this page (OV-3070), which the Legend list keys its rows by: the id of the
+// row's key. A rename that keeps the key (a row of Python's) keeps it; a rule commit that gives a row a new key (a
+// rule row's rename, OV-645, OV-660) moves it to the new key (`rekeyLegendRowIds`), and the old key keeps it too, so
+// a restore that brings the old key back (Undo, Load) finds the row's id again. An id belongs to the key it was last
+// moved to while that key is listed. Never the row's caption, which a rename writes, or its place, which a rename
+// can change. Not saved: a Session and a History step name rows by their keys.
+/** @type {Map<PythonLegendKey, LegendRowId>} */
+const rowIdOfKey = new Map();
+/** @type {Map<LegendRowId, PythonLegendKey>} The key each id belongs to. */
+const keyOfRowId = new Map();
+let rowIdCount = 0;
+
+/** @param {PythonLegendKey} key @param {LegendRowId} id */
+const giveRowId = (key, id) => {
+  rowIdOfKey.set(key, id);
+  keyOfRowId.set(id, key);
+  return id;
+};
+/** @param {PythonLegendKey} key */
+const newRowId = (key) => giveRowId(key, /** @type {LegendRowId} */ (`legend-row-${++rowIdCount}`));
+
+/**
+ * The ids of a Legend list's rows, in its order. A key whose id belongs to another listed key gets a new id; a
+ * second row of one key (no writer lists one) gets its first row's id with its count.
+ * @param {readonly { readonly caption?: unknown, readonly originalCaption?: unknown }[]} rows
+ * @returns {LegendRowId[]}
+ */
+export const legendRowIds = (rows) => {
+  const keys = rows.map(legendEntryKey);
+  const listed = new Set(keys);
+  /** @type {Map<LegendRowId, number>} */
+  const seen = new Map();
+  return keys.map((key) => {
+    const known = rowIdOfKey.get(key);
+    const owner = known && keyOfRowId.get(known);
+    const id = !known || (owner !== key && owner && listed.has(owner)) ? newRowId(key) : giveRowId(key, known);
+    const count = seen.get(id) ?? 0;
+    seen.set(id, count + 1);
+    return count === 0 ? id : /** @type {LegendRowId} */ (`${id}-${count}`);
+  });
+};
+
+/**
+ * Moves the ids of re-keyed rows to their new keys (old key to new key, all at once).
+ * @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} moves
+ */
+export const rekeyLegendRowIds = (moves) => {
+  const ids = [...moves].map(([from, to]) => /** @type {const} */ ([to, rowIdOfKey.get(from) ?? newRowId(from)]));
+  ids.forEach(([to, id]) => giveRowId(to, id));
+};
 
 /**
  * @param {readonly (LegendEntryInput | null | undefined)[] | null | undefined} entries

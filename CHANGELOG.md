@@ -509,6 +509,13 @@ write-up of a release.
   Legend name or an id with only spaces added, shows the stored value again
   once it is refused, also when you pressed Enter and stay in the field
   (OV-3068).
+- Fixed (Web app): renaming a Legend row that a color rule draws, which can
+  move the row in the Legend list, sent the keyboard focus to the same place
+  in the list, on another row's control (Tab after the new name landed on
+  "Stroke options for AT skew (+)" instead of the renamed row's). The focus
+  now stays on the renamed row's control. A row the list moves while you type
+  its name keeps the typed name and the focus, instead of showing another
+  row's name (OV-3070).
 - Fixed (Web app): an Undo could show a figure that did not match its
   settings. After a label or visibility edit that only a redraw can show (for
   example Feature visibility On for a feature the figure did not draw), a step

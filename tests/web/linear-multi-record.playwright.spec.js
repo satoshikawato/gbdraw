@@ -3105,9 +3105,9 @@ test('A refused Legend name committed by Enter shows the stored name while the f
   expect(await legendNamesAndUndoCount(page)).toEqual(before);
 });
 
-// A rename of a Legend row that a color rule draws gives the row a new key and moves it; the list's rows are patched
-// in place, so the focus that Tab moved to a control of the list stays in the list.
-test('A renamed color rule row of the Legend list keeps the focus Tab moved within the list', async ({ page }) => {
+// A rename of a Legend row that a color rule draws gives the row a new key and moves it (OV-3070); the list keys its
+// rows by an identity the rename keeps, so the focus that Tab moved to the row's Stroke options stays on that control.
+test('A renamed color rule row of the Legend list keeps the focus Tab moved to its own control', async ({ page }) => {
   test.setTimeout(300000);
   await loadCircularSession(page);
   await evaluateWithRetainedPromise(page, async () => {
@@ -3126,8 +3126,33 @@ test('A renamed color rule row of the Legend list keeps the focus Tab moved with
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules[0].cap)).toBe('Cytochromes');
   await expect.poll(() => page.evaluate(() => {
     const focused = document.activeElement;
-    return Boolean(focused?.matches('button[aria-label^="Stroke options for "]') && focused.closest('[data-legend-drawer-row]'));
-  }), 'focus stays on a Stroke options button of the Legend list').toBe(true);
+    return focused?.closest('[data-legend-drawer-row]') ? focused.getAttribute('aria-label') : null;
+  }), 'focus stays on the renamed row\'s own Stroke options').toBe('Stroke options for Cytochromes');
+});
+
+// A row the Legend list moves while its name is being typed keeps the typed name and the focus (OV-3070): the move
+// neither commits the name nor shows another row's name in the field, and Tab then renames that row.
+test('A Legend name typed while the list moves its row keeps the typed name and the focus', async ({ page }) => {
+  test.setTimeout(300000);
+  await loadCircularSession(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+  const name = page.getByLabel('Legend entry CDS name', { exact: true });
+  await expect(name).toHaveValue('CDS');
+  const before = await legendNamesAndUndoCount(page);
+  const from = before.names.indexOf('CDS');
+  const to = from === 0 ? before.names.length - 1 : 0;
+  await recordChanges(name);
+  await name.evaluate((field) => { field.__typedRow = true; });
+  await name.selectText();
+  await name.pressSequentially('Coding');
+  await page.evaluate(([at, place]) => window.__GBDRAW_APP__.moveLegendEntry(at, place), [from, to]);
+  await expect.poll(async () => (await legendNamesAndUndoCount(page)).names[to]).toBe('CDS');
+  expect(await page.evaluate(() => document.activeElement?.__typedRow === true), 'the typed field keeps the focus').toBe(true);
+  const field = page.locator('[data-legend-drawer-row]').nth(to).getByRole('textbox');
+  await expect(field).toHaveValue('Coding');
+  expect(await field.evaluate((input) => input.__changes), 'the move committed nothing').toEqual([]);
+  await field.press('Tab');
+  await expect.poll(async () => (await legendNamesAndUndoCount(page)).names[to], { timeout: 60000 }).toBe('Coding');
 });
 
 // Display start commits after an await; an out-of-range start is refused with its error and the stored start shows.

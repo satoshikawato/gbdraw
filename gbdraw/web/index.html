@@ -8813,8 +8813,8 @@
                             </button>
                         </div>
 
-                        <div class="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
-                            <div v-for="(entry, idx) in legendEntries" :key="idx" data-legend-drawer-row
+                        <div v-keeps-list-focus class="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
+                            <div v-for="(entry, idx) in legendEntries" :key="legendRowIds[idx]" data-legend-drawer-row
                                  v-show="!legendEntryMerged(entry)"
                                  class="px-1.5 py-1 bg-slate-50 rounded border"
                                  :class="legendReorder.over === idx && legendReorder.from !== null && legendReorder.from !== idx ? 'border-blue-400' : 'border-slate-100'"

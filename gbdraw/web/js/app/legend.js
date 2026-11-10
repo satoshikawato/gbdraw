@@ -14,10 +14,12 @@ import {
   legendRowKeys
 } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
+import { legendRowIds } from '../services/legend-draft-rows.js';
 import { legendRowRules } from '../services/specific-color-rules.js';
 import { displayedLegendRowContext } from '../services/feature-visibility.js';
 import { registeredLegendFaces } from '../services/font-store.js';
 import { msg } from '../utils/i18n.js';
+import { computed } from '../utils/reactivity.js';
 
 /**
  * @typedef {object} LegendManagerOptions
@@ -83,6 +85,8 @@ export const createLegendManager = ({
 
   return {
     ...entryActions,
+    // The ids the Legend list keys the shown drawing's rows by (OV-3070), never their places.
+    legendRowIds: computed(() => legendRowIds(state.activeDrawing().legendEntries.value)),
     // A row a rule draws, including its N-06 "<caption> [<hex>]" row, edits
     // that rule through the rule owner's port (R13); any other row is a
     // legend-only edit, which the root shows on the Result. A row that stands

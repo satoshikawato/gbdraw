@@ -18,6 +18,8 @@
 //   `settleCommittedField`; a synchronous one needs nothing.
 // tests/web/committed-value.test.mjs keeps `:value` off typed fields.
 
+import { listHoldsFocus } from './list-focus.js';
+
 /** @typedef {HTMLInputElement | HTMLTextAreaElement} CommittedField */
 /** @typedef {{ value: unknown }} CommittedValueBinding */
 
@@ -65,8 +67,9 @@ const show = (field, text) => {
   if (field.value !== text) field.value = text;
 };
 
+// A field a keyed list moves has the focus again after the move (app/list-focus.js).
 /** @param {CommittedField} field */
-const hasFocus = (field) => field.ownerDocument.activeElement === field;
+const hasFocus = (field) => field.ownerDocument.activeElement === field || listHoldsFocus(field);
 
 /**
  * Hands the result of a commit of `field` to the directive, which shows the

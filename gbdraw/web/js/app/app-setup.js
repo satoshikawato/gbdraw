@@ -4191,7 +4191,7 @@ export const createAppSetup = () => {
     // (OV-125). The deleted row's stroke leaves its features (OV-293).
     shownLegendName: legendActions.shownLegendName,
     shownLegendEntryName: legendActions.shownLegendEntryName,
-    legendEntryMerged: legendActions.legendEntryMerged,
+    legendEntryMerged: legendActions.legendEntryMerged, legendRowIds: legendActions.legendRowIds,
     deleteLegendEntry: editEditorIntent(msg('Delete legend item'), deleteLegendEntry, { domains: [...LEGEND_STRUCTURE_DOMAINS, ...STROKE_DOMAINS] }),
     // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
     // removes them; the palette then reaches the returned rows.

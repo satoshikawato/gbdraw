@@ -38,7 +38,7 @@ const { createLegendEntryActions } = await import(
 // The root's reader of the colors Legend rows show (app-setup.js); without a
 // displayed Result, a row shows the color it records.
 const { displayedLegendRowColors } = await import(pathToFileURL(join(tempRoot, 'app', 'candidate-render.js')));
-const { draftLegendRows } = await import(pathToFileURL(join(tempRoot, 'services', 'legend-draft-rows.js')));
+const { draftLegendRows, legendRowIds } = await import(pathToFileURL(join(tempRoot, 'services', 'legend-draft-rows.js')));
 const { createLegendStrokeActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'stroke-actions.js'))
 );
@@ -986,6 +986,7 @@ const mockLegendEntry = (caption, color, x) => {
   stops.state.legendStrokeOverrides[RED] = { strokeColor: '#111111', strokeWidth: 3 };
   stops.state.legendColorOverrides[RED] = '#ff0000';
   stops.state.legendStrokeOverrides[TEAL] = { strokeColor: '#222222', strokeWidth: 1 };
+  const listIds = legendRowIds(stops.state.legendEntries.value);
   const unshared = await stops.actions.prepareFileLegendEntries(
     [{ caption: 'alpha', color: '#e63946' }, { caption: 'gamma', color: '#2a9d8f' }],
     // The renamed row replaces the teal row (OV-158), as a re-key of its records.
@@ -1001,6 +1002,7 @@ const mockLegendEntry = (caption, color, x) => {
     alpha: { strokeColor: '#111111', strokeWidth: 3 }, gamma: { strokeColor: '#222222', strokeWidth: 1 }
   }, 'OV-660: the stroke follows the re-keyed row, and the renamed row\'s (D-25)');
   assert.deepEqual(stops.state.legendColorOverrides, { alpha: '#ff0000' });
+  assert.deepEqual(legendRowIds(stops.state.legendEntries.value), listIds, 'OV-3070: each re-keyed row keeps its list identity');
 
   // The rule list renames "beta" onto "alpha" (no placement): the first row
   // keeps its place under its new key, and the order is still the default one.
