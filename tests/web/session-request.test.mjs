@@ -1928,6 +1928,52 @@ assert.deepEqual(
   reorderedUploadProjection.config.circularConservation.series.map((entry) => entry.label),
   ['Edited B', 'Edited A']
 );
+// A Web ring's colour is its own: it opens hand-set, with its place as its scheme index (PD-OI-110).
+assert.deepEqual(
+  reorderedUploadProjection.config.circularConservation.series.map(({ color, schemeIndex }) => [color, schemeIndex]),
+  [['#4e79a7', 0], ['#e15759', 1]]
+);
+// OV-3054, TEN-SAVED-FOLLOWS of PD-OI-110: a request written without a Web
+// draft (CLI, Python) whose rings have no colour ('') opens with its stored
+// scheme. Each ring's colour is null and its scheme index is its drawn
+// position (the stack order when the request has one), so the Web draws what
+// the CLI drew: Same color sends '' as the CLI does, and ten sends the ten
+// colours. The Web never sends the scheme itself.
+{
+  assert.ok(managedConfigOverridePathsForMode('circular').includes('objects.conservation.color_scheme'));
+  assert.ok(!managedConfigOverridePathsForMode('linear').includes('objects.conservation.color_scheme'));
+  const cliRequest = (scheme, slots = null) => {
+    const request = structuredClone(reorderedUploadCanonical);
+    request.renderRequest.diagramOptions.conservationColors = ['', ''];
+    if (scheme !== null) request.renderRequest.diagramOptions.configOverrides['objects.conservation.color_scheme'] = scheme;
+    if (slots) request.renderRequest.diagramOptions.tracks = { ...request.renderRequest.diagramOptions.tracks, circularTrackSlots: slots };
+    return request;
+  };
+  const savedState = structuredClone({ circularConservation: state.circularConservation });
+  for (const [scheme, colors] of [[null, ['', '']], ['same', ['', '']], ['ten', ['#81a5cc', '#e5a972']]]) {
+    const projected = projectCanonicalSessionRequest(cliRequest(scheme)).config.circularConservation;
+    assert.equal(projected.colorScheme, scheme ?? 'same', `${scheme}: the stored scheme`);
+    assert.equal(projected.reassignOnReorder, false);
+    assert.deepEqual(projected.series.map(({ color, schemeIndex }) => [color, schemeIndex]), [[null, 0], [null, 1]],
+      `${scheme}: the rings have no colour of their own`);
+    state.circularConservation = projected;
+    const rebuilt = buildCanonicalRenderRequestRaw({
+      state,
+      filesData: { ...filesData, c_conservation_blasts: [blastTableB, blastTable], c_conservation_sequence_sources: [] }
+    }).renderRequest.diagramOptions;
+    assert.deepEqual(rebuilt.conservationColors, colors, `${scheme}: the Web sends what the CLI drew`);
+    assert.equal(Object.hasOwn(rebuilt.configOverrides, 'objects.conservation.color_scheme'), false,
+      `${scheme}: the Web never sends the scheme`);
+  }
+  const stacked = projectCanonicalSessionRequest(cliRequest('ten', [
+    { id: 'features', renderer: 'features', enabled: true, params: {} },
+    { id: 'ring_b', renderer: 'sequence_conservation', enabled: true, params: { track_index: '2' } },
+    { id: 'ring_a', renderer: 'sequence_conservation', enabled: true, params: { track_index: '1' } }
+  ])).config.circularConservation;
+  assert.deepEqual(stacked.series.map(({ schemeIndex }) => schemeIndex), [1, 0],
+    'a stack that draws the second ring outermost gives it the first colour, as Python drew it');
+  state.circularConservation = savedState.circularConservation;
+}
 
 state.circularConservation.source = 'losat';
 state.circularConservation.series = [

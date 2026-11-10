@@ -174,7 +174,7 @@ const EDITS = {
   'Move series 0 down': () => panel.moveCircularConservationSeries(0, 1),
   'a label and colour': (drawing) => {
     Object.assign(drawing.circularConservation.series[0], { label: 'EDITED', color: '#abcdef' });
-    panel.refreshShownCircularConservationSlots();
+    panel.refreshCircularConservationSlots();
   },
   'a genetic code': (drawing) => { drawing.circularConservation.series[2].losat_gencode = 25; },
   'Add Seq': () => addSeq(textFile('new.fasta', '>r\nTTTTT\n')),

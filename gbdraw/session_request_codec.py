@@ -1755,6 +1755,18 @@ class StoredRecordWindow(TypedDict):
     column: object
 
 
+def released_ring_genome_files(item: object) -> list[object]:
+    """One ring's genome files (``conservationFastaFiles``) of a stored request of schema 9 or older, as schema 10
+    writes them.
+
+    Those schemas wrote one file reference or null per ring; schema 10 writes a list per ring (none for a ring without
+    a genome). The decoder reads an old request by this rule, and so does a reader of a stored payload that is not
+    decoded. Values are not validated; the request decode does that.
+    """
+
+    return [] if item is None else [item]
+
+
 def stored_record_windows(record: Mapping[str, object]) -> list[StoredRecordWindow]:
     """The windows of a stored request record of any schema, as schema 10 writes them.
 
@@ -3403,8 +3415,7 @@ def _decode_option_value(
         def ring_files(index: int, item: object) -> list[object]:
             if schema >= RING_GENOME_FILES_SCHEMA:
                 return _array(item, path=f"{path}[{index - 1}]")
-            # A released request: one file reference or null per ring.
-            return [] if item is None else [item]
+            return released_ring_genome_files(item)
 
         return tuple(
             tuple(
@@ -6646,6 +6657,7 @@ __all__ = [
     "StoredRecordWindow",
     "legacy_region_span",
     "stored_record_windows",
+    "released_ring_genome_files",
     "decode_record_selector",
     "encode_annotation_set",
     "CANONICAL_REQUEST_SCHEMA",

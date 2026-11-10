@@ -1662,11 +1662,7 @@ export const createAppSetup = () => {
     rekeyCircularConservationRows: circularTrackSlotEditor.rekeyCircularConservationRows,
     circularConservationRowsLeaving: circularTrackSlotEditor.circularConservationRowsLeaving
   });
-  const {
-    setCircularConservationUploadFiles, circularConservationSeriesRows, canMoveCircularConservationSeries,
-    moveCircularConservationSeries, openCircularConservationComparisonFilePicker, changeCircularConservationSource,
-    setCircularConservationShown, refreshShownCircularConservationSlots
-  } = createCircularConservationSeriesPanel({
+  const circularConservationSeriesPanel = createCircularConservationSeriesPanel({
     state, shownAction, shownDrawingOfMode, writeLosatCacheInfo, circularConservationFastaInput,
     reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
   });
@@ -3558,17 +3554,10 @@ export const createAppSetup = () => {
     annotationRecordShowsSelect: annotationEditor.recordShowsSelect,
     annotationRecordCaption: annotationEditor.recordCaptionFor,
     circularConservationFastaInput,
-    circularConservationSeriesRows,
-    setCircularConservationUploadFiles,
+    ...circularConservationSeriesPanel,
     addRingRowFiles, removeRingRowFile,
-    canMoveCircularConservationSeries,
-    moveCircularConservationSeries,
-    openCircularConservationComparisonFilePicker,
     addCircularConservationComparisonFile,
     removeCircularConservationSource,
-    changeCircularConservationSource,
-    setCircularConservationShown,
-    refreshCircularConservationSlots: refreshShownCircularConservationSlots,
     depthTrackRows,
     circularDepthTrackRows,
     linearDepthTrackRows,

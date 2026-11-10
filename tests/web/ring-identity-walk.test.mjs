@@ -48,7 +48,7 @@ const {
   bindDrawingInputFileList, bindDrawingInputFileTree, ringGenomeFileLists, setConservationBlastsSource
 } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
-  circularRingSources, isManagedConservationSlot, orderedConservationSources, ringGenomeFilesInRingOrder
+  circularRingSources, isManagedConservationSlot, orderedConservationSources, ringDrawnPositions, ringGenomeFilesInRingOrder
 } = await import('../../gbdraw/web/js/services/conservation-series.js');
 const { NO_CONSERVATION_PAIRS, losatRequestRings, searchedRingSources } = await import('../../gbdraw/web/js/services/circular-conservation-keys.js');
 const { readFileText } = await import('../../gbdraw/web/js/services/file-content-cache.js');
@@ -113,10 +113,11 @@ const seeded = (seed) => () => {
 };
 
 /**
- * The walk's model: each ring by its own id, with its files' bases, its label, colour and LOSAT genetic code, its
+ * The walk's model: each ring by its own id, with its files' bases, its label, own colour (or null) and scheme index
+ * (PD-OI-110) and LOSAT genetic code, its
  * stack row's id and width once the stack has made it, and whether a Load lost its genome while its replayed table
  * stays (`lost`: drawn from its table, not searched by the next Generate).
- * @typedef {{ id: number, bases: Set<string>, label: string, color: string, code: number,
+ * @typedef {{ id: number, bases: Set<string>, label: string, color: string | null, schemeIndex: number, code: number,
  *   row: { id: string, width: unknown } | null, lost: boolean }} ModelRing
  */
 
@@ -140,7 +141,8 @@ const drawnRings = async (drawing) => {
   return Promise.all(drawn.map(async (source, index) => ({
     bases: await Promise.all((genomes[index] || []).map(async (file) => basesOfText(await readFileText(state.inputFiles.fileOf(file))))),
     label: source.label,
-    color: source.color,
+    color: source.ownColor,
+    schemeIndex: source.schemeIndex,
     code: source.losat_gencode,
     row: ringRows(drawing).find((slot) => String(slot.params.series_key) === source.sourceKey) || null
   })));
@@ -178,13 +180,16 @@ const runWalk = async (seed, steps) => {
       `the rings' identity invariant (${where})`);
     const drawn = await drawnRings(drawing);
     assert.equal(drawn.length, model.length, `one drawn ring per ring (${where})`);
+    // PD-OI-110, fix round 13: no two rings share a scheme index, so no two draw one scheme colour.
+    const schemeIndexes = drawn.map((ring) => ring.schemeIndex);
+    assert.equal(new Set(schemeIndexes).size, schemeIndexes.length, `no two rings share a scheme index ${JSON.stringify(schemeIndexes)} (${where})`);
     drawn.forEach((ring, index) => {
       const expected = model[index];
       assert.ok(expected.lost
         ? ring.bases.length === 0
         : ring.bases.length > 0 && ring.bases.every((bases) => expected.bases.has(bases)) && ring.bases.length === expected.bases.size,
       `ring ${index} draws ring ${expected.id}'s files (${where})`);
-      assert.deepEqual([ring.label, ring.color, ring.code], [expected.label, expected.color, expected.code],
+      assert.deepEqual([ring.label, ring.color, ring.schemeIndex, ring.code], [expected.label, expected.color, expected.schemeIndex, expected.code],
         `ring ${expected.id}'s label, colour and genetic code (${where})`);
       if (drawing.adv.circular_track_slots_enabled !== true) return;
       assert.ok(ring.row, `ring ${expected.id} has its stack row (${where})`);
@@ -213,7 +218,7 @@ const runWalk = async (seed, steps) => {
   const newRingOf = (index, bases) => {
     const entry = drawing.circularConservation.series[index];
     ringCount += 1;
-    return { id: ringCount, bases: new Set([bases]), label: entry.label, color: entry.color, code: entry.losat_gencode, row: null, lost: false };
+    return { id: ringCount, bases: new Set([bases]), label: entry.label, color: entry.color, schemeIndex: entry.schemeIndex, code: entry.losat_gencode, row: null, lost: false };
   };
   /** A change of the genome files leaves a LOSAT-cache replay: a ring whose genome a Load lost goes with its table. */
   const leaveReplay = () => { model = model.filter((ring) => !ring.lost); };
@@ -283,7 +288,7 @@ const runWalk = async (seed, steps) => {
         // Half of the labels hold a comma, which no stored list may split into another ring's name (OV-3193).
         entry.label = random() < 0.5 ? `ring ${model[index].id}, strain K-${model[index].id}` : `ring ${model[index].id}`;
         entry.color = `#00${String(model[index].id).padStart(2, '0')}aa`;
-        panel.refreshShownCircularConservationSlots();
+        panel.refreshCircularConservationSlots();
         Object.assign(model[index], { label: entry.label, color: entry.color });
       }
     },
@@ -416,6 +421,34 @@ const runWalk = async (seed, steps) => {
       }
     }
   };
+  // PD-OI-110 (fix round 13): the ring colour steps draw from their own generator after a step, so the walk above
+  // draws the same steps as without them.
+  const colourRandom = seeded(seed + 110);
+  const colourPick = (count) => Math.floor(colourRandom() * count);
+  /** @type {Record<string, { can: () => boolean, run: () => void }>} */
+  const COLOUR_STEPS = {
+    're-assign colours': {
+      // 「今の並びで色を振り直す」 under 10 colors: every ring takes its drawn position as its scheme index, one with
+      // its own colour too (it keeps the colour).
+      can: () => model.length > 1,
+      run: () => {
+        panel.setCircularConservationColorScheme('ten');
+        panel.reassignCircularConservationColors();
+        const slots = drawing.adv.circular_track_slots_enabled === true ? drawing.adv.circular_track_slots : null;
+        const positions = ringDrawnPositions(model.length, slots);
+        model.forEach((ring, index) => { ring.schemeIndex = positions[index]; });
+      }
+    },
+    'use the scheme colour': {
+      can: () => model.some((ring) => ring.color !== null),
+      run: () => {
+        const own = model.map((ring, index) => (ring.color !== null ? index : -1)).filter((index) => index >= 0);
+        const index = own[colourPick(own.length)];
+        panel.useCircularConservationSchemeColor(index);
+        model[index].color = null;
+      }
+    },
+  };
   const names = Object.keys(STEPS);
   for (let step = 1; step <= steps; step += 1) {
     const open = names.filter((name) => STEPS[name].can());
@@ -425,6 +458,13 @@ const runWalk = async (seed, steps) => {
     trail.push(name);
     kinds.set(name, (kinds.get(name) || 0) + 1);
     await STEPS[name].run();
+    await check(step);
+    const colourOpen = Object.keys(COLOUR_STEPS).filter((candidate) => COLOUR_STEPS[candidate].can());
+    if (colourOpen.length === 0 || colourRandom() >= 0.2) continue;
+    const colourStep = colourOpen[colourPick(colourOpen.length)];
+    trail.push(colourStep);
+    kinds.set(colourStep, (kinds.get(colourStep) || 0) + 1);
+    COLOUR_STEPS[colourStep].run();
     await check(step);
   }
   // The walk ends with the stack on, so the rows of every ring are checked once more.
@@ -447,7 +487,7 @@ test('each ring keeps one identity, its label, colour, genetic code and stack ro
   }
   console.log(`ring walk steps: ${JSON.stringify(Object.fromEntries(drawnKinds))}`);
   for (const kind of ['add seq', 'remove series', 'row add file', 'row remove file', 'move series', 'edit label and colour',
-    'set a genetic code', 'widen a stack row', 'generate', 'rerender the committed request', 'replace a replayed table', 'source radio round trip',
+    're-assign colours', 'use the scheme colour', 'set a genetic code', 'widen a stack row', 'generate', 'rerender the committed request', 'replace a replayed table', 'source radio round trip',
     'save and load', 'a Load that lost a genome', 'a replay Load that lost a genome', 'a Generate that searched no ring',
     'stack off and on']) {
     assert.ok((drawnKinds.get(kind) || 0) >= 3, `the walk draws ${kind} (${drawnKinds.get(kind) || 0} times)`);

@@ -666,20 +666,6 @@
       "source": "twin.unregistered.v1 on feat/web-custom-fonts (PR-2, custom fonts)"
     },
     {
-      "id": "function:normalizeHexColor",
-      "concern": "Hex color to lower-case #rrggbb",
-      "pythonOwner": [
-        "gbdraw/core/color.py:normalize_hex_color"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/config-field-readers.js:normalizeHexColor"
-      ],
-      "vector": null,
-      "reason": "Partly the same: the Web also resolves color names and falls back to a default; Python refuses. No shared vector.",
-      "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
-      "source": "twin.unregistered.v1 on origin/dev 927b658b"
-    },
-    {
       "id": "function:normalizeLabelRendering",
       "concern": "labels.rendering value",
       "pythonOwner": [

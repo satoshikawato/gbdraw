@@ -8,11 +8,18 @@ import test from 'node:test';
 
 const {
   applyComparisonSequenceRecordLabel,
+  conservationSourceDescriptors,
   defaultConservationSeriesLabel,
-  normalizeConservationSeriesColor,
+  effectiveRingColor,
+  moveConservationSeriesEntry,
   orderedConservationSources,
+  reassignDrawnRingColors,
+  reassignRingColorsOnReorder,
   reconcileConservationSeries,
+  ringDrawnPositions,
+  ringKeysOfFiles,
   ringsOfDrawing,
+  ringSwatchColor,
   withoutConservationSeries
 } = await import('../../gbdraw/web/js/services/conservation-series.js');
 const { ringGenomeFileLists } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
@@ -111,15 +118,108 @@ test('withoutConservationSeries leaves out one series with its files; later seri
   assert.equal(series[2].sourceIndex, 2, 'the stored entries are not changed');
 });
 
-// A row without a colour takes its colour by position, repeating after ten. The
-// list stays as it was when it was derived by rounding (OV-2393 moved the colour
-// conversion to truncation); each colour is one of the CLI's `ten` scheme.
-test('a row without a colour takes the colour of its position', () => {
-  const colors = ['#81a5cc', '#e5a972', '#7cb075', '#d38282', '#8fc4c0',
-    '#ead487', '#be92b2', '#ffafb7', '#ae8e7c', '#c6bebb'];
-  assert.deepEqual(colors.map((_, index) => normalizeConservationSeriesColor(null, index)), colors);
-  assert.equal(normalizeConservationSeriesColor('', 10), colors[0]);
-  assert.equal(normalizeConservationSeriesColor('#ABC', 3), '#aabbcc');
+// PD-OI-110 (Ring colors): a ring without a colour of its own takes its
+// scheme's colour at its scheme index, repeating; Same color leaves it to the
+// configured colour (null, sent as ''); a hand-set colour wins on every scheme.
+test('a ring takes its own colour on every scheme, else the scheme colour at its index', () => {
+  const ten = ['#81a5cc', '#e5a972', '#8fc4c0', '#d38282', '#c6bebb', '#7cb075', '#be92b2', '#ead487', '#ae8e7c', '#ffafb7'];
+  assert.deepEqual(ten.map((_, schemeIndex) => effectiveRingColor({ color: null, schemeIndex }, 'ten')), ten,
+    'the ten colours in the receipt order (no Web order)');
+  assert.equal(effectiveRingColor({ color: null, schemeIndex: 10 }, 'ten'), ten[0], 'ring 11 repeats ring 1');
+  assert.equal(effectiveRingColor({ color: null, schemeIndex: 4 }, 'per_five'), '#8b9cc1');
+  assert.equal(effectiveRingColor({ color: null, schemeIndex: 5 }, 'per_five'), '#c88890');
+  assert.equal(effectiveRingColor({ color: null, schemeIndex: 30 }, 'per_five'), '#8b9cc1', 'ring 31 repeats ring 1');
+  assert.equal(effectiveRingColor({ color: null, schemeIndex: 3 }, 'same'), null, 'Same color invents no colour');
+  assert.equal(effectiveRingColor({ color: '', schemeIndex: 3 }, undefined), null, 'unset reads as Same color');
+  for (const scheme of ['same', 'ten', 'per_five']) {
+    assert.equal(effectiveRingColor({ color: '#ABC', schemeIndex: 0 }, scheme), '#aabbcc', `${scheme}: the own colour wins`);
+  }
+  const packaged = { unmanagedConfigOverrides: {} };
+  assert.equal(ringSwatchColor(null, packaged), '#8b9cc1', 'a Same color ring shows the configured colour');
+  assert.equal(ringSwatchColor('', packaged), '#8b9cc1');
+  assert.equal(ringSwatchColor('#123456', packaged), '#123456');
+  const configured = { unmanagedConfigOverrides: { 'objects.conservation.max_color': '#AB0' } };
+  assert.equal(ringSwatchColor(null, configured), '#aabb00', 'the drawing\'s own max colour, as Python draws it');
+  assert.equal(ringSwatchColor('#123456', configured), '#123456');
+});
+
+test('a new ring has no colour of its own and takes the first scheme index no ring uses (D-05)', () => {
+  const [a, b, c, d] = ['a.fa', 'b.fa', 'c.fa', 'd.fa'].map((name) => file(name));
+  const three = rowsFor([a, b, c]);
+  assert.deepEqual(three.map(({ color, schemeIndex }) => [color, schemeIndex]), [[null, 0], [null, 1], [null, 2]]);
+  const withoutB = reconcileConservationSeries({ sourceFiles: [a, c], previousSeries: three, legacyLabels: [] }).series;
+  assert.deepEqual(withoutB.map(({ schemeIndex }) => schemeIndex), [0, 2], 'a removal keeps the others\' colours');
+  const added = reconcileConservationSeries({ sourceFiles: [a, c, d], previousSeries: withoutB, legacyLabels: [] }).series;
+  assert.deepEqual(added.map(({ schemeIndex }) => schemeIndex), [0, 2, 1], 'the added ring takes the freed index');
+  assert.deepEqual(orderedConservationSources([a, c, d], { series: added, colorScheme: 'ten' }).map(({ color }) => color),
+    ['#81a5cc', '#8fc4c0', '#e5a972']);
+  assert.deepEqual(orderedConservationSources([a, c, d], { series: added }).map(({ color }) => color), ['', '', ''],
+    'Same color sends no colour, as the CLI reads it');
+});
+
+test('a hand-set colour survives a scheme switch and a reorder; re-assignment changes scheme colours only', () => {
+  const [a, b, c] = ['a.fa', 'b.fa', 'c.fa'].map((name) => file(name));
+  const series = rowsFor([a, b, c]);
+  series[1].color = '#123456';
+  const colors = (scheme) => orderedConservationSources([a, b, c], { series, colorScheme: scheme }).map(({ color }) => color);
+  assert.deepEqual(colors('ten'), ['#81a5cc', '#123456', '#8fc4c0']);
+  assert.deepEqual(colors('same'), ['', '#123456', '']);
+  assert.ok(moveConservationSeriesEntry(series, 2, -1) && moveConservationSeriesEntry(series, 1, -1), 'c moves to the outside');
+  assert.deepEqual(series.map(({ fileName }) => fileName), ['c.fa', 'a.fa', 'b.fa']);
+  assert.deepEqual(orderedConservationSources([a, b, c], { series, colorScheme: 'ten' }).map(({ color }) => color),
+    ['#8fc4c0', '#81a5cc', '#123456'], 'with re-assignment off a colour stays with its genome');
+  const drawing = { circularConservation: { series, colorScheme: 'ten' }, adv: { circular_track_slots_enabled: false } };
+  assert.equal(reassignDrawnRingColors(drawing), true);
+  assert.deepEqual(series.map(({ color, schemeIndex }) => [color, schemeIndex]), [[null, 0], [null, 1], ['#123456', 2]],
+    'the button gives each ring its position, the hand-set one too, and keeps the hand-set colour (fix round 13)');
+  assert.deepEqual(orderedConservationSources([a, b, c], { series, colorScheme: 'ten' }).map(({ color }) => color),
+    ['#81a5cc', '#e5a972', '#123456'], 'the re-assignment changes scheme colours only');
+  assert.equal(reassignDrawnRingColors(drawing), false, 'a second press changes nothing');
+});
+
+test('re-assignment on reorder runs only with the checkbox on, and not under Same color (D-21)', () => {
+  const ring = (schemeIndex) => ({ color: null, schemeIndex });
+  const drawing = (colorScheme, reassignOnReorder) => ({
+    circularConservation: { series: [ring(1), ring(0)], colorScheme, reassignOnReorder },
+    adv: { circular_track_slots_enabled: false }
+  });
+  const indexes = (shown) => shown.circularConservation.series.map(({ schemeIndex }) => schemeIndex);
+  for (const [scheme, on, changed] of [['ten', true, true], ['per_five', true, true], ['ten', false, false],
+    ['same', true, false], [undefined, true, false]]) {
+    const shown = drawing(scheme, on);
+    assert.equal(reassignRingColorsOnReorder(shown), changed, `${scheme}, checkbox ${on}`);
+    assert.deepEqual(indexes(shown), changed ? [0, 1] : [1, 0]);
+  }
+  const same = drawing('same', false);
+  assert.equal(reassignDrawnRingColors(same), false, 'the button changes nothing under Same color');
+  assert.deepEqual(indexes(same), [1, 0]);
+});
+
+test('the drawn order is the stack order of the enabled ring slots, as Python counts it', () => {
+  const slot = (trackIndex, enabled = true) => ({ renderer: 'sequence_conservation', enabled, params: { track_index: String(trackIndex) } });
+  assert.deepEqual(ringDrawnPositions(3, null), [0, 1, 2]);
+  assert.deepEqual(ringDrawnPositions(3, [{ renderer: 'features' }, slot(3), slot(1), slot(2)]), [1, 2, 0]);
+  assert.deepEqual(ringDrawnPositions(3, [slot(2), slot(1, false)]), [1, 0, 2], 'a ring no slot draws follows the drawn ones');
+});
+
+// PD-OI-110 (D-38): Load pairs a draft entry with a ring of the stored request by the key the ring's file has among
+// the request's ring files: the key the draft's entry for that file holds.
+test('the ring keys of a request are its ring files\' source keys, none for a ring without a file', () => {
+  const file = (name, size = 4) => ({ name, size, lastModified: 7 });
+  const ringFiles = [file('a.fna'), null, file('a.gbk'), file('a.fna')];
+  assert.deepEqual(ringKeysOfFiles(ringFiles), ['a.fna|4|7|0', null, 'a.gbk|4|7|0', 'a.fna|4|7|1']);
+  assert.deepEqual(ringKeysOfFiles(ringFiles).filter(Boolean),
+    conservationSourceDescriptors(ringFiles).map(({ sourceKey }) => sourceKey), 'the keys the draft\'s entries take');
+});
+
+// OV-3236: each ring takes the file its entry's `sourceKey` names, also among files of one name (by file name, two
+// different files of one name took the files in file order whatever the rings' order).
+test('the ring files in series order follow each entry\'s source key, also for files of one name', () => {
+  const x = { name: 'genomic.fna', size: 8, lastModified: 1 };
+  const y = { name: 'genomic.fna', size: 14, lastModified: 2 };
+  const series = reconcileConservationSeries({ sourceFiles: [x, y], previousSeries: [], legacyLabels: [] }).series;
+  assert.ok(moveConservationSeriesEntry(series, 1, -1));
+  assert.deepEqual(orderedConservationSources([x, y], { series }).map(({ file }) => file), [y, x]);
 });
 
 // PR-B: a ring's place holds its comparison genome's files. A place that is one
@@ -174,10 +274,12 @@ test('a ring whose files are missing does not take a later ring of the same file
   assert.deepEqual(ringGenomePlaces(drawing).places, [null, 1]);
   assert.deepEqual(ringGenomeFilesInRingOrder(drawing), [[], [b]], 'Save keeps the missing ring\'s place empty');
   assert.deepEqual(orderedConservationSources(drawing.files.c_conservation_fastas, drawing.circularConservation)
-    .map((source) => [source.label, source.color, source.placeIndex, source.files]), [['Genome B', entryB.color, 1, [b]]],
+    .map((source) => [source.label, source.ownColor, source.schemeIndex, source.placeIndex, source.files]),
+  [['Genome B', entryB.color, entryB.schemeIndex, 1, [b]]],
   'Generate draws Genome B on its own genome');
   assert.deepEqual(reconcileConservationSeries({ sourceFiles: [[b]], previousSeries: [entryA, entryB], legacyLabels: [] }).series
-    .map((entry) => [entry.label, entry.color]), [['Genome B', entryB.color]], 'the reconcile keeps Genome B, not A on B\'s file');
+    .map((entry) => [entry.label, entry.color, entry.schemeIndex]), [['Genome B', entryB.color, entryB.schemeIndex]],
+  'the reconcile keeps Genome B, not A on B\'s file');
 });
 
 // The series reconcile follows a change of the files: an entry whose files went leaves with them, so a re-picked set

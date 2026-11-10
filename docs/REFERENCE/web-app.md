@@ -1145,6 +1145,33 @@ field uses the file name shown as its placeholder. The Source recipe passes the
 Web labels explicitly. **Ring Width** and **Ring Gap** control the ordered
 comparison rings. **Save Raw LOSAT TSV** exports generated search rows.
 
+**Ring colors** colors the rings that have no color of their own, as
+`--conservation_color_scheme` does: **Same color** (the default) draws them in
+one color, **10 colors** gives each ring the next of ten colors, repeating from
+ring 11, and **One color per 5 rings** gives every five rings one color,
+repeating from ring 31. A color picked in a ring's row is that ring's own color: it wins on every
+scheme and stays when you switch schemes, and **Use the scheme color** next to
+the ring drops it. A scheme color stays with its ring when you reorder the
+rings, with the arrows or in the custom stack. **Re-assign colors when tracks
+are reordered** (off by default) gives the scheme colors out again in the drawn
+order after each reorder, and **Re-assign colors in the current order** does so
+once; neither changes a ring's own color, and **Use the scheme color** then
+gives such a ring the scheme color of its place. Under **Same color** both are
+unavailable and a reorder gives out no colors, so the rings keep the scheme
+colors they had when you switch back. A ring added after a removal takes the first scheme color that
+no ring uses. Each of these changes is one Undo step. A CLI or Python Session
+opens with its scheme and draws the colors the CLI drew; every ring color in a
+Session saved by gbdraw 0.14.5 or earlier is the ring's own color, and such a
+Session keeps the scheme of the CLI Session it was saved from. When its Circular
+request names no ring colors (it was saved without a Generate after it opened the
+CLI Session), each ring takes the scheme color the request draws it with, as the
+CLI does, instead of the one blue that version gave them, also when you moved the
+rings before you saved. When that request names ring colors, the Session holds no
+Circular request, or the request's track stack cannot be read, the rings keep the
+colors they were saved with. Under **Same
+color** a swatch shows the color the rings draw, the one the Session's settings
+give (`objects.conservation.max_color`).
+
 **Show Comparison Rings**, under **Hide GC Content**, **Hide GC Skew**, and
 **Show Depth**, draws the rings, and Generate runs the comparisons (LOSAT or
 the uploaded BLAST tables) only while it is on. Like **Show Depth**, it turns

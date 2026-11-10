@@ -214,24 +214,28 @@
   },
   {
    "title": "Compare the chromosome with three genomes",
-   "body": "Open Pairwise Comparisons. Run LOSAT is the default source, and the default LOSAT mode, BLASTN, compares nucleotide sequences. Click Add comparison sequence, choose NZ_CP008957.1.fna, and type O157:H7 EDL933 in the name box beside the ring's color. Add NC_000913.3.fna and NC_004431.1.fna the same way, one at a time, with the names in the table. Show Comparison Rings in Layout turns on with the first file. Click Generate Diagram: LOSATN compares each genome with the chromosome once, and three identity rings appear inside the features, outer to inner in the order you added them. The EDL933 ring is closed except one gap near 5.05 Mbp. The K-12 and CFT073 rings break at the same places, around 0.9, 1.3, 1.4, 2.9, 4.6, and 5.05 Mbp: stretches of the Sakai chromosome that these two strains lack.",
+   "body": "Open Pairwise Comparisons. Run LOSAT is the default source, and the default LOSAT mode, BLASTN, compares nucleotide sequences. Click Add comparison sequence, choose NZ_CP008957.1.fna, and type O157:H7 EDL933 in the name box beside the ring's color. Click the color box and set #81a5cc: Ring colors is Same color by default, so a ring without a color of its own draws the default color. Add NC_000913.3.fna and NC_004431.1.fna the same way, one at a time, with the names and colors in the table. Show Comparison Rings in Layout turns on with the first file. Click Generate Diagram: LOSATN compares each genome with the chromosome once, and three identity rings appear inside the features, outer to inner in the order you added them. The EDL933 ring is closed except one gap near 5.05 Mbp. The K-12 and CFT073 rings break at the same places, around 0.9, 1.3, 1.4, 2.9, 4.6, and 5.05 Mbp: stretches of the Sakai chromosome that these two strains lack.",
    "table": {
     "columns": [
      "Comparison sequence",
-     "Name"
+     "Name",
+     "Color"
     ],
     "rows": [
      [
       "NZ_CP008957.1.fna",
-      "O157:H7 EDL933"
+      "O157:H7 EDL933",
+      "#81a5cc"
      ],
      [
       "NC_000913.3.fna",
-      "K-12 MG1655"
+      "K-12 MG1655",
+      "#e5a972"
      ],
      [
       "NC_004431.1.fna",
-      "CFT073 (UPEC)"
+      "CFT073 (UPEC)",
+      "#7cb075"
      ]
     ]
    },
@@ -258,6 +262,21 @@
      "type": "fill",
      "selector": "input[aria-label='Comparison ring label 3']",
      "value": "CFT073 (UPEC)"
+    },
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Comparison ring color for NZ_CP008957.1.fna']",
+     "value": "#81a5cc"
+    },
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Comparison ring color for NC_000913.3.fna']",
+     "value": "#e5a972"
+    },
+    {
+     "type": "fill",
+     "selector": "input[aria-label='Comparison ring color for NC_004431.1.fna']",
+     "value": "#7cb075"
     },
     {
      "type": "generate"

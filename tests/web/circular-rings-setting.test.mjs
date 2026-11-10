@@ -733,3 +733,63 @@ test('re-picked tables of other names are named after their files, not after the
   panel.setCircularConservationUploadFiles([]);
   panel.changeCircularConservationSource('losat');
 });
+
+// PD-OI-110 (D-21): under Same color the re-assignment controls are disabled, and disabled has no effect. A move of
+// the series arrows with 「トラックを並び替えたら色を振り直す」 on re-assigns under 10 colors, not under Same color, so
+// the indexes are those before the move when 10 colors comes back.
+test('a series move re-assigns the scheme colours with the checkbox on, except under Same color', async () => {
+  const drawing = circular();
+  for (const name of ['a.fasta', 'b.fasta', 'c.fasta']) await addSeq(name);
+  const indexes = () => drawing.circularConservation.series.map(({ fileName, schemeIndex }) => [fileName, schemeIndex]);
+  assert.deepEqual(indexes(), [['a.fasta', 0], ['b.fasta', 1], ['c.fasta', 2]]);
+  panel.setCircularConservationColorScheme('ten');
+  panel.setCircularConservationReassignOnReorder(true);
+  panel.moveCircularConservationSeries(2, -1);
+  assert.deepEqual(indexes(), [['a.fasta', 0], ['c.fasta', 1], ['b.fasta', 2]], '10 colors re-assigns in the new order');
+
+  panel.setCircularConservationColorScheme('same');
+  panel.moveCircularConservationSeries(2, -1);
+  assert.deepEqual(ringNames(), ['a.fasta', 'b.fasta', 'c.fasta']);
+  panel.setCircularConservationColorScheme('ten');
+  assert.deepEqual(indexes(), [['a.fasta', 0], ['b.fasta', 2], ['c.fasta', 1]], 'Same color kept the indexes of before the move');
+  panel.reassignCircularConservationColors();
+  assert.deepEqual(indexes(), [['a.fasta', 0], ['b.fasta', 1], ['c.fasta', 2]]);
+  panel.setCircularConservationColorScheme('same');
+  panel.moveCircularConservationSeries(1, 1);
+  panel.reassignCircularConservationColors();
+  assert.deepEqual(indexes(), [['a.fasta', 0], ['c.fasta', 2], ['b.fasta', 1]], 'the button does nothing under Same color');
+
+  panel.setCircularConservationReassignOnReorder(false);
+  while (drawing.circularConservation.series.length > 0) comparisonFiles.removeCircularConservationSource(0);
+});
+
+// Fix round 13: a re-assignment gives every ring its drawn position as its scheme index, a ring with its own colour
+// too (it keeps its colour), so no two rings share an index and 「スキームの色を使う」 then shows the colour of the
+// ring's place, never another ring's.
+test('a re-assignment leaves no two rings one scheme index, so Use the scheme color shows the ring\'s own place', async () => {
+  const drawing = circular();
+  const TEN = ['#81a5cc', '#e5a972', '#8fc4c0'];
+  const drawnColors = () => orderedConservationSources(circularRingSources(drawing), drawing.circularConservation).map(({ color }) => color);
+  const assertDistinct = (where) => {
+    const indexes = drawing.circularConservation.series.map(({ schemeIndex }) => schemeIndex);
+    assert.equal(new Set(indexes).size, indexes.length, `no two rings share a scheme index ${where}: ${JSON.stringify(indexes)}`);
+  };
+  for (const route of ['checkbox', 'button']) {
+    for (const name of ['a.fasta', 'b.fasta', 'c.fasta']) await addSeq(name);
+    panel.setCircularConservationColorScheme('ten');
+    panel.setCircularConservationRingColor(0, '#123456');
+    panel.setCircularConservationReassignOnReorder(route === 'checkbox');
+    panel.moveCircularConservationSeries(2, -1);
+    panel.moveCircularConservationSeries(1, -1);
+    assert.deepEqual(ringNames(), ['c.fasta', 'a.fasta', 'b.fasta']);
+    if (route === 'button') panel.reassignCircularConservationColors();
+    assertDistinct(`after the ${route} re-assignment`);
+    assert.deepEqual(drawnColors(), [TEN[0], '#123456', TEN[2]], `the hand-set colour stays (${route})`);
+    panel.useCircularConservationSchemeColor(1);
+    assertDistinct(`after Use the scheme color (${route})`);
+    assert.deepEqual(drawnColors(), TEN, `each ring draws the colour of its drawn position (${route})`);
+    panel.setCircularConservationReassignOnReorder(false);
+    panel.setCircularConservationColorScheme('same');
+    while (drawing.circularConservation.series.length > 0) comparisonFiles.removeCircularConservationSource(0);
+  }
+});

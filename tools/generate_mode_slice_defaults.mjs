@@ -81,6 +81,12 @@ const EARLIER_DEFAULTS = [
     path: 'colors',
     reason: 'gbdraw 0.14.5 and earlier saved the default palette with one color for repeat_region, misc_feature and every unlisted type (OV-3114).',
     value: {"CDS": "#54bcf8", "rRNA": "#71ee7d", "tRNA": "#e8b441", "tmRNA": "#ded44e", "ncRNA": "#c4fac3", "repeat_region": "#d3d3d3", "misc_feature": "#d3d3d3", "default": "#d3d3d3", "skew_high": "#6dded3", "skew_low": "#ad72e3", "gc_content": "#a1a1a1", "pairwise_match": "#d3d3d3", "pairwise_match_min": "#FFE7E7", "pairwise_match_max": "#FF7272", "collinear_block_plus_min": "#f0f1f5", "collinear_block_plus": "#8b9cc1", "collinear_block_minus_min": "#FFE7E7", "collinear_block_minus": "#E15759"}
+  },
+  {
+    domain: 'config',
+    path: 'circularConservation',
+    reason: 'Sessions up to 50 saved the comparison rings without the Ring colors setting (colorScheme, reassignOnReorder).',
+    value: {"enabled": false, "source": "losat", "losat_program": "blastn", "subject_gencode": 1, "reference": "auto", "labels": "", "series": [], "ring_width": null, "ring_gap": null}
   }
 ];
 

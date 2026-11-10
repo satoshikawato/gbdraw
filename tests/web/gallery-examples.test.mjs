@@ -10,8 +10,8 @@ import {
   galleryExamplesFromCatalog,
   galleryTitleParts
 } from '../../gbdraw/web/js/services/gallery-examples.js';
-import { normalizeConservationSeriesColor } from '../../gbdraw/web/js/services/conservation-series.js';
 import { isReusableLosatEntry } from '../../gbdraw/web/js/services/losat-cache.js';
+import { normalizeOptionalHexColor } from '../../gbdraw/web/js/utils/color-utils.js';
 
 const CATALOG_URL = new URL('https://gbdraw.app/gallery/examples.json');
 const catalog = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/examples.json', import.meta.url), 'utf8'));
@@ -93,17 +93,24 @@ test('an unusable catalog or entry gives no example', () => {
 // reader adds takes the Web's automatic colour of its row. The published
 // Session must draw the same colours unless the tutorial sets one, or the
 // tutorial's previews and the Gallery figure disagree (as after #1803).
-test('a Gallery Session whose tutorial sets no ring colour draws the automatic ring colours', () => {
+// PD-OI-110: a ring's colour in a Gallery Session is its own exactly when the
+// tutorial sets it (D-15 keeps the E. coli tutorial's three colours); a ring
+// the tutorial leaves alone takes the Ring colors scheme (null).
+test('a Gallery Session ring has its own colour exactly when its tutorial sets one', () => {
   let checked = 0;
   for (const entry of catalog) {
     const tutorial = JSON.parse(readFileSync(galleryFile(entry.tutorial), 'utf8'));
-    const setsColour = (tutorial.manualSteps ?? []).some((step) => (step.replay ?? [])
-      .some((action) => /ring colou?r/i.test(String(action.selector ?? ''))));
-    if (setsColour) continue;
+    /** @type {Map<string, string>} The colour the tutorial sets, by the ring's file name. */
+    const setColours = new Map((tutorial.manualSteps ?? []).flatMap((step) => (step.replay ?? []))
+      .flatMap((action) => {
+        const match = String(action.selector ?? '').match(/Comparison ring color for (.+?)'/);
+        return match ? [[match[1], String(action.value).toLowerCase()]] : [];
+      }));
     for (const drawing of gallerySession(entry).drawings ?? []) {
       const series = drawing.config?.circularConservation?.series ?? [];
       series.forEach((row, index) => {
-        assert.equal(normalizeConservationSeriesColor(row.color, index), normalizeConservationSeriesColor('', index),
+        const name = [...setColours.keys()].find((fileName) => String(row.fileName).startsWith(fileName.replace(/\.[^.]+$/, '')));
+        assert.equal(normalizeOptionalHexColor(row.color), name === undefined ? null : setColours.get(name),
           `${entry.id}: comparison ring ${index + 1}`);
         checked += 1;
       });

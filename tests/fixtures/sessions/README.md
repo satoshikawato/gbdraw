@@ -412,6 +412,29 @@ PD-OI-113; `tests/web/session50-load-resave.test.mjs`). The route is in its
 provenance file; its decompressed SHA-256 is
 `589a36641a4a3357ef6eaf4b2f7adbcd5123df92c1804c6d925819bf418f2109`.
 
+`web-ring-color-scheme-preserved.v50.gbdraw-session.json.gz` is a released flat Session
+50 (tag `v0.14.5`) that a Web **Save Session** wrote: the tag's Web app loaded a CLI
+Session of three BLAST rings on `tests/fixtures/forced_label_underlay.gb` saved with
+`--conservation_color_scheme ten`, a path its GUI did not manage, so the Circular slice's
+draft keeps it in `unmanagedConfigOverrides`, and the tag's Web filled every ring with
+`#4e79a7` (OV-3054). Load moves the scheme into the drawing's Ring colors setting
+(`circularConservation.colorScheme`, PD-OI-110) with no dialog row; as the stored Circular
+request names no ring colour, the fill reads as no colour of the rings' own and they take the
+scheme's colours of their drawn positions (`tests/web/session50-load-resave.test.mjs`). The route
+is in its provenance file; its decompressed SHA-256 is
+`a5ae08d87075f1dc3c90eaf594ed196d42f46b9ef8c3fd7013691890485b2a95`.
+
+`web-losat-ring-copies.v50.gbdraw-session.json.gz` is a released flat Session 50 (tag
+`v0.14.5`) that the tag's own Web app wrote, saved as downloaded with no edits: Circular on
+`tests/test_inputs/HmmtDNA.gbk`, Run LOSAT with TLOSATX rings of `a.fna` (its bases 1-6000), `a.fna`
+again and `b.fna` (bases 5001-11000); ring 1 red with genetic code 4, ring 2 green with genetic code
+11, then ring 2 moved outward before the Generate. The tag kept the copy numbers of the file order,
+so the outer (green) ring is saved as copy 1 and the red one as copy 0 (OV-3238). Load matches the
+copies by their stored places, and a candidate of the committed request keeps each ring's colour and genetic code
+(`tests/web/session-losat-cache-validation.test.mjs`). The script, inputs and steps are in its
+provenance file; its decompressed SHA-256 is
+`8b9d53299e683bee642bed370686df29c00245d0cb99d98454685f46ad7d2189`.
+
 `hidden-definition-circular.v49.gbdraw-session.json.gz` is a Web **Save
 Session** download of the current writer (Session 49, PD-OI-109), written by
 `tests/web/circular-hide-definition.playwright.spec.js` and recompressed with
