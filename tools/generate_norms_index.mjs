@@ -192,32 +192,34 @@ const contractSection = ({ read, files, problems }) => {
   });
   const recordLink = (id) => link(OUTPUT, CONTRACT, records.get(id).slug, id);
   const byNumber = (left, right) => Number(left.slice(6)) - Number(right.slice(6)) || (left < right ? -1 : 1);
-  const recordRows = [...records.keys()].sort(byNumber).map((id) => {
+  const fileList = (id) => (citing.get(id) ?? []).map((file) => `  - ${code(file)}`);
+  // One block per record, ended by a blank line, with no count that a citing
+  // test elsewhere changes: two pull requests that change different records edit
+  // lines that an unchanged line separates, so their changes to this file merge.
+  const recordBlocks = [...records.keys()].sort(byNumber).flatMap((id) => {
     const { title, fields } = records.get(id);
-    return [
-      recordLink(id), title, unquoted(fields.Status), unquoted(fields['Concern key']),
-      unquoted(fields['Scenario revision']), supersedes(id, fields.Supersedes), (citing.get(id) ?? []).length
+    const earlier = supersedes(id, fields.Supersedes);
+    const facts = [
+      unquoted(fields.Status), `concern ${code(unquoted(fields['Concern key']))}`,
+      `scenario revision ${unquoted(fields['Scenario revision'])}`,
+      ...(earlier === '—' ? [] : [`supersedes ${earlier}`])
     ];
+    return [`- ${recordLink(id)}: ${title}. ${facts.join(', ')}.`, ...fileList(id), ''];
   });
-  const cited = [...citing.keys()].sort(byNumber);
-  const fileList = (id) => citing.get(id).map((file) => `  - ${code(file)}`);
-  const missing = cited.filter((id) => !records.has(id));
+  const missing = [...citing.keys()].filter((id) => !records.has(id)).sort(byNumber);
   return [
     '## Product Contract records and the tests that cite them',
     '',
     `Source: the \`### PD-OI-nnn\` records of ${code(CONTRACT)}`,
     `and the test files under ${code('tests/')} that name a record id.`,
     '',
-    'A record is revised in place: its Supersedes field names its own earlier scenario',
-    'revision. A record replaced in full is removed, so the tests that still cite it',
-    'are listed under "Cited ids without a record".',
+    'Each record gives its title, status, concern key, scenario revision, and the',
+    'revision it supersedes, followed by the test files that cite it. A record is',
+    'revised in place: its Supersedes field names its own earlier scenario revision.',
+    'A record replaced in full is removed, so the tests that still cite it are listed',
+    'under "Cited ids without a record".',
     '',
-    ...table(['Record', 'Title', 'Status', 'Concern', 'Scenario revision', 'Supersedes', 'Test files'], recordRows),
-    '',
-    '### Test files that cite each record',
-    '',
-    ...cited.filter((id) => records.has(id)).flatMap((id) => [`- ${recordLink(id)}`, ...fileList(id)]),
-    '',
+    ...recordBlocks,
     '### Cited ids without a record',
     '',
     ...(missing.length ? missing.flatMap((id) => {
