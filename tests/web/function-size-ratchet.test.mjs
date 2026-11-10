@@ -110,7 +110,7 @@ const FUNCTION_LINES = {
   'app/run-info.js::buildRunInfo': 201,
   'app/run-info.js::validateCurrentSemanticCoverage': 165,
   'app/settings-pane.js::createSettingsPaneController': 178,
-  'app/similarity-alignment.js::createSimilarityAlignmentActions': 1112,
+  'app/similarity-alignment.js::createSimilarityAlignmentActions': 985,
   'app/svg-styles.js::createSvgStyles': 186,
   'app/watchers.js::setupWatchers': 449,
   'components.js::SettingsSectionIndex.setup': 163,
