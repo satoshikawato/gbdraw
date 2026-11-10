@@ -2557,7 +2557,7 @@ export const createAppSetup = () => {
       const drawing = duplicateDrawingState(state.drawingOf(sourceId), copyId);
       const slot = artifactSlots.readOfDrawing(sourceId, state.activeDrawingId.value,
         () => historySnapshots.captureArtifactSlot(), (kept) => kept);
-      return { drawing, held: { slot: slot ? artifactSlotAs(slot, drawing) : null, losatRows: losatRowsOf(sourceId) } };
+      return { drawing, held: { slot: slot ? artifactSlotAs(slot, drawing) : null, losatRows: losatRowsOf(sourceId), losatClears: historySnapshots.losatClearCount() } };
     },
     // A region drawing is read as Load reads a stored drawing, then made under its new ID.
     regionDrawing: makeRegionDrawing,
@@ -2566,11 +2566,11 @@ export const createAppSetup = () => {
     // and the Undo of New and Duplicate remove a drawing here, which hands over its slot and LOSAT rows (OV-3209).
     removeDrawing: (drawingId, left = []) => {
       if (errorDrawingId() === drawingId) errorLog.value = null;
-      return { slot: state.removeDrawing(drawingId, artifactSlots), losatRows: swapLosatResultRows(drawingId, left) };
+      return { slot: state.removeDrawing(drawingId, artifactSlots), losatRows: swapLosatResultRows(drawingId, left), losatClears: historySnapshots.losatClearCount() };
     },
-    putHeld: (drawingId, { slot, losatRows }) => {
-      if (slot) artifactSlots.putSlot(slot);
-      return swapLosatResultRows(drawingId, losatRows);
+    putHeld: (drawingId, { slot, losatRows, losatClears }) => {
+      const cleared = historySnapshots.putHeldSlot(drawingId, slot, losatClears);
+      return swapLosatResultRows(drawingId, cleared ? [] : losatRows);
     },
     renameDrawing: state.renameDrawing,
     moveDrawing: state.moveDrawing,

@@ -16,7 +16,9 @@ import { drawingViewAt, savedDrawingView, withSavedDrawingView } from './helpers
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { createHash } from 'node:crypto';
-import { losatResultRowsOfDrawing, losatRowsOnePerKey } from '../../gbdraw/web/js/services/losat-cache.js';
+import {
+  losatResultRowsOfDrawing, losatRowsOnePerKey, validateProteinRawEntryReferences
+} from '../../gbdraw/web/js/services/losat-cache.js';
 
 globalThis.window = {
   Vue: {
@@ -1490,6 +1492,65 @@ test('Load and Save keep each Session 51 drawing\'s own protein identity manifes
     for (const id of ['linear', 'linear-2']) {
       assert.deepEqual(saved.drawings.find((entry) => entry.id === id).proteinIdentityManifest, manifests[id], `shared ${shared}: ${id} saved`);
     }
+  }
+});
+
+// #1777 round 18 (OV-3273, D-201): a copy of a Linear drawing keeps its card uids, so after its region changes one
+// record instance key names other proteins in each drawing's manifest. A Load validates each drawing's saved protein
+// entries with that drawing's own manifest, and Save reuses that check only for the manifest it ran with: Load, Save,
+// Load, Save writes into each drawing only the protein entries its own manifest resolves, which the CLI requires.
+test('Load and Save keep each Linear drawing\'s protein LOSAT entries to those its own manifest resolves (OV-3273)', async () => {
+  const fixture = fixtureSession('BGC0000708-BGC0000709-copy-crop.v51-web');
+  const proteinKeysOf = (session) => Object.fromEntries(session.drawings.map((entry) => [entry.id,
+    entry.losatCache.entries.filter((cached) => cached.queryRecordInstanceKey !== undefined).map(({ key }) => key).sort()]));
+  assert.deepEqual(Object.values(proteinKeysOf(fixture)).map((keys) => keys.length), [4, 4]);
+  const pythonAdmits = async (session) => JSON.parse(String(await evaluatePython(`
+import gzip, json, os, tempfile
+from gbdraw.session_io import load_session
+with tempfile.NamedTemporaryFile(suffix='.gbdraw-session.json.gz', delete=False) as handle:
+    handle.write(gzip.compress(payload.encode()))
+try:
+    load_session(handle.name)
+    result = json.dumps('admitted')
+except Exception as error:
+    result = json.dumps(str(error))
+finally:
+    os.unlink(handle.name)
+`, JSON.stringify(session))));
+  let session = fixture;
+  for (const round of [1, 2]) {
+    resetDrawings();
+    const loaded = await loadKeepingSlots(session);
+    assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+    let reused = 0;
+    globalThis.__GBDRAW_TEST_HOOKS__ = {
+      onStructuralMetric: ({ name }) => { if (name === 'sessionSaveProteinRawTextValidationReuseCount') reused += 1; }
+    };
+    let result;
+    try {
+      result = await exportSession(`copy-crop-${round}`, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+    } finally {
+      delete globalThis.__GBDRAW_TEST_HOOKS__;
+    }
+    assert.equal(result.status, 'saved', result.error?.message);
+    // Save checks again only what Load did not check with the drawing's manifest: each drawing's own 4 are reused.
+    assert.equal(reused, 8, `save ${round}: validations Save reused`);
+    session = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+    for (const entry of session.drawings) {
+      for (const cached of entry.losatCache.entries.filter((value) => value.queryRecordInstanceKey !== undefined)) {
+        assert.equal(validateProteinRawEntryReferences(cached, entry.proteinIdentityManifest), true,
+          `save ${round}: ${entry.id} writes ${cached.key}, which its manifest resolves`);
+      }
+    }
+    assert.deepEqual(proteinKeysOf(session), proteinKeysOf(fixture), `save ${round}: each drawing keeps its own entries`);
+    assert.equal(await pythonAdmits(session), 'admitted', `save ${round}: the CLI admits it`);
+  }
+  // tests/test_session_io.py reads this route's second Save as the "resaved" fixture.
+  const resaved = fixtureSession('BGC0000708-BGC0000709-copy-crop-resaved.v51-web');
+  for (const entry of session.drawings) {
+    const stored = resaved.drawings.find((candidate) => candidate.id === entry.id);
+    assert.deepEqual(entry.losatCache.entries.map(({ key }) => key), stored.losatCache.entries.map(({ key }) => key), entry.id);
+    assert.deepEqual(entry.proteinIdentityManifest, stored.proteinIdentityManifest, entry.id);
   }
 });
 

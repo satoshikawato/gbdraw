@@ -14,7 +14,8 @@
 //   (g) Clear LOSAT results counts no fewer searches than the rows name, and none after a Clear (OV-3211);
 //   (h) an Undo or a Redo changes the rows of no drawing but the one it shows (OV-3207, OV-3212);
 //   (i) a drawing that comes back (an Undo of its Delete, a Redo of its New or Duplicate) has the rows it left with,
-//       or none after a Clear (OV-3209, OV-3212: another drawing's Generate and its Undo in between take none away);
+//       or none after a Clear (OV-3209, OV-3212: another drawing's Generate and its Undo in between take none away),
+//       and after a Clear an empty protein identity manifest, as the drawings Clear found (OV-3274);
 //   (j) the shown drawing's evidence resolves: each protein row's search names record instances of the drawing's own
 //       manifest (OV-3213, OV-3214), and the all-against-all search of the Generate its rows come from is cached;
 //   (k') no step but Clear removes a cached search or converted payload (D-200, OV-3260: a later Generate reuses
@@ -240,6 +241,38 @@ test('Clear then the Undo of a Generate brings back no search that no row names 
   } finally { resetLosat(); }
 });
 
+// OV-3274 (review 14): Clear empties every drawing's protein identity manifest (D-197), also that of a drawing History
+// holds out of the project (a Delete, the Undo of a New or Duplicate): it comes back with an empty one and no rows.
+test('a drawing that comes back after Clear has an empty protein identity manifest and no LOSAT rows (OV-3274)', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  /** @param {string} key */
+  const pairRow = (key) => ({ key, filename: `${key}.tsv`, display: true, drawingId: '', edgeKey: `edge-${key}`, queryUid: 'u1', subjectUid: 'u2' });
+  for (const leave of ['delete', 'undo-new', 'undo-duplicate']) {
+    resetLosat();
+    try {
+      onlyShownDrawing(app);
+      const { drawingId: a } = app.drawingList.newDrawing('linear');
+      onlyShownDrawing(app);
+      const made = leave === 'delete' ? app.drawingList.newDrawing('linear')
+        : leave === 'undo-new' ? app.drawingList.newDrawing('linear') : app.drawingList.duplicateDrawing(a);
+      const b = made.drawingId;
+      app.selectDrawing(b);
+      await generateRows([pairRow('kB')], { searches: new Map([['kB', proteinSearch('b', 'u1', 'u2')]]), manifest: proteinManifest('b', ['u1', 'u2']) });
+      app.selectDrawing(a);
+      if (leave === 'delete') app.drawingList.deleteDrawing(b);
+      else await history.undo();
+      assert.ok(!state.drawingTabs.value.some((tab) => tab.id === b), `${leave}: B is held`);
+      app.clearLosatCache();
+      if (leave === 'delete') await history.undo();
+      else await history.redo();
+      app.selectDrawing(b);
+      assert.deepEqual([keysOf(b), state.proteinIdentityManifest.value], [[], emptyProteinIdentityManifest()],
+        `${leave}: B comes back with no rows and an empty manifest`);
+    } finally { resetLosat(); }
+  }
+});
+
 // OV-3214, OV-3213: each Linear drawing's protein pairs resolve through its own protein identity manifest, also when
 // another drawing's protein Generate gave one card uid (a Duplicate copies the uids) another meaning, and after that
 // Generate's Undo and Redo: a listed pair always downloads (the hydrate reads the shown drawing's manifest).
@@ -361,6 +394,7 @@ test('a drawing\'s LOSAT rows follow it through Generate, New, Duplicate, Delete
   const away = new Map();
   let clears = 0;
   let returns = 0;
+  let clearedReturns = 0;
   const lives = () => new Map(tabIds().map((id) => [state.drawingOf(id), id]));
   /** The cached searches' and converted payloads' keys. */
   const cacheKeys = () => [...[...state.losatCache.value.keys()].map((key) => `search:${key}`),
@@ -382,6 +416,13 @@ test('a drawing\'s LOSAT rows follow it through Generate, New, Duplicate, Delete
       returns += 1;
       away.delete(drawing);
       assert.deepEqual(after.rows[id], left.clears === clears ? left.rows : [], `${where} (i): ${id} comes back with its rows`);
+      if (left.clears === clears) return;
+      clearedReturns += 1;
+      // A switch is no History step: the walk shows the drawing to read its manifest and shows the other one again.
+      const shownNow = state.activeDrawingId.value;
+      app.selectDrawing(id);
+      assert.deepEqual(state.proteinIdentityManifest.value, emptyProteinIdentityManifest(), `${where} (i): ${id} comes back with an empty manifest`);
+      app.selectDrawing(shownNow);
     });
     if (!undoOrRedo) return;
     const changed = Object.keys(after.rows).filter((id) => id !== state.activeDrawingId.value && id in before.rows
@@ -440,9 +481,10 @@ test('a drawing\'s LOSAT rows follow it through Generate, New, Duplicate, Delete
       }
     }
     assert.ok(returns > 100, `the walk brought drawings back ${returns} times`);
+    assert.ok(clearedReturns > 10, `the walk brought drawings back after a Clear ${clearedReturns} times`);
   } finally {
     state.losatCacheInfo.value = [];
     state.losatCache.value = new Map();
   }
-  console.log(`LOSAT rows walk: ${SEEDS.length} seeds x ${STEPS} steps, ${returns} returns, in ${Date.now() - started} ms`);
+  console.log(`LOSAT rows walk: ${SEEDS.length} seeds x ${STEPS} steps, ${returns} returns (${clearedReturns} after a Clear), in ${Date.now() - started} ms`);
 });

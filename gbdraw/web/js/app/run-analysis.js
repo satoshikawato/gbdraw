@@ -1689,7 +1689,8 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   The artifact owner's install of a label rerender into its Result's drawing (OV-111).
  * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
  * @property {() => void} [emptyKeptProteinIdentityManifests] Empties the protein identity manifest each drawing not
- *   shown keeps in its artifact slot (Clear LOSAT results, D-197).
+ *   shown keeps in its artifact slot (Clear LOSAT results, D-197), and counts the Clear for the drawings History holds
+ *   out of the store, which come back emptied (OV-3274).
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
  * @property {((label: string, execute: (before: HistoryArtifactHandle | null) => any, options?: HistoryStepOptions<Record<string, any>>) => Promise<Record<string, any>>) | null} [runGeneratedArtifactReplacement]
  *   History's undoable replacement of the generated artifact.
@@ -2207,9 +2208,9 @@ export const createRunAnalysis = ({
     return { status: 'error', error, recovery };
   };
 
-  // Raw searches finish before the artifact transaction. Keep only the latest
-  // search's entries for retry, without changing the saved Result. Cache owner
-  // replacement (Clear Cache, Session load, or History) invalidates the retry.
+  // Raw searches finish before the artifact transaction. Keep only the latest search's entries for retry, without
+  // changing the saved Result. Clear, Session load or a History step that adds entries replaces the cache owner and
+  // invalidates the retry; an Undo or Redo that adds none keeps the cache and so the retry (D-200).
   /** @type {{ owner: any, entries: Map<string, any> } | null} */
   let completedLosatSearch = null;
   /**

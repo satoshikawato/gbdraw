@@ -305,7 +305,7 @@ const drawingList = createDrawingList({
   copyDrawing: () => { throw new Error('not used'); },
   regionDrawing: makeRegionDrawing,
   addDrawing: state.addDrawing,
-  removeDrawing: (drawingId) => ({ slot: state.removeDrawing(drawingId, { takeSlot: () => null }), losatRows: [] }),
+  removeDrawing: (drawingId) => ({ slot: state.removeDrawing(drawingId, { takeSlot: () => null }), losatRows: [], losatClears: 0 }),
   putHeld: () => [],
   renameDrawing: state.renameDrawing,
   moveDrawing: state.moveDrawing,

@@ -32,8 +32,10 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @typedef {(sourceId: DrawingId, drawingId: DrawingId, mode: ModeProfileName) => DrawingState} StyleDrawing
  *   A new drawing of `mode` at its defaults with the style of a drawing the store holds (PD-OI-090 〔作成〕(3)).
  * @typedef {readonly LosatCacheInfoEntry[]} HeldLosatRows LOSAT result rows of one drawing ID.
- * @typedef {{ slot: HeldSlot, losatRows: HeldLosatRows }} HeldDrawing What a drawing out of the store keeps for its
- *   return: its Result slot and its LOSAT result rows. A drawing's rows are in the state only while it is (OV-3209).
+ * @typedef {{ slot: HeldSlot, losatRows: HeldLosatRows, losatClears: number }} HeldDrawing What a drawing out of the
+ *   store keeps for its return: its Result slot, its LOSAT result rows, and the count of Clear LOSAT results when it
+ *   left; a Clear since then empties its protein identity manifest and its rows on return (OV-3274). A drawing's rows
+ *   are in the state only while it is (OV-3209).
  * @typedef {{ drawing: DrawingState, held: HeldDrawing }} MadeDrawing A new drawing and what it starts with.
  * @typedef {(sourceId: DrawingId, copyId: DrawingId) => MadeDrawing} CopyDrawing
  *   A copy of a drawing the store holds, under `copyId`, with its Result slot (null: it has no Result) and its
@@ -113,6 +115,8 @@ const copyNamePhrase = (name, number) => (
   number > 1 ? t('{name} copy {number}', { name, number }) : t('{name} copy', { name })
 );
 
+/** @type {HeldDrawing} What a drawing with no Result and no LOSAT rows holds; it has nothing a Clear could empty. */
+const NOTHING_HELD = Object.freeze({ slot: null, losatRows: [], losatClears: 0 });
 /**
  * Where a new drawing's tab goes: right after the tab of `after`, or at the end of the tabs without it.
  * @param {readonly DrawingTab[]} tabs @param {DrawingId | null} after
@@ -178,7 +182,7 @@ export const createDrawingList = ({
     return drawingId;
   });
   /** @param {DrawingState} drawing @returns {MadeDrawing} */
-  const startingEmpty = (drawing) => ({ drawing, held: { slot: null, losatRows: [] } });
+  const startingEmpty = (drawing) => ({ drawing, held: NOTHING_HELD });
 
   /** @param {ModeProfileName} mode */
   const newDrawing = (mode) => addNewDrawing('New drawing', mode, (drawingId) => startingEmpty(createDrawing(drawingId, mode)));
@@ -282,7 +286,7 @@ export const createDrawingList = ({
       const drawing = drawingOf(drawingId);
       const { name } = tabs[index];
       /** @type {HeldDrawing} */
-      let held = { slot: null, losatRows: [] };
+      let held = NOTHING_HELD;
       /** @type {HeldLosatRows} */
       let left = [];
       // The step keeps the files only this drawing binds until it is evicted.

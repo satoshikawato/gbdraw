@@ -470,7 +470,9 @@ into the `[Unreleased]` list below.
   rings of one genome share. **Save Raw LOSAT TSV** now saves the shown
   drawing's own results, each table once. **Clear N LOSAT results** counts
   each of the project's searches once and, as before, clears the results of
-  every drawing (OV-3203, OV-3204).
+  every drawing. Generating again after an Undo or Redo reuses the LOSAT
+  searches the project already ran, and **Clear N LOSAT results** counts them
+  (OV-3203, OV-3204, OV-3260).
 - Changed: when the Circular similarity rings are not all one color, each
   Legend row now shows the ring's name with that ring's own identity ramp
   (white to its color), with one scale line under the last ramp, instead of a

@@ -906,6 +906,33 @@ const losatAfterStep = (current, ownerSet, drawingId, commit) => {
 };
 
 /**
+ * Clear LOSAT results' reach into the drawings not shown (D-197): `clear` empties the protein identity manifest of each
+ * drawing the slot store keeps and counts itself; a drawing History holds out of the store (a Delete, an undone New or
+ * Duplicate) notes the `count` when it leaves and comes back through `putHeldSlot`, emptied after a Clear (OV-3274).
+ * @param {{ kept: () => readonly Readonly<ArtifactSlot>[], putSlot: (slot: Readonly<ArtifactSlot>) => void }} artifactSlots
+ * @param {(drawingId: DrawingId) => void} emptyManifestOf Writes an empty manifest into a drawing the store holds.
+ */
+const createLosatClearReach = (artifactSlots, emptyManifestOf) => {
+  let clears = 0;
+  return {
+    clear: () => {
+      clears += 1;
+      artifactSlots.kept().forEach((slot) => emptyManifestOf(slot.drawingId));
+    },
+    count: () => clears,
+    /**
+     * Puts a held drawing's Result slot back; returns whether a Clear ran since it left (its LOSAT rows are gone too).
+     * @param {DrawingId} drawingId @param {Readonly<ArtifactSlot> | null} slot @param {number} heldClears Its `count`.
+     */
+    putHeldSlot: (drawingId, slot, heldClears) => {
+      if (slot) artifactSlots.putSlot(slot);
+      if (slot && heldClears !== clears) emptyManifestOf(drawingId);
+      return heldClears !== clears;
+    }
+  };
+};
+
+/**
  * @template {DrawingView} D
  * @param {HistorySnapshotServiceOptions<D>} options
  */
@@ -1733,6 +1760,8 @@ export const createHistorySnapshotService = ({
     }
     artifactSlots.writeValues(state.drawingOf(drawingId), values);
   };
+  const losatClearReach = createLosatClearReach(artifactSlots, (drawingId) => writeArtifactValues(drawingId, {
+    proteinIdentityManifest: ARTIFACT_SLOT_EMPTY.proteinIdentityManifest() }));
   const UI_SLOT_KEYS = /** @type {const} */ (['appliedPaletteName', 'appliedPaletteColors']);
 
   // Synchronous: History captures it without an await (OV-922).
@@ -2010,9 +2039,9 @@ export const createHistorySnapshotService = ({
     restoreGeneratedArtifactHandle,
     setGeneratedArtifactIdentity,
     setGeneratedArtifactRuntimeOwner,
-    // Clear LOSAT results: each drawing not shown keeps an empty protein identity manifest (D-197).
-    emptyKeptProteinIdentityManifests: () => artifactSlots.kept().forEach((slot) => writeArtifactValues(slot.drawingId, {
-      proteinIdentityManifest: ARTIFACT_SLOT_EMPTY.proteinIdentityManifest() })),
+    emptyKeptProteinIdentityManifests: losatClearReach.clear,
+    losatClearCount: losatClearReach.count,
+    putHeldSlot: losatClearReach.putHeldSlot,
     setAfterApplyHistoryIntent,
     snapshotSignature
   };

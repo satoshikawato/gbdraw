@@ -912,14 +912,22 @@ let activeSessionResourceTable = null;
 // are, and copy any other (each drawing holds its own, D-197).
 /** @type {WeakSet<object>} */
 const adoptedProteinIdentityManifests = new WeakSet();
-/** @param {unknown} manifest @returns {any} */
+/** @param {ProteinIdentityManifest} manifest @returns {ProteinIdentityManifest} */
 const keptProteinIdentityManifest = (manifest) => {
   const raw = toRaw(manifest);
-  return isPlainObject(raw) && adoptedProteinIdentityManifests.has(raw) ? raw : cloneJsonData(raw);
+  return adoptedProteinIdentityManifests.has(raw) ? raw : cloneJsonData(raw);
 };
-// Current-session preflight receipts pair each adopted cache value with the
-// exact manifest that already validated its protein references and raw text.
+// Current-session preflight receipts: each adopted cache value with the exact
+// manifests that already validated its protein references and raw text, those
+// of the drawings whose saved list holds it (each drawing's own, D-197, OV-3273).
+/** @type {WeakMap<object, Set<unknown>>} */
 const adoptedLosatCacheValues = new WeakMap();
+/** @param {object} value An adopted cache value. @param {unknown} manifest The manifest its drawing's preflight validated it with. */
+const markValidatedWith = (value, manifest) => {
+  const manifests = adoptedLosatCacheValues.get(value) ?? new Set();
+  manifests.add(toRaw(manifest));
+  adoptedLosatCacheValues.set(value, manifests);
+};
 
 /** @param {{ renderRequest?: unknown, resources?: unknown, webFiles?: unknown } | null | undefined} canonical */
 const cloneCanonicalSession = (canonical) => {
@@ -3950,14 +3958,14 @@ const restoredLosatCacheInfoIdentity = (drawing, entry, places) => {
 };
 
 /**
- * The project's raw LOSAT entries Save writes, one per key, with the manifest a current Session's Load validated each
+ * The project's raw LOSAT entries Save writes, one per key, with the manifests a current Session's Load validated each
  * adopted protein entry with (`validatedWith`); each drawing writes those of them its own manifest resolves
  * (`losatEntriesResolvingIn`).
- * @returns {{ entries: Record<string, unknown>[], validatedWith: WeakMap<object, unknown> }}
+ * @returns {{ entries: Record<string, unknown>[], validatedWith: WeakMap<object, ReadonlySet<unknown>> }}
  */
 const serializeLosatCache = () => {
   const cacheMap = state.losatCache?.value;
-  /** @type {WeakMap<object, unknown>} */
+  /** @type {WeakMap<object, ReadonlySet<unknown>>} */
   const validatedWith = new WeakMap();
   if (!cacheMap || cacheMap.size === 0) return { entries: [], validatedWith };
   /** @type {LosatCacheInfoEntry[]} */
@@ -3988,7 +3996,8 @@ const serializeLosatCache = () => {
       display: Boolean(infoEntry.display),
       ...losatCacheInfoIdentity(infoEntry)
     };
-    if (adoptedLosatCacheValues.has(rawCached)) validatedWith.set(entry, adoptedLosatCacheValues.get(rawCached));
+    const validated = adoptedLosatCacheValues.get(rawCached);
+    if (validated) validatedWith.set(entry, validated);
     return entry;
   };
 
@@ -4013,13 +4022,15 @@ const serializeLosatCache = () => {
   return { entries, validatedWith };
 };
 
+/** @type {ReadonlySet<unknown>} An entry Load did not adopt was validated with no manifest. */
+const NO_VALIDATIONS = new Set();
 /**
  * A drawing's raw LOSAT entries that Save writes beside its protein identity manifest: a protein entry only when the
  * drawing's own manifest resolves it (D-197; a replaced source can leave earlier bindings in the cache), reusing the
  * validation of a current Session's Load when it validated the entry with this manifest.
  * @param {readonly Record<string, unknown>[]} entries `losatEntriesOfDrawing`'s.
  * @param {unknown} manifest The drawing's manifest, valid (Save checked it).
- * @param {WeakMap<object, unknown>} validatedWith `serializeLosatCache`'s.
+ * @param {WeakMap<object, ReadonlySet<unknown>>} validatedWith `serializeLosatCache`'s.
  * @returns {Record<string, unknown>[]}
  */
 const losatEntriesResolvingIn = (entries, manifest, validatedWith) => {
@@ -4028,7 +4039,7 @@ const losatEntriesResolvingIn = (entries, manifest, validatedWith) => {
   try {
     return entries.filter((entry) => {
       if (classifyRawLosatCacheEntry(entry) !== 'protein-current') return true;
-      if (validatedWith.get(entry) === toRaw(manifest)) {
+      if ((validatedWith.get(entry) ?? NO_VALIDATIONS).has(toRaw(manifest))) {
         recordStructuralMetric('sessionSaveProteinRawTextValidationReuseCount');
         return true;
       }
@@ -4054,20 +4065,18 @@ const savedLosatCacheEntryKind = (entry) => {
 
 /**
  * A saved current entry's cache value: the entry less its row fields; Load adopts a current Session's entry as it is
- * (`adoptCurrent`) and remembers the manifest it was validated with.
- * @param {Record<string, unknown>} entry @param {boolean} adoptCurrent @param {unknown} validatedManifest
+ * (`adoptCurrent`; `applyLosatCache` marks the manifests it was validated with).
+ * @param {Record<string, unknown>} entry @param {boolean} adoptCurrent
  * @returns {Record<string, unknown>}
  */
-const restoredLosatCacheValue = (entry, adoptCurrent, validatedManifest) => {
+const restoredLosatCacheValue = (entry, adoptCurrent) => {
   const excludedFields = new Set(['key', 'filename', 'display', ...LOSAT_CACHE_INFO_STRING_FIELDS, ...LOSAT_CACHE_INFO_INTEGER_FIELDS]);
   if (!adoptCurrent) {
     const restored = cloneJsonData(entry);
     excludedFields.forEach((field) => delete restored[field]);
     return restored;
   }
-  const restored = Object.fromEntries(Object.entries(entry).filter(([field]) => !excludedFields.has(field)));
-  adoptedLosatCacheValues.set(restored, toRaw(validatedManifest));
-  return restored;
+  return Object.fromEntries(Object.entries(entry).filter(([field]) => !excludedFields.has(field)));
 };
 
 /**
@@ -4081,16 +4090,18 @@ const restoredLosatCacheValue = (entry, adoptCurrent, validatedManifest) => {
  * ring entries are its Circular part's (`ringDrawingId`); an entry that no
  * drawing of its kind holds keeps one row, its first holder's.
  * @param {readonly {
- *   drawing: DrawingState, entries: unknown, places?: ReadonlyMap<string, LinearUnitPlace>, ringDrawingId?: DrawingId | null
+ *   drawing: DrawingState, entries: unknown, manifest?: unknown, places?: ReadonlyMap<string, LinearUnitPlace>,
+ *   ringDrawingId?: DrawingId | null
  * }[]} sources
- *   Each drawing's saved entries, with the units of the Result it shows (`catalogUnitPlaces`; none when not shown).
+ *   Each drawing's saved entries, with the units of the Result it shows (`catalogUnitPlaces`; none when not shown), and
+ *   the manifest Load's preflight validated them with: the drawing's own (D-197; none: no current Session's).
  * @param {unknown} [legacyEnvelope]
- * @param {{ adoptCurrent?: boolean, validatedManifest?: unknown }} [options]
+ * @param {{ adoptCurrent?: boolean }} [options]
  */
 const applyLosatCache = (
   sources,
   legacyEnvelope = null,
-  { adoptCurrent = false, validatedManifest = null } = {}
+  { adoptCurrent = false } = {}
 ) => {
   const map = new Map();
   /** @type {Record<string, unknown>[]} */
@@ -4098,7 +4109,7 @@ const applyLosatCache = (
 
   /** @type {{ row: LosatCacheInfoEntry, owned: boolean }[]} */
   const rows = [];
-  sources.forEach(({ drawing, entries, places = new Map(), ringDrawingId = null }) => {
+  sources.forEach(({ drawing, entries, manifest, places = new Map(), ringDrawingId = null }) => {
     if (!Array.isArray(entries)) return;
     // An entry an earlier drawing holds (the same key, the same content) is read once.
     const earlier = new Set(map.keys());
@@ -4106,7 +4117,9 @@ const applyLosatCache = (
       const kind = savedLosatCacheEntryKind(entry);
       if (kind === 'legacy') legacyEntries.push(entry);
       if (kind !== 'current') return;
-      if (!earlier.has(entry.key)) map.set(entry.key, restoredLosatCacheValue(entry, adoptCurrent, validatedManifest));
+      if (!earlier.has(entry.key)) map.set(entry.key, restoredLosatCacheValue(entry, adoptCurrent));
+      // The value an earlier drawing holds is also valid in this drawing's manifest (OV-3273).
+      if (adoptCurrent) markValidatedWith(map.get(entry.key), manifest);
       if (entry.display === false) return;
       const drawingKind = losatEntryDrawingKind(entry);
       const owner = drawing.mode === drawingKind ? drawing.id : drawingKind === 'circular' ? ringDrawingId : null;
@@ -7793,15 +7806,17 @@ const importSessionDocument = async (e, options = {}) => {
      * The saved entries of a LOSAT cache field the file wrote into each
      * drawing, by drawing ID (unvalidated): a Session 51's own, the projected
      * drawing's from its view; a Session 27-50's one list, `partDrawingId`'s
-     * (none when the file has no drawing of that part; its Circular part's ring entries).
-     * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field @param {DrawingId | null} partDrawingId
-     * @returns {{ id: DrawingId, entries: unknown, ringDrawingId?: DrawingId | null }[]}
+     * (none when the file has no drawing of that part; its Circular part's ring entries), each with the manifest Load's
+     * preflight validated it with, the drawing's own (D-197): the projected drawing's from its view (`projectedManifest`).
+     * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field @param {DrawingId | null} partDrawingId @param {unknown} [projectedManifest]
+     * @returns {{ id: DrawingId, entries: unknown, manifest?: unknown, ringDrawingId?: DrawingId | null }[]}
      */
-    const fileLosatEntriesOf = (projectedEntries, field, partDrawingId) => (projectedDrawingId !== null && upgraded
-      ? [{ id: projectedDrawingId, entries: projectedEntries },
+    const fileLosatEntriesOf = (projectedEntries, field, partDrawingId, projectedManifest) => (projectedDrawingId !== null && upgraded
+      ? [{ id: projectedDrawingId, entries: projectedEntries, manifest: projectedManifest },
           ...upgraded.drawings.filter((entry) => entry.id !== projectedDrawingId).map((entry) => ({
             id: /** @type {DrawingId} */ (entry.id),
-            entries: /** @type {UnvalidatedFields<'entries'>} */ (/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (entry))[field])?.entries
+            entries: /** @type {UnvalidatedFields<'entries'>} */ (/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (entry))[field])?.entries,
+            manifest: entry.proteinIdentityManifest
           }))]
       : partDrawingId === null ? [] : [{ id: partDrawingId, entries: projectedEntries, ringDrawingId: fileDrawingIdOf('circular') }]);
     // The conservation hash pairs each loaded request names (D-15-124): those
@@ -8525,16 +8540,13 @@ const importSessionDocument = async (e, options = {}) => {
      * records, `restoredLosatCacheInfoIdentity`).
      * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field
      */
-    const losatSourcesOf = (projectedEntries, field) => fileLosatEntriesOf(projectedEntries, field, losatPartDrawingId)
+    const losatSourcesOf = (projectedEntries, field) => fileLosatEntriesOf(projectedEntries, field, losatPartDrawingId, loadedProteinManifest)
       .map(({ id, ...source }) => (shownDrawing.id === id ? { ...source, drawing: shownDrawing, places: catalogUnitPlaces(admittedFeatureCatalog(artifactEditorState.featureCatalog)) } : { ...source, drawing: state.drawingOf(id) }));
     if (canonicalSession) {
       applyLosatCache(
         losatSourcesOf(projectionResult.artifactState.losatCache?.entries, 'losatCache'),
         projectionResult.artifactState.legacyArtifacts?.proteinRawCandidates,
-        {
-          adoptCurrent: currentSchemaSession,
-          validatedManifest: projectionResult.artifactState.proteinIdentityManifest
-        }
+        { adoptCurrent: currentSchemaSession }
       );
       applyLosatDerivedCache(
         losatSourcesOf(projectionResult.artifactState.losatDerivedCache?.entries, 'losatDerivedCache')
