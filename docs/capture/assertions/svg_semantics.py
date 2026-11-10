@@ -95,14 +95,14 @@ root => {
     return found && !value.slice(end).trim() ? [offsetX, offsetY] : null;
   };
   // A Linear record's group is its features slot group, or a record group when no slot draws features.
-  const linearRecordGroup = (element) => (
+  const isLinearRecordGroup = (element) => (
     /^record_group_[\w-]+$/.test(String(element.getAttribute('id') || '')) ||
     element.getAttribute('data-gbdraw-slot-renderer') === 'features'
   );
   const recordPlacementCandidates = elements
     .filter((element) => (
       String(element.tagName || '').toLowerCase() === 'g' &&
-      (/^record_\d+$/.test(String(element.getAttribute('id') || '')) || linearRecordGroup(element)) &&
+      (/^record_\d+$/.test(String(element.getAttribute('id') || '')) || isLinearRecordGroup(element)) &&
       Boolean(element.getAttribute('data-gbdraw-record-id'))
     ));
   const indexedRecordPlacements = recordPlacementCandidates.filter((element) => (
@@ -111,7 +111,7 @@ root => {
   const recordPlacements = (
     indexedRecordPlacements.length > 0
       ? indexedRecordPlacements
-      : recordPlacementCandidates.filter(linearRecordGroup)
+      : recordPlacementCandidates.filter(isLinearRecordGroup)
   )
     .map((element) => {
       const bounds = element.getBoundingClientRect();

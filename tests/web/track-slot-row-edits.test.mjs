@@ -31,7 +31,7 @@ for (const leaf of ['conservation-series.js', 'current-option-values.js', 'depth
 const { createCircularTrackSlotEditor } = await import(pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js')));
 const { createLinearTrackSlotEditor } = await import(pathToFileURL(join(tempRoot, 'app', 'linear-track-slots.js')));
 const { paramsKeptOnRendererChange } = await import(pathToFileURL(join(tempRoot, 'services', 'track-slot-validation.js')));
-const { askTrackSourceRemoval, askingTrackRowRemoval, askingTrackRowSwitch } = await import(pathToFileURL(join(tempRoot, 'app', 'track-slot-edits.js')));
+const { askTrackSourceRemoval, askingAnnotationTrackAdd, askingTrackRowRemoval, askingTrackRowSwitch } = await import(pathToFileURL(join(tempRoot, 'app', 'track-slot-edits.js')));
 const { depthSeriesRemovalLoss, depthSourceLoss, dropInvalidManagedDepthSlots, isDefaultManagedDepthSlot, reconcileManagedDepthSlots } = await import(pathToFileURL(join(tempRoot, 'services', 'depth-track-state.js')));
 const { normalizeLinearTrackSlots, placeLinearStackForGenerate } = await import(pathToFileURL(join(tempRoot, 'services', 'linear-track-slot-model.js')));
 
@@ -384,6 +384,142 @@ for (const [mode, create] of Object.entries(MODES)) {
     reset.reset();
     assert.deepEqual(annotationRows(reset), expected, 'Reset');
     assert.deepEqual(reset.slots().slice(0, 3).map((slot) => slot.id), expected.map((row) => row.id));
+  });
+}
+
+// OV-3153 (Owner D-60 of 2026-11-10): Add track with the Annotations renderer
+// gives the new row the first set no row names (an Overlay row and a row turned
+// off name theirs too), by set id; when every set has a row it asks what the
+// row draws, and the choice is one History step; Cancel adds nothing.
+for (const mode of ['circular', 'linear']) {
+  const make = mode === 'circular' ? circularRow : linearRow;
+  const laneSide = mode === 'circular' ? 'outside' : 'above';
+  const twoSets = () => [{ id: 'regions', name: 'Plastome regions', annotations: [{ mark: 'bracket' }] }, { id: 'tint', name: 'Tint', annotations: [{ mark: 'highlight' }] }];
+  /** The editor with the root's asking Add track, a recorded question, and recorded History steps. */
+  const asking = (rows, sets, answer = 'cancel') => {
+    const asked = [];
+    const steps = [];
+    const askChoice = async (request) => { asked.push(request); return typeof answer === 'function' ? answer(request) : answer; };
+    const editor = MODES[mode](rows, {}, askChoice);
+    editor.state.annotationSets = sets;
+    const add = mode === 'circular' ? editor.editor.addCircularTrackSlot : editor.editor.addLinearTrackSlot;
+    const addTrack = askingAnnotationTrackAdd({ askChoice, runUndoable: (label, fn) => { steps.push(label); return fn(); }, busy: () => null,
+      rows: editor.slots, mode, annotationSets: () => editor.state.annotationSets }, add);
+    const annotationRows = () => editor.slots().filter((slot) => slot.renderer === 'annotations').map((slot) => [slot.id, slot.params.set_id]);
+    return { ...editor, asked, steps, addTrack, annotationRows };
+  };
+
+  test(`${mode}: Add track Annotations binds the first set no row names, without asking`, async () => {
+    const editor = asking([...ROWS[mode](), make('annotations_1', 'annotations', { set_id: 'regions' }, laneSide)], twoSets());
+    await editor.addTrack('annotations');
+    assert.equal(editor.asked.length, 0);
+    assert.deepEqual(editor.annotationRows().map(([, setId]) => setId).sort(), ['regions', 'tint']);
+
+    // An Overlay row names its set, and so does a row turned off.
+    const overlay = asking([...ROWS[mode](), make('annotations_1', 'annotations', { set_id: 'regions', anchor_slot: 'features', layer: 'underlay' }, 'overlay')], twoSets());
+    overlay.slots().find((slot) => slot.id === 'annotations_1').enabled = false;
+    await overlay.addTrack('annotations');
+    assert.equal(overlay.asked.length, 0);
+    assert.deepEqual(overlay.annotationRows().map(([, setId]) => setId).sort(), ['regions', 'tint']);
+  });
+
+  test(`${mode}: Add track Annotations asks when every set has a row; each choice is one History step and Cancel adds nothing`, async () => {
+    const rows = () => [...ROWS[mode](), make('annotations_1', 'annotations', { set_id: 'regions' }, laneSide),
+      make('annotations_2', 'annotations', { set_id: 'tint', anchor_slot: 'features', layer: 'underlay' }, 'overlay')];
+    const cancel = asking(rows(), twoSets(), 'cancel');
+    const before = structuredClone(cancel.slots());
+    assert.equal(await cancel.addTrack('annotations'), false);
+    assert.deepEqual(cancel.slots(), before, 'Cancel adds nothing');
+    assert.deepEqual(cancel.steps, [], 'Cancel records no History step');
+    const [request] = cancel.asked;
+    const rowNumber = (id) => before.findIndex((slot) => slot.id === id) + 1;
+    assert.equal(request.title, 'Every annotation set already has a row');
+    assert.equal(request.description, `Track row ${rowNumber('annotations_1')} (annotations_1) draws regions. `
+      + `Track row ${rowNumber('annotations_2')} (annotations_2) draws tint. Choose what the new Annotations row draws.`);
+    assert.deepEqual(request.actions.map(({ id, label, detail }) => [id, label, detail]), [
+      ['again:regions', 'Draw regions again', 'A second row draws regions; the figure shows it twice.'],
+      ['again:tint', 'Draw tint again', 'A second row draws tint; the figure shows it twice.'],
+      ['unset', 'Add a row without a set', 'Choose the set later in the new row.']
+    ]);
+
+    const again = asking(rows(), twoSets(), 'again:tint');
+    await again.addTrack('annotations');
+    assert.deepEqual(again.steps, ['Add track']);
+    assert.deepEqual(again.annotationRows().map(([, setId]) => setId).sort(), ['regions', 'tint', 'tint']);
+
+    const unset = asking(rows(), twoSets(), 'unset');
+    await unset.addTrack('annotations');
+    assert.deepEqual(unset.steps, ['Add track']);
+    const added = unset.slots().findIndex((slot) => slot.renderer === 'annotations' && slot.params.set_id === '');
+    assert.notEqual(added, -1);
+    assert.match(unset.issue(added), /This row needs an annotation set\./);
+
+    // An answer to sets or a stack that changed while the dialog was open adds nothing.
+    const stale = asking(rows(), twoSets(), () => { stale.state.annotationSets.push({ id: 'late', annotations: [] }); return 'again:regions'; });
+    assert.equal(await stale.addTrack('annotations'), false);
+    assert.deepEqual(stale.steps, []);
+    const moved = asking(rows(), twoSets(), () => { moved.slots().push(make('spacer_x', 'spacer', {}, laneSide)); return 'again:regions'; });
+    const rowCount = moved.slots().length;
+    assert.equal(await moved.addTrack('annotations'), false);
+    assert.equal(moved.slots().length, rowCount + 1, 'only the row added meanwhile');
+    assert.deepEqual(moved.steps, []);
+    // Another renderer never asks.
+    const other = asking(rows(), twoSets());
+    await other.addTrack('spacer');
+    assert.equal(other.asked.length, 0);
+  });
+
+  // A row turned off names its set (it draws it once turned on), and every
+  // sentence of the question stays true: it says the row is off and claims no
+  // second drawing of a set whose rows are all off.
+  test(`${mode}: the question names a turned-off row as off and claims no second drawing of its set`, async () => {
+    const editor = asking([...ROWS[mode](), make('annotations_1', 'annotations', { set_id: 'regions' }, laneSide),
+      make('annotations_2', 'annotations', { set_id: 'tint' }, laneSide)], twoSets());
+    editor.slots().find((slot) => slot.id === 'annotations_1').enabled = false;
+    await editor.addTrack('annotations');
+    const [request] = editor.asked;
+    const number = (id) => editor.slots().findIndex((slot) => slot.id === id) + 1;
+    assert.equal(request.description, `Track row ${number('annotations_1')} (annotations_1) names regions but is turned off. `
+      + `Track row ${number('annotations_2')} (annotations_2) draws tint. Choose what the new Annotations row draws.`);
+    assert.deepEqual(request.actions.map(({ id, detail }) => [id, detail]), [
+      ['again:regions', 'A second row draws regions.'],
+      ['again:tint', 'A second row draws tint; the figure shows it twice.'],
+      ['unset', 'Choose the set later in the new row.']
+    ]);
+  });
+
+  // A row whose set was removed (removeAnnotationSet leaves the row) draws
+  // nothing: the question describes only the rows of the current sets.
+  test(`${mode}: the question describes no row whose set no longer exists`, async () => {
+    const editor = asking([...ROWS[mode](), make('annotations_1', 'annotations', { set_id: 'regions' }, laneSide),
+      make('annotations_2', 'annotations', { set_id: 'removed_set' }, laneSide)], [twoSets()[0]]);
+    await editor.addTrack('annotations');
+    const [request] = editor.asked;
+    const number = editor.slots().findIndex((slot) => slot.id === 'annotations_1') + 1;
+    assert.equal(request.description, `Track row ${number} (annotations_1) draws regions. Choose what the new Annotations row draws.`);
+    assert.deepEqual(request.actions.map(({ id }) => id), ['again:regions', 'unset']);
+  });
+
+  // A sequence search's set (PD-OI-117) with no row is a set without a row:
+  // the new row draws it, which is how it leaves its automatic overlay.
+  test(`${mode}: Add track Annotations gives a sequence search's set without a row to the new row, without asking`, async () => {
+    const sets = [twoSets()[0], { id: 'search_hits', annotations: [{ mark: 'highlight' }], keepHighlightOverlay: true }];
+    const editor = asking([...ROWS[mode](), make('annotations_1', 'annotations', { set_id: 'regions' }, laneSide)], sets);
+    await editor.addTrack('annotations');
+    assert.equal(editor.asked.length, 0);
+    assert.deepEqual(editor.annotationRows().map(([, setId]) => setId).sort(), ['regions', 'search_hits']);
+  });
+
+  test(`${mode}: a row whose renderer becomes Annotations takes the first set no other row names, or none`, () => {
+    const editor = asking([...ROWS[mode](), make('annotations_1', 'annotations', { set_id: 'regions' }, laneSide)], twoSets());
+    const gcSkew = () => editor.slots().find((slot) => slot.id === 'gc_skew');
+    editor.setRenderer(gcSkew(), 'annotations');
+    assert.equal(gcSkew().params.set_id, 'tint');
+    const full = asking([...ROWS[mode](), make('annotations_1', 'annotations', { set_id: 'regions' }, laneSide),
+      make('annotations_2', 'annotations', { set_id: 'tint' }, laneSide)], twoSets());
+    const skew = () => full.slots().find((slot) => slot.id === 'gc_skew');
+    full.setRenderer(skew(), 'annotations');
+    assert.equal(skew().params.set_id, '', 'no set is drawn twice without a choice');
   });
 }
 

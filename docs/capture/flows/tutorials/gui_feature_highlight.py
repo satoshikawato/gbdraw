@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -149,25 +148,24 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
     )
     features.locator("select").last.select_option("split")
 
-    page.get_by_label("New circular track renderer", exact=True).select_option(
-        "annotations"
-    )
-    page.get_by_role("button", name=re.compile(r"Add track$"), exact=False).click()
+    # Use custom stack gives the imported set its own row, annotations_1; a
+    # second Annotations row would draw the set twice (OV-3216).
     annotation = page.get_by_role(
-        "group", name="Circular track slot annotations", exact=True
+        "group", name="Circular track slot annotations_1", exact=True
     )
+    expect(annotation.get_by_label(
+        "Circular track slot annotations_1 Annotation set", exact=True
+    )).to_have_value("mitochondrial_regions")
     annotation.get_by_label(
-        "Circular track slot annotations Annotation set", exact=True
-    ).select_option(
-        "mitochondrial_regions"
-    )
-    annotation.get_by_label(
-        "Circular track slot annotations Annotation placement", exact=True
+        "Circular track slot annotations_1 Annotation placement", exact=True
     ).select_option(
         "inside"
     )
+    annotation = page.get_by_role(
+        "group", name="Circular track slot annotations_1", exact=True
+    )
     slot_id = annotation.get_by_label(
-        "Circular track slot id annotations", exact=True
+        "Circular track slot id annotations_1", exact=True
     )
     slot_id.fill("mitochondrial_regions")
     annotation = page.get_by_role(
