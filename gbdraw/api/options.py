@@ -421,7 +421,7 @@ def _ring_genome_files(values: object) -> tuple[RingGenomeFiles, ...] | None:
     if values is None:
         return None
     if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
-        raise ValidationError("conservation_sequence_files must be a sequence.")
+        raise ValidationError("conservation_sequence_files must be a sequence.", diagnostic={"code": "INPUT_INVALID"})
     rings: list[RingGenomeFiles] = []
     for index, value in enumerate(values):
         if value is None or value == "":
@@ -436,8 +436,8 @@ def _ring_genome_files(values: object) -> tuple[RingGenomeFiles, ...] | None:
             rings.append(tuple(value))
         else:
             raise ValidationError(
-                f"conservation_sequence_files[{index}] must be a path, a sequence of "
-                "paths, or None."
+                f"conservation_sequence_files[{index}] must be a path, a sequence of paths, or None.",
+                diagnostic={"code": "INPUT_INVALID"},
             )
     return tuple(rings)
 
