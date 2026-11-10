@@ -427,8 +427,9 @@ the region label warnings the figure is drawn with. The CLI lists such a row
 after the rows that fit; the Web app's **Choose a fix** keeps the report's
 order and first selects a row that fits, when there is one. With several
 records, one value must fit every record. The outer-label rows do not move
-inner, embedded, or radial labels. The combination halves the drop of the
-font size the smaller-font row offers. For inner, embedded, or radial labels,
+inner, embedded, or radial labels. The combination halves the drop to the
+font size the smaller-font row offers when that row fits without a note,
+else the drop to 6 pt. For inner, embedded, or radial labels,
 the switches are tried first; the smaller font is then the first font size,
 going down from the current one, at which the labels fit; when that size
 keeps a region label warning, the row goes on down to the first size whose

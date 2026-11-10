@@ -466,8 +466,8 @@ class CircularLabelFitSearch:
             tuple[tuple[str, LabelFitValue], ...], LabelFitVerification
         ] = {}
         self._rows: dict[LabelFitRowKind, tuple[LabelFitRow, float | None]] = {}
-        # A row found before the deadline that a later ask may make milder, or whose walk past a region label warning
-        # (OV-3110) is not finished, is not kept in ``_rows``.
+        # A row found before the deadline that a later ask may make milder, whose walk past a region label warning
+        # (OV-3110) is not finished, or that starts from such a row, is not kept in ``_rows``.
         self._unfinished = False
         # ``rows`` takes every row's first value before any row walks on past it (D-110).
         self._first_values_only = False
@@ -546,11 +546,15 @@ class CircularLabelFitSearch:
     def _row(self, kind: LabelFitRowKind) -> tuple[LabelFitRow, float | None]:
         if kind in self._rows:
             return self._rows[kind]
+        asking_row_unfinished = self._unfinished
         self._unfinished = False
         row, value = self._compute(kind)
         computed = self._with_region_notice(row), value
-        if not self._unfinished:
+        finished = not self._unfinished
+        if finished:
             self._rows[kind] = computed
+        # A row that starts from an unfinished row is unfinished too: a later ask may bound it differently.
+        self._unfinished = asking_row_unfinished or not finished
         return computed
 
     def _region_warned(self, row: LabelFitRow) -> LabelFit | None:
@@ -563,8 +567,8 @@ class CircularLabelFitSearch:
         return fit if fit is not None and fit.region_warnings else None
 
     def _with_region_notice(self, row: LabelFitRow) -> LabelFitRow:
-        """A row whose figure keeps a region label warning draws with the notice; its first value still bounds the
-        rows that start from it."""
+        """A row whose figure keeps a region label warning draws with the notice; it bounds no row that starts from
+        it (D-118)."""
 
         fit = self._region_warned(row)
         return row if fit is None else replace(row, status="found_with_notice", remaining=fit)
@@ -575,18 +579,18 @@ class CircularLabelFitSearch:
         found: tuple[LabelFitRow, float],
         later_values: Sequence[float],
         values_for: Callable[[float], dict[str, LabelFitValue]],
-    ) -> tuple[LabelFitRow, float]:
+    ) -> tuple[LabelFitRow, float | None]:
         """A row whose first value keeps a region label warning walks on, as when it answered for the whole figure,
         to the first later value of its lever whose whole figure fits; without one up to the lever's limit, its first
-        value stays and draws with the notice (OV-3110, D-117). The value the row offers bounds the rows that start
-        from this one, as on dev: the value it walked on to, else its first value (D-118). At the deadline the first
-        value is the row, kept out of the cache so a later ask walks on."""
+        value stays and draws with the notice (OV-3110, D-117). Only a value whose whole figure fits bounds the rows
+        that start from this one, as on dev; a row offered with the notice bounds none (D-118). At the deadline the
+        first value is the row, kept out of the cache so a later ask walks on."""
 
         if self._region_warned(found[0]) is None:
             return found
         if self._first_values_only:
             self._unfinished = True
-            return found
+            return found[0], None
         try:
             for value in later_values:
                 values = values_for(value)
@@ -595,7 +599,7 @@ class CircularLabelFitSearch:
                     return row, value
         except _SearchStopped:
             self._unfinished = True
-        return found
+        return found[0], None
 
     def _compute(self, kind: LabelFitRowKind) -> tuple[LabelFitRow, float | None]:
         if kind in _SWITCH_VALUES:
@@ -765,7 +769,7 @@ class CircularLabelFitSearch:
 
     def _mildest_row(
         self, kind: LabelFitRowKind, lever: _Lever, *, offer_notice: bool
-    ) -> tuple[LabelFitRow, float] | None:
+    ) -> tuple[LabelFitRow, float | None] | None:
         """The mildest value every record's probe accepts, stepped stronger until verified.
 
         Probes accept a fit, or with ``offer_notice`` a layout without overlaps.

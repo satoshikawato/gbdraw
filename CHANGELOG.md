@@ -878,7 +878,9 @@ into the `[Unreleased]` list below.
   before, to the first value whose whole figure fits; if none fits up to the
   fix's limit, its first value is offered with a note such as "the figure is
   drawn with 1 region label overlap". The CLI lists such fixes after the fixes
-  that fit and tries every fix's first value before any fix goes on; the Web
+  that fit and tries every fix's first value before any fix goes on, so when
+  the 5 s limit ends the search, a fix that would fit with more time may show
+  its first value with its note; the Web
   app's **Choose a fix**
   keeps its order and first selects a fix that fits. A Linear "separate
   overlapping features" fix, or a fix offered when nothing was drawn, whose
