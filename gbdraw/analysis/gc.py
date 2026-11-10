@@ -14,26 +14,28 @@ from pandas import DataFrame
 from gbdraw.exceptions import ValidationError
 from Bio.Seq import MutableSeq, Seq
 
-from gbdraw.analysis.skew import counted_bases
+from gbdraw.io.record_sequences import known_base_counts
 
 
 def calculate_gc_percent(seq: Seq | MutableSeq | bytes) -> float:
     """Calculate GC percentage for a sequence, counted as the GC track counts: over its known bases (A, C, G, T),
-    0 when it has none (OV-2799). The bases are read a chunk at a time (:func:`counted_bases`)."""
+    0 when it has none (OV-2799). The counts come from the owner of record sequences
+    (:func:`gbdraw.io.record_sequences.known_base_counts`): a record read from a file reads no base again."""
 
     return gc_percent_of_sequences((seq,))
 
 
 def gc_percent_of_sequences(seqs: Iterable[Seq | MutableSeq | bytes]) -> float:
     """The GC percentage of several sequences taken together, counted as the GC track counts: over their known bases
-    (A, C, G, T), 0 when they have none (OV-2799). The bases are read a chunk at a time (:func:`counted_bases`)."""
+    (A, C, G, T), 0 when they have none (OV-2799). Each sequence's counts come from
+    :func:`gbdraw.io.record_sequences.known_base_counts`, as for one sequence."""
 
     gc_count = 0
     known = 0
     for seq in seqs:
-        for chunk in counted_bases(seq):
-            gc_count += chunk.count(b"G") + chunk.count(b"C")
-            known += len(chunk) - chunk.count(b"N")
+        a, c, g, t = (int(count) for count in known_base_counts(seq))
+        gc_count += g + c
+        known += a + c + g + t
     if not known:
         return 0.0
     return round(100.0 * gc_count / known, 2)

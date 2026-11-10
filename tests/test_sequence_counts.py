@@ -1,89 +1,185 @@
-"""The counted bytes and prefix counts read a sequence without per-base arrays."""
+"""One producer of base counts: the parse pass counts a record's bases, and every count of a span, a window or the
+letter check reads those counts (``gbdraw.io.record_sequences``), never a whole copy of the sequence.
+
+The oracle is the count of a whole copy, as gbdraw counted before: A, C, G and T in either case, U as T.
+"""
 
 from __future__ import annotations
 
+import gzip
 import tracemalloc
+from collections.abc import Iterator
+from pathlib import Path
 
 import numpy as np
 import pytest
 from Bio.Seq import MutableSeq, Seq
 
 from gbdraw.analysis import skew
-from gbdraw.analysis.skew import _prefix_counts_at, counted_bases
+from gbdraw.core import base_counts
+from gbdraw.exceptions import ValidationError
+from gbdraw.io import record_sequences
+from gbdraw.io.genome import load_query_fasta, read_sequence_file_records, require_nucleotide_records
+from gbdraw.io.record_sequences import known_base_counts, known_base_counts_at, sequence_view, two_turns
 
 
-@pytest.mark.parametrize(
-    "seq",
-    [Seq("acgtuACGTUnN-"), MutableSeq("acgtuACGTUnN-"), b"acgtuACGTUnN-"],
-)
-def test_counted_bases_read_case_ignored_and_u_as_t(seq: object) -> None:
-    # Every byte other than A, C, G, T and U is an unknown base and reads as N (OV-2799).
-    assert b"".join(counted_bases(seq)) == b"ACGTTACGTTNNN"
+def _oracle(seq: object, positions: object) -> list[list[int]]:
+    """The counts of A, C, G and T before each position, from a whole copy (positions clipped to it)."""
+
+    bases = bytes(seq).upper().replace(b"U", b"T")  # type: ignore[call-overload]
+    clipped = [max(0, min(int(p), len(bases))) for p in positions]  # type: ignore[attr-defined]
+    return [[bases[:p].count(letter) for p in clipped] for letter in (b"A", b"C", b"G", b"T")]
 
 
-def test_counted_bases_are_read_a_chunk_at_a_time(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(skew, "_COUNT_CHUNK", 4)
-    assert list(counted_bases(Seq("acgtuACGTUnN-"))) == [b"ACGT", b"TACG", b"TTNN", b"N"]
+def _fasta(path: Path, bases: bytes, width: int = 61, *, compress: bool = False) -> Path:
+    text = b">bases\n" + b"\n".join(bases[i : i + width] for i in range(0, len(bases), width)) + b"\n"
+    path.write_bytes(gzip.compress(text) if compress else text)
+    return path
 
 
-def test_prefix_counts_read_unsorted_duplicate_and_out_of_range_positions() -> None:
-    seq = b"ACGGTAGGCCGAT" * 7
-    positions = np.array([40, 0, 91, 7, 7, 91, 13, 3, 200, -5], dtype=np.int64)
-    for base in b"ACGTN":
-        expected = [seq[: max(0, min(int(p), len(seq)))].count(bytes([base])) for p in positions]
-        assert _prefix_counts_at([seq], (base,), positions)[0].tolist() == expected
+def _genbank(path: Path, bases: bytes) -> Path:
+    lines = [f"LOCUS       {'bases':<16}{len(bases):>12} bp    DNA     linear   UNK 01-JAN-1980", "ORIGIN"]
+    for start in range(0, len(bases), 60):
+        chunk = bases[start : start + 60].decode()
+        lines.append(f"{start + 1:>9} " + " ".join(chunk[i : i + 10] for i in range(0, len(chunk), 10)))
+    path.write_text("\n".join([*lines, "//", ""]))
+    return path
 
 
-def test_prefix_counts_agree_across_chunk_boundaries() -> None:
-    rng = np.random.default_rng(2)
-    seq = rng.choice(np.frombuffer(b"ACGT", dtype=np.uint8), size=3_000_000).tobytes()
-    edge = 1 << 20
-    positions = np.array([0, 10, 5_000, edge - 1, edge, edge + 1, 2 * edge, 2_900_000, 3_000_000, 2_000_000])
-    for base in b"ACGT":
-        expected = [seq[:p].count(bytes([base])) for p in positions.tolist()]
-        assert _prefix_counts_at([seq], (base,), positions)[0].tolist() == expected
+@pytest.fixture
+def small_rows(monkeypatch: pytest.MonkeyPatch) -> Iterator[int]:
+    """Count rows of 8 raw bytes, so a short sequence has many row edges."""
+
+    rows = 8
+    monkeypatch.setattr(base_counts, "ROW_BYTES", rows)
+    monkeypatch.setattr(base_counts, "_ROW_KEYS", np.arange(base_counts.SLICE_BYTES, dtype=np.uint32) // rows * 256)
+    monkeypatch.setattr(record_sequences, "ROW_BYTES", rows)
+    yield rows
 
 
-def test_prefix_counts_of_several_bases_come_from_one_pass_and_equal_their_own_counts() -> None:
-    rng = np.random.default_rng(4)
-    seq = rng.choice(np.frombuffer(b"ACGTN", dtype=np.uint8), size=2_200_000).tobytes()
-    positions = np.array([0, 9, 1 << 20, (1 << 20) + 1, 2_000_000, len(seq)])
-    bases = tuple(b"GCN")
-    counts = _prefix_counts_at([seq], bases, positions)
-    for row, base in enumerate(bases):
-        assert counts[row].tolist() == _prefix_counts_at([seq], (base,), positions)[0].tolist()
+def _random_bases(seed: int, size: int, letters: bytes = b"ACGTNacgtuURY-") -> bytes:
+    rng = np.random.default_rng(seed)
+    return np.frombuffer(letters, dtype=np.uint8)[rng.integers(0, len(letters), size=size)].tobytes()
 
 
-def test_prefix_counts_of_a_base_that_fills_a_chunk_or_is_absent_from_it() -> None:
-    # A long N run fills whole chunks (counted from the other bases' offsets) and has no G (counted as none).
-    rng = np.random.default_rng(5)
-    edge = 1 << 20
-    known = rng.choice(np.frombuffer(b"ACT", dtype=np.uint8), size=edge // 2).tobytes()
-    seq = known + b"N" * (2 * edge) + b"ACGTN" * 1000 + known
-    positions = np.array([0, 5, edge // 2, edge - 3, edge, edge + 7, 2 * edge + 11, 2 * edge + edge // 2 + 2_500, len(seq)])
-    for base in b"NGA":
-        expected = [seq[:p].count(bytes([base])) for p in positions.tolist()]
-        assert _prefix_counts_at([seq], (base,), positions)[0].tolist() == expected
+@pytest.mark.parametrize("held", ["fasta", "fasta.gz", "genbank", "Seq", "MutableSeq", "bytes"])
+def test_counts_of_any_span_equal_a_whole_copy_s_count(held: str, tmp_path: Path, small_rows: int) -> None:
+    bases = _random_bases(7, 3_000, b"ACGTNacgtuURY") if held == "genbank" else _random_bases(7, 3_000)
+    if held.startswith("fasta"):
+        (record,) = read_sequence_file_records(str(_fasta(tmp_path / f"b.{held}", bases, compress=held.endswith("gz"))), "fasta")
+        seq: object = record.seq
+        bases = bytes(record.seq)
+    elif held == "genbank":
+        (record,) = read_sequence_file_records(str(_genbank(tmp_path / "b.gb", bases)), "genbank")
+        seq = record.seq
+        bases = bytes(record.seq)
+    else:
+        seq = {"Seq": Seq, "MutableSeq": MutableSeq, "bytes": bytes}[held](bases)
+    positions = np.array([40, 0, 2_999, 7, 7, 8, 9, 16, 3_000, 3_200, -5, 1_234], dtype=np.int64)
+    assert known_base_counts_at(seq, positions).tolist() == _oracle(bases, positions)
+    assert known_base_counts(seq).tolist() == [row[0] for row in _oracle(bases, [len(bases)])]
+    if not isinstance(seq, Seq):
+        return
+    for start, stop in ((0, 3_000), (5, 13), (8, 16), (1_001, 2_500), (17, 17)):
+        for strand in (1, -1):
+            view = sequence_view(seq, start, stop, strand=strand)  # a crop, reversed or not
+            inside = np.array([0, 1, len(view) // 2, max(0, len(view) - 1), len(view)], dtype=np.int64)
+            assert known_base_counts_at(view, inside).tolist() == _oracle(bytes(view), inside), (start, stop, strand)
+    across = two_turns(sequence_view(seq, 2_000, 3_000, strand=-1))  # reversed and across the origin
+    inside = np.arange(0, len(across) + 1, 37, dtype=np.int64)
+    assert known_base_counts_at(across, inside).tolist() == _oracle(bytes(across), inside)
 
 
-def test_prefix_counts_read_segments_as_one_sequence_across_chunk_boundaries() -> None:
-    rng = np.random.default_rng(3)
-    seq = rng.choice(np.frombuffer(b"ACGT", dtype=np.uint8), size=2_500_000).tobytes()
-    edge = 1 << 20
-    segments = [seq[:7], seq[7 : edge + 3], b"", seq[edge + 3 :]]
-    positions = np.array([0, 6, 7, 8, edge, edge + 3, edge + 4, 2 * edge + 5, len(seq), len(seq) + 9, -1])
-    for base in b"ACGT":
-        expected = [seq[: max(0, p)].count(bytes([base])) for p in positions.tolist()]
-        assert _prefix_counts_at(segments, (base,), positions)[0].tolist() == expected
+def test_window_counts_at_row_edges_equal_a_copy_at_any_row_size(tmp_path: Path, small_rows: int) -> None:
+    bases = _random_bases(3, 5_000)
+    (record,) = read_sequence_file_records(str(_fasta(tmp_path / "w.fasta", bases, width=13)), "fasta")
+    segments = [sequence_view(record.seq, 4_000, 5_000, strand=-1), Seq(b""), record.seq[:7], sequence_view(record.seq, 7, 4_000)]
+    joined = b"".join(bytes(segment) for segment in segments)
+    positions = np.array([0, 6, 7, 8, 999, 1_000, 1_001, 1_007, 1_008, 4_999, 5_000, 5_009, -1], dtype=np.int64)
+    assert skew._known_counts_at(segments, positions).tolist() == _oracle(joined, positions)
 
 
-def test_prefix_counts_need_no_array_as_long_as_the_sequence() -> None:
-    rng = np.random.default_rng(1)
-    seq = rng.choice(np.frombuffer(b"ACGT", dtype=np.uint8), size=8_000_000).tobytes()
-    positions = np.arange(0, len(seq), 50_000, dtype=np.int64)
+def test_counts_of_bases_in_memory_need_no_array_as_long_as_the_sequence() -> None:
+    bases = _random_bases(1, 8_000_000, b"ACGT")
+    positions = np.arange(0, len(bases), 50_000, dtype=np.int64)
     tracemalloc.start()
-    counts = _prefix_counts_at([seq], (ord("G"),), positions)[0]
+    counts = known_base_counts_at(Seq(bases), positions)
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     assert peak < 6 << 20
-    assert counts[3] == seq[:150_000].count(b"G")
+    assert counts[2, 3] == bases[:150_000].count(b"G")
+
+
+def test_a_record_read_from_a_file_is_counted_by_its_parse_pass_and_not_read_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bases = _random_bases(5, 300_000, b"ACGTN")
+    (record,) = read_sequence_file_records(str(_fasta(tmp_path / "r.fasta", bases)), "fasta")
+    read: list[int] = []
+    real = record_sequences._SequenceFile.read_at
+    monkeypatch.setattr(record_sequences._SequenceFile, "read_at",
+                        lambda self, offset, size: read.append(size) or real(self, offset, size))
+    assert known_base_counts(record.seq).tolist() == [row[0] for row in _oracle(bases, [len(bases)])]
+    assert read == []  # the whole record's counts are its rows' counts
+    positions = np.array([10_000, 150_001, 299_999], dtype=np.int64)
+    assert known_base_counts_at(record.seq, positions).tolist() == _oracle(bases, positions)
+    assert len(read) == 3 and max(read) <= base_counts.ROW_BYTES  # one edge row each
+
+
+# The letter check: the same refusals, with the same letter, from the counts of the parse pass.
+
+
+@pytest.mark.parametrize(
+    ("text", "letter"),
+    [
+        (b"acgtnACGTN" * 500 + b"U", None),
+        (b"ACGTRYSWKMBDHVN" * 600 + b"acgturyswkmbdhvn", None),
+        (b"ACGT" * 3_000 + b"-ACGT", "-"),
+        (b"ACGT" * 3_000 + b"x", "x"),
+        (b"ACGT" * 3_000 + b"E", "E"),
+        (b"ACGT" * 3_000 + b"1", "1"),
+        (b"ACGT" * 3_000 + b"\xc3\xa9", "\xe9"),  # a letter of two bytes is one letter (was an uncaught decode error)
+        (b"*ACGT", "*"),
+    ],
+)
+def test_the_letter_check_refuses_the_first_letter_outside_the_nucleotide_codes(
+    text: bytes, letter: str | None, tmp_path: Path, small_rows: int
+) -> None:
+    path = _fasta(tmp_path / "q.fasta", text, width=70)
+    records = read_sequence_file_records(str(path), "fasta")
+    if letter is None:
+        assert require_nucleotide_records(records, str(path)) == records
+        assert load_query_fasta(str(path))[0][1] == "nucleotide"
+        return
+    with pytest.raises(ValidationError) as refused:
+        require_nucleotide_records(records, str(path))
+    assert refused.value.diagnostic["reason"] == "NOT_NUCLEOTIDE"
+    assert refused.value.diagnostic["codepoint"] == ord(letter)
+    assert f"holds {letter!r}, which is not a nucleotide code" in str(refused.value)
+    if letter.isascii() and (letter.isalpha() or letter == "*"):
+        assert load_query_fasta(str(path))[0][1] == "protein"
+    else:
+        with pytest.raises(ValidationError) as query:
+            load_query_fasta(str(path))
+        assert query.value.diagnostic["reason"] == "NOT_SEQUENCE"
+        assert query.value.diagnostic["codepoint"] == ord(letter)
+
+
+def test_the_letter_check_of_bases_in_memory_reads_the_same_rule() -> None:
+    from gbdraw.io.genome import _first_letter_outside
+
+    assert _first_letter_outside(Seq("ACGTN" * 5_000 + "acgu"), base_counts.NUCLEOTIDE) is None
+    assert _first_letter_outside(Seq("ACGTN" * 5_000 + "QZ"), base_counts.NUCLEOTIDE) == "Q"
+    assert _first_letter_outside(Seq("ACGTN" * 5_000 + "QZ-"), base_counts.PROTEIN) == "-"
+    assert _first_letter_outside(MutableSeq("ACGTN" * 5_000 + "QZ-"), base_counts.PROTEIN) == "-"
+
+
+def test_every_byte_counts_as_the_counting_rule_says() -> None:
+    counts = base_counts.row_counts(bytes(range(256)))[0]
+    assert counts[base_counts.KNOWN].tolist() == [2, 2, 2, 4]
+    assert counts[base_counts.BASES] == 256
+    assert counts[base_counts.BEYOND_NUCLEOTIDE] == 256 - len(base_counts.NUCLEOTIDE_CODES)
+    assert counts[base_counts.BEYOND_PROTEIN] == 256 - len(base_counts.PROTEIN_CODES)
+    every = np.frombuffer(bytes(range(256)) * 3, dtype=np.uint8)
+    positions = np.arange(0, len(every) + 1, dtype=np.intp)
+    assert base_counts.known_prefix_counts(every.tobytes(), positions).tolist() == _oracle(every.tobytes(), positions)
