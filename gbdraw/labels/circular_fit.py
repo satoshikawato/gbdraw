@@ -90,8 +90,6 @@ OFFSET_STEP = 0.025
 OFFSET_LIMIT = 2.0
 FONT_STEP_PT = 0.5
 TIGHTER_ROW_GRID_PX = (2.5, 2.0, 1.5, 1.0, 0.5, 0.25, 0.1)
-# How many values past its first a label row tries when the first one's figure keeps a region label warning (OV-3110).
-REGION_CLEAR_STEPS = 2
 
 # The dialog order of the rows; a report has the rows that apply to its records.
 ROW_KINDS: tuple[LabelFitRowKind, ...] = (
@@ -468,10 +466,10 @@ class CircularLabelFitSearch:
             tuple[tuple[str, LabelFitValue], ...], LabelFitVerification
         ] = {}
         self._rows: dict[LabelFitRowKind, tuple[LabelFitRow, float | None]] = {}
-        # A row found before the deadline that a later ask may make milder, or whose next values (OV-3110) are still
-        # to try, is not kept in ``_rows``.
+        # A row found before the deadline that a later ask may make milder, or whose walk past a region label warning
+        # (OV-3110) is not finished, is not kept in ``_rows``.
         self._unfinished = False
-        # ``rows`` takes every row's first value before any row tries its next values (D-110).
+        # ``rows`` takes every row's first value before any row walks on past it (D-110).
         self._first_values_only = False
         self._deadline: float | None = None
 
@@ -498,8 +496,9 @@ class CircularLabelFitSearch:
         Rows that leave crossings, labels over the definition text, or a
         region label warning come after the others (LP-D57, OV-3105). Every
         row's first value comes first; then the rows whose figure keeps a
-        region label warning try their next values while the deadline allows
-        (OV-3110, D-110), so no row waits for another row's next values.
+        region label warning walk on to a value whose whole figure fits while
+        the deadline allows (OV-3110, D-110), so no row waits for another
+        row's walk.
         """
 
         order = _SEARCH_ORDER if self._outer_only else _SWITCHES_FIRST_ORDER
@@ -577,9 +576,11 @@ class CircularLabelFitSearch:
         later_values: Sequence[float],
         values_for: Callable[[float], dict[str, LabelFitValue]],
     ) -> tuple[LabelFitRow, float]:
-        """A row whose first value keeps a region label warning takes the first of the next ``REGION_CLEAR_STEPS``
-        values of its lever whose whole figure fits; otherwise its first value stays (OV-3110). At the deadline the
-        first value is the row, kept out of the cache so a later ask tries on."""
+        """A row whose first value keeps a region label warning walks on, as when it answered for the whole figure,
+        to the first later value of its lever whose whole figure fits; without one up to the lever's limit, its first
+        value stays and draws with the notice (OV-3110, D-117). Either way the first value, the mildest that clears the
+        labels the row moves, bounds the rows that start from this one. At the deadline the first value is the row,
+        kept out of the cache so a later ask walks on."""
 
         if self._region_warned(found[0]) is None:
             return found
@@ -587,11 +588,11 @@ class CircularLabelFitSearch:
             self._unfinished = True
             return found
         try:
-            for value in later_values[:REGION_CLEAR_STEPS]:
+            for value in later_values:
                 values = values_for(value)
                 row = verified_row(kind, values, self._verify(kind, values), offer_notice=False)
                 if row is not None and self._region_warned(row) is None:
-                    return row, value
+                    return row, found[1]
         except _SearchStopped:
             self._unfinished = True
         return found

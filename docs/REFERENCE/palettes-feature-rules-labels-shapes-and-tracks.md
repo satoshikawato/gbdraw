@@ -420,9 +420,9 @@ the others; running again with it draws the figure with the warning. The label
 rows answer for the labels they move: they leave out the region label warnings
 each record of the figure already has, up to as many of each kind, and a value
 that adds a region label warning to a record does not fit. When the figure of
-a row's first value keeps a region label warning, the next two values of that
-row are tried, and the first whose whole figure fits is the row; otherwise the
-first value is offered the same way as a row that leaves crossings and names
+a row's first value keeps a region label warning, the row goes on to its next
+values, up to its limit, and the first whose whole figure fits is the row;
+otherwise the first value is offered the same way as a row that leaves crossings and names
 the region label warnings the figure is drawn with. The CLI lists such a row
 after the rows that fit; the Web app's **Choose a fix** keeps the report's
 order and first selects a row that fits, when there is one. With several

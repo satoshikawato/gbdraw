@@ -874,10 +874,10 @@ into the `[Unreleased]` list below.
   fixes now answer only for the labels they move: they leave out the region
   label warnings each record already had, and a value that adds one still
   does not fit. When the first value that clears those labels keeps the region
-  warning, the next two values of the fix are tried and the first whose whole
-  figure fits is offered; otherwise the fix is offered with a note such as
-  "the figure is drawn with 1 region label overlap" (about 11 redraws in place of
-  120). The CLI lists such fixes after the fixes that fit and tries every
+  warning, the fix goes on to its next values and the first whose whole
+  figure fits is offered; if none fits up to the fix's limit, its first value
+  is offered with a note such as "the figure is drawn with 1 region label
+  overlap". The CLI lists such fixes after the fixes that fit and tries every
   fix's first value before any next value; the Web app's **Choose a fix**
   keeps its order and first selects a fix that fits. A Linear "separate
   overlapping features" fix, or a fix offered when nothing was drawn, whose
