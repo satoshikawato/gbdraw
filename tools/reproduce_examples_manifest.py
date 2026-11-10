@@ -11,7 +11,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
 
 
 FigureGroup = Literal["docs", "palettes", "composites", "readme"]
-BlastTool = Literal["blastn", "tblastx"]
+BlastTool = Literal["tblastx"]
 CompositeKind = Literal["grid", "contact_sheet", "social_preview"]
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -51,25 +51,6 @@ UNREFERENCED_FIGURE_RETENTION: dict[str, str] = {
     ),
     "examples/NC_001879_color.svg": "Archived chloroplast color-table recipe retained for reproducibility.",
     "examples/NC_010162_edelweiss.svg": "Source panel used by the published social-preview composite.",
-}
-
-
-# Figures whose source records are in neither the repository nor the test-data Release
-# (tools/test_data.py). `reproduce_examples.py --check` names each one as not checked, and
-# fails once one of them renders, so a figure leaves this list when its inputs arrive.
-FIGURES_WITHOUT_INPUTS: dict[str, str] = {
-    "Escherichia_Shigella_pair": (
-        "Shigella_dysenteriae.gbk is not in the repository or the test-data Release, and its "
-        "comparison needs blastn (BLAST+)."
-    ),
-    "Escherichia_Shigella_multi": (
-        "Shigella_dysenteriae.gbk, Shigella_flexneri.gbk and Shigella_sonnei.gbk are not in the "
-        "repository or the test-data Release, and its comparisons need blastn (BLAST+)."
-    ),
-    "M16-5_fugaku": "M16-5.gb is not in the repository or the test-data Release.",
-    "Pandoravirus_salinus_forest": (
-        "Pandoravirus_salinus.gb is not in the repository or the test-data Release."
-    ),
 }
 
 
@@ -475,22 +456,18 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
         figure_id="Escherichia_Shigella_pair",
         output_path="examples/Escherichia_Shigella_pair.svg",
         groups=("docs",),
-        required_inputs=("Escherichia_coli.gbk", "Shigella_dysenteriae.gbk"),
-        preparations=(
-            _fasta_prep("Escherichia_coli.fasta", "Escherichia_coli.gbk"),
-            _fasta_prep("Shigella_dysenteriae.fasta", "Shigella_dysenteriae.gbk"),
-            _blast_prep(
-                "Escherichia_coli-Shigella_dysenteriae.blastn.out",
-                "blastn",
-                "Escherichia_coli.fasta",
-                "Shigella_dysenteriae.fasta",
-            ),
+        # The blastn results of both Shigella figures are inputs, made from the GenBank records
+        # with `blastn -query <first>.fasta -subject <second>.fasta -outfmt 7` (BLAST+ 2.17.0).
+        required_inputs=(
+            "Escherichia_coli.gbk",
+            "Shigella_dysenteriae.gbk",
+            "Escherichia_coli-Shigella_dysenteriae.blastn.out",
         ),
         recipe=CliRecipe(
             subcommand="linear",
             gbk_files=("Escherichia_coli.gbk", "Shigella_dysenteriae.gbk"),
             blast_files=("Escherichia_coli-Shigella_dysenteriae.blastn.out",),
-            extra_args=("--align_center", "--separate_strands"),
+            extra_args=("--align_center", "--separate_strands", "--evalue", "1e-99", "--bitscore", "5000"),
         ),
         description="Tutorial 2 two-genome comparison example.",
     )
@@ -503,30 +480,9 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
             "Shigella_dysenteriae.gbk",
             "Shigella_flexneri.gbk",
             "Shigella_sonnei.gbk",
-        ),
-        preparations=(
-            _fasta_prep("Escherichia_coli.fasta", "Escherichia_coli.gbk"),
-            _fasta_prep("Shigella_dysenteriae.fasta", "Shigella_dysenteriae.gbk"),
-            _fasta_prep("Shigella_flexneri.fasta", "Shigella_flexneri.gbk"),
-            _fasta_prep("Shigella_sonnei.fasta", "Shigella_sonnei.gbk"),
-            _blast_prep(
-                "Escherichia_coli-Shigella_dysenteriae.blastn.out",
-                "blastn",
-                "Escherichia_coli.fasta",
-                "Shigella_dysenteriae.fasta",
-            ),
-            _blast_prep(
-                "Shigella_dysenteriae-Shigella_flexneri.blastn.out",
-                "blastn",
-                "Shigella_dysenteriae.fasta",
-                "Shigella_flexneri.fasta",
-            ),
-            _blast_prep(
-                "Shigella_flexneri-Shigella_sonnei.blastn.out",
-                "blastn",
-                "Shigella_flexneri.fasta",
-                "Shigella_sonnei.fasta",
-            ),
+            "Escherichia_coli-Shigella_dysenteriae.blastn.out",
+            "Shigella_dysenteriae-Shigella_flexneri.blastn.out",
+            "Shigella_flexneri-Shigella_sonnei.blastn.out",
         ),
         recipe=CliRecipe(
             subcommand="linear",
@@ -2043,7 +1999,6 @@ __all__ = [
     "CompositePanel",
     "CompositeRecipe",
     "FigureSpec",
-    "FIGURES_WITHOUT_INPUTS",
     "FastaPreparation",
     "FileArgument",
     "MANUALLY_MANAGED_FIGURES",

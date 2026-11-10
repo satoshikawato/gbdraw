@@ -24,7 +24,6 @@ from tools.reproduce_examples import (
     render_figures,
 )
 from tools.reproduce_examples_manifest import (
-    FIGURES_WITHOUT_INPUTS,
     MANUALLY_MANAGED_FIGURES,
     UNREFERENCED_FIGURE_RETENTION,
     CliRecipe,
@@ -671,9 +670,7 @@ def test_a_cli_png_records_what_cairosvg_draws_not_the_written_svg(tmp_path: Pat
     assert outputs["plain"][1] != outputs["marked"][1]
 
 
-def test_check_names_figures_without_inputs_and_fails_on_any_other_missing_input(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_check_fails_on_a_missing_input(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     figures = dict(_figure_specs())
     figures["missing_figure"] = FigureSpec(
         figure_id="missing_figure",
@@ -682,33 +679,25 @@ def test_check_names_figures_without_inputs_and_fails_on_any_other_missing_input
         required_inputs=("definitely_missing.gb",),
         recipe=CliRecipe(subcommand="linear", gbk_files=("definitely_missing.gb",)),
     )
-    declared = next(iter(FIGURES_WITHOUT_INPUTS))
-
-    ok, reproducer = _check_run(figures, [declared], tmp_path)
-    reproducer.close()
-    out = capsys.readouterr().out
-    assert ok, out
-    assert f"  {declared}: {FIGURES_WITHOUT_INPUTS[declared]}" in out
-
-    ok, reproducer = _check_run(figures, [declared, "missing_figure"], tmp_path)
+    ok, reproducer = _check_run(figures, ["missing_figure"], tmp_path)
     reproducer.close()
     out = capsys.readouterr().out
     assert not ok
     assert "  missing_figure: not rendered; missing inputs: definitely_missing.gb" in out
 
 
-def test_figures_without_inputs_lack_only_inputs_outside_the_repository() -> None:
+def test_every_figure_finds_its_inputs_in_the_repository_or_the_test_data_release() -> None:
+    """pytest places the test-data Release (tools/test_data.py), so every input a recipe reads,
+    BLAST results included, resolves without running BLAST+."""
     figures = _figure_specs()
-    assert set(FIGURES_WITHOUT_INPUTS) <= set(figures)
-    assert all(reason.strip() for reason in FIGURES_WITHOUT_INPUTS.values())
     reproducer = Reproducer(
         project_root=PROJECT_ROOT, output_root=PROJECT_ROOT / "_reproduced", figures=figures
     )
     try:
-        for figure_id in FIGURES_WITHOUT_INPUTS:
-            assert reproducer.inspect_figure(figure_id) is False, figure_id
+        unresolved = [figure_id for figure_id in figures if not reproducer.inspect_figure(figure_id)]
     finally:
         reproducer.close()
+    assert unresolved == [], reproducer.report_payload()["missing_inputs"]
 
 
 def test_a_second_render_into_the_same_root_replaces_the_outputs(tmp_path: Path) -> None:
