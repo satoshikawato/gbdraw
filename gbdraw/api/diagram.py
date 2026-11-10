@@ -108,6 +108,7 @@ from gbdraw.api.options import (
 from gbdraw.auto_sizes import (
     depth_sliding_window,
     determine_length_parameter,
+    feature_density_windows,
     record_sliding_windows,
 )
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
@@ -3225,15 +3226,18 @@ def assemble_circular_diagram_from_records(
         parsed_circular_track_slots, inputs, implicit=implicit_track_stack, show_ticks=bool(cfg.objects.scale.show),
         show_depth=show_depth, depth_track_count=depth_track_count(record_depth_tracks), show_gc=show_gc, show_skew=show_skew,
     )
-    # The records share one Legend, so their feature density tracks share one window (the longest record's) and
-    # one scale.
-    density_window = _resolve_circular_window_step(
-        max(records, key=lambda record: len(record.seq)), cfg, window=inputs.window, step=inputs.step
-    )
+    # The records share one Legend, so their feature density tracks share one window and one scale.
+    density_windows = [
+        (
+            int(inputs.window) if inputs.window is not None else auto_window,
+            int(inputs.step) if inputs.step is not None else auto_step,
+        )
+        for auto_window, auto_step in feature_density_windows([len(record.seq) for record in records], cfg)
+    ]
     record_feature_density = feature_density_record_layers(
         records,
         inputs.feature_density_tracks,
-        windows=[density_window] * len(records),
+        windows=density_windows,
         transforms=bind_record_transforms(records, _record_transforms),
     )
     record_scales = _resolve_multi_record_scales(

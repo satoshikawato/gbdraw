@@ -70,12 +70,12 @@ def test_auto_value_vectors(cfg, case: dict[str, Any]) -> None:
     for setting, expected in case["expected"].items():
         assert values[setting] == pytest.approx(expected, abs=1e-9), setting
     if "recordValues" in case:
-        records = record_auto_values(_extent(case), cfg)
-        assert [dict(record) for record in records] == case["recordValues"]
         # A setting is the drawing's Auto value only when every record takes it.
         for setting in case["recordValues"][0]:
             shared = {record[setting] for record in case["recordValues"]}
             assert values.get(setting) == (shared.pop() if len(shared) == 1 else None), setting
+        records = record_auto_values(_extent(case), cfg)
+        assert [dict(record) for record in records] == case["recordValues"]
 
 
 @pytest.mark.parametrize("case", VECTORS["adaptations"], ids=lambda case: case["name"])
@@ -471,6 +471,46 @@ def test_a_circular_record_compares_its_own_auto_window_and_scale_interval(tmp_p
     assert {item.setting: (item.source_auto, item.target_auto) for item in region.adaptation.reset} == {
         "window": (1_000, 400), "step": (100, 40), "objects.scale.interval": (5_000, 1_000),
     }
+
+
+def _gene_density() -> tuple[Any, ...]:
+    from gbdraw.analysis.feature_density import FeatureDensityTrack
+    from gbdraw.features.query import FeatureQuery
+
+    return (FeatureDensityTrack("d", FeatureQuery("gene")),)
+
+
+def test_a_circular_region_compares_the_feature_density_window_of_the_canvas(tmp_path: Path) -> None:
+    # The records of one Circular canvas share one feature density window, the longest record's (1,000 bp); the
+    # whole 5 kb record drawn alone takes 500 bp, so a hand-set window and step the density track reads return to
+    # Auto, and the reset names the density track's values.
+    source = _circular_canvas_of_50_and_5_kb(tmp_path, window=300, step=30, feature_density_tracks=_gene_density())
+    region = derive_region_request(source, [RegionSelection("pair:2", 1, 5_000)])
+    assert region.mode == "circular"
+    assert {item.setting: (item.source_auto, item.target_auto) for item in region.adaptation.reset} == {
+        "window": (1_000, 500), "step": (100, 50),
+    }
+    # A track with its own window and step reads neither: the hand-set values stay.
+    from gbdraw.analysis.feature_density import FeatureDensityTrack
+    from gbdraw.features.query import FeatureQuery
+
+    own = (FeatureDensityTrack("d", FeatureQuery("gene"), window=2_000, step=200),)
+    source = _circular_canvas_of_50_and_5_kb(tmp_path, window=300, step=30, feature_density_tracks=own)
+    assert derive_region_request(source, [RegionSelection("pair:2", 1, 5_000)]).adaptation.reset == ()
+
+
+def test_a_region_of_a_circular_batch_compares_each_diagrams_own_density_window(tmp_path: Path) -> None:
+    # In separate diagrams each record draws its feature density track at its own length (500 bp for 5 kb): the
+    # hand-set window and step stay.
+    from gbdraw.api.requests import CircularBatchOutputPolicy, CircularBatchRequest
+
+    canvas = _circular_canvas_of_50_and_5_kb(tmp_path, window=300, step=30, feature_density_tracks=_gene_density())
+    batch = CircularBatchRequest(
+        records=canvas.records, options=canvas.options, output_policy=CircularBatchOutputPolicy(output_prefix=str(tmp_path / "o"))
+    )
+    region = derive_region_request(batch, [RegionSelection("pair:2", 1, 5_000)])
+    assert region.adaptation.reset == ()
+    assert (region.request.options.window, region.request.options.step) == (300, 30)
 
 
 def test_a_linear_region_of_circular_records_compares_each_records_own_auto_window(tmp_path: Path) -> None:

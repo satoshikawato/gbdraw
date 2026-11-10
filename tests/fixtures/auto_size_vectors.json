@@ -163,6 +163,20 @@
       ]
     },
     {
+      "name": "Linear drawing of a 50 kb and a 5 kb record: the records share the longest record's windows",
+      "mode": "linear",
+      "recordLengths": [50000, 5000],
+      "expected": {
+        "window": 1000,
+        "step": 100,
+        "objects.scale.interval": 10000
+      },
+      "recordValues": [
+        {"window": 1000, "step": 100, "depth_window": 100, "depth_step": 10, "objects.scale.interval": 10000},
+        {"window": 1000, "step": 100, "depth_window": 100, "depth_step": 10, "objects.scale.interval": 10000}
+      ]
+    },
+    {
       "name": "Circular 75 kb boundary: 74,999 bp is short",
       "mode": "circular",
       "recordLengths": [74999],

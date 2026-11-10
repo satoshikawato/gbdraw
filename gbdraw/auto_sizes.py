@@ -108,6 +108,8 @@ _CIRCULAR_SLOT_RENDERERS = {
 _WINDOW_SETTINGS = ("window", "step", "depth_window", "depth_step")
 # The settings whose Auto value each record of a drawing takes for itself (``record_auto_values``).
 _RECORD_SETTINGS = (*_WINDOW_SETTINGS, "objects.scale.interval")
+# The Auto value a feature density track takes from the window and step settings, keyed in ``record_auto_values``.
+_DENSITY_WINDOW_KEYS = {"window": "feature_density.window", "step": "feature_density.step"}
 # The settings whose Auto value follows the drawn extent but is no length pair.
 _MODE_EXTENT_SETTINGS: Mapping[DiagramMode, tuple[str, ...]] = {
     "circular": (
@@ -209,6 +211,12 @@ def depth_sliding_window(window: int, step: int) -> tuple[int, int]:
     return max(_DEPTH_MIN_WINDOW, int(window) // _DEPTH_WINDOW_DIVISOR), max(1, int(step) // _DEPTH_WINDOW_DIVISOR)
 
 
+def _auto_windows(record_lengths: Sequence[int], cfg: GbdrawConfig, *, shared: bool) -> tuple[tuple[int, int], ...]:
+    """Each record's Auto (window, step): the longest record's for every record when ``shared``, else its own."""
+    lengths = (max(record_lengths),) * len(record_lengths) if shared else tuple(record_lengths)
+    return tuple(sliding_window(length, cfg) for length in lengths)
+
+
 def record_sliding_windows(
     mode: DiagramMode, record_lengths: Sequence[int], cfg: GbdrawConfig
 ) -> tuple[tuple[int, int], ...]:
@@ -218,8 +226,19 @@ def record_sliding_windows(
     drawing share one axis, so each takes the longest record's. The one reading of this rule: the renderer, the
     Auto values of a drawing (``record_auto_values``) and the region derivation (``adapt_explicit_settings``).
     """
-    lengths = tuple(record_lengths) if mode == "circular" else (max(record_lengths),) * len(record_lengths)
-    return tuple(sliding_window(length, cfg) for length in lengths)
+    return _auto_windows(record_lengths, cfg, shared=mode == "linear")
+
+
+def feature_density_windows(
+    record_lengths: Sequence[int], cfg: GbdrawConfig, *, separate: bool = False
+) -> tuple[tuple[int, int], ...]:
+    """Return the Auto (window, step) each record's feature density tracks draw with when a track sets none.
+
+    The records drawn together, in either mode, share one window, the longest record's, so a track has one window
+    and one Legend scale; records drawn as diagrams of their own (``separate``, a Circular batch) each take their
+    own. The one reading of this rule: the renderer and the Auto values of a drawing (``record_auto_values``).
+    """
+    return _auto_windows(record_lengths, cfg, shared=not separate)
 
 
 def circular_tick_intervals(length: int) -> tuple[int, int]:
@@ -393,18 +412,25 @@ class DrawnExtent:
 
     ``wrap_row_length`` is a wrapped drawing's row length: sizes and ticks follow what one row shows, the
     windows the whole record. ``depth_rows`` are the depth rows a Circular drawing draws, in stack order.
+    ``density_window_settings`` names the settings (``window``, ``step``) that a feature density track of the
+    drawing takes, being one that sets none of its own. ``separate_records``: each record is a diagram of its own
+    (a Circular batch), so its feature density tracks take its own window.
     """
 
     mode: DiagramMode
     record_lengths: tuple[int, ...]
     wrap_row_length: int | None = None
     depth_rows: tuple[DrawnDepthRow, ...] = ()
+    density_window_settings: tuple[str, ...] = ()
+    separate_records: bool = False
 
     def __post_init__(self) -> None:
         if self.mode not in _MODE_LENGTH_PAIRS:
             raise ValueError(f"Unknown diagram mode: {self.mode!r}")
         if not self.record_lengths or min(self.record_lengths) < 1:
             raise ValueError("A drawn extent needs at least one record of length >= 1")
+        if not set(self.density_window_settings) <= set(_DENSITY_WINDOW_KEYS):
+            raise ValueError(f"Unknown density window settings: {self.density_window_settings!r}")
 
     def size_class(self, cfg: GbdrawConfig) -> SizeClass:
         """Return the drawing's size class: that of its longest record."""
@@ -423,17 +449,25 @@ def record_auto_values(extent: DrawnExtent, cfg: GbdrawConfig) -> tuple[Mapping[
     with, in drawing order.
 
     A Circular record takes them at its own length (``record_sliding_windows``, ``circular_tick_intervals``); the
-    records of a Linear drawing share the longest record's windows and the drawn axis's interval.
+    records of a Linear drawing share the longest record's windows and the drawn axis's interval. Where a feature
+    density track takes the drawing's window or step (``extent.density_window_settings``), the record also lists
+    the Auto value that track draws with (``feature_density_windows``), keyed ``feature_density.window`` and
+    ``feature_density.step``.
     """
     records: list[Mapping[str, int]] = []
     windows = record_sliding_windows(extent.mode, extent.record_lengths, cfg)
-    for length, (window, step) in zip(extent.record_lengths, windows, strict=True):
+    density = feature_density_windows(extent.record_lengths, cfg, separate=extent.separate_records)
+    for length, (window, step), density_values in zip(extent.record_lengths, windows, density, strict=True):
         interval = (
             circular_tick_intervals(length)[0]
             if extent.mode == "circular"
             else linear_tick_interval(extent.drawn_axis_length)
         )
-        records.append(dict(zip(_RECORD_SETTINGS, (window, step, *depth_sliding_window(window, step), interval))))
+        record = dict(zip(_RECORD_SETTINGS, (window, step, *depth_sliding_window(window, step), interval)))
+        for setting, value in zip(("window", "step"), density_values):
+            if setting in extent.density_window_settings:
+                record[_DENSITY_WINDOW_KEYS[setting]] = value
+        records.append(record)
     return tuple(records)
 
 
@@ -596,17 +630,36 @@ def adapt_explicit_settings(
     # The source records the target's records come from: the values a reset names.
     from_source = tuple(record for _, records in compared for record in records)
 
+    def record_keys(setting: str) -> tuple[str, ...]:
+        """The per-record Auto values a setting sets: its own and, for the window and step, a density track's."""
+        return (setting, _DENSITY_WINDOW_KEYS[setting]) if setting in _DENSITY_WINDOW_KEYS else (setting,)
+
+    def same_record_auto(key: str) -> bool:
+        # A density key is compared where both records draw such a track.
+        return all(
+            target_record[key] == source_record[key]
+            for target_record, records in compared
+            for source_record in records
+            if key in target_record and key in source_record
+        )
+
+    def changed_key(setting: str) -> str | None:
+        return next((key for key in record_keys(setting) if not same_record_auto(key)), None)
+
     def same_auto(setting: str, source_values: Mapping[str, AutoValue], target_values: Mapping[str, AutoValue]) -> bool:
         if setting in _RECORD_SETTINGS:
-            return all(
-                target_record[setting] == source_record[setting]
-                for target_record, records in compared
-                for source_record in records
-            )
+            return changed_key(setting) is None
         return source_values.get(setting) == target_values.get(setting)
 
-    def auto_of(setting: str, values: Mapping[str, AutoValue], records: Sequence[Mapping[str, int]]) -> AutoValue | None:
-        return _shared_record_value(records, setting) if setting in _RECORD_SETTINGS else values.get(setting)
+    def autos_of(setting: str) -> tuple[AutoValue | None, AutoValue | None]:
+        """The source and target Auto values a reset names: those of the per-record value that changed."""
+        if setting not in _RECORD_SETTINGS:
+            return source_auto.get(setting), target_auto.get(setting)
+        key = changed_key(setting) or setting
+        return (
+            _shared_record_value((record for record in from_source if key in record), key),
+            _shared_record_value((record for record in target_records if key in record), key),
+        )
 
     def thickness(mode: DiagramMode, values: Mapping[str, AutoValue]) -> dict[str, float]:
         return {
@@ -643,12 +696,7 @@ def adapt_explicit_settings(
             kept[setting] = value
         else:
             reset.append(
-                SettingReset(
-                    setting,
-                    value,
-                    auto_of(setting, source_auto, from_source),
-                    auto_of(setting, target_auto, target_records),
-                )
+                SettingReset(setting, value, *autos_of(setting))
             )
     return SettingAdaptation(kept=kept, reset=tuple(reset))
 
@@ -669,6 +717,7 @@ __all__ = [
     "TickedAxisSource",
     "depth_axis_tick_font_size_px",
     "depth_sliding_window",
+    "feature_density_windows",
     "determine_length_parameter",
     "gc_axis_tick_font_size_of_depth",
     "gc_axis_tick_font_size_of_depth_rows",

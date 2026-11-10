@@ -37,6 +37,7 @@ from gbdraw.api.options import (
 from gbdraw.api.record_planning import ResolvedRecordCollection, ResolvedRecordProvenance
 from gbdraw.api.request_render import resolve_request_records
 from gbdraw.api.requests import (
+    CircularBatchRequest,
     CircularDiagramRequest,
     DiagramRequest,
     LinearDiagramRequest,
@@ -406,13 +407,24 @@ def derive_from_source(
         options.config,
         {path: value for path, value in (options.config_overrides or {}).items() if _setting_of(path) not in _SIZE_SETTINGS},
     )
+    # The window settings the feature density tracks take, which the new drawing carries.
+    density_settings = tuple(
+        setting
+        for setting in ("window", "step")
+        if any(getattr(track, setting) is None for track in options.feature_density_tracks or ())
+    )
     source_extent = DrawnExtent(
         source_mode,
         tuple(len(record) for record in collection.records),
         depth_rows=_drawn_depth_rows(options, source_tracks, cfg, source_mode),
+        density_window_settings=density_settings,
+        separate_records=isinstance(source, CircularBatchRequest),
     )
     target_extent = DrawnExtent(
-        target_mode, derived.lengths, depth_rows=_drawn_depth_rows(options, depth_tracks, cfg, target_mode)
+        target_mode,
+        derived.lengths,
+        depth_rows=_drawn_depth_rows(options, depth_tracks, cfg, target_mode),
+        density_window_settings=density_settings,
     )
     # The source record each drawn unit comes from, by its index there: each record compares its own Auto windows.
     record_sources: list[int | None] = [None] * len(derived.lengths)

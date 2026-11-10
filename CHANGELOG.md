@@ -27,12 +27,21 @@ write-up of a release.
 - Fixed: a new drawing from a region of a Circular drawing with several
   records compared a hand-set GC window, step or scale interval with the Auto
   value of the longest record, though each record of a Circular drawing draws
-  them at its own length. A region of the 5 kb record beside a 50 kb record
-  returned its hand-set window to Auto although its Auto window (500 bp) does
-  not change. Each record now compares its own Auto values, in the Python API
-  and the Web (OV-3231). The Web's Depth window and step notes now show the
-  value every record shares instead of "Auto (by genome size)" (OV-3232).
-  Figures do not change.
+  its GC content, skew, depth and ticks at its own length. A region of the
+  5 kb record beside a 50 kb record returned its hand-set window to Auto
+  although its Auto window (500 bp) does not change; the scale interval did
+  the same (OV-3231). Each record now compares its own Auto values, in the
+  Python API and the Web. A feature density track that takes the drawing's
+  window still compares the window the records of one canvas share (the
+  longest record's), so with such a track the window returns to Auto as
+  before; in separate diagrams each record compares its own. The other direction changes too: regions of both records drawn in
+  one Linear drawing (20 kb and 5 kb) now return a hand-set window to Auto,
+  since the 5 kb record drew with 500 bp and the Linear drawing uses 1,000 bp;
+  before, the window was kept. In the Python API, a `SettingReset` of the
+  window, step or scale interval names `source_auto=None` when the source
+  records it comes from take different Auto values. The Web's Depth window and
+  step notes now show the value every record shares instead of "Auto (by
+  genome size)" (OV-3232). Figures do not change.
 - Fixed: in a Linear row that draws several records or several windows of one
   record side by side, a label's leader from a record drawn later could be
   drawn over the letters of a label from a record drawn before it (with
