@@ -23,9 +23,9 @@ import {
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
-// The publication's draft split is Python's `split_draft_into_modes`, and its
-// Session files are written by Python's `write_serialized_session` (both in
-// gbdraw/session_io.py), so a `.gz` Session is compressed as the CLI's.
+// The publication's draft split is Python's `split_draft_into_modes`
+// (gbdraw/session_io.py), and its Session files are written by the refresh
+// tool's `write_gallery_session`, so a `.gz` Session is compressed as the CLI's.
 // `tools/refresh_gallery_sessions.py` names its own interpreter in PYTHON.
 const SPLIT_DRAFT = `
 import json, sys
@@ -38,10 +38,11 @@ json.dump(split_draft_into_modes(
     palette_colors=mode_split_palette_colors(payload['draft'].get('config')),
 ), sys.stdout)
 `;
+// One Gallery Session text (OV-3370), not the number text of `JSON.stringify`.
 const WRITE_SESSION = `
-import sys
-from gbdraw.session_io import write_serialized_session
-write_serialized_session(sys.argv[1], sys.stdin.buffer.read())
+import json, sys
+from tools.refresh_gallery_sessions import write_gallery_session
+write_gallery_session(sys.argv[1], json.load(sys.stdin.buffer))
 `;
 
 /**

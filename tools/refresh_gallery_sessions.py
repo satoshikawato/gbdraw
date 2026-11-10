@@ -1240,23 +1240,31 @@ def _one_drawing_document(session: Mapping[str, Any]) -> Mapping[str, Any]:
     return write_session_drawings([view])
 
 
+def write_gallery_session(session_path: str | Path, document: Mapping[str, Any]) -> None:
+    """Write a Gallery Session document as its one JSON text (OV-3370).
+
+    The publication bridge's writes and this tool's edits of a staged Session
+    come here, so a Session's bytes do not depend on which step wrote it last
+    (Python's number text, ``1e-05``, not ``JSON.stringify``'s ``0.00001``).
+    Compressed as the CLI's Sessions are (:func:`write_serialized_session`).
+    """
+
+    write_serialized_session(
+        session_path,
+        json.dumps(document, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+    )
+
+
 def _edit_staged_session(
     session_path: Path, edit: Callable[[dict[str, Any]], int]
 ) -> None:
     """Rewrite a staged Session file when ``edit`` changes the view of its
-    drawing (:func:`_gallery_view`), through the Session writer the CLI uses."""
+    drawing (:func:`_gallery_view`), through :func:`write_gallery_session`."""
 
     document = _read_session_file(session_path)
     session, drawing_id = _gallery_view(document)
     if edit(session):
-        write_serialized_session(
-            session_path,
-            json.dumps(
-                _gallery_document(document, session, drawing_id),
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ).encode("utf-8"),
-        )
+        write_gallery_session(session_path, _gallery_document(document, session, drawing_id))
 
 
 def _keep_created_at(tracked_path: Path, staged_path: Path) -> None:

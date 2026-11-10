@@ -2528,6 +2528,32 @@ def test_publication_bridge_writes_a_gz_session_through_the_python_session_write
     assert compressed == expected.getvalue()
 
 
+def test_every_gallery_session_writer_writes_one_number_text(tmp_path: Path) -> None:
+    """OV-3370: the bridge's write and the tools' Python edits give a Session one JSON text.
+
+    The bridge wrote the text of `JSON.stringify` (`0.00001`) and a later edit through Python
+    (`1e-05`), so a Session's bytes depended on which step wrote it last.
+    """
+
+    import os
+
+    output = tmp_path / "prepared.gbdraw-session.json"
+    refresh_gallery_sessions_module._run_publication_bridge(
+        "prepare",
+        _session_path("HmmtDNA_basic_circular"),
+        output,
+        env=dict(os.environ),
+    )
+    text = output.read_text(encoding="utf-8")
+    document = json.loads(text)
+
+    # The Session's E-value cutoff, 0.00001, in Python's text.
+    assert '"evalue":1e-05' in text and '"evalue":0.00001' not in text
+    edited = tmp_path / "edited.gbdraw-session.json"
+    refresh_gallery_sessions_module.write_gallery_session(edited, document)
+    assert edited.read_text(encoding="utf-8") == text
+
+
 def _losat_result(query: str, subject: str, runtime: dict[str, object], text: str) -> dict[str, object]:
     from gbdraw.comparisons.losat_jobs import losat_fasta_text, sha256_text
 
