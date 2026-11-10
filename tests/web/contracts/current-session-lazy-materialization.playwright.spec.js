@@ -373,14 +373,14 @@ test('neutral cached conservation session regenerates three ordered rings offlin
       const lazyFields = ['text', 'arrayBuffer', 'data', 'resourceId'];
       const resources = [
         state.activeDrawing().circularSources[0].gb,
-        ...state.activeDrawing().files.c_conservation_fastas,
+        ...state.activeDrawing().files.c_conservation_fastas.flat(),
         ...state.activeDrawing().files.c_conservation_blasts
       ].map((ref) => state.inputFiles.fileOf(ref));
       return {
         status: result?.status,
         content: String(selected?.content || ''),
         referenceName: state.activeDrawing().circularSources[0]?.gb?.name,
-        comparisonNames: state.activeDrawing().files.c_conservation_fastas.map(({ name }) => name),
+        comparisonNames: state.activeDrawing().files.c_conservation_fastas.flat().map(({ name }) => name),
         cachedResultNames: state.activeDrawing().files.c_conservation_blasts.map(({ name }) => name),
         cachedResultSource: state.activeDrawing().files.c_conservation_blasts_source,
         cacheEntries: state.losatCache.value.size,
@@ -521,7 +521,7 @@ test('two rings of one sequence save and restore with one cached LOSAT table', a
         return {
           errorLog: app.errorLog ? JSON.parse(JSON.stringify(app.errorLog)) : null,
           content,
-          comparisonNames: state.activeDrawing().files.c_conservation_fastas.map(({ name }) => name),
+          comparisonNames: state.activeDrawing().files.c_conservation_fastas.flat().map(({ name }) => name),
           labels: state.activeDrawing().circularConservation.series.map(({ label }) => label),
           cacheKeys: Array.from(state.losatCache.value.keys()),
           cacheInfo: state.losatCacheInfo.value.map(({ key, filename }) => ({ key, filename })),
@@ -548,7 +548,7 @@ test('two rings of one sequence save and restore with one cached LOSAT table', a
       const { state } = await import('/gbdraw/web/js/state.js');
       const { readFileText } = await import('/gbdraw/web/js/services/file-content-cache.js');
       const copy = new File(
-        [await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[1]))],
+        [await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[1][0]))],
         'comparison-c-copy.fasta',
         { type: 'text/plain', lastModified: 0 }
       );
@@ -694,7 +694,7 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
       const { state } = await import('/gbdraw/web/js/state.js');
       const { readFileText } = await import('/gbdraw/web/js/services/file-content-cache.js');
       const app = window.__GBDRAW_APP__;
-      const fasta = await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[1]));
+      const fasta = await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[1][0]));
       const [header, ...body] = fasta.trim().split(/\r?\n/);
       const recordId = header.slice(1).split(/\s+/)[0];
       const sequence = body.join('').toLowerCase();
@@ -715,7 +715,7 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
         ''
       ].join('\n');
       const files = [...state.activeDrawing().files.c_conservation_fastas];
-      files[1] = state.inputFiles.registerFile(new File([flatFile], 'comparison-c.gbk', { type: 'text/plain', lastModified: 0 }));
+      files[1] = [state.inputFiles.registerFile(new File([flatFile], 'comparison-c.gbk', { type: 'text/plain', lastModified: 0 }))];
       state.activeDrawing().files.c_conservation_fastas = files;
       const result = await app.runAnalysis();
       const content = String(app.currentResults()[app.selectedResultIndex]?.content || '');
@@ -782,9 +782,9 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
         runInfo: JSON.parse(JSON.stringify(app.lastRunInfo)),
         files: {
           'reference-a.gb': await readFileText(state.inputFiles.fileOf(state.activeDrawing().circularSources[0].gb)),
-          'comparison-b.fasta': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[0])),
-          'comparison-c.gbk': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[1])),
-          'comparison-d.fasta': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[2]))
+          'comparison-b.fasta': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[0][0])),
+          'comparison-c.gbk': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[1][0])),
+          'comparison-d.fasta': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[2][0]))
         },
         tables: Object.fromEntries(state.losatCacheInfo.value.map(({ key, filename }) => (
           [filename, state.losatCache.value.get(key)?.text || '']
@@ -860,7 +860,7 @@ test('GenBank and DDBJ ring rows added without a label take the CLI default labe
       const result = await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } });
       const { state } = await import('/gbdraw/web/js/state.js');
       const { readFileText } = await import('/gbdraw/web/js/services/file-content-cache.js');
-      return { status: result?.status, fasta: await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[1])) };
+      return { status: result?.status, fasta: await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[1][0])) };
     }, neutralConservationSessionText);
     expect(loaded.status).toBe('ok');
 
