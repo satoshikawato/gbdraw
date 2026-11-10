@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 import pandas as pd
+from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -2589,3 +2590,151 @@ def test_circular_region_label_leaves_a_made_way_place_that_meets_feature_letter
     over = _pinned_region_labels((RegionLabelPlace("r0", 4500.0),), at_4500.parts)
     assert over.parts != at_4500.parts
     assert over.parts == _pinned_region_labels((), at_4500.parts).parts
+
+
+# OV-3220 (the Circular mirror of OV-3078, OV-3219; Owner D-65, C1): a region overlay that spans nothing (no
+# cover_anchor, no to_slot) anchored to a features slot keeps its labels off that slot's glyphs. The lambda phage
+# repro: seven 20 pt labels on line marks.
+_OVERLAY_REGIONS = (
+    ("head", 1, 9500, "Head genes"),
+    ("tail", 9600, 19000, "Tail genes"),
+    ("b2", 22000, 27000, "b2 region"),
+    ("int", 27500, 29500, "Integration"),
+    ("early", 33000, 38000, "Early left"),
+    ("repl", 38500, 40500, "Replication"),
+    ("lysis", 44000, 46500, "Lysis"),
+)
+_OVERLAY_FOREGROUND = "layer=foreground,z=1"
+_OVERLAY_UNDERLAY = "layer=underlay,z=0"
+# Each layout: the track type, the features slot and the overlay's own params.
+_CIRCULAR_OVERLAY_LAYOUTS = {
+    # Labels on the glyphs on dev: the lanes reach past the axis circle, which the labels cleared alone ...
+    "spreadout-foreground": ("spreadout", "features:features", _OVERLAY_FOREGROUND),
+    "middle-foreground": ("middle", "features:features", _OVERLAY_FOREGROUND),
+    "tuckin-lanes-outside": ("tuckin", "features:features@lanes=outside", _OVERLAY_FOREGROUND),
+    # ... or hidden under them.
+    "spreadout-underlay": ("spreadout", "features:features@z=1", _OVERLAY_UNDERLAY),
+    "middle-underlay": ("middle", "features:features@z=1", _OVERLAY_UNDERLAY),
+    # Already off the glyphs on dev (the lanes lie inside the axis circle): unchanged.
+    "tuckin-foreground": ("tuckin", "features:features", _OVERLAY_FOREGROUND),
+    "tuckin-underlay": ("tuckin", "features:features@z=1", _OVERLAY_UNDERLAY),
+    "spreadout-cover": ("spreadout", "features:features", f"{_OVERLAY_FOREGROUND},cover_anchor=true"),
+}
+
+
+def _lambda_circular_overlay(layout: str):
+    track_type, features, overlay = _CIRCULAR_OVERLAY_LAYOUTS[layout]
+    style = RegionAnnotationStyle(label_font_size=20, label_orientation="horizontal")
+    regions = tuple(
+        RegionAnnotation(key, CoordinateSpan(None, start, end), label=text, mark="line", style=style)
+        for key, start, end, text in _OVERLAY_REGIONS
+    )
+    record = SeqIO.read(Path(__file__).parent / "test_inputs" / "NC_001416.gb", "genbank")
+    return build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(
+            annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+            config_overrides={"canvas.circular.track_type": track_type},
+            tracks=CircularRequestTrackOptions(
+                circular_track_slots=(
+                    features,
+                    f"regions:annotations@set_id=regions,side=overlay,anchor_slot=features,{overlay}",
+                )
+            ),
+        ),
+    )
+
+
+def _feature_glyph_outer_radii(root) -> tuple[float, float]:
+    """How far from the circle centre the drawn feature glyphs reach: their outline, and their paint (stroke
+    included)."""
+
+    outline = paint = -math.inf
+    for path in root.iter():
+        if not path.tag.endswith("path") or not path.attrib.get("data-gbdraw-feature-id"):
+            continue
+        points = _PAIR.findall(re.sub(r"A \S+ \S+ \S+ \S+ ", "A ", path.attrib["d"]))
+        reach = max(math.hypot(float(x), float(y)) for x, y in points)
+        outline = max(outline, reach)
+        paint = max(paint, reach + 0.5 * float(path.attrib.get("stroke-width", 0.0)))
+    assert outline > 0.0, "no feature glyphs drawn"
+    return outline, paint
+
+
+@pytest.mark.parametrize("layout", list(_CIRCULAR_OVERLAY_LAYOUTS))
+def test_circular_overlay_region_labels_stay_off_the_anchored_feature_glyphs(layout: str) -> None:
+    root = ElementTree.fromstring(_lambda_circular_overlay(layout).tostring())
+    slot_frames = {
+        group.attrib["data-gbdraw-slot-id"]: group.attrib.get("transform")
+        for group in root.iter()
+        if group.attrib.get("data-gbdraw-slot-id")
+    }
+    # Both slots are drawn around the same centre, so their radii compare.
+    assert slot_frames["features"] == slot_frames["regions"]
+    outline, paint = _feature_glyph_outer_radii(root)
+    labels = [
+        (_text_of(text), _drawn_label(text, root))
+        for group in root.iter()
+        if group.attrib.get("data-gbdraw-annotation-label")
+        for text in group
+        if text.tag.endswith("}text")
+    ]
+
+    assert len(labels) == len(_OVERLAY_REGIONS)
+    for text, drawn in labels:
+        # The letters stand clear of the glyphs' paint: never on a CDS (foreground) or under one (underlay). They keep
+        # at least label_offset beyond the edge of the lanes, as the letters of an overlay that covers its anchor do.
+        assert drawn.near > paint, text
+        assert drawn.near - outline >= 4.0 - 1e-3, (text, drawn.near - outline)
+
+
+# The layouts whose labels were already off the glyphs keep every label where dev drew it (values read on dev
+# before OV-3078): the canvas, the overlay's slot frame and each label's anchor point in it.
+_TUCKIN_OVERLAY_PLACES = (
+    "0.0 0.0 1073.5958802084717 838.6425781251512",
+    "translate(-14.692982214507367,-91.5) translate(500.0,500.0)",
+    {
+        "Head genes": (249.98, -353.632),
+        "Tail genes": (423.041, 122.395),
+        "b2 region": (-12.98, 403.059),
+        "Integration": (-221.966, 361.735),
+        "Early left": (-432.046, 49.297),
+        "Replication": (-408.203, -174.788),
+        "Lysis": (-169.399, -377.966),
+    },
+)
+_CLEAN_CIRCULAR_OVERLAY_PLACES = {
+    "tuckin-foreground": _TUCKIN_OVERLAY_PLACES,
+    "tuckin-underlay": _TUCKIN_OVERLAY_PLACES,
+    "spreadout-cover": (
+        "0.0 0.0 1150.6913693999918 919.0425781251482",
+        "translate(24.503799007763575,-50.55000000000007) translate(500.0,500.0)",
+        {
+            "Head genes": (272.84, -385.97),
+            "Tail genes": (460.94, 133.359),
+            "b2 region": (-14.25, 442.509),
+            "Integration": (-242.674, 395.481),
+            "Early left": (-471.243, 53.77),
+            "Replication": (-444.477, -190.32),
+            "Lysis": (-185.545, -413.99),
+        },
+    ),
+}
+
+
+@pytest.mark.parametrize("layout", list(_CLEAN_CIRCULAR_OVERLAY_PLACES))
+def test_circular_overlay_region_labels_already_off_the_glyphs_keep_their_places(layout: str) -> None:
+    root = ElementTree.fromstring(_lambda_circular_overlay(layout).tostring())
+    view_box, slot_frame, anchors = _CLEAN_CIRCULAR_OVERLAY_PLACES[layout]
+    (slot,) = [group for group in root.iter() if group.attrib.get("data-gbdraw-slot-id") == "regions"]
+    drawn = {
+        text.text: (float(text.attrib["x"]), float(text.attrib["y"]))
+        for group in slot.iter()
+        if group.attrib.get("data-gbdraw-annotation-label")
+        for text in group.iter()
+        if text.tag.endswith("text")
+    }
+
+    assert root.attrib["viewBox"] == view_box
+    assert slot.attrib["transform"] == slot_frame
+    assert drawn == {text: pytest.approx(anchor, abs=1e-3) for text, anchor in anchors.items()}

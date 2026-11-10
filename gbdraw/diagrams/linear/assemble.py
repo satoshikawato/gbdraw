@@ -212,8 +212,9 @@ from ...annotations import (
     effective_annotation_style,
     feature_underlay_anchor_slot_id,
     feature_underlay_slot_id,
+    LinearAnnotationLabelSide,
     layout_annotation_track,
-    linear_annotation_labels_above,
+    linear_annotation_label_side,
     merge_feature_underlays,
     sync_annotation_legend_entries,
 )
@@ -365,12 +366,23 @@ def _prepare_linear_annotation_tracks(
         auto_slot_ids=auto_slot_ids,
         label_font_size=label_font_size,
         font_family=str(profile.config.objects.text.font_family),
-        # The side each slot is drawn on, which puts its labels above or below its marks.
-        slot_sides={slot.id: slot.side for slot in normalize_linear_track_slots_with_axis(slots, axis_index)},
+        label_sides=_linear_annotation_label_sides(normalize_linear_track_slots_with_axis(slots, axis_index)),
         sequence_widths=sequence_widths,
         record_transforms=record_transforms,
     )
     return updated_slots, bundle, layouts, auto_slot_ids
+
+
+def _linear_annotation_label_sides(slots: Sequence[NormalizedLinearTrackSlot]) -> dict[str, LinearAnnotationLabelSide]:
+    """Where each drawn annotation slot puts its labels (``linear_annotation_label_side``), found by its anchor's slot
+    id among the drawn features slots."""
+
+    feature_sides = {slot.id: slot.side for slot in slots if slot.renderer == "features"}
+    return {
+        slot.id: linear_annotation_label_side(slot.side, annotation_track_params_from_mapping(slot.params), feature_sides)
+        for slot in slots
+        if slot.renderer == "annotations"
+    }
 
 
 def _layout_linear_annotation_tracks(
@@ -381,7 +393,7 @@ def _layout_linear_annotation_tracks(
     auto_slot_ids: frozenset[str],
     label_font_size: float,
     font_family: str,
-    slot_sides: Mapping[str, str],
+    label_sides: Mapping[str, LinearAnnotationLabelSide],
     sequence_widths: Sequence[float],
     record_transforms: Sequence[RecordDisplayTransform] | None,
 ) -> tuple[list[LinearTrackSlot], dict[str, ResolvedAnnotationTrack]]:
@@ -389,8 +401,9 @@ def _layout_linear_annotation_tracks(
     ``sequence_width``).
 
     ``label_font_size`` is the feature label font size of the diagram, the size of a region label whose style
-    sets none; ``font_family`` measures the labels' letters. ``slot_sides`` is the side each enabled slot is
-    drawn on (``NormalizedLinearTrackSlot.side``)."""
+    sets none; ``font_family`` measures the labels' letters. ``label_sides`` is where each drawn slot puts its
+    labels (``linear_annotation_label_side``): the track keeps it (``ResolvedAnnotationTrack.labels_above``,
+    ``labels_beyond_slot``) for the slot's footprint, its drawer and its label placement."""
 
     if len(sequence_widths) != len(records):
         raise ValueError("sequence_widths must contain one width for every record")
@@ -408,7 +421,8 @@ def _layout_linear_annotation_tracks(
             if slot.id in auto_slot_ids
             else (slot.height.resolve(1.0) if slot.height is not None else None)
         )
-        side = slot_sides.get(slot.id)
+        # A disabled slot is not drawn.
+        label_side = label_sides.get(slot.id, LinearAnnotationLabelSide(above=False))
         layout = layout_annotation_track(
             slot.id,
             params.set_id,
@@ -421,12 +435,11 @@ def _layout_linear_annotation_tracks(
                 extent=partial(linear_annotation_label_extent, font_family=font_family, bp_per_px=bp_per_px),
                 reach=linear_annotation_mark_past_lane,
                 bp_per_px=bp_per_px,
-                # A disabled slot is not drawn.
-                labels_above=side is not None and linear_annotation_labels_above(side, params),
+                labels_above=label_side.above,
             ),
             join_origin=False,
         )
-        layouts[slot.id] = layout
+        layouts[slot.id] = replace(layout, labels_beyond_slot=label_side.beyond_slot)
         updated_slots.append(
             replace(slot, height=ScalarSpec(layout.required_extent_px, "px"))
             if slot.id in auto_slot_ids
@@ -492,7 +505,11 @@ def _add_linear_feature_underlays(
         auto_slot_ids=frozenset((slot_id,)),
         label_font_size=label_font_size,
         font_family=font_family,
-        slot_sides={slot_id: str(underlay_slot.side)},
+        label_sides={
+            slot_id: linear_annotation_label_side(
+                str(underlay_slot.side), annotation_track_params_from_mapping(underlay_slot.params), {}
+            )
+        },
         sequence_widths=sequence_widths,
         record_transforms=record_transforms,
     )
@@ -1028,12 +1045,14 @@ def _linear_slot_footprints_for_record(
             continue
 
         if slot.renderer == "annotations":
+            track = annotation_track_layouts.get(slot.id)
             footprints[slot.id] = _linear_annotation_slot_footprint(
                 slot,
                 record_index=record_index,
-                annotation_layout=annotation_track_layouts.get(slot.id),
+                annotation_layout=track,
                 font_family=font_family,
                 wrap_row=wrap_row,
+                beyond_band=_linear_labels_beyond_band(layout, slot, track, feature_geometry),
             )
             continue
 
@@ -1045,6 +1064,24 @@ def _linear_slot_footprints_for_record(
     return footprints, feature_center_y
 
 
+def _linear_labels_beyond_band(
+    layout: LinearTrackLayout,
+    slot: LinearResolvedTrack,
+    track: ResolvedAnnotationTrack | None,
+    feature_geometry: LinearFeatureLaneGeometry,
+) -> VerticalBand | None:
+    """The record's feature lanes (``LinearFeatureLaneGeometry.occupied_band``) where an overlay's labels stand
+    beyond them (``ResolvedAnnotationTrack.labels_beyond_slot``), in the overlay's own frame: it keeps its origin
+    from that features slot. None where its labels stand beside their marks or the record has no lanes."""
+
+    anchor_id = track.labels_beyond_slot if track is not None else None
+    anchor = next((item for item in layout.slots if item.id == anchor_id), None)
+    lanes = feature_geometry.occupied_band
+    if anchor is None or lanes.height <= 0.0:
+        return None
+    return lanes.translate(float(anchor.y_offset) - float(slot.y_offset))
+
+
 def _linear_annotation_slot_footprint(
     slot: LinearResolvedTrack,
     *,
@@ -1053,6 +1090,7 @@ def _linear_annotation_slot_footprint(
     font_family: str,
     span_height: float | None = None,
     wrap_row: int | None = None,
+    beyond_band: VerticalBand | None = None,
 ) -> LinearSlotFootprint:
     """An annotation slot's own band with its labels' room on their side (on one row of a wrapped record:
     that row's labels, and paint only where the row holds a mark).
@@ -1060,6 +1098,8 @@ def _linear_annotation_slot_footprint(
     ``span_height`` is the stretched height of an overlay the record's plan
     spans over slots (``spans_slots``): its labels then keep clear of every
     slot it covers, measured on that height; otherwise on the slot's own.
+    ``beyond_band`` is the lanes its labels stand beyond (``_linear_labels_beyond_band``), which the footprint
+    keeps for its drawer (``LinearSlotFootprint.label_beyond_band``).
     """
 
     body_band = _slot_body_band(slot)
@@ -1068,17 +1108,17 @@ def _linear_annotation_slot_footprint(
         linear_annotation_label_room(
             annotation_layout,
             record_index=record_index,
-            side=slot.side,
             covers_slots=span_height is not None,
             height_px=float(body_band.height if span_height is None else span_height),
             font_family=font_family,
             params=params,
             wrap_row=wrap_row,
+            beyond_band=beyond_band,
         )
         if annotation_layout is not None
         else 0.0
     )
-    if linear_annotation_labels_above(slot.side, params):
+    if annotation_layout is not None and annotation_layout.labels_above:
         expanded = body_band.expand(label_overhang, 0.0)
     else:
         expanded = body_band.expand(0.0, label_overhang)
@@ -1093,6 +1133,7 @@ def _linear_annotation_slot_footprint(
         paint_band=expanded if painted else None,
         reserve_band=expanded,
         data_available=available,
+        label_beyond_band=beyond_band,
     )
 
 

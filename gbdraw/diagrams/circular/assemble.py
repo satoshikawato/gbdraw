@@ -1151,10 +1151,11 @@ def _circular_annotation_labels_by_slot(
             annotation_track_params_from_mapping(slot.params),
         )
         obstacles = replace(obstacles, made_way=made_way.get(slot.id, ()))
+        rings = _label_rings(axis_paint, slot.label_clear_band_px)
         measured = _kept_measure(
             lambda measures: measures.labels,
             (record_index, record_length, inner, outer, side, font_family, slot.spans_slots),
-            (layout, params, axis_paint, obstacles),
+            (layout, params, rings, obstacles),
             partial(
                 circular_annotation_labels,
                 layout,
@@ -1165,7 +1166,7 @@ def _circular_annotation_labels_by_slot(
                 side=side,
                 font_family=font_family,
                 params=params,
-                rings=(axis_paint,),
+                rings=rings,
                 obstacles=obstacles,
                 covers_slots=slot.spans_slots,
             ),
@@ -1605,21 +1606,35 @@ class _AnnotationLabelRoom:
         self._record_index = record_index
         self._record_length = record_length
         self._font_family = font_family
-        self._measured: dict[tuple[RadialBand, RadialBand, str, AnnotationTrackParams, bool], CircularLabelRoom] = {}
+        self._measured: dict[
+            tuple[RadialBand, tuple[RadialBand, ...], str, AnnotationTrackParams, bool], CircularLabelRoom
+        ] = {}
 
     def __call__(
-        self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any], covers_slots: bool
+        self,
+        band: RadialBand,
+        axis: CircularAxisLayout,
+        side: str,
+        params: AnnotationTrackParams,
+        covers_slots: bool,
+        clears: RadialBand | None = None,
     ) -> float:
-        return self._room(band, axis, side, params, covers_slots).px
+        return self._room(band, _label_rings(axis.paint_band_px, clears), side, params, covers_slots).px
 
-    def drops_labels(self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any]) -> bool:
-        return self._room(band, axis, side, params, False).drops_labels
+    def drops_labels(
+        self, band: RadialBand, axis: CircularAxisLayout, side: str, params: AnnotationTrackParams
+    ) -> bool:
+        return self._room(band, _label_rings(axis.paint_band_px, None), side, params, False).drops_labels
 
     def _room(
-        self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any], covers_slots: bool
+        self,
+        band: RadialBand,
+        rings: tuple[RadialBand, ...],
+        side: str,
+        params: AnnotationTrackParams,
+        covers_slots: bool,
     ) -> CircularLabelRoom:
-        track_params = annotation_track_params_from_mapping(params)
-        key = (band, axis.paint_band_px, side, track_params, covers_slots)
+        key = (band, rings, side, params, covers_slots)
         room = self._measured.get(key)
         if room is None:
             room = self._measured[key] = circular_annotation_label_room(
@@ -1629,11 +1644,19 @@ class _AnnotationLabelRoom:
                 band=band,
                 side=side,
                 font_family=self._font_family,
-                params=track_params,
-                rings=(axis.paint_band_px,),
+                params=params,
+                rings=rings,
                 covers_slots=covers_slots,
             )
         return room
+
+
+def _label_rings(axis_paint: RadialBand, clears: RadialBand | None) -> tuple[RadialBand, ...]:
+    """The rings an annotation slot's letters keep ``label_offset`` beyond where they would meet them: the axis
+    circle's paint, and the lanes of the features slot an overlay is anchored to when its labels keep off them
+    (``CircularResolvedSlot.label_clear_band_px``, OV-3220)."""
+
+    return (axis_paint,) if clears is None else (axis_paint, clears)
 
 
 def _primary_radial_half_stroke_px(

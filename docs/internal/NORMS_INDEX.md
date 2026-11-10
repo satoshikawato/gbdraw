@@ -259,7 +259,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-094](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-094-linear-file-cards-fold-to-one-line) | Linear File cards fold to one line | ACCEPTED | web.linear.file-card-fold | 1 | — | 0 |
 | [PD-OI-095](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-095-one-naming-rule-for-legend-rows-that-share-a-name) | One naming rule for Legend rows that share a name | ACCEPTED | legend.row-name-multiplicity | 1 | — | 5 |
 | [PD-OI-096](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-096-legend-position-of-a-diagram-mode-at-load) | Legend position of a diagram mode at Load | ACCEPTED | web.legend.position-of-mode | 3 | scenario revision 2 | 1 |
-| [PD-OI-097](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-097-labels-that-do-not-fit) | Labels that do not fit | ACCEPTED | product.circular-outer-label-fit | 26 | scenario revision 25 | 10 |
+| [PD-OI-097](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-097-labels-that-do-not-fit) | Labels that do not fit | ACCEPTED | product.circular-outer-label-fit | 27 | scenario revision 26 | 10 |
 | [PD-OI-098](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-098-font-of-the-diagram-text) | Font of the diagram text | ACCEPTED | diagram-generation.diagram-font | 2 | scenario revision 1 | 1 |
 | [PD-OI-099](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-099-confirm-what-load-cannot-restore-before-it-loads) | Confirm what Load cannot restore before it loads | ACCEPTED | web.session.load-repair-confirmation | 1 | — | 0 |
 | [PD-OI-100](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-100-rich-feature-popup-outside-undo) | Rich Feature Popup outside Undo | ACCEPTED | web.history.rich-feature-popup | 1 | — | 0 |

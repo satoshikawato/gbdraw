@@ -21,7 +21,6 @@ from gbdraw.annotations import (
     apply_feature_underlay_dom_attributes,
     effective_annotation_style,
     is_auto_feature_underlay,
-    linear_annotation_labels_above,
     mark_parts,
 )
 from gbdraw.annotations.models import annotation_solid_fill
@@ -117,12 +116,15 @@ class AnnotationRowFrame(NamedTuple):
 @dataclass(frozen=True)
 class AnnotationSlotFrame:
     """An annotation slot as its marks are drawn, slot-local: its height on the first row, its frame on each row of a
-    wrapped record (none on an unwrapped one), and each strand's lane of the feature track it covers (none when it
-    covers no track that separates the strands; the same on every row)."""
+    wrapped record (none on an unwrapped one), each strand's lane of the feature track it covers (none when it
+    covers no track that separates the strands; the same on every row), and the feature lanes its labels stand beyond
+    (``ResolvedAnnotationTrack.labels_beyond_slot``; none where they stand beside their marks). Those lanes lie on the
+    axis, where a record is never wrapped, so a wrapped record has none."""
 
     height_px: float
     row_frames: tuple[AnnotationRowFrame, ...] = ()
     strand_bands: Mapping[Literal["+", "-"], VerticalBand] = field(default_factory=dict)
+    beyond_band: VerticalBand | None = None
 
     def clip_path(
         self, clip_id: str, *, y_offset_px: float, bar_length_px: float, labels: Sequence[LinearAnnotationLabel]
@@ -309,18 +311,20 @@ def _label_rows(
     track: ResolvedAnnotationTrack,
     *,
     record_index: int,
-    side: str,
     covers_slots: bool,
     height_px: float,
     font_family: str,
     params: AnnotationTrackParams,
     wrap_row: int | None = None,
+    beyond_band: VerticalBand | None = None,
 ) -> list[tuple[PlacedRegionAnnotation, RegionAnnotationStyle, float, tuple[float, float, float, float]]]:
     """Each labelled region of the record (of one row when ``wrap_row`` is given): its style, the label's
     slot-local ``y`` and its ink offsets.
 
     The letters keep ``label_offset`` from the painted edge of the mark on the
-    side ``linear_annotation_labels_above`` picks (OV-844). A slot that
+    track's side (``ResolvedAnnotationTrack.labels_above``, OV-844), and as far
+    from ``beyond_band``, the feature lanes an overlay lying on them puts its
+    labels beyond (``labels_beyond_slot``, OV-3078), where that is farther. A slot that
     ``covers_slots`` (the plan's ``spans_slots``) keeps them outside every slot
     it covers too: ``label_offset`` beyond the slot's edge, or beyond the
     mark's paint where it passes that edge, so the place does not depend on
@@ -335,7 +339,7 @@ def _label_rows(
     if not params.show_labels:
         return []
     placements, lane_height = _record_lanes(track, record_index=record_index, height_px=height_px, params=params)
-    above = linear_annotation_labels_above(side, params)
+    above = track.labels_above
     rows = []
     for placement in placements:
         annotation = placement.annotation
@@ -360,6 +364,9 @@ def _label_rows(
             lane_center = _lane_center(track, placement, row, lane_height, params.padding_px)
             near = reach.from_centre + float(style.label_offset)
             y = lane_center - near - bottom if above else lane_center + near - top
+            if beyond_band is not None:
+                gap = float(style.label_offset)
+                y = min(y, beyond_band.top_y - gap - bottom) if above else max(y, beyond_band.bottom_y + gap - top)
         rows.append((placement, style, y, offsets))
     return rows
 
@@ -368,12 +375,12 @@ def linear_annotation_label_room(
     track: ResolvedAnnotationTrack,
     *,
     record_index: int,
-    side: str,
     covers_slots: bool,
     height_px: float,
     font_family: str,
     params: AnnotationTrackParams,
     wrap_row: int | None = None,
+    beyond_band: VerticalBand | None = None,
 ) -> float:
     """How far the record's labels (one row's, when ``wrap_row`` is given) reach beyond the slot's ``height_px``
     on their side.
@@ -382,17 +389,17 @@ def linear_annotation_label_room(
     axis line, the next slot or the record edge keeps that gap (OV-844).
     """
 
-    above = linear_annotation_labels_above(side, params)
+    above = track.labels_above
     room = 0.0
     for _placement, style, y, (_left, _right, top, bottom) in _label_rows(
         track,
         record_index=record_index,
-        side=side,
         covers_slots=covers_slots,
         height_px=height_px,
         font_family=font_family,
         params=params,
         wrap_row=wrap_row,
+        beyond_band=beyond_band,
     ):
         far = -(y + top) if above else y + bottom - float(height_px)
         room = max(room, far + float(style.label_offset))
@@ -446,7 +453,6 @@ def linear_annotation_labels(
     record_index: int,
     record_length: int,
     bar_length_px: float,
-    side: str,
     covers_slots: bool,
     frame: AnnotationSlotFrame,
     font_family: str,
@@ -464,18 +470,17 @@ def linear_annotation_labels(
 
     scale = float(bar_length_px) / max(1, int(record_length))
     placements, _lane = _record_lanes(track, record_index=record_index, height_px=height_px, params=params)
-    above = linear_annotation_labels_above(side, params)
+    above = track.labels_above
     labels: list[LinearAnnotationLabel] = []
     candidates = (
         [
-            (row_item, shift)
-            for row, (shift, row_height) in enumerate(row_frames)
+            (row_item, row_frame.shift_y)
+            for row, row_frame in enumerate(row_frames)
             for row_item in _label_rows(
                 track,
                 record_index=record_index,
-                side=side,
                 covers_slots=covers_slots,
-                height_px=row_height,
+                height_px=row_frame.height_px,
                 font_family=font_family,
                 params=params,
                 wrap_row=row,
@@ -487,11 +492,11 @@ def linear_annotation_labels(
             for row_item in _label_rows(
                 track,
                 record_index=record_index,
-                side=side,
                 covers_slots=covers_slots,
                 height_px=height_px,
                 font_family=font_family,
                 params=params,
+                beyond_band=frame.beyond_band,
             )
         ]
     )

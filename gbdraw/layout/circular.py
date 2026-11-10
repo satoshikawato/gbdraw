@@ -185,6 +185,10 @@ class CircularResolvedSlot:
     # An overlay that covers a feature track that separates the strands (``cover_anchor``): the band of each
     # strand's lane (``CircularFeatureLayout.strand_lane_bands``), where a region with that strand is drawn.
     strand_bands_px: Mapping[Literal["+", "-"], RadialBand] = field(default_factory=dict)
+    # An annotation overlay whose labels keep off the glyphs of the features slot it is anchored to
+    # (``overlay_labels_clear_anchor``): that slot's lanes, which the letters clear by ``label_offset`` as they clear
+    # the axis circle (OV-3220).
+    label_clear_band_px: RadialBand | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "params", freeze_layout_mapping(self.params))

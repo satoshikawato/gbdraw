@@ -293,6 +293,34 @@ write-up of a release.
   figure a gbdraw 0.14.5 or earlier CLI saved in it lists them in the order the
   slots were written, so for a stack written out of side order the Legend order
   changes at the first Generate (OV-3079, OV-3155).
+- Fixed: in Linear, the labels of a region overlay anchored to the features
+  slot (`side=overlay,anchor_slot=features` without `cover_anchor` or
+  `to_slot`) could be drawn on the CDS arrows (`layer=foreground` with the
+  features below the axis, or with the default Middle layout) or hidden under
+  them (`layer=underlay` with the features above the axis, or with Middle),
+  with no warning. The labels now stand on the side of their marks away from
+  the features; where the marks lie on the features (Middle), below the
+  features on either layer, where feature labels do not stand. These figures
+  grow by the labels' height (lambda with 20 pt labels: 155 to 174 px tall
+  with the features below the axis, 136 to 156 px with Middle), and with
+  feature labels drawn, Middle with `layer=underlay` warns of 0 region label
+  overlaps instead of 12. Other figures are unchanged (OV-3078, OV-3219).
+- Changed: in Linear with the default Middle layout, the labels of a region
+  overlay with `cover_anchor` and `layer=underlay`, such as the automatic row
+  of labelled highlights, stand below the features instead of above them,
+  where feature labels stand. Lambda with seven 20 pt highlight labels: 159
+  to 157 px tall; with feature labels drawn, 768 to 756 px and 0 warned
+  region label overlaps instead of 5. Overlays with `to_slot` keep their
+  labels on their layer's side (OV-3223).
+- Fixed: in Circular, the labels of such a region overlay could be drawn on the
+  CDS arrows (`layer=foreground`) or hidden under them (`layer=underlay`) when
+  the feature lanes reach outside the axis circle (`--track_type spreadout` or
+  `middle`, or feature lanes stacked outward), with no warning. The labels now
+  stand outside the feature lanes, as those of an overlay with `cover_anchor`
+  do. These figures grow by the labels' room (lambda with 20 pt labels: from
+  1116 x 901 to 1151 x 919 px with Spreadout, from 1074 x 857 to 1107 x 874 px
+  with Middle). Other figures, including the default Tuckin layout, are
+  unchanged (OV-3220).
 - Fixed: a foreground annotation overlay written before another slot of the
   same `z` that it covers (with `to_slot`, or with its own `w` or `h`) was
   painted under that slot, so a GC content or skew plot hid the highlight. An

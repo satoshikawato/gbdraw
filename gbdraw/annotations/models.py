@@ -7,7 +7,7 @@ from gbdraw.layout.record_coordinates import DisplayFragment
 from dataclasses import dataclass, field, replace
 from math import isfinite
 from types import MappingProxyType
-from typing import Iterable, Literal, Mapping, NamedTuple, Protocol, Sequence, TypeAlias, TypeVar, cast
+from typing import Container, Iterable, Literal, Mapping, NamedTuple, Protocol, Sequence, TypeAlias, TypeVar, cast
 
 from pandas import DataFrame
 
@@ -464,14 +464,51 @@ class AnnotationTrackParams:
             object.__setattr__(self, name, slot_id)
 
 
-def linear_annotation_labels_above(side: str, params: AnnotationTrackParams) -> bool:
-    """Whether a Linear annotation slot puts its labels above its marks.
+def overlay_labels_clear_anchor(
+    side: str, params: AnnotationTrackParams, feature_slot_ids: Container[str]
+) -> str | None:
+    """The features slot whose glyphs an annotation slot's labels keep off, in either mode: the anchor of an overlay
+    that spans nothing (no ``to_slot``, no ``cover_anchor``) when ``feature_slot_ids`` holds it (OV-3078, OV-3219,
+    OV-3220); None for every other slot. Each mode places the labels clear of that slot's lanes."""
 
-    Labels go above a slot on the ``above`` side and above an underlay
-    overlay; every other slot puts them below.
+    if side != "overlay" or params.to_slot is not None or params.cover_anchor:
+        return None
+    return params.anchor_slot if params.anchor_slot is not None and params.anchor_slot in feature_slot_ids else None
+
+
+class LinearAnnotationLabelSide(NamedTuple):
+    """Where a Linear annotation slot puts its labels: above its marks (else below them), and the features slot whose
+    lanes they stand beyond, on that side (None: beside their marks)."""
+
+    above: bool
+    beyond_slot: str | None = None
+
+
+def linear_annotation_label_side(
+    side: str, params: AnnotationTrackParams, feature_slot_sides: Mapping[str, str]
+) -> LinearAnnotationLabelSide:
+    """Where a Linear annotation slot on ``side`` puts its labels; ``feature_slot_sides`` is the side of each drawn
+    features slot, by slot id.
+
+    An overlay anchored on a features slot drawn on the axis that spans no other slot (no ``to_slot``) puts its
+    labels below the lanes on either layer, where feature labels do not stand (OV-3223): beyond them when it keeps
+    off its anchor's glyphs (``overlay_labels_clear_anchor``), and below its covering band with ``cover_anchor``.
+    An overlay that keeps off the glyphs of lanes drawn above or below the axis stands its labels on its marks'
+    other side, away from the lanes. Every other slot puts its labels above its marks on the ``above`` side and on
+    an underlay overlay, below them elsewhere.
     """
 
-    return side == "above" or (side == "overlay" and params.layer == "underlay")
+    anchor = overlay_labels_clear_anchor(side, params, feature_slot_sides)
+    if (
+        side == "overlay"
+        and params.to_slot is None
+        and params.anchor_slot is not None
+        and feature_slot_sides.get(params.anchor_slot) == "overlay"
+    ):
+        return LinearAnnotationLabelSide(False, anchor)
+    if anchor is not None:
+        return LinearAnnotationLabelSide(feature_slot_sides[anchor] == "below")
+    return LinearAnnotationLabelSide(side == "above" or (side == "overlay" and params.layer == "underlay"))
 
 
 def annotation_track_params_from_mapping(params: Mapping[str, object]) -> AnnotationTrackParams:
@@ -866,7 +903,9 @@ __all__ = [
     "annotation_solid_fill",
     "annotation_track_params_from_mapping",
     "effective_annotation_style",
-    "linear_annotation_labels_above",
+    "LinearAnnotationLabelSide",
+    "linear_annotation_label_side",
+    "overlay_labels_clear_anchor",
     "mark_parts",
     "origin_sides",
     "parse_feature_selector",

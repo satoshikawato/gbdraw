@@ -203,10 +203,12 @@ def linear_feature_glyph_boxes(
 
 def linear_annotation_slot_frame(plan: LinearRecordVerticalPlan, slot_id: str) -> AnnotationSlotFrame:
     """An annotation slot as its marks and labels are drawn, slot-local: its height, its frame on each row of a
-    wrapped record (none otherwise), and the strand lanes it covers (``LinearResolvedSlot.strand_bands``, moved from
-    record coordinates)."""
+    wrapped record (none otherwise), the strand lanes it covers (``LinearResolvedSlot.strand_bands``) and the
+    feature lanes its labels stand beyond (``LinearResolvedSlot.label_beyond_band``), moved from record
+    coordinates."""
 
     slot = plan.slot_by_id(slot_id)
+    beyond = slot.label_beyond_band
     return AnnotationSlotFrame(
         height_px=float(slot.height),
         row_frames=tuple(
@@ -214,6 +216,7 @@ def linear_annotation_slot_frame(plan: LinearRecordVerticalPlan, slot_id: str) -
             for row, shift in zip(plan.wrap_rows, plan.slot_row_shifts(slot_id), strict=True)
         ),
         strand_bands={strand: band.translate(-float(slot.origin_y)) for strand, band in slot.strand_bands.items()},
+        beyond_band=None if beyond is None else beyond.translate(-float(slot.origin_y)),
     )
 
 
@@ -574,7 +577,6 @@ def place_linear_annotation_labels(
             record_index=record_index,
             record_length=record_length,
             bar_length_px=sequence_width,
-            side=slot.side,
             covers_slots=slot.spans_slots,
             frame=linear_annotation_slot_frame(plan, slot.id),
             font_family=font_family,
