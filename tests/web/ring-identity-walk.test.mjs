@@ -9,7 +9,9 @@
 // files. After every step it checks the invariant (`ringIdentityDefects`: each series entry names one source by key,
 // file name and place; a replay's tables sit beside their genome lists; each drawn ring's one stack row is its own row
 // of the walk's model) and that each ring keeps its label, its colour, its genetic code (also as the next Generate
-// reads the rings) and its stack row's id and width. Every expected value comes from the walk's own model.
+// reads the rings) and its stack row's id and width. Every expected value comes from the walk's own model. Among its
+// steps it must draw a Remove of one of two copies and an Add Seq while a ring result is replayed and its rows hold
+// edits (OV-3306, OV-3307).
 // Undo and Redo are not walked: a History restore installs the series, the stack rows and the file bindings it
 // captured together (R11), after a step this walk checks, and calls no reconcile or re-key.
 import assert from 'node:assert/strict';
@@ -215,6 +217,10 @@ const runWalk = async (seed, steps) => {
     });
   };
   const replayed = () => drawing.files.c_conservation_blasts_source === 'losat-cache' && drawing.files.c_conservation_blasts.length > 0;
+  /** Counts a kind of step the walk must draw. */
+  const drew = (kind) => kinds.set(kind, (kinds.get(kind) || 0) + 1);
+  /** A replay's ring rows with an edit to keep: the rows a ring transition there re-keys (OV-3306, OV-3307). */
+  const replayRows = () => replayed() && drawing.adv.circular_track_slots_enabled === true && model.some((ring) => ring.row);
   const newRingOf = (index, bases) => {
     const entry = drawing.circularConservation.series[index];
     ringCount += 1;
@@ -230,6 +236,8 @@ const runWalk = async (seed, steps) => {
       run: async () => {
         const file = genomeFile(random() < 0.6);
         const bases = basesOfText(atob(file.data));
+        // OV-3307: each kept ring's key moves from its table to its genome files; its row keeps its id and width.
+        if (replayRows()) drew('add seq to a replay with ring rows');
         await files.addCircularConservationComparisonFile(/** @type {any} */ ({ target: { files: [file], value: 'x' } }));
         const index = drawing.circularConservation.series.length - 1;
         assert.equal(drawing.circularConservation.series[index].label, file.name.replace(/\.[^.]+$/, ''),
@@ -242,6 +250,10 @@ const runWalk = async (seed, steps) => {
       weight: 2, can: () => model.length > 0,
       run: () => {
         const index = pick(model.length);
+        // OV-3306: copies of one file share a table name; the kept copy's key moves to the freed copy number, and its
+        // row stays its own.
+        const names = drawing.circularConservation.series.map(({ fileName }) => fileName);
+        if (replayRows() && names.filter((name) => name === names[index]).length > 1) drew('remove a copy from a replay with ring rows');
         files.removeCircularConservationSource(index);
         model = model.filter((_, ring) => ring !== index);
       }
@@ -489,7 +501,7 @@ test('each ring keeps one identity, its label, colour, genetic code and stack ro
   for (const kind of ['add seq', 'remove series', 'row add file', 'row remove file', 'move series', 'edit label and colour',
     're-assign colours', 'use the scheme colour', 'set a genetic code', 'widen a stack row', 'generate', 'rerender the committed request', 'replace a replayed table', 'source radio round trip',
     'save and load', 'a Load that lost a genome', 'a replay Load that lost a genome', 'a Generate that searched no ring',
-    'stack off and on']) {
+    'add seq to a replay with ring rows', 'remove a copy from a replay with ring rows', 'stack off and on']) {
     assert.ok((drawnKinds.get(kind) || 0) >= 3, `the walk draws ${kind} (${drawnKinds.get(kind) || 0} times)`);
   }
 });
