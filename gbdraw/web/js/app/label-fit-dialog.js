@@ -157,6 +157,33 @@ const rowToSelect = (rows, selectedKind, kept) => {
   return offered[0]?.kind || '';
 };
 
+/**
+ * The dialog's row selection (OV-3105): the row `rowToSelect` prefers, until the user chooses a row in this opening
+ * or Apply or Cancel waits for the row being computed (the row shown selected is the one applied).
+ * @param {LabelFitDialogState} dialog
+ */
+const createRowSelection = (dialog) => {
+  /** True once the user chose a row in this opening of the dialog. */
+  let chosen = false;
+  const select = () => {
+    dialog.selectedKind = rowToSelect(dialog.rows, dialog.selectedKind, chosen || dialog.finishing);
+  };
+  return {
+    select,
+    /** A new opening: no row is chosen yet. */
+    open: () => {
+      dialog.selectedKind = '';
+      chosen = false;
+      select();
+    },
+    /** The user's choice (a row's radio button), which no row computed later replaces. @param {LabelFitRowKind} kind */
+    choose: (kind) => {
+      dialog.selectedKind = kind;
+      chosen = true;
+    }
+  };
+};
+
 /** @param {LabelFitDialogPorts} ports */
 export const createLabelFitDialog = ({
   reactive, computeRow, writeRowSettings, withHistory, closeAfterChoice, choicePending, runAnalysis, errorSummary,
@@ -180,8 +207,7 @@ export const createLabelFitDialog = ({
   let reportRemedies = [];
   /** @type {LargerFigure | null} The requested sides the report's `figure_size` remedy names. */
   let reportLargerFigure = null;
-  /** True once the user chose a row in this opening of the dialog. */
-  let rowChosen = false;
+  const selection = createRowSelection(dialog);
 
   const close = () => { dialog.show = false; openCount += 1; };
   // Python names the ways for a stop and for a report whose rows have no value; a row still to compute may fit, so
@@ -196,12 +222,6 @@ export const createLabelFitDialog = ({
     if (index >= 0) dialog.rows[index] = { ...dialog.rows[index], ...update };
     listRemedies();
   };
-  // Apply or Cancel waits for the row being computed: the row shown selected is the one applied.
-  const selectFirstOffered = () => {
-    dialog.selectedKind = rowToSelect(dialog.rows, dialog.selectedKind, rowChosen || dialog.finishing);
-  };
-  /** The user's choice (a row's radio button), which no row computed later replaces. @param {LabelFitRowKind} kind */
-  const chooseLabelFitRow = (kind) => { dialog.selectedKind = kind; rowChosen = true; };
 
   /**
    * @param {number} opened
@@ -221,7 +241,7 @@ export const createLabelFitDialog = ({
         if (computed.kind !== row.kind) throw diagnosticError('RESULT_INVALID', {}, { stage: 'result-admission' });
         rowsByKind.set(row.kind, computed);
         updateRow(row.kind, displayRow(computed));
-        selectFirstOffered();
+        selection.select();
       } catch (error) {
         if (opened !== openCount) return;
         updateRow(row.kind, { status: 'failed', reason: errorSummary(error) });
@@ -251,10 +271,8 @@ export const createLabelFitDialog = ({
     dialog.definitionRecords = definitionRecordsOf(report);
     dialog.rows = report.rows.map(displayRow);
     listRemedies();
-    dialog.selectedKind = '';
-    rowChosen = false;
     dialog.finishing = false;
-    selectFirstOffered();
+    selection.open();
     dialog.show = true;
     return computeMissingRows(opened, rowToken);
   };
@@ -303,5 +321,8 @@ export const createLabelFitDialog = ({
     return dialog.show ? false : showRecordText(recordIndex);
   };
 
-  return { labelFitDialog: dialog, openLabelFitDialog, chooseLabelFitRow, resolveLabelFitChoice, editLabelFitRecordText };
+  return {
+    labelFitDialog: dialog, openLabelFitDialog, chooseLabelFitRow: selection.choose, resolveLabelFitChoice,
+    editLabelFitRecordText
+  };
 };
