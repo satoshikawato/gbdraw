@@ -3221,7 +3221,9 @@ def _assemble_one_circle(
     drawn_indexes = [unit.record_index for unit, _place in circle_layout.placed]
     record_features = inputs._resolved_record_features
     # One GC window and step for the bases of the records the circle draws, unless the caller set them.
-    auto_window, auto_step = sliding_window(sum(unit.length for unit, _place in circle_layout.placed), inputs.cfg)
+    [(auto_window, auto_step)] = record_sliding_windows(
+        "circular", (sum(unit.length for unit, _place in circle_layout.placed),), inputs.cfg
+    )
     return assemble_circular_diagram_from_record(
         records[first],
         replace(
