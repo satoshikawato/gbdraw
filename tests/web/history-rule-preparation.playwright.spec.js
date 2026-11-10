@@ -3,7 +3,7 @@ const { resolve } = require('node:path');
 const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { openBatch } = require('./helpers/audit-browser.cjs');
-const { appAction, history } = require('./helpers/live-generate-parity-steps.cjs');
+const { appAction, addColorRule, history } = require('./helpers/live-generate-parity-steps.cjs');
 
 const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
 
@@ -133,12 +133,10 @@ test('Redo of a rule predicate change shows what Generate draws', async ({ page 
 });
 
 // OV-3285: a feature color edit and a product-scope hide, both undone, end
-// in the restore of a History checkpoint. A Feature visibility rule added
-// after it hides its feature live, as Generate does: the restore installs the
-// catalog's own features, on which the rule matches are recorded, not copies
-// of them.
-test('A visibility rule added after the Undo of feature edits shows what Generate draws', async ({ page }) => {
-  test.setTimeout(240_000);
+// in the restore of a History checkpoint. A rule added after it shows live
+// what Generate draws: the restore installs the catalog's own features, on
+// which the rule matches are recorded, not copies of them.
+const undoneFeatureEdits = async (page) => {
   await openBatch(page);
   await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
@@ -155,6 +153,11 @@ test('A visibility rule added after the Undo of feature edits shows what Generat
   await settleLive(page);
   await history(page, 'undo');
   await history(page, 'undo');
+};
+
+test('A visibility rule added after the Undo of feature edits shows what Generate draws', async ({ page }) => {
+  test.setTimeout(240_000);
+  await undoneFeatureEdits(page);
   await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.addFeatureVisibilityRule();
@@ -163,4 +166,11 @@ test('A visibility rule added after the Undo of feature edits shows what Generat
     for (const [field, value] of Object.entries(rule)) await app.setFeatureVisibilityRuleField(index, field, value);
   });
   await expectLiveEqualsGenerate(page, { label: 'Visibility rule after the Undo of feature edits' });
+});
+
+test('A color rule added after the Undo of feature edits shows what Generate draws', async ({ page }) => {
+  test.setTimeout(240_000);
+  await undoneFeatureEdits(page);
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0004$', color: '#ff00ff', cap: 'fourth' });
+  await expectLiveEqualsGenerate(page, { label: 'Color rule after the Undo of feature edits' });
 });
