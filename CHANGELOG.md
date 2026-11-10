@@ -667,6 +667,12 @@ write-up of a release.
 - Performance: Circular maps with many labelled regions are drawn faster,
   with the same figure: a map with 150 or 400 labelled regions in an `inside`
   slot takes about half the time (OV-2981).
+- Performance: a Circular `inside` slot of labelled regions too wide for the
+  gap between the centre definition and the next ring is no longer measured
+  in that gap before it is drawn in one that holds it, so its labels' room is
+  measured twice per map instead of about 90 to 140 times. The figure is the
+  same; with 150 labelled regions the map is drawn in about a quarter of the
+  CPU time, with 400 in about 60 % (OV-2981).
 - Fixed: after a font file was registered for a font family that had already
   been used, curved Circular region labels were still checked against the
   earlier font's letters (for overlaps and for their reach), while their size
