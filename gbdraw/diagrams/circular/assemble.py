@@ -571,14 +571,7 @@ class _CircularAnnotationPacking:
                 reach=circular_annotation_mark_past_lane,
                 bp_per_px={self.record_index: self.record_length / max(1.0, 2.0 * math.pi * self.axis_radius_px)},
                 meet=partial(circular_annotation_lanes_meeting, placed=placed) if drawn else None,
-                across_centre=partial(
-                    circular_annotation_labels_across_centre,
-                    placed=placed,
-                    record_length=self.record_length,
-                    lanes_from_px=lanes_from_px,
-                )
-                if drawn and inside
-                else None,
+                across_centre=partial(circular_annotation_labels_across_centre, placed=placed) if drawn and inside else None,
             ),
             join_origin=True,
             room_bounds=room_bounds,

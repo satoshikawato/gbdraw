@@ -788,9 +788,16 @@ def circular_annotation_labels(
     )
 
 
-# The labels the drawer draws for each record of a track (record index, drawn labels), placed among the track's own
-# labels only (``circular_annotation_lane_labels``): what the lane packer's checks read.
-CircularLaneLabels: TypeAlias = tuple[tuple[int, tuple[CircularAnnotationLabel, ...]], ...]
+class CircularLaneLabels(NamedTuple):
+    """A track's labels as the lane packer's checks read them (``circular_annotation_lane_labels``): the ring its
+    lanes take, the record length they were placed on, and the labels drawn for each record (record index, labels),
+    placed among the track's own labels only."""
+
+    ring: AnnotationRing
+    record_length: int
+    labels: tuple[tuple[int, tuple[CircularAnnotationLabel, ...]], ...]
+
+
 # ``circular_annotation_lane_labels`` bound to where a slot's lanes stack: the labels of a track, its parameters and
 # the extent its lanes take.
 LaneLabelPlacer: TypeAlias = Callable[[ResolvedAnnotationTrack, AnnotationTrackParams, float], CircularLaneLabels]
@@ -815,16 +822,21 @@ def circular_annotation_lane_labels(
     ``circular_annotation_labels_across_centre``)."""
 
     inner, outer = (lanes_from_px, lanes_from_px + extent_px) if outward else (lanes_from_px - extent_px, lanes_from_px)
-    return tuple(
-        (
-            record_index,
-            circular_annotation_labels(
-                track, record_index=record_index, record_length=record_length, inner_radius_px=max(0.0, inner),
-                outer_radius_px=outer, side="outside" if outward else "inside", font_family=font_family, params=params,
-                obstacles=CircularLabelObstacles(clearance=clearance_px),
-            ).drawn,
-        )
-        for record_index in sorted({item.annotation.record_index for item in track.placements})
+    ring = AnnotationRing(max(0.0, inner), outer, "outside" if outward else "inside")
+    return CircularLaneLabels(
+        ring,
+        record_length,
+        tuple(
+            (
+                record_index,
+                circular_annotation_labels(
+                    track, record_index=record_index, record_length=record_length, inner_radius_px=ring.inner_radius_px,
+                    outer_radius_px=ring.outer_radius_px, side=ring.side, font_family=font_family, params=params,
+                    obstacles=CircularLabelObstacles(clearance=clearance_px),
+                ).drawn,
+            )
+            for record_index in sorted({item.annotation.record_index for item in track.placements})
+        ),
     )
 
 
@@ -840,7 +852,7 @@ def circular_annotation_lanes_meeting(
     packer's measure (``LabelSizing.meet``)."""
 
     met: set[tuple[int, int, int]] = set()
-    for record_index, drawn in placed(track, params, extent_px):
+    for record_index, drawn in placed(track, params, extent_px).labels:
         lanes = {item.annotation.id: item.lane for item in track.placements if item.annotation.record_index == record_index}
         for index, first in enumerate(drawn):
             for second in drawn[index + 1 :]:
@@ -858,21 +870,19 @@ def circular_annotation_labels_across_centre(
     extent_px: float,
     *,
     placed: LaneLabelPlacer,
-    record_length: int,
-    lanes_from_px: float,
 ) -> frozenset[tuple[int, str]]:
     """The labels (record index, annotation id) of an inside track whose letters ``circular_annotation_labels`` draws
     over the centre of the circle and within their ``label_offset`` of another annotation's painted mark, or across the
-    paint of their own mark (``_mark_ink``), its lanes taking ``extent_px`` toward the centre from ``lanes_from_px`` and
-    its labels ``placed`` as ``circular_annotation_lanes_meeting`` reads them (``circular_annotation_lane_labels``).
+    paint of their own mark (``_mark_ink``), its lanes taking ``extent_px`` toward the centre in the ring, and its labels,
+    ``placed`` as ``circular_annotation_lanes_meeting`` reads them (``circular_annotation_lane_labels``).
     Letters too wide for the circle their mark leaves them are centred on the centre of the circle and come back across
     it, where no room keeps them clear of the marks they meet (LBL-ACROSS-CENTRE-OMIT; OV-2991, OV-3035). Letters that
     only come nearer their own mark than their ``label_offset`` are not counted. The lane packer's measure
     (``LabelSizing.across_centre``)."""
 
-    ring = AnnotationRing(max(0.0, lanes_from_px - extent_px), lanes_from_px, "inside")
+    ring, record_length, labels = placed(track, params, extent_px)
     met: set[tuple[int, str]] = set()
-    for record_index, drawn in placed(track, params, extent_px):
+    for record_index, drawn in labels:
         across = [label for label in drawn if label.ink_radii[0] <= 0.0]
         if not across:
             continue
