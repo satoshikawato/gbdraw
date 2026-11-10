@@ -22,7 +22,7 @@ from xml.etree import ElementTree
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from gbdraw.svg.path_data import PATH_DECIMALS
-from gbdraw.web_support.feature_catalog import FEATURE_CATALOG_SCHEMA
+from gbdraw.web_support.feature_catalog import INTERACTIVE_EMBED_SCHEMA
 
 if __package__:
     from ._scenario_support import (
@@ -2294,7 +2294,7 @@ def _assert_export_set(workdir: Path) -> None:
     if (
         len(scripts) != 1
         or len(metadata) != 1
-        or metadata[0].attrib.get("data-schema") != str(FEATURE_CATALOG_SCHEMA)
+        or metadata[0].attrib.get("data-schema") != str(INTERACTIVE_EMBED_SCHEMA)
         or any(
             token not in interactive_source
             for token in (
@@ -2380,7 +2380,7 @@ def _assert_tutorial_interactive_handoff(workdir: Path) -> None:
         interactive_root.attrib.get("data-gbdraw-interactive-svg") != "true"
         or len(feature_ids) != 37
         or len(metadata) != 1
-        or metadata[0].attrib.get("data-schema") != str(FEATURE_CATALOG_SCHEMA)
+        or metadata[0].attrib.get("data-schema") != str(INTERACTIVE_EMBED_SCHEMA)
         or "COX1" not in interactive_source
         or any(
             token not in interactive_source

@@ -2026,13 +2026,15 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
         if element.get("id") == "gbdraw-interactive-feature-metadata"
     )
     payload = json.loads(metadata.text or "{}")
-    assert payload["schema"] == feature_catalog_module.FEATURE_CATALOG_SCHEMA
+    assert payload["schema"] == feature_catalog_module.INTERACTIVE_EMBED_SCHEMA
     assert len(payload["items"]) == 1
     item = payload["items"][0]
     session_catalog = session["editorState"]["featureCatalog"]
     assert session_catalog["schema"] == feature_catalog_module.FEATURE_CATALOG_SCHEMA
     session_item = session_catalog["items"][0]
-    assert item == session_item
+    # The embed keeps the sequences (schema 5); without them it is the stored item.
+    promoted = feature_catalog_module.promote_legacy_feature_catalog({**payload, "items": [item]})
+    assert promoted["items"][0] == session_item
 
     features = item["features"]
     biological_features = item["biologicalFeatures"]

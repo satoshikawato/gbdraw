@@ -215,6 +215,20 @@ it covers the whole feature track, as before. The writer writes the key only whe
 encodes as before; the reader reads an absent key as no strand. This adds no request schema (a new optional field of
 `CanonicalRegionAnnotation`). The same positive fixture holds it.
 
+Session 51 also stores its feature catalog at schema 6, which holds no sequence (PD-OI-128): no row has
+`nucleotide_sequence`, `amino_acid_sequence`, `sequence_warnings` (or their camel-case forms), `sequenceSourceIndex`
+or `translationFromAminoAcidSequence`, a CDS row keeps its `/translation` qualifier, and the item has no
+`sequenceSources` (`STORED_SEQUENCE_KEYS` in `gbdraw/web_support/feature_catalog.py`). A schema 6 catalog with any of
+them is refused. The Web app reads the bases of a feature or a match span from the Session's own inputs through Python
+when it shows them (`gbdraw/web_support/catalog_sequences.py`). Sessions 46 to 50 keep catalog schema 5
+(`FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION`); reading one promotes its catalog to schema 6
+(`promote_legacy_feature_catalog`, and `migrateLegacyFeatureCatalog` in the Web app): the keys are dropped and the
+`/translation` that a `translationFromAminoAcidSequence` mark stood for comes back, so the next Save writes schema 6.
+An exported Interactive SVG still embeds schema 5 with the sequences (`INTERACTIVE_EMBED_SCHEMA`), so the CLI writes
+the same file as before. Session 51 has not reached `main`, so the version does not change; the fixtures
+`tests/fixtures/sessions/*.v51*`, `tests/test_inputs/BGC0000708-BGC0000713.gbdraw`, and the documentation and
+Gallery Sessions carry schema 6.
+
 Request schema 10 writes a record's spans as `windows`, a list of `{start, end, reverseComplement, column}` in the
 record's source coordinates, in place of `region` (`{selector, start, end, reverseComplement}` or null). A record
 drawn as one span has one window with a null `column` (the presentation's `gridColumn` places it), and a record
