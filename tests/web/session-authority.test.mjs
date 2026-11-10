@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { drawingViewAt, savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readSavedSession } from './helpers/session-documents.mjs';
@@ -458,8 +458,8 @@ assert.throws(() => validateSessionAuthorityInventory({
   const { readFileSync } = await import('node:fs');
   const read = async (name) => {
     const saved = await readSavedSession(new Blob([readFileSync(join(repoRoot, 'gbdraw/web/gallery/sessions', name))]));
-    // The one-drawing view is the 46 layout this block checks (`modes`, `otherModeResult`).
-    return { ...savedDrawingView(saved, saved.ui.activeDrawingId), version: 46 };
+    // The one-drawing view as a Session 46 holds it, the layout this block checks (`modes`, `otherModeResult`).
+    return drawingViewAt(savedDrawingView(saved, saved.ui.activeDrawingId), 46);
   };
   const circularSession = await read('HmmtDNA_basic_circular.gbdraw');
   const linearSession = await read('lambda_basic_linear.gbdraw');
