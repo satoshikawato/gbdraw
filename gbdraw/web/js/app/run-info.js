@@ -1013,6 +1013,71 @@ const plannedRecordPlaces = async (records, drawnRecords, planRecordPlaces) => {
 };
 
 /**
+ * Writes `--records_table`: a row per record, a row per window of a record drawn in several (sharing a record_group,
+ * PD-OI-122), and a row per record of a placed Linear file drawn whole (`#1`..`#n`), every record at the columns
+ * Python's drawing gives it when such a file splits (`plannedRecordPlaces`).
+ * @param {string[]} args
+ * @param {readonly CanonicalRecord[]} records
+ * @param {RecipeFiles} files
+ * @param {{ options: readonly CliSourceOption[], sourcePaths: string[][], requestedRows: readonly (number | '')[],
+ *   requestedColumns: readonly number[], drawnRecords: readonly number[], cliPositions: CliPositions,
+ *   planRecordPlaces: RecordPlacePlanner | null }} table
+ */
+const appendRecordsTable = async (args, records, files, {
+  options, sourcePaths, requestedRows, requestedColumns, drawnRecords, cliPositions, planRecordPlaces
+}) => {
+  const places = drawnRecords.some((count) => count > 1)
+    ? await plannedRecordPlaces(records, drawnRecords, planRecordPlaces)
+    : null;
+  const requestedTableRows = requestedRows;
+  // The windows of a record drawn in several are table rows that share a record_group value (PD-OI-122).
+  const grouped = records.some((record) => record.windows.length > 1);
+  const columns = [
+    ...options, 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column',
+    'topology', 'display_start', ...(grouped ? ['record_group'] : [])
+  ];
+  const rows = records.flatMap((record, index) => {
+    const selector = selectorText(record.selector);
+    // Python's columns of the records or windows this record draws, when a file drawn whole takes several.
+    const columns = places?.[index].columns ?? [];
+    const row = {
+      ...Object.fromEntries(options.map((option, part) => [option, files.visibleName(sourcePaths[index][part])])),
+      record_label: String(record.presentation?.label || ''),
+      record_subtitle: String(record.presentation?.subtitle || ''),
+      record_id: selector,
+      region: '',
+      reverse_complement: record.windows.length ? '0' : (record.presentation?.reverseComplement ? '1' : '0'),
+      order: cliPositions[index][0],
+      row: gridCoordinate(record.presentation?.gridRow) || requestedTableRows[index] || '',
+      column: gridCoordinate(columns[0]) || gridCoordinate(record.presentation?.gridColumn) || requestedColumns[index] || '',
+      topology: record.display?.isCircular == null ? '' : record.display.isCircular ? 'circular' : 'linear',
+      display_start: record.display?.startCoordinate ?? '',
+      ...(grouped ? { record_group: '' } : {})
+    };
+    if (drawnRecords[index] > 1) {
+      return cliPositions[index].map((order, at) => ({
+        ...row, record_id: `#${at + 1}`, order, column: gridCoordinate(columns[at]) || row.column
+      }));
+    }
+    if (record.windows.length <= 1) {
+      return [{ ...row, region: record.windows.length ? regionText(record.windows[0]) : '' }];
+    }
+    return record.windows.map((window, at) => ({
+      ...row,
+      region: regionText(window),
+      column: gridCoordinate(columns[at]) || gridCoordinate(window.column) || row.column,
+      record_group: String(index + 1)
+    }));
+  });
+  const tablePath = files.generatedTextPath(
+    'records.tsv',
+    tsv(columns, rows),
+    'generatedFiles.source_recipe.records_table'
+  );
+  args.push('--records_table', tablePath);
+};
+
+/**
  * @param {string[]} args
  * @param {CanonicalRenderRequest} request
  * @param {RecipeFiles} files
@@ -1118,55 +1183,9 @@ const appendInputArgs = async (args, request, files, planRecordPlaces) => {
   }
 
   if (recordsTableRequired) {
-    const places = drawnRecords.some((count) => count > 1)
-      ? await plannedRecordPlaces(records, drawnRecords, planRecordPlaces)
-      : null;
-    const requestedTableRows = requestedRows;
-    // The windows of a record drawn in several are table rows that share a record_group value (PD-OI-122).
-    const grouped = records.some((record) => record.windows.length > 1);
-    const columns = [
-      ...options, 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column',
-      'topology', 'display_start', ...(grouped ? ['record_group'] : [])
-    ];
-    const rows = records.flatMap((record, index) => {
-      const selector = selectorText(record.selector);
-      // Python's columns of the records or windows this record draws, when a file drawn whole takes several.
-      const columns = places?.[index].columns ?? [];
-      const row = {
-        ...Object.fromEntries(options.map((option, part) => [option, files.visibleName(sourcePaths[index][part])])),
-        record_label: String(record.presentation?.label || ''),
-        record_subtitle: String(record.presentation?.subtitle || ''),
-        record_id: selector,
-        region: '',
-        reverse_complement: record.windows.length ? '0' : (record.presentation?.reverseComplement ? '1' : '0'),
-        order: cliPositions[index][0],
-        row: gridCoordinate(record.presentation?.gridRow) || requestedTableRows[index] || '',
-        column: gridCoordinate(columns[0]) || gridCoordinate(record.presentation?.gridColumn) || requestedColumns[index] || '',
-        topology: record.display?.isCircular == null ? '' : record.display.isCircular ? 'circular' : 'linear',
-        display_start: record.display?.startCoordinate ?? '',
-        ...(grouped ? { record_group: '' } : {})
-      };
-      if (drawnRecords[index] > 1) {
-        return cliPositions[index].map((order, at) => ({
-          ...row, record_id: `#${at + 1}`, order, column: gridCoordinate(columns[at]) || row.column
-        }));
-      }
-      if (record.windows.length <= 1) {
-        return [{ ...row, region: record.windows.length ? regionText(record.windows[0]) : '' }];
-      }
-      return record.windows.map((window, at) => ({
-        ...row,
-        region: regionText(window),
-        column: gridCoordinate(columns[at]) || gridCoordinate(window.column) || row.column,
-        record_group: String(index + 1)
-      }));
+    await appendRecordsTable(args, records, files, {
+      options, sourcePaths, requestedRows, requestedColumns, drawnRecords, cliPositions, planRecordPlaces
     });
-    const tablePath = files.generatedTextPath(
-      'records.tsv',
-      tsv(columns, rows),
-      'generatedFiles.source_recipe.records_table'
-    );
-    args.push('--records_table', tablePath);
     return { recordsTableUsed: true, cliPositions };
   }
 
