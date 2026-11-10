@@ -844,6 +844,9 @@ export const createLinearTrackSlotEditor = ({
     if (slot.renderer === 'dinucleotide_content' || slot.renderer === 'dinucleotide_skew') {
       slot.params.nt = normalizeNt(slot.params.nt, normalizeNt(drawing.adv.nt));
     }
+    if (slot.renderer === 'feature_density' && !slot.params.track) {
+      slot.params.track = nextFeatureDensitySlotTrack(drawing.adv.feature_density_tracks, drawing.adv.linear_track_slots);
+    }
     if (slot.renderer === 'annotations') {
       slot.side = slot.side === 'overlay' ? 'overlay' : 'above';
       // The row itself names no set yet, so it does not count against one.

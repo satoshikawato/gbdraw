@@ -1310,3 +1310,23 @@ for (const stackOn of [true, false]) {
     assert.equal(editor.state.adv.pending_marker, 'kept');
   });
 }
+
+// #1836 review r1 finding 1: a row changed away from Feature density drops `track` (Python refuses it on any other
+// renderer), and a row changed to Feature density draws the first track no row draws yet, as Add does.
+test('a row changed from or to Feature density drops or picks its track, in both modes', () => {
+  for (const [mode, open] of Object.entries(MODES)) {
+    const row = mode === 'circular' ? circularRow : linearRow;
+    const { state, slots, setRenderer, issue } = open([
+      row('features', 'features', {}, mode === 'circular' ? 'inside' : 'overlay'),
+      row('density_genes', 'feature_density', { track: 'genes' }), row('sp', 'spacer')
+    ]);
+    state.adv.feature_density_tracks = [{ id: 'genes' }, { id: 'ltr' }];
+    setRenderer(slots()[1], 'spacer');
+    assert.deepEqual(slots()[1].params, {}, `${mode}: density -> spacer`);
+    assert.equal(issue(1), '', `${mode}: the former density row has no issue`);
+    setRenderer(slots()[2], 'feature_density');
+    assert.equal(slots()[2].params.track, 'genes', `${mode}: spacer -> density picks the first undrawn track`);
+    setRenderer(slots()[1], 'feature_density');
+    assert.equal(slots()[1].params.track, 'ltr', `${mode}: the next one picks the next undrawn track`);
+  }
+});

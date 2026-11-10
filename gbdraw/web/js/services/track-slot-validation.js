@@ -1016,6 +1016,7 @@ const PARAM_OWNER = new Map([
   ['high_color', 'dinucleotide_skew'],
   ['low_color', 'dinucleotide_skew'],
   ['track_index', 'depth-or-conservation'],
+  ['track', 'feature_density'],
   ['source_index', 'sequence_conservation'],
   ['series_key', 'sequence_conservation'],
   ['managed', 'sequence_conservation'],

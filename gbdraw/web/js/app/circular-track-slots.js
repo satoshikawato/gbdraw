@@ -1458,6 +1458,8 @@ export const createCircularTrackSlotEditor = ({
       slot.params.overflow = 'error';
       slot.params.show_labels = true;
       slot.params.layer = 'foreground';
+    } else if (renderer === 'feature_density' && !slot.params.track) {
+      slot.params.track = nextFeatureDensitySlotTrack(drawing.adv.feature_density_tracks, drawing.adv.circular_track_slots);
     }
     normalizeSlots(drawing);
   };
