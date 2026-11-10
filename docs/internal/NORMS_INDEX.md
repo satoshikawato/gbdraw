@@ -688,6 +688,7 @@ under "Cited ids without a record".
   - `tests/web/circular-track-measure-input.playwright.spec.js`
   - `tests/web/failed-generate-bindings.playwright.spec.js`
   - `tests/web/feature-catalog-reuse.playwright.spec.js`
+  - `tests/web/feature-density-editor.test.mjs`
   - `tests/web/gui-audit-20260930-options.playwright.spec.js`
   - `tests/web/live-generate-parity-track-data.playwright.spec.js`
   - `tests/web/live-setting-application-gt.test.mjs`
@@ -861,6 +862,11 @@ under "Cited ids without a record".
   - `tests/web/diagram-out-of-memory.test.mjs`
   - `tests/web/error-boundary.playwright.spec.js`
   - `tests/web/error-normalization.test.mjs`
+
+- [PD-OI-126](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-126-feature-density-track-editor): Feature density track editor. ACCEPTED, concern `web.feature-density.track-editor`, scenario revision 1.
+  - `tests/web/feature-density-editor.test.mjs`
+  - `tests/web/scale-visibility.playwright.spec.js`
+  - `tests/web/settings-pane-rail.playwright.spec.js`
 
 ### Cited ids without a record
 
