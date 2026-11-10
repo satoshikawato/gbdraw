@@ -4,6 +4,7 @@ import {
   IMPORTED_COMPARISON_ACTIONS,
   IMPORTED_COMPARISON_DISPOSITIONS,
   classifyImportedComparisonIntent,
+  comparisonFollowsCurrentControls,
   createImportedComparisonIntentState,
   followCommittedComparison,
   importedComparisonExecution,
@@ -260,6 +261,13 @@ assert.deepEqual([emptyReplacement?.code, emptyReplacement?.actions],
 assert.equal(emptyReplacement?.summary,
   'Set up a comparison in the Comparison panel, or choose Clear comparison, then Generate again.');
 assert.equal(importedComparisonExecution({ intent: decisionState, draftResolution: null }).ok, false);
+// OV-3324: Generate takes its cards from the current controls (a whole
+// multi-record card splits, as for an editable comparison) once Replace is
+// chosen; an undecided, inherited or cleared saved comparison keeps the cards
+// it was saved over.
+assert.equal(comparisonFollowsCurrentControls(decisionState), true);
+assert.equal(comparisonFollowsCurrentControls(createImportedComparisonIntentState()), true);
+assert.equal(comparisonFollowsCurrentControls(inheritedState), false);
 
 restoreImportedComparisonIntent(decisionState, decision);
 assert.deepEqual(resolveImportedComparisonAction({
@@ -271,6 +279,9 @@ assert.deepEqual(importedComparisonExecution({
   intent: decisionState,
   draftResolution: { valid: false, hasComparisonIntent: false }
 }), { ok: true, mode: 'clear' });
+assert.equal(comparisonFollowsCurrentControls(decisionState), false);
+restoreImportedComparisonIntent(decisionState, decision);
+assert.equal(comparisonFollowsCurrentControls(decisionState), false);
 
 const committed = {
   renderRequest: request([{

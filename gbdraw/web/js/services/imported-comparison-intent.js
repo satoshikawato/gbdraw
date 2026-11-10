@@ -575,23 +575,25 @@ export const resolveImportedComparisonAction = ({
 };
 
 /**
+ * Whether the next Generate draws the comparison of the current controls rather than the saved one: an editable
+ * comparison, or a saved one the user chose to Replace. Generate then takes the cards from the current controls too,
+ * splitting a whole multi-record card into one card per record (OV-3324); a saved comparison it keeps (Inherit) or
+ * has not been told what to do with keeps the cards it was saved over, which its record indexes name.
+ * @param {ImportedComparisonIntent} intent
+ */
+export const comparisonFollowsCurrentControls = (intent) => (
+  intent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE || intent.action === IMPORTED_COMPARISON_ACTIONS.REPLACE
+);
+
+/**
  * @param {{ intent: ImportedComparisonIntent | null | undefined, draftResolution: ComparisonDraftResolution | null | undefined }} state
  */
 export const importedComparisonExecution = ({ intent, draftResolution }) => {
-  if (intent?.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
-    return { ok: true, mode: 'draft' };
-  }
-  if (intent?.action === IMPORTED_COMPARISON_ACTIONS.INHERIT) {
-    return { ok: true, mode: 'inherit' };
-  }
-  if (intent?.action === IMPORTED_COMPARISON_ACTIONS.CLEAR) {
-    return { ok: true, mode: 'clear' };
-  }
-  if (intent?.action === IMPORTED_COMPARISON_ACTIONS.REPLACE) {
-    // An invalid draft (issues need an edge, so it has an intent) fails in the run
+  if (intent && comparisonFollowsCurrentControls(intent)) {
+    // After Replace, an invalid draft (issues need an edge, so it has an intent) fails in the run
     // with its own diagnostic, as an editable comparison does. An empty draft
     // would clear the saved comparison instead.
-    if (draftResolution?.hasComparisonIntent === true) {
+    if (intent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE || draftResolution?.hasComparisonIntent === true) {
       return { ok: true, mode: 'draft' };
     }
     return {
@@ -599,6 +601,12 @@ export const importedComparisonExecution = ({ intent, draftResolution }) => {
       message: 'Set one complete, valid comparison before generating.',
       fallbackCode: 'COMPARISON_REPLACEMENT_EMPTY'
     };
+  }
+  if (intent?.action === IMPORTED_COMPARISON_ACTIONS.INHERIT) {
+    return { ok: true, mode: 'inherit' };
+  }
+  if (intent?.action === IMPORTED_COMPARISON_ACTIONS.CLEAR) {
+    return { ok: true, mode: 'clear' };
   }
   // A reason with its own diagnostic (a missing resource) keeps it; any other
   // reason reports the pending choice instead of the unclassified fallback (OV-303).
