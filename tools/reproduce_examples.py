@@ -119,9 +119,8 @@ def recording_svg2png(svg2png: Callable[..., Any], record: Callable[[bytes], Non
 def run_recording_cli(argv: list[str]) -> None:
     """``gbdraw <argv[1:]>`` with the ``raster_input_digest`` of each PNG it writes appended, one per
     line, to the file ``argv[0]``."""
-    import cairosvg
-
     from gbdraw.cli import main
+    from gbdraw.render.export import get_cairosvg
 
     record = Path(argv[0])
 
@@ -129,7 +128,9 @@ def run_recording_cli(argv: list[str]) -> None:
         with record.open("ab") as handle:
             handle.write(digest + b"\n")
 
-    cairosvg.svg2png = recording_svg2png(cairosvg.svg2png, append)
+    # The module gbdraw's export converts with: the wrapper sees each call, and converts nothing itself.
+    cairosvg_module = get_cairosvg()
+    cairosvg_module.svg2png = recording_svg2png(cairosvg_module.svg2png, append)
     sys.argv = ["gbdraw", *argv[1:]]
     main()
 
