@@ -5240,7 +5240,8 @@ Status: active Product authority
   - Rule message 1: 「直し方：1つのファイル内の複数レコード、あるいは1つのファイル内の1レコード内の複数領域だったら、E-valueは1ファイル単位で数えるべきでは？1ファイル内に複数のレプリコンがある場合はそうしてたよね？それと同じ」
   - Rule message 2: 「1行に複数ファイルがある場合も、E-valueはまとめて計算するべき。」
   - Rule message 3: 「もとは1つのゲノムのレプリコンが複数ファイルに分かれているような場合、E-valueはゲノム単位で計算すべきという意味」
-  - Rule message 4: 「CircularのMulti-replicon genome (Vibrio nigripulchritudo TUMSAT-TG-2018のExampleみたいな）は、「リング」は複数だけど1個のゲノムということでいいね？」
+  - Message 4, a question that the session answered yes (the receipt's
+    Circular sentence follows that answer): 「CircularのMulti-replicon genome (Vibrio nigripulchritudo TUMSAT-TG-2018のExampleみたいな）は、「リング」は複数だけど1個のゲノムということでいいね？」
   - Reply to the full receipt text recorded below: 「すべて推奨通り、文面承認」
   - The Owner approved the receipt text as written; it is recorded byte for
     byte.
