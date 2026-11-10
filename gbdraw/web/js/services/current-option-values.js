@@ -73,6 +73,7 @@ export const CIRCULAR_MULTI_RECORD_SIZE_MODES = /** @type {const} */ (['auto', '
 export const LINEAR_TRACK_LAYOUTS = /** @type {const} */ (['above', 'middle', 'below']);
 export const LINEAR_LABEL_PLACEMENTS = /** @type {const} */ (['auto', 'above_feature']);
 export const PROTEIN_BLASTP_MODES = /** @type {const} */ (['pairwise', 'orthogroup', 'collinear']);
+/** @typedef {(typeof PROTEIN_BLASTP_MODES)[number]} ProteinBlastpMode */
 export const CIRCULAR_MULTI_RECORD_SIZE_MODE_ALIASES = Object.freeze({ sqrt: /** @type {const} */ ('auto') });
 export const LINEAR_TRACK_LAYOUT_ALIASES = Object.freeze({ spreadout: /** @type {const} */ ('above'), tuckin: /** @type {const} */ ('below') });
 export const LINEAR_LABEL_PLACEMENT_ALIASES = Object.freeze({ on_feature: /** @type {const} */ ('above_feature') });

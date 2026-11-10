@@ -2,6 +2,9 @@
 /** @import { FileImports } from './file-imports.js' */
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { ProteinBlastpMode } from './current-option-values.js' */
+/** @import { CollinearMergeOrientation } from './losat-normalization.js' */
+/** @import { CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
 /** @import { CanonicalFeatureDensityTrack, CanonicalLinearLayout, CanonicalLinearRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
 /** @import { FieldLeaf, FieldReading } from '../utils/field-reading.js' */
 /** @import { LinearWrapFormValue } from './linear-wrap-form.js' */
@@ -135,15 +138,39 @@ export const createDefaultAdv = (mode = 'circular') => ({
   circular_track_slots_schema_version: CIRCULAR_TRACK_SLOT_SCHEMA_VERSION, circular_track_slots_axis_index: null, circular_track_slots: createDefaultCircularTrackSlots(),
   outer_label_x_offset: null, outer_label_y_offset: null, inner_label_x_offset: null, inner_label_y_offset: null
 });
+/** @typedef {{ candidateLimit: number | null, orthogroupMemberMaxHits: number | null }} LosatpHitLimits `null` is Unbounded */
+/** @returns {Record<ProteinBlastpMode, LosatpHitLimits>} */
 export const createDefaultLosatpHitLimits = () => ({
   pairwise: { ...FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits },
   orthogroup: { ...FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits },
   collinear: { ...FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits }
 });
+/**
+ * The values of the execution selects (option values are text; Parallel runs' Auto is `undefined`).
+ * @typedef {{ executionMode: string, totalThreadBudget: string, threadsPerJob: string, parallelWorkers: string | undefined }} LosatExecution
+ */
 // How LOSAT runs: one app-level setting for both drawings (Session `ui.losatExecution`).
+/** @returns {LosatExecution} */
 export const createDefaultLosatExecution = () => ({
   executionMode: 'threaded', totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined
 });
+/**
+ * A drawing's LOSAT search settings. A count is `''` when its `v-model.number` input is cleared; `null` is Unbounded.
+ * `hitLimitsByMode` keeps each mode's two limits while another mode is shown. A choice holds a value Python reads.
+ * @typedef {{ mode: ProteinBlastpMode, maxHits: number | '', candidateLimit: number | '' | null,
+ *   hitLimitsByMode: Record<ProteinBlastpMode, Pick<LosatBlastpSettings, keyof LosatpHitLimits>>,
+ *   orthogroupMembershipMode: CanonicalProteinComparisonSettings['orthogroupMembershipMode'],
+ *   orthogroupMemberMaxHits: number | '' | null, collinearInferOrthogroups: boolean, collinearMinAnchors: number | '',
+ *   collinearMaxUnitGap: number | '', collinearMaxDiagonalDrift: number | '', collinearMaxConflictsInMergeGap: number | '',
+ *   collinearMaxParalogLinksPerOrthogroup: number | '',
+ *   collinearColorMode: CanonicalProteinComparisonSettings['collinearityColorMode'],
+ *   collinearUnitMode: CanonicalProteinComparisonSettings['collinearityUnitMode'],
+ *   collinearAnchorMode: CanonicalProteinComparisonSettings['collinearityAnchorMode'],
+ *   collinearMergeOrientation: CollinearMergeOrientation,
+ *   collinearSearchScope: CanonicalProteinComparisonSettings['collinearitySearchScope'] }} LosatBlastpSettings
+ * @typedef {{ outfmt: string, blastn: { task: string }, blastp: LosatBlastpSettings }} LosatSettings
+ */
+/** @returns {LosatSettings} */
 export const createDefaultLosat = () => ({
   outfmt: '6',
   blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', hitLimitsByMode: createDefaultLosatpHitLimits(), maxHits: 5, candidateLimit: FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits.candidateLimit, orthogroupMembershipMode: ORTHOGROUP_INFERENCE_VERSION,
