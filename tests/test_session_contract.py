@@ -18,7 +18,11 @@ from gbdraw.session_io import (
     SESSION_FORMAT,
     validate_session,
 )
-from gbdraw.session_request_codec import describe_canonical_request, stored_record_windows
+from gbdraw.session_request_codec import (
+    describe_canonical_request,
+    released_ring_genome_files,
+    stored_record_windows,
+)
 from gbdraw.web_support.mode_scoped_settings import DIAGRAM_MODES, MODE_SCOPED_SETTINGS
 from tests.test_canonical_request_shape import _request
 from tests.test_session_admission_vectors import VECTORS, _edited
@@ -47,8 +51,8 @@ def _admission_problems(session: dict[str, Any]) -> list[str]:
 
 
 def _with_current_request(session: dict[str, Any]) -> dict[str, Any]:
-    """A Session up to 50 as the current description reads it: its schema 9 requests, one ``region`` per record, as
-    schema 10 (``two_mode_session`` stores schema 9 requests).
+    """A Session up to 50 as the current description reads it: its schema 9 requests, one ``region`` per record and one
+    genome file per ring, as schema 10 (``two_mode_session`` stores schema 9 requests).
 
     The description is of the current request; a Session 50 stores the request of its own time, which the readers
     accept (``tests/test_session_request_codec.py``).
@@ -65,6 +69,12 @@ def _with_current_request(session: dict[str, Any]) -> dict[str, Any]:
             record["windows"] = stored_record_windows(record)
             region = record.pop("region")
             assert region is None or region["selector"] is None, "a region selector moves to the record on decode"
+        options = request["diagramOptions"]
+        if isinstance(options.get("conservationFastaFiles"), list):
+            # The production reader of a ring's genome files (one reference or null per ring before schema 10).
+            options["conservationFastaFiles"] = [
+                released_ring_genome_files(item) for item in options["conservationFastaFiles"]
+            ]
     return session
 
 
