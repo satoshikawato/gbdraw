@@ -563,7 +563,7 @@ class CircularLabelFitSearch:
         return fit if fit is not None and fit.region_warnings else None
 
     def _with_region_notice(self, row: LabelFitRow) -> LabelFitRow:
-        """A row whose figure keeps a region label warning draws with the notice; its grid value still bounds the
+        """A row whose figure keeps a region label warning draws with the notice; its first value still bounds the
         rows that start from it."""
 
         fit = self._region_warned(row)
@@ -578,9 +578,9 @@ class CircularLabelFitSearch:
     ) -> tuple[LabelFitRow, float]:
         """A row whose first value keeps a region label warning walks on, as when it answered for the whole figure,
         to the first later value of its lever whose whole figure fits; without one up to the lever's limit, its first
-        value stays and draws with the notice (OV-3110, D-117). Either way the first value, the mildest that clears the
-        labels the row moves, bounds the rows that start from this one. At the deadline the first value is the row,
-        kept out of the cache so a later ask walks on."""
+        value stays and draws with the notice (OV-3110, D-117). The value the row offers bounds the rows that start
+        from this one, as on dev: the value it walked on to, else its first value (D-118). At the deadline the first
+        value is the row, kept out of the cache so a later ask walks on."""
 
         if self._region_warned(found[0]) is None:
             return found
@@ -592,7 +592,7 @@ class CircularLabelFitSearch:
                 values = values_for(value)
                 row = verified_row(kind, values, self._verify(kind, values), offer_notice=False)
                 if row is not None and self._region_warned(row) is None:
-                    return row, found[1]
+                    return row, value
         except _SearchStopped:
             self._unfinished = True
         return found

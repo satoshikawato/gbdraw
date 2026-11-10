@@ -533,10 +533,12 @@ test('a row that fits is selected over a row with the notice, until the user cho
   assert.deepEqual(applied.writes.map(({ values }) => values), [{ [Y_OFFSET]: 1.025 }]);
   assert.equal(applied.generates.length, 1);
 
-  // The radio buttons choose through the dialog, so it knows the user's choice.
+  // The radio buttons choose through the dialog, so it knows the user's choice: on a click, which a radio already
+  // selected also fires (it fires no change event; the Playwright crossing-leaders case clicks it).
   const { readFile } = await import('node:fs/promises');
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  assert.match(html, /@change="chooseLabelFitRow\(row\.kind\)"/);
+  assert.match(html, /@click="chooseLabelFitRow\(row\.kind\)"/);
+  assert.doesNotMatch(html, /@change="chooseLabelFitRow/);
   assert.doesNotMatch(html, /labelFitDialog\.selectedKind = /);
 });
 

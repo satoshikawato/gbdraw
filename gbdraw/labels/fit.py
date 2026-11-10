@@ -17,7 +17,7 @@ from __future__ import annotations
 import math
 import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol, TypeAlias, TypeGuard, get_args
 
 from ..exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
@@ -157,10 +157,32 @@ class LabelShape:
     leader: tuple[Point, ...] = ()
 
 
-# The region label warnings of ``LabelFit``, by field, with their count words (singular, plural): the one list that
-# sums, leaves out and words them (LP-D68, LP-D87, LP-D86, LBL-ROOM-STOP-AT-CENTRE-OMIT, LBL-ROOM-CLIP-FIT-OMIT,
-# RGN-CUT-EMPTY-OMIT).
-_REGION_WARNING_WORDS: Mapping[str, tuple[str, str]] = {
+# The fields of ``LabelFit``, in its order (a test pins them to the dataclass).
+LabelFitField: TypeAlias = Literal[
+    "overlap_pairs",
+    "crossing_pairs",
+    "definition_overlaps",
+    "region_overlaps",
+    "region_cuts",
+    "region_track_overlaps",
+    "definition_track_overlaps",
+    "region_rooms_past_centre",
+    "region_rooms_clipped",
+    "region_cuts_left_out",
+]
+# Its region label warnings: the one list that sums, leaves out and words them (LP-D68, LP-D87, LP-D86,
+# LBL-ROOM-STOP-AT-CENTRE-OMIT, LBL-ROOM-CLIP-FIT-OMIT, RGN-CUT-EMPTY-OMIT).
+RegionWarningField: TypeAlias = Literal[
+    "region_overlaps",
+    "region_cuts",
+    "region_track_overlaps",
+    "region_rooms_past_centre",
+    "region_rooms_clipped",
+    "region_cuts_left_out",
+]
+REGION_WARNING_FIELDS: tuple[RegionWarningField, ...] = get_args(RegionWarningField)
+# Each region label warning's count words (singular, plural).
+_REGION_WARNING_WORDS: Mapping[RegionWarningField, tuple[str, str]] = {
     "region_overlaps": ("region label overlap", "region label overlaps"),
     "region_cuts": ("region label cut", "region labels cut"),
     "region_track_overlaps": ("region label on another track", "region labels on other tracks"),
@@ -174,7 +196,6 @@ _REGION_WARNING_WORDS: Mapping[str, tuple[str, str]] = {
         "region labels left out: no letter fits their circles",
     ),
 }
-REGION_WARNING_FIELDS: tuple[str, ...] = tuple(_REGION_WARNING_WORDS)
 
 
 @dataclass(frozen=True)
@@ -214,7 +235,7 @@ class LabelFit:
 
         return self.region_rooms_past_centre + self.region_rooms_clipped + self.region_cuts_left_out
 
-    def count(self, field_name: str) -> int:
+    def count(self, field_name: LabelFitField) -> int:
         """One count by its field name."""
 
         count: int = getattr(self, field_name)
@@ -243,7 +264,7 @@ class LabelFit:
 
 
 FITS = LabelFit(0, 0)
-_FIT_FIELDS: tuple[str, ...] = tuple(item.name for item in fields(LabelFit))
+_FIT_FIELDS: tuple[LabelFitField, ...] = get_args(LabelFitField)
 
 
 @dataclass(frozen=True)
@@ -1108,8 +1129,10 @@ __all__ = [
     "LabelCapacityRecord",
     "LabelCapacityRemedy",
     "LabelFit",
+    "LabelFitField",
     "OFFERED_ROW_STATUSES",
     "REGION_WARNING_FIELDS",
+    "RegionWarningField",
     "LabelFitOutcome",
     "LabelFitRecord",
     "LabelFitReport",
