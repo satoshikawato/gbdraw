@@ -226,7 +226,8 @@ const AGAIN_PREFIX = 'again:';
  * asks what the new row draws: one set again, or no set yet (the row then asks
  * for one). A row turned off names its set too (it draws it once turned on);
  * the question says it is off, and claims no second drawing of a set whose
- * every row is off. The choice adds the row as one History step; Cancel adds
+ * every row is off. It describes only the rows of the current sets: a row
+ * whose set was removed draws nothing. The choice adds the row as one History step; Cancel adds
  * nothing.
  * The answer does nothing when the stack's rows or the sets are no longer
  * those it asked about. The composition root wraps each stack editor's Add
@@ -248,7 +249,7 @@ export const askingAnnotationTrackAdd = ({ askChoice, runUndoable, busy, rows, a
   const drawnSets = new Set();
   const named = stack.flatMap((row, index) => {
     const setId = annotationRowSetId(row);
-    if (!setId) return [];
+    if (!setIds.includes(setId)) return [];
     const texts = { row: trackRowItem(index, row.id), set: setId };
     if (row.enabled === false) return [t('{row} names {set} but is turned off.', texts)];
     drawnSets.add(setId);
@@ -336,7 +337,7 @@ export const askTrackSourceRemoval = ({ askChoice, runUndoable, busy, rows, mode
     label,
     unchanged: () => {
       const now = sources();
-      return !busy() && now.length === asked.length && now.every((source, index) => source === asked[index]);
+      return !busy() && sameEntries(asked, now);
     },
     apply
   });

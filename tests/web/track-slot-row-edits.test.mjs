@@ -488,6 +488,18 @@ for (const mode of ['circular', 'linear']) {
     ]);
   });
 
+  // A row whose set was removed (removeAnnotationSet leaves the row) draws
+  // nothing: the question describes only the rows of the current sets.
+  test(`${mode}: the question describes no row whose set no longer exists`, async () => {
+    const editor = asking([...ROWS[mode](), make('annotations_1', 'annotations', { set_id: 'regions' }, laneSide),
+      make('annotations_2', 'annotations', { set_id: 'removed_set' }, laneSide)], [twoSets()[0]]);
+    await editor.addTrack('annotations');
+    const [request] = editor.asked;
+    const number = editor.slots().findIndex((slot) => slot.id === 'annotations_1') + 1;
+    assert.equal(request.description, `Track row ${number} (annotations_1) draws regions. Choose what the new Annotations row draws.`);
+    assert.deepEqual(request.actions.map(({ id }) => id), ['again:regions', 'unset']);
+  });
+
   // A sequence search's set (PD-OI-117) with no row is a set without a row:
   // the new row draws it, which is how it leaves its automatic overlay.
   test(`${mode}: Add track Annotations gives a sequence search's set without a row to the new row, without asking`, async () => {
