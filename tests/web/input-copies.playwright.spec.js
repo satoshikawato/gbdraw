@@ -16,13 +16,25 @@ const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 const SOURCE = path.resolve('tests/test_inputs/NC_001416.gb');
 const OTHER = path.resolve('tests/test_inputs/AP027078.gb');
 
-// Every copy file of every tab folder: [{ tab, name, size }].
+// Every copy file of every tab folder: [{ tab, name, size }]. The app writes and removes
+// copies while this lists them, so an entry that is gone when read is left out.
 const copyFiles = (page) => page.evaluate(async () => {
   const base = await (await navigator.storage.getDirectory()).getDirectoryHandle('gbdraw-input-copies', { create: true });
   const files = [];
+  const skipGone = (error) => {
+    if (error.name !== 'NotFoundError') throw error;
+  };
   for await (const [tab, folder] of base.entries()) {
-    for await (const [name, handle] of folder.entries()) {
-      files.push({ tab, name, size: (await handle.getFile()).size });
+    try {
+      for await (const [name, handle] of folder.entries()) {
+        try {
+          files.push({ tab, name, size: (await handle.getFile()).size });
+        } catch (error) {
+          skipGone(error);
+        }
+      }
+    } catch (error) {
+      skipGone(error);
     }
   }
   return files;
