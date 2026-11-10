@@ -158,7 +158,7 @@ test('a WASI thread refreshes its view of the shared memory right before wasi_th
   assert.equal(new Int32Array(cold.memory.buffer)[0], 1);
 });
 
-const setupPage = async (t, { trappedAttempts = Infinity, trap = true } = {}) => {
+const setupPage = async (t, { trappedAttempts = Infinity, trap = true, losatReported } = {}) => {
   assert.ok(WebAssembly.validate(threadedJobModule));
   restoreGlobalsAfter(t, ['window', 'crossOriginIsolated', 'fetch', 'Worker']);
   for (const level of ['info', 'warn']) {
@@ -194,7 +194,10 @@ const setupPage = async (t, { trappedAttempts = Infinity, trap = true } = {}) =>
         return;
       }
       queueMicrotask(() => {
-        const data = { id: message.id, type: message.type, ok: true, text: 'q\ts\t100\n' };
+        // `losatReported`: every run's LOSAT exits with an error and reports this (OV-3304).
+        const data = losatReported !== undefined && message.type === 'run'
+          ? { id: message.id, type: 'run', ok: false, error: 'LOSAT_RUNTIME/FAILED', losatReported, trap: false }
+          : { id: message.id, type: message.type, ok: true, text: 'q\ts\t100\n' };
         for (const listener of this.listeners.get('message') || []) listener({ data });
       });
     }
@@ -258,6 +261,20 @@ test('automatic threaded LOSAT falls back to serial execution after its trap ret
   assert.deepEqual(workers.map((worker) => worker.threaded), [true, true, true, false]);
   assert.ok(workers.every((worker) => worker.terminated));
 });
+
+// OV-3304: a LOSAT run that exits with an error reaches the page as the LOSAT failure with what LOSAT reported, from
+// either pool, once: the serial pool does not run the jobs again in the page, and the threaded pool retries only traps.
+for (const [label, executionMode, threaded] of [['serial', 'serial', false], ['threaded', 'threaded', true]]) {
+  test(`a ${label} LOSAT failure reaches the page with what LOSAT reported, run once`, async (t) => {
+    const { owner, workers } = await setupPage(t, { trappedAttempts: 0, losatReported: "invalid value '9' for '-searchsp <INT_VALUE>'" });
+    await assert.rejects(
+      settleWithin(owner.runLosatPairsParallel([job], { ...options, executionMode }), 5000, label),
+      (error) => error.code === 'LOSAT_RUNTIME' && error.stage === 'losat' && error.context.reason === 'FAILED'
+        && error.context.losatMessage === "invalid value '9' for '-searchsp <INT_VALUE>'"
+    );
+    assert.deepEqual(workers.map((worker) => worker.threaded), [threaded]);
+  });
+}
 
 // CO-01 (PD-OI-018): threaded stays strict without cross-origin isolation and
 // fails with a recognized LOSAT diagnostic instead of UNKNOWN.

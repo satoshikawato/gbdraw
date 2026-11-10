@@ -8,6 +8,8 @@ import { losatSearchTask } from './losat-cache.js';
 import {
   compileLosatWasm,
   hasDirectLosatApi,
+  losatRunFailure,
+  reportedLosatFailure,
   requireLosatProgram,
   runLosatPairDirect,
   runLosatPairWasi
@@ -90,14 +92,16 @@ const SERIAL_LOSATN_TASKS = new Set(['megablast', 'blastn']);
  */
 
 /**
- * What the LOSAT workers post back. `init` and `run` replies carry `ok`; the
- * threaded worker adds `trap` and `spawnCount`; a thread-fault arrives on the
- * fault BroadcastChannel with `tid` and `stderr`.
+ * What the LOSAT workers post back. `init` and `run` replies carry `ok`; a failed
+ * `run` whose LOSAT exited with an error carries what LOSAT reported
+ * (`reportedLosatFailure`); the threaded worker adds `trap` and `spawnCount`; a
+ * thread-fault arrives on the fault BroadcastChannel with `tid` and `stderr`.
  * @typedef {object} LosatWorkerReply
  * @property {string} [id]
  * @property {string} [type]
  * @property {boolean} [ok]
  * @property {string} [error]
+ * @property {string | null} [losatReported]
  * @property {string} [text]
  * @property {boolean} [trap]
  * @property {number} [spawnCount]
@@ -486,6 +490,7 @@ const runLosatPairsSequential = async (jobs, { onProgress, sequences, signal, wa
       }
     } catch (error) {
       if (isAbortError(error, signal)) throw getAbortReason(signal);
+      if (reportedLosatFailure(error) !== null) throw error;
       const message = error?.message ? String(error.message) : String(error || 'Unknown LOSAT error');
       throw new Error(`${formatPairErrorPrefix(job)}: ${message}`);
     }
@@ -679,7 +684,8 @@ const runLosatPairsWithWorkers = async (
         worker.removeEventListener('messageerror', handleMessageError);
 
         if (!data.ok) {
-          fail(new Error(`${formatPairErrorPrefix(job)}: ${data.error || 'LOSAT worker failed'}`));
+          fail(typeof data.losatReported === 'string' ? losatRunFailure(data.losatReported)
+            : new Error(`${formatPairErrorPrefix(job)}: ${data.error || 'LOSAT worker failed'}`));
           return;
         }
         if (signal?.aborted) {
@@ -882,7 +888,8 @@ const runLosatPairsThreaded = async (
         if (!data.ok) {
           failOrRetryTrap(
             index,
-            new Error(`${formatPairErrorPrefix(job)}: ${data.error || 'Threaded LOSAT worker failed'}`),
+            typeof data.losatReported === 'string' ? losatRunFailure(data.losatReported)
+              : new Error(`${formatPairErrorPrefix(job)}: ${data.error || 'Threaded LOSAT worker failed'}`),
             data.trap === true
           );
           return;
@@ -1052,6 +1059,8 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
     return await runLosatPairsWithWorkers(jobList, options);
   } catch (error) {
     if (isAbortError(error, options.signal)) throw getAbortReason(options.signal);
+    // LOSAT itself failed: the same engine in this thread would fail the same way.
+    if (reportedLosatFailure(error) !== null) throw error;
     console.warn('LOSAT Worker pool failed; falling back to sequential execution.', normalizeUserFacingError(error));
     return runLosatPairsSequential(jobList, options);
   }

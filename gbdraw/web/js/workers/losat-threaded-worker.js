@@ -1,4 +1,6 @@
-import { compileLosatWasm, concatUint8Arrays, losatCommandArgs } from '../services/losat-runtime.js';
+import {
+  compileLosatWasm, concatUint8Arrays, losatCommandArgs, losatRunFailure, reportedLosatFailure
+} from '../services/losat-runtime.js';
 import { LOSAT_WASM_BUILD } from '../services/losat-build.generated.js';
 
 // The shared memory of a job: the initial pages the threaded file imports (recorded from the file), and at most
@@ -339,9 +341,7 @@ const runThreadedLosat = async ({
     const exitCode = wasi.start(instance);
     const stdoutText = new TextDecoder().decode(concatUint8Arrays(stdoutChunks));
     const stderrText = new TextDecoder().decode(concatUint8Arrays(stderrChunks));
-    if (exitCode !== 0) {
-      throw new Error(stderrText.trim() || `LOSAT exited with code ${exitCode}`);
-    }
+    if (exitCode !== 0) throw losatRunFailure(stderrText);
     return { text: stdoutText, stderr: stderrText, spawnCount };
   } finally {
     await terminateWorkers(workers);
@@ -371,6 +371,7 @@ self.onmessage = async (event) => {
       type: 'run',
       ok: false,
       error: error?.message ? String(error.message) : String(error || 'Threaded LOSAT worker failed'),
+      losatReported: reportedLosatFailure(error),
       trap: error instanceof WebAssembly.RuntimeError
     });
   }

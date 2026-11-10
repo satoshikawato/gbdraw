@@ -442,6 +442,13 @@ write-up of a release.
   the previous build ran runs them once more at its first Generate, because a
   saved LOSAT result is reused only by the LOSAT build that wrote it; the
   results are the same.
+- Fixed: in the Web app, a LOSAT search that LOSAT itself ended with an error
+  (for example an option value it refuses) failed with "The operation failed
+  without recognized diagnostic information". The error now says that the
+  comparison search failed and shows LOSAT's own first error line, on the
+  serial and the threaded engine, for comparisons and Sequence search. A
+  serial run no longer runs every search a second time on the page after
+  such a failure (OV-3304, OV-3287).
 - Added: one Linear row can show several windows of one record, leaving out
   the interval between them. Repeat `--region` for a record, or give the rows of
   a records table that are its windows one value in the new `record_group`

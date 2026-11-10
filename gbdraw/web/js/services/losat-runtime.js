@@ -1,5 +1,7 @@
 // @ts-check
 import { LOSAT_SEARCH_FLAGS } from '../contracts/schema.generated.js';
+import { diagnosticError } from '../utils/error-normalization.js';
+/** @import { DiagnosticError } from '../utils/error-normalization.js' */
 
 /**
  * The exports of the direct LOSAT wasm API (`hasDirectLosatApi` checks for it).
@@ -62,6 +64,44 @@ export function requireLosatProgram(program) {
     throw new Error(`LOSAT program must be one of ${[...LOSAT_PROGRAMS].join(', ')}.`);
   }
 }
+
+/**
+ * The context of a LOSAT run that exited with an error: the code `LOSAT_RUNTIME` with the reason `FAILED`, as Python's
+ * `run_losat_search` raises it for the CLI.
+ * @typedef {object} LosatFailureContext
+ * @property {'FAILED'} reason
+ * @property {string} [losatMessage] The first line LOSAT wrote about the failure, without its `error:` prefix (for an
+ *   argument LOSAT refuses, the option and the value). Absent when LOSAT wrote nothing.
+ */
+
+/** @typedef {DiagnosticError & { context: LosatFailureContext }} LosatRunFailure */
+
+/**
+ * The failure of a LOSAT run that exited with an error, for every engine (the serial reactor, a WASI command, the
+ * threaded worker) and so for every caller (pair comparisons, Sequence search). A pool worker posts what LOSAT
+ * reported (`reportedLosatFailure`) and the page raises the failure again here.
+ * @param {string} reported LOSAT's error text: its stderr, or the reactor's error buffer; empty when it wrote none
+ * @returns {LosatRunFailure}
+ */
+export const losatRunFailure = (reported) => {
+  const line = String(reported).split(/\r?\n/).map((text) => text.trim()).find(Boolean) ?? '';
+  const losatMessage = line.replace(/^error:\s*/i, '');
+  return /** @type {LosatRunFailure} */ (diagnosticError('LOSAT_RUNTIME', {
+    reason: 'FAILED', ...(losatMessage && { losatMessage })
+  }, { stage: 'losat' }));
+};
+
+/**
+ * What a LOSAT worker posts of a failure so the page can raise it again: what LOSAT reported (empty when it wrote
+ * nothing) for a failure of `losatRunFailure`, `null` for any other failure.
+ * @param {unknown} error
+ * @returns {string | null}
+ */
+export const reportedLosatFailure = (error) => {
+  if (!(error instanceof Error) || /** @type {Partial<LosatRunFailure>} */ (error).code !== 'LOSAT_RUNTIME') return null;
+  const { context } = /** @type {LosatRunFailure} */ (error);
+  return context.reason === 'FAILED' ? context.losatMessage ?? '' : null;
+};
 
 /** @type {Readonly<Record<string, string>>} */
 const SEARCH_FLAGS = LOSAT_SEARCH_FLAGS;
@@ -164,9 +204,7 @@ export const runLosatPairWasi = async ({
 
   const stdoutText = new TextDecoder().decode(concatUint8Arrays(stdoutChunks));
   const stderrText = new TextDecoder().decode(concatUint8Arrays(stderrChunks));
-  if (exitCode !== 0) {
-    throw new Error(stderrText.trim() || `LOSAT exited with code ${exitCode}`);
-  }
+  if (exitCode !== 0) throw losatRunFailure(stderrText);
   return stdoutText;
 };
 
@@ -260,7 +298,7 @@ export const runLosatPairDirect = async ({
         exports.losat_web_error_ptr,
         exports.losat_web_error_len
       );
-      throw new Error(detail || `LOSAT exited with code ${exitCode}`);
+      throw losatRunFailure(detail);
     }
     return readWasmString(exports, exports.losat_web_result_ptr, exports.losat_web_result_len);
   } finally {

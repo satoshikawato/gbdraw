@@ -1,0 +1,95 @@
+// A LOSAT run that exits with an error (an argument LOSAT refuses, for example) reaches the user as the LOSAT
+// failure Python raises for the CLI (`LOSAT_RUNTIME`, reason `FAILED`) with LOSAT's own first error line, not as an
+// unrecognized failure (OV-3304). The one owner is `losatRunFailure` in services/losat-runtime.js; a pool worker
+// posts what LOSAT reported and the page raises the same failure again.
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+
+const web = new URL('../../gbdraw/web/', import.meta.url);
+const runtime = await import(new URL('js/services/losat-runtime.js', web).href);
+const { normalizeUserFacingError } = await import(new URL('js/utils/error-normalization.js', web).href);
+const { errorText } = await import(new URL('js/utils/error-text.js', web).href);
+const wasiShimUrl = new URL('vendor/browser_wasi_shim/dist/index.js', web).href;
+
+const REFUSED = ['--searchsp', '99999999999999999999'];
+const pair = { program: 'blastn', queryFasta: '>q\nACGTACGTACGTACGTACGT\n', subjectFasta: '>s\nACGTACGTACGTACGTACGT\n' };
+
+/** @param {unknown} error */
+const isRefusal = (error) => error instanceof Error && error.code === 'LOSAT_RUNTIME' && error.stage === 'losat'
+  && error.context.reason === 'FAILED' && /searchsp/.test(error.context.losatMessage);
+
+test('a LOSAT failure names the search and shows what LOSAT reported, as text', () => {
+  const failure = runtime.losatRunFailure("error: invalid value '9' for '-searchsp <INT_VALUE>': too large\n\nFor more information, try '--help'.\n");
+  assert.deepEqual({ code: failure.code, stage: failure.stage, context: failure.context }, {
+    code: 'LOSAT_RUNTIME', stage: 'losat',
+    context: { reason: 'FAILED', losatMessage: "invalid value '9' for '-searchsp <INT_VALUE>': too large" }
+  });
+  const model = normalizeUserFacingError(failure, { operation: 'generate' });
+  assert.equal(model.code, 'LOSAT_RUNTIME');
+  assert.equal(model.stage, 'losat');
+  assert.deepEqual(model.actions, ['edit-comparison', 'retry']);
+  assert.equal(model.summary, 'The comparison search could not run or returned unusable output. Check the LOSAT or NCBI BLAST+ runtime, then Generate again.'
+    + ' The search runtime exited with an error; check its message and inputs.'
+    + " LOSAT reported: invalid value '9' for '\u2011searchsp <INT_VALUE>': too large");
+  // LOSAT's words are a value of the phrase, never a catalog key: a translation renders them as written, except that
+  // a hyphen starting an option name does not end a line; the Diagnostics keep LOSAT's own text.
+  assert.equal(errorText(model.summaryParts).endsWith("LOSAT reported: invalid value '9' for '\u2011searchsp <INT_VALUE>': too large"), true);
+  assert.match(model.details[0].text, /losatMessage: invalid value '9' for '-searchsp <INT_VALUE>': too large/);
+  assert.match(normalizeUserFacingError(runtime.losatRunFailure('unsupported argument: --searchsp, - x-y')).summary,
+    /LOSAT reported: unsupported argument: \u2011\u2011searchsp, \u2011 x-y$/);
+  // One line of at most 200 characters, control characters folded.
+  const long = normalizeUserFacingError({ code: 'LOSAT_RUNTIME', stage: 'losat', context: { reason: 'FAILED', losatMessage: `a\u0000b\tc ${'x'.repeat(300)}` } });
+  assert.equal(long.context.losatMessage, `a b c ${'x'.repeat(194)}`);
+  // LOSAT wrote nothing: the failure keeps its code and reason, and no LOSAT line.
+  const silent = runtime.losatRunFailure('');
+  assert.deepEqual(silent.context, { reason: 'FAILED' });
+  assert.doesNotMatch(normalizeUserFacingError(silent).summary, /LOSAT reported/);
+  assert.equal(runtime.reportedLosatFailure(silent), '');
+  assert.equal(runtime.reportedLosatFailure(failure), failure.context.losatMessage);
+  assert.equal(runtime.reportedLosatFailure(new Error('LOSAT_RUNTIME')), null);
+});
+
+test('the serial reactor raises the LOSAT failure for an argument LOSAT refuses', async () => {
+  const wasiShim = await import(wasiShimUrl);
+  const wasmModule = await WebAssembly.compile(await readFile(new URL('wasm/losat/losat.wasm', web)));
+  await assert.rejects(runtime.runLosatPairDirect({ ...pair, extraArgs: REFUSED, wasiShim, wasmModule }), isRefusal);
+});
+
+test('a WASI command that exits with an error raises the LOSAT failure with its first stderr line', async () => {
+  const encoder = new TextEncoder();
+  const wasiShim = {
+    WASI: class {
+      constructor(_args, _env, fds) { this.fds = fds; this.wasiImport = {}; }
+      start() {
+        this.fds[2].write(encoder.encode("\nerror: invalid value '99999999999999999999' for '-searchsp <INT_VALUE>'\n"));
+        return 2;
+      }
+    },
+    File: class {},
+    OpenFile: class {},
+    PreopenDirectory: class {},
+    ConsoleStdout: class { constructor(write) { this.write = write; } }
+  };
+  const wasmModule = await WebAssembly.compile(new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]));
+  await assert.rejects(runtime.runLosatPairWasi({ ...pair, extraArgs: REFUSED, wasiShim, wasmModule }), isRefusal);
+});
+
+test('the serial pool worker posts what LOSAT reported', async (t) => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'self');
+  t.after(() => { if (previous) Object.defineProperty(globalThis, 'self', previous); else delete globalThis.self; });
+  const posted = [];
+  globalThis.self = { postMessage: (message) => posted.push(message) };
+  await import(`${new URL('js/workers/losat-worker.js', web).href}?instance=${Date.now()}`);
+  const wasmModule = await WebAssembly.compile(await readFile(new URL('wasm/losat/losat.wasm', web)));
+  await globalThis.self.onmessage({ data: { type: 'init', id: 'i', wasmModule, wasiShimUrl } });
+  await globalThis.self.onmessage({
+    data: {
+      type: 'run', id: 'r', job: { program: 'blastn', querySequenceKey: 'q', subjectSequenceKey: 's', extraArgs: REFUSED },
+      sequences: [{ key: 'q', fasta: pair.queryFasta }, { key: 's', fasta: pair.subjectFasta }]
+    }
+  });
+  assert.deepEqual(posted.map(({ id, ok }) => ({ id, ok })), [{ id: 'i', ok: true }, { id: 'r', ok: false }]);
+  assert.match(posted[1].losatReported, /searchsp/);
+  assert.equal(isRefusal(runtime.losatRunFailure(posted[1].losatReported)), true);
+});
