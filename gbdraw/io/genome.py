@@ -523,7 +523,7 @@ def scan_features_recursive(
             )
             if source_indexes is not None:
                 _copy_source_feature_identity(feature, new_feature,
-                    index=source_indexes[id(feature)], coord_base=1, coord_step=1)
+                    index=source_indexes[id(feature)], coord_base=1, coord_step=1, period=None)
             filtered_list.append(new_feature)
 
         if feature.sub_features:

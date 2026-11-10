@@ -105,7 +105,7 @@ from gbdraw.io.record_select import (
     parse_record_selector,
     reverse_records,
 )
-from gbdraw.io.regions import RecordWindow, RegionSpec, crop_record_to_region, region_text
+from gbdraw.io.regions import RecordWindow, RegionSpec, _wrapped_location, crop_record_to_region, region_text
 from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 from gbdraw.core.record_metadata import (
@@ -1148,9 +1148,11 @@ def _with_crop_edits(source: SeqRecord, crop: SeqRecord, window: RecordWindow) -
     each was cut from, and only what differs is written to the source: a changed qualifier of a feature (on the
     whole source feature, so one the crop cut at an end keeps its full location), a changed type (likewise), a
     moved feature (``_same_location``; written at its new place, mapped back into the window and reversed back for a
-    reverse-complemented crop, as the figure places it), a feature the crop left out, a feature added to the crop
-    (mapped back likewise; a copy of a cut feature is one, ``edited_crop_draw_order``), and a changed name or
-    annotation.
+    reverse-complemented crop, as the figure places it, and across the source's origin for a crop across it), a
+    feature the crop left out, a feature added to the crop (mapped back likewise; a copy of a cut feature, and a
+    feature that carries an index the crop did not cut, is one: ``edited_crop_draw_order``), and a changed name or
+    annotation. A feature whose source feature the window no longer holds (one moved in the crop this crop was cut
+    from) is written at its place too.
 
     A feature's place in the source is its source feature index on replay, so every feature the crop kept, and
     every feature outside the window (across the origin too), stays at its place. The added features follow the
@@ -1158,27 +1160,29 @@ def _with_crop_edits(source: SeqRecord, crop: SeqRecord, window: RecordWindow) -
     the indexes the crop gives them, the ones after every index it carries (``_feature_source_index_map``).
     Cutting the result through the window again draws the edited crop with its flanks, each feature with the
     source feature index it has in the crop, unless the crop left out a feature that comes before others in the
-    source (OV-3230). ``None`` (the crop is written as its own bytes) for a crop across the origin, or one whose
-    bases are no longer the source's bases in the window.
+    source (OV-3230). A crop across the origin is written so too (OV-3262). ``None`` (the crop is written as its
+    own bytes) for a crop whose bases are no longer the source's bases in the window.
     """
 
-    if window.start > window.end:
-        return None
+    across_origin = window.start > window.end
     start_0, end_0 = window.start - 1, window.end
-    bases = source.seq[start_0:end_0]
+    bases = source.seq[start_0:] + source.seq[:end_0] if across_origin else source.seq[start_0:end_0]
     if bytes(crop.seq) != bytes(bases.reverse_complement() if window.reverse_complement else bases):
         return None
     spec = RegionSpec(
         raw=region_text(window.start, window.end, window.reverse_complement), file_selector=None, record_id=None,
         record_index=None, start=window.start, end=window.end, reverse_complement=window.reverse_complement,
     )
-    recut = crop_record_to_region(source, spec)
+    recut = crop_record_to_region(source, spec, circular=across_origin)
     cut = {_source_feature_index(feature): feature for feature in recut.features}
 
     def in_source(feature: SeqFeature) -> SeqFeature:
-        if not window.reverse_complement:
-            return feature._shift(start_0)
-        return reverse_records((SeqRecord(crop.seq, features=[feature]),), True)[0].features[0]._shift(start_0)
+        if window.reverse_complement:
+            feature = reverse_records((SeqRecord(crop.seq, features=[feature]),), True)[0].features[0]
+        shifted = feature._shift(start_0)
+        if across_origin:
+            shifted.location = _wrapped_location(shifted.location, len(source))
+        return shifted
 
     # The crop's features cut from the source, by the source feature each was cut from; any other was added.
     kept: dict[int, SeqFeature] = {}

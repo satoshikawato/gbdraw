@@ -13,6 +13,7 @@ from gbdraw.core.record_metadata import (
     _mapped_feature_location_parts,
     _read_coord_map,
     _feature_source_index_map,
+    _source_period,
     _source_feature_location_parts,
     _stamped_source_feature_hash,
 )
@@ -184,6 +185,7 @@ def source_feature_location_parts(
         feature,
         coord_base=coord_base,
         coord_step=coord_step,
+        period=None if record is None else _source_period(record),
     )
 
 

@@ -102,14 +102,20 @@ write-up of a release.
   with "duplicate source feature indexes" when the crop keeps other features
   (OV-3141). A feature moved inside such a crop now has the ID of its new place
   in the figure, as in the replay of its Session (OV-3142). A crop whose
-  feature cut at an end was moved or retyped, or that holds a copy of a feature
-  it cut, is saved as its source with the edit, so its replay keeps the crop's
-  subtitle, width and every feature ID (OV-3246, OV-3247).
+  feature cut at an end was moved or retyped is saved as its source with the
+  edit, so its replay keeps the crop's subtitle, width and every feature ID
+  (OV-3246). A crop that holds a copy of a feature it cut now draws, and its
+  Session replays it as drawn (OV-3247). A feature copied into a crop from
+  another crop of the same record is a feature added at its place, with the
+  ID and paint order its replay gives it (OV-3256). An edited crop across the
+  origin is saved as its source with the edits, so its replay keeps the crop's
+  subtitle, width and feature IDs, and a feature added to it past the source's
+  origin has the ID of its place on the source (OV-3262).
 - Changed: a crop given in memory and edited since its cut draws its features
   in the order its Session replay draws them, the figure Save Session and Load
-  already gave: by source order (a reverse-complemented crop by start), with
-  added features after the kept ones. The Legend lists the feature types in
-  that order, and overlapping features are painted in that order.
+  already gave: a crop in source order, with added features after the kept
+  ones, and a reverse-complemented crop by start. The Legend lists the feature
+  types in that order, and overlapping features are painted in that order.
   The order of the crop's feature list no longer sets either; a whole record
   and a crop as cut still draw in list order (OV-3229).
 - Changed: the Auto GC content and GC skew window is now at most a tenth of the

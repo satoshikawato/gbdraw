@@ -121,11 +121,14 @@ def crop_and_shift_features(
     *,
     coord_base=1,
     coord_step=1,
+    period=None,
     _source_indexes=None,
 ):
     """
     Iterates over old features, crops/shifts them relative to the
     crop window (start_0, end_0), and returns a new list of features.
+    ``coord_base``, ``coord_step`` and ``period`` are the coordinate map of
+    the record the features belong to.
     """
     new_features_list = []
     source_indexes = (
@@ -181,6 +184,7 @@ def crop_and_shift_features(
             index=source_indexes[id(old_feature)],
             coord_base=coord_base,
             coord_step=coord_step,
+            period=period,
         )
         sub_features = getattr(old_feature, "sub_features", None)
         if sub_features is not None:
@@ -190,6 +194,7 @@ def crop_and_shift_features(
                 end_0,
                 coord_base=coord_base,
                 coord_step=coord_step,
+                period=period,
                 _source_indexes=source_indexes,
             )
         new_features_list.append(new_feature)

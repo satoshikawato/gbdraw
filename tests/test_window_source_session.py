@@ -6,6 +6,7 @@ cut from and the crop's window in it, so the replay crops it again and draws wha
 
 from __future__ import annotations
 
+import copy
 import json
 import random
 import re
@@ -577,6 +578,64 @@ def test_a_copy_of_a_cut_feature_is_saved_as_an_added_feature_and_replays_as_dra
     assert sorted(_locus(feature) for feature in _saved_source(tmp_path).features) == \
         sorted(["source", "S1", "ORI", "I1", copied])
 
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+@pytest.mark.parametrize("spec", ["src:20001-40000", "src:20001-40000:rc"], ids=["forward", "reversed"])
+def test_a_feature_copied_from_another_crop_of_the_source_is_an_added_feature(
+    mode: str, spec: str, tmp_path: Path
+) -> None:
+    """A feature copied from another crop of the same record carries a source feature index this crop did not cut;
+    it is a feature added at its place, live and in the saved Session, so the replay keeps the crop's subtitle,
+    width, source span, feature IDs and paint order (OV-3256)."""
+
+    crop = apply_region_specs([_flanked_source()], parse_region_specs([spec]))[0]
+    other = apply_region_specs([_flanked_source()], parse_region_specs(["src:1-10000"]))[0]
+    crop.features.append(copy.deepcopy(next(feature for feature in other.features if _locus(feature) == "ORI")))
+    live, replay = _replayed(_request(mode, crop, tmp_path), tmp_path)
+    assert _record_facts(replay) == _record_facts(live)
+    assert replay == live
+    [saved] = _saved_records(tmp_path)
+    assert [(window["start"], window["end"]) for window in saved["windows"]] == [(20001, 40000)]
+    # The source keeps ORI outside the window and gains the copy as an added feature.
+    assert sorted(_locus(feature) for feature in _saved_source(tmp_path).features) == \
+        sorted(["source", "S1", "ORI", "I1", "ORI"])
+
+
+_ORIGIN_EDITS = {
+    # Only a qualifier of the CDS joined across the origin changes.
+    "product": lambda crop: next(f for f in crop.features if _locus(f) == "ORI").qualifiers.update(product=["edited"]),
+    # A copy of the CDS joined across the origin.
+    "copy": lambda crop: crop.features.append(
+        copy.deepcopy(next(f for f in crop.features if _locus(f) == "ORI"))
+    ),
+    # A CDS added across the source's origin (crop bases 9,501-10,500 are source bases 59,501-500).
+    "added": lambda crop: crop.features.append(
+        SeqFeature(FeatureLocation(9_500, 10_500, 1), type="CDS", qualifiers={"locus_tag": ["NEW"], "product": ["n"]})
+    ),
+}
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+@pytest.mark.parametrize(
+    "spec", ["src:50001-10000:origin", "src:50001-10000:origin:rc"], ids=["forward", "reversed"]
+)
+@pytest.mark.parametrize("edit", sorted(_ORIGIN_EDITS))
+def test_an_edited_crop_across_the_origin_is_saved_with_its_edits_on_its_source(
+    mode: str, spec: str, edit: str, tmp_path: Path
+) -> None:
+    """An edited crop across the origin is saved as its source with the edits and its window, as a crop that does
+    not cross the origin is, so the replay keeps its subtitle, width, source span and feature IDs (OV-3262)."""
+
+    from gbdraw.io.regions import crop_record_to_region
+
+    crop = crop_record_to_region(_flanked_source(), parse_region_specs([spec])[0], circular=True)
+    _ORIGIN_EDITS[edit](crop)
+    live, replay = _replayed(_request(mode, crop, tmp_path), tmp_path)
+    assert _record_facts(replay) == _record_facts(live)
+    assert replay == live
+    [saved] = _saved_records(tmp_path)
+    assert [(window["start"], window["end"]) for window in saved["windows"]] == [(50001, 10000)]
 
 def _twins_source() -> SeqRecord:
     """A linear 60 kb record with a CDS X and two identical CDS B and C (same type and location) inside 20-40 kb."""

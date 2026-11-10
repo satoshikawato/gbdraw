@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import re
-from collections.abc import Iterable, Iterator
+from collections.abc import Collection, Iterable, Iterator
 from xml.sax.saxutils import escape
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, NamedTuple, TypedDict, TypeVar
@@ -142,15 +142,18 @@ def _feature_source_index_map(features: Iterable[SeqFeature] | None) -> dict[int
     return indexes
 
 
-def _holder_of(feature: SeqFeature, index: int) -> SeqFeature:
-    """``feature`` as the holder of ``index``, the source feature index ``_feature_source_index_map`` gave it.
+def _holder_of(feature: SeqFeature, index: int, cut: Collection[int]) -> SeqFeature:
+    """``feature`` of a crop as the holder of ``index``, the source feature index ``_feature_source_index_map`` gave
+    it, when the crop cut a feature with that index (``cut``, the crop's ``WindowSource.cut_indexes``).
 
-    A feature that carries another index, a copy of a cut feature whose index an earlier feature holds, is a feature
-    added at its place: a shallow copy that carries no source identity (index, source location facts, source hash),
-    so every reader reads it from its place, as the replay of its saved Session does (OV-3247).
+    A feature that carries another index (a copy of a cut feature whose index an earlier feature holds, OV-3247), or
+    an index the crop did not cut (a feature copied from another crop of its source, OV-3256), is a feature added at
+    its place: a shallow copy that carries no source identity (index, source location facts, source hash), so every
+    reader reads it from its place, as the replay of its saved Session does.
     """
 
-    if _source_feature_index(feature) in (None, index):
+    carried = _source_feature_index(feature)
+    if carried is None or (carried == index and carried in cut):
         return feature
     added = copy.copy(feature)
     for name in (_SOURCE_FEATURE_INDEX_ATTR, _SOURCE_FEATURE_LOCATION_ATTR, _SOURCE_FEATURE_HASH_ATTR):
@@ -306,8 +309,13 @@ def _mapped_feature_location_parts(
     *,
     coord_base: int,
     coord_step: int,
+    period: int | None,
 ) -> tuple[tuple[int, int, int | None], ...]:
-    """Map a feature's current parts into its biological source coordinates."""
+    """Map a feature's current parts into its biological source coordinates.
+
+    ``period`` is the source length of a record across the origin (:func:`_source_period`): a part there that runs
+    across the source's origin maps to two parts, split there in biological order (:func:`_source_intervals`).
+    """
 
     location = getattr(feature, "location", None)
     raw_parts = list(getattr(location, "parts", None) or [location])
@@ -316,12 +324,7 @@ def _mapped_feature_location_parts(
         if part is None:
             continue
         try:
-            start, end = _absolute_display_interval(
-                int(part.start),
-                int(part.end),
-                coord_base,
-                coord_step,
-            )
+            intervals = _source_intervals(int(part.start), int(part.end), coord_base, coord_step, period)
         except (AttributeError, TypeError, ValueError):
             continue
         strand = getattr(part, "strand", None)
@@ -329,7 +332,7 @@ def _mapped_feature_location_parts(
             strand = int(strand) * (1 if int(coord_step) >= 0 else -1)
         else:
             strand = None
-        parts.append((start, end, strand))
+        parts.extend((start, end, strand) for start, end in (intervals[::-1] if strand == -1 else intervals))
     return tuple(parts)
 
 
@@ -340,28 +343,32 @@ def _copy_source_feature_identity(
     index: int,
     coord_base: int,
     coord_step: int,
+    period: int | None,
 ) -> None:
     """Carry source feature index, biological parts and source hash across a transformation.
 
-    ``index`` is the source's source feature index, as ``_feature_source_index_map`` gives it.
+    ``index`` is the source's source feature index, as ``_feature_source_index_map`` gives it; ``coord_base``,
+    ``coord_step`` and ``period`` are the coordinate map of the source's record (``_source_period``).
     """
 
     setattr(target, _SOURCE_FEATURE_INDEX_ATTR, int(index))
-    _carry_source_location(source, target, coord_base=coord_base, coord_step=coord_step)
+    _carry_source_location(source, target, coord_base=coord_base, coord_step=coord_step, period=period)
     stamp = _feature_hash_stamp(source)
     if stamp is not None:
         _stamp_source_feature_hash(target, stamp.record_id, stamp.feature_hash)
 
 
-def _carry_source_location(source: object, target: object, *, coord_base: int, coord_step: int) -> None:
+def _carry_source_location(
+    source: object, target: object, *, coord_base: int, coord_step: int, period: int | None
+) -> None:
     """Carry ``source``'s source location facts onto ``target``'s location; ``source`` maps through
-    ``coord_base`` and ``coord_step`` when it carries none for its own location."""
+    ``coord_base``, ``coord_step`` and ``period`` when it carries none for its own location."""
 
     carried = _carried_source_location(source)
     setattr(target, _SOURCE_FEATURE_LOCATION_ATTR, _CarriedSourceLocation(
         getattr(target, "location", None),
         carried.parts if carried is not None else _mapped_feature_location_parts(
-            source, coord_base=coord_base, coord_step=coord_step,
+            source, coord_base=coord_base, coord_step=coord_step, period=period,
         ),
         carried.anchor_profile if carried is not None else _location_anchor_profile(
             getattr(source, "location", None), coord_step=coord_step,
@@ -375,7 +382,9 @@ def _settle_source_location(feature: object, record: object) -> None:
 
     coord_base, coord_step = _read_coord_map(record)
     if (coord_base, coord_step) != (1, 1) and _carried_source_location(feature) is None:
-        _carry_source_location(feature, feature, coord_base=coord_base, coord_step=coord_step)
+        _carry_source_location(
+            feature, feature, coord_base=coord_base, coord_step=coord_step, period=_source_period(record)
+        )
 
 
 # A drawn unit that is one of several windows of a record carries that record's key here (D-01); the unit's own key

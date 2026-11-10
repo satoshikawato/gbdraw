@@ -14,13 +14,14 @@ from typing import Sequence
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 
-from ..analysis.windows import WINDOW_SOURCE_ANNOTATION, WindowSource, reversed_window_source
+from ..analysis.windows import WINDOW_SOURCE_ANNOTATION, WindowSource, reversed_window_source, window_source
 from ..core.numeric import parse_ascii_nonnegative_integer
 from ..core.record_metadata import (
     _copy_source_feature_identity,
     _feature_source_index_map,
     _holder_of,
     _read_coord_map,
+    _source_period,
     _write_coord_map,
     record_identity_key,
 )
@@ -178,18 +179,21 @@ def edited_crop_draw_order(crop: SeqRecord) -> list[SeqFeature]:
     (``session_request_codec._with_crop_edits``), where each feature takes its source feature index
     (``_feature_source_index_map``) as its place: a forward cut lists the features by that index, a
     reverse-complemented one by start, ties by that index, as ``reverse_records`` lists them (OV-3229). A copy of a
-    cut feature is a feature added at its place (``_holder_of``), as the replay reads it (OV-3247).
+    cut feature, and a feature that carries an index the crop did not cut (``WindowSource.cut_indexes``), is a
+    feature added at its place (``_holder_of``), as the replay reads it (OV-3247, OV-3256).
 
-    The indexes are those the map gives ``crop.features``, the user's list; a reader of the drawn crop reads them from
-    the returned list, where added features take theirs in the order drawn, as on replay.
+    Which of two holders of one carried index is the cut feature is decided on ``crop.features``, the user's list;
+    the added features then take the indexes after the cut ones in that list's order. A reader of the drawn crop
+    reads the indexes from the returned list, where added features take theirs in the order drawn, as on replay.
     """
 
-    indexes = _feature_source_index_map(crop.features)
+    cut = window_source(crop).cut_indexes
+    carried = _feature_source_index_map(crop.features)
+    holders = [_holder_of(feature, carried[id(feature)], cut) for feature in crop.features]
+    indexes = _feature_source_index_map(holders)
     if _read_coord_map(crop)[1] < 0:
-        ordered = sorted(crop.features, key=lambda feature: (_feature_start(feature), indexes[id(feature)]))
-    else:
-        ordered = sorted(crop.features, key=lambda feature: indexes[id(feature)])
-    return [_holder_of(feature, indexes[id(feature)]) for feature in ordered]
+        return sorted(holders, key=lambda feature: (_feature_start(feature), indexes[id(feature)]))
+    return sorted(holders, key=lambda feature: indexes[id(feature)])
 
 
 def in_draw_order(record: SeqRecord) -> SeqRecord:
@@ -229,6 +233,7 @@ def reverse_records(
         rc_base = base + (step * max(0, record_length - 1))
         rc_step = -step
         source_indexes = _feature_source_index_map(rec.features)
+        period = _source_period(rec)
 
         def reverse_feature(feature):
             reversed_feature = feature._flip(record_length)
@@ -238,6 +243,7 @@ def reverse_records(
                 index=source_indexes[id(feature)],
                 coord_base=base,
                 coord_step=step,
+                period=period,
             )
             sub_features = getattr(feature, "sub_features", None)
             if sub_features is not None:
