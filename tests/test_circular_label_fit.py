@@ -952,6 +952,57 @@ def test_an_outward_vertical_row_offered_with_the_notice_leaves_outward_both_unb
         )
 
 
+def test_the_cli_first_pass_leaves_the_combination_to_the_second_while_the_font_row_walks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-118: Smaller font's first value (16 pt) keeps the region warning and its walk is not finished in the CLI's
+    first pass, so the combination waits for the second pass instead of starting from 6 pt; then Smaller font fits
+    at 14 pt and the combination is 15.5 pt + Y 1.025, as on dev, in 7 redraws (one second each, 8 s bound or none).
+    With a 7 s bound, which ends before the second pass reaches it, the combination is not searched, as on dev."""
+
+    def values_of(values: Mapping[str, object]) -> tuple[float, float, float]:
+        return (
+            float(str(values.get(X_OFFSET_PATH, 1.0))),
+            float(str(values.get(Y_OFFSET_PATH, 1.0))),
+            float(str(values.get(FONT_SIZE_PATHS[0], 17.0))),
+        )
+
+    def probe(values: Mapping[str, object]) -> LabelFit:
+        x, y, font = values_of(values)
+        return FITS if (y >= 1.025 - 1e-9 or x >= 1.075 - 1e-9 or font <= 15.0) else LabelFit(0, 10)
+
+    clock = [0.0]
+
+    def full(values: Mapping[str, object]) -> LabelFit:
+        clock[0] += 1.0
+        x, y, font = values_of(values)
+        region = 0 if (font <= 14.0 or y >= 1.025 - 1e-9 or x >= 1.075 - 1e-9) else 1
+        return dataclasses.replace(probe(values), region_overlaps=region)
+
+    layout = dataclasses.replace(
+        _layout("P1", _p1_like), font_size=17.0, kind_fits={"circular_outer": probe({}),
+        "circular_region": LabelFit(0, 0, region_overlaps=1)}, label_counts={"circular_outer": 71,
+        "circular_region": 1}, region_font_size=10.0, probe=probe,
+    )
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: clock[0])
+    for seconds, combination, redraws in (
+        (8.0, ("found", {**{path: 15.5 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.025}), 7),
+        (1e9, ("found", {**{path: 15.5 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.025}), 7),
+        (7.0, ("not_computed", None), 6),
+    ):
+        clock[0] = 0.0
+        verify, calls = _fit_assembly(full)
+        with pytest.warns(LabelLeadersCrossWarning):
+            checked = check_circular_label_fit([layout], verify, warn_search_seconds=seconds)
+        assert checked is not None
+        rows = {row.kind: row for row in checked[0].rows}
+        assert (rows["combination"].status, rows["combination"].values) == combination, seconds
+        assert (rows["smaller_font"].status, rows["smaller_font"].values) == (
+            "found", {path: 14.0 for path in FONT_SIZE_PATHS}
+        ), seconds
+        assert len(calls) == redraws, (seconds, calls)
+
+
 def test_a_label_row_walks_on_to_a_value_whose_whole_figure_fits_else_offers_its_first_value() -> None:
     """OV-3110 (D-117): a label row whose first value keeps a region label warning walks on as when it answered for the
     whole figure, to the first value whose whole figure fits; without one up to its limit, it offers its first value,
@@ -1397,9 +1448,8 @@ def test_a_region_label_among_outer_labels_lets_each_row_walk_on_to_a_value_that
     """OV-3105 (D-108), OV-3110 (D-117), D-110: lambda at 17 pt with a long region label among the outer labels, which
     the rev 26 backing still counts (3 overlaps with feature labels' letters). Every row's first value comes first;
     the rows whose first value keeps some of those overlaps walk on to the first value whose whole figure fits, as
-    dev does: Smaller font 12.5 pt; the combination halves that font's drop, as on dev (14.5 pt, D-118). In the CLI's
-    first pass the font row is unfinished and bounds nothing, so the combination starts from 6 pt (11.5 pt, which
-    fits at the current Y offset); the second pass asks it again from 12.5 pt."""
+    dev does: Smaller font 12.5 pt; the combination halves that font's drop, as on dev (14.5 pt, D-118). The CLI's
+    first pass leaves the combination to the second while the font row walks, so it draws 10 figures, as dev does."""
 
     report, assemblies, text = _lambda_band_rows(monkeypatch, tmp_path, 18500, 19000, "prophage integration region")
     assert report.region_overlaps == 3
@@ -1411,13 +1461,13 @@ def test_a_region_label_among_outer_labels_lets_each_row_walk_on_to_a_value_that
     assert rows["combination"] == ("found", {**{path: 14.5 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.025}, None)
     assert rows["tighter_rows"][0] == "not_found"
     font = FONT_SIZE_PATHS[0]
-    # The five rows' first values, then the walks of the rows whose first value keeps a region warning.
+    # The four rows' first values, then the walks of the rows whose first value keeps a region warning, then the
+    # combination.
     assert assemblies == [
         {Y_OFFSET_PATH: 1.025},
         {X_OFFSET_PATH: 1.025, Y_OFFSET_PATH: 1.025},
         {X_OFFSET_PATH: 1.075},
         {path: 14.0 for path in FONT_SIZE_PATHS},
-        {path: 11.5 for path in FONT_SIZE_PATHS},
         {Y_OFFSET_PATH: 1.05},
         {X_OFFSET_PATH: 1.1},
         {path: 13.5 for path in FONT_SIZE_PATHS},

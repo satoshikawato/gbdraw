@@ -250,6 +250,10 @@ class _SearchStopped(Exception):
     """The bounded search reached its deadline before a new probe."""
 
 
+class _RowDeferred(_SearchStopped):
+    """In the first pass, a row whose value depends on a row still walking waits for the second pass (D-118)."""
+
+
 def _offset_grid(current: float) -> list[float]:
     grid: list[float] = []
     step = 1
@@ -477,6 +481,7 @@ class CircularLabelFitSearch:
         """One row; with a ``time.monotonic()`` deadline it may be ``not_computed``."""
 
         self._deadline = deadline
+        self._unfinished = False
         try:
             return self._row(kind)[0]
         except _SearchStopped:
@@ -497,8 +502,9 @@ class CircularLabelFitSearch:
         region label warning come after the others (LP-D57, OV-3105). Every
         row's first value comes first; then the rows whose figure keeps a
         region label warning walk on to a value whose whole figure fits while
-        the deadline allows (OV-3110, D-110), so no row waits for another
-        row's walk.
+        the deadline allows (OV-3110, D-110). Only the combination, whose font
+        comes from the smaller-font row, waits for that row's walk; a row the
+        deadline leaves out is not searched (D-118).
         """
 
         order = _SEARCH_ORDER if self._outer_only else _SWITCHES_FIRST_ORDER
@@ -509,7 +515,7 @@ class CircularLabelFitSearch:
         finally:
             self._first_values_only = False
         for kind in kinds:
-            if kind not in self._rows and found[kind].status != "not_computed":
+            if kind not in self._rows:
                 row = self.row(kind, deadline=deadline)
                 found[kind] = found[kind] if row.status == "not_computed" else row
         rows = [found[kind] for kind in ROW_KINDS if kind in found]
@@ -736,6 +742,9 @@ class CircularLabelFitSearch:
         # Combination (OD-F4, OD-F7): half the font row's drop, at least one step,
         # then the smallest Y offset at that font; the current Y offset comes first.
         font_value = self._row("smaller_font")[1]
+        if self._first_values_only and "smaller_font" not in self._rows:
+            # The font row is still walking: its value decides this row's font, so this row waits (D-118).
+            raise _RowDeferred
         drop = max(FONT_STEP_PT, _round_half_pt((self._font_size - (font_value or FONT_LIMIT_PT)) / 2.0))
         combined_font = max(FONT_LIMIT_PT, self._font_size - drop)
 

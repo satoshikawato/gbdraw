@@ -438,7 +438,9 @@ whole figure fits, as above. A smaller size than the one offered may not fit.
 When the figure is drawn anyway, gbdraw searches for 5 seconds, every row's
 first value before any row's next values, and names the rows it did not
 reach. A row whose search the 5 seconds cut keeps its first value with its
-note, though a later value might fit. When nothing is drawn, every outer-label row is
+note, though a later value might fit. The combination waits until the
+smaller-font row has gone on past a first size that keeps a region label
+warning, since its font follows from that row. When nothing is drawn, every outer-label row is
 searched; for inner, embedded, or radial labels the switches and then the font
 search share 30 seconds. The first setting is always tried; each later one
 is tried only if drawing the figure once more, as long as the last try took,
