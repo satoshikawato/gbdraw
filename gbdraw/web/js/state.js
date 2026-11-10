@@ -250,9 +250,7 @@ const linearFoldedSources = reactive(new Set());
 
 // The fonts registered in this page (custom fonts D-01, services/font-store.js):
 // frozen entries with their bytes, never saved (D-02) and not in History.
-/** @type {WebFontEntry[]} */
-const loadedFontsInitial = [];
-const loadedFonts = ref(loadedFontsInitial);
+const loadedFonts = typedRef(/** @type {WebFontEntry[]} */ ([]));
 
 // Color & Filter State
 const paletteDefinitions = ref({});
