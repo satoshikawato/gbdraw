@@ -15,6 +15,7 @@ import { msg } from '../utils/i18n.js';
 /** @import { DrawingId, DrawingIdentity } from '../services/drawing-view.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
 /** @import { PythonLegendKey } from '../services/legend-svg.js' */
+/** @import { SvgResultEntry } from '../services/svg-result-ingestion.js' */
 
 const { computed } = window.Vue;
 
@@ -29,7 +30,7 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
 /**
  * @typedef {object} DrawingSwitchPorts
  * @property {WebState} state
- * @property {{ readonly value: Record<string, unknown>[] }} results The displayed drawing's Results.
+ * @property {{ readonly value: SvgResultEntry[] }} results The displayed drawing's Results.
  * @property {{ readonly value: number | string }} selectedResultIndex
  * @property {{ value: unknown }} errorLog The operation error shown, or null.
  * @property {{ value: boolean }} failedGeneratePreservedResult Whether "Showing the last successful result" shows.
@@ -52,7 +53,7 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {(departing: DrawingId, arriving: DrawingId) => void} switchDrawingSearch
  * @property {() => void} rebindAnnotationRecords Rebinds the shown drawing's annotations to its record catalog (R10).
  * @property {() => void} clearActiveRuntime Releases the displayed Result.
- * @property {(result: Record<string, unknown>) => string} getResultIdentity
+ * @property {(result: SvgResultEntry) => string} getResultIdentity
  * @property {(bindingOptions?: { modeArrival?: boolean }) => unknown} presentSelectedResult
  * @property {(identity: string | undefined, inventory: readonly PythonLegendKey[]) => void} rememberResultInventory
  * @property {(departing: Readonly<ArtifactSlot>, arrivingId: DrawingId) => Readonly<ArtifactSlot> | null} artifactSlotsSwap

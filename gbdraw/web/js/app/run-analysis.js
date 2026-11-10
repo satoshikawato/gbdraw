@@ -232,7 +232,7 @@ import {
 } from '../services/imported-comparison-intent.js';
 /** @import { InheritedPipelineSearch } from '../services/imported-comparison-intent.js' */
 /** @import { LabelDiagramOptions, LabelFeature } from './feature-editor/label-actions.js' */
-/** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
+/** @import { SvgMutationOperations, SvgResultEntry } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { FeatureCatalog } from '../services/feature-catalog.js' */
 /** @import { LosatJob, LosatJobResult, LosatOverlayRun, LosatRunOptions } from '../services/losat.js' */
@@ -1669,9 +1669,9 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {() => DrawingState} displayedArtifactDrawing The drawing the displayed Result belongs to.
  * @property {(drawing: DrawingState) => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
  *   The artifact owners' values, with the color rules and queued palette of `drawing`.
- * @property {(ownerSet: Record<string, any>, options: { drawing: DrawingState, selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
+ * @property {(ownerSet: Record<string, any>, options: { drawing: DrawingState, selectedResultIndex: number, installResults: (results: SvgResultEntry[]) => void }) => void} installGeneratedArtifactOwnerSet
  *   Installs an owner set as the displayed artifact, its color rules and queued palette into `drawing`.
- * @property {(drawingId: DrawingState['id'], redrawn: RedrawnArtifact, options: { installResults: (results: unknown[]) => void }) => void} installRedrawnArtifact
+ * @property {(drawingId: DrawingState['id'], redrawn: RedrawnArtifact, options: { installResults: (results: SvgResultEntry[]) => void }) => void} installRedrawnArtifact
  *   The artifact owner's install of a label rerender into its Result's drawing (OV-111).
  * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
