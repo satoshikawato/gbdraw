@@ -1,5 +1,5 @@
-// A Linear Generate with an editable comparison never writes a card that draws a file of several records whole
-// (OV-3272): its prepare step asks the record selector to split every automatic card into record cards before the
+// A Linear Generate that draws the current controls' comparison (an editable one, or a Replace) never writes a card
+// that draws a file of several records whole (OV-3272, OV-3324): its prepare step asks the record selector to split every automatic card into record cards before the
 // request is built (app/record-discovery-requests.js `prepareLinearGenerate`,
 // `materializeAutomaticLinearRecords`). Python numbers a comparison's records over the records such a card draws,
 // while the Web's unit plan counts the card as one, so a request that carried one beside a comparison could bind the
@@ -13,7 +13,9 @@ globalThis.window = {
   }
 };
 const { createRecordDiscoveryRuns } = await import('../../gbdraw/web/js/app/record-discovery-requests.js');
-const { IMPORTED_COMPARISON_DISPOSITIONS } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
+const { IMPORTED_COMPARISON_ACTIONS, IMPORTED_COMPARISON_DISPOSITIONS } = await import(
+  '../../gbdraw/web/js/services/imported-comparison-intent.js'
+);
 
 test('Generate prepares an editable Linear comparison by splitting every automatic card into record cards', async () => {
   const expansions = new Map([['waiting', false]]);
@@ -45,7 +47,7 @@ test('Generate prepares an editable Linear comparison by splitting every automat
   assert.equal(refreshed.length, 1);
 });
 
-test('Generate splits the automatic cards only when the comparison is editable, and reads the cards again otherwise', async () => {
+test('Generate splits the automatic cards when it draws the current controls\' comparison, and reads the cards again otherwise', async () => {
   /** @type {Map<string, Map<string, boolean>>} */
   const expansionsOf = new Map();
   /** @type {[string, [string, boolean][]][]} */
@@ -63,8 +65,9 @@ test('Generate splits the automatic cards only when the comparison is editable, 
       return { status: 'ok' };
     }
   });
-  const drawing = (id, disposition) => ({
-    id, mode: 'linear', importedComparisonIntent: { disposition }, linearSeqs: [{ uid: 'whole', region_record_id: '' }]
+  const drawing = (id, disposition, action = null) => ({
+    id, mode: 'linear', importedComparisonIntent: { disposition, action },
+    linearSeqs: [{ uid: 'whole', region_record_id: '' }]
   });
   await prepareLinearGenerate(drawing('editable', IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE));
   const others = Object.values(IMPORTED_COMPARISON_DISPOSITIONS).filter(
@@ -72,8 +75,19 @@ test('Generate splits the automatic cards only when the comparison is editable, 
   );
   for (const disposition of others) await prepareLinearGenerate(drawing(disposition, disposition));
   assert.ok(others.length > 0);
+  // OV-3324: after Replace, Generate draws the current controls' comparison and splits as an editable one does;
+  // Inherit and Clear keep the cards the saved comparison was saved over.
+  const replaced = `${IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED}:${IMPORTED_COMPARISON_ACTIONS.REPLACE}`;
+  await prepareLinearGenerate(drawing(replaced, IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED,
+    IMPORTED_COMPARISON_ACTIONS.REPLACE));
+  const kept = [IMPORTED_COMPARISON_ACTIONS.INHERIT, IMPORTED_COMPARISON_ACTIONS.CLEAR];
+  for (const action of kept) {
+    await prepareLinearGenerate(drawing(action, IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY, action));
+  }
   assert.deepEqual(refreshed, [
     ['editable', [['whole', true]]],
-    ...others.map((disposition) => [disposition, []])
+    ...others.map((disposition) => [disposition, []]),
+    [replaced, [['whole', true]]],
+    ...kept.map((action) => [action, []])
   ]);
 });
