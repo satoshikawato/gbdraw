@@ -115,7 +115,7 @@ const labelFitReports = ref(/** @type {readonly ResultLabelFit[]} */ ([]));
 // not saved in a Session.
 const inputSummaries = ref(/** @type {readonly DrawnInputSummary[]} */ ([]));
 // Store original pairwise match factors for re-interpolation
-const pairwiseMatchFactors = ref({}); // { pathId: factor }
+const pairwiseMatchFactors = typedRef(/** @type {Record<string, number>} */ ({})); // { pathId: factor }
 // Analysis-scoped materialized nucleotide sources used by match span popups.
 const matchSequenceRegistry = createSequenceSourceRegistry();
 const svgContent = typedComputed(() => {

@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawnTrack } from '../services/track-legend-rows.js' */
+/** @import { WebState } from '../state.js' */
 import {
   appliedFeatureColors,
   estimateColorFactor,
@@ -79,12 +80,21 @@ const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
 
 /**
  * @typedef {object} SvgStylesOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(source: any, callback: (...args: any[]) => void, options?: Record<string, any>) => any} watch Vue `watch`
+ * @property {Pick<WebState, 'svgContent' | 'svgContainer' | 'appliedPaletteColors' | 'pairwiseMatchFactors'
+ *   | 'sessionOperationAvailability' | 'semanticFileWatchersSuppressed' | 'paletteDefinitions'
+ *   | 'appliedPaletteName'>} state App state (state.js): the members this owner reads, with those
+ *   `appliedFeatureColors` reads.
+ * @property {<T>(
+ *   source: { readonly value: T },
+ *   callback: (value: T, previous: T) => void,
+ *   options?: { deep?: boolean }
+ * ) => unknown} watch Vue `watch`.
  * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`
  * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
- * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean }) => boolean | Promise<boolean>} projectPaletteAndRules
+ * @property {(options?: {
+ *   recolor?: { recolorPairwise?: boolean, recolorCollinear?: boolean }, prepareRules?: boolean
+ * }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3), which prepares the
  *   rule matches, paints the tracks through this owner, and shows the fills.
  * @property {() => readonly DrawnTrack[]} readDrawnTracks
@@ -121,7 +131,7 @@ export const createSvgStyles = ({
     recolorPairwise = false,
     recolorCollinear = false
   } = {}) => {
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     if (!svgContent.value) return;
     if (!svgContainer.value) return;
@@ -251,7 +261,7 @@ export const createSvgStyles = ({
   watch(
     appliedPaletteColors,
     (colors, previousColors) => {
-      if (state.semanticFileWatchersSuppressed?.value || paletteColorsEqual(colors, previousColors)) return;
+      if (state.semanticFileWatchersSuppressed.value || paletteColorsEqual(colors, previousColors)) return;
       // Inferred comparison factors are lossy, so only re-interpolate a family
       // when one of its palette endpoints actually changed.
       const recolorPairwise = !paletteColorKeysEqual(

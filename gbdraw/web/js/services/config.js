@@ -6386,7 +6386,9 @@ export const buildRunStateData = () => ({
 /** @param {NonNullable<UnvalidatedFields<'lastRunInfo' | 'pairwiseMatchFactors'>>} [runState] */
 export const applyRunStateData = (runState = {}) => {
   state.lastRunInfo.value = runState.lastRunInfo ? cloneJsonData(runState.lastRunInfo) : null;
-  state.pairwiseMatchFactors.value = cloneJsonObject(runState.pairwiseMatchFactors);
+  // A run state is a capture of `buildRunStateData` (History, a Load's rollback):
+  // its factors are the numbers the SVG styles owner wrote, by path key.
+  state.pairwiseMatchFactors.value = /** @type {Record<string, number>} */ (cloneJsonObject(runState.pairwiseMatchFactors));
 };
 
 // The shown drawing's feature-editor status from its restored features; a Load
