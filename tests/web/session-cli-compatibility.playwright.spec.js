@@ -463,12 +463,17 @@ test('Session 40 early CLI linear tables survives Web Generate', async ({ browse
 });
 
 // OV-3031: a CLI Session with two feature density tracks keeps them at Web Generate: the new Result draws the same
-// density slot groups (paths and fills) as the Result the CLI stored.
+// density slot groups (paths and fills) as the CLI's replay of that Session. The Result the Session stores keeps the
+// layout of the commit that wrote the fixture, so it gives only the slots and the fills.
 test('Session CLI feature density tracks survive Web Generate', async ({ browser }, testInfo) => {
   test.setTimeout(600_000);
   const bytes = gunzipSync(await fs.readFile(path.join(root, 'tests/fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw-session.json.gz')));
   const file = testInfo.outputPath('feature-density.gbdraw-session.json');
   await fs.writeFile(file, bytes);
+  const prefix = testInfo.outputPath('feature-density-replay');
+  await promisify(execFile)('python', ['-m', 'gbdraw.cli', 'circular', '--session', file, '-o', prefix, '-f', 'svg'], {
+    cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 1_000_000
+  });
   const run = await load(browser, file, { width: 1600, height: 1000 });
   try {
     const density = (svg) => run.page.evaluate((text) => {
@@ -478,10 +483,13 @@ test('Session CLI feature density tracks survive Web Generate', async ({ browser
         [...group.querySelectorAll('path')].map((item) => `${item.getAttribute('fill')}|${item.getAttribute('d')}`).sort()
       ]);
     }, svg);
+    const fills = (groups) => groups.map(([id, paths]) => [id, paths.map((item) => item.split('|')[0])]);
     const stored = await density(JSON.parse(bytes).drawings[0].results[0].content);
     expect(stored.map(([id]) => id)).toEqual(['density_genes', 'density_trna']);
+    const replayed = await density(await fs.readFile(`${prefix}.svg`, 'utf8'));
+    expect(fills(replayed)).toEqual(fills(stored));
     await generateAndWaitForResult(run.page);
-    expect(await density((await snapshot(run.page)).selected)).toEqual(stored);
+    expect(await density((await snapshot(run.page)).selected)).toEqual(replayed);
     expect(run.errors).toEqual([]);
   } finally {
     await run.context.close();

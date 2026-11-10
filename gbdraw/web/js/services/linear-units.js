@@ -9,7 +9,7 @@
 /** @import { LinearSeq } from './drawing/inputs.js' */
 /** @import { LinearComparisonResolution, LinearComparisonResolvedEdge, WindowLosatFilenames } from './linear-comparisons.js' */
 /** @import { CanonicalRecordWindow } from '../contracts/request.generated.js' */
-/** @import { GenomeScaleWarning, GenomeScaleWarningParams, LinearGenomeScales } from '../contracts/card-windows.generated.js' */
+/** @import { GenomeScaleWarning, GenomeScaleWarningParams, LinearGenomeScales, RingGenomeScales } from '../contracts/card-windows.generated.js' */
 import { linearComparisonEdgeKey } from './linear-comparisons.js';
 import { linearSeqRecordKey } from './record-draw-selection.js';
 import { diagnosticError } from '../utils/error-normalization.js';
@@ -188,12 +188,31 @@ export const readGenomeScales = (result, recordKeys) => {
 };
 
 /**
+ * The search space of each ring search of a Circular Generate, in ring order, from Python's `planRingScales` reply
+ * (`RingGenomeScales` of gbdraw/web_support/comparison_sequences.py), checked: a scale for each of the `ringCount`
+ * rings Generate searches (a positive decimal string, or null for LOSAT's own; PD-OI-018 revision 6) and the
+ * warnings of rings among them searched per file. Python sums and multiplies the genomes; the page never does.
+ * @param {unknown} result
+ * @param {number} ringCount
+ * @returns {RingGenomeScales}
+ */
+export const readRingScales = (result, ringCount) => {
+  const valid = isRecord(result) && Array.isArray(result.scales) && result.scales.length === ringCount
+    && result.scales.every(isScale)
+    && Array.isArray(result.warnings) && result.warnings.every((warning) => isRecord(warning)
+      && isIndex(warning.ring) && Number(warning.ring) < ringCount && typeof warning.text === 'string'
+      && warning.text !== '' && isWarningParams(warning.params));
+  if (!valid) throw diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'planRingScales' });
+  return /** @type {RingGenomeScales} */ (/** @type {unknown} */ (result));
+};
+
+/**
  * The banner of one Generate's per-file warnings: `notice(warning)` for each search it builds shows the warnings so
  * far, each once and translated (`tm(text, params)`: its English text is the one the command line logs), in the order
  * the searches ask for them. Generate calls it only for the pairs it searches, so a pair of the reply that no search
  * reads shows nothing.
  * @param {(notice: { text: string, tone: 'warning' }) => void} show
- * @returns {(warning: GenomeScaleWarning | null) => void}
+ * @returns {(warning: Pick<GenomeScaleWarning, 'text' | 'params'> | null) => void}
  */
 export const perFileWarningNotice = (show) => {
   /** @type {Set<string>} */

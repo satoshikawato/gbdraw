@@ -224,10 +224,11 @@ def test_a_typed_width_is_never_narrowed(gc_slots: list[str]) -> None:
     assert not any(slot.compressed for slot in inside)
 
 
-@pytest.mark.parametrize(("band", "dev_width_px"), [(170.0, 68.45), (200.0, 51.8)])
+@pytest.mark.parametrize(("band", "dev_width_px"), [(170.0, 68.45), (200.0, 57.35)])
 def test_an_explicit_center_reserved_radius_narrows_typed_lane_widths_as_before(band: float, dev_width_px: float) -> None:
     # DF-D38: --gc_content_width 74 --gc_skew_width 74 with --center_reserved_radius 170 (or 200) drew on dev, the GC
-    # rows narrowed to 68.45 (51.8) px; the typed-width exemption belongs to rule L's automatic fit only.
+    # rows narrowed to 68.45 (51.8) px; the typed-width exemption belongs to rule L's automatic fit only. At 200 px they
+    # keep 57.35 px since labels inside the scale stand closer to the ticks (OV-3300).
     slots = [
         "features:features",
         "ticks:ticks",
@@ -264,9 +265,10 @@ def test_turning_narrowing_off_keeps_the_auto_widths_of_a_custom_stack() -> None
 def test_an_explicit_center_reserved_radius_narrows_auto_widths_below_the_floor() -> None:
     # DF-D05: the user's own radius narrows the inside tracks to their readable minimums, below the floor; the
     # definition's band of the same size leaves their widths.
-    # 247 px: the floor clears a 246 px band since the tick labels reserve their drawn box (OV-165; 245 px before).
-    explicit = _by_id(_layout(247.0, center_reserved_radius_explicit=True))
-    definition = _by_id(_layout(247.0))
+    # 251 px: the floor clears a 250.5 px band since labels inside the scale stand the label margin from the ticks
+    # (OV-3300; 246 px before, and 245 px before the tick labels reserved their drawn box, OV-165).
+    explicit = _by_id(_layout(251.0, center_reserved_radius_explicit=True))
+    definition = _by_id(_layout(251.0))
     for slot_id in GC_ROWS:
         assert explicit[slot_id].compressed, slot_id
         assert explicit[slot_id].resolved_width_px < 30.0

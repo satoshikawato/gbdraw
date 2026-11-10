@@ -300,6 +300,15 @@ either genome is not the whole of its genome; the value is
 (`_losatp_database_sizes` in `gbdraw/api/request_render.py`). A LOSATP raw entry stored for such a pair before no
 longer matches and is searched again; a whole one-record pair's key is unchanged.
 
+Circular similarity ring raw entries (flow `circular-conservation`) follow the same rule with `--searchsp`
+(PD-OI-018 revision 6): the CLI (`resolve_circular_conservation_losat` in `gbdraw/comparisons/circular_losat.py`) and
+the Web (the ring flow of `gbdraw/web/js/app/run-analysis.js`, from the Worker helper `planRingScales`, which runs
+`plan_ring_scales_json` in `gbdraw/web_support/comparison_sequences.py` on the reference files and each ring's
+files) write the search space of the reference genome and the ring's genome (`ring_search_spaces`) into the entry's
+`args`, unless both genomes are one file of one record. A ring entry stored before for such a ring no longer matches
+and is searched again; a one-record pair's key is unchanged. Vectors: `tests/web/circular-ring-subject-oracle.py`,
+read by `tests/web/run-analysis-simple-path.test.mjs`, and `tests/test_ring_genome_evalue.py`.
+
 ## Unreleased: request schema 10 stores feature density tracks
 
 Request schema 10 (not on `main` yet, so its number stays) adds the optional

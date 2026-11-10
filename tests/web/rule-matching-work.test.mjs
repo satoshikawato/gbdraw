@@ -108,6 +108,7 @@ test('"All features with legend item" over K features with K hash rules does O(K
     };
     Object.assign(state, {
       results: ref([]), selectedResultIndex: ref(0), svgContainer: ref(null), clickedFeature: ref(null),
+      displayedResultMetadata: () => null,
       featureStyleScopeDialog, resetColorDialog: {}, legendRenameDialog: {}, originalLegendOrder: ref([]),
       originalLegendColors: ref({}), originalSvgStroke: ref({ color: null, width: null }), appliedPaletteColors: ref({}),
       skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false), hasPendingPaletteDraft: ref(false)
@@ -142,7 +143,10 @@ test('the Legend item of K features, whose K hash rules name a row of another co
     rules.forEach((rule) => { rule.color = '#abcdef'; });
     const preparation = createRulePreparation({ state, evaluate: evaluateHashRules });
     assert.equal(await preparation.prepare(rules), true);
-    Object.assign(state, { results: ref([]), files: { t_color: null }, originalLegendOrder: ref(['CDS']) });
+    Object.assign(state, {
+      results: ref([]), files: { t_color: null }, originalLegendOrder: ref(['CDS']), svgContainer: ref(null),
+      displayedResultMetadata: () => null
+    });
     const actions = createFeatureRuleActions({
       ref, computed: (get) => ({ get value() { return get(); } }), watch() {}, state, ...ruleOwnerPorts(preparation),
       runUndoable: async (_, commit) => commit(), runUndoableCheckpoint: async (_, commit) => commit(),

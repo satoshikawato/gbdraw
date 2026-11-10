@@ -20,7 +20,8 @@ import { msg } from '../utils/i18n.js';
 /** @import { ColorRuleLegendGroup } from '../services/specific-color-rules.js' */
 /** @import { PopupOrigin } from '../utils/popup-bounds.js' */
 /** @import { ColorFeature } from './feature-editor/color-actions.js' */
-/** @import { EditableLabelEntry, LabelTableInput } from './feature-editor/label-actions.js' */
+/** @import { LabelTableInput } from './feature-editor/label-actions.js' */
+/** @import { EditableLabelEntry } from '../services/label-override-table.js' */
 /** @import { VisibilityScopeChoice } from './feature-editor/visibility-actions.js' */
 
 const { computed, reactive, ref } = window.Vue;

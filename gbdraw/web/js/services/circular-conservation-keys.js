@@ -43,7 +43,7 @@ export const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(re
 
 /**
  * The conservation subject: the LOSAT FASTA of every record of the Circular reference, each source card's file
- * whole, in card order (the records the CLI loader reads, OV-1599, as `ring_subject_records` in
+ * whole, in card order (the records the CLI loader reads, OV-1599, as `ring_subject_sources` in
  * gbdraw/comparisons/circular_losat.py takes them; a record without a sequence is left out) and its SHA-256, the
  * entry's `subjectCanonicalHash`, which the CLI's ring of the same files has.
  * @typedef {{ files: readonly FileLike[], fasta: string, hash: string }} ConservationSubject

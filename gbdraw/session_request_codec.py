@@ -1623,6 +1623,29 @@ def legacy_record_cardinality(mode: object, record: Mapping[str, Any]) -> Record
     return RecordCardinality.EXACTLY_ONE
 
 
+def decode_record_source(
+    value: object, *, path: str, resource_paths: Mapping[str, str | Path]
+) -> RecordInputSource:
+    """A request record's source (``records[].source``): its kind and the staged files it names, as the request
+    source the planner reads. The one decoder of a record source: a request's records and the Web's ring planner
+    (``gbdraw.web_support.comparison_sequences``), which reads the reference sources the next Generate names, read it.
+    """
+
+    source_payload = _object(value, path=path, required={"kind"}, exact=False)
+    kind = source_payload["kind"]
+    source_kind = next(
+        (candidate for candidate in _SOURCE_FILE_RESOURCES if _camel(candidate) == kind), None
+    )
+    if source_kind is None:
+        raise CanonicalRequestDecodingError(f"Unsupported record source kind at {path}: {kind!r}.")
+    fields_of_kind = [field for _resource_kind, field in _SOURCE_FILE_RESOURCES[source_kind]]
+    _require_exact_fields(source_payload, path=path, required={"kind", *fields_of_kind})
+    return _SOURCE_FILE_CLASSES[source_kind](*(
+        _resolve_resource(source_payload[field], path=f"{path}.{field}", resource_paths=resource_paths)
+        for field in fields_of_kind
+    ))
+
+
 def _decode_record(
     value: object,
     *,
@@ -1645,25 +1668,7 @@ def _decode_record(
         raw = _object(item["display"], path=f"{path}.display",
                       required={"isCircular", "startCoordinate"})
         display = RecordDisplayOptions(raw["isCircular"], raw["startCoordinate"])
-    source_payload = _object(
-        item["source"], path=f"{path}.source", required={"kind"}, exact=False
-    )
-    kind = source_payload["kind"]
-    source_kind = next(
-        (candidate for candidate in _SOURCE_FILE_RESOURCES if _camel(candidate) == kind), None
-    )
-    if source_kind is None:
-        raise CanonicalRequestDecodingError(
-            f"Unsupported record source kind at {path}.source: {kind!r}."
-        )
-    fields_of_kind = [field for _resource_kind, field in _SOURCE_FILE_RESOURCES[source_kind]]
-    _require_exact_fields(source_payload, path=f"{path}.source", required={"kind", *fields_of_kind})
-    source = _SOURCE_FILE_CLASSES[source_kind](*(
-        _resolve_resource(
-            source_payload[field], path=f"{path}.source.{field}", resource_paths=resource_paths
-        )
-        for field in fields_of_kind
-    ))
+    source = decode_record_source(item["source"], path=f"{path}.source", resource_paths=resource_paths)
 
     presentation_payload = _object(
         item["presentation"],
@@ -6654,6 +6659,7 @@ def describe_canonical_request() -> dict[str, Any]:
 
 
 __all__ = [
+    "decode_record_source",
     "StoredRecordWindow",
     "legacy_region_span",
     "stored_record_windows",

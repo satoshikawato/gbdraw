@@ -23,24 +23,24 @@
       "sha256": "4aec66691309b610851023a1997061228a73097e622a0f1038fef5aa9d902e2c"
     },
     "gallery/examples/HmmtDNA_ATskew.svg": {
-      "bytes": 445344,
-      "sha256": "ec878ab679a18f388e9d39e2645c5a55addf6a2291f7639813268361fbe9ecf5"
+      "bytes": 445346,
+      "sha256": "68c2609a9f57cef4070daf58ee424fbf4af61b7fad5481e2e9742119ebf897ff"
     },
     "gallery/examples/HmmtDNA_basic_circular.svg": {
-      "bytes": 434932,
-      "sha256": "13b22edef5a57aef3b8790d124ef6bef0678cb6007dcf61471100e1f8b18c96b"
+      "bytes": 434967,
+      "sha256": "fe988b3eb547c07654ae65c08594a999ae9087a04ce35c175ac3fddd41c8634e"
     },
     "gallery/examples/Vnig_TUMSAT-TG-2018.svg": {
-      "bytes": 27274862,
-      "sha256": "774e85a054c881246beee6ed1f4fa8ae9828a4df079f3f151ec52f7c5df0e38d"
+      "bytes": 27276330,
+      "sha256": "69fbc93ca7bac48c7e8a073ce15eeb89f5dc958ae5a71e0bc32a99d2c65130dc"
     },
     "gallery/examples/ecoli_o157_sakai_rings.svg": {
-      "bytes": 26678846,
-      "sha256": "f12d1fa131104995e77caff6a6376c1a389b203cbba80a11698d3987baf92797"
+      "bytes": 26679828,
+      "sha256": "e1e0126fff0124a225ffc928d5791ed27cbfb628343c5ba3a05b4fdfde183ffe"
     },
     "gallery/examples/hepatoplasma_scabrum_depth.svg": {
-      "bytes": 2857513,
-      "sha256": "9be882cddadd6c36aae85299376a31ca559b7fd54ccdfcbc7fc6d4676d366a4e"
+      "bytes": 2858294,
+      "sha256": "796973e622f29c8e1fe16b56fac97f2a9e8c8d29fecd3a119aeaa602c5a5a6fc"
     },
     "gallery/examples/hepatoplasmataceae_collinear.svg": {
       "bytes": 14674738,
@@ -71,24 +71,24 @@
       "sha256": "2663f033183c7ed0e108cb5d580cd3ab6fa52069beed5abbaad5016f74f0f19e"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
-      "bytes": 276108,
-      "sha256": "dadca7162e3241e668faf5c00c604e60d6ac8c13ca882b2b0a44c28fb89fdeb9"
+      "bytes": 276110,
+      "sha256": "8a4b8119ec8ace918b100657bf509d080236a80b77ecc214dcb1f0c9b4cef7dd"
     },
     "gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": {
-      "bytes": 260501,
-      "sha256": "a9e211bccb180e022114f27be2710b43d170bea816524336abfc2ae165283088"
+      "bytes": 260724,
+      "sha256": "b5343b3d01fb70e44c2669c6bf1e06101f4a82280bded934ecb0076fef7c513b"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
-      "bytes": 11841811,
-      "sha256": "81d9d60250f0b15555d350a22812ddd3d627aad0f56a8dd377e398493f5be3a5"
+      "bytes": 11842052,
+      "sha256": "11d2c29312fa310078918e1ce61cb7f703cd64aa070b245dbff4a8b2069e5e1b"
     },
     "gallery/sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz": {
-      "bytes": 21339504,
-      "sha256": "b3acbd0c3a453c020335a8e2f769aed2c093f67a49b159631d6da017df75010e"
+      "bytes": 21340556,
+      "sha256": "5d9a98e6e19a862da4a093d2274864417abbc8cdb7ecdf740b40348cff5c8294"
     },
     "gallery/sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz": {
-      "bytes": 1071659,
-      "sha256": "c18d748b4b302860fffea96dfeeabc838ee764d8e0a4785d21d52bd0fa958fdd"
+      "bytes": 1072103,
+      "sha256": "47b3770525c5fd53851ac8bac05cff9aa631cce928b1be8e024081391017d896"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
       "bytes": 11557828,
@@ -119,24 +119,24 @@
       "sha256": "fe09f54e43f4a4e8482f132bc657b219795e7648c66cdea2c3f0486eacd14d1e"
     },
     "gallery/sources/HmmtDNA_ATskew.svg": {
-      "bytes": 85635,
-      "sha256": "d1847f0a8bfab909af28fc70c081ba26b387be7d55549ee93e8a1d16a3154726"
+      "bytes": 85637,
+      "sha256": "3c82abbea7e1ee2ff32915bb2cbaf0b3bf4a98b66bf837f22f95edb0e32ee26f"
     },
     "gallery/sources/HmmtDNA_basic_circular.svg": {
-      "bytes": 75207,
-      "sha256": "cb9037a6761ae9f38c5b69d860757d5ce996223a4aa9759785b2f7e520ccb3fe"
+      "bytes": 75242,
+      "sha256": "9dcef4d8e16eb2549b73b5a2263697b4c6af08fba49b88525fd5719ff8375686"
     },
     "gallery/sources/Vnig_TUMSAT-TG-2018.svg": {
-      "bytes": 2627174,
-      "sha256": "b34fb755d59a090e0f30e4b3f410b61bfd3fad737a3540e9ad5d44ac95bf22ec"
+      "bytes": 2628642,
+      "sha256": "48446165b3927dd8f3ffadc1a14c1be9303a7822b280c868d951021ab9dc6161"
     },
     "gallery/sources/ecoli_o157_sakai_rings.svg": {
-      "bytes": 14243289,
-      "sha256": "5a4fbf94d55d4fa80711dc80018ed9590740978e809d3e52161e5c108ebccc1d"
+      "bytes": 14244271,
+      "sha256": "55d3f81ce04d6bb127091dd479fdf27c0a258aed6262244a4bdfc92523df9caa"
     },
     "gallery/sources/hepatoplasma_scabrum_depth.svg": {
-      "bytes": 481177,
-      "sha256": "874881d79cd3d5e19da937e5c47a8a25eda43f42aac6e095e8a0e7462c86aab4"
+      "bytes": 481958,
+      "sha256": "755bd92a56131dca28e2a270e0614f1959e65b01221705e6151c4efd65dd1996"
     },
     "gallery/sources/hepatoplasmataceae_collinear.svg": {
       "bytes": 3719005,
@@ -167,24 +167,24 @@
       "sha256": "321a080ad026144ff1b83b1b5200d490049d8209a11ef72bc56e27ad25426f85"
     },
     "gallery/thumbnails/HmmtDNA_ATskew.webp": {
-      "bytes": 22172,
-      "sha256": "53eea37f62d5c00c908d5bbbcc3d4c483fe9da425fa4250d5b5592f943a3ef9f"
+      "bytes": 22236,
+      "sha256": "f853901dd2f19e36bcd3505c0ec005a344222ed520a4db135167e5633e8ee1a7"
     },
     "gallery/thumbnails/HmmtDNA_basic_circular.webp": {
-      "bytes": 18780,
-      "sha256": "6d0e80497af9eead731760507d38f9b5456aea8e2ec7c5768a73d9d77330e04e"
+      "bytes": 18742,
+      "sha256": "86b9209722b0f4e4679af4107855de09e8c8fb0e6ca23b226f12791be87bcf90"
     },
     "gallery/thumbnails/Vnig_TUMSAT-TG-2018.webp": {
-      "bytes": 28352,
-      "sha256": "683a47c8479f2c0e3985a44d9950c429abf3c79160e12df2ff13071063dfedd2"
+      "bytes": 28594,
+      "sha256": "d0500234b770f94bf7a2fcb6f29dec31376cc387007dae3154c4e60f4a59f6a4"
     },
     "gallery/thumbnails/ecoli_o157_sakai_rings.webp": {
-      "bytes": 25402,
-      "sha256": "3debc8498746f7fc03ede77188e13c78b0326d0c454a63e89d7727c0051261a9"
+      "bytes": 25542,
+      "sha256": "51af1312d95334f90f2cb7dc527b729df1cfc5438711f4669576f8ec01ca8ca9"
     },
     "gallery/thumbnails/hepatoplasma_scabrum_depth.webp": {
-      "bytes": 20990,
-      "sha256": "f4605e02b57d15587f18ecf4011f779d533a2bfb77ab71924643fd939aaa9bd9"
+      "bytes": 21178,
+      "sha256": "387ae246abcded897dc17c3a7b48d952eaca16de84d68e0398c07dea9da270c7"
     },
     "gallery/thumbnails/hepatoplasmataceae_collinear.webp": {
       "bytes": 19732,

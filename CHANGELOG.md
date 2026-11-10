@@ -1136,8 +1136,8 @@ into the `[Unreleased]` list below.
   record takes a longer interval where the labels of the shorter one would come
   closer than a quarter of their font size, the gap feature labels keep: a
   113 Mbp record has a tick every 5 Mbp, and a 35.8 Mbp record, whose 1 Mbp
-  labels touched, a tick every 2 Mbp. Figures of records up to 33.8 Mbp do not
-  change. Linear ruler labels (`--scale_style ruler` and the axis ruler)
+  labels touched, a tick every 2 Mbp. Records up to 34.2 Mbp keep a tick every
+  1 Mbp. Linear ruler labels (`--scale_style ruler` and the axis ruler)
   overlapped above 50 Mbp in the same way and now take the same steps from
   46,484,180 bp; the scale bar of a default Linear figure that long takes the
   same longer interval as its length (5 Mbp at 113 Mbp instead of a 1 Mbp bar

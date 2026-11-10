@@ -293,7 +293,7 @@ const biologicalFeatures = typedRef(/** @type {ExtractedFeature[]} */ ([])); // 
 const featureCatalog = typedRef(/** @type {FeatureCatalog | null} */ (null));
 // Whether the rule preparation (app/rule-matching.js) is matching rules; it
 // records the matches, which live on the feature objects, before this falls back.
-const ruleMatchingPending = ref(false);
+const ruleMatchingPending = typedRef(false);
 // OV-924: the qualifier names of the drawn features, read from the raw rows
 // once per feature list; a rule edit or a mode switch only merges the rules.
 const extractedFeatureQualifierNames = computed(() => collectFeatureQualifierNames(toRaw(extractedFeatures.value)));
@@ -384,12 +384,17 @@ const previewFeatureSearchRenderedCount = ref(0);
 // Whether the Preview search bar is shown; transient view state (search-bar hide D-04).
 const previewFeatureSearchVisible = ref(true);
 const labelSearch = typedRef('');
-const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
+/** @import { EditableLabelEntry } from './services/label-override-table.js' */
+// The editable labels of the displayed Result (the label actions read them from its SVG).
+const editableLabels = typedRef(/** @type {EditableLabelEntry[]} */ ([]));
 const autoLabelReflowEnabled = typedRef(false);
 const labelReflowProcessing = typedRef(false);
 const labelReflowRequestSeq = typedRef(0);
 const labelReflowForceRequestSeq = typedRef(0);
-const labelReflowLastError = ref(null);
+// The last label rerender's failure (`liveEditFailure`), or none.
+const labelReflowLastError = typedRef(
+  /** @type {ReturnType<typeof import('./utils/error-normalization.js').liveEditFailure>} */ (null)
+);
 // The GC and skew hides an Undo took back, per drawing id: the automatic rerender
 // (run-analysis.js) keeps them; its track projection and the note read them.
 /** @import { UndoneTrackHide } from './services/setting-application.js' */
@@ -547,7 +552,7 @@ const legendRenameDialog = typedReactive({
 });
 
 // Label text scope dialog state
-const labelTextScopeDialog = reactive({
+const labelTextScopeDialog = typedReactive({
   show: false,
   labelKey: '',
   newText: '',
@@ -558,7 +563,7 @@ const labelTextScopeDialog = reactive({
 
 // A label text edit on a feature that has no label in the displayed Result.
 // `reason` is the label absence reason (label-actions.js) the dialog words.
-const hiddenLabelTextDialog = reactive({
+const hiddenLabelTextDialog = typedReactive({
   show: false,
   featureId: '',
   reason: ''
@@ -566,7 +571,7 @@ const hiddenLabelTextDialog = reactive({
 
 // Label visibility On that the diagram cannot draw (Owner Q1, Q2): why, and
 // the feature type the dialog names. The label actions own the pending edit.
-const labelOnDialog = reactive({
+const labelOnDialog = typedReactive({
   show: false,
   reason: '',
   featureType: ''

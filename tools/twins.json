@@ -784,7 +784,7 @@
       "id": "concern:circular-ring-subject-database",
       "concern": "Circular similarity ring subject database (every record of the reference file that has a sequence, uncropped, as LOSAT FASTA text and its hash)",
       "pythonOwner": [
-        "gbdraw/comparisons/circular_losat.py:ring_subject_records",
+        "gbdraw/comparisons/circular_losat.py:ring_subject_sources",
         "gbdraw/comparisons/circular_losat.py:ring_subject_fasta"
       ],
       "jsOwner": [

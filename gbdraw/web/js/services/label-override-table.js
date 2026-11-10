@@ -24,6 +24,12 @@ const isHeaderRow = (parts) => {
  * A displayed label: the feature it labels and the text it shows before any edit.
  * @typedef {{ identityKey: string, sourceText?: unknown }} BulkLabelTarget
  */
+/**
+ * An editable label of the displayed Result, as the Features list shows it: the label actions read it from the
+ * drawn SVG (`data-label-key`, its source text and feature ID; `kind` is 'embedded' or 'regular'). `draftText` is
+ * the text typed in the list and not yet applied.
+ * @typedef {{ key: string, idx: number, text: string, sourceText: string, featureId: string, kind: string, draftText: string }} EditableLabelEntry
+ */
 
 /**
  * Projects the bulk label edits (`labelTextBulkOverrides`, {sourceText: text})

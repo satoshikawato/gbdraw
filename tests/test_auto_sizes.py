@@ -125,8 +125,8 @@ def test_depth_window_follows_the_gc_window(window: int, step: int, expected: tu
         (10_000_000, (500_000, 100_000)),
         (10_000_001, (1_000_000, 200_000)),
         # OV-2747, OV-2748: above 10 Mbp the intervals coarsen where the default labels come closer than a quarter em.
-        (33_839_331, (1_000_000, 200_000)),
-        (33_839_332, (2_000_000, 400_000)),
+        (34_236_412, (1_000_000, 200_000)),
+        (34_236_413, (2_000_000, 400_000)),
         (112_934_049, (5_000_000, 1_000_000)),
     ],
 )

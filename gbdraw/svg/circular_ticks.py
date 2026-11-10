@@ -422,14 +422,10 @@ def resolve_circular_tick_label_geometry(
     normalized_label_side = str(label_side or "legacy").strip().lower()
     normalized_tick_side = str(tick_side or "legacy").strip().lower()
     if normalized_label_side in {"inside", "outside"} and normalized_tick_side in {"inside", "outside", "both"}:
+        # One gap on either side: the label's text box stands the label margin from the tick marks (OV-3300).
         margin_px = circular_tick_label_margin_px(font_size, tick_width)
         if normalized_label_side == "inside":
-            path_radius = (
-                float(tick_inner)
-                - margin_px
-                - (float(bbox_height_px) / 4.0)
-                - label_outer_offset_px
-            )
+            path_radius = float(tick_inner) - margin_px - label_outer_offset_px
         else:
             path_radius = float(tick_outer) + margin_px + label_inner_offset_px
     if str(tick_side or "legacy").strip().lower() not in {"none", ""}:

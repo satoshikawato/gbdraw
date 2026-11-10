@@ -176,8 +176,9 @@ class RowWindowHeadingGroup(DefinitionGroup):
 
 @dataclass(frozen=True)
 class RowWindowPlace:
-    """Where one unit of a windowed row is drawn: its left x and width, its axis y, and the top of its feature
-    lanes from the axis (canvas coordinates without the horizontal offset)."""
+    """Where one unit of a windowed row is drawn: its left x and width, its axis y, and the top of its row's
+    feature lanes from the axis, the line every number and "//" length of the row stands on (canvas coordinates
+    without the horizontal offset)."""
 
     record_index: int
     x: float
@@ -214,7 +215,7 @@ class RowWindowMarksGroup:
             self._gap(
                 0.5 * (left_place.x + left_place.width + right_place.x),
                 left_place.axis_y,
-                left_place.axis_y + min(left_place.feature_top_y, right_place.feature_top_y),
+                left_place.axis_y + left_place.feature_top_y,
                 gap.text,
                 style,
             )

@@ -1,7 +1,7 @@
 // @ts-check
 import { storedRegionWindows, writeCanonicalRecordReverseComplement } from './record-display-model.js';
 import {
-  INPUT_TYPES, inputSourceFiles, inputTypeOfSourceKind, inputTypeSpec,
+  INPUT_TYPES, inputSourceFiles, inputSourceSlotFiles, inputTypeOfSourceKind, inputTypeSpec,
   recordSourceOf, recordSourceSlotIds
 } from './input-types.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
@@ -1696,22 +1696,40 @@ const inputRecordSource = (resources, inputType, slots, index) => {
 const linearRecordSource = (resources, inputType, seq, index) => inputRecordSource(resources, inputType, seq, index);
 
 /**
- * The record-source resources the next Generate's request names for these drawn Linear cards, under the same ids
- * (`linearRecordSource`). The descriptors hold no bytes: their payload owner is the File, which a helper stages
- * under that id so the Generate finds its bytes and parsed records in the Worker (OV-1595). Null when a card lacks
- * a file the request needs.
- * @param {readonly RequestLinearSeq[]} linearSeqs The drawn cards, in request order.
- * @param {unknown} inputType
- * @returns {Readonly<Record<string, RawSessionResourceDescriptor>> | null}
+ * Generate's descriptor of one input File (`serializeFile` in config.js): its name, type, size (a gzip File's expanded
+ * bytes) and payload owner, as the request and a Session write them.
+ * @typedef {(file: FileLike) => Promise<RawSessionResourceDescriptor | null>} DescribeInputFile
  */
-export const linearRecordSourceResources = (linearSeqs, inputType) => {
+/**
+ * The record sources the next Generate's request names for these inputs (drawn Linear cards, or the Circular source
+ * cards), in request order, with their resources under the same ids (`inputRecordSource`) and the Files they read.
+ * Each file's descriptor is the one Generate's request writes of it (`describeFile`), so a helper that stages it
+ * under that id stages the size and bytes the request names, and the Generate finds its bytes and parsed records in
+ * the Worker (OV-1595, OV-3364). The descriptors hold no bytes: their payload owner is the File. Null when an input
+ * lacks a file the request needs; a file `describeFile` refuses (a gzip past the cap) rejects with its reason.
+ * @template {Readonly<Partial<Record<InputSlot, FileLike | null>>>} C
+ * @param {readonly C[]} inputs In request order.
+ * @param {unknown} inputType
+ * @param {DescribeInputFile} describeFile
+ * @returns {Promise<{ sources: CanonicalRecord['source'][], resources: Readonly<Record<string, RawSessionResourceDescriptor>>,
+ *   files: FileLike[] } | null>}
+ */
+export const requestRecordSources = async (inputs, inputType, describeFile) => {
+  const slots = inputSourceSlotFiles(inputType).map(({ slot }) => slot);
+  /** @type {FileLike[]} */
+  const files = inputs.flatMap((input) => slots.flatMap((slot) => input[slot] ?? []));
+  const described = await Promise.all(inputs.map(async (input) => Object.fromEntries(await Promise.all(slots.map(
+    async (slot) => [slot, input[slot] ? await describeFile(/** @type {FileLike} */ (input[slot])) : null]
+  )))));
   const resources = createResourceBuilder({ encode: false });
+  /** @type {CanonicalRecord['source'][]} */
+  let sources;
   try {
-    linearSeqs.forEach((seq, index) => linearRecordSource(resources, inputType, seq, index));
+    sources = described.map((input, index) => inputRecordSource(resources, inputType, input, index));
   } catch {
     return null;
   }
-  return resources.resources;
+  return { sources, resources: resources.resources, files };
 };
 
 /**

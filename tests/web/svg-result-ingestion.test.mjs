@@ -801,6 +801,7 @@ test('the Legend owner shows a row by its drawn name and reads which typed names
   const owner = createLegendEntryActions({
     state: {
       results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
+      displayedResultMetadata: () => null, extractedFeatures: { value: [] },
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: ['#112233', '#445566'].map((color) => ({ feat: 'CDS', qual: 'gene', val: color, color, cap: 'Shared' })) })
     },
@@ -838,6 +839,7 @@ test('the Legend owner finds the row a typed name names, by its key', async () =
   const owner = createLegendEntryActions({
     state: {
       results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
+      displayedResultMetadata: () => null, extractedFeatures: { value: [] },
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: [], legendEntries, deletedLegendEntries: { value: [] } })
     },
@@ -877,6 +879,7 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
   const strokeOptionsOpen = new Set();
   const state = {
     results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
+    displayedResultMetadata: () => null, extractedFeatures: { value: [] },
     originalLegendOrder: { value: ['CDS', 'GC content'] }, originalLegendColors: { value: {} },
     legendStrokeOptionsOpen: strokeOptionsOpen,
     activeDrawing: () => drawing,

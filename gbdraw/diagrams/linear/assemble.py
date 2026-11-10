@@ -3030,6 +3030,34 @@ class _LinearVerticalPlans:
     record_vertical_plans: list[LinearRecordVerticalPlan]
     record_definition_geometries: list[_LinearRecordDefinitionGeometry]
     ribbon_clear_bands: dict[int, VerticalBand]
+    # Each window of a windowed row: the feature lanes of its row (``_shared_by_row_windows``), whose top its
+    # number and "//" length stand on (PD-OI-122).
+    row_window_lanes: dict[int, VerticalBand]
+    # Each record: where its ribbons attach (``_comparison_attachments``).
+    comparison_attachments: dict[int, _ComparisonAttachment]
+
+
+@dataclass(frozen=True, slots=True)
+class _ComparisonAttachment:
+    """Where a record's ribbons attach, from its axis (``band``: for a window of a windowed row, its row's), and the
+    paint of its tracks other than features (``None`` without any)."""
+
+    band: VerticalBand
+    non_feature_band: VerticalBand | None
+
+
+def _shared_by_row_windows(
+    bands: Mapping[int, VerticalBand], row_windows: Sequence[LinearRowWindows]
+) -> dict[int, VerticalBand]:
+    """``bands`` by record index, each window of a windowed row given the union of its row's bands; other records
+    keep their own. The windows of a row share one top and one bottom, so their numbers stand on one line and
+    the ribbons to and from them end on one line, whichever strands each window's features take (OV-3374)."""
+
+    shared = dict(bands)
+    for windows in row_windows:
+        row_band = union_vertical_bands([bands[index] for index in windows.record_indices])
+        shared.update(dict.fromkeys(windows.record_indices, row_band))
+    return shared
 
 
 def _ribbon_clear_bands(
@@ -3091,12 +3119,16 @@ def _linear_vertical_plans(
         render_context=tracks.render_context,
         record_transforms=record_inputs.record_transforms,
     )
-    # A window's marks, number and gap text belong to its record's body (PD-OI-122).
-    marks_bands = {
-        index: frame.row_window_style.marks_band(record_vertical_plans[index].feature_lanes_band.top_y)
-        for windows in frame.row_windows
-        for index in windows.record_indices
-    }
+    # A window's marks, number and gap text belong to its record's body (PD-OI-122), on its row's lanes.
+    row_window_lanes = _shared_by_row_windows(
+        {
+            index: record_vertical_plans[index].feature_lanes_band
+            for windows in frame.row_windows
+            for index in windows.record_indices
+        },
+        frame.row_windows,
+    )
+    marks_bands = {index: frame.row_window_style.marks_band(lanes.top_y) for index, lanes in row_window_lanes.items()}
     for index, marks in marks_bands.items():
         plan = record_vertical_plans[index]
         record_vertical_plans[index] = replace(
@@ -3113,6 +3145,20 @@ def _linear_vertical_plans(
             plan,
             record_body_band=plan.record_body_band.union(band),
             comparison_exclusion_band=plan.comparison_exclusion_band.union(band),
+        )
+    # The rows are spaced from a windowed row's shared edge, where its ribbons attach: a ribbon from its shallowest
+    # window keeps the comparison height (OV-3374).
+    row_comparison_bands = _shared_by_row_windows(
+        {index: record_vertical_plans[index].comparison_exclusion_band for index in row_window_lanes},
+        frame.row_windows,
+    )
+    for index, band in row_comparison_bands.items():
+        plan = record_vertical_plans[index]
+        record_vertical_plans[index] = replace(
+            plan,
+            record_body_band=plan.record_body_band.union(band),
+            comparison_exclusion_band=band,
+            canvas_band=plan.canvas_band.union(band),
         )
     # Every later reader counts a wrapped record's labels in one frame, where rows do not overlap.
     feature_slot_id = next((slot.id for slot in tracks.linear_track_layout.slots if slot.renderer == "features"), None)
@@ -3131,6 +3177,10 @@ def _linear_vertical_plans(
         record_vertical_plans=record_vertical_plans,
         record_definition_geometries=record_definition_geometries,
         ribbon_clear_bands=ribbon_clear_bands,
+        row_window_lanes=row_window_lanes,
+        comparison_attachments=_comparison_attachments(
+            record_vertical_plans, tracks, ribbon_clear_bands, frame.row_windows
+        ),
     )
 
 
@@ -3255,15 +3305,16 @@ class _LinearRowStacking:
 
 
 def _row_window_mark_bands(
-    frame: _LinearRowFrame, plan: LinearRecordVerticalPlan, record_index: int, record_x: float
+    frame: _LinearRowFrame, vertical: _LinearVerticalPlans, record_index: int, record_x: float
 ) -> tuple[CollisionBand, ...]:
     """A window's marks beside it, in its insets (PD-OI-122), as a body band: rows keep clear of them and the
     figure bounds hold them."""
 
-    if frame.row_windows_of(record_index) is None:
+    lanes = vertical.row_window_lanes.get(record_index)
+    if lanes is None:
         return ()
     placement = frame.horizontal_placements[record_index]
-    marks = frame.row_window_style.marks_band(plan.feature_lanes_band.top_y)
+    marks = frame.row_window_style.marks_band(lanes.top_y)
     return (
         CollisionBand(
             "body",
@@ -3331,7 +3382,7 @@ def _linear_row_stacking(
             definition_gap=float(canvas_config.definition_column_gap),
             definition_column_left=horizontal.definition_column_left,
         )
-        + _row_window_mark_bands(frame, plans[index], index, placements[index].x + horizontal.final_translations[index][0])
+        + _row_window_mark_bands(frame, vertical, index, placements[index].x + horizontal.final_translations[index][0])
         for index in range(len(records))
     ]
     record_offsets: list[float] = [0.0 for _record in records]
@@ -3421,6 +3472,40 @@ class _LinearPlacements:
     length_bar_offset_y: float
 
 
+def _comparison_attachments(
+    plans: Sequence[LinearRecordVerticalPlan],
+    tracks: _LinearTrackPlan,
+    clear_bands: Mapping[int, VerticalBand],
+    row_windows: Sequence[LinearRowWindows],
+) -> dict[int, _ComparisonAttachment]:
+    """Where each record's ribbons attach: its axis, its features by their occupied lanes, its other track paint
+    and the row text its ribbons keep clear of (``clear_bands``). The windows of a windowed row attach on their row's
+    band (``_shared_by_row_windows``), the band the rows are spaced from."""
+
+    bands: dict[int, VerticalBand] = {}
+    non_feature_bands: dict[int, VerticalBand | None] = {}
+    for record_index, plan in enumerate(plans):
+        band = plan.axis_band
+        non_feature_band: VerticalBand | None = None
+        for plan_slot in plan.slots:
+            paint = plan_slot.paint_band
+            if paint is None:
+                continue
+            if plan_slot.renderer == "features":
+                paint = tracks.record_feature_lane_geometries[record_index].occupied_band.translate(plan_slot.origin_y)
+            elif not plan_slot.spans_slots:
+                # A span's band comes from the slots it covers, counted here or as lanes.
+                non_feature_band = paint if non_feature_band is None else non_feature_band.union(paint)
+            band = band.union(paint)
+        clear_band = clear_bands.get(record_index)
+        bands[record_index] = band if clear_band is None else band.union(clear_band)
+        non_feature_bands[record_index] = non_feature_band
+    return {
+        record_index: _ComparisonAttachment(band, non_feature_bands[record_index])
+        for record_index, band in _shared_by_row_windows(bands, row_windows).items()
+    }
+
+
 def _attach_comparison_endpoints(
     record_placements: dict[int, LinearRecordPlacement],
     tracks: _LinearTrackPlan,
@@ -3430,32 +3515,20 @@ def _attach_comparison_endpoints(
     """Attach each record's comparison endpoints to its track paint, replacing its placement in
     ``record_placements``, and return the attachments of features that moved off the first lane.
 
-    Row spacing reserves labels, but ribbon endpoints attach to track paint;
-    this runs after both layout paths have fixed every slot and record. A
-    feature's attachment is kept as its offset from the record's anchors, so
-    moving rows leaves it as it is.
+    Row spacing reserves labels, but ribbon endpoints attach to track paint
+    (``_LinearVerticalPlans.comparison_attachments``); this runs after both
+    layout paths have fixed every slot and record. A feature's attachment is
+    kept as its offset from the record's anchors, so moving rows leaves it as
+    it is. The ribbons of a windowed row's windows end on the row's edge, so
+    they follow no feature.
     """
 
     feature_attachments: dict[int, dict[str, LinearFeatureAttachment]] = {}
     for record_index, placement in record_placements.items():
         plan = vertical.record_vertical_plans[record_index]
-        attachment_band = plan.axis_band
-        non_feature_band: VerticalBand | None = None
-        for plan_slot in plan.slots:
-            band = plan_slot.paint_band
-            if band is None:
-                continue
-            if plan_slot.renderer == "features":
-                band = tracks.record_feature_lane_geometries[
-                    record_index
-                ].occupied_band.translate(plan_slot.origin_y)
-            elif not plan_slot.spans_slots:
-                # A span's band comes from the slots it covers, counted here or as lanes.
-                non_feature_band = band if non_feature_band is None else non_feature_band.union(band)
-            attachment_band = attachment_band.union(band)
+        attachment_band = vertical.comparison_attachments[record_index].band
+        non_feature_band = vertical.comparison_attachments[record_index].non_feature_band
         clear_band = vertical.ribbon_clear_bands.get(record_index)
-        if clear_band is not None:
-            attachment_band = attachment_band.union(clear_band)
         record_placements[record_index] = replace(
             placement,
             comparison_top_y=(
@@ -3468,6 +3541,8 @@ def _attach_comparison_endpoints(
         # Feature-associated matches follow their endpoint features. A moved
         # feature must not shorten matches attached to another occupied lane.
         features = tracks.record_feature_dicts[record_index]
+        if record_index in vertical.row_window_lanes:
+            continue
         if not any(feature.placement is not None and feature.placement.requested_target is not None
                    for feature in features.values()):
             continue
@@ -4277,7 +4352,7 @@ def _draw_linear_row_window_marks(canvas: Drawing, canvas_config: LinearCanvasCo
                 x=float(plan.placements.record_placements[index].x),
                 width=float(plan.placements.record_placements[index].sequence_width),
                 axis_y=float(plan.placements.record_placements[index].axis_y),
-                feature_top_y=float(plan.vertical.record_vertical_plans[index].feature_lanes_band.top_y),
+                feature_top_y=float(plan.vertical.row_window_lanes[index].top_y),
             )
             for index in windows.record_indices
         )

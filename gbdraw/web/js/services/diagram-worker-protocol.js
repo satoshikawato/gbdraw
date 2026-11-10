@@ -2,7 +2,7 @@
 /** @import { buildPyodideAssetManifest } from './pyodide-assets.js' */
 /** @import { FontIdentity } from './font-store.js' */
 /** @import { CommittedCanonicalSession } from './session-request.js' */
-/** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 /**
  * A font file the page sends a Worker (init `fonts`, and each font it
@@ -74,6 +74,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   PLAN_GENOME_SCALES: 'planGenomeScales',
   PLAN_LINEAR_UNITS: 'planLinearUnits',
   PLAN_RECORD_PLACES: 'planRecordPlaces',
+  PLAN_RING_SCALES: 'planRingScales',
   PROMOTE_LEGACY_LOSATP_CACHE: 'promoteLegacyLosatpCache',
   READ_ALL_SEQUENCE_RECORDS: 'readAllSequenceRecords',
   READ_COMPARISON_SEQUENCE: 'readComparisonSequence',
@@ -99,6 +100,7 @@ export const DIAGRAM_HELPER_OPERATION_NAMES = Object.freeze(
  * @property {unknown} [canonicalRequest]
  * @property {{ canonicalRequest?: unknown } | null} [projection]
  * @property {unknown} [recordSource]
+ * @property {readonly CanonicalRecord['source'][]} [referenceSources]
  */
 
 /**
@@ -106,7 +108,8 @@ export const DIAGRAM_HELPER_OPERATION_NAMES = Object.freeze(
  * names: the page stages those resources as a Generate does and adds the
  * staged payload keys; the Worker accepts those keys from these helpers only.
  * A helper's references come from the committed request, from the request of
- * a projection, or (blastp extraction, OV-1555) from the one record source it reads.
+ * a projection, from the one record source it reads (blastp extraction, OV-1555), or from the
+ * reference's record sources (the ring scales, which the next Generate's render reuses).
  * @type {Readonly<Record<string, (payload: StagingHelperPayload) => unknown>>}
  */
 const STAGED_HELPER_REFERENCES = Object.freeze({
@@ -120,7 +123,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: (payload) => payload.projection?.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA]: (payload) => payload.recordSource,
-  [DIAGRAM_HELPER_OPERATIONS.PLAN_GENOME_SCALES]: (payload) => payload.canonicalRequest
+  [DIAGRAM_HELPER_OPERATIONS.PLAN_GENOME_SCALES]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.PLAN_RING_SCALES]: (payload) => payload.referenceSources
 });
 
 /**

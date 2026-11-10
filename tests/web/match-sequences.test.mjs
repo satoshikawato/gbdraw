@@ -33,7 +33,12 @@ const pythonReplies = {
     if (!records.length) return { error: { code: 'INPUT_UNREADABLE', stage: 'helper' } };
     const fasta = records.map((record) => `>${pythonId(record)}\n${record.sequence}\n`).join('');
     if (text.includes('malformed reply')) return { fasta, format: 'fasta', recordLabel: null };
-    return { fasta, format: formatOf(text), recordLabel: null, recordIds: records.map(pythonId) };
+    // Each file's lengths, as `comparison_genome_files` gives them (`genomeFiles`).
+    const recordLengths = records.map(({ sequence }) => sequence.length);
+    return {
+      fasta, format: formatOf(text), recordLabel: null, recordIds: records.map(pythonId),
+      genomeFiles: [{ length: recordLengths.reduce((sum, length) => sum + length, 0), recordLengths }]
+    };
   },
   readAllSequenceRecords: (payload) => {
     const records = parseSequenceRecordsFast(new TextDecoder().decode(bytesOf(payload)), payload.format);

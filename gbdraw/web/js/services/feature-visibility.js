@@ -29,7 +29,7 @@ import { createRuleLegendCaptions } from './specific-color-rules.js';
 /** @import { RuleMatcher } from './rule-matchers.js' */
 /** @import { LegendRowContext, SpecificColorRule } from './specific-color-rules.js' */
 /** @import { PythonLegendKey } from './legend-svg.js' */
-/** @import { SvgLegendRowFacts } from './svg-result-ingestion.js' */
+/** @import { WebState } from '../state.js' */
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
 
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
@@ -803,30 +803,22 @@ export const resolveFeatureDrawn = (feature, context) => {
   return colorRuleMatcher(context).matchesAny(feature);
 };
 
-/**
- * What the Legend readers take of the displayed Result's committed metadata (svg-result-ingestion.js
- * `CommittedSvgResultMetadata`).
- * @typedef {{ renderedFeatureIdentities?: { renderedIds?: unknown } | null, legendRowFacts?: SvgLegendRowFacts | null }}
- *   DisplayedResultLegendMetadata
- */
-
 // The features the displayed Result draws, as its Legend rows are read
 // (`LegendRowContext.features`, N-06): those Python drew in it at its last
 // render (the rendered IDs of its committed metadata; every read feature for a
 // Result without them) that are still drawn (`resolveFeatureDrawn`; an unknown
 // answer keeps a feature). Read when iterated.
 /**
- * @param {{ extractedFeatures?: { value?: unknown },
- *   displayedResultMetadata?: () => DisplayedResultLegendMetadata | null | undefined }} state
+ * @param {Pick<WebState, 'extractedFeatures' | 'displayedResultMetadata'>} state
  * @param {Parameters<typeof featureDrawnContext>[0]} drawing
  * @returns {Iterable<{ svg_id?: unknown, type?: unknown, fill_color?: unknown }>}
  */
 export const displayedDrawnFeatures = (state, drawing) => ({
   * [Symbol.iterator]() {
-    const features = Array.isArray(state.extractedFeatures?.value) ? state.extractedFeatures.value : [];
-    const renderedIds = state.displayedResultMetadata?.()?.renderedFeatureIdentities?.renderedIds;
+    /** @type {ReadonlySet<unknown> | undefined} */
+    const renderedIds = state.displayedResultMetadata()?.renderedFeatureIdentities.renderedIds;
     const context = featureDrawnContext(drawing);
-    for (const feature of features) {
+    for (const feature of state.extractedFeatures.value) {
       if (renderedIds instanceof Set && !renderedIds.has(feature?.svg_id)) continue;
       if (resolveFeatureDrawn(feature, context) !== false) yield feature;
     }
@@ -835,10 +827,8 @@ export const displayedDrawnFeatures = (state, drawing) => ({
 
 /**
  * What `displayedLegendRowContext` reads of the app state.
- * @typedef {Parameters<typeof displayedDrawnFeatures>[0] & {
- *   svgContainer?: { value?: { querySelector?: (selector: 'svg') => SVGSVGElement | null } | null },
- *   originalLegendOrder?: { value?: readonly string[] }
- * }} DisplayedLegendState
+ * @typedef {Parameters<typeof displayedDrawnFeatures>[0] & Pick<WebState, 'svgContainer' | 'originalLegendOrder'>}
+ *   DisplayedLegendState
  */
 
 /** @type {ReadonlySet<PythonLegendKey>} */
@@ -860,10 +850,10 @@ const NO_LEGEND_KEYS = new Set();
  */
 export const displayedLegendRowContext = (state, drawing) => ({
   rules: drawing.manualSpecificRules,
-  pythonRows: pythonLegendRows(state.svgContainer?.value?.querySelector?.('svg')),
+  pythonRows: pythonLegendRows(state.svgContainer.value?.querySelector('svg')),
   features: displayedDrawnFeatures(state, drawing),
-  originalLegendOrder: state.originalLegendOrder?.value || [],
-  sharedLegendKeys: /** @type {ReadonlySet<PythonLegendKey> | undefined} */ (state.displayedResultMetadata?.()?.legendRowFacts?.suppressed)
+  originalLegendOrder: state.originalLegendOrder.value,
+  sharedLegendKeys: /** @type {ReadonlySet<PythonLegendKey> | undefined} */ (state.displayedResultMetadata()?.legendRowFacts?.suppressed)
     ?? NO_LEGEND_KEYS
 });
 
