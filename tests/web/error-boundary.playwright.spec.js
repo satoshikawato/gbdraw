@@ -614,9 +614,14 @@ for (const engine of ['serial', 'threaded']) test(`a LOSAT run that exits with a
   }, { texts: [genbank('A1'), genbank('B1')], engine });
   const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
   expect(failed).toMatchObject({ status: 'error', error: { code: 'LOSAT_RUNTIME', operation: 'generate', stage: 'losat',
-    context: { reason: 'FAILED', losatMessage: expect.stringContaining('searchsp') }, actions: ['edit-comparison', 'retry'] } });
+    context: { reason: 'FAILED', losatMessage: expect.stringContaining('searchsp') }, actions: ['edit-comparison'] } });
   const alert = page.getByRole('alert', { name: 'Generation Error' });
-  await expect(alert).toContainText('The comparison search could not run or returned unusable output.');
+  // OV-3317: Generate with the same settings stops the same way, so the panel offers the comparison settings only.
+  await expect(page.getByRole('button', { name: 'Show in Comparison', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
+  // The text names what the one action leads to (the settings LOSAT names), not the runtime and Retry.
+  await expect(alert).toContainText('LOSAT stopped the comparison search. Generating again with the same settings and inputs stops the same way; change what LOSAT names below, then Generate again.');
+  await expect(alert).not.toContainText('Check the LOSAT or NCBI BLAST+ runtime');
   // A hyphen that starts an option name does not end a line (U+2011); the Diagnostics keep LOSAT's text.
   await expect(alert).toContainText(`LOSAT reported: ${failed.error.context.losatMessage.replace(/(^|[\s'"(<[])-/g, '$1\u2011')}`);
   await expect(alert).not.toContainText('without recognized diagnostic information');

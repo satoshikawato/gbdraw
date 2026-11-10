@@ -1389,18 +1389,59 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   await settled();
   expect(await history()).toEqual({ count: before.count + 1, label: 'Change comparisons', mode: 'collinear', plan: 'adjacent' });
   // A LOSAT runtime failure has no pair issue: Show in Comparison opens
-  // Settings at Execution.
+  // Settings at Execution, also for a threaded trap after its retries,
+  // which Serial or Auto may run (OV-3327).
   await expect(issues).toHaveCount(0);
-  for (const code of ['LOSAT_THREADING_UNAVAILABLE', 'LOSAT_RUNTIME']) {
+  for (const error of [{ code: 'LOSAT_THREADING_UNAVAILABLE', stage: 'comparison' }, { code: 'LOSAT_RUNTIME', stage: 'comparison' },
+    { code: 'LOSAT_RUNTIME', operation: 'generate', stage: 'losat', context: { reason: 'THREADED_TRAP' } }]) {
     await comparisonSettings(page).evaluate((details) => { details.open = false; });
-    await page.evaluate((errorCode) => { window.__GBDRAW_APP__.errorLog = { code: errorCode, stage: 'comparison' }; }, code);
+    await page.evaluate((errorLog) => { window.__GBDRAW_APP__.errorLog = errorLog; }, error);
     await page.getByRole('button', { name: 'Show in Comparison', exact: true }).click();
     await expect(comparisonSettings(page)).toHaveAttribute('open', '');
     await expect(page.getByRole('combobox', { name: 'LOSAT execution' })).toBeFocused();
   }
+  // OV-3317, OV-3327: LOSAT said why it stopped (an option it refused), or LOSAT trapped: the same search stops the
+  // same way, so Show in Comparison opens Settings at the LOSAT mode in use, not at Execution, and Retry Generate is
+  // not offered.
+  for (const context of [{ reason: 'FAILED', losatMessage: 'BLAST query/options error: No hits are being saved' }, { reason: 'TRAP' }]) {
+    await comparisonSettings(page).evaluate((details) => { details.open = false; });
+    await page.evaluate((errorContext) => {
+      window.__GBDRAW_APP__.errorLog = { code: 'LOSAT_RUNTIME', operation: 'generate', stage: 'losat', context: errorContext };
+    }, context);
+    await page.getByRole('button', { name: 'Show in Comparison', exact: true }).click();
+    await expect(comparisonSettings(page)).toHaveAttribute('open', '');
+    await expect(page.locator('[data-linear-comparison-losat-mode-option][aria-pressed="true"]')).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
+  }
   await page.evaluate(() => { window.__GBDRAW_APP__.errorLog = null; });
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   expect(await history()).toEqual(before);
+});
+
+// OV-3317, OV-3327: Circular's comparison rings have no issue list. A LOSAT failure that repeats (a refusal, a trap)
+// offers Show in Comparison, which opens Pairwise Comparisons, where the LOSAT options and the comparison files are;
+// another comparison error keeps its actions without it.
+test('in Circular, a LOSAT failure that repeats shows Pairwise Comparisons', async ({ page }) => {
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await showDrawing(page, { kind: 'circular' });
+  const section = page.locator('[data-setting="pairwise-comparisons"]');
+  const show = page.getByRole('alert', { name: 'Generation Error' }).getByRole('button', { name: 'Show in Comparison', exact: true });
+  for (const context of [{ reason: 'FAILED', losatMessage: 'Unknown genetic code 99' }, { reason: 'TRAP' }]) {
+    await section.locator(':scope > details').evaluate((details) => { details.open = false; });
+    await page.evaluate((errorContext) => {
+      window.__GBDRAW_APP__.errorLog = { code: 'LOSAT_RUNTIME', operation: 'generate', stage: 'losat', context: errorContext };
+    }, context);
+    await show.click();
+    await expect(section.locator(':scope > details')).toHaveAttribute('open', '');
+    await expect(section.locator(':scope > details > summary')).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
+  }
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.errorLog = { code: 'COMPARISON_INPUT', operation: 'generate', stage: 'comparison' };
+  });
+  await expect(page.getByRole('button', { name: 'Retry Generate', exact: true })).toBeVisible();
+  await expect(show).toHaveCount(0);
 });
 
 // Two uploaded GenBank records joined by one uploaded-table comparison (CO-06).

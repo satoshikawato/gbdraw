@@ -36,6 +36,8 @@ placement strict compress reserve gapAfter gap_after innerRadius inner_radius ou
 const REASONS = Object.freeze({
   CROSS_ORIGIN_ISOLATION: 'This page is not cross-origin isolated.', SHARED_MEMORY: 'This browser does not provide SharedArrayBuffer.',
   WORKERS: 'This browser does not provide Web Workers.', THREADED_WASM: 'The threaded LOSAT runtime could not start.',
+  // A threaded run whose host could not run LOSAT's threads (services/losat-runtime.js `losatThreadsFailure`, OV-3316).
+  THREADS_FAILED: 'The threaded LOSAT engine could not start or keep its threads running in this browser.',
   DECORATION_IDENTITY: 'Source, region, mode, grouping or record identity changed, is unknown, or is ambiguous.',
   DECORATION_TARGET: 'The decoration target is missing or ambiguous.',
   DECORATION_METADATA: 'Composition metadata is invalid or unavailable.',
@@ -130,6 +132,12 @@ const REASONS = Object.freeze({
   SEQUENCE_MISSING: 'Use a comparison file that contains the sequence (FASTA, or GenBank or DDBJ with an ORIGIN sequence).',
   UNAVAILABLE: 'Install LOSAT or NCBI BLAST+, or select a runtime executable.',
   FAILED: 'The search runtime exited with an error; check its message and inputs.',
+  // A trap of LOSAT's code (services/losat-runtime.js `losatTrapFailure`, OV-3327), in Sequence search and Find in
+  // other files; Generate says it in its own first sentence (`losatTrapped`).
+  TRAP: 'LOSAT stopped unexpectedly.',
+  // A trap left after the threaded pool's retries (services/losat-runtime.js `losatThreadedTrapFailure`), in the same
+  // two searches; Generate says it in its own first sentence (`losatThreadedTrapped`).
+  THREADED_TRAP: 'LOSAT stopped unexpectedly in threaded execution; Serial or Auto execution may run the search.',
   OUTPUT: 'The search output was not BLAST outfmt 6 rows for the searched records.',
   JSON_FORMAT: 'Use valid JSON.', VISIBILITY_ACTION: 'Use show, off, or exclude_matching; accepted aliases are on, hide, false, and 0.',
   TARGET_RECORD: 'Choose an available target record.',
@@ -401,9 +409,18 @@ const PHRASES = Object.freeze({
   // LOSAT_RUNTIME of a LOSAT run that exited with an error (services/losat-runtime.js `losatRunFailure`): LOSAT's
   // own first error line, shown as written (`shownLosatMessage`).
   losatReported: 'LOSAT reported: {message}',
+  // The first sentence of a LOSAT failure that repeats (`losatFailureRepeats`) on Generate, in place of the code's
+  // message and the reason's sentence: the one action leads to the comparison settings, never to Retry (OV-3317).
+  losatRefused: 'LOSAT stopped the comparison search. Generating again with the same settings and inputs stops the same way; change what LOSAT names below, then Generate again.',
+  losatTrapped: 'LOSAT stopped unexpectedly during the comparison search. Generating again with the same settings and inputs stops the same way; change the comparison settings or inputs, then Generate again.',
+  // The first sentence of a threaded trap on Generate, in place of the code's message and the reason's sentence: the
+  // serial engine may run the search, so it names Serial and Auto and keeps Retry.
+  losatThreadedTrapped: 'LOSAT stopped unexpectedly in threaded execution. Select Serial or Auto execution, or change the comparison settings or inputs, then Generate again.',
   // LOSAT_RUNTIME in Sequence search (OV-3288) and Find in other files: the code's message names Generate, which
   // neither search uses; each runs from its own Search button.
   searchFailed: 'The search could not run or returned unusable output. Check the search settings, then click Search again.',
+  // LOSAT_THREADING_UNAVAILABLE in the same two searches.
+  searchThreadsUnavailable: 'Threaded LOSAT execution is unavailable in this browser environment. Select Serial or Auto execution, then click Search again.',
   sessionSaveRemedy: 'Remove or replace the largest inputs with smaller ones, then save again.',
   // EXPORT_LIMIT (gbdraw/render/export_limits.py): the limit and size in the format's unit, and what would fit.
   exportSizePx: 'PNG is limited to {limit} px per side, and this figure is {width} x {height} px.',
@@ -426,7 +443,10 @@ const PHRASES = Object.freeze({
 // A code's message for one operation, where the code's own message names a step that operation does not have.
 /** @type {Readonly<Record<string, Readonly<Record<string, string>>>>} */
 const OPERATION_MESSAGES = Object.freeze({
-  LOSAT_RUNTIME: Object.freeze({ searchHitAnnotationSet: PHRASES.searchFailed, findInOtherFiles: PHRASES.searchFailed })
+  LOSAT_RUNTIME: Object.freeze({ searchHitAnnotationSet: PHRASES.searchFailed, findInOtherFiles: PHRASES.searchFailed }),
+  LOSAT_THREADING_UNAVAILABLE: Object.freeze({
+    searchHitAnnotationSet: PHRASES.searchThreadsUnavailable, findInOtherFiles: PHRASES.searchThreadsUnavailable
+  })
 });
 /**
  * One sentence or phrase of a user-facing error text. `text` is the English
@@ -974,6 +994,31 @@ const trackRoomParts = ({ keptInsidePx, keptInsideTracks, slotTrack }) => {
   return parts;
 };
 
+/**
+ * Whether the same LOSAT search would stop the same way: LOSAT exited with an error and said why (`losatMessage`,
+ * services/losat-runtime.js `losatRunFailure`, OV-3317), or LOSAT's code trapped (`losatTrapFailure`, OV-3327). The
+ * failure offers the comparison settings and never Retry.
+ * @param {{ code: string, context: UserFacingContext }} error
+ * @returns {boolean}
+ */
+export const losatFailureRepeats = (error) => error.code === 'LOSAT_RUNTIME'
+  && (error.context.losatMessage !== undefined || error.context.reason === 'TRAP');
+
+/**
+ * The first sentence of a failure: the code's message for its operation where the code's own names a step that
+ * operation does not have (`OPERATION_MESSAGES`), else for a threaded trap or a LOSAT failure that repeats the sentence
+ * that says so, which also stands for the reason's sentence (`coversReason`), else the code's message.
+ * @param {{ code: string, operation: string, context: UserFacingContext }} error
+ * @returns {{ text: string, coversReason: boolean }}
+ */
+const leadSentence = (error) => {
+  const operationMessages = Object.hasOwn(OPERATION_MESSAGES, error.code) ? OPERATION_MESSAGES[error.code] : {};
+  if (Object.hasOwn(operationMessages, error.operation)) return { text: operationMessages[error.operation], coversReason: false };
+  if (error.code === 'LOSAT_RUNTIME' && error.context.reason === 'THREADED_TRAP') return { text: PHRASES.losatThreadedTrapped, coversReason: true };
+  if (!losatFailureRepeats(error)) return { text: DEFINITIONS[error.code][0], coversReason: false };
+  return { text: error.context.reason === 'TRAP' ? PHRASES.losatTrapped : PHRASES.losatRefused, coversReason: true };
+};
+
 /** @typedef {{ operation?: string | null, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} UserFacingOptions A null operation is read as no known operation. */
 
 /**
@@ -1000,9 +1045,8 @@ export const normalizeUserFacingError = (value, {
     if (item?.code !== 'CLEANUP_FAILED' || item?.stage !== 'cleanup') continue;
     result.secondary.push({ code: 'CLEANUP_FAILED', stage: 'cleanup' });
   }
-  const [codeMessage, actions] = DEFINITIONS[result.code];
-  const operationMessages = Object.hasOwn(OPERATION_MESSAGES, result.code) ? OPERATION_MESSAGES[result.code] : {};
-  const message = Object.hasOwn(operationMessages, result.operation) ? operationMessages[result.operation] : codeMessage;
+  const actions = DEFINITIONS[result.code][1];
+  const lead = leadSentence(result);
   const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath, featureCaption, sessionTable, diagramMode } = result.context;
   const { featureId, featureType, featureStart, featureEnd, featureCount, field, reason, position, columnCount, recordCount } = result.context;
   const { recordName, recordPosition, codepoint } = result.context;
@@ -1030,7 +1074,7 @@ export const normalizeUserFacingError = (value, {
   const pieces = [
     saveOverCap
       ? { text: sessionSizeKind === 'file' ? PHRASES.sessionFileNotSaved : PHRASES.sessionNotSaved, params: { size: (/** @type {number} */ (sessionBytes) / 1048576).toFixed(1), limit: Math.round(/** @type {number} */ (sessionByteLimit) / 1048576) } }
-      : reason !== 'REPLY_TOO_LARGE' && { text: message },
+      : reason !== 'REPLY_TOO_LARGE' && { text: lead.text },
     saveOverCap && largestInputs !== undefined && { text: PHRASES.largestInputs, params: { inputs: largestInputs } },
     saveOverCap && { text: PHRASES.sessionSaveRemedy },
     diagramMode !== undefined && { text: diagramMode === 'linear' ? PHRASES.diagramLinear : PHRASES.diagramCircular },
@@ -1057,8 +1101,8 @@ export const normalizeUserFacingError = (value, {
     exportSize && rowLength !== undefined && { text: PHRASES.exportRowLength, params: { length: grouped(rowLength) } },
     exportSize && dpi !== undefined && { text: PHRASES.exportDpi, params: { dpi } },
     ...figureSizeSentences,
-    sessionVersionGuidance(result.context) || (figureSizeSentences.length > 0 ? null
-      : (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null)),
+    !lead.coversReason && (sessionVersionGuidance(result.context) || (figureSizeSentences.length > 0 ? null
+      : (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null))),
     losatMessage !== undefined && { text: PHRASES.losatReported, params: { message: shownLosatMessage(losatMessage) } },
     reason === 'NOT_NUCLEOTIDE' && letter && { text: PHRASES.letter, params: { letter } },
     reason === 'NOT_SEQUENCE' && letter && { text: PHRASES.queryLetter, params: { letter } },
@@ -1090,6 +1134,7 @@ export const normalizeUserFacingError = (value, {
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
   // A table stored in a Session is corrected in the Session file, not in this page.
   result.actions = sessionTable !== undefined || saveOverCap ? ['select-input']
+    : losatFailureRepeats(result) ? ['edit-comparison']
     : [...(reason !== undefined && Object.hasOwn(REASON_ACTIONS, reason) ? REASON_ACTIONS[reason] : actions)];
   return result;
 };
