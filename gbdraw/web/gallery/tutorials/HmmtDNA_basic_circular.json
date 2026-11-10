@@ -63,6 +63,7 @@
           "capture": {
             "source": "webapp",
             "session": "./sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+            "replayThrough": 2,
             "viewport": {
               "width": 1280,
               "height": 1400

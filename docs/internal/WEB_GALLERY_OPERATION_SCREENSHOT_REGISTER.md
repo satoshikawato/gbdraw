@@ -642,16 +642,19 @@ Record "Not inspected"); a reader who uploads the file sees them read at once
 row). The capture tool now reads the shown drawing's records after it loads
 the Session and replays the steps, with the action that **Inspect source
 records** (a Linear card's **Inspect records**) runs, and it refuses a webapp
-crop whose shown drawing still has unread records. This section replaces the
+crop whose shown drawing still has unread records. A capture that loads a
+Session stands in for a reader who uploaded the files and has no Session, so it
+also hides the uploader's **Files in this Session** chooser (OV-3330), and
+`--check` refuses a step that names that chooser. This section replaces the
 capture state of the same media in the rows of the earlier sections; those
 rows stay as history.
 
 | Tutorial | Operation media | Decision | Required capture state | Status |
 | --- | --- | --- | --- | --- |
-| `HmmtDNA_basic_circular` | `manual-02-01-genbank-upload.webp` | Recapture; recipe changed | Session; records read; clip from the **Input Genomes** header to the **Topology and display start** row (the read opens the single-record panel, which this step does not use); 1400 px page; `visibleText` `1 source record inspected` | Recaptured at DSF 3, 942x1266; compared side by side |
+| `HmmtDNA_basic_circular` | `manual-02-01-genbank-upload.webp` | Recapture; recipe changed | Session replayed through step 2 (the Web defaults of the upload step: Multi-Record Canvas on, as in `HmmtDNA_ATskew`; the finished Session has it off); records read; clip from the **Input Genomes** header to the **Topology and display start** row (the read opens the single-record panel, which this step does not use); 1400 px page; `visibleText` `1 source record inspected` | Recaptured at DSF 3, 942x1338; compared side by side and with `HmmtDNA_ATskew` |
 | `HmmtDNA_ATskew`, `ecoli_o157_sakai_rings`, `hepatoplasma_scabrum_depth` | `manual-02-01-genbank-upload.webp` | Recapture; `visibleText` adds `1 source record inspected` (`HmmtDNA_ATskew`: 1400 px page) | Session replayed through step 2; records read | Recaptured at DSF 3, 942x1530; compared side by side |
 | `tobacco-chloroplast` | `manual-02-01-genbank-upload.webp` | Recapture; recipe now replays through step 2 | Session replayed through step 2 (the Web defaults of the upload step, not the finished figure's Record choice); records read; whole **Input Genomes** card | Recaptured at DSF 3, 1020x1770; compared side by side |
 | `Vnig_TUMSAT-TG-2018` | `manual-02-01-gbff-upload.webp` | Recapture; recipe repaired (OV-3328) | Session replayed through step 2; `assertAppState` reads the first Circular File card (`files.c_gb` no longer exists); clip from the **Input Genomes** header to **Source records**, which says `6 source records inspected · 6 of 6 records drawn`, as the step text says | Recaptured at DSF 3, 942x1014; compared side by side |
-| `hepatoplasmataceae_orthogroup` | `manual-02-01-upload-row-context.webp` | Recapture; recipe unchanged | Session; records read: **Record options** shows the AP027078.1 rotation row instead of **Inspect records**, and the Region Record select names the choice instead of "Not inspected" | Recaptured at DSF 3, 1422x2124; compared side by side |
+| `hepatoplasmataceae_orthogroup` | `manual-02-01-upload-row-context.webp` | Recapture; recipe unchanged | Session; records read: **Record options** shows the AP027078.1 rotation row instead of **Inspect records**, and the Region Record select names the choice instead of "Not inspected"; no **Files in this Session** chooser | Recaptured at DSF 3, 1422x2040; compared side by side |
 | `lambda_basic_linear` | `manual-02-01-genbank-upload.webp` | Keep; recipe repaired (OV-3329) | The capture no longer replaces the loaded file with a renamed copy, a replacement the reader never makes (the Session's file already shows `NC_001416.gb`) | Recaptured; the crop shows no record state and matched the committed image, so the committed bytes stay |
 | `hepatoplasmataceae_collinear`, `majanivirus_orthogroup`, `BGC0000708-BGC0000713` (steps 2, 3), `vibrio-harveyi-group-collinear` (steps 2, 3) | upload-step crops | Keep | Already read (replay) or no record state in the crop; a recapture differs only by later changes on dev (the uploader's **Files in this Session** chooser, the Linear window controls), which the full Gallery refresh takes | Recaptured and reverted |

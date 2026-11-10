@@ -1096,6 +1096,10 @@ class _PreparePage:
         if "data-linear-source-fold" in script:
             self.events.append("open Linear File cards")
 
+    def add_style_tag(self, content: str) -> None:
+        if "[data-session-file-picker]" in content and "display: none" in content:
+            self.events.append("hide Files in this Session")
+
 
 @pytest.mark.parametrize("fresh_page", [False, True])
 def test_session_capture_reads_the_records_as_the_readers_upload_did(
@@ -1121,7 +1125,15 @@ def test_session_capture_reads_the_records_as_the_readers_upload_did(
     if fresh_page:
         assert events == ["open page", "action"]
     else:
-        assert events == ["open page", "load session", "open Linear File cards", "replay", "read records", "action"]
+        assert events == [
+            "open page",
+            "load session",
+            "open Linear File cards",
+            "hide Files in this Session",
+            "replay",
+            "read records",
+            "action",
+        ]
 
 
 def test_webapp_crop_refuses_records_not_inspected() -> None:
@@ -1144,3 +1156,17 @@ def test_webapp_crop_refuses_records_not_inspected() -> None:
     script = unread.scripts[0]
     assert "circularRecordDiscoveryState" in script and "status === 'ready'" in script
     assert "linearRecordSelectorDisabled" in script
+
+
+def test_no_tutorial_step_names_the_session_file_chooser_that_captures_hide() -> None:
+    """A capture stands in for a reader who uploaded the files, who has no Session: it hides
+    **Files in this Session** (OV-3330), so no step may tell the reader to use it."""
+
+    result = ValidationResult(errors=[], warnings=[])
+    capture_tool.add_step_text_validation(
+        result, _manual_context(2), {"title": "Upload", "body": "Pick it in Files in this Session."}
+    )
+    capture_tool.add_step_text_validation(result, _manual_context(3), {"title": "Upload", "body": "Add the file."})
+
+    assert len(result.errors) == 1
+    assert "step 2" in result.errors[0] and "Files in this Session" in result.errors[0]

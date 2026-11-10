@@ -78,6 +78,8 @@ CAPTURE_SELECT_CONTROL_SELECTOR = ".gbdraw-capture-select-control"
 # A drawn openSelect menu shows at most this many rows, scrolled so the
 # selected option is in view, like a native select list.
 OPEN_SELECT_MAX_VISIBLE_OPTIONS = 17
+SESSION_FILE_CHOOSER_SELECTOR = "[data-session-file-picker]"
+SESSION_FILE_CHOOSER_NAME = "Files in this Session"
 
 
 class QuietGalleryRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -470,6 +472,20 @@ def add_capture_contract_validation(
         )
 
 
+def add_step_text_validation(
+    result: ValidationResult,
+    context: TutorialContext,
+    step: dict[str, Any],
+) -> None:
+    """No step tells the reader to use the uploader's Session file chooser, which captures hide."""
+
+    if SESSION_FILE_CHOOSER_NAME.lower() in json.dumps(step, ensure_ascii=False).lower():
+        result.errors.append(
+            f"{context.label}: names {SESSION_FILE_CHOOSER_NAME}, which tutorial captures hide: "
+            "the reader uploads the files and has no Session."
+        )
+
+
 def add_step_replay_validation(
     result: ValidationResult,
     context: TutorialContext,
@@ -535,6 +551,7 @@ def validate_tutorial_media(
                 and not media_entries(step.get("media"))
             ):
                 result.errors.append(f"{context.label}: step is missing operations.")
+            add_step_text_validation(result, context, step)
             add_step_replay_validation(result, context, step)
             for entry in media_entries(step.get("media")):
                 add_media_validation(
@@ -1404,6 +1421,10 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
                 "() => document.querySelectorAll('[data-linear-source-fold]')"
                 ".forEach((fold) => { fold.open = true; })"
             )
+            # The uploader offers the files of a loaded Session (**Files in this Session**). A
+            # tutorial reader uploaded the files and has no Session, so no capture shows it
+            # (OV-3330); `add_step_text_validation` keeps every step from naming it.
+            page.add_style_tag(content=f"{SESSION_FILE_CHOOSER_SELECTOR} {{ display: none !important; }}")
         replay_through = capture.get("replayThrough")
         if isinstance(replay_through, int):
             replay_tutorial_steps(page, sample, replay_through)
