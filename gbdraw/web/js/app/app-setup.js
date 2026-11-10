@@ -5,7 +5,6 @@
 /** @import { RecordSpanRead } from '../services/diagram-worker-protocol.js' */
 /** @import { LinearUnitPlanPayload } from '../services/linear-units.js' */
 /** @import { CardWindowRecordInput } from '../contracts/card-windows.generated.js' */
-/** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq } from '../state.js' */
 /** @import { NoticeLink } from './app-messages.js' */
@@ -218,7 +217,8 @@ import {
 import { createRightDrawerController } from './right-drawer.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
-import { askTrackSourceRemoval, askingAnnotationTrackAdd, askingTrackRowRemoval, askingTrackRowSwitch } from './track-slot-edits.js';
+import { askTrackSourceRemoval, askingAnnotationTrackAdd, createAskingStackPorts } from './track-slot-edits.js';
+import { createFeatureDensityTrackEditor } from './feature-density-tracks.js';
 import { createAnnotationEditor } from './annotations.js';
 import { createDrawingLegendRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
@@ -1373,19 +1373,16 @@ export const createAppSetup = () => {
   const linearTrackSlotEditor = createLinearTrackSlotEditor({
     state, changeTrackLayout, changeTrackVisibility: retireShownLegendStyles
   });
-  // PD-OI-104 scenario revisions 6 and 7: a row's own switch, a row's Remove, and
-  // the removal of a Depth file or series ask before they take out of the shown
-  // stack a row that other rows start at or extend to (Add track: OV-3153).
-  /** @param {'circular_track_slots' | 'linear_track_slots'} slotsKey @returns {AskingStackPorts<SwitchedTrackRow>} */
-  const askingStackPorts = (slotsKey) => ({
-    askChoice, runUndoable: history.runUndoable, busy: sessionOperationAvailability, annotationSets: () => state.activeDrawing().annotationSets,
-    rows: () => /** @type {readonly SwitchedTrackRow[]} */ (state.activeDrawing().adv[slotsKey]),
-    mode: /** @type {'circular' | 'linear'} */ (slotsKey === 'circular_track_slots' ? 'circular' : 'linear')
+  // PD-OI-104 scenario revisions 6 and 7: the shown stacks' asking ports (track-slot-edits.js).
+  const { askingStackPorts, askingRowSwitch, askingRowRemoval } = createAskingStackPorts({
+    askChoice, runUndoable: history.runUndoable, busy: sessionOperationAvailability, shownDrawing: () => state.activeDrawing()
   });
-  /** @template {SwitchedTrackRow} Row @param {(slot: Row | null | undefined, enabled: unknown, turnOffReaching?: (() => void) | Event) => unknown} setEnabled @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
-  const askingRowSwitch = (setEnabled, slotsKey) => askingTrackRowSwitch(/** @type {AskingStackPorts<Row>} */ (askingStackPorts(slotsKey)), setEnabled);
-  /** @param {(index: unknown, turnOffReaching?: (() => void) | Event) => unknown} removeRow @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
-  const askingRowRemoval = (removeRow, slotsKey) => askingTrackRowRemoval(askingStackPorts(slotsKey), removeRow);
+  // The Feature density section (app/feature-density-tracks.js); a track's stack rows go through the mode's normalizer.
+  const featureDensityTrackEditor = createFeatureDensityTrackEditor({
+    shownDrawing: () => state.activeDrawing(), busy: sessionOperationAvailability, askingStackPorts,
+    normalizeStack: (drawing) => (drawing.mode === 'circular'
+      ? circularTrackSlotEditor.normalizeCircularTrackSlots(drawing) : linearTrackSlotEditor.normalizeLinearTrackSlots())
+  });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
     state, getRecordCatalog: () => getAnnotationRecordCatalog(state.activeDrawing()), retireLegendStylesOfUnnamedCaptions: retireShownLegendStyles, askChoice,
@@ -3503,6 +3500,7 @@ export const createAppSetup = () => {
     circularConservation: drawingMember('circularConservation'),
     annotationSets: drawingMember('annotationSets'),
     selectedAnnotation,
+    ...featureDensityTrackEditor,
     addAnnotationSet: annotationEditor.addAnnotationSet,
     renameAnnotationSet: annotationEditor.renameAnnotationSet,
     duplicateAnnotationSet: annotationEditor.duplicateAnnotationSet,

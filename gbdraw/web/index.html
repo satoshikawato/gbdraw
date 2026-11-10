@@ -4325,6 +4325,83 @@
                     </details>
                 </div>
 
+                <!-- Feature density tracks (app/feature-density-tracks.js): each track counts what one query finds in each window.
+                     A track is found by its id; its stack rows follow it. -->
+                <div v-settings-section="'feature-density'" data-setting="feature-density" class="card">
+                    <details>
+                        <summary :aria-label="t('Feature density')"><settings-section-title section="feature-density"></settings-section-title> <setting-note setting="feature-density"></setting-note> <help-tip :text="t('Each track counts the features one query finds in each window of every record, as a heatmap or a histogram. The query is a feature type (* for every type), with an optional qualifier, value regex and length range.')"></help-tip></summary>
+                        <div class="mt-2 space-y-2 pt-2 border-t border-slate-200" data-feature-density-tracks>
+                            <button type="button" class="btn btn-secondary text-[10px] w-full px-2" @click="addFeatureDensityTrack()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add feature density track') }}</button>
+                            <div
+                                v-for="(track, i) in adv.feature_density_tracks"
+                                :key="track.id"
+                                :data-feature-density-track="track.id"
+                                class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1"
+                            >
+                                <div class="flex items-center justify-between gap-1">
+                                    <div class="min-w-0 flex items-center gap-1 text-[9px] font-semibold text-slate-500">
+                                        <span class="shrink-0">#{{ i + 1 }}</span>
+                                        <span class="truncate font-mono" :title="track.id">{{ track.id }}</span>
+                                    </div>
+                                    <div class="flex items-center justify-end gap-0.5">
+                                        <button :aria-label="t('Move track {id} up', { id: track.id })" type="button" @click="moveFeatureDensityTrack(track.id, -1)" :disabled="!semanticMutationAvailable || i === 0" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" :title="t('Move track up')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Move track {id} down', { id: track.id })" type="button" @click="moveFeatureDensityTrack(track.id, 1)" :disabled="!semanticMutationAvailable || i === adv.feature_density_tracks.length - 1" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" :title="t('Move track down')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Duplicate track {id}', { id: track.id })" type="button" @click="duplicateFeatureDensityTrack(track.id)" :disabled="!semanticMutationAvailable" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" :title="t('Duplicate track')"><i class="ph ph-copy" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Delete track {id}', { id: track.id })" type="button" @click="removeFeatureDensityTrack(track.id)" :disabled="!semanticMutationAvailable" class="h-6 w-6 text-red-500 hover:text-red-700 disabled:opacity-30" :title="t('Delete track')"><i class="ph ph-trash" aria-hidden="true"></i></button>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-12 gap-1 px-1 text-[9px] font-semibold uppercase text-slate-500">
+                                    <span class="col-span-4">{{ t('Feature Type') }}</span>
+                                    <span class="col-span-4">{{ t('Qualifier') }}</span>
+                                    <span class="col-span-4">{{ t('Value regex') }}</span>
+                                </div>
+                                <div class="grid grid-cols-12 gap-1">
+                                    <select :value="track.query.featureType" @change="setFeatureDensityTrackField(track.id, 'featureType', $event.target.value)" :aria-label="t('Track {id} feature type', { id: track.id })" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
+                                        <option v-if="!featureVisibilityFeatureSuggestions.includes(track.query.featureType)" :value="track.query.featureType">{{ track.query.featureType }}</option>
+                                        <option v-for="value in featureVisibilityFeatureSuggestions" :key="`fd-type-${value}`" :value="value">{{ value }}</option>
+                                    </select>
+                                    <input v-committed-value="track.query.qualifier ?? ''" @change="setFeatureDensityTrackField(track.id, 'qualifier', $event.target.value)" :aria-label="t('Track {id} qualifier', { id: track.id })" list="feature-visibility-qualifier-options" :placeholder="t('qualifier')" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
+                                    <input v-committed-value="track.query.value ?? ''" @change="setFeatureDensityTrackField(track.id, 'value', $event.target.value)" :aria-label="t('Track {id} value regex', { id: track.id })" :placeholder="t('value regex')" class="form-input form-input-compact col-span-4 font-mono" :disabled="!semanticMutationAvailable">
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Shortest (bp)') }}</span>
+                                        <input type="number" min="0" step="1" v-committed-value="track.query.minLength ?? ''" @change="setFeatureDensityTrackField(track.id, 'minLength', $event.target.value)" :aria-label="t('Track {id} shortest length', { id: track.id })" :placeholder="t('Any')" class="form-input form-input-compact" :disabled="!semanticMutationAvailable"></label>
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Longest (bp)') }}</span>
+                                        <input type="number" min="0" step="1" v-committed-value="track.query.maxLength ?? ''" @change="setFeatureDensityTrackField(track.id, 'maxLength', $event.target.value)" :aria-label="t('Track {id} longest length', { id: track.id })" :placeholder="t('Any')" class="form-input form-input-compact" :disabled="!semanticMutationAvailable"></label>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Style') }}</span>
+                                        <select :value="track.style" @change="setFeatureDensityTrackField(track.id, 'style', $event.target.value)" :aria-label="t('Track {id} style', { id: track.id })" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                            <option v-for="style in featureDensityTrackChoices.styles" :key="style" :value="style">{{ tm(featureDensityChoiceWords[style] ?? style) }}</option>
+                                        </select></label>
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Value') }}</span>
+                                        <select :value="track.metric" @change="setFeatureDensityTrackField(track.id, 'metric', $event.target.value)" :aria-label="t('Track {id} value', { id: track.id })" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                            <option v-for="metric in featureDensityTrackChoices.metrics" :key="metric" :value="metric">{{ tm(featureDensityChoiceWords[metric] ?? metric) }}</option>
+                                        </select></label>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Window (bp)') }}</span>
+                                        <auto-value-field :visible="autoValueVisible(track.window, 'dinucleotideWindow')" :text="autoValueText('dinucleotideWindow')">
+                                            <input type="number" min="1" step="1" v-committed-value="track.window ?? ''" @change="setFeatureDensityTrackField(track.id, 'window', $event.target.value)" :aria-label="t('Track {id} window', { id: track.id })" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        </auto-value-field></label>
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Step (bp)') }}</span>
+                                        <auto-value-field :visible="autoValueVisible(track.step, 'dinucleotideStep')" :text="autoValueText('dinucleotideStep')">
+                                            <input type="number" min="1" step="1" v-committed-value="track.step ?? ''" @change="setFeatureDensityTrackField(track.id, 'step', $event.target.value)" :aria-label="t('Track {id} step', { id: track.id })" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        </auto-value-field></label>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <span class="input-label text-[10px]">{{ t('Color') }}</span>
+                                        <color-value-control :model-value="track.color" @update:model-value="setFeatureDensityTrackField(track.id, 'color', $event)" :fallback="adv.depth_color" :allow-none="false" :aria-label="t('Track {id} color', { id: track.id })"></color-value-control>
+                                    </div>
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Legend name') }}</span>
+                                        <input v-committed-value="track.caption ?? ''" @change="setFeatureDensityTrackField(track.id, 'caption', $event.target.value)" :aria-label="t('Track {id} Legend name', { id: track.id })" :placeholder="t('Auto')" class="form-input form-input-compact" :disabled="!semanticMutationAvailable"></label>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
                 <div v-if="mode === 'circular'" v-settings-section="'pairwise-comparisons'" data-setting="pairwise-comparisons" class="card">
                     <details>
                         <summary :aria-label="t('Pairwise Comparisons')"><settings-section-title section="pairwise-comparisons"></settings-section-title> <setting-note setting="pairwise-comparisons"></setting-note> <help-tip :text="t('Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison sequence file (FASTA, GenBank, or DDBJ). Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits.')"></help-tip></summary>

@@ -59,6 +59,7 @@ export const SETTINGS_SECTIONS = catalog([
   { key: 'advanced-comparison', title: msg('Advanced comparison and layout'), icon: 'ph-gear-six', short: msg('Advanced'), modes: ['linear'] },
   { key: 'region-annotations', title: msg('Region Annotations'), icon: 'ph-brackets-curly', short: msg('Regions'), modes: BOTH_MODES },
   { key: 'sequence-search', title: msg('Sequence search'), icon: 'ph-binoculars', short: msg('Search'), modes: BOTH_MODES },
+  { key: 'feature-density', title: msg('Feature density'), icon: 'ph-chart-bar', short: msg('Density'), modes: BOTH_MODES },
   { key: 'pairwise-comparisons', title: msg('Pairwise Comparisons'), icon: 'ph-arrows-left-right', short: msg('Compare'), modes: ['circular'] },
   { key: 'preserved-settings', dock: 'input-genomes', modes: BOTH_MODES },
   { key: 'layout', title: msg('Layout'), icon: 'ph-layout', short: msg('Layout'), shortContext: 'rail', modes: BOTH_MODES },

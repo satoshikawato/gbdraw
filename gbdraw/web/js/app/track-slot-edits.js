@@ -7,6 +7,7 @@
 /** @import { AskChoice } from './app-messages.js' */
 /** @import { DepthSourceLoss } from '../services/depth-track-state.js' */
 /** @import { AnnotationSetRow } from '../services/drawing/annotation-sets.js' */
+/** @import { DrawingState } from '../state.js' */
 import { annotationRowSetId, annotationSetForNewRow, annotationSetIdsOf, overlayRowsReaching } from '../services/track-slot-validation.js';
 import { joinSentences, listText, msg, t, tn } from '../utils/i18n.js';
 
@@ -156,6 +157,30 @@ export const askTrackHide = ({ askChoice, runUndoable }, { rows, mode, hiding, a
  */
 
 /**
+ * PD-OI-104 scenario revisions 6 and 7: the ports of the shown drawing's stacks through which a row's own switch, a
+ * row's Remove, the removal of a Depth file or series, and the removal of a feature density track ask before they
+ * take out of the shown stack a row that other rows start at or extend to (Add track: OV-3153). `askingStackPorts`
+ * gives a stack's ports by its draft key; `askingRowSwitch` and `askingRowRemoval` wrap an editor's switch and Remove.
+ * @param {{ askChoice: AskChoice, runUndoable: (label: string, fn: () => unknown) => unknown, busy: () => unknown,
+ *   shownDrawing: () => DrawingState }} ports
+ */
+export const createAskingStackPorts = ({ askChoice, runUndoable, busy, shownDrawing }) => {
+  /** @param {'circular_track_slots' | 'linear_track_slots'} slotsKey @returns {AskingStackPorts<SwitchedTrackRow>} */
+  const askingStackPorts = (slotsKey) => ({
+    askChoice, runUndoable, busy, annotationSets: () => shownDrawing().annotationSets,
+    rows: () => /** @type {readonly SwitchedTrackRow[]} */ (shownDrawing().adv[slotsKey]),
+    mode: slotsKey === 'circular_track_slots' ? 'circular' : 'linear'
+  });
+  return {
+    askingStackPorts,
+    /** @template {SwitchedTrackRow} Row @param {(slot: Row | null | undefined, enabled: unknown, turnOffReaching?: (() => void) | Event) => unknown} setEnabled @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
+    askingRowSwitch: (setEnabled, slotsKey) => askingTrackRowSwitch(/** @type {AskingStackPorts<Row>} */ (askingStackPorts(slotsKey)), setEnabled),
+    /** @param {(index: unknown, turnOffReaching?: (() => void) | Event) => unknown} removeRow @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
+    askingRowRemoval: (removeRow, slotsKey) => askingTrackRowRemoval(askingStackPorts(slotsKey), removeRow)
+  };
+};
+
+/**
  * A stack row's own switch that asks before it turns off a drawn row other
  * rows start at or extend to, and turns them off with it (`askTrackHide`).
  * The composition root wraps each stack editor's switch with it.
@@ -276,9 +301,11 @@ export const askingAnnotationTrackAdd = ({ askChoice, runUndoable, busy, rows, a
 
 /**
  * @typedef {object} TrackSourceRemoval
- * @property {'depth-file' | 'depth-series' | 'linear-file' | 'comparison'} kind What goes: a Depth file, a whole
- *   Depth series, a Linear File with the Depth files it holds, or a comparison source.
+ * @property {'depth-file' | 'depth-series' | 'linear-file' | 'comparison' | 'feature-density-track'} kind What goes: a
+ *   Depth file, a whole Depth series, a Linear File with the Depth files it holds, a comparison source, or a feature
+ *   density track with its rows.
  * @property {number} [series] The Depth series' index, of a `depth-series`.
+ * @property {string} [track] The feature density track's id, of a `feature-density-track`.
  * @property {DepthSourceLoss} loss What it does to the stack (depth-track-state.js).
  * @property {() => readonly unknown[]} sources What the removal reads, compared by identity at the answer.
  * @property {string} label The History step of the chosen removal.
@@ -286,9 +313,10 @@ export const askingAnnotationTrackAdd = ({ askChoice, runUndoable, busy, rows, a
  */
 /**
  * The title and action of a removal's question.
- * @param {TrackSourceRemoval['kind']} kind @param {{ rows: string, series: number }} texts
+ * @param {TrackSourceRemoval['kind']} kind @param {{ rows: string, series: number, id: string }} texts
  */
 const trackSourceRemovalTexts = (kind, texts) => {
+  if (kind === 'feature-density-track') return { title: t('Remove feature density track {id} and turn off {rows}?', texts), action: t('Remove feature density track {id} and turn off {rows}', texts) };
   if (kind === 'depth-file') return { title: t('Remove the Depth file and turn off {rows}?', texts), action: t('Remove the Depth file and turn off {rows}', texts) };
   if (kind === 'depth-series') return { title: t('Remove Depth series #{series} and turn off {rows}?', texts), action: t('Remove Depth series #{series} and turn off {rows}', texts) };
   if (kind === 'linear-file') return { title: t('Remove the File and turn off {rows}?', texts), action: t('Remove the File and turn off {rows}', texts) };
@@ -307,7 +335,7 @@ const trackSourceRemovalTexts = (kind, texts) => {
  * @param {TrackSourceRemoval} removal
  * @returns {Promise<unknown> | null} null when nothing asks: the caller removes it itself.
  */
-export const askTrackSourceRemoval = ({ askChoice, runUndoable, busy, rows, mode }, { kind, series = 0, loss, sources, label, apply }) => {
+export const askTrackSourceRemoval = ({ askChoice, runUndoable, busy, rows, mode }, { kind, series = 0, track = '', loss, sources, label, apply }) => {
   const asked = [...sources()];
   const stack = rows();
   const alsoOff = new Set([...loss.stayingOn].filter((id) => overlayRowsReaching(stack, mode, new Set([id])).length > 0));
@@ -320,7 +348,7 @@ export const askTrackSourceRemoval = ({ askChoice, runUndoable, busy, rows, mode
       const staying = stack.flatMap((row, index) => (alsoOff.has(String(row.id)) ? [trackRowItem(index, row.id)] : []));
       const emptySeries = loss.emptySeries(turnedOff);
       return {
-        ...trackSourceRemovalTexts(kind, { rows: trackRowsText(numbers), series: series + 1 }),
+        ...trackSourceRemovalTexts(kind, { rows: trackRowsText(numbers), series: series + 1, id: track }),
         description: joinSentences(...[
           emptySeries.length === 0 ? '' : tn(emptySeries.length,
             'Depth series {series} stays empty, and Generate will ask for a file or its removal.',

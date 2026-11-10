@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+from dataclasses import fields
 from typing import get_args
 
+from gbdraw.analysis.feature_density import FEATURE_DENSITY_METRICS, FEATURE_DENSITY_STYLES, FeatureDensityTrack
 from gbdraw.api.region_drawing import NotCarriedKind, StartAfterEndReason
 from gbdraw.auto_sizes import (
     ADAPTABLE_SETTINGS,
@@ -20,6 +22,7 @@ from gbdraw.config.models.labels import LinearLabelScope
 from gbdraw.config.toml import load_config_toml
 from gbdraw.core.figure_length import figure_length_unit_table
 from gbdraw.diagrams.circular.presets import circular_auto_slot_sizes, circular_track_preset_table
+from gbdraw.features.query import FeatureQuery
 from gbdraw.labels.label_style import (
     DEFAULT_ITALIC_GENE_LABELS,
     DEFAULT_LABEL_LINE,
@@ -39,6 +42,7 @@ from gbdraw.tracks.linear import LinearTrackRendererName
 
 # The track renderers of each mode, in Python's order: the Web's slot models, editors and checks read them.
 _TRACK_RENDERERS = {"circular": CircularTrackRendererName, "linear": LinearTrackRendererName}
+_FEATURE_DENSITY_DEFAULTS = {field.name: field.default for field in fields(FeatureDensityTrack)}
 
 
 def _camel_threshold_name(name: str) -> str:
@@ -86,6 +90,16 @@ def mode_profiles_payload() -> dict[str, object]:
         # The id of the slot that draws a feature density track in a stack the reader did not write: this prefix
         # and the track's id (gbdraw/tracks/parsing.py `feature_density_slot_id`).
         "featureDensitySlotIdPrefix": FEATURE_DENSITY_SLOT_ID_PREFIX,
+        # The choices of a feature density track's metric and style, and what a track the Web adds starts with: the
+        # defaults of gbdraw/analysis/feature_density.py `FeatureDensityTrack` and the type of every feature
+        # (gbdraw/features/query.py `FeatureQuery`).
+        "featureDensityTrack": {
+            "metrics": list(FEATURE_DENSITY_METRICS),
+            "styles": list(FEATURE_DENSITY_STYLES),
+            "defaultMetric": _FEATURE_DENSITY_DEFAULTS["metric"],
+            "defaultStyle": _FEATURE_DENSITY_DEFAULTS["style"],
+            "everyFeatureType": FeatureQuery().feature_type,
+        },
         "featureTypes": list(DEFAULT_FEATURE_TYPES),
         # The units of canvas.figure_width and canvas.figure_height (gbdraw/core/figure_length.py): the Figure size
         # field's unit choices and the size line's conversion and decimals.

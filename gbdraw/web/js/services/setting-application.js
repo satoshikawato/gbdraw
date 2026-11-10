@@ -77,7 +77,7 @@ export const SETTING_APPLICATION = Object.freeze([
   // OV-1042: `output-prefix` names the Results at Generate, and exports take
   // their file names from the Result (export.js `getDownloadName`).
   ...rows('generate', ['output-prefix', 'inputs', 'comparison', 'species-strain', 'advanced-comparison', 'region-annotations',
-    'pairwise-comparisons', 'preserved-settings', 'layout', 'font', 'titles', 'features',
+    'feature-density', 'pairwise-comparisons', 'preserved-settings', 'layout', 'font', 'titles', 'features',
     'stroke', 'labels', 'axis-scale', 'dinucleotide', 'feature-placement']),
   // D-201, PD-OI-103 rev 2: the stack's structure edits apply on Generate; a
   // switch that hides or shows a GC, skew or Depth row is the track-visibility row's.
