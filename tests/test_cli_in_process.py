@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+import json
 import logging
 import os
 import subprocess
@@ -11,8 +13,9 @@ from pathlib import Path
 
 import pytest
 
+from gbdraw import cli
 from gbdraw.core import fonts
-from tests.utils.cli_in_process import run_gbdraw
+from tests.utils.cli_in_process import describe_filters, run_gbdraw
 
 LAMBDA = Path(__file__).parent / "test_inputs" / "NC_001416.gb"
 
@@ -60,3 +63,24 @@ def test_in_process_run_leaves_the_process_as_it_found_it(tmp_path: Path) -> Non
         fonts.registered_fonts(),
     )
     assert after == before
+
+
+def test_in_process_run_holds_the_warning_filters_of_a_fresh_process(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The filters a command runs under: the interpreter's defaults, those its imports add (numpy's ``RankWarning``
+    ``always`` among them) and the CLI's own, in the same order as in ``python -m gbdraw.cli``."""
+
+    script = (
+        "from __future__ import annotations\n" + inspect.getsource(describe_filters)
+        + "import json, sys, warnings\nfrom gbdraw import cli\nseen = []\n"
+        + "cli.linear_main = lambda args: seen.extend(describe_filters(warnings.filters))\n"
+        + "sys.argv = ['gbdraw', 'linear']\ncli.main()\nprint(json.dumps(seen))"
+    )
+    fresh = json.loads(subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=True).stdout)
+    seen: list[object] = []
+    monkeypatch.setattr(cli, "linear_main", lambda args: seen.extend(describe_filters(warnings.filters)))
+
+    assert run_gbdraw(["linear"], cwd=tmp_path).returncode == 0
+
+    assert [list(row) for row in seen] == fresh
