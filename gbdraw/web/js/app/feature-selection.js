@@ -34,18 +34,15 @@ const MARQUEE_THRESHOLD_PX = 4;
 const TOOLBAR_EDGE_MARGIN_PX = 8;
 
 /**
+ * @import { ExtractedFeature } from '../services/feature-metadata-extraction.js'
  * @import { RegionAxisRecord } from '../services/region-axis.js'
  * @import { WebState } from '../state.js'
  */
 
 /**
- * A listed feature as the selection reads it (the extracted features of
- * `state.js`, whose owner has no typedef).
- * @typedef {{
- *   svg_id?: unknown, fileIdx?: unknown, record_idx?: unknown,
- *   displayRecordId?: unknown, record_id?: unknown, type?: unknown,
- *   record_key?: unknown, start?: unknown, end?: unknown, location_parts?: unknown
- * }} SelectionFeature
+ * A listed feature as the selection reads it: a row of `state.js`'s
+ * `extractedFeatures`, typed by its owner.
+ * @typedef {ExtractedFeature} SelectionFeature
  */
 
 /** @typedef {{ left: number, top: number, right: number, bottom: number }} Edges */

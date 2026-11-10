@@ -281,8 +281,9 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 const downloadWhiteBackground = ref(false);
 
 // Feature Color Editor state
-const extractedFeatures = ref([]); // Features from last generation
-const biologicalFeatures = ref([]); // Complete source catalog, including non-rendered features
+/** @import { ExtractedFeature } from './services/feature-metadata-extraction.js' */
+const extractedFeatures = typedRef(/** @type {ExtractedFeature[]} */ ([])); // Features from last generation
+const biologicalFeatures = typedRef(/** @type {ExtractedFeature[]} */ ([])); // Complete source catalog, including non-rendered features
 /** @import { FeatureCatalog } from './services/feature-catalog.js' */
 // Null, or the admitted catalog of the committed Results (`admittedFeatureCatalog`
 // in services/config.js; R11), held by reference.
@@ -296,16 +297,7 @@ const extractedFeatureQualifierNames = computed(() => collectFeatureQualifierNam
 const specificRuleQualifierSuggestions = computed(() =>
   specificColorQualifierSuggestions(extractedFeatureQualifierNames.value, activeDrawing().manualSpecificRules)
 );
-/**
- * What state.js reads of a listed feature (the Features list rows and the
- * extracted features, whose owner has no typedef).
- * @typedef {{
- *   id?: unknown, svg_id?: unknown, record_idx?: unknown, displayRecordId?: unknown,
- *   rendered_svg_id?: unknown, renderedSvgId?: unknown, rendered_feature_svg_id?: unknown,
- *   renderedFeatureSvgId?: unknown
- * }} FeatureListRow
- */
-/** @param {FeatureListRow | null | undefined} feature */
+/** @param {ExtractedFeature | null | undefined} feature */
 const renderedFeatureSvgId = (feature) => {
   return String(
     feature?.rendered_svg_id ||
@@ -348,7 +340,7 @@ const selectedFeatures = computed(() => {
 
   const bySvgId = featuresBySvgId.value instanceof Map ? featuresBySvgId.value : new Map();
   const fallback = new Map();
-  (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((/** @type {FeatureListRow} */ feature) => {
+  (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((feature) => {
     const svgId = renderedFeatureSvgId(feature);
     if (svgId && !fallback.has(svgId)) fallback.set(svgId, feature);
   });
@@ -747,7 +739,7 @@ const featureList = computed(() => {
   const features = extractedFeatures.value;
   const renderedIds = names.length < 2 ? null : metadata?.renderedFeatureIdentities?.renderedIds;
   return {
-    rows: renderedIds instanceof Set ? features.filter((/** @type {FeatureListRow} */ feature) => renderedIds.has(feature.svg_id)) : features,
+    rows: renderedIds instanceof Set ? features.filter((feature) => renderedIds.has(feature.svg_id)) : features,
     drawn: null,
     rendered: null
   };
@@ -765,7 +757,7 @@ const featureListState = (feature) => {
 };
 const featureRecordPickerVisible = computed(() => (
   featureRecordIds.value.length > 1
-  && new Set(featureList.value.rows.map((/** @type {FeatureListRow} */ feature) => (
+  && new Set(featureList.value.rows.map((/** @type {ExtractedFeature} */ feature) => (
     mode.value === 'circular' ? feature.record_idx : feature.displayRecordId
   ))).size > 1
 ));
@@ -815,7 +807,7 @@ const isFeatureDrawerMounted = computed(
 const featureListExpandedIndex = computed(() => (
   featureListExpandedId.value === null
     ? -1
-    : filteredFeatures.value.findIndex((/** @type {FeatureListRow} */ feature) => feature.id === featureListExpandedId.value)
+    : filteredFeatures.value.findIndex((/** @type {ExtractedFeature} */ feature) => feature.id === featureListExpandedId.value)
 ));
 /** @param {number} index */
 const featureListRowTop = (index) => (

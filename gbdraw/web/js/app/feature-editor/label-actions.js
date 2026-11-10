@@ -29,10 +29,11 @@ import {
 import { joinSentences, msg, t, tm, tn } from '../../utils/i18n.js';
 
 /**
- * A feature row of the displayed Result's catalog or of the extracted list.
- * Python owns the fields (R7), so the editor reads them as `unknown`.
- * @typedef {Record<string, unknown>} LabelFeature
+ * A feature row of the displayed Result's catalog or of the extracted list: the
+ * state's feature row. Python owns the fields (R7), so the editor reads them as `unknown`.
+ * @typedef {ExtractedFeature} LabelFeature
  */
+/** @import { ExtractedFeature } from '../../services/feature-metadata-extraction.js' */
 /**
  * What the label code reads of a render request's `diagramOptions`.
  * @typedef {{ configOverrides?: Readonly<Record<string, unknown>> | null, featureShapes?: Readonly<Record<string, unknown>> | null }} LabelDiagramOptions

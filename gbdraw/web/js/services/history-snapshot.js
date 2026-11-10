@@ -2,6 +2,7 @@
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 /** @import { ArtifactSlot, FeatureEditorStatus } from './artifact-slot.js' */
 /** @import { DrawnInputSummary } from './input-summary.js' */
+/** @import { ExtractedFeature } from './feature-metadata-extraction.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
 import { INPUTS_SLICE, boundInputFileIds, installBoundInputs } from './drawing/inputs.js';
@@ -841,8 +842,8 @@ const applyFilesData = (state, drawing, filesData, fileStore) => {
  */
 
 /**
- * @typedef {Readonly<{ featureCatalog: unknown, extractedFeatures: readonly unknown[],
- *   biologicalFeatures: readonly unknown[], results: SvgResultEntry[], labelFitReports: readonly unknown[],
+ * @typedef {Readonly<{ featureCatalog: unknown, extractedFeatures: readonly ExtractedFeature[],
+ *   biologicalFeatures: readonly ExtractedFeature[], results: SvgResultEntry[], labelFitReports: readonly unknown[],
  *   inputSummaries: readonly DrawnInputSummary[] }>} RedrawnArtifact
  *   What a label rerender draws again of its Result's drawing (OV-111).
  */
