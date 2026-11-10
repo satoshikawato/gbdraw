@@ -30,6 +30,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from gbdraw.comparisons.circular_losat import comparison_query_fasta  # noqa: E402
+from gbdraw.comparisons.losat_jobs import losat_fasta_text, sha256_text  # noqa: E402
+from gbdraw.exceptions import ValidationError  # noqa: E402
+from gbdraw.io.comparison_sequences import read_comparison_sequence_file  # noqa: E402
 from gbdraw.session_io import (  # noqa: E402
     CURRENT_SESSION_VERSION,
     DRAWINGS_SESSION_MIN_VERSION,
@@ -1581,6 +1585,89 @@ def _assert_declared_figure(declared_path: Path, published_path: Path) -> None:
         )
 
 
+def _session_sequence_fastas(session: Mapping[str, Any], directory: Path) -> dict[str, Path]:
+    """The LOSAT FASTA files of the sequences a Session holds, by the SHA-256 of their text.
+
+    Each sequence file among its resources gives its whole text (a ring's query
+    or subject) and each record's text (a whole record's search). Other
+    resources are no sequence file and give nothing.
+    """
+
+    fastas: dict[str, Path] = {}
+    for resource_id, resource in session["resources"].items():
+        path = directory / f"{resource_id}-{PurePosixPath(str(resource.get('name') or 'resource')).name}"
+        path.write_bytes(_resource_bytes(session, resource_id))
+        try:
+            sequences = read_comparison_sequence_file(path)
+        except ValidationError:
+            continue
+        for text in (
+            comparison_query_fasta(sequences, ordinal=1),
+            *(losat_fasta_text(str(record.id), str(record.seq)) for record in sequences.records),
+        ):
+            digest = sha256_text(text)
+            fastas[digest] = directory / f"{digest}.fa"
+            fastas[digest].write_text(text, encoding="utf-8")
+    return fastas
+
+
+def _search_stale_losat_results(session: dict[str, Any], directory: Path, *, env: Mapping[str, str]) -> int:
+    """Search again, with the LOSAT the Web app ships, each stored LOSAT result that Generate would search again.
+
+    Generate reuses a stored result only when the Web's rule
+    (``isReusableLosatEntry``) admits its runtime, so a LOSAT update leaves a
+    published Session searching on first Generate. The new rows must be the
+    stored rows: the request's results were drawn from them. Returns the
+    number of results searched.
+    """
+
+    entries = [
+        entry
+        for entry in (session.get("losatCache") or {}).get("entries") or []
+        if isinstance(entry, dict)
+    ]
+    if not entries:
+        return 0
+    entries_path, flags_path = directory / "losat-entries.json", directory / "losat-stale.json"
+    entries_path.write_text(
+        json.dumps([{key: entry.get(key) for key in ("program", "runtime")} for entry in entries]),
+        encoding="utf-8",
+    )
+    _run_publication_bridge("stale-losat", entries_path, flags_path, env=env)
+    stale = [
+        entry
+        for entry, is_stale in zip(entries, json.loads(flags_path.read_text(encoding="utf-8")), strict=True)
+        if is_stale
+    ]
+    if not stale:
+        return 0
+    fastas = _session_sequence_fastas(session, directory)
+    jobs = []
+    for entry in stale:
+        query, subject = (fastas.get(str(entry.get(f"{side}CanonicalHash"))) for side in ("query", "subject"))
+        if query is None or subject is None:
+            raise ValueError(
+                f"LOSAT result {entry.get('filename') or entry.get('key')} searched a sequence that is no whole "
+                "file or record of the Session; save the Session again from a Web replay"
+            )
+        jobs.append(
+            {"program": entry["program"], "outfmt": entry["outfmt"], "args": entry["args"],
+             "query": str(query), "subject": str(subject)}
+        )
+    jobs_path, results_path = directory / "losat-jobs.json", directory / "losat-results.json"
+    jobs_path.write_text(json.dumps(jobs), encoding="utf-8")
+    _run_publication_bridge("search-losat", jobs_path, results_path, env=env)
+    for entry, result in zip(stale, json.loads(results_path.read_text(encoding="utf-8")), strict=True):
+        if result["text"] != entry["text"]:
+            raise ValueError(
+                f"LOSAT {result['runtime']['version']} gives other rows than {entry['runtime']} for "
+                f"{entry.get('filename') or entry.get('key')}, and the Session draws results made from the old "
+                "rows; save the Session again from a Web replay"
+            )
+        entry["runtime"] = result["runtime"]
+    return len(stale)
+
+
 def _refresh_one_session(
     session_path: Path,
     *,
@@ -1605,6 +1692,8 @@ def _refresh_one_session(
         # `finalize` keeps, so it is set on the input, before `prepare`.
         if _reopen_for_publication(session_path, session) + _set_output_prefix(
             session, gallery_id
+        ) + _search_stale_losat_results(
+            session, staging_root, env=env
         ):
             publication_input_path = (
                 staging_root / f"canonicalized-{session_path.name}"
