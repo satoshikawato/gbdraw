@@ -1329,6 +1329,25 @@
       "reason": "Python decodes the stored request directly; the Web promotes the JSON before its one stored-request reader so Load needs no Worker",
       "retireWhen": "the Web reads stored requests through the Python decoder, or stops reading request schema 9 and older",
       "source": "review of feat/ring-genome-files (OV-2957); the twin is on dev with no shared vector"
+    },
+    {
+      "id": "vector:tests/fixtures/feature_density_slot_vectors.json",
+      "concern": "The feature density rows of a stack the user did not write: one row per track after the features row, with the track's id, and the axis index moved past them; part of the default stacks each side builds",
+      "pythonOwner": [
+        "gbdraw/tracks/parsing.py:with_feature_density_slots",
+        "gbdraw/tracks/circular.py:default_circular_track_slots",
+        "gbdraw/tracks/linear.py:default_linear_track_slots"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-density-tracks.js:insertFeatureDensitySlots",
+        "gbdraw/web/js/services/circular-track-slot-model.js:createDefaultCircularTrackSlots",
+        "gbdraw/web/js/services/linear-track-slot-model.js:createDefaultLinearTrackSlots"
+      ],
+      "vector": "tests/fixtures/feature_density_slot_vectors.json",
+      "reason": "The Web shows and edits a custom stack before any Generate and sends the Circular size shortcuts as an explicit stack, so it builds the default stacks itself; without the rows Python inserts, Use custom stack and the shortcuts drop the tracks (OV-3174). Vectors generated from with_feature_density_slots pin the Web copy.",
+      "retireWhen": "the Web asks the Python owner (Worker) for the default stack instead of building it",
+      "source": "euk-feasibility-20261108 E4 (#1836 review r1 finding 2, D-57)",
+      "pending": true
     }
   ]
 }

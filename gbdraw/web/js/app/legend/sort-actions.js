@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
+/** @import { DrawingState, WebState } from '../../state.js' */
 /** @import { LegendRow } from '../../services/drawing/paint.js' */
 import { legendEntryKey, replaceLegendRows } from '../../services/drawing/paint.js';
 // Sort and Move compute the requested row order, write it into the
@@ -7,7 +7,7 @@ import { legendEntryKey, replaceLegendRows } from '../../services/drawing/paint.
 // R13): the executor orders the displayed Result's rows.
 /**
  * @typedef {object} LegendSortActionsOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Pick<WebState, 'activeDrawing' | 'sessionOperationAvailability' | 'originalLegendOrder'>} state
  * @property {() => unknown} showLegendStructure The root's show of the Legend structure intent.
  */
 
