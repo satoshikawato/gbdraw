@@ -400,6 +400,8 @@ const PHRASES = Object.freeze({
   // LOSAT_RUNTIME of a LOSAT run that exited with an error (services/losat-runtime.js `losatRunFailure`): LOSAT's
   // own first error line, shown as written (`shownLosatMessage`).
   losatReported: 'LOSAT reported: {message}',
+  // LOSAT_RUNTIME in Sequence search (OV-3288): the code's message names Generate, which a search does not use.
+  sequenceSearchFailed: 'The sequence search could not run or returned unusable output. Check the queries and the search settings, then click Search again.',
   sessionSaveRemedy: 'Remove or replace the largest inputs with smaller ones, then save again.',
   // EXPORT_LIMIT (gbdraw/render/export_limits.py): the limit and size in the format's unit, and what would fit.
   exportSizePx: 'PNG is limited to {limit} px per side, and this figure is {width} x {height} px.',
@@ -419,6 +421,9 @@ const PHRASES = Object.freeze({
   liveEditChange: 'Change the edit, or change the settings and use Generate.',
   operationError: 'Operation error'
 });
+// A code's message for one operation, where the code's own message names a step that operation does not have.
+/** @type {Readonly<Record<string, Readonly<Record<string, string>>>>} */
+const OPERATION_MESSAGES = Object.freeze({ LOSAT_RUNTIME: Object.freeze({ searchHitAnnotationSet: PHRASES.sequenceSearchFailed }) });
 /**
  * One sentence or phrase of a user-facing error text. `text` is the English
  * template and its catalog key; each `{name}` takes `params[name]`: a part is
@@ -991,7 +996,9 @@ export const normalizeUserFacingError = (value, {
     if (item?.code !== 'CLEANUP_FAILED' || item?.stage !== 'cleanup') continue;
     result.secondary.push({ code: 'CLEANUP_FAILED', stage: 'cleanup' });
   }
-  const [message, actions] = DEFINITIONS[result.code];
+  const [codeMessage, actions] = DEFINITIONS[result.code];
+  const operationMessages = Object.hasOwn(OPERATION_MESSAGES, result.code) ? OPERATION_MESSAGES[result.code] : {};
+  const message = Object.hasOwn(operationMessages, result.operation) ? operationMessages[result.operation] : codeMessage;
   const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath, featureCaption, sessionTable, diagramMode } = result.context;
   const { featureId, featureType, featureStart, featureEnd, featureCount, field, reason, position, columnCount, recordCount } = result.context;
   const { recordName, recordPosition, codepoint } = result.context;

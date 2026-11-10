@@ -392,6 +392,17 @@ const formatPairErrorPrefix = (job) => {
 };
 
 /**
+ * The failure of a pool worker's `run` reply: LOSAT's own error exit again (`losatRunFailure`) when the worker
+ * reports one, else the worker's failure with the job's pair.
+ * @param {LosatJob} job
+ * @param {LosatWorkerReply} data
+ * @param {string} fallback the failure when the worker names none
+ * @returns {Error}
+ */
+const failedRun = (job, data, fallback) => (typeof data.losatReported === 'string'
+  ? losatRunFailure(data.losatReported) : new Error(`${formatPairErrorPrefix(job)}: ${data.error || fallback}`));
+
+/**
  * @param {LosatSequences} [sequences]
  * @returns {Map<string, string>}
  */
@@ -684,8 +695,7 @@ const runLosatPairsWithWorkers = async (
         worker.removeEventListener('messageerror', handleMessageError);
 
         if (!data.ok) {
-          fail(typeof data.losatReported === 'string' ? losatRunFailure(data.losatReported)
-            : new Error(`${formatPairErrorPrefix(job)}: ${data.error || 'LOSAT worker failed'}`));
+          fail(failedRun(job, data, 'LOSAT worker failed'));
           return;
         }
         if (signal?.aborted) {
@@ -888,8 +898,7 @@ const runLosatPairsThreaded = async (
         if (!data.ok) {
           failOrRetryTrap(
             index,
-            typeof data.losatReported === 'string' ? losatRunFailure(data.losatReported)
-              : new Error(`${formatPairErrorPrefix(job)}: ${data.error || 'Threaded LOSAT worker failed'}`),
+            failedRun(job, data, 'Threaded LOSAT worker failed'),
             data.trap === true
           );
           return;
@@ -1022,7 +1031,9 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
         return results;
       } catch (error) {
         if (isAbortError(error, options.signal)) throw getAbortReason(options.signal);
-        if (executionMode === 'threaded') throw error;
+        // Auto falls back for a failure of the threaded host only: LOSAT's own error exit would recur on the serial
+        // engine, or the serial engine would refuse the task instead of showing LOSAT's report (OV-3289).
+        if (executionMode === 'threaded' || reportedLosatFailure(error) !== null) throw error;
         // The argument is never falsy (`error || {...}`), so a model is returned, not null.
         const diagnostic = /** @type {UserFacingDiagnostic} */ (
           normalizeUserFacingError(error || { code: 'UNKNOWN' }, { operation: 'generate', stage: 'helper' })
