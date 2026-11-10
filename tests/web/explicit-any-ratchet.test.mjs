@@ -55,7 +55,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/legend/track-data-styles.js': 2,
   'app/linear-track-slots.js': 4,
   'app/preview-runtime.js': 20,
-  'app/record-display-options.js': 8,
+  'app/record-display-options.js': 7,
   'app/record-display/feature-record-rotation.js': 14,
   'app/results.js': 1,
   'app/rule-matching.js': 15,
