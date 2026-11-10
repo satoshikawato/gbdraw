@@ -10,10 +10,9 @@
 /** @import { WebState } from '../state.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { ArtifactSlotStore } from '../services/artifact-slot.js' */
-/** @import { AlignmentFigureGeometry, AlignmentOverlayRecord } from '../services/alignment-review-view.js' */
+/** @import { AlignmentFigureGeometry, AlignmentOverlayRecord, DirectionPreviewRecord } from '../services/alignment-review-view.js' */
 /** @import { AliasSource } from '../services/feature-identity.js' */
 /** @import { SvgResultEntry } from '../services/svg-result-ingestion.js' */
-/** @import { DirectionPreviewRecord } from './similarity-alignment.js' */
 import { ALIGNMENT_REFERENCE_KEY, alignmentOverlayRecords, buildAlignmentReviewView } from '../services/alignment-review-view.js';
 import { t } from '../utils/i18n.js';
 

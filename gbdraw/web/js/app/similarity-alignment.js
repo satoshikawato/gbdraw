@@ -1129,10 +1129,6 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
   recordKeys
 );
 
-/**
- * One record of the Review alignment direction preview; its owner is the Review view.
- * @typedef {import('../services/alignment-review-view.js').DirectionPreviewRecord} DirectionPreviewRecord
- */
 
 /**
  * One alignment run that the composition root executes as a candidate (R13):
