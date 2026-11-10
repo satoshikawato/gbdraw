@@ -3726,7 +3726,8 @@ def _checked_circular_drawing(
     over the definition text alone keep the drawing, warn, and attach the report and its search (rows searched for
     ``warn_search_seconds``). At a requested size, labels not placed for lack of room offer a larger figure of an
     estimated size, and labels no row of the label settings fits offer one without an estimate (PD-OI-114 r3).
-    Every assembly of the figure, the rows' among them, shares its annotation measures (``CircularAnnotationMeasures``).
+    Every assembly of the figure, the rows' among them, and the definition row's probes share its annotation measures
+    (``CircularAnnotationMeasures``).
     """
 
     measures = CircularAnnotationMeasures()
@@ -3767,12 +3768,15 @@ def _checked_circular_drawing(
         def larger(ratio: float | None) -> LargerFigure:
             return larger_figure(plan, size, ratio)
 
-    checked = check_circular_label_fit(
-        _circular_label_layouts(drawing),
-        verify,
-        warn_search_seconds=warn_search_seconds,
-        larger_figure=larger,
-    )
+    # The definition row's probes (``CircularLabelLayout.definition_probe``) count the lines against the paint the
+    # assemblies measured, so they share the measures too.
+    with kept_annotation_measures(measures):
+        checked = check_circular_label_fit(
+            _circular_label_layouts(drawing),
+            verify,
+            warn_search_seconds=warn_search_seconds,
+            larger_figure=larger,
+        )
     if checked is not None:
         setattr(drawing, _LABEL_FIT_ATTR, checked)
     return drawing

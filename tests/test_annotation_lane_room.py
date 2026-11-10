@@ -462,6 +462,40 @@ def test_the_definition_scan_packs_and_places_each_slot_once_for_the_same_inputs
     assert len(indexes) == len(placed)
 
 
+def test_the_definition_scan_draws_and_paints_each_slot_once_for_the_same_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Each row the scan verifies assembles the figure again (OV-3111): a slot drawn with the same lanes, ring and
+    # labels is drawn once, and its paint, which every count of the definition lines against the tracks reads (the
+    # verified rows' and the probes' before the labels are placed), is built once for the same inputs.
+    import gbdraw.diagrams.circular.assemble as assemble_module
+    from gbdraw.api.diagram import label_fit_report
+
+    record, options = _inside_slot_over_the_definition()
+    drawn: list[tuple[object, ...]] = []
+    painted: list[tuple[object, ...]] = []
+    draw, paint = assemble_module.circular_annotation_track_content, assemble_module.circular_annotation_track_ink
+
+    def counting_draw(track: object, **kwargs: object) -> object:
+        drawn.append((id(track), kwargs["ring"], tuple(kwargs["labels"])))
+        return draw(track, **kwargs)
+
+    def counting_paint(track: object, **kwargs: object) -> object:
+        painted.append((id(track), kwargs["ring"], tuple(kwargs["labels"])))
+        return paint(track, **kwargs)
+
+    monkeypatch.setattr(assemble_module, "circular_annotation_track_content", counting_draw)
+    monkeypatch.setattr(assemble_module, "circular_annotation_track_ink", counting_paint)
+    with pytest.warns(UserWarning, match="definition lines"):
+        drawing = gbdraw.draw_circular(record, options=options)
+
+    report = label_fit_report(drawing._drawing)
+    assert report is not None and any(row.kind == "smaller_definition_font" for row in report.rows)
+    for calls in (drawn, painted):
+        distinct = [call for index, call in enumerate(calls) if call not in calls[:index]]
+        assert calls and len(calls) == len(distinct), (len(calls), len(distinct))
+
+
 def test_a_curved_label_pushed_to_the_centre_is_measured_within_one_turn() -> None:
     # Lane rooms can carry an inside lane's mark edge past the centre (OV-2665). There a curved label is cut to its
     # ellipsis, whose letters stand on the baseline, so its radius nears zero; its letters still cover at most one
