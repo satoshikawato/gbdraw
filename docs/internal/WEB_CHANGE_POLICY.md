@@ -125,10 +125,10 @@ the up-to-date requirement:
   the [current guard scope](#current-guard-scope) and
   `docs/internal/SELECTIVE_CI.md`. The checks classify these files by path and
   do not read their content from the base, and integrated `dev` staging runs
-  a changed guard test on the merged SHA. If the required checks of such an
-  open pull request run again later, the trusted base check compares the
-  newer `dev` tree with the pull request head, so it can report those files as
-  part of the pull request. Update the pull request then.
+  a changed guard test on the merged SHA. A later run of the required checks
+  of such an open pull request measures only the pull request's own change
+  ([CI diff scope](#ci-diff-scope-and-exact-sha-evidence)), so those files are
+  not reported as part of it.
 - Integrated `dev` staging is the safety net after merge. It runs on each
   exact merged SHA and finds conflicts between pull requests that passed on
   different bases.
@@ -247,8 +247,19 @@ independent deterministic rule gives them hard semantics.
 
 ## CI diff scope and exact-SHA evidence
 
-Pull request checks compare the pull request base SHA with its head SHA. A push
-to `dev` checks only the change integrated by that push, from
+Pull request checks measure what the pull request itself changes: from the
+merge base of its base SHA and head SHA to the head. That is the base SHA
+itself when the head contains it, and the base SHA again when Git finds no
+merge base. A change that reached `dev` after the branch forked, such as a
+lowered count baseline, an edited guard, or a replaced vendored file, is
+therefore never read as the pull request's change in reverse, and the branch
+needs no update from `dev` for it. Every rule still reads the trusted policy
+(registries, listings, budgets) from the base SHA. A count that the branch
+raises past a baseline lowered on `dev` after it forked is caught by the guard
+tests, which run on the pull request's merge commit. Without `--head` (a local
+run on the working tree), the checker compares the working tree with the base.
+
+A push to `dev` checks only the change integrated by that push, from
 `github.event.before` to `github.sha`. A manual `dev` staging run has no push
 payload, so it checks the current merge commit from its first parent to `HEAD`.
 These ranges determine only the change presented to the Web checker. The full
@@ -648,11 +659,11 @@ An update takes two pull requests in this order:
    tests, notices, and packaging that use it, and leaves the list unchanged.
    Changing the list beside a runtime path fails the Gate.
 
-The check compares the pull request base with its head, so an open pull
-request that is behind `dev` after step 2 merged shows the listed change in
-reverse. When the head does not contain its base and leaves a listed path as
-their merge base had it, the checker reports that the branch is behind its
-base; update it from `dev`. Any other mismatch reports the kind or the hash.
+The check reads only the pull request's own change
+([CI diff scope](#ci-diff-scope-and-exact-sha-evidence)), so a listed change
+that merged after an open pull request forked is not part of it, and that pull
+request needs no update from `dev`. A mismatch in the pull request's own change
+reports the kind or the hash.
 
 An entry whose change has merged can only authorize the same bytes again.
 Remove it in the next authority-only pull request. Because a path appears once,
@@ -680,12 +691,11 @@ pull request base and head, without running Python:
   closed. A version export that the base has and the head lacks or cannot
   read fails as "a renamed or removed version export (<name>) needs a checker
   change".
-- With `--head`, a branch behind its base is compared from the merge base of
-  base and head, so only its own changes count, and only its own diff supplies
-  the co-changes. When Git cannot find a merge base, the comparison falls back
-  to the base, and a failure may come from a newer `dev` change; the message
-  then says to update the branch from `dev`. Without `--head` (the working
-  tree), the comparison is always two-dot against the base.
+- The comparison covers the pull request's own change
+  ([CI diff scope](#ci-diff-scope-and-exact-sha-evidence)), so only its own
+  diff supplies the co-changes. When Git cannot find a merge base, the
+  comparison falls back to the base, and a failure may come from a newer `dev`
+  change; the message then says to update the branch from `dev`.
 
 | Kind | Counts when | Also needs |
 | --- | --- | --- |
