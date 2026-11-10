@@ -627,6 +627,25 @@ This is the rule `AXE-VIOLATIONS` of `tools/web-design-rule-guards.json`.
   Owner's approval, also when a newer axe-core finds more. Lowering or
   removing one is optional.
 
+## Whole record sequence copies
+
+This is the rule `SEQUENCE-COPIES` of `tools/web-design-rule-guards.json`.
+
+- A record's sequence is read from its input file on demand, through
+  `gbdraw/io/record_sequences.py`. A whole copy of it holds 1 byte per base or
+  more, so whole copies do not spread.
+- `tests/test_record_sequence_copies.py` reads `gbdraw/` except `gbdraw/web/`
+  and that module, and finds `str()` or `bytes()` of a `.seq` attribute or of a
+  name `seq` or `sequence`, every `reverse_complement()` call, `+` with a `.seq`
+  operand, `.join` over `.seq` values, `SeqIO.write`, and `SeqIO.parse` or
+  `SeqIO.read` outside the record readers of `gbdraw/io/genome.py`.
+- `SITES` in the same test holds, per file, function and kind, the number of
+  such sites today. The test fails on a site without an entry or beyond its
+  count, and on an entry whose sites are gone.
+- Adding or raising an entry is an authority-only change that needs the
+  Owner's approval. Lowering or removing one is optional, and is done in the
+  pull request that reads that sequence in pieces.
+
 ## Evidence examples
 
 These examples use changed-scope sets. They do not assert repository-wide
