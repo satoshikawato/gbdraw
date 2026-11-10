@@ -108,7 +108,7 @@ from gbdraw.api.options import (
 from gbdraw.auto_sizes import (
     depth_sliding_window,
     determine_length_parameter,
-    sliding_window,
+    record_sliding_windows,
 )
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
 from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN, LosatCacheWrite
@@ -821,7 +821,7 @@ def _resolve_circular_window_step(
     step: int | None,
 ) -> tuple[int, int]:
     """Resolve circular window/step with record-length defaults."""
-    auto_window, auto_step = sliding_window(len(record.seq), cfg)
+    [(auto_window, auto_step)] = record_sliding_windows("circular", (len(record.seq),), cfg)
     return (
         int(window) if window is not None else auto_window,
         int(step) if step is not None else auto_step,
@@ -2511,10 +2511,7 @@ def assemble_linear_diagram_from_records(
 
     seq_len_dict = create_dict_for_sequence_lengths(records)
     # Use raw records to avoid collapsing lengths when IDs are duplicated.
-    longest_genome = max(len(record.seq) for record in records)
-
-    # Match legacy CLI behavior: linear window/step are based on the longest genome.
-    auto_window, auto_step = sliding_window(longest_genome, cfg)
+    auto_window, auto_step = record_sliding_windows("linear", [len(record.seq) for record in records], cfg)[0]
     window = auto_window if inputs.window is None else inputs.window
     step = auto_step if inputs.step is None else inputs.step
     resolved_depth_window, resolved_depth_step = _resolve_depth_window_step(
@@ -2848,10 +2845,7 @@ def assemble_circular_diagram_from_record(
             cfg.objects.conservation.color_scheme, parsed_circular_track_slots, conservation_tracks
         )
 
-    # Match legacy CLI behavior: circular window/step are based on the record length.
-    auto_window, auto_step = sliding_window(len(gb_record.seq), cfg)
-    window = auto_window if inputs.window is None else inputs.window
-    step = auto_step if inputs.step is None else inputs.step
+    window, step = _resolve_circular_window_step(gb_record, cfg, window=inputs.window, step=inputs.step)
     resolved_depth_window, resolved_depth_step = _resolve_depth_window_step(
         window=int(window),
         step=int(step),

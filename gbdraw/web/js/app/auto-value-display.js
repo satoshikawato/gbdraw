@@ -68,9 +68,6 @@ const DEFAULTS = Object.freeze({
 // are Python's (gbdraw/auto_sizes.py), carried by the generated mode-profile data.
 const { slidingWindow, depthWindow, circularTicks, linearTicks, circularSlots, scalarAxisTickFont } = MODE_PROFILE_DATA.autoSizes;
 const SLIDING_WINDOW_TIERS = [...slidingWindow.tiers, [Infinity, ...slidingWindow.above]];
-// One object per (window, step): `sharedLengthValue` compares the values of the drawn records by identity.
-/** @type {Map<string, Readonly<{ window: number, step: number }>>} */
-const SLIDING_WINDOW_VALUES = new Map();
 
 /** @param {unknown} value */
 const parsePositiveNumber = (value) => {
@@ -275,12 +272,7 @@ const slidingWindowForLength = (length) => {
   const tier = SLIDING_WINDOW_TIERS.find(([below]) => numeric < below) ?? SLIDING_WINDOW_TIERS[SLIDING_WINDOW_TIERS.length - 1];
   const window = Math.max(1, Math.min(tier[1], Math.floor(numeric / slidingWindow.divisor)));
   const step = Math.max(1, Math.min(tier[2], Math.floor(window / slidingWindow.divisor)));
-  const key = `${window}/${step}`;
-  const known = SLIDING_WINDOW_VALUES.get(key);
-  if (known) return known;
-  const value = Object.freeze({ window, step });
-  SLIDING_WINDOW_VALUES.set(key, value);
-  return value;
+  return Object.freeze({ window, step });
 };
 
 /**
@@ -545,9 +537,9 @@ const dinucleotideWindowText = (state, drawing, field) => {
   if (field === 'window' && manualWindow !== null) return withAuto(formatBp(manualWindow));
   if (field === 'step' && manualStep !== null) return withAuto(formatBp(manualStep));
 
-  const preset = sharedLengthValue(state, slidingWindowForLength);
-  if (preset) return withAuto(formatBp(preset[field]));
-  return t('Auto (by genome size)');
+  // Each field by itself: the records may share a window and not a step (Python's record_auto_values).
+  const value = sharedLengthValue(state, (length) => slidingWindowForLength(length)?.[field] ?? null);
+  return value !== null ? withAuto(formatBp(value)) : t('Auto (by genome size)');
 };
 
 /**
@@ -560,9 +552,12 @@ const depthWindowText = (state, drawing, field) => {
   const manualSource = parsePositiveNumber(drawing?.adv?.[sourceField]);
   if (manualSource !== null) return withAuto(formatBp(depthWindowValue(manualSource, field)));
 
-  const preset = sharedLengthValue(state, slidingWindowForLength);
-  if (preset) return withAuto(formatBp(depthWindowValue(field === 'window' ? preset.window : preset.step, field)));
-  return t('Auto (by genome size)');
+  // Records of different GC windows can share a Depth window (at least 100 bp; Python's record_auto_values).
+  const value = sharedLengthValue(state, (length) => {
+    const preset = slidingWindowForLength(length);
+    return preset ? depthWindowValue(preset[field], field) : null;
+  });
+  return value !== null ? withAuto(formatBp(value)) : t('Auto (by genome size)');
 };
 
 /** @param {RecordLengthState} state @param {DrawingState} drawing */

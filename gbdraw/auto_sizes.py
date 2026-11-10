@@ -106,6 +106,8 @@ _CIRCULAR_SLOT_RENDERERS = {
     "depth": "depth",
 }
 _WINDOW_SETTINGS = ("window", "step", "depth_window", "depth_step")
+# The settings whose Auto value each record of a drawing takes for itself (``record_auto_values``).
+_RECORD_SETTINGS = (*_WINDOW_SETTINGS, "objects.scale.interval")
 # The settings whose Auto value follows the drawn extent but is no length pair.
 _MODE_EXTENT_SETTINGS: Mapping[DiagramMode, tuple[str, ...]] = {
     "circular": (
@@ -205,6 +207,19 @@ def depth_sliding_window(window: int, step: int) -> tuple[int, int]:
     default track is not overly noisy.
     """
     return max(_DEPTH_MIN_WINDOW, int(window) // _DEPTH_WINDOW_DIVISOR), max(1, int(step) // _DEPTH_WINDOW_DIVISOR)
+
+
+def record_sliding_windows(
+    mode: DiagramMode, record_lengths: Sequence[int], cfg: GbdrawConfig
+) -> tuple[tuple[int, int], ...]:
+    """Return the Auto GC content and skew (window, step) each record of a drawing draws with, in drawing order.
+
+    A Circular record draws at its own length (each record is a circle of its own); the records of a Linear
+    drawing share one axis, so each takes the longest record's. The one reading of this rule: the renderer, the
+    Auto values of a drawing (``record_auto_values``) and the region derivation (``adapt_explicit_settings``).
+    """
+    lengths = tuple(record_lengths) if mode == "circular" else (max(record_lengths),) * len(record_lengths)
+    return tuple(sliding_window(length, cfg) for length in lengths)
 
 
 def circular_tick_intervals(length: int) -> tuple[int, int]:
@@ -403,6 +418,31 @@ class DrawnExtent:
         return longest if self.wrap_row_length is None else min(longest, self.wrap_row_length)
 
 
+def record_auto_values(extent: DrawnExtent, cfg: GbdrawConfig) -> tuple[Mapping[str, int], ...]:
+    """Return the Auto window, step, Depth window, Depth step and scale interval each record of ``extent`` draws
+    with, in drawing order.
+
+    A Circular record takes them at its own length (``record_sliding_windows``, ``circular_tick_intervals``); the
+    records of a Linear drawing share the longest record's windows and the drawn axis's interval.
+    """
+    records: list[Mapping[str, int]] = []
+    windows = record_sliding_windows(extent.mode, extent.record_lengths, cfg)
+    for length, (window, step) in zip(extent.record_lengths, windows, strict=True):
+        interval = (
+            circular_tick_intervals(length)[0]
+            if extent.mode == "circular"
+            else linear_tick_interval(extent.drawn_axis_length)
+        )
+        records.append(dict(zip(_RECORD_SETTINGS, (window, step, *depth_sliding_window(window, step), interval))))
+    return tuple(records)
+
+
+def _shared_record_value(records: Iterable[Mapping[str, int]], setting: str) -> int | None:
+    """The value of ``setting`` that every record takes, or None when they differ."""
+    values = {record[setting] for record in records}
+    return values.pop() if len(values) == 1 else None
+
+
 def auto_setting_values(
     extent: DrawnExtent,
     cfg: GbdrawConfig,
@@ -420,10 +460,11 @@ def auto_setting_values(
     value at every length in that mode.
 
     ``cfg`` must hold no explicit size values (normally the packaged defaults).
-    The size class and tick intervals follow the longest drawn axis and the windows the
-    longest record; in a
-    Circular canvas the records then share the long styles. The GC content and
-    Depth tick fonts follow the track thickness: the Auto thickness unless
+    The size class follows the longest drawn axis; in a Circular canvas the
+    records then share the long styles. The windows and the scale interval are
+    those every record takes (``record_auto_values``): a setting that the
+    records of a Circular drawing take at different values is left out. The
+    GC content and Depth tick fonts follow the track thickness: the Auto thickness unless
     ``track_thickness_px`` gives the drawing's own (keys ``gc_content`` and
     ``depth``); a Circular drawing's Depth font, that of the first depth
     row of series 0 (``extent.depth_rows``). The drawing gives a Percent GC
@@ -434,14 +475,20 @@ def auto_setting_values(
     (the GC content mode among them).
     """
     mode = extent.mode
-    longest = max(extent.record_lengths)
     size = extent.size_class(cfg)
     values: dict[str, AutoValue] = {
         path: float(getattr(reduce(getattr, path.split("."), cfg), size))
         for path in (*_SHARED_LENGTH_PAIRS, *_MODE_LENGTH_PAIRS[mode])
     }
-    window, step = sliding_window(longest, cfg)
-    values.update(zip(_WINDOW_SETTINGS, (window, step, *depth_sliding_window(window, step))))
+    records = record_auto_values(extent, cfg)
+
+    def put_shared(*settings: str) -> None:
+        for setting in settings:
+            shared = _shared_record_value(records, setting)
+            if shared is not None:
+                values[setting] = shared
+
+    put_shared(*_WINDOW_SETTINGS)
     if mode == "circular":
         circular = cfg.canvas.circular
         for slot_id, renderer in _CIRCULAR_SLOT_RENDERERS.items():
@@ -451,10 +498,10 @@ def auto_setting_values(
                 track_ratio=circular.track_ratio,
                 factors=circular.track_ratio_factors[size],
             )
-        values["objects.scale.interval"] = circular_tick_intervals(longest)[0]
+        put_shared("objects.scale.interval")
     else:
         values["labels.font_size.linear"] = linear_label_font_size((extent.drawn_axis_length,), cfg)
-        values["objects.scale.interval"] = linear_tick_interval(extent.drawn_axis_length)
+        put_shared("objects.scale.interval")
         values["canvas.linear.default_gc_height"] = float(cfg.canvas.linear.default_gc_height)
         values["canvas.linear.depth_height"] = float(cfg.canvas.linear.depth_height)
     thickness = {
@@ -493,7 +540,8 @@ def auto_setting_values(
 class SettingReset:
     """A hand-set size that returns to Auto because its Auto value differs.
 
-    An Auto value of ``None`` means that drawing's mode does not draw the setting.
+    An Auto value of ``None`` means that drawing's mode does not draw the setting, or, for a setting each record
+    takes for itself (``record_auto_values``), that the records compared take different values.
     """
 
     setting: str
@@ -516,6 +564,7 @@ def adapt_explicit_settings(
     source: DrawnExtent,
     target: DrawnExtent,
     cfg: GbdrawConfig,
+    record_sources: Sequence[int | None] | None = None,
 ) -> SettingAdaptation:
     """Keep a hand-set size only where its Auto value is the same in ``target``.
 
@@ -525,7 +574,39 @@ def adapt_explicit_settings(
     that neither drawing lists is not a size and is in neither. The tick fonts
     are compared at the track thickness each drawing ends with, and its depth
     rows at the Depth width it ends with.
+
+    A setting each record takes for itself (the windows and the scale
+    interval, ``record_auto_values``) is compared record by record:
+    ``record_sources`` gives, for each record of ``target``, the index of the
+    record of ``source`` it comes from (None for a record from elsewhere, and
+    no list when none comes from ``source``); a record from elsewhere compares
+    with every record of ``source``. It is kept only where every record keeps
+    its Auto value.
     """
+    if record_sources is None:
+        record_sources = (None,) * len(target.record_lengths)
+    if len(record_sources) != len(target.record_lengths):
+        raise ValueError("record_sources needs one entry per target record")
+    source_records = record_auto_values(source, cfg)
+    target_records = record_auto_values(target, cfg)
+    compared = tuple(
+        (target_record, source_records if index is None else (source_records[index],))
+        for target_record, index in zip(target_records, record_sources, strict=True)
+    )
+    # The source records the target's records come from: the values a reset names.
+    from_source = tuple(record for _, records in compared for record in records)
+
+    def same_auto(setting: str, source_values: Mapping[str, AutoValue], target_values: Mapping[str, AutoValue]) -> bool:
+        if setting in _RECORD_SETTINGS:
+            return all(
+                target_record[setting] == source_record[setting]
+                for target_record, records in compared
+                for source_record in records
+            )
+        return source_values.get(setting) == target_values.get(setting)
+
+    def auto_of(setting: str, values: Mapping[str, AutoValue], records: Sequence[Mapping[str, int]]) -> AutoValue | None:
+        return _shared_record_value(records, setting) if setting in _RECORD_SETTINGS else values.get(setting)
 
     def thickness(mode: DiagramMode, values: Mapping[str, AutoValue]) -> dict[str, float]:
         return {
@@ -543,9 +624,7 @@ def adapt_explicit_settings(
     )
     target_auto = auto_setting_values(target, cfg)
     unchanged = {
-        setting: value
-        for setting, value in explicit.items()
-        if source_auto.get(setting) == target_auto.get(setting)
+        setting: value for setting, value in explicit.items() if same_auto(setting, source_auto, target_auto)
     }
     # The thickness settings never depend on a thickness, so this pass only
     # moves the tick fonts to the thickness and the Depth font the target keeps.
@@ -558,13 +637,18 @@ def adapt_explicit_settings(
     kept: dict[str, AutoValue] = {}
     reset: list[SettingReset] = []
     for setting, value in explicit.items():
-        if setting not in source_auto and setting not in target_auto:
+        if setting not in source_auto and setting not in target_auto and setting not in _RECORD_SETTINGS:
             continue
-        if source_auto.get(setting) == target_auto.get(setting):
+        if same_auto(setting, source_auto, target_auto):
             kept[setting] = value
         else:
             reset.append(
-                SettingReset(setting, value, source_auto.get(setting), target_auto.get(setting))
+                SettingReset(
+                    setting,
+                    value,
+                    auto_of(setting, source_auto, from_source),
+                    auto_of(setting, target_auto, target_records),
+                )
             )
     return SettingAdaptation(kept=kept, reset=tuple(reset))
 
@@ -592,6 +676,8 @@ __all__ = [
     "linear_label_size_lengths",
     "linear_label_size_records",
     "linear_tick_interval",
+    "record_auto_values",
+    "record_sliding_windows",
     "scalar_axis_tick_font_rule",
     "scalar_axis_tick_font_size",
     "sliding_window",

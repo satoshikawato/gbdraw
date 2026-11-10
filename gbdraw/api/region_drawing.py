@@ -414,11 +414,17 @@ def derive_from_source(
     target_extent = DrawnExtent(
         target_mode, derived.lengths, depth_rows=_drawn_depth_rows(options, depth_tracks, cfg, target_mode)
     )
+    # The source record each drawn unit comes from, by its index there: each record compares its own Auto windows.
+    record_sources: list[int | None] = [None] * len(derived.lengths)
+    for region in selected:
+        for unit in region.units:
+            record_sources[unit] = region.item.resolved_index
     adaptation = adapt_explicit_settings(
         _explicit_values(options, source_extent.size_class(cfg)),
         source=source_extent,
         target=target_extent,
         cfg=cfg,
+        record_sources=record_sources,
     )
     if not adapt_sizes:
         kept = {**adaptation.kept, **{reset.setting: reset.explicit for reset in adaptation.reset}}

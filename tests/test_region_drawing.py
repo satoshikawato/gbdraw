@@ -41,7 +41,7 @@ from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.region_drawing import derive_region_request
 from gbdraw.api.request_render import resolve_request_records
 from gbdraw.api.requests import DiagramRequest
-from gbdraw.auto_sizes import DrawnExtent, adapt_explicit_settings, auto_setting_values
+from gbdraw.auto_sizes import DrawnExtent, adapt_explicit_settings, auto_setting_values, record_auto_values
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
 from gbdraw.io.record_select import RecordSelector
@@ -69,6 +69,13 @@ def test_auto_value_vectors(cfg, case: dict[str, Any]) -> None:
     values = auto_setting_values(_extent(case), cfg)
     for setting, expected in case["expected"].items():
         assert values[setting] == pytest.approx(expected, abs=1e-9), setting
+    if "recordValues" in case:
+        records = record_auto_values(_extent(case), cfg)
+        assert [dict(record) for record in records] == case["recordValues"]
+        # A setting is the drawing's Auto value only when every record takes it.
+        for setting in case["recordValues"][0]:
+            shared = {record[setting] for record in case["recordValues"]}
+            assert values.get(setting) == (shared.pop() if len(shared) == 1 else None), setting
 
 
 @pytest.mark.parametrize("case", VECTORS["adaptations"], ids=lambda case: case["name"])
@@ -417,6 +424,67 @@ def test_a_circular_region_drawing_takes_one_record(materialize) -> None:
             [RegionSelection("pair:1", 1, 10), RegionSelection("pair:2", 1, 10)],
             mode="circular",
         )
+
+
+def _circular_canvas_of_50_and_5_kb(tmp_path: Path, **options: Any) -> CircularDiagramRequest:
+    """A Circular drawing of two circular records, 50 kb and 5 kb: each draws its GC content and ticks at its own
+    length (Auto window 1,000 and 500 bp, scale interval 5,000 and 1,000 bp)."""
+    from Bio import SeqIO
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    path = tmp_path / "fifty_and_five.gb"
+    SeqIO.write(
+        [
+            SeqRecord(
+                Seq("ACGTTGCA" * (length // 8)), id=name, name=name, description=name,
+                annotations={"molecule_type": "DNA", "topology": "circular"},
+            )
+            for name, length in (("BIG", 50_000), ("SMALL", 5_000))
+        ],
+        path,
+        "genbank",
+    )
+    return CircularDiagramRequest(
+        records=[RecordInput(GenBankInputSource(path), record_key="pair", cardinality=RecordCardinality.ALL)],
+        options=CircularDiagramOptions(**options),
+    )
+
+
+def test_a_circular_record_compares_its_own_auto_window_and_scale_interval(tmp_path: Path) -> None:
+    # Each record of a Circular drawing draws at its own length: the 5 kb record with Auto window 500 bp and scale
+    # interval 1,000 bp, not the 50 kb record's 1,000 bp and 5,000 bp. A drawing of the whole 5 kb record has the same
+    # Auto values, so its hand-set values stay (OV-3231: the scale interval follows the same rule).
+    source = _circular_canvas_of_50_and_5_kb(
+        tmp_path, window=300, step=30, config_overrides={"objects.scale.interval": 2_000}
+    )
+    region = derive_region_request(source, [RegionSelection("pair:2", 1, 5_000)])
+    assert region.mode == "circular"
+    assert region.adaptation.reset == ()
+    assert {key: region.adaptation.kept[key] for key in ("window", "step", "objects.scale.interval")} == {
+        "window": 300, "step": 30, "objects.scale.interval": 2_000,
+    }
+    assert (region.request.options.window, region.request.options.step) == (300, 30)
+
+    # The 50 kb record's own Auto values change at 4 kb: they return to Auto, the 4 kb record's values shown.
+    region = derive_region_request(source, [RegionSelection("pair:1", 1, 4_000)], mode="circular")
+    assert {item.setting: (item.source_auto, item.target_auto) for item in region.adaptation.reset} == {
+        "window": (1_000, 400), "step": (100, 40), "objects.scale.interval": (5_000, 1_000),
+    }
+
+
+def test_a_linear_region_of_circular_records_compares_each_records_own_auto_window(tmp_path: Path) -> None:
+    # The records of a Linear drawing share the longest record's Auto window (1,000 bp at 20 kb); the 5 kb record
+    # drew its GC content with 500 bp in the Circular source, so a hand-set window returns to Auto.
+    source = _circular_canvas_of_50_and_5_kb(tmp_path, window=300, step=30)
+    region = derive_region_request(source, [RegionSelection("pair:1", 1, 20_000), RegionSelection("pair:2", 1, 5_000)])
+    assert region.mode == "linear"
+    reset = {item.setting: (item.source_auto, item.target_auto) for item in region.adaptation.reset}
+    # The two source records differ: no one source value to name.
+    assert reset == {"window": (None, 1_000), "step": (None, 100)}
+    # From the 50 kb record alone the Auto window is the same.
+    region = derive_region_request(source, [RegionSelection("pair:1", 1, 20_000)])
+    assert region.adaptation.reset == ()
 
 
 def test_circular_track_widths_follow_the_rule(materialize) -> None:
