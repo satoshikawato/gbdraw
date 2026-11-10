@@ -2816,3 +2816,33 @@ def test_linear_overlay_region_labels_of_two_lanes_stay_off_the_glyphs_and_each_
     assert not any(_overlapping(a, b) for index, a in enumerate(inks) for b in inks[index + 1 :])
     above = [label["ink"][3] <= label["mark"][0] for label in _span_label_marks(drawing)]
     assert len(set(above)) == 1
+
+
+# The layouts whose labels were already off the glyphs keep every label where dev drew it (values read on dev
+# before OV-3078): the letters' box (left, top, right, bottom) and the canvas height.
+_CLEAN_LABEL_XS = {
+    "Head genes": (328.135, 433.633),
+    "Tail genes": (729.622, 818.509),
+    "b2 region": (1154.393, 1235.204),
+    "Integration": (1314.335, 1405.702),
+    "Early left": (1611.132, 1687.148),
+    "Replication": (1765.503, 1861.509),
+    "Lysis": (2029.667, 2072.128),
+}
+_CLEAN_OVERLAY_PLACES = {
+    "below-underlay": (27.5, 46.143, 173.611),
+    "above-foreground": (82.062, 100.705, 171.111),
+    "cover-foreground": (79.5, 98.143, 163.549),
+    "cover-underlay": (27.5, 46.143, 163.361),
+}
+
+
+@pytest.mark.parametrize("layout", list(_CLEAN_OVERLAY_PLACES))
+def test_linear_overlay_region_labels_already_off_the_glyphs_keep_their_places(tmp_path: Path, layout: str) -> None:
+    drawing = _lambda_overlay(tmp_path, layout)
+    top, bottom, height = _CLEAN_OVERLAY_PLACES[layout]
+
+    assert float(drawing.attribs["viewBox"].split()[3]) == pytest.approx(height, abs=1e-3)
+    assert dict(_region_label_inks(drawing)) == {
+        text: pytest.approx((left, top, right, bottom), abs=1e-3) for text, (left, right) in _CLEAN_LABEL_XS.items()
+    }

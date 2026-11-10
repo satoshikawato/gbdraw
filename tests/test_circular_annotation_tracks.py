@@ -2595,3 +2595,55 @@ def test_circular_overlay_region_labels_stay_off_the_anchored_feature_glyphs(lay
         # at least label_offset beyond the edge of the lanes, as the letters of an overlay that covers its anchor do.
         assert drawn.near > paint, text
         assert drawn.near - outline >= 4.0 - 1e-3, (text, drawn.near - outline)
+
+
+# The layouts whose labels were already off the glyphs keep every label where dev drew it (values read on dev
+# before OV-3078): the canvas, the overlay's slot frame and each label's anchor point in it.
+_TUCKIN_OVERLAY_PLACES = (
+    "0.0 0.0 1073.5958802084717 838.6425781251512",
+    "translate(-14.692982214507367,-91.5) translate(500.0,500.0)",
+    {
+        "Head genes": (249.98, -353.632),
+        "Tail genes": (423.041, 122.395),
+        "b2 region": (-12.98, 403.059),
+        "Integration": (-221.966, 361.735),
+        "Early left": (-432.046, 49.297),
+        "Replication": (-408.203, -174.788),
+        "Lysis": (-169.399, -377.966),
+    },
+)
+_CLEAN_CIRCULAR_OVERLAY_PLACES = {
+    "tuckin-foreground": _TUCKIN_OVERLAY_PLACES,
+    "tuckin-underlay": _TUCKIN_OVERLAY_PLACES,
+    "spreadout-cover": (
+        "0.0 0.0 1150.6913693999918 919.0425781251482",
+        "translate(24.503799007763575,-50.55000000000007) translate(500.0,500.0)",
+        {
+            "Head genes": (272.84, -385.97),
+            "Tail genes": (460.94, 133.359),
+            "b2 region": (-14.25, 442.509),
+            "Integration": (-242.674, 395.481),
+            "Early left": (-471.243, 53.77),
+            "Replication": (-444.477, -190.32),
+            "Lysis": (-185.545, -413.99),
+        },
+    ),
+}
+
+
+@pytest.mark.parametrize("layout", list(_CLEAN_CIRCULAR_OVERLAY_PLACES))
+def test_circular_overlay_region_labels_already_off_the_glyphs_keep_their_places(layout: str) -> None:
+    root = ElementTree.fromstring(_lambda_circular_overlay(layout).tostring())
+    view_box, slot_frame, anchors = _CLEAN_CIRCULAR_OVERLAY_PLACES[layout]
+    (slot,) = [group for group in root.iter() if group.attrib.get("data-gbdraw-slot-id") == "regions"]
+    drawn = {
+        text.text: (float(text.attrib["x"]), float(text.attrib["y"]))
+        for group in slot.iter()
+        if group.attrib.get("data-gbdraw-annotation-label")
+        for text in group.iter()
+        if text.tag.endswith("text")
+    }
+
+    assert root.attrib["viewBox"] == view_box
+    assert slot.attrib["transform"] == slot_frame
+    assert drawn == {text: pytest.approx(anchor, abs=1e-3) for text, anchor in anchors.items()}

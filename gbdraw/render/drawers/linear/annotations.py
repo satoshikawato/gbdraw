@@ -107,12 +107,10 @@ class LinearAnnotationLabel:
 
 
 class AnnotationRowFrame(NamedTuple):
-    """A slot on one row of a wrapped record: how far it lies below the slot's first-row frame, its height there, and
-    the feature lanes its labels stand beyond there, in its frame on that row (``AnnotationSlotFrame.beyond_band``)."""
+    """A slot on one row of a wrapped record: how far it lies below the slot's first-row frame, and its height there."""
 
     shift_y: float
     height_px: float
-    beyond_band: VerticalBand | None = None
 
 
 @dataclass(frozen=True)
@@ -120,7 +118,8 @@ class AnnotationSlotFrame:
     """An annotation slot as its marks are drawn, slot-local: its height on the first row, its frame on each row of a
     wrapped record (none on an unwrapped one), each strand's lane of the feature track it covers (none when it
     covers no track that separates the strands; the same on every row), and the feature lanes its labels stand beyond
-    on the first row (``ResolvedAnnotationTrack.labels_beyond_slot``; none where they stand beside their marks)."""
+    (``ResolvedAnnotationTrack.labels_beyond_slot``; none where they stand beside their marks). Those lanes lie on the
+    axis, where a record is never wrapped, so a wrapped record has none."""
 
     height_px: float
     row_frames: tuple[AnnotationRowFrame, ...] = ()
@@ -485,7 +484,6 @@ def linear_annotation_labels(
                 font_family=font_family,
                 params=params,
                 wrap_row=row,
-                beyond_band=row_frame.beyond_band,
             )
         ]
         if row_frames
