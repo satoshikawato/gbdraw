@@ -3,6 +3,7 @@
 // a test finds a drawing by its ID.
 import { drawingViewOf, sessionDocumentOfViews } from '../../../gbdraw/web/js/services/session-drawings-upgrade.js';
 import { MODE_SCOPED_SETTINGS } from '../../../gbdraw/web/js/mode-scoped-settings.generated.js';
+import { FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION } from '../../../gbdraw/web/js/contracts/schema.generated.js';
 
 const drawingById = (document, id) => {
   const drawing = document.drawings.find((entry) => entry.id === id);
@@ -48,12 +49,24 @@ export const savedModesView = (document) => {
 
 /**
  * `view` (a one-drawing view, or a 46-48-shaped view of every drawing) as a
- * Session `version` file holds it: `version`, and no slice field a later
- * Session added (a registry row's `since`), which its writer did not write.
+ * Session `version` file holds it: `version`, no slice field a later Session
+ * added (a registry row's `since`), which its writer did not write, and each
+ * feature catalog (the view's own, the other mode's Result set's, each mode
+ * slice's) labelled with the schema that version writes: a catalog with no
+ * sequence (schema 6) is a valid schema 5 catalog
+ * (tests/utils/session_drawing_view.py `view_at` does the same).
  */
 export const drawingViewAt = (view, version) => {
   const at = structuredClone(view);
+  const catalogSchema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION[version];
+  const labelCatalog = (holder) => {
+    const catalog = holder?.editorState?.featureCatalog;
+    if (catalogSchema !== undefined && catalog && typeof catalog === 'object') catalog.schema = catalogSchema;
+  };
+  labelCatalog(at);
+  labelCatalog(at.otherModeResult);
   for (const slice of Object.values(at.modes ?? {})) {
+    labelCatalog(slice);
     for (const { domain, path, since } of MODE_SCOPED_SETTINGS.rows) {
       const container = domain.split('.').reduce((value, part) => value?.[part], slice);
       if (since > version && container && typeof container === 'object') delete container[path];

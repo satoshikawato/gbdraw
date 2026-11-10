@@ -782,8 +782,8 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # Updated again when the stored catalog left its sequences (D5, catalog schema 6): with schema 5, each CDS row's
     # amino_acid_sequence, sequenceSourceIndex and translationFromAminoAcidSequence in place of its /translation
     # qualifier, and the item's sequenceSources put back, the reply has the earlier digest.
-    "similarity_groups": "6cb08292c871b9fe4cc80c03087540814586792c298bb1fbf0959307d8421367",
-    "collinear": "4320d007be09018053eee7b3553d7c59fdcc5dec9f0d93de058dd58eec353a7b",
+    "similarity_groups": "fe8d72d1d2af12ce91f30fd1adcc555e723af2432944f5c04fba8fb9fa124f7e",
+    "collinear": "77882178861fac3e1b9b650149cc9a3092d203f03240e47f700520a766d359a3",
 }
 
 
