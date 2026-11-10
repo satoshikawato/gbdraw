@@ -1426,13 +1426,16 @@ def _cli_losat_search(
         )
     except ValidationError as exc:
         diagnostic = exc.diagnostic or {}
-        flag = _CLI_LOSAT_FIELD_FLAGS.get(str(diagnostic.get("field")))
-        if diagnostic.get("reason") != "LOSAT_OPTION_PROGRAM" or flag is None:
+        field = str(diagnostic.get("field"))
+        flag = _CLI_LOSAT_FIELD_FLAGS.get(field)
+        if flag is None or diagnostic.get("reason") not in {"LOSAT_OPTION_PROGRAM", "GENETIC_CODE"}:
             raise
-        raise ValidationError(
-            f"{flag} does not apply to --losat {args.losat}.",
-            diagnostic=diagnostic,
-        ) from exc
+        message = (
+            f"{flag} does not apply to --losat {args.losat}."
+            if diagnostic.get("reason") == "LOSAT_OPTION_PROGRAM"
+            else str(exc).replace(field, flag, 1)
+        )
+        raise ValidationError(message, diagnostic=diagnostic) from exc
 
 
 def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:

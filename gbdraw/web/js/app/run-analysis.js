@@ -42,6 +42,7 @@ import {
 import { ABSENT_COLLINEAR_INFER_ORTHOGROUPS, DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION, readCollinearMergeOrientation } from '../services/losat-normalization.js';
 import {
   losatRecordGencode, losatSearchSequences, nucleotideLosatArgs, prepareLosatSourceBatches, proteinLosatArgs,
+  requireLosatGeneticCode,
   splitLosatSourceResult
 } from '../services/linear-sources.js';
 import {
@@ -783,8 +784,10 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  *   current schema (Load reads a stored one to the current schema; Generate and the rerender commit the one they built).
  * @param {readonly LinearSeq[]} options.sequences
  * @param {readonly (number | null)[]} options.gridRows The row each card's record is written in now
- *   (`linearRecordGridRows`): a LOSATP search's E-value scale is its subject genome's, and a genome is the files whose
- *   records share a row, so a moved record declines reuse.
+ *   (`linearRecordGridRows`). The rows decide two things the stored results were made for: the genomes (the files
+ *   whose records share a row), whose proteins are a LOSATP search's E-value scale, and the adjacent rows, whose
+ *   record pairs are searched and drawn. Rows that keep every genome can still pair other records (1, 2, 3 reordered
+ *   to 2, 3, 1 pairs C with A), so any row change declines reuse (OV-3318).
  * @param {ResolvedProteinReuseActive} options.active
  */
 const canReuseResolvedProteinArtifacts = ({
@@ -2369,19 +2372,28 @@ export const createRunAnalysis = ({
    * @param {string} edgeKey
    */
   const losatPairDefaultName = (drawing, edgeKey) => {
+    const { edge, query, subject, cardPair } = losatPairParts(drawing, edgeKey);
+    const { name: cardPairName, known } = cardPairDefaultName(drawing, drawing.drawnLinearSeqs.value,
+      query?.recordKey ?? edge?.queryUid, subject?.recordKey ?? edge?.subjectUid);
+    if (cardPair === undefined) return known ? cardPairName : '';
+    // A name typed on the card pair names its window pairs whether or not the records are read.
+    return known || cardPair?.losatFilenameActive ? losatUnitPairFilename(cardPair, cardPairName, query, subject) : '';
+  };
+  /**
+   * The pair a Comparison card row names: its edge or cache-info row, its units' places, and for a window pair the
+   * resolved edge of its card pair (null when the plan has none), whose typed name names it; `undefined` for a
+   * card pair.
+   * @param {DrawingState} drawing
+   * @param {string} edgeKey
+   */
+  const losatPairParts = (drawing, edgeKey) => {
     const edge = getResolvedLinearEdge(drawing, edgeKey) || getLosatCacheInfoEntry(drawing, edgeKey);
-    const drawnSeqs = drawing.drawnLinearSeqs.value;
     const places = catalogUnitPlaces(featureCatalog.value);
     const query = places.get(String(edge?.queryUid ?? ''));
     const subject = places.get(String(edge?.subjectUid ?? ''));
-    const windowPair = Boolean(query?.window || subject?.window);
-    const { name: cardPairName, known } = cardPairDefaultName(
-      drawing, drawnSeqs, query?.recordKey ?? edge?.queryUid, subject?.recordKey ?? edge?.subjectUid);
-    if (!windowPair) return known ? cardPairName : '';
-    const cardPair = getResolvedLinearEdge(drawing, linearComparisonEdgeKey(
-      query?.recordKey ?? edge?.queryUid, subject?.recordKey ?? edge?.subjectUid));
-    // A name typed on the card pair names its window pairs whether or not the records are read.
-    return known || cardPair?.losatFilenameActive ? losatUnitPairFilename(cardPair, cardPairName, query, subject) : '';
+    const cardPair = query?.window || subject?.window ? getResolvedLinearEdge(drawing, linearComparisonEdgeKey(
+      query?.recordKey ?? edge?.queryUid, subject?.recordKey ?? edge?.subjectUid)) : undefined;
+    return { edge, query, subject, cardPair };
   };
   // LOSAT pairs are the Linear comparisons: the three pair handlers act for
   // the drawing their caller (the panel binding) gives, and do nothing for a
@@ -2439,9 +2451,11 @@ export const createRunAnalysis = ({
     if (!entry || !cacheMap) return;
     const cached = cacheMap.get(entry.key);
     if (!isCurrentRawLosatCacheEntry(cached)) return;
-    // A pair with no name of its own is named by its cards' record IDs, as Generate names it: read them first (a
-    // loaded Session's cards are read on demand, OV-3227).
-    if (!String(customName || '').trim() && !entry.filename) await readLinearCardRecords(drawing);
+    // A pair with no typed or saved name (its own, or for a window pair its card pair's) is named by its cards'
+    // record IDs, as Generate names it: read them first (a loaded Session's cards are read on demand, OV-3227).
+    const named = String(customName || '').trim() || entry.filename
+      || losatPairParts(drawing, entry.edgeKey || edgeKey).cardPair?.losatFilenameActive;
+    if (!named) await readLinearCardRecords(drawing);
     const defaultName = losatPairDefaultName(drawing, entry.edgeKey || edgeKey);
     const fallbackOrdinal = Number.isInteger(Number(entry.ordinal))
       ? Number(entry.ordinal)
@@ -3394,15 +3408,20 @@ export const createRunAnalysis = ({
               drawing.circularConservation.losat_program
             );
             drawing.circularConservation.losat_program = circularLosatProgram;
-            const subjectGencode = normalizePositiveInteger(drawing.circularConservation.subject_gencode, 1);
-            /** @param {unknown} comparisonGencode */
-            const buildExtraArgs = (comparisonGencode) => {
+            /**
+             * A ring's search arguments; a TLOSATX table LOSAT does not read is refused before any search (OV-3326).
+             * @param {unknown} comparisonGencode
+             * @param {number} inputOrdinal The ring's number among the comparison sequences.
+             */
+            const buildExtraArgs = (comparisonGencode, inputOrdinal) => {
               if (circularLosatProgram === 'tblastx') {
                 return [
                   '--query-gencode',
-                  String(normalizePositiveInteger(comparisonGencode, 1)),
+                  String(requireLosatGeneticCode(normalizePositiveInteger(comparisonGencode, 1),
+                    { field: 'conservation_losat_gencodes', inputOrdinal })),
                   '--db-gencode',
-                  String(subjectGencode)
+                  String(requireLosatGeneticCode(normalizePositiveInteger(drawing.circularConservation.subject_gencode, 1),
+                    { field: 'reference_gencode' }))
                 ];
               }
               const normalizedTask = String(drawing.losat.blastn?.task || 'megablast').trim() || 'megablast';
@@ -3432,7 +3451,7 @@ export const createRunAnalysis = ({
               const { fasta: queryFasta } = await readComparisonSequence({ files: ringFiles });
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
-              const extraArgs = buildExtraArgs(comparisonEntry?.losat_gencode);
+              const extraArgs = buildExtraArgs(comparisonEntry?.losat_gencode, index + 1);
               const cacheMetadata = {
                 flow: CIRCULAR_CONSERVATION_FLOW,
                 program: circularLosatProgram,
@@ -4277,8 +4296,9 @@ export const createRunAnalysis = ({
             return nucleotideLosatArgs({
               program,
               task: searchDrawing.losat.blastn.task,
-              queryGencode: losatRecordGencode(losatSeqs[queryIdx]),
-              dbGencode: losatRecordGencode(losatSeqs[subjectIdx]),
+              // A table LOSAT does not read is refused before any search, naming its card (OV-3326).
+              queryGencode: losatRecordGencode(losatSeqs[queryIdx], drawing.linearSeqs.indexOf(losatCards[queryIdx]) + 1),
+              dbGencode: losatRecordGencode(losatSeqs[subjectIdx], drawing.linearSeqs.indexOf(losatCards[subjectIdx]) + 1),
               searchSpace: scale
             });
           }

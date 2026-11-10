@@ -128,9 +128,12 @@ const estimateLosatArgs = (drawing, sequences) => (query, subject) => {
   if (program !== 'blastn' && program !== 'tblastx') {
     return proteinLosatArgs({ pairwise: drawing.losat.blastp?.mode === 'pairwise', candidateLimit: null, databaseSize: null });
   }
+  // A refused genetic code (OV-3326) leaves no estimate; Generate refuses it with its card's number.
+  /** @param {number} index */
+  const gencode = (index) => losatRecordGencode(sequences[index],
+    drawing.linearSeqs.findIndex((card) => card.uid === sequences[index]?.uid) + 1);
   return nucleotideLosatArgs({
-    program, task: drawing.losat.blastn.task, queryGencode: losatRecordGencode(sequences[query]),
-    dbGencode: losatRecordGencode(sequences[subject]), searchSpace: null
+    program, task: drawing.losat.blastn.task, queryGencode: gencode(query), dbGencode: gencode(subject), searchSpace: null
   });
 };
 

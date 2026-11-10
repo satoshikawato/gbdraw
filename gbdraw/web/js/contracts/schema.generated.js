@@ -277,6 +277,13 @@ export const AUTOMATIC_ANNOTATION_LANE_SIDES = Object.freeze({
 /** @type {readonly string[]} */
 export const INPUT_WARNINGS_OF_DRAWN_INPUT = Object.freeze(['comparison_record_id_repeated']);
 
+// gbdraw/comparisons/losat_runtime.py: LOSAT_GENETIC_CODES
+/** @type {readonly number[]} */
+export const LOSAT_GENETIC_CODES = Object.freeze([1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33]);
+
+// gbdraw/comparisons/losat_runtime.py: LOSAT_GENETIC_CODE_TEXT
+export const LOSAT_GENETIC_CODE_TEXT = '1–6, 9–16, 21–33';
+
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,

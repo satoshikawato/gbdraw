@@ -1092,7 +1092,7 @@ def _cli_ring_error(exc: ValidationError, args: argparse.Namespace) -> Validatio
     }
     flag = flags.get(str(diagnostic.get("field")))
     reason = diagnostic.get("reason")
-    if flag is None or reason not in {"LOSAT_OPTION_PROGRAM", "RING_LOSAT_INPUT"}:
+    if flag is None or reason not in {"LOSAT_OPTION_PROGRAM", "RING_LOSAT_INPUT", "GENETIC_CODE"}:
         return exc
     if reason == "LOSAT_OPTION_PROGRAM":
         program = f"--losat {args.losat}" if args.losat else "no --losat"

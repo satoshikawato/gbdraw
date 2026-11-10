@@ -137,6 +137,9 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("AUTOMATIC_ANNOTATION_LANE_SIDES", "gbdraw.annotations.planning", "AUTOMATIC_ANNOTATION_LANE_SIDES"),
     # Input summary warnings of an input drawn in full (OV-2954): no "not drawn" heading.
     ("INPUT_WARNINGS_OF_DRAWN_INPUT", "gbdraw.api.input_summary", "INPUT_WARNINGS_OF_DRAWN_INPUT"),
+    # The genetic codes LOSAT reads, and how a refusal names them: Generate refuses any other before a search (OV-3326).
+    ("LOSAT_GENETIC_CODES", "gbdraw.comparisons.losat_runtime", "LOSAT_GENETIC_CODES"),
+    ("LOSAT_GENETIC_CODE_TEXT", "gbdraw.comparisons.losat_runtime", "LOSAT_GENETIC_CODE_TEXT"),
 )
 # (Web name, Python module, function): values a Python function derives from
 # its owner, written in this order after the constants.

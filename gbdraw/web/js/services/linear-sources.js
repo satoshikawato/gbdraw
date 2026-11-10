@@ -6,6 +6,8 @@ import { inputTypeSpec } from './input-types.js';
 import { depthFileSlotsFromValue } from './depth-track-state.js';
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
 import { plainTextLinearRecordLabel } from './linear-comparisons.js';
+import { LOSAT_GENETIC_CODES, LOSAT_GENETIC_CODE_TEXT } from '../contracts/schema.generated.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
 // Two Session resource views of one stored resource are one source (`sourceId`).
 /** @param {InputFileRef | null | undefined} file */
@@ -335,13 +337,37 @@ export const resolveLinearRecordEffectiveSubtitle = (sequence, source = null) =>
   return fileSub || '';
 };
 
-// The explicit LOSAT translation table of one record, or null for the default.
-/** @param {{ losat_gencode?: unknown } | null | undefined} sequence */
-export const losatRecordGencode = (sequence) => {
+/**
+ * Where a TLOSATX genetic code was typed: a Linear card's Gencode (this entry), a comparison ring's Comparison gencode
+ * (each with its number in its list), or the Circular Reference gencode.
+ * @typedef {{ field: 'losat_gencode' | 'conservation_losat_gencodes', inputOrdinal: number }
+ *   | { field: 'reference_gencode' }} LosatGeneticCodeField
+ */
+
+/**
+ * A TLOSATX genetic code a search passes. A code that is not one of the NCBI tables LOSAT reads (Python's
+ * `LOSAT_GENETIC_CODES`) stops LOSAT with a trap, so Generate refuses it before any search, naming the field it was
+ * typed in (OV-3326).
+ * @param {number} code
+ * @param {LosatGeneticCodeField} at
+ * @returns {number}
+ */
+export const requireLosatGeneticCode = (code, at) => {
+  if (LOSAT_GENETIC_CODES.includes(code)) return code;
+  throw diagnosticError('COMPARISON_INPUT', { ...at, reason: 'GENETIC_CODE', geneticCodes: LOSAT_GENETIC_CODE_TEXT });
+};
+
+/**
+ * The explicit LOSAT translation table of one Linear card, or null for the default; a table LOSAT does not read is
+ * refused (`requireLosatGeneticCode`).
+ * @param {{ losat_gencode?: unknown } | null | undefined} sequence
+ * @param {number} inputOrdinal The card's number among the drawing's cards, which the refusal names.
+ */
+export const losatRecordGencode = (sequence, inputOrdinal) => {
   const raw = sequence?.losat_gencode;
   if (raw === null || raw === undefined || raw === '') return null;
   const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
+  return Number.isFinite(value) ? requireLosatGeneticCode(value, { field: 'losat_gencode', inputOrdinal }) : null;
 };
 
 /**
