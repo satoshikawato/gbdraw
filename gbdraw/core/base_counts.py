@@ -40,13 +40,15 @@ OTHER: Final = 2
 A, C, G, T, BASES, BEYOND_NUCLEOTIDE, BEYOND_PROTEIN = range(7)
 KNOWN: Final = slice(A, T + 1)
 _COLUMNS: Final = 7
+# The counting rule of A, C, G and T, in column order: the one owner every count below derives from.
+_LETTERS: Final = ((A, b"Aa"), (C, b"Cc"), (G, b"Gg"), (T, b"TtUu"))
 
 
 def count_matrix(deleted: bytes = b"") -> NDArray[np.int64]:
     """What each byte value adds to each column of a row's counts; a byte in ``deleted`` is not a base and adds nothing."""
 
     matrix = np.zeros((256, _COLUMNS), dtype=np.int64)
-    for column, letters in ((A, b"Aa"), (C, b"Cc"), (G, b"Gg"), (T, b"TtUu")):
+    for column, letters in _LETTERS:
         matrix[list(letters), column] = 1
     kept = np.ones(256, dtype=bool)
     kept[list(deleted)] = False
@@ -60,8 +62,9 @@ def count_matrix(deleted: bytes = b"") -> NDArray[np.int64]:
 
 BASES_MATRIX: Final = count_matrix()  # bytes that are all bases
 
-_LETTER_BYTES: Final = np.frombuffer(b"AaCcGgTtUu", dtype=np.uint8).astype(np.intp)
-_LETTER_COLUMNS: Final = np.array([0, 2, 4, 6])  # where A, C, G and T begin in ``_LETTER_BYTES``
+# The bytes of each column's letters in a row, one after another, and where each column's begin.
+_LETTER_BYTES: Final = np.frombuffer(b"".join(letters for _, letters in _LETTERS), dtype=np.uint8).astype(np.intp)
+_LETTER_COLUMNS: Final = np.cumsum([0] + [len(letters) for _, letters in _LETTERS[:-1]]).astype(np.intp)
 
 
 class CountedRows(NamedTuple):
@@ -190,7 +193,9 @@ _BYTE_SUM = np.uint64(0x0101010101010101)
 _TOP_BYTE = np.uint64(56)
 _EIGHT = np.arange(8)
 _LOWER = np.uint8(0x20)
-_KNOWN_LETTERS: Final = ((A, b"a"), (C, b"c"), (G, b"g"), (T, b"t"), (T, b"u"))
+# Each letter once in lower case (``| 0x20`` folds a byte's case before it is compared).
+_KNOWN_LETTERS: Final = tuple((column, bytes((letter,))) for column, letters in _LETTERS
+                              for letter in sorted(set(letters.lower())))
 
 
 def known_prefix_counts(bases: bytes, positions: NDArray[np.intp]) -> NDArray[np.int64]:

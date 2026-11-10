@@ -17,7 +17,7 @@ from Bio.Seq import MutableSeq, Seq
 from gbdraw.io.record_sequences import known_base_counts
 
 
-def calculate_gc_percent(seq: Seq | MutableSeq | bytes) -> float:
+def calculate_gc_percent(seq: Seq | MutableSeq) -> float:
     """Calculate GC percentage for a sequence, counted as the GC track counts: over its known bases (A, C, G, T),
     0 when it has none (OV-2799). The counts come from the owner of record sequences
     (:func:`gbdraw.io.record_sequences.known_base_counts`): a record read from a file reads no base again."""
