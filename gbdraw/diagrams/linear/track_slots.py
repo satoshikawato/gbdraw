@@ -27,6 +27,9 @@ class LinearSlotFootprint:
     body_band: VerticalBand | None = None
     # A features slot that separates the strands: each strand's lane (``LinearFeatureLaneGeometry.strand_lane_bands``).
     strand_bands: Mapping[Literal["+", "-"], VerticalBand] = field(default_factory=dict)
+    # An annotation overlay whose labels stand beyond its anchor's feature lanes: those lanes, in its own frame
+    # (``ResolvedAnnotationTrack.labels_beyond_slot``).
+    label_beyond_band: VerticalBand | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,8 @@ class LinearResolvedSlot:
     # The footprint's ``strand_bands`` in record coordinates; on an overlay that covers such a features slot
     # (``cover_anchor``), the lanes a region with a strand covers.
     strand_bands: Mapping[Literal["+", "-"], VerticalBand] = field(default_factory=dict)
+    # The footprint's ``label_beyond_band`` in record coordinates.
+    label_beyond_band: VerticalBand | None = None
 
 @dataclass(frozen=True)
 class LinearRecordVerticalPlan:
@@ -482,6 +487,7 @@ def _resolved_slot(
         params=dict(track.params),
         body_band=_translate_optional_band(footprint.body_band, origin_y),
         strand_bands={strand: band.translate(origin_y) for strand, band in footprint.strand_bands.items()},
+        label_beyond_band=_translate_optional_band(footprint.label_beyond_band, origin_y),
     )
 
 

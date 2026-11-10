@@ -517,10 +517,17 @@ def test_linear_cover_anchor_without_lanes_keeps_the_label_rule_of_its_mark(mark
     (label,) = _span_label_marks(covering)
 
     # Without lanes there is nothing to span (OV-1158): the overlay keeps its own band, and its label
-    # keeps label_offset from its own painted mark, as on an overlay that covers nothing.
+    # keeps label_offset from its own painted mark on its layer's side ...
     assert _ink_gap_to_mark(label) == pytest.approx(4.0, abs=1e-6)
-    assert label["ink"] == pytest.approx(_span_label_marks(plain)[0]["ink"], abs=1e-9)
-    assert _record_body(covering) == pytest.approx(_record_body(plain), abs=1e-9)
+    (plain_label,) = _span_label_marks(plain)
+    above = label["ink"][3] <= label["mark"][0]
+    assert above == (layer == "underlay")
+    # ... as on an overlay that covers nothing, which stands its labels on its marks' side away from the lanes
+    # below the axis (OV-3078): above them. A foreground overlay that covers its anchor keeps them below.
+    assert plain_label["ink"][3] <= plain_label["mark"][0]
+    if layer == "underlay":
+        assert label["ink"] == pytest.approx(plain_label["ink"], abs=1e-9)
+        assert _record_body(covering) == pytest.approx(_record_body(plain), abs=1e-9)
 
 
 @pytest.mark.parametrize("layer", ["underlay", "foreground"])
@@ -2658,3 +2665,154 @@ def test_linear_region_set_without_a_stack_tags_its_slot_as_the_written_stack_do
         "gc_skew",
     ]
     assert slot_groups(default_svg) == slot_groups(explicit_svg)
+
+
+# OV-3078, OV-3219 (Owner D-65, C1): a region overlay that spans nothing (no cover_anchor, no to_slot) anchored to a
+# features slot keeps its labels off that slot's glyphs. The lambda phage repro: seven 20 pt labels on line marks.
+_OVERLAY_REGIONS_TSV = """set_id\tid\tmark\tstart\tend\tlabel\tlabel_orientation\tlabel_font_size
+regions\thead\tline\t1\t9500\tHead genes\thorizontal\t20
+regions\ttail\tline\t9600\t19000\tTail genes\thorizontal\t20
+regions\tb2\tline\t22000\t27000\tb2 region\thorizontal\t20
+regions\tint\tline\t27500\t29500\tIntegration\thorizontal\t20
+regions\tearly\tline\t33000\t38000\tEarly left\thorizontal\t20
+regions\trepl\tline\t38500\t40500\tReplication\thorizontal\t20
+regions\tlysis\tline\t44000\t46500\tLysis\thorizontal\t20
+"""
+
+# Each layout: the features slot, the overlay's own params, and where its labels stand: "above" or "below" their
+# marks, or "beyond" the feature lanes on that side.
+_OVERLAY_LAYOUTS = {
+    # Labels on the glyphs on dev: the marks lie between the axis and the lanes below it ...
+    "below-foreground": ("features:features@side=below", "layer=foreground,z=1", "above"),
+    # ... or on the lanes of features drawn on the axis (the default middle layout) ...
+    "middle-foreground": ("features:features@side=overlay", "layer=foreground,z=1", "beyond below"),
+    "middle-underlay": ("features:features@side=overlay", "layer=underlay,z=-1", "beyond above"),
+    # ... or between the lanes above the axis and the axis, hidden under the glyphs (OV-3219).
+    "above-underlay": ("features:features@side=above,z=1", "layer=underlay,z=0", "below"),
+    # Already off the glyphs on dev: unchanged.
+    "below-underlay": ("features:features@side=below,z=1", "layer=underlay,z=0", "above"),
+    "above-foreground": ("features:features@side=above", "layer=foreground,z=1", "below"),
+    "cover-foreground": ("features:features@side=below", "layer=foreground,z=1,cover_anchor=true", "beyond below"),
+    "cover-underlay": ("features:features@side=below,z=1", "layer=underlay,z=0,cover_anchor=true", "beyond above"),
+}
+
+
+def _lambda_overlay(tmp_path: Path, layout: str, *, tsv: str = _OVERLAY_REGIONS_TSV, overrides=None):
+    features, overlay, _side = _OVERLAY_LAYOUTS[layout]
+    table = tmp_path / "regions.tsv"
+    table.write_text(tsv, encoding="utf-8")
+    record = SeqIO.read(Path(__file__).parent / "test_inputs" / "NC_001416.gb", "genbank")
+    return assemble_linear_diagram_from_records(
+        [record],
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(None, dict(overrides or {})),
+            legend="none",
+            linear_track_slots=[
+                parse_linear_track_slot(features),
+                parse_linear_track_slot(f"regions:annotations@set_id=regions,side=overlay,anchor_slot=features,{overlay}"),
+            ],
+            annotation_options=AnnotationOptions(table_file=str(table)),
+        ),
+    )
+
+
+def _feature_glyph_boxes(drawing) -> list[tuple[float, float, float, float]]:
+    """The box of every drawn feature glyph (min x, min y, max x, max y) in canvas units, stroke included."""
+
+    root = ElementTree.fromstring(drawing.tostring())
+    parents = {child: parent for parent in root.iter() for child in parent}
+    boxes = []
+    for path in root.iter():
+        if not path.tag.endswith("path") or not path.attrib.get("data-gbdraw-feature-id"):
+            continue
+        dx, dy = _translation(path, parents)
+        points = [(float(x), float(y)) for x, y in re.findall(r"([-0-9.eE]+),([-0-9.eE]+)", path.attrib["d"])]
+        half = 0.5 * float(path.attrib.get("stroke-width", 0.0))
+        xs, ys = [x for x, _ in points], [y for _, y in points]
+        boxes.append((dx + min(xs) - half, dy + min(ys) - half, dx + max(xs) + half, dy + max(ys) + half))
+    assert boxes, "no feature glyphs drawn"
+    return boxes
+
+
+def _region_label_inks(drawing) -> list[tuple[str, tuple[float, float, float, float]]]:
+    """Each drawn region label and the box of its letters, in canvas units (on every row of a wrapped record)."""
+
+    root = ElementTree.fromstring(drawing.tostring())
+    parents = {child: parent for parent in root.iter() for child in parent}
+    return [
+        (str(text.text), _text_ink_box(text, parents))
+        for group in root.iter()
+        if group.attrib.get("data-gbdraw-annotation-label")
+        for text in group.iter()
+        if text.tag.endswith("text")
+    ]
+
+
+def _overlapping(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+def _labels_on_glyphs(drawing) -> list[str]:
+    glyphs = _feature_glyph_boxes(drawing)
+    return [text for text, ink in _region_label_inks(drawing) if any(_overlapping(ink, glyph) for glyph in glyphs)]
+
+
+@pytest.mark.parametrize("layout", list(_OVERLAY_LAYOUTS))
+def test_linear_overlay_region_labels_stay_off_the_anchored_feature_glyphs(tmp_path: Path, layout: str) -> None:
+    drawing = _lambda_overlay(tmp_path, layout)
+    labels = _span_label_marks(drawing)
+    glyphs = _feature_glyph_boxes(drawing)
+    lanes = (min(box[1] for box in glyphs), max(box[3] for box in glyphs))
+    expected = _OVERLAY_LAYOUTS[layout][2]
+
+    assert len(labels) == 7
+    # No letter of a region label on a CDS glyph (OV-3078) or under one (OV-3219).
+    assert _labels_on_glyphs(drawing) == []
+    for label in labels:
+        _left, top, _right, bottom = label["ink"]
+        mark_top, mark_bottom = label["mark"]
+        if expected == "above":
+            # On the marks' side away from the lanes, label_offset from the mark.
+            assert bottom <= mark_top and _ink_gap_to_mark(label) == pytest.approx(4.0, abs=1e-6), label["text"]
+        elif expected == "below":
+            assert top >= mark_bottom and _ink_gap_to_mark(label) == pytest.approx(4.0, abs=1e-6), label["text"]
+        elif expected == "beyond below":
+            # Past the lanes on the layer's side, as cover_anchor puts them: label_offset (4) beyond the lanes' band,
+            # which ends 1.5 px past the glyphs' stroke.
+            assert top - lanes[1] == pytest.approx(5.5, abs=0.05), label["text"]
+        else:
+            assert lanes[0] - bottom == pytest.approx(5.5, abs=0.05), label["text"]
+
+
+@pytest.mark.parametrize("layout", ["below-foreground", "above-underlay", "below-underlay", "above-foreground"])
+def test_linear_overlay_region_labels_stay_off_the_glyphs_on_every_row_of_a_wrapped_record(
+    tmp_path: Path, layout: str
+) -> None:
+    drawing = _lambda_overlay(
+        tmp_path,
+        layout,
+        overrides={
+            "canvas.linear.wrap_length": "20kb",
+            "canvas.linear.track_layout": "below",
+            "objects.scale.style": "ruler",
+        },
+    )
+
+    assert len(drawing._gbdraw_track_slot_geometry["records"][0]["wrap"]["rowOffsets"]) == 3
+    assert len(_region_label_inks(drawing)) == 7
+    assert _labels_on_glyphs(drawing) == []
+
+
+@pytest.mark.parametrize("layout", ["below-foreground", "middle-foreground", "middle-underlay", "above-underlay"])
+def test_linear_overlay_region_labels_of_two_lanes_stay_off_the_glyphs_and_each_other(tmp_path: Path, layout: str) -> None:
+    # "cos to tail" overlaps Head genes and Tail genes: a second lane, whose labels stand on the same side.
+    drawing = _lambda_overlay(
+        tmp_path, layout, tsv=_OVERLAY_REGIONS_TSV + "regions\tcos\tline\t4000\t15000\tcos to tail\thorizontal\t20\n"
+    )
+    inks = [ink for _text, ink in _region_label_inks(drawing)]
+
+    assert len(inks) == 8
+    assert _labels_on_glyphs(drawing) == []
+    assert not any(_overlapping(a, b) for index, a in enumerate(inks) for b in inks[index + 1 :])
+    above = [label["ink"][3] <= label["mark"][0] for label in _span_label_marks(drawing)]
+    assert len(set(above)) == 1

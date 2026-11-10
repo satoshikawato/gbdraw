@@ -50,7 +50,7 @@ from gbdraw.labels.linear import (
     linear_leader_polyline,
     linear_row_label_fit,
 )
-from gbdraw.layout.linear import LinearFeatureLaneGeometry
+from gbdraw.layout.linear import LinearFeatureLaneGeometry, VerticalBand
 from gbdraw.layout.spatial import Aabb
 from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
 from gbdraw.render.drawers.linear.annotations import (
@@ -60,7 +60,7 @@ from gbdraw.render.drawers.linear.annotations import (
     linear_annotation_labels,
 )
 
-from .track_slots import LinearRecordVerticalPlan
+from .track_slots import LinearRecordVerticalPlan, LinearResolvedSlot
 
 AnnotationLabelsBySlot = Mapping[str, tuple[LinearAnnotationLabel, ...]]
 # What drew an obstacle: (record index, kind, index); a feature label's box and leader share one.
@@ -203,18 +203,25 @@ def linear_feature_glyph_boxes(
 
 def linear_annotation_slot_frame(plan: LinearRecordVerticalPlan, slot_id: str) -> AnnotationSlotFrame:
     """An annotation slot as its marks and labels are drawn, slot-local: its height, its frame on each row of a
-    wrapped record (none otherwise), and the strand lanes it covers (``LinearResolvedSlot.strand_bands``, moved from
-    record coordinates)."""
+    wrapped record (none otherwise), the strand lanes it covers (``LinearResolvedSlot.strand_bands``) and the
+    feature lanes its labels stand beyond on each row (``LinearResolvedSlot.label_beyond_band``), moved from record
+    coordinates."""
 
     slot = plan.slot_by_id(slot_id)
+    row_slots = [row.plan.slot_by_id(slot_id) for row in plan.wrap_rows]
     return AnnotationSlotFrame(
         height_px=float(slot.height),
         row_frames=tuple(
-            AnnotationRowFrame(shift, float(row.plan.slot_by_id(slot_id).height))
-            for row, shift in zip(plan.wrap_rows, plan.slot_row_shifts(slot_id), strict=True)
+            AnnotationRowFrame(shift, float(row_slot.height), _slot_local(row_slot.label_beyond_band, row_slot))
+            for row_slot, shift in zip(row_slots, plan.slot_row_shifts(slot_id), strict=True)
         ),
         strand_bands={strand: band.translate(-float(slot.origin_y)) for strand, band in slot.strand_bands.items()},
+        beyond_band=_slot_local(slot.label_beyond_band, slot),
     )
+
+
+def _slot_local(band: VerticalBand | None, slot: LinearResolvedSlot) -> VerticalBand | None:
+    return None if band is None else band.translate(-float(slot.origin_y))
 
 
 def _place_along_span(label: LinearAnnotationLabel, origin_y: float, obstacles: Sequence[LabelObstacle], gap: float) -> float:
@@ -574,7 +581,6 @@ def place_linear_annotation_labels(
             record_index=record_index,
             record_length=record_length,
             bar_length_px=sequence_width,
-            side=slot.side,
             covers_slots=slot.spans_slots,
             frame=linear_annotation_slot_frame(plan, slot.id),
             font_family=font_family,

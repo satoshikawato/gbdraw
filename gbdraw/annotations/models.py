@@ -464,14 +464,36 @@ class AnnotationTrackParams:
             object.__setattr__(self, name, slot_id)
 
 
-def linear_annotation_labels_above(side: str, params: AnnotationTrackParams) -> bool:
-    """Whether a Linear annotation slot puts its labels above its marks.
+class LinearAnnotationLabelSide(NamedTuple):
+    """Where a Linear annotation slot puts its labels: above its marks (else below them), and the features slot whose
+    lanes they stand beyond, on that side (None: beside their marks)."""
 
-    Labels go above a slot on the ``above`` side and above an underlay
-    overlay; every other slot puts them below.
+    above: bool
+    beyond_slot: str | None = None
+
+
+def linear_annotation_label_side(
+    side: str, params: AnnotationTrackParams, feature_slot_sides: Mapping[str, str]
+) -> LinearAnnotationLabelSide:
+    """Where a Linear annotation slot on ``side`` puts its labels; ``feature_slot_sides`` is the side of each drawn
+    features slot, by slot id.
+
+    An overlay that spans nothing (no ``to_slot``, no ``cover_anchor``) anchored to a features slot keeps its labels
+    off that slot's glyphs (OV-3078, OV-3219): it lies on the axis's side of lanes drawn above or below the axis, so
+    its labels stand on its marks' other side, away from the lanes; it lies on lanes drawn on the axis, so its labels
+    stand beyond them on its layer's side. Every other slot puts its labels above its marks on the ``above`` side and
+    on an underlay overlay, below them elsewhere.
     """
 
-    return side == "above" or (side == "overlay" and params.layer == "underlay")
+    layer_above = side == "above" or (side == "overlay" and params.layer == "underlay")
+    spans = params.to_slot is not None or params.cover_anchor
+    anchor = params.anchor_slot or ""
+    anchor_side = feature_slot_sides.get(anchor) if side == "overlay" and not spans else None
+    if anchor_side == "overlay":
+        return LinearAnnotationLabelSide(layer_above, anchor)
+    if anchor_side is not None:
+        return LinearAnnotationLabelSide(anchor_side == "below")
+    return LinearAnnotationLabelSide(layer_above)
 
 
 def annotation_track_params_from_mapping(params: Mapping[str, object]) -> AnnotationTrackParams:
@@ -859,7 +881,8 @@ __all__ = [
     "annotation_solid_fill",
     "annotation_track_params_from_mapping",
     "effective_annotation_style",
-    "linear_annotation_labels_above",
+    "LinearAnnotationLabelSide",
+    "linear_annotation_label_side",
     "mark_parts",
     "origin_sides",
     "parse_feature_selector",

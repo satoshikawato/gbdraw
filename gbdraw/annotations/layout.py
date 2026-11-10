@@ -248,6 +248,9 @@ class ResolvedAnnotationTrack:
     lane_rooms: tuple[LaneRoom, ...] = ()
     # Whether the labels stand toward lane 0 (``LabelSizing.labels_above``).
     labels_above: bool = False
+    # Linear: the features slot whose lanes the labels stand beyond, on their side (an overlay that lies on them;
+    # ``LinearAnnotationLabelSide.beyond_slot``); None where they stand beside their marks.
+    labels_beyond_slot: str | None = None
     # The labels (record index, annotation id) the track leaves out, and the warning count they join (``RoomStop``,
     # ``_LaneBand.counted``: in clipped slots for a slot whose overflow is clip, else for want of room before the
     # centre; None where nothing bounds the rooms and no label is left out): labels that would cross another lane's
