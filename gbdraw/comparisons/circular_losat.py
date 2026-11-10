@@ -6,10 +6,12 @@
 The Circular planners call :func:`resolve_circular_conservation_losat` once the
 records are loaded. Each comparison genome (all records of its files, each
 file whole in the listed order: the query) is searched against the subject database: every record of the
-subject-side source files, whole (:func:`ring_subject_records`, Owner D-25), as
+subject-side source files, whole (:func:`ring_subject_sources`, Owner D-25), as
 the Web searches it. Records that are not drawn, a single presentation and a
-crop do not change it, so every ring has the reference genome as its E-value
-database and the raw cache keys equal the Web's. The raw cache entries keep
+crop do not change it, and the raw cache keys equal the Web's. A ring search
+passes the search space of its genome pair, the reference genome and the
+ring's (:func:`ring_search_spaces`, PD-OI-018 revision 6), so its E-values do
+not depend on how either genome is split into records or files. The raw cache entries keep
 the search output; :func:`ring_rows_in_search_frame` turns it into the ring
 rows of the drawn records, in their search frame like every ring table
 (PD-OI-073, Owner D-28), which replace the search intent as
@@ -21,7 +23,7 @@ converts its search output through the same owner
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import logging
 import os
 import re
@@ -30,11 +32,14 @@ from typing import Any, Callable, Hashable, Iterable, Mapping, Sequence
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.conservation import ConservationSearchResult
-from gbdraw.api.options import CircularDiagramOptions
+from gbdraw.api.options import CircularDiagramOptions, LosatSearchOptions
 from gbdraw.api.requests import FastaInputSource, GenBankInputSource, GffFastaInputSource, RecordInputSource
 from gbdraw.comparisons.losat_jobs import (
     LOSAT_OUTFMT,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+    PerFileWarning,
+    genome_file_names,
+    genome_search_spaces,
     losat_fasta_text,
     nucleotide_losat_cache_key,
     sha256_text,
@@ -45,13 +50,14 @@ from gbdraw.comparisons.losat_runtime import (
     LosatRuntimeRecord,
     LosatSearchArgs,
     losat_cache_args,
+    losat_takes_genome_scale,
     require_losat_task_support,
     run_losat_search,
 )
 from gbdraw.core.record_metadata import _read_coord_map, _record_source_start
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparison_sequences import ComparisonGenome, comparison_file_stem
-from gbdraw.io.genome import read_sequence_file_records, record_sequence_text
+from gbdraw.io.genome import read_sequence_file_records, record_sequence_text, source_genome_length
 
 logger = logging.getLogger(__name__)
 
@@ -118,12 +124,39 @@ def comparison_query_fasta(comparison: ComparisonGenome, *, ordinal: int) -> str
     )
 
 
-def ring_subject_records(
+@dataclass(frozen=True)
+class RingGenomeFile:
+    """One file of a ring search's genome, the reference or a ring: the name a warning gives it, its length
+    (every record, uncropped: :func:`gbdraw.io.genome.source_genome_length`) and the length of each record the
+    search reads of it, every record whole. A frozen value."""
+
+    name: str
+    length: int
+    record_lengths: tuple[int, ...]
+
+
+def ring_genome_file(name: str, kind: str, paths: Sequence[str], records: Sequence[SeqRecord]) -> RingGenomeFile:
+    """The genome file of ``records``, every record of one source (``kind`` and ``paths`` as
+    :func:`gbdraw.io.genome.source_genome_length` reads them), as the CLI and the Web read it."""
+
+    lengths = tuple(len(record) for record in records)
+    return RingGenomeFile(name, source_genome_length(kind, paths, sum(lengths)), lengths)
+
+
+@dataclass(frozen=True)
+class RingSubjectSource:
+    """One source of the ring subject database: its records, whole, in file order, and its genome file."""
+
+    records: tuple[SeqRecord, ...]
+    genome: RingGenomeFile
+
+
+def ring_subject_sources(
     sources: Iterable[RecordInputSource],
     *,
     file_records: Callable[[GenBankInputSource | FastaInputSource], Sequence[SeqRecord]],
-) -> tuple[SeqRecord, ...]:
-    """The records of the ring subject database, in request order (Owner D-25).
+) -> tuple[RingSubjectSource, ...]:
+    """The sources of the ring subject database, in request order (Owner D-25): the reference genome.
 
     Every distinct subject-side source the request reads gives all of its
     records, uncropped, in file order, on the file's strand, also records that
@@ -132,11 +165,13 @@ def ring_subject_records(
     (``file_records``: the planner's parse, so no source is parsed twice). A
     GFF3/FASTA pair gives every entry of its FASTA file, also one the GFF3 file
     does not name: the GFF3 parse keeps only named entries, so the FASTA file is
-    read again. An in-memory record (Python API) is its own source, as given.
+    read again, and that read is its genome length too (the FASTA file is the
+    source here, as its key says). An in-memory record (Python API) is its own
+    source, as given.
     """
 
     seen: set[Hashable] = set()
-    records: list[SeqRecord] = []
+    found: list[RingSubjectSource] = []
     for source in sources:
         key: Hashable = (
             ("genbank", str(source.path)) if isinstance(source, GenBankInputSource)
@@ -146,13 +181,93 @@ def ring_subject_records(
         if key in seen:
             continue
         seen.add(key)
-        if isinstance(source, (GenBankInputSource, FastaInputSource)):
-            records.extend(file_records(source))
+        if isinstance(source, GenBankInputSource):
+            records = tuple(file_records(source))
+            genome = ring_genome_file(os.path.basename(str(source.path)), "genbank", (str(source.path),), records)
+        elif isinstance(source, FastaInputSource):
+            records = tuple(file_records(source))
+            genome = ring_genome_file(
+                os.path.basename(str(source.fasta_path)), "fasta", (str(source.fasta_path),), records
+            )
         elif isinstance(source, GffFastaInputSource):
-            records.extend(read_sequence_file_records(str(source.fasta_path), "fasta"))
+            records = tuple(read_sequence_file_records(str(source.fasta_path), "fasta"))
+            genome = ring_genome_file(
+                os.path.basename(str(source.gff_path)), "fasta", (str(source.fasta_path),), records
+            )
         else:
-            records.append(source.record)
-    return tuple(records)
+            records = (source.record,)
+            genome = ring_genome_file("in-memory record", "memory", (), records)
+        found.append(RingSubjectSource(records, genome))
+    return tuple(found)
+
+
+def comparison_genome_files(
+    comparison: ComparisonGenome, names: Sequence[str] | None = None
+) -> tuple[RingGenomeFile, ...]:
+    """The genome files of one ring's comparison genome, in the listed order; ``names`` names them (the Web stages
+    files under fixed names), else each file's base name."""
+
+    return tuple(
+        ring_genome_file(
+            names[index] if names is not None else os.path.basename(file.path), file.format, (file.path,), file.records
+        )
+        for index, file in enumerate(comparison.files)
+    )
+
+
+@dataclass(frozen=True)
+class RingSearchSpaces:
+    """The ``-searchsp`` of each ring search, in ring order (``None``: LOSAT's own), and the warning of a ring whose
+    genome pair is searched per file (Owner decision 2026-11-10), else ``None``. A frozen value."""
+
+    spaces: tuple[int | None, ...]
+    warnings: tuple[PerFileWarning | None, ...]
+
+
+def ring_search_spaces(
+    program: str, reference: Sequence[RingGenomeFile], rings: Sequence[Sequence[RingGenomeFile]]
+) -> RingSearchSpaces:
+    """The search space each ring search of ``program`` (``losatn`` or ``tlosatx``) passes LOSAT (PD-OI-018 revision 6).
+
+    The reference genome is every file of ``reference`` (the subject database), ring ``k``'s genome every file of
+    ``rings[k]``, each file counting every record (:class:`RingGenomeFile`). A ring search passes the two genome
+    lengths multiplied, in the program's letters (:func:`gbdraw.comparisons.losat_jobs.genome_search_spaces`), so a
+    hit has one E-value however either genome is split into records or files. A pair of two genomes that are each
+    one file of one record passes none: LOSAT's own search space is then the genome pair's, and the figure, raw
+    cache key and Session stay as they were. The one owner of the ring scales: the CLI ring search and the Web's
+    (``gbdraw.web_support.comparison_sequences.plan_ring_scales_json``) read it.
+    """
+
+    rows: list[Hashable] = []
+    source_ids: list[Hashable] = []
+    source_lengths: list[int] = []
+    searched_lengths: list[int] = []
+    names: dict[Hashable, str] = {}
+    firsts: list[int] = []
+    genomes: list[tuple[Hashable, Sequence[RingGenomeFile]]] = [("reference", reference)]
+    genomes.extend((("ring", index), ring) for index, ring in enumerate(rings))
+    for genome, files in genomes:
+        firsts.append(len(rows))
+        for file_index, file in enumerate(files):
+            source = (genome, file_index)
+            names[source] = file.name
+            for record_length in file.record_lengths:
+                rows.append(genome)
+                source_ids.append(source)
+                source_lengths.append(file.length)
+                searched_lengths.append(record_length)
+        if firsts[-1] == len(rows):
+            raise ValueError(f"The {genome} genome of the ring searches has no record.")
+    spaces = genome_search_spaces(
+        rows=rows, source_ids=source_ids, source_lengths=source_lengths, searched_lengths=searched_lengths,
+        letters=LOSAT_PROGRAMS[program].space_letters,
+    )
+    genome_names = genome_file_names(rows, source_ids, names.__getitem__)
+    reference_index, ring_indexes = firsts[0], firsts[1:]
+    return RingSearchSpaces(
+        spaces=tuple(spaces(ring, reference_index) for ring in ring_indexes),
+        warnings=tuple(spaces.per_file_warning(ring, reference_index, genome_names) for ring in ring_indexes),
+    )
 
 
 def ring_subject_fasta(records: Iterable[SeqRecord]) -> str:
@@ -265,17 +380,42 @@ def _ring_gencodes(options: CircularDiagramOptions, count: int) -> list[int]:
     return list(gencodes)
 
 
+def _ring_search_spaces(
+    search: LosatSearchOptions,
+    subject_sources: Sequence[RingSubjectSource],
+    comparison_files: Sequence[ComparisonGenome],
+) -> tuple[int | None, ...]:
+    """Each ring search's ``-searchsp`` (:func:`ring_search_spaces`), with the warning of each ring searched per file
+    logged once. A runtime without ``-searchsp`` (LOSAT v0.1.0) searches as before, with a warning."""
+
+    scales = ring_search_spaces(
+        search.program,
+        [source.genome for source in subject_sources],
+        [comparison_genome_files(comparison) for comparison in comparison_files],
+    )
+    for warning in dict.fromkeys(scales.warnings):
+        if warning is not None:
+            logger.warning("%s", warning.message())
+    if all(space is None for space in scales.spaces) or losat_takes_genome_scale(
+        LOSAT_PROGRAMS[search.program],
+        losat_bin=search.runtime.losat_executable,
+        ncbi_blast_bin=search.runtime.ncbi_blast_executable,
+    ):
+        return scales.spaces
+    return tuple(None for _space in scales.spaces)
+
+
 def resolve_circular_conservation_losat(
     options: CircularDiagramOptions,
     *,
-    subject_records: Sequence[SeqRecord],
+    subject_sources: Sequence[RingSubjectSource],
     drawn_records: Sequence[SeqRecord],
     load_sequences: Callable[[], Sequence[ComparisonGenome]],
 ) -> tuple[CircularDiagramOptions, tuple[Mapping[str, Any], ...]]:
     """Run the ring searches and return resolved options and raw cache entries.
 
-    ``subject_records`` are the subject database records
-    (:func:`ring_subject_records`); ``drawn_records`` the records the request
+    ``subject_sources`` are the sources of the subject database, the reference
+    genome (:func:`ring_subject_sources`); ``drawn_records`` the records the request
     draws, whose search frame the ring rows are in
     (:func:`ring_rows_in_search_frame`); ``load_sequences`` returns the
     comparison genomes in ring order (the request's memoized reader result).
@@ -299,6 +439,7 @@ def resolve_circular_conservation_losat(
         )
 
     # The subject database: the whole subject-side source files (D-25).
+    subject_records = tuple(record for source in subject_sources for record in source.records)
     subject_fasta = ring_subject_fasta(subject_records)
     subject_hash = sha256_text(subject_fasta)
     subject_ids = _fasta_ids(subject_fasta)
@@ -309,12 +450,15 @@ def resolve_circular_conservation_losat(
         else _DEFAULT_GENCODE
     )
     ring_gencodes = _ring_gencodes(options, len(comparison_files))
+    searchsp = _ring_search_spaces(search, subject_sources, comparison_files)
 
     def search_args(index: int) -> LosatSearchArgs:
         if search.program == "losatn":
-            return LosatSearchArgs(task=search.losatn_task)
+            return LosatSearchArgs(task=search.losatn_task, searchsp=searchsp[index])
         # The Web ring flow always passes both tables (default 1).
-        return LosatSearchArgs(query_gencode=ring_gencodes[index], db_gencode=reference_gencode)
+        return LosatSearchArgs(
+            query_gencode=ring_gencodes[index], db_gencode=reference_gencode, searchsp=searchsp[index]
+        )
 
     cache = LosatRawCache()
     results: list[ConservationSearchResult] = []
@@ -402,6 +546,12 @@ __all__ = [
     "resolve_circular_conservation_losat",
     "ring_losat_filename",
     "ring_rows_in_search_frame",
+    "comparison_genome_files",
+    "ring_genome_file",
+    "ring_search_spaces",
     "ring_subject_fasta",
-    "ring_subject_records",
+    "ring_subject_sources",
+    "RingGenomeFile",
+    "RingSearchSpaces",
+    "RingSubjectSource",
 ]
