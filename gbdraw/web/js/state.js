@@ -231,7 +231,7 @@ const legacyProteinDerivedEvidence = ref({ schema: LEGACY_LOSAT_DERIVED_CACHE_SC
 const orthogroups = typedRef(/** @type {OrthogroupGroup[]} */ ([]));
 const collinearGroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
-const selectedOrthogroupAlignmentFeature = ref('');
+const selectedOrthogroupAlignmentFeature = typedRef('');
 /** @import { CanonicalSimilarityAlignmentPlan } from './contracts/request.generated.js' */
 /** @import { StoredRecordTranslation } from './services/linear-record-layout.js' */
 /** @import { AlignmentResetReceipt } from './services/session-active-config-contract.js' */
@@ -244,7 +244,7 @@ const orthogroupSortMode = typedRef('id');
 const showRightDrawer = typedRef(false);
 /** @import { RightDrawerTab } from './services/right-drawer-state.js' */
 const rightDrawerTab = typedRef(/** @type {RightDrawerTab} */ ('features'));
-const linearReorderNotice = ref('');
+const linearReorderNotice = typedRef('');
 // The Linear File cards folded to their header line, by source uid: app-level
 // view state. Its transitions are in services/linear-sources.js.
 /** @import { FoldedLinearSources } from './services/linear-sources.js' */
@@ -366,9 +366,9 @@ const setFeatureEditorStatus = (status, error = null) => {
 };
 const featureExtractionPending = ref(false);
 const featureRecordIds = ref([]); // Record IDs for multi-record files
-const selectedFeatureRecordIdx = ref(0); // Currently selected record index
+const selectedFeatureRecordIdx = typedRef(0); // Currently selected record index
 const resultGenerationKey = typedRef(0);
-const featurePanelTab = ref(defaultEditorDraftState.featurePanelTab); // 'colors' | 'labels'
+const featurePanelTab = typedRef(defaultEditorDraftState.featurePanelTab); // 'colors' | 'labels'
 const featureSearchInput = ref('');
 const featureSearch = ref('');
 const previewFeatureSearchInput = ref('');
@@ -383,12 +383,12 @@ const previewFeatureSearchError = ref('');
 const previewFeatureSearchRenderedCount = ref(0);
 // Whether the Preview search bar is shown; transient view state (search-bar hide D-04).
 const previewFeatureSearchVisible = ref(true);
-const labelSearch = ref('');
+const labelSearch = typedRef('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
-const autoLabelReflowEnabled = ref(false);
+const autoLabelReflowEnabled = typedRef(false);
 const labelReflowProcessing = typedRef(false);
-const labelReflowRequestSeq = ref(0);
-const labelReflowForceRequestSeq = ref(0);
+const labelReflowRequestSeq = typedRef(0);
+const labelReflowForceRequestSeq = typedRef(0);
 const labelReflowLastError = ref(null);
 // The GC and skew hides an Undo took back, per drawing id: the automatic rerender
 // (run-analysis.js) keeps them; its track projection and the note read them.
@@ -631,15 +631,15 @@ const generatedCircularPlotTitlePosition = ref('none');
 
 // Flag to skip captureBaseConfig when editing SVG (repositioning legend, adding legend entries, etc.)
 // This prevents base config from being overwritten during incremental edits
-const skipCaptureBaseConfig = ref(false);
+const skipCaptureBaseConfig = typedRef(false);
 
 // Flag to skip extractLegendEntries in watch(svgContent) when setFeatureColor is handling it
 // This prevents race condition where watcher overwrites correct legend state
-const skipExtractOnSvgChange = ref(false);
+const skipExtractOnSvgChange = typedRef(false);
 
 // Trusted Artifact History restores already-validated generated owners directly.
 // Watchers still mount the SVG and handlers, but must not rebuild metadata from it.
-const trustedArtifactRestoreInProgress = ref(false);
+const trustedArtifactRestoreInProgress = typedRef(false);
 
 const featureKeys = [
   'assembly_gap',
@@ -814,7 +814,7 @@ const FEATURE_LIST_OVERSCAN = 8;
 const featureListScrollTop = ref(0);
 const featureListViewportHeight = ref(520);
 const featureListExpandedId = ref(null);
-const isFeatureDrawerMounted = computed(
+const isFeatureDrawerMounted = typedComputed(
   () => Boolean(svgContent.value && showRightDrawer.value && rightDrawerTab.value === 'features')
 );
 const featureListExpandedIndex = computed(() => (
