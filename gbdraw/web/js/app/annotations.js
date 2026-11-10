@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { AskChoice } from './app-messages.js' */
+/** @import { WebState } from '../state.js' */
 /**
  * @import { AnnotationRecordCatalog } from './annotations/record-catalog.js'
  * @import { AnnotationItem, AnnotationSet, AnnotationStyle, AnnotationTarget } from '../services/annotation-state.js'
@@ -56,10 +57,11 @@ const nextAnnotationId = (annotations, prefix) => {
 };
 
 /**
- * The Web state the editor reads; the four feature and result members are refs
+ * The Web state the editor reads; the selected-feature and result members are refs
  * or plain lists, read only as the Results hold them.
  * @typedef {{
- *   extractedFeatures: any, biologicalFeatures: any, selectedFeatures: any, results: any,
+ *   extractedFeatures: WebState['extractedFeatures'], biologicalFeatures: WebState['biologicalFeatures'],
+ *   selectedFeatures: any, results: any,
  *   activeDrawing: () => AnnotationEditorDrawing, sessionOperationAvailability?: () => any
  * }} AnnotationEditorState `sessionOperationAvailability` returns a busy outcome while a Session operation runs.
  * @typedef {AnnotationSetsDrawing & {

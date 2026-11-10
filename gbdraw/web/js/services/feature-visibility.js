@@ -21,6 +21,7 @@ import { replaceAnnotationTarget } from './drawing/annotation-sets.js';
 import { featureOverrideKey } from './feature-override-identity.js';
 import { createRuleLegendCaptions } from './specific-color-rules.js';
 /** @import { PaintSlice } from './drawing/paint.js' */
+/** @import { ExtractedFeature } from './feature-metadata-extraction.js' */
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
 /** @import { AnnotationRow, AnnotationSetRow, AnnotationSetsSlice } from './drawing/annotation-sets.js' */
 /** @import { AnnotationTarget } from './annotation-state.js' */
@@ -584,7 +585,7 @@ const replaceRows = (before, after, write) => {
  *   previousRecords?: FeatureRequestRecord[],
  *   currentRecords?: FeatureRequestRecord[],
  *   retainedRecords?: FeatureRequestRecord[],
- *   biologicalFeatures?: Record<string, any>[],
+ *   biologicalFeatures?: readonly ExtractedFeature[],
  *   moves?: ReadonlyMap<string, string>
  * }} options `retainedRecords`: the records of OFF records, which the request
  *   leaves out without dropping their rows (record selection D-05), with their

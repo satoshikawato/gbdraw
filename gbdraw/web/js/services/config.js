@@ -6242,15 +6242,17 @@ const drawingFeatureData = (drawing) => ({
 });
 
 // The catalog features of the shown Result (artifact values).
+/** @import { ExtractedFeature } from './feature-metadata-extraction.js' */
 /** @param {SavedFeatureFields} [features] */
 const applyFeatureArtifactData = (features = {}) => {
-  // The casts: `Array.isArray` proves an array, not its elements.
+  // The casts: `Array.isArray` proves an array, not its elements. The feature rows are those the catalog admission,
+  // the feature recovery or a History snapshot wrote from the state's own rows.
   state.extractedFeatures.value = Array.isArray(features.extractedFeatures)
-    ? /** @type {unknown[]} */ (features.extractedFeatures)
+    ? /** @type {ExtractedFeature[]} */ (features.extractedFeatures)
     : [];
   if (state.biologicalFeatures) {
     state.biologicalFeatures.value = Array.isArray(features.biologicalFeatures)
-      ? /** @type {unknown[]} */ (features.biologicalFeatures)
+      ? /** @type {ExtractedFeature[]} */ (features.biologicalFeatures)
       : [];
   }
   state.featureRecordIds.value = Array.isArray(features.featureRecordIds)
