@@ -111,7 +111,10 @@ write-up of a release.
   origin is saved as its source with the edits, so it replays as drawn, with
   its subtitle, width, feature IDs and partial feature ends (OV-3262). A crop
   of a crop across the origin that runs across the origin or lies past it now
-  draws, also reverse-complemented (OV-3270).
+  draws, also reverse-complemented (OV-3270). A reverse-complemented crop of a
+  reverse-complemented crop, back in its source's orientation, lists its
+  features in source order, so its replay paints overlapping features as the
+  figure does (OV-3271).
 - Changed: a crop given in memory and edited since its cut draws its features
   in the order its Session replay draws them, the figure Save Session and Load
   already gave: a crop in source order, with added features after the kept

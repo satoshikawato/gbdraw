@@ -259,7 +259,14 @@ def reverse_records(
             reverse_feature(feature)
             for feature in rec.features
         ]
-        reversed_features.sort(key=_feature_start)
+        if rc_step > 0:
+            # Reversed back to its source's orientation, a record lists its features in source order, as its source
+            # and a forward cut of it do (OV-3271).
+            order = {id(reversed_feature): source_indexes[id(feature)]
+                     for feature, reversed_feature in zip(rec.features, reversed_features, strict=True)}
+            reversed_features.sort(key=lambda feature: order[id(feature)])
+        else:
+            reversed_features.sort(key=_feature_start)
         reversed_record = rec.reverse_complement(
             id=True,
             name=True,

@@ -682,6 +682,48 @@ def test_a_crop_of_a_crop_across_the_origin_draws_and_replays(mode: str, inner: 
     live, replay = _replayed(_request(mode, crop, tmp_path), tmp_path)
     assert replay == live
 
+
+def _out_of_start_order_source() -> SeqRecord:
+    """A circular 60 kb record whose overlapping features are listed out of start order, inside 20-40 kb and across
+    the origin."""
+
+    record = _record("src", "circular")
+    record.features = [
+        SeqFeature(FeatureLocation(0, 60_000, 1), type="source", qualifiers={"organism": ["test"]}),
+        SeqFeature(FeatureLocation(25_000, 27_000, 1), type="CDS", qualifiers={"locus_tag": ["LATE"]}),
+        SeqFeature(FeatureLocation(24_000, 26_000, 1), type="tRNA", qualifiers={"locus_tag": ["EARLY"]}),
+        SeqFeature(FeatureLocation(59_000, 60_000, 1) + FeatureLocation(0, 500, 1), type="CDS",
+                   qualifiers={"locus_tag": ["ORI"]}),
+        SeqFeature(FeatureLocation(58_000, 60_000, 1) + FeatureLocation(0, 1_000, 1), type="tRNA",
+                   qualifiers={"locus_tag": ["ORI2"]}),
+    ]
+    return record
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+@pytest.mark.parametrize(
+    ("outer", "inner"),
+    [("src:10001-50000:rc", "src:1001-30000:rc"), ("src:50001-10000:origin:rc", "src:5001-15000:rc")],
+    ids=["inside", "across-the-origin"],
+)
+def test_a_reverse_complemented_crop_of_a_reverse_complemented_crop_draws_in_source_order(
+    mode: str, outer: str, inner: str, tmp_path: Path
+) -> None:
+    """Reversed twice, a crop is back in its source's orientation and lists its features in source order, as the
+    forward cut its Session replays does, so the replay paints overlapping features as the live figure does
+    (OV-3271)."""
+
+    from gbdraw.io.regions import crop_record_to_region
+
+    crop = crop_record_to_region(
+        crop_record_to_region(_out_of_start_order_source(), parse_region_specs([outer])[0], circular=True),
+        parse_region_specs([inner])[0],
+    )
+    expected = ["source", "LATE", "EARLY"] if "10001" in outer else ["source", "ORI", "ORI2"]
+    assert [_locus(feature) for feature in crop.features] == expected
+    live, replay = _replayed(_request(mode, crop, tmp_path), tmp_path)
+    assert replay == live
+
 def _twins_source() -> SeqRecord:
     """A linear 60 kb record with a CDS X and two identical CDS B and C (same type and location) inside 20-40 kb."""
 
