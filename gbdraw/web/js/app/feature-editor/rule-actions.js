@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
+/** @import { DrawingState, WebState } from '../../state.js' */
 /** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
 /** @import { RuleLegendIntent, RuleRowColor, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
@@ -78,7 +78,7 @@ import {
 /**
  * The Legend rows a rule commit draws, prepared and not yet applied.
  * @typedef {object} PreparedFileLegend
- * @property {{ add: any[], update: any[], remove: any[], unchanged: any[] }} diff
+ * @property {ReturnType<typeof import('../../services/specific-color-rules.js').diffLegendIntents>} diff
  * @property {boolean} reorders Whether Python's answer moves a listed row the commit keeps (the default order).
  * @property {() => boolean} isCurrent
  * @property {() => import('../candidate-render.js').RuleLegendRows | null} apply Writes the rows into the
@@ -95,9 +95,21 @@ import {
  */
 
 /**
+ * History's step a rule commit runs in (services/history.js): `runUndoable`, or `runUndoableCheckpoint`
+ * when the commit adds, removes, or reorders a Legend row.
+ * @typedef {(label: string, fn: () => unknown,
+ *   options?: Pick<import('../../services/history.js').HistoryStepBase, 'joinsOpenStep' | 'drawn'>) => unknown} RuleWriteStep
+ */
+
+/**
  * @typedef {object} FeatureRuleActionsOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(intents: Record<string, any>[], options?: { drawing?: DrawingState, previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: import('../legend/entry-actions.js').LegendRowPlacement | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey>, legendOrder?: readonly PythonLegendKey[] | null }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
+ * @property {Pick<WebState, 'activeDrawing' | 'appliedPaletteColors' | 'appliedPaletteName' | 'displayedResultMetadata'
+ *   | 'editableLabels' | 'errorLog' | 'extractedFeatures' | 'labelReflowProcessing' | 'newColorFeat' | 'newColorVal'
+ *   | 'newFeatureToAdd' | 'newPriorityRule' | 'newSpecRule' | 'originalLegendOrder' | 'paletteDefinitions' | 'results'
+ *   | 'selectedResultIndex' | 'selectedSpecificPreset' | 'sessionOperationAvailability' | 'specificRulePresetLoading'
+ *   | 'specificRulePresets' | 'svgContainer'>} state
+ *   The members of the app state (state.js) this owner and the helpers it passes `state` to read.
+ * @property {(intents: RuleLegendIntent[], options?: { drawing?: DrawingState, previousFileIntents?: import('../legend/entry-actions.js').EntryRecord[], isCurrent?: () => boolean, placement?: import('../legend/entry-actions.js').LegendRowPlacement | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey>, legendOrder?: readonly PythonLegendKey[] | null }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
  * @property {MoveLegendRecordsPort} moveLegendRecords
  *   The Legend owner's move of a drawing's Legend records; this owner calls it only for Delete settings' take-back.
@@ -113,18 +125,18 @@ import {
  *   The rule preparation's preparation of the candidate rules a commit admits.
  * @property {import('../rule-matching.js').RulePreparation['synthesizeGroup']} synthesizeGroupRules
  *   Python's rules for coloring a group edit's features as one group.
- * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
- * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoableCheckpoint
+ * @property {RuleWriteStep} runUndoable History's undoable step.
+ * @property {RuleWriteStep} runUndoableCheckpoint
  *   History's undoable step that stores a checkpoint of the Result.
- * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean, legendRows?: import('../candidate-render.js').RuleLegendRows | null }) => boolean | Promise<boolean>} projectPaletteAndRules
+ * @property {(options?: { prepareRules?: boolean, legendRows?: import('../candidate-render.js').RuleLegendRows | null }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3).
  * @property {RuleActionsPorts} ports
  * @property {EditDefaultColorsPort} editDefaultColors
- * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
+ * @property {() => ({ diagramOptions?: NonNullable<Parameters<typeof featureDrawnContext>[1]>['diagramOptions'] } | null)} [getCommittedRequest]
  *   The committed canonical request (Python owns the option fields, R7).
  * @property {(value?: any) => { value: any }} ref Vue `ref`
  * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
- * @property {(source: { value: any }, callback: (value: any) => void) => () => void} watch
+ * @property {(source: { readonly value: boolean }, callback: (value: boolean) => void) => () => void} watch
  *   Vue `watch`; a rule commit waits on it for an automatic rerender in flight.
  * @property {() => boolean} [isPatternEditAvailable] False while a Session import is pending.
  * @property {AskChoice} [askChoice] The root's choice dialog: a pattern that may match slowly asks first.
@@ -260,8 +272,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     .map(rule => rule.cap));
   /**
    * @param {DrawingState} drawing
-   * @param {readonly Record<string, any>[]} before
-   * @param {readonly Record<string, any>[]} after
+   * @param {readonly Partial<SpecificColorRule>[]} before
+   * @param {readonly Partial<SpecificColorRule>[]} after
    * @param {{ rows?: import('../candidate-render.js').RuleLegendRows | null, replaced?: ReadonlyMap<string, string>, holdsRow?: (caption: string) => boolean }} [options]
    *   `rows`: the rows the commit's own show adds and retires on the displayed
    *   Result (else the Result shows what History restored); `replaced`: the
@@ -406,7 +418,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    * `drawing` is the drawing of the action (default: the shown mode's at the
    * call); `isCurrent` is read from the write's turn on. `joinsOpenStep`: the
    * write is part of its caller's open History step and keeps that step's name.
-   * @typedef {{ drawing?: DrawingState, isCurrent?: () => boolean, afterCommit?: (intents: RuleLegendIntent[]) => void, previousLegendIntents?: Record<string, any>[], legendPlacement?: LegendPlacement | null, joinsOpenStep?: boolean }} CommitSpecificRulesOptions
+   * @typedef {{ drawing?: DrawingState, isCurrent?: () => boolean, afterCommit?: (intents: RuleLegendIntent[]) => void, previousLegendIntents?: Parameters<typeof candidateLegendIntents>[2], legendPlacement?: LegendPlacement | null, joinsOpenStep?: boolean }} CommitSpecificRulesOptions
    */
   /**
    * The write port of the rule table (R13): other owners pass how the next
@@ -484,8 +496,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // the run did nothing (OV-280). A rule write that commits meanwhile makes it
   // stale the same way: the run prepares again, so it is not dropped (OV-444).
   /**
-   * @param {Record<string, any>[]} rules
-   * @param {() => any} commit
+   * @param {Partial<SpecificColorRule>[]} rules
+   * @param {() => unknown} commit
    * @returns {unknown}
    */
   const runWithRuleMatches = (rules, commit) => {
@@ -755,7 +767,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // One reader serves a pass over many features (OV-193). It answers "which
   // row" with the row's key; a caption written from it is the row's name
   // (the Legend owner's `legendRowName`, OV-640).
-  /** @returns {(feat: Record<string, any> | null | undefined) => PythonLegendKey} */
+  /** @returns {(feat: ColorFeature | null | undefined) => PythonLegendKey} */
   const effectiveLegendCaptions = () => {
     const drawing = state.activeDrawing();
     const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
@@ -768,9 +780,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       if (rule && normalizeCaption(rule.cap)) return legendCaption(rule);
 
       // A color edit carries a name (its rule's caption): its row is the one
-      // the rules of that caption and color draw, else the row it names.
+      // the rules of that caption and color draw, else the row it names. A
+      // bare color (an older Session's edit) carries no name.
       const override = getFeatureOverride(drawing.featureColorOverrides, feat);
-      const overrideCaption = normalizeCaption(override?.caption);
+      const overrideCaption = typeof override === 'object' && normalizeCaption(override.caption);
       if (overrideCaption) return legendCaption({ cap: overrideCaption, color: override.color });
 
       return rowOf(normalizeCaption(feat.type) || getIndividualFeatureLabel(feat));
@@ -1022,7 +1035,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const drawing = state.activeDrawing();
     const override = getFeatureOverride(drawing.featureColorOverrides, feat);
     if (override) {
-      return resolveColorToHex(override.color || override);
+      return resolveColorToHex(typeof override === 'string' ? override : override.color);
     }
     return resolveColorToHex(appliedFeatureColorOf(state, feat.type)) || '#cccccc';
   };
@@ -1032,9 +1045,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const drawing = state.activeDrawing();
     const override = getFeatureOverride(drawing.featureColorOverrides, feat);
     if (!override) return null;
-    return Object.prototype.hasOwnProperty.call(override, 'color')
-      ? override.color
-      : override;
+    return typeof override === 'string' ? override : override.color;
   };
 
   // A feature that has a stable hash can take a single-feature color rule. The
