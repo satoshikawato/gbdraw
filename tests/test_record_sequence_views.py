@@ -312,6 +312,23 @@ def test_a_view_of_a_file_that_changed_is_refused(tmp_path: Path) -> None:
         bytes(crop)
 
 
+@pytest.mark.parametrize(("start", "stop"), [(400_000, 500_000), (400_000, 400_010), (0, 1_000_000)])
+def test_reading_a_crop_reads_only_the_chunks_it_covers(
+    start: int, stop: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A crop written out of a long record (``crop_genbank``) reads its own chunks, never the whole record."""
+
+    bases = b"ACGTTGCA" * 125_000
+    seq = _sequence_file(tmp_path, bases)
+    record_sequences._CACHE.drop_file(seq._data._bases.source.key)
+    read: list[int] = []
+    real = record_sequences._SequenceFile.read_at
+    monkeypatch.setattr(record_sequences._SequenceFile, "read_at",
+                        lambda self, offset, size: read.append(size) or real(self, offset, size))
+    assert bytes(sequence_view(seq, start, stop)) == bases[start:stop]
+    assert sum(read) <= (stop - start) * 61 // 60 + 2 * record_sequences._CHUNK_BYTES
+
+
 def test_gc_windows_of_a_record_past_the_cache_hold_no_copy_of_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

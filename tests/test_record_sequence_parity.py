@@ -259,12 +259,12 @@ def test_embl_sequence_reads_as_biopython_reads_it() -> None:
     _assert_same(_biopython_flat(path), read_flat_file_records(str(path)))
 
 
-@pytest.mark.parametrize("budget", [None, 1 << 16], ids=["one block", "chunks"])
-def test_record_sequence_reads_slices_and_copies(budget: int | None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A record within the cache budget is read as one block, a longer one a chunk at a time (or in bulk)."""
+@pytest.mark.parametrize("bulk", [None, 1 << 12], ids=["chunks", "bulk"])
+def test_record_sequence_reads_slices_and_copies(bulk: int | None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A short read reads its chunks through the cache, a long one is decoded in bulk around it."""
 
-    if budget is not None:
-        monkeypatch.setattr(record_sequences, "_CACHE_BYTES", budget)
+    if bulk is not None:
+        monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", bulk)
     lines = _SEQUENCE_CASES["many lines"]
     path = tmp_path / "long.gb"
     path.write_text(_genbank(lines, 3000 * 60), encoding="utf-8")
