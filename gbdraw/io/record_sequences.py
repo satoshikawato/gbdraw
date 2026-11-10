@@ -445,6 +445,7 @@ class RecordSequence(SequenceDataAbstractBaseClass):
         reads = [bases[first:last] if isinstance(bases, bytes) else bases.read(first, last)
                  for first, last in self._forward_pieces(start, stop)]
         data = reads[0] if len(reads) == 1 else b"".join(reads)
+        del reads  # each step below holds the bases read and their next form only
         if self._translate is not None:
             data = data.translate(self._translate)
         return data[::-1] if self._reverse else data

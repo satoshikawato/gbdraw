@@ -6,6 +6,7 @@ import logging
 from contextlib import contextmanager
 from collections import Counter
 from collections.abc import Iterator, Sequence, Set as AbstractSet
+from itertools import islice
 import string
 from typing import Callable, List, Dict, Literal
 
@@ -90,8 +91,9 @@ def genbank_absence_diagnostic(path: str) -> dict[str, str]:
     return {"code": "NO_RECORDS", "reason": reason}
 
 
-def read_flat_file_records(path: str) -> list[SeqRecord]:
+def read_flat_file_records(path: str, *, first_only: bool = False) -> list[SeqRecord]:
     """Every record of one GenBank, DDBJ or EMBL flat file, plain or gzip, in file order: the one flat-file parse.
+    ``first_only`` reads the first record and leaves the rest of the file unread.
 
     The first non-blank line names the format (an ``ID`` line is EMBL). The text
     reaches Biopython through :func:`gbdraw.io.input_text.flat_file_stream`, and each
@@ -105,7 +107,7 @@ def read_flat_file_records(path: str) -> list[SeqRecord]:
     def parse(lines: Iterator[str], file_format: FlatFileFormat) -> list[SeqRecord]:
         nonlocal fmt
         fmt = file_format
-        return list(SeqIO.parse(flat_file_stream(lines, fmt), fmt))
+        return list(islice(SeqIO.parse(flat_file_stream(lines, fmt), fmt), 1 if first_only else None))
 
     try:  # A file that is not text stops at its first line: UnicodeDecodeError is a ValueError.
         records = read_flat_records(path, parse, flat_file_format)

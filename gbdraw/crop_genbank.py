@@ -55,7 +55,7 @@ def _get_args():
 def gbk_to_seqrecord(in_gbk):
     """The first record of a GenBank file, read as the drawing reads it (``read_flat_file_records``): its sequence
     is read from the file on demand."""
-    return read_flat_file_records(in_gbk)[0]
+    return read_flat_file_records(in_gbk, first_only=True)[0]
 
 
 def check_start_end_coords(record_len: int, start: int, end: int, record_id: str) -> tuple[int, int]:
