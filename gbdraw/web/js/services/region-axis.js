@@ -97,7 +97,7 @@ import { t } from '../utils/i18n.js';
 
 /**
  * A drawn feature of the feature catalog as the converter reads it: its record key, the drawn unit it lies in, and its
- * parts in the input file's coordinates (the catalog rows of `extractedFeatures` have no typedef of their own).
+ * parts in the input file's coordinates (fields of a row of `extractedFeatures`, an `ExtractedFeature`, read by name).
  * @typedef {object} RegionFeatureRow
  * @property {unknown} [svg_id]
  * @property {unknown} [record_key]

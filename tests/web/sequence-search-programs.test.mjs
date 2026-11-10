@@ -98,6 +98,38 @@ test('the panel names the programs of its queries, and the task applies to blast
   assert.deepEqual(sent, [[{ recordKey: 'r', originWindow: 90 }], ['blastn', 'tblastn']]);
 });
 
+// OV-3304: a search whose LOSAT exits with an error shows the LOSAT failure with LOSAT's own line in the panel.
+test('a search whose LOSAT fails shows what LOSAT reported', async () => {
+  globalThis.window ??= {
+    Vue: {
+      ref: (value) => ({ value }), reactive: (value) => value,
+      computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {}
+    }
+  };
+  const { createSequenceSearch } = await import('../../gbdraw/web/js/app/sequence-search.js');
+  const panel = createSequenceSearch({
+    state: { activeDrawing: () => ({ id: 'linear', mode: 'linear', annotationSets: [] }) },
+    readAxisRecords: () => [{ recordKey: 'r' }],
+    readRecordSpans: async () => ({ fasta: '>r:1-100\nACGT\n', spans: [] }),
+    committedSets: () => [],
+    readRecordBindings: () => ({ bindingKeyOf: () => 'r', selectorOf: () => null, selectorOfBinding: () => null }),
+    runLosatJobs: async () => { throw runtime.losatRunFailure("error: invalid value '9' for '-evalue <REAL>'\n"); },
+    runHelper: async () => ({ result: { queries: [nucleotide] } }),
+    helperOperations: { readQueries: 'readSearchQueries', buildHitSet: 'searchHitAnnotationSet' },
+    addSearchSet: () => {},
+    shownRoot: () => null,
+    closeRegionPopup: () => {},
+    revealSection: async () => {}
+  });
+  await panel.readQueries('>n1\nACGT\n');
+  await panel.search();
+  assert.equal(panel.panel.searchError.code, 'LOSAT_RUNTIME');
+  assert.match(panel.panel.searchError.summary, /LOSAT reported: invalid value '9' for '\u2011evalue <REAL>'$/);
+  // OV-3288: the search names its own step, not Generate.
+  assert.match(panel.panel.searchError.summary, /^The search could not run or returned unusable output\. Check the search settings, then click Search again\./);
+  assert.doesNotMatch(panel.panel.searchError.summary, /Generate/);
+});
+
 test('every LOSAT runner reads the one program list, which has tblastn', async () => {
   assert.deepEqual([...runtime.LOSAT_PROGRAMS], ['blastn', 'tblastx', 'blastp', 'tblastn']);
   assert.throws(() => runtime.requireLosatProgram('blastx'), /LOSAT program must be one of blastn, tblastx, blastp, tblastn\./);

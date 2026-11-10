@@ -11,9 +11,20 @@ import {
   galleryTitleParts
 } from '../../gbdraw/web/js/services/gallery-examples.js';
 import { normalizeConservationSeriesColor } from '../../gbdraw/web/js/services/conservation-series.js';
+import { isReusableLosatEntry } from '../../gbdraw/web/js/services/losat-cache.js';
 
 const CATALOG_URL = new URL('https://gbdraw.app/gallery/examples.json');
 const catalog = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/examples.json', import.meta.url), 'utf8'));
+const galleryFile = (path) => new URL(`../../gbdraw/web/gallery/${path.replace(/^\.\//, '')}`, import.meta.url);
+const sessions = new Map();
+/** The Session of a catalog entry, parsed once for every test of this file. */
+const gallerySession = (entry) => {
+  if (!sessions.has(entry.session)) {
+    const bytes = readFileSync(galleryFile(entry.session));
+    sessions.set(entry.session, JSON.parse((entry.session.endsWith('.gz') ? gunzipSync(bytes) : bytes).toString('utf8')));
+  }
+  return sessions.get(entry.session);
+};
 
 test('every shipped catalog entry is an example, in catalog order, with its Session and mode', () => {
   const examples = galleryExamplesFromCatalog(catalog, CATALOG_URL);
@@ -83,16 +94,13 @@ test('an unusable catalog or entry gives no example', () => {
 // Session must draw the same colours unless the tutorial sets one, or the
 // tutorial's previews and the Gallery figure disagree (as after #1803).
 test('a Gallery Session whose tutorial sets no ring colour draws the automatic ring colours', () => {
-  const galleryFile = (path) => new URL(`../../gbdraw/web/gallery/${path.replace(/^\.\//, '')}`, import.meta.url);
   let checked = 0;
   for (const entry of catalog) {
     const tutorial = JSON.parse(readFileSync(galleryFile(entry.tutorial), 'utf8'));
     const setsColour = (tutorial.manualSteps ?? []).some((step) => (step.replay ?? [])
       .some((action) => /ring colou?r/i.test(String(action.selector ?? ''))));
     if (setsColour) continue;
-    const bytes = readFileSync(galleryFile(entry.session));
-    const session = JSON.parse((entry.session.endsWith('.gz') ? gunzipSync(bytes) : bytes).toString('utf8'));
-    for (const drawing of session.drawings ?? []) {
+    for (const drawing of gallerySession(entry).drawings ?? []) {
       const series = drawing.config?.circularConservation?.series ?? [];
       series.forEach((row, index) => {
         assert.equal(normalizeConservationSeriesColor(row.color, index), normalizeConservationSeriesColor('', index),
@@ -102,4 +110,23 @@ test('a Gallery Session whose tutorial sets no ring colour draws the automatic r
     }
   }
   assert.ok(checked > 0, 'no Gallery Session has comparison rings');
+});
+
+// A Gallery example draws on first Generate from the LOSAT results its Session
+// stores, with no search. Generate reuses a stored result only when this Web
+// build would (isReusableLosatEntry): rows of another LOSAT Wasm build are
+// searched again, so a LOSAT update re-searches them in the Session with
+// tools/refresh_gallery_sessions.py.
+test('every LOSAT result a Gallery Session stores is one that Generate reuses', () => {
+  let checked = 0;
+  for (const entry of catalog) {
+    for (const drawing of gallerySession(entry).drawings ?? []) {
+      for (const result of drawing.losatCache?.entries ?? []) {
+        assert.ok(isReusableLosatEntry(result), `${entry.id}: ${result.filename ?? result.key} (${JSON.stringify(result.runtime)}); `
+          + `search it again: python tools/refresh_gallery_sessions.py --session ${entry.id}`);
+        checked += 1;
+      }
+    }
+  }
+  assert.ok(checked > 0, 'no Gallery Session stores a LOSAT result');
 });

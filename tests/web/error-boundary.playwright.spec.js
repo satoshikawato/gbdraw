@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise, fetchRoute } = require('./helpers/app-lifecycle.cjs');
+const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise, fetchRoute, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
@@ -582,4 +582,47 @@ test('a gzip GenBank is inspected and a GenBank record without sequence names it
   const alert = page.getByRole('alert', { name: 'Generation Error' });
   await expect(alert).toContainText('Sequence content is undefined');
   await expect(alert).not.toContainText('Python exception');
+});
+
+// OV-3304: a LOSAT run that exits with an error (here LOSAT refuses an out-of-range -searchsp that a test executor adds
+// to every job) is the LOSAT failure with LOSAT's own words, on the serial and the threaded engine, not an
+// unrecognized failure.
+for (const engine of ['serial', 'threaded']) test(`a LOSAT run that exits with an error shows what LOSAT reported: ${engine}`, async ({ page }) => {
+  test.setTimeout(300000);
+  await routeCrossOriginIsolated(page.context());
+  await page.addInitScript(() => {
+    window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+      const { runLosatPairsParallel } = await import('/gbdraw/web/js/services/losat.js');
+      return runLosatPairsParallel(jobs.map((job) => ({ ...job, extraArgs: [...job.extraArgs, '-searchsp', '99999999999999999999'] })), options);
+    };
+  });
+  await openApp(page);
+  await showDrawing(page, { kind: 'linear' });
+  const genbank = (id) => `LOCUS       ${id} 120 bp    DNA     linear   UNK 01-JAN-1980\nFEATURES             Location/Qualifiers\nORIGIN\n`
+    + `        1 ${'acgtgcatgc'.repeat(6)}\n       61 ${'ttgacgtaca'.repeat(6)}\n//\n`;
+  await page.evaluate(async ({ texts, engine }) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearInputType('gb');
+    for (const [index, text] of texts.entries()) {
+      if (index > 0) app.addLinearSeq();
+      app.setLinearSeqPrimaryFile(index, 'gb', new File([text], `r${index}.gb`, { type: 'text/plain', lastModified: 1 }));
+      await app.refreshLinearRecordSelectors();
+    }
+    app.losatExecution.executionMode = engine;
+    await app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastn');
+  }, { texts: [genbank('A1'), genbank('B1')], engine });
+  const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(failed).toMatchObject({ status: 'error', error: { code: 'LOSAT_RUNTIME', operation: 'generate', stage: 'losat',
+    context: { reason: 'FAILED', losatMessage: expect.stringContaining('searchsp') }, actions: ['edit-comparison'] } });
+  const alert = page.getByRole('alert', { name: 'Generation Error' });
+  // OV-3317: Generate with the same settings stops the same way, so the panel offers the comparison settings only.
+  await expect(page.getByRole('button', { name: 'Show in Comparison', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
+  // The text names what the one action leads to (the settings LOSAT names), not the runtime and Retry.
+  await expect(alert).toContainText('LOSAT stopped the comparison search. Generating again with the same settings and inputs stops the same way; change what LOSAT names below, then Generate again.');
+  await expect(alert).not.toContainText('Check the LOSAT or NCBI BLAST+ runtime');
+  // A hyphen that starts an option name does not end a line (U+2011); the Diagnostics keep LOSAT's text.
+  await expect(alert).toContainText(`LOSAT reported: ${failed.error.context.losatMessage.replace(/(^|[\s'"(<[])-/g, '$1\u2011')}`);
+  await expect(alert).not.toContainText('without recognized diagnostic information');
 });

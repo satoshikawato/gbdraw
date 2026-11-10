@@ -13,6 +13,7 @@ from time import perf_counter
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Hashable,
     Iterator,
     Literal,
@@ -64,9 +65,11 @@ from gbdraw.analysis.protein_colinearity import (
     extract_web_stable_cds_proteins,
     is_json_exact_protein_identity_manifest,
     is_protein_losat_cache_entry,
+    source_protein_letters,
     validate_protein_identity_manifest,
     validate_protein_raw_entry_references,
 )
+from gbdraw.analysis.windows import window_source
 from gbdraw.annotations import (
     FeatureIdentitySpan,
     FeatureSelector,
@@ -76,13 +79,32 @@ from gbdraw.annotations import (
     resolve_annotations,
 )
 from gbdraw.annotations.planning import annotation_sets_left_out
-from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losat, ring_subject_records
-from gbdraw.comparisons.linear_losat import NucleotideLosatRecord, resolve_linear_nucleotide_losat
-from gbdraw.comparisons.losat_jobs import losat_record_uids, losat_source_ids, losatp_job_specs
+from gbdraw.comparisons.circular_losat import (
+    resolve_circular_conservation_losat,
+    ring_subject_records,
+)
+from gbdraw.comparisons.linear_losat import (
+    NucleotideLosatRecord,
+    linear_search_spaces,
+    resolve_linear_nucleotide_losat,
+)
+from gbdraw.comparisons.losat_jobs import (
+    GenomeDatabaseSizes,
+    PerFileWarning,
+    genome_database_sizes,
+    genome_file_names,
+    losat_record_uids,
+    losat_source_ids,
+    losatp_job_specs,
+    source_file_name,
+)
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import (
     FeatureIdentityNotice,
     FeatureOverride,
+    ResolvedFeatureOverride,
+    bind_feature_overrides,
+    normalize_feature_overrides,
     read_feature_override_table,
 )
 from gbdraw.features.placement import (
@@ -95,34 +117,39 @@ from gbdraw.features.source import (
     IdentityBindings,
     SourceFeatureIdentity,
     capture_source_features,
+    resolve_feature_identities,
 )
 from gbdraw.features.visibility import (
     read_feature_visibility_file,
     resolve_candidate_feature_types,
 )
 from gbdraw.io.colors import read_color_table, read_default_color_overrides
-from gbdraw.render_stages import render_stage
 from gbdraw.io.comparison_sequences import (
+    ComparisonGenome,
     ComparisonSequenceFile,
+    RepeatedRecordIds,
+    comparison_genome,
     read_comparison_sequence_file,
 )
 from gbdraw.io.comparisons import COMPARISON_COLUMNS, read_comparison_resource
-from gbdraw.io.genome import load_fasta, parse_gff_fasta
-from gbdraw.labels.fit import WARN_SEARCH_SECONDS, LabelFitReport
+from gbdraw.io.genome import load_fasta, parse_gff_fasta, source_genome_length
+from gbdraw.io.record_select import select_record_units
 from gbdraw.labels.filtering import (
     read_filter_list_file,
     read_label_override_file,
     read_qualifier_priority_file,
 )
+from gbdraw.labels.fit import WARN_SEARCH_SECONDS, LabelFitReport
+from gbdraw.layout.linear_multi_record import drawn_unit_rows, grid_display_pairs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import detected_topology
 from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
 from gbdraw.mode_profiles import ComparisonThresholds
-from gbdraw.io.record_select import parse_record_selector, select_record_units
 from gbdraw.io.record_sequences import detached_records
 from gbdraw.layout.record_placement import (
     FeatureAnchorPlacement,
     parse_record_row_position,
+    record_order_selector,
     resolve_record_row_positions,
 )
 from gbdraw.layout.similarity_alignment import (
@@ -139,7 +166,13 @@ from gbdraw.render.interactive_context import (
     require_interactive_svg_metadata,
 )
 from gbdraw.render.interactive_svg import InteractiveSvgContext
-from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, parse_circular_track_slots, parse_linear_track_slots
+from gbdraw.render_stages import render_stage
+from gbdraw.tracks import (
+    CircularTrackSlot,
+    LinearTrackSlot,
+    parse_circular_track_slots,
+    parse_linear_track_slots,
+)
 from gbdraw.tracks.parsing import slots_draw_features
 
 from .diagram import (
@@ -150,9 +183,9 @@ from .diagram import (
     build_circular_multi_diagram,
     build_linear_diagram_result,
     label_fit_report,
-    resolve_default_colors,
     resolve_feature_inputs,
 )
+from .input_summary import InputSummary, summarize_inputs
 from .io import load_render_gbks as load_gbks  # the render's reader; tests replace it under this name
 from .migration_report import SessionMigrationReport
 from .options import (
@@ -166,40 +199,39 @@ from .options import (
     losatp_analysis_mode,
 )
 from .prepared import (
+    RECORD_IDENTITY_TAG,
     ParsedRecordInputs,
-    PreparedResourceIdentity,
     ResolvedFeatureInputs,
     get_or_build_parsed_source,
     get_or_build_resolved_records,
     prepared_input_cache_active,
     prepared_resource_identity,
     register_prepared_resource_value,
-    RECORD_IDENTITY_TAG,
     register_prepared_value_identity,
 )
-from .input_summary import InputSummary, summarize_inputs
 from .record_planning import (
-    decide_linear_wrap,
+    FastaLoader,
     GenBankLoader,
     GffFastaLoader,
-    FastaLoader,
     ResolvedRecordCollection,
     ResolvedRecordDisplay,
     ResolvedRecordProvenance,
+    _file_source,
     _gff_feature_types,
     _load_source_records,
     _prepared_source_cache_spec,
     _similarity_candidate_from_orthogroup_member,
     _source_details,
     _source_key,
-    effective_record_presentation,
-    resolve_anchor_feature,
     alignment_record_keys,
-    project_similarity_alignment_centers,
     comparison_record_bindings,
-    record_is_reverse_complemented,
+    decide_linear_wrap,
+    effective_record_presentation,
     has_source_bound_results,
+    project_similarity_alignment_centers,
     project_source_bound_results,
+    record_is_reverse_complemented,
+    resolve_anchor_feature,
     resolve_circular_batch_outputs,
     resolve_circular_options,
     resolve_implicit_record_output_prefix,
@@ -334,7 +366,6 @@ def _resolve_request_option_tables(
     options: _OptionsT,
     *,
     mode: Literal["circular", "linear"],
-    load_comparison_colors: bool,
 ) -> _OptionsT:
     """Resolve file-backed option tables once before record and drawing plans."""
 
@@ -347,24 +378,14 @@ def _resolve_request_option_tables(
                 read_color_table(colors.color_table_file),
                 colors.color_table_file,
             )
-        default_colors = colors.default_colors
-        if default_colors is None and colors.default_colors_file is not None:
-            # The request keeps the merged table (a Session saves it).
-            default_colors, _default_color_map = render_stage(
-                "default_colors",
-                resolve_default_colors,
-                None,
-                _default_color_overrides(colors),
-                colors.default_colors_palette,
-                load_comparison_colors,
-            )
-        if colors.color_table_file is not None or colors.default_colors_file is not None:
+        # A Default colors file stays a file unless a table shadows it: a
+        # Session saves the rows the user gave, which apply over the palette
+        # when the request is drawn (`_prepare_diagram_inputs`), so a later
+        # palette change reaches the Session (OV-3302).
+        default_colors_file = None if colors.default_colors is not None else colors.default_colors_file
+        if colors.color_table_file is not None or default_colors_file != colors.default_colors_file:
             colors = replace(
-                colors,
-                color_table=color_table,
-                color_table_file=None,
-                default_colors=default_colors,
-                default_colors_file=None,
+                colors, color_table=color_table, color_table_file=None, default_colors_file=default_colors_file
             )
             changed = True
 
@@ -441,74 +462,57 @@ def _resolve_request_option_tables(
 
 @dataclass
 class _ComparisonSequenceSources:
-    """Memoized Circular comparison-genome records shared by a request batch."""
+    """Memoized Circular comparison-genome records shared by a request batch.
 
-    paths: tuple[str | None, ...]
-    _files: tuple[ComparisonSequenceFile | None, ...] | None = None
+    ``genomes`` are the files of each ring (``conservation_genome_files``);
+    each file is parsed once, through the prepared parsed-source cache.
+    """
+
+    genomes: tuple[tuple[str, ...], ...]
+    _genomes: tuple[ComparisonGenome | None, ...] | None = None
     _records: tuple[tuple[SeqRecord, ...], ...] | None = None
-
-    def cache_specs(
-        self,
-    ) -> tuple[
-        tuple[Hashable, frozenset[PreparedResourceIdentity]] | None,
-        ...,
-    ]:
-        specs: list[
-            tuple[Hashable, frozenset[PreparedResourceIdentity]] | None
-        ] = []
-        for path in self.paths:
-            if path is None:
-                specs.append(None)
-                continue
-            identity = prepared_resource_identity(path)
-            specs.append(
-                None
-                if identity is None
-                else (
-                    ("parsed-source-v1", "comparison-sequence", identity),
-                    frozenset({identity}),
-                )
-            )
-        return tuple(specs)
 
     def load(self) -> tuple[tuple[SeqRecord, ...], ...]:
         if self._records is None:
             self._records = tuple(
-                file.records if file is not None else () for file in self.files()
+                genome.records if genome is not None else () for genome in self.files()
             )
         return self._records
 
-    def files(self) -> tuple[ComparisonSequenceFile | None, ...]:
-        """Each comparison genome read once by the one reader (design D12)."""
+    @staticmethod
+    def _read(path: str) -> ComparisonSequenceFile:
+        identity = prepared_resource_identity(path)
+        if identity is None:
+            return read_comparison_sequence_file(path)
+        return get_or_build_parsed_source(
+            ("parsed-source-v1", "comparison-sequence", identity),
+            frozenset({identity}),
+            lambda: read_comparison_sequence_file(path),
+            publish=lambda value: bool(value.records),
+        )
 
-        if self._files is None:
-            loaded: list[ComparisonSequenceFile | None] = []
-            for path, cache_spec in zip(
-                self.paths,
-                self.cache_specs(),
-                strict=True,
-            ):
-                if not path:
-                    loaded.append(None)
-                    continue
+    def files(self) -> tuple[ComparisonGenome | None, ...]:
+        """Each comparison genome read once by the one reader (design D12); ``None`` for a ring without one."""
 
-                def parse(path: str = path) -> ComparisonSequenceFile:
-                    return read_comparison_sequence_file(path)
+        if self._genomes is None:
+            self._genomes = tuple(
+                comparison_genome(tuple(self._read(path) for path in paths)) if paths else None
+                for paths in self.genomes
+            )
+        return self._genomes
 
-                if cache_spec is None:
-                    loaded.append(parse())
-                    continue
-                key, identities = cache_spec
-                loaded.append(
-                    get_or_build_parsed_source(
-                        key,
-                        identities,
-                        parse,
-                        publish=lambda value: bool(value.records),
-                    )
-                )
-            self._files = tuple(loaded)
-        return self._files
+    def repeated_record_ids(self) -> tuple[RepeatedRecordIds, ...]:
+        """The repeated record IDs of the genomes this render read (OV-2954), each file once.
+
+        Only a genome the render read (for the LOSAT query or the interactive
+        span export) is reported: a ring that reads no file names no record.
+        """
+
+        found: dict[RepeatedRecordIds, None] = {}
+        for genome in self._genomes or ():
+            if genome is not None:
+                found.update(dict.fromkeys(genome.repeated_record_ids))
+        return tuple(found)
 
 
 @dataclass(frozen=True)
@@ -1110,6 +1114,8 @@ class LinearRequestPlan:
     feature_anchor: FeatureAnchorPlacement | None = None
     # Raw cache entries of the LOSATN / TLOSATX searches this plan resolved.
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
+    # Each LOSATP search's database size (``_losatp_database_sizes``); None when no LOSATP search runs.
+    losatp_database_sizes: GenomeDatabaseSizes | None = None
     # The request keeps its comparison rows in the search frame; the plan
     # projects them into the drawn record views once, which also checks their
     # source bindings, and the build draws these options (OV-399).
@@ -1314,9 +1320,7 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
         else (set(options.selected_features_set or DEFAULT_SELECTED_FEATURES), False)
     )
     comparison_sequences = (
-        _ComparisonSequenceSources(
-            tuple(options.conservation_sequence_files or ())
-        )
+        _ComparisonSequenceSources(options.conservation_genome_files)
         if isinstance(options, CircularDiagramOptions)
         and options.conservation_sequence_files
         else None
@@ -1843,12 +1847,19 @@ def _linear_layout_with_record_placements(
         return _windows_share_rows(request, layout)
     if layout is None:  # pragma: no cover - LinearDiagramRequest refuses grid rows without a layout.
         raise ValidationError("Grid placement requires LinearMultiRecordOptions.", diagnostic={"code": "INPUT_INVALID"})
-    positioned = grid_placement_order(positioned)
-    positions = tuple(
-        f"#{index + 1}@{presentation.grid_row}"
-        for index, presentation in positioned
-    )
+    rows = _request_unit_rows(request)
+    positions = tuple(f"#{index + 1}@{rows[index] + 1}" for index, _presentation in grid_placement_order(positioned))
     return replace(layout, multi_record_positions=positions)
+
+
+def _request_unit_rows(request: LinearDiagramRequest) -> tuple[int, ...]:
+    """The row of each record of a projected request that names no row positions (``drawn_unit_rows``): the one rule
+    the Web's unit plan reads too (``plan_linear_units``)."""
+
+    return drawn_unit_rows(
+        [record_input.presentation.grid_row for record_input in request.records],
+        [drawn_record_identity(record_input) for record_input in request.records],
+    )
 
 
 def _unit_positions(request: LinearDiagramRequest, layout: LinearMultiRecordOptions) -> LinearMultiRecordOptions:
@@ -1867,7 +1878,7 @@ def _unit_positions(request: LinearDiagramRequest, layout: LinearMultiRecordOpti
     for token in layout.multi_record_positions or ():
         selector, row = parse_record_row_position(str(token))
         try:
-            units = select_record_units(records, parse_record_selector(selector))
+            units = select_record_units(records, record_order_selector(selector, records))
         except ValueError as exc:
             raise ValidationError(f"multi_record_position selector '{selector}': {exc}") from exc
         positions.extend(f"#{unit + 1}@{row}" for unit in units)
@@ -1895,10 +1906,10 @@ def _windows_share_rows(
     keys = [drawn_record_identity(record_input) for record_input in request.records]
     if layout is None or len(set(keys)) == len(keys):
         return layout
-    rows = {key: row for row, key in enumerate(dict.fromkeys(keys), start=1)}
+    rows = _request_unit_rows(request)
     return replace(
         layout,
-        multi_record_positions=tuple(f"#{index}@{rows[key]}" for index, key in enumerate(keys, start=1)),
+        multi_record_positions=tuple(f"#{index + 1}@{row + 1}" for index, row in enumerate(rows)),
     )
 
 
@@ -1968,11 +1979,11 @@ def _resolve_ring_losat(
         return (parsed if parsed is not None else load_render_source_records(source)).records
 
     sources = inputs.comparison_sequences or _ComparisonSequenceSources(
-        tuple(options.conservation_sequence_files or ())
+        options.conservation_genome_files
     )
 
-    def load_sequences() -> tuple[ComparisonSequenceFile, ...]:
-        return tuple(file for file in sources.files() if file is not None)
+    def load_sequences() -> tuple[ComparisonGenome, ...]:
+        return tuple(genome for genome in sources.files() if genome is not None)
 
     return resolve_circular_conservation_losat(
         options,
@@ -2019,7 +2030,6 @@ def plan_circular_request(
         resolved_options = _resolve_request_option_tables(
             resolve_circular_options(request.options),
             mode="circular",
-            load_comparison_colors=False,
         )
         unresolved_request = (
             request
@@ -2082,7 +2092,6 @@ def plan_circular_batch_request(
         resolved_options = _resolve_request_option_tables(
             resolve_circular_options(request.options),
             mode="circular",
-            load_comparison_colors=False,
         )
         unresolved_request = (
             request
@@ -2156,28 +2165,10 @@ def plan_linear_request(
             "tuple[LinearDiagramRequest, CurrentRequestArtifacts | None]",
             _resolve_similarity_alignment_reference(request, None),
         )
+    loaded = _load_linear_request(request)
+    unresolved_request, collection, prepared_inputs = loaded.request, loaded.collection, loaded.prepared_inputs
+    inputs, projected_request, resolved_layout = loaded.inputs, loaded.projected_request, loaded.layout
     with _request_render_diagnostic_phase("preparation"):
-        unresolved_request = replace(
-            request,
-            options=_resolve_request_option_tables(
-                request.options,
-                mode="linear",
-                load_comparison_colors=_linear_request_uses_comparisons(request),
-            ),
-        )
-        inputs = _prepare_diagram_inputs(unresolved_request)
-        unresolved_request = _with_prepared_colors(unresolved_request, inputs)
-    with _request_render_diagnostic_phase("recordLoad"):
-        unresolved_request, collection = _load_request_records(unresolved_request, inputs)
-    with _request_render_diagnostic_phase("preparation"):
-        prepared_inputs = inputs
-        inputs = _materialize_feature_inputs(unresolved_request, collection, prepared_inputs)
-        projected_request = _with_window_layout(replace(
-            unresolved_request,
-            records=_materialized_record_inputs(collection),
-            record_options=RecordCollectionOptions(),
-        ))
-        resolved_layout = _linear_layout_with_record_placements(projected_request)
         resolved_options = resolve_linear_options(
             decide_linear_wrap(
                 projected_request.options,
@@ -2252,7 +2243,95 @@ def plan_linear_request(
             alignment_anchor_centers=alignment_anchor_centers,
             feature_anchor=feature_anchor,
             losat_cache_entries=losat_cache_entries,
+            losatp_database_sizes=(
+                None if losatp_analysis_mode(resolved_options.losat_search) == "none"
+                else _losatp_database_sizes(replace(loaded, collection=collection, inputs=inputs))
+            ),
         )
+
+
+@dataclass(frozen=True)
+class _LoadedLinearRequest:
+    """A Linear request with its records loaded, as its plan reads them before it resolves its options."""
+
+    # The request with its option tables and colours resolved, and its record inputs as the record load wrote them.
+    request: LinearDiagramRequest
+    collection: ResolvedRecordCollection
+    prepared_inputs: PreparedDiagramInputs
+    # ``prepared_inputs`` with the identity-addressed inputs resolved on the collection.
+    inputs: PreparedDiagramInputs
+    projected_request: LinearDiagramRequest
+    layout: LinearMultiRecordOptions | None
+    # Each source file the record load parsed, by its source key.
+    parsed_sources: Mapping[tuple[object, ...], ParsedRecordInputs]
+
+
+def _load_linear_request(request: LinearDiagramRequest) -> _LoadedLinearRequest:
+    """Load the records of a Linear request and resolve what its plan reads of them: its feature inputs and layout."""
+
+    with _request_render_diagnostic_phase("preparation"):
+        unresolved_request = replace(
+            request,
+            options=_resolve_request_option_tables(
+                request.options,
+                mode="linear",
+            ),
+        )
+        inputs = _prepare_diagram_inputs(unresolved_request)
+        unresolved_request = _with_prepared_colors(unresolved_request, inputs)
+    parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] = {}
+    with _request_render_diagnostic_phase("recordLoad"):
+        unresolved_request, collection = _load_request_records(unresolved_request, inputs, parsed_sources)
+    with _request_render_diagnostic_phase("preparation"):
+        projected_request = _with_window_layout(replace(
+            unresolved_request,
+            records=_materialized_record_inputs(collection),
+            record_options=RecordCollectionOptions(),
+        ))
+        return _LoadedLinearRequest(
+            request=cast(LinearDiagramRequest, unresolved_request),
+            collection=collection,
+            prepared_inputs=inputs,
+            inputs=_materialize_feature_inputs(unresolved_request, collection, inputs),
+            projected_request=projected_request,
+            layout=_linear_layout_with_record_placements(projected_request),
+            parsed_sources=parsed_sources,
+        )
+
+
+GenomeScaleProgram: TypeAlias = Literal["losatn", "tlosatx", "losatp"]
+# The LOSAT programs whose searches pass an E-value scale of their genomes.
+GENOME_SCALE_PROGRAMS: tuple[GenomeScaleProgram, ...] = ("losatn", "tlosatx", "losatp")
+
+
+def linear_genome_scales(
+    request: LinearDiagramRequest, program: GenomeScaleProgram, source_names: Mapping[str, str] | None = None
+) -> tuple[tuple[str, ...], Callable[[int, int], int | None], Callable[[int, int], PerFileWarning | None]]:
+    """The E-value scale each record-pair search of a Linear request's ``program`` search passes LOSAT, by drawn
+    record indexes (a record drawn in windows is a record per window), with the key of the record each draws and
+    the warning of a pair searched per file.
+
+    LOSATN and TLOSATX pass the search space of the genome pair (``-searchsp``), LOSATP the proteins of the subject
+    genome (``-dbsize``); ``None`` keeps LOSAT's own (PD-OI-018 revision 6). A genome pair whose search space is past
+    what LOSAT reads is searched per file, with the warning the command line logs (Owner decision 2026-11-10);
+    ``source_names`` names the files the warning names, by the name the request reads them under. They are the
+    values the plan's own searches pass, from the same owners: the Web's Generate asks for them before it searches
+    (``gbdraw.web_support.linear_units.plan_genome_scales``), so the CLI and the Web pass one value.
+    """
+
+    loaded = _load_linear_request(request)
+    keys = tuple(item.record_identity_key for item in loaded.collection.provenance)
+    if program == "losatp":
+        return keys, _losatp_database_sizes(loaded), lambda _query, _subject: None
+    rows, source_ids, source_lengths = _genome_inputs(loaded.collection, loaded.layout)
+    spaces = linear_search_spaces(
+        program, records=loaded.collection.records, rows_by_record=rows, source_ids=source_ids,
+        source_lengths=source_lengths,
+    )
+    names = genome_file_names(
+        rows, source_ids, lambda source: (source_names or {}).get(source_file_name(source), source_file_name(source))
+    )
+    return keys, spaces, lambda query, subject: spaces.per_file_warning(query, subject, names)
 
 
 def _auto_oriented_collection(
@@ -2310,34 +2389,138 @@ def _resolve_nucleotide_losat(
 ) -> tuple[LinearDiagramOptions, tuple[Mapping[str, Any], ...]]:
     """Replace LOSATN / TLOSATX intent with comparisons (design 3.4).
 
-    A source file is one genome; an in-memory record is its own source
-    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`, as for LOSATP).
+    A source file is one search job's side; an in-memory record is its own source
+    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`, as for LOSATP). A
+    row's source files are one genome, whose E-value scale every search between
+    two rows shares (OV-3143).
     """
 
     if options.losat_search is None or options.losat_search.program == "losatp":
         return options, ()
-    _ordered, rows_by_record = resolve_record_row_positions(
-        collection.records,
-        layout.multi_record_positions if layout is not None else None,
-    )
+    rows_by_record, source_ids, source_lengths = _genome_inputs(collection, layout)
     records = [
         NucleotideLosatRecord(
             record=record,
             source_id=source_id,
+            source_length=source_length,
             record_key=record_key,
             label=item.presentation.label or str(record.id),
             window=item.window.index + 1 if item.window is not None and item.window.is_one_of_several else None,
             input_index=item.input_index,
         )
-        for item, record, source_id, record_key in zip(
+        for item, record, source_id, source_length, record_key in zip(
             collection.provenance,
             collection.records,
-            losat_source_ids(collection.records),
+            source_ids,
+            source_lengths,
             losat_record_uids(collection.records),
             strict=True,
         )
     ]
     return resolve_linear_nucleotide_losat(options, records=records, rows_by_record=rows_by_record)
+
+
+def _source_genome_lengths(collection: ResolvedRecordCollection) -> list[int]:
+    """The genome length of each record's source (``source_genome_length``), read once per file (a GFF3/FASTA
+    pair reads its FASTA file again)."""
+
+    file_lengths: dict[tuple[str, ...], int] = {}
+
+    def genome_length(item: ResolvedRecordProvenance, record: SeqRecord) -> int:
+        loaded = item.source_file_length if item.source_file_length is not None else len(record)
+        if item.source_kind == "memory":
+            return loaded
+        if item.source_paths not in file_lengths:
+            file_lengths[item.source_paths] = source_genome_length(item.source_kind, item.source_paths, loaded)
+        return file_lengths[item.source_paths]
+
+    return [genome_length(item, record) for item, record in zip(collection.provenance, collection.records, strict=True)]
+
+
+def _genome_inputs(
+    collection: ResolvedRecordCollection, layout: LinearMultiRecordOptions | None
+) -> tuple[list[int], list[Hashable], list[int]]:
+    """What a genome of each drawn record is made of (OV-3143): its row, its source file, and the length of every
+    record of that source (``_source_genome_lengths``); the genomes are the files linked through shared rows."""
+
+    rows = resolve_record_row_positions(
+        collection.records, layout.multi_record_positions if layout is not None else None
+    )[1]
+    return list(rows), list(losat_source_ids(collection.records)), _source_genome_lengths(collection)
+
+
+def _losatp_database_sizes(loaded: _LoadedLinearRequest) -> GenomeDatabaseSizes:
+    """Each LOSATP record-pair search's database size, its subject genome's proteins (OV-3143).
+
+    A source counts every record of its file, uncropped, drawn or not (a record held from a file plan, its
+    file's; an in-memory crop, the record it was cut from, as its genome length does), with the proteins LOSATP's
+    extraction takes under the drawing's visibility rules and the request's feature edits of each drawn record,
+    bound to the uncropped record, so an edit outside a crop or window counts too (an undrawn record has none):
+    ``source_protein_letters``, read once per source.
+    """
+
+    collection, inputs = loaded.collection, loaded.inputs
+    provenance = collection.provenance
+    edits = normalize_feature_overrides(loaded.request.options.feature_overrides or ())
+
+    def source_of(item: ResolvedRecordProvenance) -> Hashable:
+        return item.source_paths or ("memory", item.input_index)
+
+    letters: dict[Hashable, int] = {}
+    for item in provenance:
+        key = source_of(item)
+        if key in letters:
+            continue
+        source = loaded.request.records[item.input_index].source
+        if item.source_kind != "memory" and isinstance(source, InMemoryRecordSource):
+            source = _file_source(item.source_kind, item.source_paths)
+        parsed = loaded.parsed_sources.get(_source_key(source))
+        source_records = [
+            window_source(record).record if record.annotations.get("gbdraw_region_applied") else record
+            for record in (parsed if parsed is not None else load_render_source_records(source)).records
+        ]
+        drawn: dict[int, ResolvedRecordProvenance] = {}
+        for other in provenance:
+            if source_of(other) == key:
+                drawn.setdefault(other.source_record_index, other)
+        letters[key] = source_protein_letters(
+            source_records,
+            feature_visibility_rules=inputs.features.feature_visibility_rules,
+            feature_overrides=_source_record_edits(edits, source_records, drawn),
+        )
+    rows, source_ids, source_lengths = _genome_inputs(collection, loaded.layout)
+    return genome_database_sizes(
+        rows=rows,
+        source_ids=source_ids,
+        source_lengths=source_lengths,
+        searched_lengths=[len(record) for record in collection.records],
+        source_proteins=[letters[source_of(item)] for item in provenance],
+    )
+
+
+def _source_record_edits(
+    edits: Sequence[FeatureOverride],
+    source_records: Sequence[SeqRecord],
+    drawn: Mapping[int, ResolvedRecordProvenance],
+) -> list[Mapping[int, ResolvedFeatureOverride]]:
+    """The feature edits of each record of one source, bound to the uncropped records by feature identity.
+
+    ``drawn`` is a drawn unit of each drawn record, by source record index (its key and source catalog name the
+    record); an undrawn record has no edits.
+    """
+
+    indexes = sorted(drawn)
+    keys = [drawn[index].record_identity_key for index in indexes]
+    wanted = [row for row in edits if row.identity.record_key in set(keys)]
+    if not wanted:
+        return [{} for _ in source_records]
+    catalogs = [drawn[index].source_feature_catalog for index in indexes]
+    records = [source_records[index] for index in indexes]
+    bindings = resolve_feature_identities(
+        records=records, record_keys=keys, source_catalogs=catalogs, identities={row.identity for row in wanted},
+    )
+    bound = dict(zip(indexes, bind_feature_overrides(wanted, bindings, catalogs), strict=True))
+    return [bound.get(index, {}) for index in range(len(source_records))]
 
 
 def resolve_similarity_alignment_plan(
@@ -2780,6 +2963,7 @@ def _prepare_linear_artifacts(
     provenance: Sequence[ResolvedRecordProvenance],
     *,
     extraction: ProteinExtractionResult | None,
+    database_sizes: GenomeDatabaseSizes | None = None,
 ) -> _PreparedLinearArtifacts:
     current_protein = tuple(
         entry
@@ -2829,6 +3013,7 @@ def _prepare_linear_artifacts(
             else None
         )
         or "auto",
+        database_sizes=database_sizes,
     )
     return _PreparedLinearArtifacts(
         cache=cache,
@@ -2937,20 +3122,16 @@ def _request_record_instance_keys(request: DiagramRequest) -> tuple[str, ...]:
 def _request_derived_settings(
     request: LinearDiagramRequest,
     mode: str,
+    rows_by_record: Sequence[int],
 ) -> DerivedLosatpSettings:
-    """The converter settings a request's derived payload was computed with."""
+    """The converter settings a request's derived payload was computed with. ``rows_by_record`` are the rows the
+    drawing places its records in: a drawing whose records stand in a grid displays its grid pairs
+    (``grid_display_pairs``), as the Web's unit plan says."""
 
     options = request.options
     params = options.collinearity_params or LosslessCollinearityParameters()
     search = options.losat_search
-    # The Python reading of the Web's grid precondition: every drawn record
-    # holds one canonical grid cell (`canonicalGridDisplayPairs`).
-    explicit_display_pairs = len(request.records) >= 2 and all(
-        record_input.presentation.grid_row is not None
-        and record_input.presentation.grid_column is not None
-        and record_input.cardinality is RecordCardinality.EXACTLY_ONE
-        for record_input in request.records
-    )
+    explicit_display_pairs = grid_display_pairs(rows_by_record) is not None
     return normalize_derived_losatp_settings(
         mode=mode,
         bitscore=options.bitscore,
@@ -3042,6 +3223,7 @@ def _build_current_derived_entries(
     metadata: LinearDiagramMetadata | None,
     request: LinearDiagramRequest,
     records: tuple[SeqRecord, ...],
+    layout: LinearMultiRecordOptions | None,
     artifacts: _PreparedLinearArtifacts,
     raw_entries: Sequence[Mapping[str, Any]],
 ) -> tuple[Mapping[str, Any], ...]:
@@ -3071,7 +3253,11 @@ def _build_current_derived_entries(
     # from raw LOSAT results: one owner gives its identity, key and pairs.
     if not wanted or not compact_resource:
         return ()
-    settings = _request_derived_settings(request, mode)
+    settings = _request_derived_settings(
+        request,
+        mode,
+        resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1],
+    )
     pairs = _derived_identity_pairs(request, settings, pair_frames, raw_entries)
     if pairs is None:
         return ()
@@ -3254,6 +3440,7 @@ def _build_request_plan_diagram(
                 plan.inputs,
                 plan.provenance,
                 extraction=protein_extraction,
+                database_sizes=plan.losatp_database_sizes,
             )
         with _request_render_diagnostic_phase("drawing"):
             linear_build = plan.build(
@@ -3285,6 +3472,7 @@ def _build_request_plan_diagram(
                 linear_metadata,
                 plan.request,
                 records,
+                plan.layout,
                 linear_artifacts,
                 losat_cache_entries,
             )
@@ -3530,6 +3718,8 @@ def _render_request_diagram(
             prepared,
             include_feature_catalog=include_feature_catalog,
         )
+    sources = prepared.inputs.comparison_sequences if prepared.inputs is not None else None
+    repeated_ids = sources.repeated_record_ids() if sources is not None else ()
     if isinstance(prepared, PreparedCircularBatchRequest):
         return CircularBatchRenderResult(
             request=prepared.request,
@@ -3539,6 +3729,7 @@ def _render_request_diagram(
                     item,
                     comparison_sequence_records=comparison_sequence_records,
                     include_feature_catalog=include_feature_catalog,
+                    repeated_comparison_ids=repeated_ids,
                 )
                 for item in prepared.items
             ),
@@ -3549,6 +3740,7 @@ def _render_request_diagram(
         prepared,
         comparison_sequence_records=comparison_sequence_records,
         include_feature_catalog=include_feature_catalog,
+        repeated_comparison_ids=repeated_ids,
     )
 
 
@@ -3578,13 +3770,9 @@ def _comparison_sequence_records(
     if inputs is not None and inputs.comparison_sequences is not None:
         return require_interactive_svg_metadata(inputs.comparison_sequences.load)
 
-    def load_unprepared() -> tuple[tuple[SeqRecord, ...], ...]:
-        return tuple(
-            read_comparison_sequence_file(path).records if path else ()
-            for path in options.conservation_sequence_files or ()
-        )
-
-    return require_interactive_svg_metadata(load_unprepared)
+    return require_interactive_svg_metadata(
+        _ComparisonSequenceSources(options.conservation_genome_files).load
+    )
 
 
 def _render_output_paths(output: RenderOutputRequest) -> tuple[Path, ...]:
@@ -3666,8 +3854,13 @@ def _render_prepared_request(
     *,
     comparison_sequence_records: Sequence[Sequence[SeqRecord]] = (),
     include_feature_catalog: bool = False,
+    repeated_comparison_ids: tuple[RepeatedRecordIds, ...] = (),
 ) -> RequestRenderResult:
-    """Write one already-planned diagram using its canonical output request."""
+    """Write one already-planned diagram using its canonical output request.
+
+    Its input summary adds the repeated record IDs of the comparison genomes the
+    render read (OV-2954), known only once they are read.
+    """
 
     output = prepared.request.output
     with _request_render_diagnostic_phase("interactivePreparation"):
@@ -3707,7 +3900,7 @@ def _render_prepared_request(
         output_paths=tuple(Path(path) for path in paths),
         annotation_warnings=prepared.annotation_warnings,
         feature_identity_notices=prepared.feature_identity_notices,
-        input_summary=prepared.input_summary,
+        input_summary=replace(prepared.input_summary, repeated_comparison_ids=repeated_comparison_ids),
         interactive_context=interactive_context,
         linear_metadata=prepared.linear_metadata,
         losat_cache_entries=prepared.losat_cache_entries,
@@ -3736,6 +3929,9 @@ __all__ = [
     "plan_request",
     "plan_circular_batch_request",
     "plan_circular_request",
+    "GENOME_SCALE_PROGRAMS",
+    "GenomeScaleProgram",
+    "linear_genome_scales",
     "plan_linear_request",
     "preflight_diagram_request_outputs",
     "render_request",

@@ -193,16 +193,16 @@ test('Swapping Linear rows reconverts LOSATP Similarity groups and draws the fre
   expect(swapped.paths).toEqual(fresh.paths);
 });
 
-// A CLI records table with row and column places GridA and GridB in row 1 and
-// GridC in row 2. The Web keeps that grid, which displays 0-2 and 1-2.
+// A CLI records table with row and column places GridA and GridB, the two
+// records of one file, in row 1 and GridC in row 2. The Web keeps that grid,
+// which displays 0-2 and 1-2. A file is one genome in any rows (PD-OI-018), so
+// the LOSATP genome scales, and with them the searches, stay without the grid.
 const saveCliGridSession = (testInfo) => {
-  const records = [['GridA', [1, 121, 241]], ['GridB', [31, 151, 271]], ['GridC', [61, 181, 271]]];
-  const table = ['gbk\trow\tcolumn'];
-  records.forEach(([recordId, starts], index) => {
-    const path = testInfo.outputPath(`${recordId}.gbk`);
-    writeFileSync(path, makeGenbank(recordId, starts));
-    table.push(`${path}\t${index < 2 ? 1 : 2}\t${index < 2 ? index + 1 : 1}`);
-  });
+  const shared = testInfo.outputPath('GridAB.gbk');
+  writeFileSync(shared, makeGenbank('GridA', [1, 121, 241]) + makeGenbank('GridB', [31, 151, 271]));
+  const single = testInfo.outputPath('GridC.gbk');
+  writeFileSync(single, makeGenbank('GridC', [61, 181, 271]));
+  const table = ['gbk\trecord_id\trow\tcolumn', `${shared}\tGridA\t1\t1`, `${shared}\tGridB\t1\t2`, `${single}\tGridC\t2\t1`];
   const tablePath = testInfo.outputPath('records.tsv');
   writeFileSync(tablePath, `${table.join('\n')}\n`);
   const prefix = testInfo.outputPath('cli-grid');
@@ -251,6 +251,68 @@ test('Turning off a CLI grid reconverts LOSATP Collinear blocks and draws the fr
   expect(rows.cache).toEqual({ cacheHits: 9, cacheMisses: 0, derivedHits: 0, derivedMisses: 1 });
   expect(rows.links).toEqual(fresh.links);
   expect(rows.paths).toEqual(fresh.paths);
+});
+
+// OV-3248: a grid arranged in Record Layout writes rows without columns. It displays
+// every record pair of adjacent rows, as the same grid from a records table does.
+test('A grid arranged in the Web draws LOSATP Collinear blocks between every record pair of adjacent rows', async ({ page }) => {
+  test.setTimeout(420000);
+  await installProteinExecutor(page);
+  await openApp(page);
+  await showDrawing(page, { kind: 'linear' });
+  const sources = [['GridA', [1, 121, 241]], ['GridB', [31, 151, 271]], ['GridC', [61, 181, 271]]];
+  for (const [index, [recordId, starts]] of sources.entries()) {
+    if (index > 0) await page.getByRole('button', { name: 'Add sequence' }).first().click();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Choose GenBank / DDBJ File' }).nth(index).click();
+    await (await chooser).setFiles({
+      name: `${recordId}.gbk`, mimeType: 'text/plain', buffer: Buffer.from(makeGenbank(recordId, starts))
+    });
+  }
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(3);
+  await chooseLosatp(page, 'collinear');
+  await page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches', exact: true }).check();
+  await page.getByRole('combobox', { name: 'Collinear search between' }).selectOption('all');
+  await openLayoutControls(page);
+  await page.getByLabel('Arrange linear records in rows').check();
+  await setRows(page, [1, 1, 2]);
+  // GridA and GridB share row 1; GridC sits in row 2.
+  expect((await generate(page)).links).toEqual(['0->2 1-330 61-360', '1->2 31-360 61-360']);
+});
+
+// OV-3248: the windows of one record share its row, so with GridB below, each window joins GridB, as the CLI draws.
+test('The windows of one record each draw their LOSATP Collinear blocks to the record of the next row', async ({ page }) => {
+  test.setTimeout(420000);
+  await installProteinExecutor(page);
+  await openApp(page);
+  await showDrawing(page, { kind: 'linear' });
+  const sources = [['GridA', [1, 121, 241]], ['GridB', [31, 151, 271]]];
+  for (const [index, [recordId, starts]] of sources.entries()) {
+    if (index > 0) await page.getByRole('button', { name: 'Add sequence' }).first().click();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Choose GenBank / DDBJ File' }).nth(index).click();
+    await (await chooser).setFiles({
+      name: `${recordId}.gbk`, mimeType: 'text/plain', buffer: Buffer.from(makeGenbank(recordId, starts))
+    });
+  }
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(2);
+  const uid = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].uid);
+  await page.locator(`[data-record-selector-uid="${uid}"]`).evaluate((select) => {
+    for (let node = select; node; node = node.parentElement) if (node.tagName === 'DETAILS') node.open = true;
+  });
+  await page.getByRole('button', { name: 'Add window to sequence 1' }).click();
+  const windows = page.locator('[data-record-windows]');
+  for (const [label, value] of [['Window 1 start', '1'], ['Window 1 end', '120'], ['Window 2 start', '121'], ['Window 2 end', '360']]) {
+    const input = windows.getByLabel(`${label} for sequence 1`, { exact: true });
+    await input.fill(value);
+    await input.press('Tab');
+  }
+  await chooseLosatp(page, 'collinear');
+  await page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches', exact: true }).check();
+  await page.getByRole('combobox', { name: 'Collinear search between' }).selectOption('all');
+  await page.getByRole('spinbutton', { name: 'Collinear minimum block genes' }).fill('1');
+  // Drawn units: GridA 1-120 (0), GridA 121-360 (1), GridB (2); window coordinates are the unit's own.
+  expect((await generate(page)).links).toEqual(['0->2 1-90 31-120', '1->2 1-210 151-360']);
 });
 
 // OV-2368: a CDS across a circular record's origin reaches the converter with its
@@ -305,14 +367,16 @@ test('A CDS across a circular origin covers only its arc in LOSATP results', asy
 // PR5-B1: a CLI Session stores the records of one file in one resource named
 // after it with record-ID selectors, so the Web plans the same source-file
 // searches and every raw CLI search (same protein FASTA, same searchContext
-// keys) is a cache hit.
-const FAKE_CLI_LOSAT = `#!/usr/bin/env python3
+// keys, same genome scale) is a cache hit. The CLI passes LOSATP its genome
+// scale (-dbsize) when the LOSAT's blastp help lists it; LOSAT v0.1.0 has none.
+const fakeCliLosat = ({ genomeScale }) => `#!/usr/bin/env python3
 import sys
 args = sys.argv[1:]
 if args in (["--version"], ["-version"]):
-    print("losat 0.1.0")
+    print("losat ${genomeScale ? '0.2.0' : '0.1.0'}")
     sys.exit(0)
 if len(args) == 2 and args[1] == "--help":
+    ${genomeScale ? 'print("  -dbsize <Int8>")' : 'pass'}
     sys.exit(0)
 def proteins(path):
     entries, current = {}, None
@@ -334,13 +398,13 @@ for query_id, query_sequence in query.items():
                              "1e-30", "200"]))
 `;
 
-const saveCliMultiRecordSession = (testInfo) => {
+const saveCliMultiRecordSession = (testInfo, { genomeScale = true } = {}) => {
   const multi = testInfo.outputPath('two-records.gbk');
   writeFileSync(multi, makeGenbank('FileA1', [1, 121, 241]) + makeGenbank('FileA2', [31, 151, 271]));
   const single = testInfo.outputPath('FileB.gbk');
   writeFileSync(single, makeGenbank('FileB', [61, 181, 271]));
   const losat = testInfo.outputPath('losat');
-  writeFileSync(losat, FAKE_CLI_LOSAT, { mode: 0o755 });
+  writeFileSync(losat, fakeCliLosat({ genomeScale }), { mode: 0o755 });
   const tablePath = testInfo.outputPath('records.tsv');
   writeFileSync(tablePath, `gbk\trecord_id\n${multi}\tFileA1\n${multi}\tFileA2\n${single}\tFileB\n`);
   const prefix = testInfo.outputPath('cli-multi-record');
@@ -352,14 +416,27 @@ const saveCliMultiRecordSession = (testInfo) => {
   return `${prefix}.gbdraw-session.json`;
 };
 
-test('The Web reuses every raw LOSATP search of a CLI Session over a multi-record file', async ({ page }, testInfo) => {
-  test.setTimeout(420000);
-  const sessionPath = saveCliMultiRecordSession(testInfo);
+const openCliSession = async (page, sessionPath) => {
   await installProteinExecutor(page);
   await openApp(page);
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 60000 })
     .toBe(3);
+};
+
+// A setting that changes only the derived result: it invalidates the stored results, not the raw searches.
+const setParalogLinks = async (page) => {
+  await openLayoutControls(page);
+  await page.getByRole('spinbutton', { name: 'Paralog links per group', exact: true }).fill('3');
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.losat.blastp.collinearMaxParalogLinksPerOrthogroup
+  ))).toBe(3);
+};
+
+test('The Web reuses every raw LOSATP search of a CLI Session over a multi-record file', async ({ page }, testInfo) => {
+  test.setTimeout(420000);
+  const sessionPath = saveCliMultiRecordSession(testInfo);
+  await openCliSession(page, sessionPath);
   // OV-1068: the CLI Session stores the results it drew, so the first Generate
   // draws them as stored: no LOSAT run, hence no cache telemetry.
   const stored = await generate(page);
@@ -372,11 +449,7 @@ test('The Web reuses every raw LOSATP search of a CLI Session over a multi-recor
   // A derived-only setting invalidates the stored results but not the raw
   // searches: nine record-pair results, all from the CLI raw entries; nothing
   // is searched.
-  await openLayoutControls(page);
-  await page.getByRole('spinbutton', { name: 'Paralog links per group', exact: true }).fill('3');
-  await expect.poll(() => page.evaluate(() => (
-    window.__GBDRAW_APP__.losat.blastp.collinearMaxParalogLinksPerOrthogroup
-  ))).toBe(3);
+  await setParalogLinks(page);
   const run = await generate(page);
   expect({ hits: run.cache.cacheHits, misses: run.cache.cacheMisses }).toEqual({ hits: 9, misses: 0 });
   expect(run.executorCalls).toBe(0);
@@ -404,3 +477,14 @@ test('The Web reuses every raw LOSATP search of a CLI Session over a multi-recor
   expect(runtimes[0].text).toContain(recorded.path);
 });
 
+// Rows of a CLI LOSAT without -dbsize are on each file's own scale, not the
+// genome's that the Web passes (PD-OI-018), so the Web searches them again;
+// only the pair of the whole one-record file FileB passes no scale and is reused.
+test('The Web searches again the raw LOSATP rows of a CLI LOSAT without a genome scale', async ({ page }, testInfo) => {
+  test.setTimeout(420000);
+  await openCliSession(page, saveCliMultiRecordSession(testInfo, { genomeScale: false }));
+  await setParalogLinks(page);
+  const run = await generate(page);
+  expect({ hits: run.cache.cacheHits, misses: run.cache.cacheMisses, calls: run.executorCalls })
+    .toEqual({ hits: 1, misses: 8, calls: 1 });
+});

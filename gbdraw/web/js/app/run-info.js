@@ -708,6 +708,20 @@ const coverTrackSlots = (coverage, tracks, mode) => {
   });
 };
 
+/**
+ * The similarity ring files: one BLAST table per ring and the files of each ring's comparison genome.
+ * @param {RecipeCoverage} coverage
+ * @param {CanonicalRenderRequest['diagramOptions']} options
+ */
+const coverConservationFiles = (coverage, options) => {
+  (Array.isArray(options.conservationBlastFiles) ? options.conservationBlastFiles : []).forEach((ref, index) => (
+    coverResourceRef(coverage, ref, `diagramOptions.conservationBlastFiles[${index}]`)));
+  // The files of each ring's comparison genome (request schema 10).
+  (Array.isArray(options.conservationFastaFiles) ? options.conservationFastaFiles : []).forEach((ring, index) => (
+    (Array.isArray(ring) ? ring : []).forEach((ref, fileIndex) => (
+      coverResourceRef(coverage, ref, `diagramOptions.conservationFastaFiles[${index}][${fileIndex}]`)))));
+};
+
 /** @param {CanonicalRenderRequest} request */
 const validateCurrentSemanticCoverage = (request) => {
   /** @type {RecipeCoverage} */
@@ -715,9 +729,14 @@ const validateCurrentSemanticCoverage = (request) => {
   coverObject(coverage, request, '', [
     'mode', 'grouping', 'records', 'diagramOptions', 'layout', 'comparisons', 'output'
   ], ['schema']);
-  const supportedGroupings = request.mode === 'circular' ? ['single', 'grid'] : ['single'];
-  if (!supportedGroupings.includes(request.grouping) || Array.isArray(request.output)) {
+  // A Circular batch of one record is what the CLI writes for `--gbk <file> -o <prefix>`: its one output is the
+  // recipe's `-o` (OV-3191). A batch of several outputs names each record's file, which no one `-o` gives.
+  const supportedGroupings = request.mode === 'circular' ? ['single', 'grid', 'batch'] : ['single'];
+  if (!supportedGroupings.includes(request.grouping)) {
     throw recipeUnavailable(msg('batch or multiple-output semantics have no single current CLI projection.'));
+  }
+  if (Array.isArray(request.output) && request.output.length !== 1) {
+    throw recipeUnavailable(msg('per-record batch output names have no single current CLI projection.'));
   }
 
   (Array.isArray(request.records) ? request.records : []).forEach((record, index) => {
@@ -816,11 +835,7 @@ const validateCurrentSemanticCoverage = (request) => {
       coverage, ref, `${path}.source${Array.isArray(track.source) ? `[${refIndex}]` : ''}`
     ));
   });
-  /** @type {const} */ (['conservationBlastFiles', 'conservationFastaFiles']).forEach((field) => {
-    (Array.isArray(options[field]) ? options[field] : []).forEach((ref, index) => (
-      coverResourceRef(coverage, ref, `diagramOptions.${field}[${index}]`)
-    ));
-  });
+  coverConservationFiles(coverage, options);
   if (options.annotations !== undefined) {
     throw recipeUnavailable(msg('canonical annotation semantics have no fully lossless current CLI projection.'));
   }
@@ -856,10 +871,9 @@ const validateCurrentSemanticCoverage = (request) => {
       'kind', 'resourceId', 'queryRecordIndex', 'subjectRecordIndex'
     ]);
   });
-  coverObject(coverage, request.output, 'output', [
-    'prefix', 'formats', 'overwrite', 'interactiveMetadataPolicy'
-  ]);
-  if (request.output?.interactiveMetadataPolicy !== 'auto') {
+  const [output, outputPath] = Array.isArray(request.output) ? [request.output[0], 'output[0]'] : [request.output, 'output'];
+  coverObject(coverage, output, outputPath, ['prefix', 'formats', 'overwrite', 'interactiveMetadataPolicy']);
+  if (output.interactiveMetadataPolicy !== 'auto') {
     throw recipeUnavailable(msg('the interactive metadata policy has no current CLI projection.'));
   }
   return {
@@ -1987,9 +2001,12 @@ const appendComparisonOptions = (args, request, files, units) => {
       ? options.conservationBlastFiles
       : [];
     if (blasts.length === 0) return;
-    const fastas = Array.isArray(options.conservationFastaFiles)
-      ? options.conservationFastaFiles
-      : [];
+    const genomes = (Array.isArray(options.conservationFastaFiles) ? options.conservationFastaFiles : [])
+      .map((ring, index) => (Array.isArray(ring) ? ring : []).flatMap((ref, fileIndex) => {
+        const resourceId = referencedResourceId(ref);
+        const fallback = `comparison-${index + 1}${fileIndex > 0 ? `-${fileIndex + 1}` : ''}.fasta`;
+        return resourceId ? [files.resourcePath(resourceId, { fallback })] : [];
+      }));
     const labels = Array.isArray(options.conservationLabels) ? options.conservationLabels : [];
     const colors = Array.isArray(options.conservationColors) ? options.conservationColors : [];
     args.push(
@@ -2003,16 +2020,12 @@ const appendComparisonOptions = (args, request, files, units) => {
         }
       ))
     );
-    if (fastas.some(Boolean)) {
-      args.push(
-        '--conservation_sequence',
-        ...fastas.map((ref, index) => {
-        const resourceId = referencedResourceId(ref);
-          return resourceId
-            ? files.resourcePath(resourceId, { fallback: `comparison-${index + 1}.fasta` })
-            : '';
-        })
-      );
+    // One file per ring keeps --conservation_sequence; a genome in several files needs
+    // --conservation_genome, once per ring ('' alone for a ring without a genome).
+    if (genomes.some((paths) => paths.length > 1)) {
+      genomes.forEach((paths) => args.push('--conservation_genome', ...(paths.length > 0 ? paths : [''])));
+    } else if (genomes.some((paths) => paths.length > 0)) {
+      args.push('--conservation_sequence', ...genomes.map((paths) => paths[0] || ''));
     }
     if (labels.length > 0) args.push('--conservation_labels', ...labels.map(String));
     // A ring without a color of its own ('') is `auto` (gbdraw/circular.py conservation_colors_from_cli);
@@ -2098,9 +2111,7 @@ const appendComparisonOptions = (args, request, files, units) => {
  */
 const appendDiagramOptions = (args, request, files, colorTablePath, units) => {
   const options = request.diagramOptions || {};
-  if (Array.isArray(request.output) && request.output.length !== 1) {
-    throw recipeUnavailable(msg('per-record batch output names have no single current CLI projection.'));
-  }
+  // `validateCurrentSemanticCoverage` admitted one output.
   const output = Array.isArray(request.output) ? request.output[0] : request.output;
   appendOption(args, '-o', output?.prefix);
   if (Array.isArray(output?.formats) && output.formats.length > 0) {
@@ -2462,8 +2473,11 @@ const finalizeGeneratedRecipeFiles = (generatedFiles, allocatedMetadata) => {
   });
 };
 
-// PD-OI-018 revision 4 and D-40: the Web search database differs from the CLI.
+// PD-OI-018 revision 4 and D-40: the note a Result made before one E-value scale per genome stored (OV-3143). It
+// stays true of that Result, so the tab still shows it.
 export const LOSAT_DATABASE_SCOPE_NOTE = msg('LOSAT E-values use the subject source file as the search database, without the query record when both records come from the same file.');
+// PD-OI-018 revision 6 (OV-3143): the E-value scale of each LOSAT program, which the Web and the CLI share.
+export const LOSAT_EVALUE_SCALE_NOTE = msg('LOSATN and TLOSATX E-values use one scale for each pair of genomes: a genome is the files whose records share a row, with every record of those files counted, drawn or not, so a crop, a window or a split into files does not change them. LOSATP E-values use the proteins of the subject genome as the database size, every protein of every record of its files, drawn or not, so a crop, a window or a split into files does not change them either. For a genome pair whose drawn records are each the whole of a one-record file, LOSAT keeps its own scale, which it adjusts for the length of a hit, so that pair\'s E-values differ slightly from those of the same genomes cropped. A genome pair whose search space is past the largest LOSAT reads is searched per file, with a warning.');
 const SOURCE_HELPER_FILE_NOTE = msg('The Source recipe references a browser-generated file: {files}. Use "Download reproducibility files" to save it next to the uploaded inputs before running the command in a terminal.');
 const SOURCE_HELPER_FILES_NOTE = msg('The Source recipe references browser-generated files: {files}. Use "Download reproducibility files" to save them next to the uploaded inputs before running the command in a terminal.');
 const UNMAPPED_PATHS_NOTE = msg('Some browser virtual paths could not be mapped to visible file names, so this command is only an approximation.');
@@ -2481,7 +2495,7 @@ export const shownRunInfoNoteParts = (noteParts) => noteParts.flatMap((part) => 
   if (part.text === SOURCE_HELPER_FILE_NOTE || part.text === SOURCE_HELPER_FILES_NOTE) {
     return [{ text: NEEDS_HELPER_FILES, params: part.params }];
   }
-  return part.text === UNMAPPED_PATHS_NOTE || part.text === LOSAT_DATABASE_SCOPE_NOTE ? [part] : [];
+  return [UNMAPPED_PATHS_NOTE, LOSAT_EVALUE_SCALE_NOTE, LOSAT_DATABASE_SCOPE_NOTE].includes(part.text) ? [part] : [];
 });
 
 /** @type {Readonly<Record<string, string>>} */
@@ -2681,7 +2695,7 @@ export const buildRunInfo = ({
     noteParts.push({ text: msg('The Source recipe can be rerun with the uploaded file names shown here.') });
   }
   if (losatComparisons) {
-    noteParts.push({ text: LOSAT_DATABASE_SCOPE_NOTE });
+    noteParts.push({ text: LOSAT_EVALUE_SCALE_NOTE });
   }
   if (exact && exact.helperFiles.length > 0) {
     noteParts.push({

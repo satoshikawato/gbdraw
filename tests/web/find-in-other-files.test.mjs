@@ -236,7 +236,8 @@ test('a cancelled search adds nothing and keeps the dialog on the search', async
   assert.equal(owner.dialog.screen, 'search');
   assert.equal(owner.dialog.status, 'ready');
   assert.equal(calls.losat.length, 1);
-  assert.equal(calls.losat[0].byFile, true);
+  // By File, worded for this dialog's operation.
+  assert.deepEqual(calls.losat[0].byFile, { operation: 'findInOtherFiles' });
   assert.deepEqual(calls.steps.map((step) => step.step), ['files', 'reference', 'search']);
   assert.deepEqual(calls.created, []);
 });

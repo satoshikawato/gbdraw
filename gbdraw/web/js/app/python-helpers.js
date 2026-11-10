@@ -29,7 +29,9 @@ from gbdraw.web_support.feature_override_table import read_feature_override_tabl
 from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 from gbdraw.web_support.locate import locate_web_json
 from gbdraw.web_support.record_spans import read_record_span_sequences_json
-from gbdraw.web_support.linear_units import plan_card_windows_json, plan_linear_units_json, plan_record_places_json
+from gbdraw.web_support.linear_units import (
+    plan_card_windows_json, plan_genome_scales_json, plan_linear_units_json, plan_record_places_json,
+)
 from gbdraw.web_support.reply_buffers import json_utf8_chunks, text_utf8_chunks, write_reply_buffer
 from gbdraw.web_support.sequence_search import read_search_queries_json, sequence_search_annotation_set_json
 from gbdraw.web_support.feature_anchor import resolve_feature_anchor_json
@@ -810,28 +812,11 @@ def promote_legacy_losatp_cache_candidates(
         if scan.promotion is None:
             return json.dumps({"status": "no-match", "rejections": rejections})
         promotion = scan.promotion
-        protein_id_map = {}
-        old_rows = [
-            line.split("\t")
-            for line in str(entries[promotion.candidate_index].get("text") or "").splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ]
-        new_rows = [
-            line.split("\t")
-            for line in promotion.rewritten_tsv.splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ]
-        for old_row, new_row in zip(old_rows, new_rows):
-            if len(old_row) < 2 or len(new_row) < 2:
-                continue
-            protein_id_map[old_row[0]] = new_row[0]
-            protein_id_map[old_row[1]] = new_row[1]
         return json.dumps({
             "status": "promoted",
             "candidateIndex": candidate_indexes[promotion.candidate_index],
             "entry": promotion.entry,
             "text": promotion.rewritten_tsv,
-            "proteinIdMap": protein_id_map,
             "rejections": rejections,
         })
     except Exception as error:
@@ -1831,6 +1816,11 @@ _WEB_JSON_HELPERS = {
     "locate_web_json": (_with_prepared_input_lookup(locate_web_json, 1), "findInOtherFiles"),
     "read_record_span_sequences_json": (
         _with_prepared_input_lookup(read_record_span_sequences_json, 1), "readRecordSpanSequences"
+    ),
+    # Generate's LOSAT searches pass the E-value scale Python plans for the drawing's request: its parse is kept for
+    # the render (PD-OI-018 revision 6).
+    "plan_genome_scales_json": (
+        _with_prepared_input_lookup(plan_genome_scales_json, 1, publish_inputs=True), "planGenomeScales"
     ),
     # Generate's comparison searches run over the drawn units Python plans (D-01, D-37).
     "plan_linear_units_json": (plan_linear_units_json, "planLinearUnits"),

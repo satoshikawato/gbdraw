@@ -28,7 +28,6 @@ import { toRaw } from '../utils/vue-raw.js';
 /** @import { DisplayedLegendRowContext } from '../services/feature-visibility.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { DrawnTrack } from '../services/track-legend-rows.js' */
-/** @import { AddressedFeature } from '../services/feature-override-identity.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 
 const { watch } = window.Vue;
@@ -56,7 +55,7 @@ const { watch } = window.Vue;
  * @typedef {object} EditorIntentShowPorts
  * @property {WebState} state
  * @property {{ readonly value: SvgResultEntry[] }} results The displayed drawing's Results.
- * @property {{ readonly value: readonly AddressedFeature[] | null }} extractedFeatures The features read from a Result without a catalog.
+ * @property {WebState['extractedFeatures']} extractedFeatures The features read from a Result without a catalog.
  * @property {{ readonly value: string[] }} originalLegendOrder The captions of the rows Python drew.
  * @property {{ readonly value: Element | null }} svgContainer The element that holds the mounted SVG.
  * @property {{ readonly value: number | string }} selectedResultIndex

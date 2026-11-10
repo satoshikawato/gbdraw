@@ -197,6 +197,7 @@ in the same change.
 | A Linear File card's windows: the one list its Region block and Windows list edit, the card's orientation (`orientLinearCard`), and the span that a Start, End and "Across the origin" give | `js/services/linear-card-windows.js` (`cardWindowList`, `orientLinearCard`, `windowSpanOf`) |
 | What the card and Record Layout show of the shown drawing's windows: each window's fields, its circled number, the length across the origin and the bases left out between two windows (the numbers are Python's) | `js/app/linear-card-window-readers.js`; the Worker helper `planCardWindows` and its typed request and answer are `js/contracts/card-windows.generated.js`, written by `tools/generate_web_contracts.py` from `describe_card_window_plan()` in `gbdraw/web_support/linear_units.py` |
 | What a text, number or color field shows while the user types and when a commit ends (the directive `v-committed-value`, written in place of `:value` on every typed field) | `js/app/committed-value.js` (`settleCommittedField`) |
+| What a Linear comparison-plan edge keeps of the user's input (its file, typed record-pair name, window-pair names) when the plan leaves it out, for the plan's edits and Reset Settings | `js/services/linear-comparison-retained.js` (`edgeRetainsUserData`, `windowLosatFilenamesOf`); it imports nothing, so the settings slice reads it |
 | Legend entry point | `js/app/legend.js` |
 | Legend helpers | `js/app/legend/` |
 | Legend/diagram positioning | `js/app/legend-layout.js`, `js/app/legend-layout/` |
@@ -214,7 +215,7 @@ full checkpoint cloning or signing, and its pre-state is the sole rollback autho
 
 Keep top-level `create*` entry points in `js/app/*.js`. Put larger,
 single-purpose helpers in the matching subfolder instead of growing another
-general utility module. Functions stay within the line limit of
+general utility module. Functions stay within the statement limit of
 [Web function size](../../docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#web-function-size),
 which counts a `create*` factory with every function inside it.
 
@@ -409,7 +410,7 @@ binding of a Result install or rebuild it outside these steps (Python's Legend
 rows and colors, the edits a source-replacing Generate prunes, and the feature
 strokes a Generate moves to a record's new key). The Legend
 name input also writes an unchanged copy of the list outside a step, so that it
-shows the row's name again after a refused or cancelled rename. No other code
+shows the row's name again after a cancelled rename. No other code
 calls the paint slice's writers; a new caller, or a caller that moves to
 another route, is an authority-only change.
 

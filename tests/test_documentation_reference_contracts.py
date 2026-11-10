@@ -260,9 +260,13 @@ def test_public_reference_rejects_artificially_split_lambda_fixture() -> None:
 
 def test_release_reference_faq_and_gallery_local_links_resolve() -> None:
     missing: list[str] = []
-    for source in DOCUMENTATION_PAGES:
+    # A changelog fragment is folded into CHANGELOG.md, so its links resolve from there.
+    fragments = [path for path in (REPO_ROOT / "changelog.d").glob("*.md") if path.name != "README.md"]
+    pages = [(source, source) for source in DOCUMENTATION_PAGES]
+    pages += [(fragment, REPO_ROOT / "CHANGELOG.md") for fragment in fragments]
+    for source, resolves_from in pages:
         for raw_target in MARKDOWN_LINK_RE.findall(source.read_text(encoding="utf-8")):
-            target = _local_markdown_target(source, raw_target)
+            target = _local_markdown_target(resolves_from, raw_target)
             if target is not None and not target.exists():
                 missing.append(f"{source.relative_to(REPO_ROOT)} -> {raw_target}")
     assert missing == []

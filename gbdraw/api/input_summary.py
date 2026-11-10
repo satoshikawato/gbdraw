@@ -31,6 +31,7 @@ from gbdraw.features.overrides import feature_override_lookup
 from gbdraw.features.placement import ResolvedRecordFeatureInputs
 from gbdraw.features.selector_values import get_feature_type
 from gbdraw.features.visibility import should_render_feature
+from gbdraw.io.comparison_sequences import RepeatedRecordIds
 from gbdraw.io.comparisons import ComparisonThresholdName, ComparisonThresholdTally
 from gbdraw.layout.linear_wrap import LinearWrapSummary
 from gbdraw.linear_comparison import ComparisonTableTally
@@ -44,11 +45,15 @@ InputWarningCode = Literal[
     "comparison_rows_filtered_out",
     "comparison_table_empty",
     "annotation_set_not_drawn",
+    "comparison_record_id_repeated",
 ]
 NO_DRAWABLE_FEATURES: InputWarningCode = "no_drawable_features"
 COMPARISON_ROWS_FILTERED_OUT: InputWarningCode = "comparison_rows_filtered_out"
 COMPARISON_TABLE_EMPTY: InputWarningCode = "comparison_table_empty"
 ANNOTATION_SET_NOT_DRAWN: InputWarningCode = "annotation_set_not_drawn"
+COMPARISON_RECORD_ID_REPEATED: InputWarningCode = "comparison_record_id_repeated"
+# Warnings of inputs drawn in full: the Web does not head them "Part of the input was not drawn".
+INPUT_WARNINGS_OF_DRAWN_INPUT: frozenset[InputWarningCode] = frozenset({COMPARISON_RECORD_ID_REPEATED})
 
 _THRESHOLD_WORDING: dict[ComparisonThresholdName, tuple[str, str, str]] = {
     # name: (relation of a left-out row, threshold name, unit)
@@ -81,6 +86,9 @@ class RecordInputSummary:
     record_index: int
     record_id: str
     source_name: str
+    # The files it was read from, as the request named them: with ``source_record_index`` and ``region``, the record's
+    # identity, which a batch's log tells apart (two files of one base name in two folders are two inputs).
+    source_paths: tuple[str, ...]
     source_record_index: int
     source_record_count: int
     drawn_length: int
@@ -103,10 +111,17 @@ class RecordInputSummary:
 
 @dataclass(frozen=True)
 class InputWarning:
-    """A reason the drawing shows less than its inputs hold; the run still draws."""
+    """A reason the drawing shows less than its inputs hold, or names part of them ambiguously; the run still draws."""
 
     code: InputWarningCode
     message: str
+    # The input it concerns, by identity: a record's place in its files, a comparison table's file and record pair,
+    # a region annotation set's ID, a comparison sequence file's path. A batch logs one warning of a code per input.
+    subject: tuple[str, ...]
+
+
+# A warning of one input (``InputWarning.code``, ``InputWarning.subject``): what a batch logs once.
+InputWarningKey = tuple[InputWarningCode, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -118,6 +133,8 @@ class InputSummary:
     # The region annotation sets with annotations that the explicit track stack draws nothing of
     # (``gbdraw.annotations.planning.annotation_sets_left_out``), in the order the sets were given.
     annotation_sets_left_out: tuple[str, ...] = ()
+    # The comparison genome files the render read whose record IDs repeat (OV-2954).
+    repeated_comparison_ids: tuple[RepeatedRecordIds, ...] = ()
 
 
 class InputWarningPayload(TypedDict):
@@ -242,6 +259,7 @@ def summarize_inputs(
             record_index=index,
             record_id=str(record.id),
             source_name=item.source_name,
+            source_paths=item.source_paths,
             source_record_index=item.source_record_index,
             source_record_count=item.source_record_count,
             drawn_length=len(record.seq),
@@ -289,6 +307,11 @@ def _types_not_read_in_record(record: RecordInputSummary) -> list[tuple[str, int
     if record.region is None:
         return []
     return [(item.feature_type, item.not_read) for item in record.features if item.not_read]
+
+
+def _record_subject(record: RecordInputSummary) -> tuple[str, ...]:
+    region = "" if record.region is None else _region_text(record.region)
+    return (str(record.source_record_index), region, *record.source_paths)
 
 
 def _record_label(record: RecordInputSummary) -> str:
@@ -379,12 +402,14 @@ def _no_feature_reason(record: RecordInputSummary) -> str:
 
 
 def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
-    """The reasons the drawing shows nothing of a record, of a comparison table, or of a region annotation set."""
+    """The reasons the drawing shows nothing of a record, of a comparison table, or of a region annotation set, and
+    the comparison files whose hover and span export name some records ambiguously."""
 
     warnings = [
         InputWarning(
             NO_DRAWABLE_FEATURES,
             f"{_record_label(record)} has no feature to draw: {_no_feature_reason(record)}.",
+            _record_subject(record),
         )
         for record in summary.records
         # A stack without a features track draws none by request; the inputs are not the reason.
@@ -393,40 +418,61 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
     for table in summary.comparisons:
         tally = table.tally
         label = _comparison_label(table, summary.records)
+        # A Linear comparison: a table's file, or a record pair (a Linear run draws one Result).
+        table_subject = (table.source_name or "", str(table.query_record_index), str(table.subject_record_index))
         if table.protein_matches and tally.rows_kept == 0:
-            warnings.append(InputWarning(COMPARISON_TABLE_EMPTY, f"{label} has no protein match to draw."))
+            warnings.append(InputWarning(COMPARISON_TABLE_EMPTY, f"{label} has no protein match to draw.", table_subject))
         elif tally.rows_read == 0:
-            warnings.append(InputWarning(COMPARISON_TABLE_EMPTY, f"{label} has no rows, so no match is drawn."))
+            warnings.append(
+                InputWarning(COMPARISON_TABLE_EMPTY, f"{label} has no rows, so no match is drawn.", table_subject)
+            )
         elif tally.rows_kept == 0:
             warnings.append(InputWarning(
                 COMPARISON_ROWS_FILTERED_OUT,
                 f"{label}: the thresholds leave out all {_count(tally.rows_read, 'row')}, so no match is drawn: "
                 + "; ".join(_threshold_text(item) for item in tally.thresholds) + ".",
+                table_subject,
             ))
     warnings.extend(
         InputWarning(
             ANNOTATION_SET_NOT_DRAWN,
             f"Region annotation set {set_id} is not drawn: no annotations track slot names it. "
             f"Add an annotations track slot for it (set_id={set_id}) to draw it.",
+            (set_id,),
         )
         for set_id in summary.annotation_sets_left_out
+    )
+    warnings.extend(
+        InputWarning(COMPARISON_RECORD_ID_REPEATED, item.message, (item.source_path,))
+        for item in summary.repeated_comparison_ids
     )
     return tuple(warnings)
 
 
-def log_input_warnings(summary: InputSummary) -> None:
-    """Write the summary's warnings as WARNING lines (the Python API's ``draw_circular`` and ``draw_linear``)."""
+def log_input_warnings(summary: InputSummary, *, warned: set[InputWarningKey] | None = None) -> None:
+    """Write the summary's warnings as WARNING lines (the Python API's ``draw_circular`` and ``draw_linear``).
+
+    ``warned`` holds the warnings the earlier Results of a batch wrote, by code and
+    input: a warning of an input they share (one comparison file every Result
+    reads) is written once, and the new ones join it. Two inputs whose warnings
+    read alike (two files of one base name) are each written.
+    """
 
     for warning in input_warnings(summary):
+        if warned is not None:
+            key: InputWarningKey = (warning.code, warning.subject)
+            if key in warned:
+                continue
+            warned.add(key)
         logger.warning("%s", warning.message)
 
 
-def log_input_summary(summary: InputSummary) -> None:
-    """Write the summary as CLI INFO lines and its warnings as WARNING lines."""
+def log_input_summary(summary: InputSummary, *, warned: set[InputWarningKey] | None = None) -> None:
+    """Write the summary as CLI INFO lines and its warnings as WARNING lines, each of a batch once (``warned``)."""
 
     for line in input_summary_lines(summary):
         logger.info("%s", line)
-    log_input_warnings(summary)
+    log_input_warnings(summary, warned=warned)
 
 
 def with_source_names(summary: InputSummary, names: Mapping[str, str]) -> InputSummary:
@@ -446,6 +492,10 @@ def with_source_names(summary: InputSummary, names: Mapping[str, str]) -> InputS
             replace(table, source_name=names.get(table.source_name, table.source_name))
             if table.source_name is not None else table
             for table in summary.comparisons
+        ),
+        repeated_comparison_ids=tuple(
+            replace(item, source_name=names.get(item.source_name, item.source_name))
+            for item in summary.repeated_comparison_ids
         ),
     )
 
@@ -490,13 +540,16 @@ def input_summary_payload(
 
 __all__ = [
     "ANNOTATION_SET_NOT_DRAWN",
+    "COMPARISON_RECORD_ID_REPEATED",
     "COMPARISON_ROWS_FILTERED_OUT",
     "COMPARISON_TABLE_EMPTY",
     "FeatureTypeTally",
+    "INPUT_WARNINGS_OF_DRAWN_INPUT",
     "InputSummary",
     "InputSummaryPayload",
     "InputWarning",
     "InputWarningCode",
+    "InputWarningKey",
     "InputWarningPayload",
     "LinearWrapPayload",
     "NO_DRAWABLE_FEATURES",

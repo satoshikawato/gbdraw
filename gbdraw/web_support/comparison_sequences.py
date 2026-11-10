@@ -14,26 +14,34 @@ from __future__ import annotations
 import json
 
 from gbdraw.comparisons.circular_losat import comparison_query_fasta
-from gbdraw.io.comparison_sequences import read_comparison_sequence_file
+from gbdraw.io.comparison_sequences import comparison_genome, read_comparison_sequence_file
 
 
-def read_comparison_sequence_json(path: str) -> str:
-    """Return the LOSAT query FASTA, format, record label and record IDs as JSON.
+def read_comparison_sequence_json(path: str, *more_paths: str) -> str:
+    """Return a ring's LOSAT query FASTA, format, record label and record IDs as JSON.
 
-    ``recordLabel`` is the CLI default ring label when the file names one
-    (GenBank / DDBJ: the first record's DEFINITION, else its organism), else
-    ``null``: the Worker stages the file under a fixed name, so the Web applies
-    the file-name rule of ``comparison_file_stem`` itself. Raises
-    ``INPUT_UNREADABLE`` (``SEQUENCE_MISSING`` for a file or record without
-    sequence) like the CLI ring search.
+    ``path`` and ``more_paths`` are the files of one comparison genome in the
+    listed order (a chromosome and its plasmids in separate files), read by the
+    one reader and joined by :func:`comparison_genome` as the CLI ring search
+    joins them, so the query FASTA and its raw cache key are the CLI's.
+    ``format`` and ``recordLabel`` are the first file's: ``recordLabel`` is the
+    CLI default ring label when that file names one (GenBank / DDBJ: the first
+    record's DEFINITION, else its organism), else ``null``: the Worker stages
+    the files under fixed names, so the Web applies the file-name rule of
+    ``comparison_file_stem`` itself. ``recordIds`` lists every record of every
+    file in query order. Raises ``INPUT_UNREADABLE`` (``SEQUENCE_MISSING`` for
+    a file or record without sequence) like the CLI ring search, and
+    ``INPUT_INVALID`` / ``UNIQUE_IDS`` when two files share a record ID.
     """
 
-    comparison = read_comparison_sequence_file(path)
+    comparison = comparison_genome(
+        tuple(read_comparison_sequence_file(file_path) for file_path in (path, *more_paths))
+    )
     fasta = comparison_query_fasta(comparison, ordinal=1)
     return json.dumps(
         {
             "fasta": fasta,
-            "format": comparison.format,
+            "format": comparison.files[0].format,
             "recordLabel": comparison.record_label,
             "recordIds": [str(record.id) for record in comparison.records],
         },

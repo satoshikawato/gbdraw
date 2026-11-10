@@ -345,7 +345,7 @@
  * @property {CanonicalCircularTrackOptions} [tracks]
  * @property {CanonicalCircularOutputOptions} [output]
  * @property {CanonicalFileRef[]} [conservationBlastFiles]
- * @property {(CanonicalFileRef | null)[]} [conservationFastaFiles]
+ * @property {CanonicalFileRef[][]} [conservationFastaFiles]
  * @property {CanonicalTableRef[]} [conservationDataframes]
  * @property {'query' | 'subject' | 'auto'} [conservationReference]
  * @property {string[] | null} [conservationLabels]

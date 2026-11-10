@@ -256,6 +256,7 @@ request and complete them.
   - [ ] Count baselines (Procedure step 7): no `BASELINE may be lowered` line on `dev`, or the named entries were lowered: <PR or "none">
   - [ ] Evidence carried from an ancestor: none, or E <sha>, the `classify --base <E> --head <H>` output, and the verdicts used
   - [ ] Release records for <version>: each `## Unreleased:` heading in `docs/internal/SESSION_FORMAT_HISTORY.md` whose entry this promotion ships starts with `<version>:` instead, and the Supported versions table of `SECURITY.md` lists the <version> line (any other change to that table is the Owner's)
+  - [ ] Changelog for <version>: the release pull request into `dev` ran `python tools/changelog.py fold`, so `CHANGELOG.md` lists every entry and `changelog.d/` holds only `README.md` on the promotion head
   - [ ] Release date for <version>: the `CHANGELOG.md` heading of <version> and `date-released` in `CITATION.cff` carry the day the Owner plans to publish the release; if the tag is published on another day, a pull request into `dev` corrects both lines to the tag's date
   - [ ] Release evidence for the tag: the release-tier run above is on H or on an ancestor whose evidence carries to H, its `Release / gate` passed, no newer release-tier run on such a commit failed it, and the promotion merge adds nothing to `main` beyond H, so the release workflow's `Release-tier evidence carries to the tag` job can pass on the tagged commit ([Release evidence check](#release-evidence-check))
 ```

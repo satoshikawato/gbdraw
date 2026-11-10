@@ -7,7 +7,9 @@ import { cloneFileBytesForTransfer } from './file-content-cache.js';
 /** @import { FileLike } from './session-resource-backing.js' */
 
 /**
- * A feature as the Python extraction returns it: JSON keyed by field name.
+ * A feature as the Python extraction returns it: JSON keyed by field name. It is
+ * also the row type of the app state's `extractedFeatures` and `biologicalFeatures`
+ * (state.js), which hold these rows or the catalog admission's projections of them.
  * @typedef {Record<string, unknown>} ExtractedFeature
  */
 /** @typedef {ExtractedFeature & { svg_id: string, stable_svg_id: string, stable_feature_id: string }} NormalizedFeature */

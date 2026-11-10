@@ -1009,10 +1009,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         conservationBlastFiles: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalFileRef"})}),
         conservationFastaFiles: Object.freeze({
           kind: "array",
-          items: Object.freeze({
-            kind: "union",
-            options: Object.freeze([Object.freeze({kind: "ref", name: "CanonicalFileRef"}), Object.freeze({kind: "null"})])
-          })
+          items: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalFileRef"})})
         }),
         conservationDataframes: Object.freeze({kind: "array", items: Object.freeze({kind: "ref", name: "CanonicalTableRef"})}),
         conservationReference: Object.freeze({kind: "literal", values: Object.freeze(["query", "subject", "auto"])}),

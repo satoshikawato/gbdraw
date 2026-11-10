@@ -36,6 +36,8 @@ from gbdraw.layout.linear_multi_record import (
     LinearLayoutPlan,
     LinearRecordMeasurement,
     RecordKey,
+    drawn_unit_rows,
+    grid_display_pairs,
     record_pairs_between_adjacent_rows,
     resolve_record_row_positions,
     solve_linear_horizontal_layout,
@@ -167,18 +169,138 @@ def test_non_contiguous_rows_and_token_column_order_are_normalized() -> None:
     assert rows == (0, 0, 1)
 
 
-def test_shared_record_position_grammar_preserves_mode_compatibility() -> None:
-    assert parse_record_row_position(
-        "record@segment@2",
-        _compatibility="circular",
-    ) == ("record@segment", 2)
-    with pytest.raises(ValidationError, match="'<selector>@<row>' format"):
-        parse_record_row_position("record@segment@2")
+# OV-2988: one reader of a `#N` record selector (`parse_record_selector`, gbdraw/io/record_select.py) for Linear
+# and Circular Record Order, `--record_id` and `--region`. A form any of them drew names that record on all of them
+# (Linear Record Order read `#+2` as record 2); a form all of them refused stays refused.
+_RECORD_SELECTOR_FORMS_READ = ("#2", "#02", "# 2", " #2 ", "#\u30002", "#+2", "# +2", "#+02")
+_RECORD_SELECTOR_FORMS_REFUSED = (
+    "#+ 2", "#-2", "#-0", "#0", "#+0", "#00", "#\u0662", "#2a", "#", "#++2", pytest.param("#" + "9" * 5000, id="#9x5000"),
+)
 
 
-def test_linear_record_selector_error_text_is_preserved() -> None:
-    with pytest.raises(ValidationError, match=r"#0.*out of range for 1 loaded record"):
-        resolve_record_row_positions(_records(100), ("#0@1",))
+@pytest.mark.parametrize("compatibility", ("linear", "circular"))
+@pytest.mark.parametrize("form", _RECORD_SELECTOR_FORMS_READ)
+def test_every_surface_reads_a_record_selector_form_as_one_record(form: str, compatibility: str) -> None:
+    from gbdraw.io.regions import parse_region_spec
+
+    assert parse_record_row_position(f"{form}@1") == (form.strip(), 1)
+    assert resolve_record_row_positions(
+        _records(100, 100, 100), (f"{form}@1", "#1@2", "#3@3"), _compatibility=compatibility  # type: ignore[arg-type]
+    ) == ((1, 0, 2), (1, 0, 2))
+    selector = parse_record_selector(form)
+    assert selector is not None and selector.record_index == 1
+    assert parse_region_spec(f"{form}:1-5").record_index == 1
+
+
+@pytest.mark.parametrize("compatibility", ("linear", "circular"))
+@pytest.mark.parametrize("form", _RECORD_SELECTOR_FORMS_REFUSED)
+def test_every_surface_refuses_a_record_selector_form_all_of_them_refused(form: str, compatibility: str) -> None:
+    from gbdraw.io.regions import parse_region_spec
+
+    with pytest.raises(ValidationError, match="Invalid record selector|Record index must be >= 1"):
+        parse_record_row_position(f"{form}@1")
+    with pytest.raises(ValidationError, match="Invalid record selector|Record index must be >= 1"):
+        resolve_record_row_positions(
+            _records(100, 100, 100), (f"{form}@1", "#1@2", "#3@3"), _compatibility=compatibility  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValueError):
+        parse_record_selector(form)
+    with pytest.raises(ValueError):
+        parse_region_spec(f"{form}:1-5")
+
+
+@pytest.mark.parametrize("compatibility", ("linear", "circular"))
+def test_record_order_reads_one_grammar_in_both_modes(compatibility: str) -> None:
+    # OV-3312: a row with a `+` sign (Linear drew it); a record ID with `@` (Circular drew it) or that is a word
+    # `--record_id` reads as no selector, such as `none` or `-` (Linear drew it): both modes draw each now.
+    assert resolve_record_row_positions(
+        _records(100, 100), ("#2@+1", "#1@+2"), _compatibility=compatibility  # type: ignore[arg-type]
+    ) == ((1, 0), (1, 0))
+    for record_id in ("record@segment", "none", "-"):
+        records = [SeqRecord(Seq("A" * 100), id=record_id), SeqRecord(Seq("A" * 100), id="other")]
+        assert parse_record_row_position(f"{record_id}@2") == (record_id, 2)
+        assert resolve_record_row_positions(
+            records, (f"{record_id}@2", "other@1"), _compatibility=compatibility  # type: ignore[arg-type]
+        ) == ((1, 0), (1, 0))
+    for row in ("-1", "0", "+0", "x"):
+        with pytest.raises(ValidationError, match="positive integer row"):
+            parse_record_row_position(f"#1@{row}")
+    with pytest.raises(ValidationError, match=r"#4.*out of range for 3 loaded record"):
+        resolve_record_row_positions(
+            _records(100, 100, 100), ("#4@1", "#1@2", "#3@3"), _compatibility=compatibility  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize("record_id", ("none", "-"))
+def test_record_order_names_a_record_with_windows_by_the_same_grammar(record_id: str) -> None:
+    # OV-3312: a record drawn in windows takes its Record Order row through the same reader as any other record, so
+    # a record ID `none` or `-` names that record with windows as it does without them.
+    def record(name: str) -> SeqRecord:
+        made = SeqRecord(Seq("A" * 1000), id=name)
+        made.annotations["molecule_type"] = "DNA"
+        return made
+
+    def rows(windows: tuple[RecordWindow, ...]) -> list[int]:
+        request = LinearDiagramRequest(
+            records=(
+                RecordInput(InMemoryRecordSource(record(record_id)), windows=windows, record_key="named"),
+                RecordInput(InMemoryRecordSource(record("other")), record_key="other"),
+            ),
+            layout=LinearMultiRecordOptions(multi_record_positions=(f"{record_id}@1", "other@2")),
+        )
+        axes = [entry["axisYpx"] for entry in build_request_diagram(request).drawing._gbdraw_track_slot_geometry["records"]]
+        return [sorted(set(axes)).index(axis) + 1 for axis in axes]
+
+    assert rows(()) == [1, 2]
+    assert rows((RecordWindow(1, 400), RecordWindow(600, 900))) == [1, 1, 2]
+
+
+_NULL_WORDS = ("none", "-", "null", "undefined", "jsnull", "jsundefined")
+
+
+def _named_records(*names: str) -> list[SeqRecord]:
+    made = [SeqRecord(Seq("A" * 1000), id=name) for name in names]
+    for record in made:
+        record.annotations["molecule_type"] = "DNA"
+    return made
+
+
+@pytest.mark.parametrize("word", _NULL_WORDS)
+@pytest.mark.parametrize("windows", ((), (RecordWindow(1, 400), RecordWindow(600, 900))), ids=("whole", "windows"))
+def test_a_no_selector_word_names_the_one_drawn_record(word: str, windows: tuple[RecordWindow, ...]) -> None:
+    # D-211: a Record Order token names the record with that ID; a word `parse_record_selector` reads as no selector
+    # names the one drawn record when no record has that ID; otherwise it is refused. Records drawn in windows drew
+    # `none@1` on dev; whole records refused it in Linear.
+    [real] = _named_records("real")
+    request = LinearDiagramRequest(
+        records=(RecordInput(InMemoryRecordSource(real), windows=windows, record_key="real"),),
+        layout=LinearMultiRecordOptions(multi_record_positions=(f"{word}@1",)),
+    )
+    build_request_diagram(request)
+    for compatibility in ("linear", "circular"):
+        assert resolve_record_row_positions(
+            [real], (f"{word}@1",), _compatibility=compatibility  # type: ignore[arg-type]
+        ) == ((0,), (0,))
+
+
+@pytest.mark.parametrize("word", _NULL_WORDS)
+@pytest.mark.parametrize("windows", ((), (RecordWindow(1, 400), RecordWindow(600, 900))), ids=("whole", "windows"))
+def test_a_no_selector_word_is_refused_when_several_records_are_drawn(word: str, windows: tuple[RecordWindow, ...]) -> None:
+    real, other = _named_records("real", "other")
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(InMemoryRecordSource(real), windows=windows, record_key="real"),
+            RecordInput(InMemoryRecordSource(other), record_key="other"),
+        ),
+        layout=LinearMultiRecordOptions(multi_record_positions=(f"{word}@1", "other@2")),
+    )
+    with pytest.raises(ValidationError, match="did not match any record ID"):
+        build_request_diagram(request)
+    for compatibility in ("linear", "circular"):
+        with pytest.raises(ValidationError, match="did not match any record ID"):
+            resolve_record_row_positions(
+                [real, other], (f"{word}@1", "other@2"), _compatibility=compatibility  # type: ignore[arg-type]
+            )
 
 
 def test_adjacent_row_pairs_exclude_same_row_records() -> None:
@@ -188,6 +310,23 @@ def test_adjacent_row_pairs_exclude_same_row_records() -> None:
         (1, 2),
         (1, 3),
     )
+
+
+def test_grid_display_pairs_are_the_adjacent_row_pairs_of_rows_that_hold_several_records() -> None:
+    # Two records above one: both stand above it (OV-3248).
+    assert grid_display_pairs((0, 0, 1)) == ((0, 2), (1, 2))
+    # One record per row, rows in record order: the comparisons join consecutive records.
+    assert grid_display_pairs((0, 1, 2)) is None
+    # Rows out of record order: the records of adjacent rows, not consecutive records.
+    assert grid_display_pairs((2, 0, 1)) == ((0, 2), (1, 2))
+
+
+def test_drawn_unit_rows_read_grid_rows_else_one_row_per_record_shared_by_its_windows() -> None:
+    assert drawn_unit_rows((1, 1, 3), ("a", "b", "c")) == (0, 0, 1)
+    assert drawn_unit_rows((None, None, None), ("a", "a", "b")) == (0, 0, 1)
+    assert drawn_unit_rows((2, 2, 1), ("a", "a", "b")) == (1, 1, 0)
+    with pytest.raises(ValidationError, match="every record must have it"):
+        drawn_unit_rows((1, None), ("a", "b"))
 
 
 def test_layout_rejects_gap_that_consumes_available_width() -> None:

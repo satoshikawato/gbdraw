@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
+const { pythonLinearUnitPlan } = await import(pathToFileURL(join(repoRoot, 'tests', 'web', 'helpers', 'linear-unit-plan.mjs')));
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-losat-cache-'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 // losat-cache.js reads the generated schema constants, the typed-result shapes (checked with contract-shape.js),
@@ -887,7 +888,7 @@ assert.throws(
 // asynchronous I/O is controlled so an exception/cancel occurs while the loan
 // is active, rather than after the loop has already released its index.
 const {
-  LINEAR_COMPARISON_MODES, buildLosatJobSpecs, canonicalGridDisplayPairs, numberLosatDisplayPairs,
+  LINEAR_COMPARISON_MODES, buildLosatJobSpecs, numberLosatDisplayPairs,
   resolveLinearComparisonPlan
 } = await import(pathToFileURL(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'linear-comparisons.js')));
 const runSource = await readFile(join(repoRoot, 'gbdraw/web/js/app/run-analysis.js'), 'utf8');
@@ -1069,7 +1070,7 @@ await exercisePairLoop({failure: 'cancel'});
 // card, and the Run Info registration gives each one its own generated file,
 // named for its card and holding its pair.
 {
-  const gridCell = (uid, row) => ({ uid, row, canonicalRow: row, canonicalColumn: 1, canonicalCardinality: 'exactly_one' });
+  const gridCell = (uid, row) => ({ uid, row });
   const linearSeqs = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
   const linearRecordRows = [gridCell('b', 1), gridCell('c', 2), gridCell('a', 3)];
   const comparisonResolution = resolveLinearComparisonPlan({
@@ -1084,9 +1085,13 @@ await exercisePairLoop({failure: 'cancel'});
     useProteinBlastp: false, useCollinearBlastp: true,
     // Without windows, the units are the cards and the unit plan is the card plan (OV-2738).
     linearSeqs, unitResolution: comparisonResolution,
-    pairNumbers: numberLosatDisplayPairs(
-      specs, comparisonResolution.edges, canonicalGridDisplayPairs(linearSeqs, linearRecordRows)
-    ),
+    // Rows out of record order: Python's unit plan displays every adjacent-row pair (`gridPairs`), a->c and b->c.
+    pairNumbers: numberLosatDisplayPairs(specs, comparisonResolution.edges, pythonLinearUnitPlan({
+      records: linearSeqs.map(({ uid }) => ({
+        recordKey: uid, windows: [], gridRow: linearRecordRows.find((row) => row.uid === uid).row
+      })),
+      pairs: []
+    }).gridPairs),
     preparedJobs: specs.map((spec) => ({
       spec, losatArgs: [], cacheMetadata: { search: `${spec.queryUid}->${spec.subjectUid}` }, batch: {}
     })),
@@ -1103,6 +1108,8 @@ await exercisePairLoop({failure: 'cancel'});
     promoteRawLosatCacheEntry() {},
     losatTiming: { totalPairs: 0, cacheHits: 0, cacheMisses: 0 },
     losatPairs: [], cacheInfo: [],
+    // The drawing whose cache-info rows these are (a ring edit of another drawing leaves them, OV-3196).
+    drawing: { id: 'drawing-linear' },
     // The card's file name (`buildCacheFilename` reads the edge the spec names).
     buildCacheFilename: (spec) => `${spec.edgeKey}.tsv`,
     pendingJobKeys: new Set(), losatJobs: []
@@ -1212,4 +1219,58 @@ const { cases: edgeFilenameCases } = JSON.parse(await readFile(
 for (const { left, right, suffix, queryWindow = null, subjectWindow = null, expected } of edgeFilenameCases) {
   assert.equal(cache.losatEdgeFilename(left, right, suffix, queryWindow, subjectWindow), expected,
     JSON.stringify({ left, right, queryWindow, subjectWindow }));
+}
+
+// #1777 review 9 (OV-3203, OV-3204): the LOSAT results a drawing's panel counts, downloads and clears are its own
+// cache-info rows, one per cache key (the first row of a key, as Save writes one entry per key); a drawing's
+// Generate, ring edit and Clear leave the other drawings' rows.
+{
+  const row = (key, drawingId, filename = `${key}.tsv`) => ({ key, filename, display: true, drawingId });
+  const rows = [row('pair', 'linear'), row('ring', 'circular'), row('ring', 'circular', 'again.tsv'), row('ring', 'circular-2'),
+    row('other', 'circular')];
+  assert.deepEqual(cache.losatRowsOnePerKey(rows), [rows[0], rows[1], rows[4]]);
+  assert.deepEqual(cache.losatResultRowsOfDrawing(rows, 'circular'), [rows[1], rows[4]]);
+  assert.deepEqual(cache.losatResultRowsOfDrawing(rows, 'circular-2'), [rows[3]]);
+  assert.deepEqual(cache.losatResultRowsOfDrawing(rows, 'linear'), [rows[0]]);
+  assert.deepEqual(cache.losatRowsOfOtherDrawings(rows, 'circular'), [rows[0], rows[3]]);
+  // The one kind rule Save and Load read (review 9 finding 3): a ring search is a Circular drawing's, any other a
+  // Linear drawing's (its pairs, or an older Session's search without record ids).
+  assert.equal(cache.losatEntryDrawingKind({ flow: cache.CIRCULAR_CONSERVATION_FLOW }), 'circular');
+  assert.equal(cache.losatEntryDrawingKind({ queryUid: 'a', subjectUid: 'b' }), 'linear');
+  assert.equal(cache.losatEntryDrawingKind({}), 'linear');
+}
+
+// #1777 round 17 (D-200, OV-3215, OV-3260): the one rule for the LOSAT caches an install leaves. No install removes a
+// cached search or converted payload; a Generate's commit installs its caches whole; an Undo, a Redo or a rollback
+// keeps the current caches and puts back only what the restored drawing's rows and protein identity manifest name, and
+// the converted payloads all of whose searches are then cached.
+{
+  const entry = (key) => ({ key });
+  const derived = (rawKeys) => ({ rawKeys });
+  const step = {
+    cache: new Map([['row', entry('row')], ['stale', entry('stale')], ['protein-key', proteinEntry], ['kept', entry('kept-step')]]),
+    derived: new Map([['live', derived(['row', 'protein-key'])], ['dead', derived(['row', 'stale'])], ['bare', {}],
+      ['current-raw', derived(['other'])]])
+  };
+  const current = {
+    cache: new Map([['other', entry('other')], ['kept', entry('kept')]]),
+    derived: new Map([['current', derived(['gone'])]])
+  };
+  const restored = cache.losatEvidenceAfterStep({ commit: false, rows: [{ key: 'row' }, { key: 'kept' }], manifest }, step, current);
+  // Everything cached now stays (OV-3260), even a payload whose searches are gone; the step adds its rows' search and
+  // the manifest's protein search, not 'stale' (OV-3215), and never replaces an entry cached now.
+  assert.deepEqual([...restored.cache.keys()], ['other', 'kept', 'row', 'protein-key']);
+  assert.equal(restored.cache.get('kept').key, 'kept');
+  assert.deepEqual([...restored.derived.keys()], ['current', 'live', 'current-raw'],
+    'a payload comes back only with all its searches cached, and one without rawKeys never');
+  // A manifest that does not resolve the search names nothing.
+  const unresolved = cache.losatEvidenceAfterStep({ commit: false, rows: [], manifest: { ...manifest, recordInstances: {} } },
+    step, { cache: new Map(), derived: new Map() });
+  assert.deepEqual([...unresolved.cache.keys()], []);
+  // The current Maps themselves when nothing comes back (a rollback's retry, PD-OI-022), and the step whole on a commit.
+  const none = cache.losatEvidenceAfterStep({ commit: false, rows: [{ key: 'other' }], manifest: null },
+    { cache: new Map([['stale', entry('stale')]]), derived: new Map([['dead', derived(['stale'])]]) }, current);
+  assert.equal(none.cache, current.cache);
+  assert.equal(none.derived, current.derived);
+  assert.equal(cache.losatEvidenceAfterStep({ commit: true, rows: [], manifest: null }, step, current), step);
 }

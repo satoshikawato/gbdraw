@@ -220,7 +220,7 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
   });
   const reuse = (session, visibility) => canReuseResolvedProteinArtifacts({
     canonicalComparisons: comparisons, committedSession: session,
-    sequences: [{ uid: 'a', region_record_id: '', windows: [] }], active: active(visibility)
+    sequences: [{ uid: 'a', region_record_id: '', windows: [] }], gridRows: [null], active: active(visibility)
   });
   const hideRule = '*\tCDS\tprotein_id\tCAG38712.1\toff\n';
   assert.equal(reuse(sessionWith(null), ''), true, 'unchanged empty visibility reuses');
@@ -240,7 +240,7 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
         comparisons: [{ ...marker, settings: { collinearMaxParalogLinksPerOrthogroup: committed } }, { kind: 'orthogroupResult' }]
       }
     },
-    sequences: [{ uid: 'a', region_record_id: '', windows: [] }],
+    sequences: [{ uid: 'a', region_record_id: '', windows: [] }], gridRows: [null],
     active: { ...active(''), maxParalogLinks: current }
   });
   assert.equal(reuseParalogs(3, 3), true, 'the same paralog links reuse');
@@ -253,7 +253,7 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
     return canReuseResolvedProteinArtifacts({
       canonicalComparisons: collinear,
       committedSession: { ...sessionWith(null), renderRequest: { ...sessionWith(null).renderRequest, comparisons: collinear } },
-      sequences: [{ uid: 'a', region_record_id: '', windows: [] }],
+      sequences: [{ uid: 'a', region_record_id: '', windows: [] }], gridRows: [null],
       active: {
         ...active(''), mode: 'collinear', inferOrthogroups, minAnchors: 1, maxUnitGap: 0, maxDiagonalDrift: 0,
         maxConflicts: 1, mergeOrientation: 'strand', unitMode: 'auto', anchorMode: 'rbh', searchScope: 'adjacent',
@@ -263,4 +263,39 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
   };
   assert.equal(reuseWithoutStoredInference(true), true, 'an absent stored flag reads as on');
   assert.equal(reuseWithoutStoredInference(false), false, 'turning inference off declines reuse');
+}
+
+// A LOSATP search's E-value scale is its subject genome's proteins, and a genome is the files whose records share a
+// row (PD-OI-018 revision 6): A, B and C in rows 1, 2 and 3 searched A->B with B whole (no --dbsize); with C moved
+// into row 2, B and C are one genome and a fresh Generate passes --dbsize. The stored result is not reused then.
+{
+  const reuseProbePath = join(identityProbeDir, 'run-analysis-reuse-rows-probe.mjs');
+  await writeFile(reuseProbePath, identityProbeSource.replace(
+    'const canReuseResolvedProteinArtifacts = ({',
+    'export const canReuseResolvedProteinArtifacts = ({'
+  ), 'utf8');
+  const { canReuseResolvedProteinArtifacts } = await import(pathToFileURL(reuseProbePath));
+  const marker = { kind: 'generatedProteinComparison', mode: 'none', settings: {} };
+  const comparisons = [marker, { kind: 'precomputedProteinComparison' }];
+  const committedSession = {
+    renderRequest: {
+      comparisons,
+      records: ['A', 'B', 'C'].map((recordKey, index) => ({
+        recordKey, windows: [], presentation: { gridRow: index + 1, gridColumn: null }
+      })),
+      diagramOptions: {}
+    },
+    resources: {}
+  };
+  const sequences = ['A', 'B', 'C'].map((uid) => ({ uid, region_record_id: '', windows: [] }));
+  const reuse = (gridRows) => canReuseResolvedProteinArtifacts({
+    canonicalComparisons: comparisons, committedSession, sequences, gridRows,
+    active: {
+      featureVisibility: '', mode: 'pairwise', candidateLimit: null, bitscore: 50, evalue: 1e-2, identity: 0,
+      alignmentLength: 0, maxHits: 5
+    }
+  });
+  assert.equal(reuse([1, 2, 3]), true, 'the same rows reuse');
+  assert.equal(reuse([1, 2, 2]), false, 'C moved into row 2 joins B\'s genome: the stored search had no --dbsize');
+  assert.equal(reuse([null, null, null]), false, 'rows turned off write no grid rows');
 }

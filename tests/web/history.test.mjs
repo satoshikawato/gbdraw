@@ -777,7 +777,7 @@ const createLayoutPreferences = () => ({
   };
   const history = createHistoryManager({
     maxActions: 0,
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     buildIntent: buildState,
     applyIntent: applyState,
     buildCheckpoint: buildState,
@@ -787,6 +787,39 @@ const createLayoutPreferences = () => ({
   currentFile = null;
   await history.runUndoable('Remove file', () => {});
   assert.equal(fileStore.has(first.fileId), false);
+}
+
+// A History built without a budget counts the bytes its file store estimates
+// for the files its steps name (`estimateFileBytes`): steps whose files exceed
+// `maxBytes` drop, oldest first. Without the file store's functions, files
+// count no bytes.
+{
+  /** @param {(fileStore: ReturnType<typeof createInputFileStore>) => object} filePorts */
+  const undoCountAfterThreeFiles = async (filePorts) => {
+    const fileStore = createInputFileStore();
+    let currentFile = makeFile('start.gb');
+    const buildState = async () => ({ file: fileStore.registerFile(currentFile) });
+    const applyState = async (snapshot) => {
+      currentFile = fileStore.fileOf(snapshot.file);
+    };
+    const history = createHistoryManager({
+      maxBytes: 100_000,
+      ...filePorts(fileStore),
+      buildIntent: buildState,
+      applyIntent: applyState,
+      buildCheckpoint: buildState,
+      applyCheckpoint: applyState
+    });
+    await history.captureBaseline('initial');
+    for (const name of ['a.gb', 'b.gb', 'c.gb']) {
+      await history.runUndoable(`Load ${name}`, () => { currentFile = makeFile(name, 60_000); });
+    }
+    return history.getUndoCount();
+  };
+  assert.equal(await undoCountAfterThreeFiles(() => ({})), 3);
+  assert.equal(await undoCountAfterThreeFiles((fileStore) => ({
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly
+  })), 1);
 }
 
 {
@@ -1037,7 +1070,7 @@ const createLayoutPreferences = () => ({
       c_depth: null,
       c_conservation_blasts: [],
       c_conservation_blasts_source: 'losat-cache',
-      c_conservation_fastas: [null, fileStore.registerFile(makeFile('comparison-2.fa', 30))],
+      c_conservation_fastas: [[], [fileStore.registerFile(makeFile('comparison-2.fa', 30))]],
       linearCanonicalComparisons: [
         {
           kind: 'precomputedProteinComparison',
@@ -1180,8 +1213,8 @@ const createLayoutPreferences = () => ({
   assert.equal(state.circularSources[0].gb.name, 'restore.gb');
   assert.equal(state.files.c_conservation_blasts_source, 'losat-cache');
   assert.equal(state.files.c_conservation_fastas.length, 2);
-  assert.equal(state.files.c_conservation_fastas[0], null);
-  assert.equal(state.files.c_conservation_fastas[1].name, 'comparison-2.fa');
+  assert.deepEqual(state.files.c_conservation_fastas[0], []);
+  assert.equal(state.files.c_conservation_fastas[1][0].name, 'comparison-2.fa');
   assert.equal(state.linearComparisonPlan.mode, 'selected');
   assert.equal(state.linearComparisonPlan.defaultSource, 'losat');
   assert.equal(state.linearComparisonPlan.edges[0].id, 'edge-a-b');
@@ -1222,7 +1255,7 @@ const createLayoutPreferences = () => ({
   // The comparison files are the Linear drawing's: its History records them.
   state.mode.value = 'linear';
   const history = createHistoryManager({
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     ...snapshots.drawingHistory('linear')
   });
   await history.captureBaseline('P3 baseline');
@@ -1525,7 +1558,7 @@ const createLayoutPreferences = () => ({
       c_conservation_blasts: [],
       c_conservation_blasts_source: 'losat-cache',
       c_conservation_fastas: [],
-      c_conservation_sequence_sources: [fileStore.registerFile(makeFile('generated-source.fa', 9_000_000))],
+      c_conservation_sequence_sources: [[fileStore.registerFile(makeFile('generated-source.fa', 9_000_000))]],
       linearCanonicalComparisons: [{ kind: 'generated', pairs: ['x'.repeat(100_000)] }]
     },
     circularSources: [],
@@ -1612,7 +1645,7 @@ const createLayoutPreferences = () => ({
   // B23: a LOSAT-cache replay's comparison sequences are held by reference only.
   assert.deepEqual(intent.files.c_conservation_blasts, []);
   assert.deepEqual(
-    Object.keys(intent.files.c_conservation_sequence_sources[0]).sort(),
+    Object.keys(intent.files.c_conservation_sequence_sources[0][0]).sort(),
     ['fileId', 'lastModified', 'name', 'size', 'sourceId', 'type']
   );
 
@@ -1623,7 +1656,7 @@ const createLayoutPreferences = () => ({
   assert.equal(uploadIntent.files.c_conservation_sequence_sources.length, 1);
   state.files.c_conservation_sequence_sources = [];
   await snapshots.drawingHistory('circular').applyIntent(uploadIntent, { changes: [{ path: ['files'] }] });
-  assert.deepEqual(state.files.c_conservation_sequence_sources.map((file) => file?.name), ['generated-source.fa']);
+  assert.deepEqual(state.files.c_conservation_sequence_sources.map((files) => files.map((file) => file.name)), [['generated-source.fa']]);
 
   // B23: in a LOSAT-cache replay the ring rows and managed track slots name the
   // derived BLAST rows, so Undo and Redo of a ring removal restore those rows
@@ -1635,11 +1668,12 @@ const createLayoutPreferences = () => ({
   Object.assign(state.files, {
     c_conservation_blasts: [...derivedBlasts],
     c_conservation_blasts_source: 'losat-cache',
-    c_conservation_fastas: [...ringFastas],
-    c_conservation_sequence_sources: [...derivedSources]
+    // One list of genome files per ring.
+    c_conservation_fastas: ringFastas.map((file) => [file]),
+    c_conservation_sequence_sources: derivedSources.map((file) => [file])
   });
   const replayHistory = createHistoryManager({
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     collectCurrentFileIds: snapshots.collectCurrentFileIds,
     ...snapshots.drawingHistory('circular'),
     buildCheckpoint: () => {
@@ -1657,8 +1691,8 @@ const createLayoutPreferences = () => ({
   const loadedRows = replayRows();
   await replayHistory.runUndoable('Remove series', () => {
     state.files.c_conservation_blasts = derivedBlasts.slice(1);
-    state.files.c_conservation_fastas = ringFastas.slice(1);
-    state.files.c_conservation_sequence_sources = derivedSources.slice(1);
+    state.files.c_conservation_fastas = ringFastas.slice(1).map((file) => [file]);
+    state.files.c_conservation_sequence_sources = derivedSources.slice(1).map((file) => [file]);
   });
   const removedRows = replayRows();
   await replayHistory.undo();
@@ -1706,8 +1740,8 @@ const createLayoutPreferences = () => ({
       c_depth: [ref(circularDepth)],
       c_conservation_blasts: [ref(conservationBlast)],
       c_conservation_blasts_source: 'losat-cache',
-      c_conservation_fastas: [ref(conservationFasta)],
-      c_conservation_sequence_sources: [ref(conservationSequenceSource)],
+      c_conservation_fastas: [[ref(conservationFasta)]],
+      c_conservation_sequence_sources: [[ref(conservationSequenceSource)]],
       linearCanonicalComparisons: [
         { kind: 'precomputedProteinComparison', file: ref(canonicalProtein) },
         { kind: 'orthogroupResult', file: ref(canonicalOrthogroups) },
@@ -1732,7 +1766,7 @@ const createLayoutPreferences = () => ({
   let artifactBuilds = 0;
   const snapshots = createHistorySnapshotService({ state: withDrawings(state), fileStore, currentResults: () => state.results.value });
   const history = createHistoryManager({
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     collectCurrentFileIds: snapshots.collectCurrentFileIds,
     buildIntent: async () => ({ setting }),
     applyIntent: async (intent) => {
@@ -1793,7 +1827,7 @@ const createLayoutPreferences = () => ({
   const history = createHistoryRouter({
     drawingIds: ['circular'],
     activeDrawingId: () => 'circular',
-    managerOptions: () => ({ fileStore, ...snapshots.drawingHistory('circular') }),
+    managerOptions: () => ({ ...snapshots.drawingHistory('circular') }),
     sessionHistory: snapshots.sessionHistory()
   });
   const draftState = () => ({
@@ -1875,8 +1909,9 @@ const createLayoutPreferences = () => ({
     entries: [{ id: 'derived-evidence-a' }]
   };
   const rawCacheValueA = { text: 'raw-a\n' };
-  const derivedCacheValueA = { payload: { id: 'derived-a' } };
-  const losatCacheInfoA = [{ key: 'raw-a' }];
+  const derivedCacheValueA = { payload: { id: 'derived-a' }, rawKeys: ['raw-a'] };
+  // A row names its drawing (`LosatCacheInfoEntry.drawingId`): a step installs its drawing's rows (OV-3207).
+  const losatCacheInfoA = [{ key: 'raw-a', drawingId: 'circular' }];
   const appliedPaletteColorsA = { CDS: '#54bcf8' };
   const pendingPaletteColorsA = {};
   const noticesA = [{
@@ -1975,8 +2010,10 @@ const createLayoutPreferences = () => ({
       state.legacyProteinDerivedEvidence.value,
       expected.legacyProteinDerivedEvidence
     );
-    assert.equal(state.losatCache.value, expected.losatCache);
-    assert.equal(state.losatDerivedCache.value, expected.losatDerivedCache);
+    // An Undo or a Redo puts back the step's searches and payloads its rows name and removes none (D-200).
+    for (const cache of ['losatCache', 'losatDerivedCache']) {
+      expected[cache].forEach((entry, key) => assert.equal(state[cache].value.get(key), entry, `${cache} ${key}`));
+    }
     assert.equal(state.losatCacheInfo.value, expected.losatCacheInfo);
   };
   const authorityOwnersA = captureAuthorityOwners();
@@ -2167,6 +2204,9 @@ const createLayoutPreferences = () => ({
     [1]
   );
   let installedResults = null;
+  // An install adds to the current searches (D-200), so it reads them; only the capture above must not.
+  state.losatCache.value = new Map();
+  state.losatDerivedCache.value = new Map();
   snapshots.installGeneratedArtifactOwnerSet(originalOwnerSet, {
     drawing: state.activeDrawing(),
     installResults: (nextResults) => {
@@ -2211,8 +2251,8 @@ const createLayoutPreferences = () => ({
     entries: [{ id: 'derived-evidence-b' }]
   };
   const rawCacheValueB = { text: 'raw-b\n' };
-  const derivedCacheValueB = { payload: { id: 'derived-b' } };
-  const losatCacheInfoB = [{ key: 'raw-b' }];
+  const derivedCacheValueB = { payload: { id: 'derived-b' }, rawKeys: ['raw-b'] };
+  const losatCacheInfoB = [{ key: 'raw-b', drawingId: 'circular' }];
   state.proteinIdentityManifest.value = proteinIdentityManifestB;
   state.legacyProteinRawCandidates.value = legacyProteinRawCandidatesB;
   state.legacyProteinDerivedEvidence.value = legacyProteinDerivedEvidenceB;
@@ -2251,7 +2291,7 @@ const createLayoutPreferences = () => ({
   state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
   state.losatCache.value = new Map([['replacement', { text: 'replacement\n' }]]);
   state.losatDerivedCache.value = new Map([['replacement', { payload: {} }]]);
-  state.losatCacheInfo.value = [{ key: 'replacement' }];
+  state.losatCacheInfo.value = [{ key: 'replacement', drawingId: 'circular' }];
   const clearsBeforeUndo = copyFeedbackClears;
   await snapshots.restoreGeneratedArtifactHandle(handleA);
   // Undo of a Generate step clears the copy feedback.
@@ -2266,6 +2306,7 @@ const createLayoutPreferences = () => ({
   assert.equal(state.legendEntries.value[0].caption, 'A');
   assert.equal(state.featureIdentityNotices.value, noticesA);
   assertAuthorityOwners(authorityOwnersA);
+  assert.deepEqual([...state.losatCache.value.keys()], ['replacement', 'raw-a'], 'the later search stays (D-200, OV-3260)');
   assert.equal(state.appliedPaletteColors.value, appliedPaletteColorsA);
   assert.equal(state.pendingPaletteColors.value, pendingPaletteColorsA);
   const recapturedA = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());
@@ -2307,7 +2348,7 @@ const createLayoutPreferences = () => ({
     }, { results: state.results.value });
   };
   const ownerHistory = createHistoryManager({
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     buildIntent: async () => ({}),
     applyIntent: async () => {},
     buildCheckpoint: () => {
@@ -2421,7 +2462,7 @@ const createLayoutPreferences = () => ({
     state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [{ id: status }] };
     state.losatCache.value = new Map([[status, { text: `${status}\n` }]]);
     state.losatDerivedCache.value = new Map([[status, { payload: { id: status } }]]);
-    state.losatCacheInfo.value = [{ key: status }];
+    state.losatCacheInfo.value = [{ key: status, drawingId: 'circular' }];
   };
   const undoCountBeforeDiscardedRuns = ownerHistory.getUndoCount();
   await assert.rejects(

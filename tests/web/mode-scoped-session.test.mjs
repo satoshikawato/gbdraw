@@ -8,6 +8,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { withBootPalettes } from './helpers/boot-palettes.mjs';
+import { buildPaletteColorOverrideRows } from '../../gbdraw/web/js/utils/color-utils.js';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { SESSION_DRAWINGS_LAYOUT } from '../../gbdraw/web/js/contracts/schema.generated.js';
@@ -15,6 +16,9 @@ import { drawingViewAt, savedDrawingView, withSavedDrawingView } from './helpers
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { createHash } from 'node:crypto';
+import {
+  losatResultRowsOfDrawing, losatRowsOnePerKey, validateProteinRawEntryReferences
+} from '../../gbdraw/web/js/services/losat-cache.js';
 
 globalThis.window = {
   Vue: {
@@ -837,6 +841,27 @@ test('a Session 51 whose Linear drawings hold different LOSAT entries keeps each
   }
 });
 
+// #1777 round 14 (OV-3210): two Linear drawings that hold one pair's entry get a row each, and each drawing's
+// per-pair readers read its own row only: the pair once, with that drawing's row.
+test('two Linear drawings that hold one LOSAT pair each read the pair once, from their own row (OV-3210)', async () => {
+  const { createLinearLayoutReaders } = await import('../../gbdraw/web/js/app/linear-comparison-panel.js');
+  const session = v49Session('drawings-linear-pair-losat');
+  const [first, second] = session.drawings;
+  second.losatCache.entries = structuredClone(first.losatCache.entries);
+  resetDrawings();
+  const loaded = await load(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const [{ edgeKey }] = first.losatCache.entries;
+  for (const drawing of [first, second]) {
+    const { linearLosatCacheInfoByEdgeKey } = createLinearLayoutReaders({
+      state, shownDrawingOfMode: () => state.drawingOf(drawing.id), losatCacheInfo: state.losatCacheInfo
+    });
+    assert.deepEqual(Object.values(linearLosatCacheInfoByEdgeKey.value).map((row) => [row.edgeKey, row.drawingId]),
+      [[edgeKey, drawing.id]], drawing.id);
+  }
+  state.losatCacheInfo.value = [];
+});
+
 // D-15-120: a Session 51 without a Linear drawing loads without one; the Linear drawing the app
 // held before the Load goes with the drawings the Load replaces.
 test('a Session 51 without a Linear drawing loads no Linear drawing', async () => {
@@ -1160,6 +1185,92 @@ test('a Session 51 with a 180 x 180 mm figure size loads both sides into the for
   }
 });
 
+// OV-3259: a Web Session of gbdraw 0.14.5 saved its palette's rows with the user's colors (`config.colors`); its
+// committed request holds only the user's rows. After OV-3114 changed misc_feature and default in 53 palettes, Load
+// reads a saved row that still holds its palette's 0.14.5 color as the palette's color now, as the CLI replay of the
+// committed request draws it; a color the user set stays.
+const v0145Session = (edit = () => {}) => {
+  const session = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw-session.json.gz', import.meta.url))));
+  edit(session.drawings.find(({ id }) => id === 'circular'), session);
+  return session;
+};
+const loadedColorsOf = async (session) => {
+  resetDrawings();
+  loadDialogs.length = 0;
+  const loaded = await load(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  return { ...state.drawingOf('circular').currentColors.value };
+};
+const currentPalette = (name) => state.paletteDefinitions.value[name];
+
+test('a 0.14.5 Session reads its palette\'s saved misc_feature and default rows as the palette\'s colors now (OV-3259)', () => withBootPalettes(state, async () => {
+  const session = v0145Session();
+  const stored = session.drawings[0].config.colors;
+  assert.deepEqual([stored.misc_feature, stored.default], ['#d3d3d3', '#d3d3d3']);
+  const colors = await loadedColorsOf(session);
+  assert.deepEqual([colors.misc_feature, colors.default], [currentPalette('default').misc_feature, currentPalette('default').default]);
+  // Every other row is as saved; no row differs from the palette, so a Generate writes no -d row.
+  for (const key of Object.keys(stored).filter((key) => !['misc_feature', 'default'].includes(key))) assert.equal(colors[key], stored[key], key);
+  assert.deepEqual(buildPaletteColorOverrideRows({ colors, paletteColors: currentPalette('default') }), []);
+  // Without the colors its Result shows (a Session no Web Generate saved), a row is read as 0.14.5 read it.
+  const unapplied = await loadedColorsOf(v0145Session((drawing) => { delete drawing.ui.appliedPaletteColors; }));
+  assert.equal(unapplied.misc_feature, currentPalette('default').misc_feature);
+}));
+
+test('Load keeps a saved color the user set: a live edit, a committed row, and a palette whose rows did not change (OV-3259)', () => withBootPalettes(state, async () => {
+  // A live Instant Preview edit after the last Generate: the draft and the shown colors hold it, the request does not.
+  const live = await loadedColorsOf(v0145Session((drawing) => {
+    Object.assign(drawing.config.colors, { CDS: '#123456', misc_feature: '#123456' });
+    Object.assign(drawing.ui.appliedPaletteColors, { CDS: '#123456', misc_feature: '#123456' });
+  }));
+  assert.deepEqual([live.CDS, live.misc_feature, live.default], ['#123456', '#123456', currentPalette('default').default]);
+  // A misc_feature #d3d3d3 row the committed Default colors table sets: a user color the last Generate drew.
+  const table = 'feature_type\tcolor\nmisc_feature\t#d3d3d3\n';
+  const committed = await loadedColorsOf(v0145Session((drawing, session) => {
+    session.resources['colors-default-colors'] = {
+      kind: 'canonical-tsv', name: 'colors-default-colors-colors-default-colors.tsv', type: 'text/tab-separated-values',
+      size: Buffer.byteLength(table), lastModified: 0, encoding: 'base64', data: Buffer.from(table).toString('base64')
+    };
+    drawing.renderRequest.diagramOptions.colors.defaultColors = { resourceId: 'colors-default-colors', representation: 'canonicalTsv' };
+  }));
+  assert.deepEqual([committed.misc_feature, committed.default], ['#d3d3d3', currentPalette('default').default]);
+  // A palette OV-3114 did not change (earthtones): every saved row stays.
+  const earthtones = { ...currentPalette('earthtones') };
+  const kept = await loadedColorsOf(v0145Session((drawing) => {
+    drawing.config.palette = 'earthtones';
+    drawing.config.colors = { ...earthtones };
+    drawing.ui.appliedPaletteName = 'earthtones';
+    drawing.ui.appliedPaletteColors = { ...earthtones };
+    drawing.renderRequest.diagramOptions.colors.defaultColorsPalette = 'earthtones';
+  }));
+  assert.deepEqual(kept, earthtones);
+}));
+
+// OV-3257: Save wrote a drawing's whole color table, its palette's rows included, so a later palette change never
+// reached the Session. A drawing that changed none of its palette's colors saves none; one with a user color keeps it.
+test('Save stores no palette colors for a drawing whose colors are its palette\'s, so a later palette reaches it (OV-3257)', () => withBootPalettes(state, async () => {
+  const { editDefaultColor } = await import('../../gbdraw/web/js/services/drawing/palette.js');
+  const slicesOf = (session) => session.drawings.find(({ id }) => id === 'circular').config;
+  assert.deepEqual(buildPaletteColorOverrideRows({ colors: await loadedColorsOf(v0145Session()), paletteColors: currentPalette('default') }), []);
+  const untouched = await save('palette colors');
+  assert.equal(Object.hasOwn(slicesOf(untouched), 'colors'), false);
+  assert.deepEqual(await loadedColorsOf(untouched), currentPalette('default'));
+  // A later palette: the Session takes its colors.
+  const palettes = state.paletteDefinitions.value;
+  state.paletteDefinitions.value = { ...palettes, default: { ...palettes.default, CDS: '#010203' } };
+  try {
+    assert.equal((await loadedColorsOf(untouched)).CDS, '#010203');
+  } finally {
+    state.paletteDefinitions.value = palettes;
+  }
+  // A user color is saved and loads as saved.
+  await loadedColorsOf(v0145Session());
+  editDefaultColor(state.drawingOf('circular').slices.palette, 'CDS', '#123456');
+  const edited = await save('a user color');
+  assert.equal(slicesOf(edited).colors.CDS, '#123456');
+  assert.equal((await loadedColorsOf(edited)).CDS, '#123456');
+}));
+
 // The request Generate builds from a drawing's draft. It reads the Legend rows of the loaded Result's SVG; Node has no
 // SVG parser, and no row matters to the feature density cases.
 const draftRequest = async (drawing) => {
@@ -1342,6 +1453,146 @@ test('Save writes into each Session 51 drawing the LOSAT entries of its own Line
   assert.deepEqual(keysOf('linear-2'), [`${entry.key}-second`]);
 });
 
+// #1777 round 16 (D-197, OV-3213): the protein identity manifest is each drawing's. Load installs each drawing's own
+// field (the shown one in the state, another in its slot) and Save writes each drawing's back; a Session whose writer
+// gave every drawing one shared manifest (Session 46 to 50, upgraded by copying it into each drawing) loads it into
+// each drawing alike. The Session's shape and version do not change.
+test('Load and Save keep each Session 51 drawing\'s own protein identity manifest (D-197)', async () => {
+  const feature = (letter) => `f_${letter.repeat(64)}`;
+  /** A valid schema-2 manifest of one record instance per uid, named by `tag`. */
+  const manifestOf = (tag, uids) => ({
+    schema: 2,
+    proteinSets: Object.fromEntries(uids.map((uid, index) => [`sha256:set-${tag}-${uid}`,
+      { schema: 1, proteins: [{ featureAnalysisId: feature('ab'[index]), aaSha256: 'ab'[index].repeat(64) }] }])),
+    recordAnalyses: Object.fromEntries(uids.map((uid) => [`sha256:analysis-${tag}-${uid}`,
+      { schema: 1, recordSourceId: uid, proteinSetHash: `sha256:set-${tag}-${uid}` }])),
+    recordInstances: Object.fromEntries(uids.map((uid, index) => [uid, {
+      schema: 2, recordAnalysisId: `sha256:analysis-${tag}-${uid}`, runtimeBindingHash: `sha256:runtime-${tag}-${uid}`,
+      displayBindingHash: `sha256:display-${tag}-${uid}`, runtimeIds: { [feature('ab'[index])]: `h_${'ab'[index].repeat(26)}` },
+      featureMetadata: { [feature('ab'[index])]: { displayAlias: `protein-${tag}-${uid}`, exportOrdinal: null } }
+    }]))
+  });
+  for (const shared of [false, true]) {
+    const session = v49Session('drawings-linear-pair-losat');
+    const uids = session.drawings.find((entry) => entry.id === 'linear').losatCache.entries.flatMap(({ queryUid, subjectUid }) => [queryUid, subjectUid]);
+    const manifests = { linear: manifestOf('first', uids), 'linear-2': manifestOf(shared ? 'first' : 'second', uids) };
+    session.drawings.forEach((entry) => { entry.proteinIdentityManifest = manifests[entry.id]; });
+    session.ui.activeDrawingId = 'linear';
+    resetDrawings();
+    const loaded = await loadKeepingSlots(session);
+    assertLoadedDrawings(session, loaded);
+    const slotOf = (id) => [loaded.opening, ...loaded.stashed].find((slot) => slot?.drawingId === id);
+    assert.deepEqual(state.proteinIdentityManifest.value, manifests.linear, `shared ${shared}: the shown drawing's`);
+    assert.deepEqual(slotOf('linear-2').values.proteinIdentityManifest, manifests['linear-2'], `shared ${shared}: linear-2's slot`);
+    assert.notEqual(slotOf('linear-2').values.proteinIdentityManifest, state.proteinIdentityManifest.value, 'two objects');
+    const result = await exportSession(`protein-manifests-${shared}`, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+    assert.equal(result.status, 'saved', result.error?.message);
+    const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+    assert.equal(saved.version, session.version);
+    for (const id of ['linear', 'linear-2']) {
+      assert.deepEqual(saved.drawings.find((entry) => entry.id === id).proteinIdentityManifest, manifests[id], `shared ${shared}: ${id} saved`);
+    }
+  }
+});
+
+// #1777 round 18 (OV-3273, D-201): a copy of a Linear drawing keeps its card uids, so after its region changes one
+// record instance key names other proteins in each drawing's manifest. A Load validates each drawing's saved protein
+// entries with that drawing's own manifest, and Save reuses that check only for the manifest it ran with: Load, Save,
+// Load, Save writes into each drawing only the protein entries its own manifest resolves, which the CLI requires.
+test('Load and Save keep each Linear drawing\'s protein LOSAT entries to those its own manifest resolves (OV-3273)', async () => {
+  const fixture = fixtureSession('BGC0000708-BGC0000709-copy-crop.v51-web');
+  const proteinKeysOf = (session) => Object.fromEntries(session.drawings.map((entry) => [entry.id,
+    entry.losatCache.entries.filter((cached) => cached.queryRecordInstanceKey !== undefined).map(({ key }) => key).sort()]));
+  assert.deepEqual(Object.values(proteinKeysOf(fixture)).map((keys) => keys.length), [4, 4]);
+  const pythonAdmits = async (session) => JSON.parse(String(await evaluatePython(`
+import gzip, json, os, tempfile
+from gbdraw.session_io import load_session
+with tempfile.NamedTemporaryFile(suffix='.gbdraw-session.json.gz', delete=False) as handle:
+    handle.write(gzip.compress(payload.encode()))
+try:
+    load_session(handle.name)
+    result = json.dumps('admitted')
+except Exception as error:
+    result = json.dumps(str(error))
+finally:
+    os.unlink(handle.name)
+`, JSON.stringify(session))));
+  let session = fixture;
+  for (const round of [1, 2]) {
+    resetDrawings();
+    const loaded = await loadKeepingSlots(session);
+    assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+    let reused = 0;
+    globalThis.__GBDRAW_TEST_HOOKS__ = {
+      onStructuralMetric: ({ name }) => { if (name === 'sessionSaveProteinRawTextValidationReuseCount') reused += 1; }
+    };
+    let result;
+    try {
+      result = await exportSession(`copy-crop-${round}`, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+    } finally {
+      delete globalThis.__GBDRAW_TEST_HOOKS__;
+    }
+    assert.equal(result.status, 'saved', result.error?.message);
+    // Save checks again only what Load did not check with the drawing's manifest: each drawing's own 4 are reused.
+    assert.equal(reused, 8, `save ${round}: validations Save reused`);
+    session = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+    for (const entry of session.drawings) {
+      for (const cached of entry.losatCache.entries.filter((value) => value.queryRecordInstanceKey !== undefined)) {
+        assert.equal(validateProteinRawEntryReferences(cached, entry.proteinIdentityManifest), true,
+          `save ${round}: ${entry.id} writes ${cached.key}, which its manifest resolves`);
+      }
+    }
+    assert.deepEqual(proteinKeysOf(session), proteinKeysOf(fixture), `save ${round}: each drawing keeps its own entries`);
+    assert.equal(await pythonAdmits(session), 'admitted', `save ${round}: the CLI admits it`);
+  }
+  // Each Save keeps each drawing's manifest as the Web wrote it.
+  for (const entry of session.drawings) {
+    assert.deepEqual(entry.proteinIdentityManifest, fixture.drawings.find(({ id }) => id === entry.id).proteinIdentityManifest, entry.id);
+  }
+});
+
+// #1777 round 19 (OV-3277, D-201): a Session 40-50 (what 0.14.5 writes) holds one LOSAT list and one manifest, the
+// file's; Load validates the list with it and marks each adopted entry with it, so the first Save checks none again.
+// A manifest Load did not check (a new object, as a Generate installs) is never trusted: Save checks every entry.
+// The stub converter returns no resource: these Sessions' reversed protein Results need Python's frame conversion,
+// which the LOSAT cache entries do not pass through.
+test('a Session 47 Load then Save reuses Load\'s check of each protein LOSAT entry, and only with the manifest Load checked (OV-3277)', async () => {
+  const { setStoredProteinResultFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
+  setStoredProteinResultFrameConverter(async () => ({ result: { resources: {} } }));
+  try {
+    for (const [name, proteins] of [['BGC0000708-BGC0000713.v47', 25], ['majanivirus_collinear-rc.v47', 4]]) {
+      resetDrawings();
+      const loaded = await loadKeepingSlots(fixtureSession(name));
+      assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+      const saveCounting = async (title) => {
+        const counts = { reused: 0, validated: 0 };
+        globalThis.__GBDRAW_TEST_HOOKS__ = {
+          onStructuralMetric: ({ name: metric }) => {
+            if (metric === 'sessionSaveProteinRawTextValidationReuseCount') counts.reused += 1;
+            if (metric === 'sessionSaveProteinRawTextValidationCount') counts.validated += 1;
+          }
+        };
+        let result;
+        try {
+          result = await exportSession(title, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+        } finally {
+          delete globalThis.__GBDRAW_TEST_HOOKS__;
+        }
+        assert.equal(result.status, 'saved', result.error?.message);
+        const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+        const savedProteins = saved.drawings.flatMap((entry) => entry.losatCache?.entries ?? [])
+          .filter((entry) => entry.queryRecordInstanceKey !== undefined);
+        return [savedProteins.length, counts.reused, counts.validated];
+      };
+      assert.deepEqual(await saveCounting(`reuse-${name}`), [proteins, proteins, 0], `${name}: Load's manifest`);
+      state.proteinIdentityManifest.value = JSON.parse(JSON.stringify(state.proteinIdentityManifest.value));
+      assert.deepEqual(await saveCounting(`recheck-${name}`), [proteins, 0, proteins], `${name}: a manifest Load did not check`);
+    }
+  } finally {
+    setStoredProteinResultFrameConverter(null);
+  }
+});
+
 // #1540 (OV-2379): rows the gbdraw 0.14.4 Web engine searched (`runtime.version: null`) for a search the
 // current build gives alike are reused. Load merges both Linear drawings' entries into the one cache with
 // that record, the reuse rule takes each of them, and Save writes each record back into its own drawing.
@@ -1422,6 +1673,43 @@ test('Save writes a Circular conservation LOSAT entry into no drawing whose requ
     { circular: [], linear: [] });
 });
 
+// OV-3201 (#1777 review 8): a cache-info row names the drawing whose entry it is, so a ring edit clears only its
+// drawing's rows. A ring entry is each Circular drawing's that holds it, one row each, never a Linear drawing's; a
+// Session 27-50's one list gives its ring entries to its Circular part.
+const ringCacheEntry = () => ({
+  schema: 2, kind: 'raw-losat', identityKind: 'nucleotide', program: 'blastn', flow: 'circular-conservation',
+  outfmt: '6', args: ['--task', 'megablast'], queryCanonicalHash: 'a'.repeat(64), subjectCanonicalHash: 'b'.repeat(64),
+  text: 'q\ts\t100.000\t10\t0\t0\t1\t10\t1\t10\t0.0\t20\n', key: 'c'.repeat(64), filename: 'ring.circular_conservation.losatn.tsv', display: true
+});
+const cacheRowDrawings = () => state.losatCacheInfo.value.map((row) => [row.key.slice(0, 4), row.drawingId]);
+test('a Load gives a ring entry one cache-info row for each Circular drawing that holds it, none for a Linear one (OV-3201)', async () => {
+  for (const [name, holders, rows] of /** @type {const} */ ([
+    ['drawings-per-drawing-cards', ['circular', 'circular-2'], [['cccc', 'circular'], ['cccc', 'circular-2']]],
+    ['drawings-circular-linear', ['circular', 'linear'], [['cccc', 'circular']]]
+  ])) {
+    const session = v49Session(name);
+    session.drawings.filter((candidate) => holders.includes(candidate.id)).forEach((candidate) => { candidate.losatCache.entries = [ringCacheEntry()]; });
+    resetDrawings();
+    const { loaded } = await loadKeepingSlots(session);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual(cacheRowDrawings(), rows, name);
+    // Each panel reads its drawing's results, one per cache key (#1777 review 9, OV-3203): 1 row in each Circular
+    // drawing's panel, none in the Linear one's.
+    assert.deepEqual(holders.map((id) => losatResultRowsOfDrawing(state.losatCacheInfo.value, id).length),
+      holders.map((id) => (id.startsWith('circular') ? 1 : 0)), name);
+    // Clear counts the project's searches, one per cache key (round 12): two drawings, one ring, 1.
+    assert.equal(losatRowsOnePerKey(state.losatCacheInfo.value).length, 1, name);
+  }
+  const legacy = fixtureSession('two-mode-linear-shown.v48');
+  legacy.losatCache.entries.push(ringCacheEntry());
+  resetDrawings();
+  const { loaded } = await loadKeepingSlots(legacy);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(cacheRowDrawings().filter(([key]) => key === 'cccc'), [['cccc', modeDrawing(state, 'circular').id]],
+    'a Session 27-50\'s ring entry names its Circular part');
+  state.losatCacheInfo.value = [];
+});
+
 // K-3: a ring's query hash is the SHA-256 of the FASTA the Python ring reader
 // (the Worker's) returns; node has no Worker, so the fixture's other ring is
 // hashed here through Python.
@@ -1469,7 +1757,8 @@ const twoConservationDrawings = async () => {
   const circular = session.drawings.find((entry) => entry.id === 'circular');
   const entries = circular.losatCache.entries;
   assert.deepEqual(entries.map(({ key }) => key), fixture.losatCache.entries.map(({ key }) => key));
-  const ringId = circular.webFiles.bindings.c_conservation_fastas[2].resourceId;
+  // A Session 51 binds each ring's genome as a list of files.
+  const ringId = circular.webFiles.bindings.c_conservation_fastas[2][0].resourceId;
   const ringText = Buffer.from(session.resources[ringId].data, 'base64').toString();
   const otherText = ringText.replace('\nACGT', '\nTCGT');
   assert.notEqual(otherText, ringText);
@@ -1511,9 +1800,9 @@ test('Save keeps the request\'s conservation entry for a ring whose bound file i
   const { session, keys } = await twoConservationDrawings();
   const second = session.drawings.find((entry) => entry.id === 'circular-2');
   // circular-2's request still names `ring-other`; its ring 3 binds circular's ring 3 file.
-  const ringId = session.drawings.find((entry) => entry.id === 'circular').webFiles.bindings.c_conservation_fastas[2].resourceId;
+  const ringId = session.drawings.find((entry) => entry.id === 'circular').webFiles.bindings.c_conservation_fastas[2][0].resourceId;
   for (const field of ['c_conservation_fastas', 'c_conservation_sequence_sources']) {
-    second.webFiles.bindings[field][2] = { ...second.webFiles.bindings[field][2], resourceId: ringId };
+    second.webFiles.bindings[field][2] = [{ ...second.webFiles.bindings[field][2][0], resourceId: ringId }];
   }
   resetDrawings();
   const loaded = await loadKeepingSlots(session);

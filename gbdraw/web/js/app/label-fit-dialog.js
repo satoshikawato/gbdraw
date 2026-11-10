@@ -2,7 +2,9 @@
 // The "Labels do not fit" dialog (LP-D43, LP-D45 SHOW-ALL, LP-D48
 // WARN-NOTICE): the rows of Python's label fit report in its order, each with
 // the settings it changes and the canvas size, or disabled with its reason. A
-// row that leaves crossing leaders says so and draws with the notice (LP-D57).
+// row that leaves crossing leaders or a region label warning says so and draws
+// with the notice (LP-D57, OV-3105); the first row that fits is selected before
+// it, until the user chooses a row.
 // A Generate that drew nothing opens it; crossing leaders or labels over the
 // definition text open it from the notice bar over the drawn figure. Rows a
 // bounded search did not reach are computed here, one after another, by the
@@ -19,7 +21,7 @@
 // room they need from Python's values (`labelCapacityText`, OV-2179). When every
 // row is known not to fit, it lists the same ways under the rows (NO-ROW-WAYS,
 // OV-2180).
-import { labelCapacityRemedyText, labelFitRowOffered, normalizeLabelFitRow } from '../services/label-fit.js';
+import { labelCapacityRemedyText, labelFitRowOffered, labelFitRowRank, normalizeLabelFitRow } from '../services/label-fit.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
 
@@ -39,7 +41,8 @@ import { msg } from '../utils/i18n.js';
  * @property {readonly LabelFitSetting[]} settings
  * @property {{ width: number, height: number } | null} canvasSize
  * @property {string | null} reason
- * @property {string | null} note What the row leaves (crossing leaders, labels over the definition text).
+ * @property {string | null} note What the row leaves (crossing leaders, labels over the definition text, region
+ *   label warnings).
  */
 /**
  * @typedef {object} LabelFitDialogState
@@ -137,6 +140,50 @@ const definitionRecordsOf = (report) => {
   return [...records.values()];
 };
 
+/**
+ * The row to select: the first offered row of Python's preferred status (`labelFitRowRank`: a row that fits, else
+ * one that draws with the notice, OV-3105). The dialog keeps the report's order, and the rows it computes arrive one
+ * by one, so a row that fits may come after a selected row with the notice: the selection moves to it unless the
+ * selected row is `kept` (the user chose it, or Apply or Cancel waits for the row being computed).
+ * @param {readonly LabelFitDialogRow[]} rows
+ * @param {LabelFitRowKind | ''} selectedKind
+ * @param {boolean} kept
+ * @returns {LabelFitRowKind | ''}
+ */
+const rowToSelect = (rows, selectedKind, kept) => {
+  const selected = rows.find((row) => row.kind === selectedKind && row.offered);
+  if (selected && (kept || labelFitRowRank(selected.status) === 0)) return selected.kind;
+  const offered = rows.filter((row) => row.offered).sort((a, b) => labelFitRowRank(a.status) - labelFitRowRank(b.status));
+  return offered[0]?.kind || '';
+};
+
+/**
+ * The dialog's row selection (OV-3105): the row `rowToSelect` prefers, until the user chooses a row in this opening
+ * or Apply or Cancel waits for the row being computed (the row shown selected is the one applied).
+ * @param {LabelFitDialogState} dialog
+ */
+const createRowSelection = (dialog) => {
+  /** True once the user chose a row in this opening of the dialog. */
+  let chosen = false;
+  const select = () => {
+    dialog.selectedKind = rowToSelect(dialog.rows, dialog.selectedKind, chosen || dialog.finishing);
+  };
+  return {
+    select,
+    /** A new opening: no row is chosen yet. */
+    open: () => {
+      dialog.selectedKind = '';
+      chosen = false;
+      select();
+    },
+    /** The user's choice (a row's radio button), which no row computed later replaces. @param {LabelFitRowKind} kind */
+    choose: (kind) => {
+      dialog.selectedKind = kind;
+      chosen = true;
+    }
+  };
+};
+
 /** @param {LabelFitDialogPorts} ports */
 export const createLabelFitDialog = ({
   reactive, computeRow, writeRowSettings, withHistory, closeAfterChoice, choicePending, runAnalysis, errorSummary,
@@ -160,6 +207,7 @@ export const createLabelFitDialog = ({
   let reportRemedies = [];
   /** @type {LargerFigure | null} The requested sides the report's `figure_size` remedy names. */
   let reportLargerFigure = null;
+  const selection = createRowSelection(dialog);
 
   const close = () => { dialog.show = false; openCount += 1; };
   // Python names the ways for a stop and for a report whose rows have no value; a row still to compute may fit, so
@@ -173,12 +221,6 @@ export const createLabelFitDialog = ({
     const index = dialog.rows.findIndex((row) => row.kind === kind);
     if (index >= 0) dialog.rows[index] = { ...dialog.rows[index], ...update };
     listRemedies();
-  };
-  // Python orders the rows that fit before those that draw with the notice.
-  const selectFirstOffered = () => {
-    const selected = rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind));
-    if (selected && labelFitRowOffered(selected.status)) return;
-    dialog.selectedKind = dialog.rows.find((row) => row.offered)?.kind || '';
   };
 
   /**
@@ -199,7 +241,7 @@ export const createLabelFitDialog = ({
         if (computed.kind !== row.kind) throw diagnosticError('RESULT_INVALID', {}, { stage: 'result-admission' });
         rowsByKind.set(row.kind, computed);
         updateRow(row.kind, displayRow(computed));
-        selectFirstOffered();
+        selection.select();
       } catch (error) {
         if (opened !== openCount) return;
         updateRow(row.kind, { status: 'failed', reason: errorSummary(error) });
@@ -229,9 +271,8 @@ export const createLabelFitDialog = ({
     dialog.definitionRecords = definitionRecordsOf(report);
     dialog.rows = report.rows.map(displayRow);
     listRemedies();
-    dialog.selectedKind = '';
     dialog.finishing = false;
-    selectFirstOffered();
+    selection.open();
     dialog.show = true;
     return computeMissingRows(opened, rowToken);
   };
@@ -280,5 +321,8 @@ export const createLabelFitDialog = ({
     return dialog.show ? false : showRecordText(recordIndex);
   };
 
-  return { labelFitDialog: dialog, openLabelFitDialog, resolveLabelFitChoice, editLabelFitRecordText };
+  return {
+    labelFitDialog: dialog, openLabelFitDialog, chooseLabelFitRow: selection.choose, resolveLabelFitChoice,
+    editLabelFitRecordText
+  };
 };

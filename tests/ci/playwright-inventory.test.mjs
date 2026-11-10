@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { SHARDS_FILE, casesPerFileOf, planShards, readMeasurements } from '../../tools/balance-functional-shards.mjs';
+import { casesPerFileOf, planShards, readMeasurements } from '../../tools/balance-functional-shards.mjs';
 
 const require = createRequire(import.meta.url);
 const cli = require.resolve('@playwright/test/cli');
@@ -49,7 +49,7 @@ test('comparison browser contracts run in the required PR contract job and full 
   const contracts = collect(...args);
   const full = new Set(collect('test', '--config=tests/web/playwright/functional.config.js'));
   const smoke = new Set(collect('test', '--config=tests/web/playwright/pr-smoke.config.js'));
-  assert.equal(contracts.length, 16);
+  assert.equal(contracts.length, 20);
   assert.ok(contracts.includes('comparison-ui.playwright.spec.js:comparison controls drive appearance and current Session round trips'));
   assert.ok(contracts.includes('linear-multi-record.playwright.spec.js:Collinear inference checkbox skips self searches and reuses matching evidence'));
   assert.ok(contracts.includes('linear-multi-record.playwright.spec.js:protein raw cache survives cancellation and derived options preserve search identity'));
@@ -148,14 +148,6 @@ test('functional CI shards run the planned spec file lists and every acceptance 
   const { shards } = planShards({ casesPerFile, secondsPerCase, shardCount });
   assert.deepEqual(assignmentProblems(specFiles, shards), []);
   assert.deepEqual(unlistedMeasurements([...secondsPerCase.keys()], specFiles, existsSync), []);
-  // Until the next pull request removes them, the old `shards` lists are what the trusted base
-  // before the planned lists runs on a pull request. They must cover every functional spec once;
-  // their balance may lag the plan as case counts change on dev.
-  const { shards: transitional } = JSON.parse(readFileSync(SHARDS_FILE, 'utf8'));
-  if (transitional !== undefined) {
-    assert.deepEqual(assignmentProblems(specFiles, transitional), [],
-      'the shards key of tests/ci/functional-shards.json must list every functional spec once');
-  }
   // Playwright file filters are regular expressions, so list each shard to prove
   // that no filter also selects another shard's file.
   const partition = shards.flatMap((files) => collect(

@@ -2,7 +2,9 @@
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { discoveryErrorIsFinal, inputRecordsOperation } from '../services/record-discovery.js';
 import { inputSourceFiles, inputTypeSpec } from '../services/input-types.js';
-import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services/record-options.js';
+import {
+  buildDisambiguatedRecordEntries, formatRecordLength, resolveDisambiguatedRecordSelection
+} from '../services/record-options.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 /** @import { DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
@@ -56,23 +58,29 @@ const currentSelectorValue = (seq) => String(seq?.region_record_id ?? '').trim()
 export { formatRecordLength };
 
 /**
+ * The options of a card's record select. The stored selector names a record as
+ * Generate reads it (`resolveDisambiguatedRecordSelection`: by option value,
+ * then `#k`, then record ID; OV-3325); that record's option carries the stored
+ * value, so the select shows it chosen. A selector that names no single record
+ * gets a "not found" entry of its own.
  * @param {readonly SequenceRecord[] | null | undefined} records
  * @param {unknown} [currentValue]
  * @returns {RecordOption[]}
  */
 export const buildRecordOptions = (records, currentValue = '') => {
   const normalizedRecords = Array.isArray(records) ? records : [];
+  const selectedValue = String(currentValue ?? '').trim();
+  const selection = resolveDisambiguatedRecordSelection(normalizedRecords, selectedValue);
   const options = buildDisambiguatedRecordEntries(normalizedRecords).map((record) => {
     const { selector, recordId, usesIndex, value } = record;
     return {
-      value,
+      value: value === selection.record?.value ? selectedValue : value,
       label: `${recordId} (${formatRecordLength(record?.recordLength)})${usesIndex ? ` [${selector}]` : ''}`,
       synthetic: false
     };
   });
 
-  const selectedValue = String(currentValue ?? '').trim();
-  const selectedIsMissing = Boolean(selectedValue) && !options.some((option) => option.value === selectedValue);
+  const selectedIsMissing = Boolean(selectedValue) && selection.status !== 'resolved';
   return [
     { value: '', label: tm(AUTOMATIC_RECORD_OPTION_LABEL), synthetic: false },
     ...(selectedIsMissing
@@ -430,7 +438,7 @@ export const createLinearRecordSelector = ({
     const selectorState = stateFor(drawing, seq);
     const currentValue = currentSelectorValue(seq);
     if (selectorState.status !== 'ready' || !currentValue) return '';
-    const available = buildRecordOptions(selectorState.records).some((option) => option.value === currentValue);
+    const available = resolveDisambiguatedRecordSelection(selectorState.records, currentValue).status === 'resolved';
     return available ? '' : t('Selected record was not found in the current file. Choose another record.');
   };
 

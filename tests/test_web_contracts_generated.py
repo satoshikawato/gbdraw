@@ -668,7 +668,8 @@ def test_the_derived_result_shape_accepts_what_python_decodes() -> None:
 _RECORD_SELECTOR_TEXTS = (
     # text, the record the renderer draws, N with 0 (tests/web/record-draw-selection.test.mjs reads the same texts).
     ("#1", 1, 1), ("#01", 1, 1), (" # 2 ", 2, 2), ("#0", None, 0), ("#00", None, 0),
-    ("#x", None, None), ("#", None, None), ("#1e1", None, None), ("#+1", None, None), ("#0x2", None, None),
+    ("#x", None, None), ("#", None, None), ("#1e1", None, None), ("#+1", 1, 1), ("# +02", 2, 2), ("#+ 1", None, None),
+    ("#++1", None, None), ("#-1", None, None), ("#+0", None, 0), ("+#1", None, None), ("#0x2", None, None),
     ("#1.0", None, None), ("BGC0000708", None, None), ("#\u00853", 3, 3), ("#\u001c3", 3, 3), ("#﻿3", None, None),
 )
 

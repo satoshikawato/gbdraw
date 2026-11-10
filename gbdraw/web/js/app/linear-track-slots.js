@@ -53,6 +53,7 @@ import {
 } from '../services/linear-track-slot-model.js';
 /** @import { LinearSlotPlacementInput, LinearTrackSlot, LinearTrackSlotInput } from '../services/linear-track-slot-model.js' */
 /** @import { DepthFileSlots, DepthSourceChange } from '../services/depth-track-state.js' */
+/** @import { FeatureDensityRowEdit } from '../services/feature-density-tracks.js' */
 
 /**
  * A slot row the editor reads: the rows of `adv.linear_track_slots` are drafts, and the guards below treat a missing row as absent.
@@ -211,6 +212,20 @@ const replaceObjectContents = (target, source) => {
   Object.assign(target, source);
   return target;
 };
+
+/**
+ * Changes a Linear drawing's stack rows for a feature density track (the Feature density section,
+ * app/feature-density-tracks.js) through the feature placement transition, as this editor's own edits go (R10):
+ * `edit` changes the rows, and `normalize` runs the editor's normalizer after it.
+ * @param {ChangeTrackLayout} changeTrackLayout
+ * @param {DrawingState} drawing
+ * @param {FeatureDensityRowEdit} edit
+ * @param {(drawing: DrawingState) => void} normalize
+ */
+export const editLinearFeatureDensityRows = (changeTrackLayout, drawing, edit, normalize) => changeTrackLayout(() => {
+  drawing.adv.linear_track_slots_axis_index = edit(drawing.adv.linear_track_slots, drawing.adv.linear_track_slots_axis_index);
+  normalize(drawing);
+});
 
 /**
  * @typedef {object} LinearTrackSlotEditorOptions

@@ -15,7 +15,7 @@ import pytest
 from gbdraw.circular import circular_main
 from gbdraw.comparisons.losat_jobs import nucleotide_losat_cache_key, sha256_text
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.comparison_sequences import read_comparison_sequence_file
+from gbdraw.io.comparison_sequences import comparison_genome, read_comparison_sequence_file
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.error_adapter import serialize_web_error
 from tests.test_comparison_sequences import ddbj_flat_file
@@ -123,6 +123,11 @@ def test_helper_record_label_reads_the_first_record(tmp_path: Path) -> None:
     result = json.loads(read_comparison_sequence_json(str(path)))
     assert len(result["recordIds"]) == 2
     assert result["recordLabel"] == read_comparison_sequence_file(path).label == "First record"
+    # OV-2954 (Owner 2026-11-09 「Q2=C」): the file draws as before, and its repeated ID is named.
+    assert [item.message for item in comparison_genome((read_comparison_sequence_file(path),)).repeated_record_ids] == [
+        "Comparison sequence file two-records.gb: record ID NC_002333.2 names more than one record. The ring draws "
+        "every record, but the hover popup and the span export show the first record with that ID."
+    ]
 
 
 @pytest.mark.circular

@@ -6,17 +6,14 @@ import {
 } from '../utils/color-utils.js';
 import { queuePalette, selectPalette } from '../services/drawing/palette.js';
 /** @import { PaletteDrawing } from '../services/drawing/palette.js' */
+/** @import { WebState } from '../state.js' */
 
 /**
- * The palette fields of the Web state (`state.js`) the loader reads and writes.
- * Each `{ value }` is a Vue ref.
- * @typedef {object} PaletteLoaderState
- * @property {{ value: Record<string, Record<string, string>> | null }} paletteDefinitions
- * @property {{ value: string[] }} paletteNames
- * @property {{ value: string }} appliedPaletteName
- * @property {{ value: Record<string, string> }} appliedPaletteColors
- * @property {() => PaletteLoaderDrawing} activeDrawing The shown mode's drawing.
- * @property {() => readonly PaletteLoaderDrawing[]} drawingList Every drawing, in creation order.
+ * The members of the Web state (`state.js`) the loader reads and writes:
+ * the palette refs, the shown mode's drawing, and every drawing in creation
+ * order.
+ * @typedef {Pick<WebState, 'paletteDefinitions' | 'paletteNames' | 'appliedPaletteName' | 'appliedPaletteColors'
+ *   | 'activeDrawing' | 'drawingList'>} PaletteLoaderState
  */
 
 /** @typedef {PaletteDrawing} PaletteLoaderDrawing The palette of a drawing (`DrawingState` of state.js). */

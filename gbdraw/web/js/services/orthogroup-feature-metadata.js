@@ -224,7 +224,7 @@ const ORTHOGROUP_FEATURE_FIELDS = Object.freeze([
   'orthogroup_member'
 ]);
 
-/** @param {OrthogroupFeature | null | undefined} feature */
+/** @param {OrthogroupFeature} feature */
 const clearDerivedOrthogroupMetadata = (feature) => {
   if (!feature || !ORTHOGROUP_FEATURE_FIELDS.some((field) => (
     Object.prototype.hasOwnProperty.call(feature, field)

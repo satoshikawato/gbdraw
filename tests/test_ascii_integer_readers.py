@@ -53,16 +53,14 @@ def test_region_spec_refuses_non_ascii_digits(digit: str) -> None:
 
 
 @pytest.mark.parametrize("digit", NON_ASCII_DIGITS)
-@pytest.mark.parametrize("compatibility", ("circular", "linear"))
-def test_record_row_position_refuses_non_ascii_digits(digit: str, compatibility: str) -> None:
+def test_record_row_position_refuses_non_ascii_digits(digit: str) -> None:
     from gbdraw.layout.record_placement import parse_record_row_position
 
-    assert parse_record_row_position("#2@3", _compatibility=compatibility) == ("#2", 3)  # type: ignore[arg-type]
+    assert parse_record_row_position("#2@3") == ("#2", 3)
     with pytest.raises(ValidationError, match="positive integer row"):
-        parse_record_row_position(f"#1@{digit}", _compatibility=compatibility)  # type: ignore[arg-type]
-    if compatibility == "circular":  # linear resolves the selector against the records later
-        with pytest.raises(ValidationError, match="Invalid record selector"):
-            parse_record_row_position(f"#{digit}@1", _compatibility=compatibility)  # type: ignore[arg-type]
+        parse_record_row_position(f"#1@{digit}")
+    with pytest.raises(ValidationError, match="Invalid record selector"):
+        parse_record_row_position(f"#{digit}@1")
 
 
 @pytest.mark.parametrize("digit", NON_ASCII_DIGITS)
@@ -74,7 +72,7 @@ def test_linear_record_placement_selector_refuses_non_ascii_digits(digit: str) -
 
     records = [SeqRecord(Seq("ACGT"), id="r0")]
     assert resolve_record_row_positions(records, ("#1@1",)) is not None
-    with pytest.raises(ValidationError, match="is invalid"):
+    with pytest.raises(ValidationError, match="Invalid record selector"):
         resolve_record_row_positions(records, (f"#{digit}@1",))
 
 

@@ -1,4 +1,4 @@
-import { compileLosatWasm, concatUint8Arrays } from '../services/losat-runtime.js';
+import { compileLosatWasm, concatUint8Arrays, isLosatTrapFailure, raisedLosatFailure } from '../services/losat-runtime.js';
 
 const markWorkerStart = (control, state) => {
   const view = new Int32Array(control);
@@ -29,7 +29,7 @@ const reportThreadFault = (tid, error, context) => {
     type: 'thread-fault',
     tid,
     error: error?.message ? String(error.message) : String(error || 'LOSAT WASI thread trapped'),
-    trap: error instanceof WebAssembly.RuntimeError,
+    trap: isLosatTrapFailure(raisedLosatFailure(error)),
     stderr
   });
   channel.close();

@@ -28,6 +28,10 @@ for (const leaf of ['conservation-series.js', 'current-option-values.js', 'depth
   'feature-density-tracks.js', 'json-clone.js']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf), join(tempRoot, 'services', leaf));
 }
+// conservation-series.js reads a ring's files through the drawing inputs slice.
+for (const file of ['drawing/inputs.js', 'drawing/slice-handle.js', 'history-files.js']) {
+  await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', file), join(tempRoot, 'services', file));
+}
 
 const { createCircularTrackSlotEditor } = await import(pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js')));
 const { createLinearTrackSlotEditor } = await import(pathToFileURL(join(tempRoot, 'app', 'linear-track-slots.js')));

@@ -1030,15 +1030,16 @@ ORIGIN
       conservationBlastSource: 'losat-cache',
       conservationLosatFastaSources: [null, 'fasta']
     }
-  }, { drawing: modeDrawing(state, 'circular') });
+  }, { drawing: modeDrawing(state, 'circular'), conservationPairs: new Set(), installRings: true });
 
   assert.equal(state.activeDrawing().circularConservation.enabled, false);
   assert.equal(modeDrawing(state, 'circular').files.c_conservation_blasts_source, 'losat-cache');
   assert.equal(modeDrawing(state, 'circular').files.c_conservation_blasts.length, 2);
   assert.equal(modeDrawing(state, 'circular').files.c_conservation_blasts[0].size, 0);
   assert.equal(modeDrawing(state, 'circular').files.c_conservation_fastas.length, 2);
-  assert.equal(modeDrawing(state, 'circular').files.c_conservation_fastas[0], null);
-  assert.equal(modeDrawing(state, 'circular').files.c_conservation_fastas[1].name, 'comparison.fna');
+  // The flat form of a schema-5 request reads as one ring genome of one file, or of none.
+  assert.deepEqual(modeDrawing(state, 'circular').files.c_conservation_fastas[0], []);
+  assert.equal(modeDrawing(state, 'circular').files.c_conservation_fastas[1][0].name, 'comparison.fna');
   assert.equal(state.activeDrawing().circularConservation.source, 'losat');
   assert.deepEqual(
     {
@@ -1051,18 +1052,20 @@ ORIGIN
       sourceIndex: 0,
       label: 'Missing FASTA',
       color: '#e15759',
-      losatGencode: 11
+      // The request carries no ring's genetic code, and the adoption takes nothing of the draft's ring at the same
+      // index: the rings' adoption transition gives each ring the code of the draft's ring it is (OV-3178,
+      // `adoptCircularRingResult`, pinned in circular-rings-setting.test.mjs).
+      losatGencode: 1
     }
   );
   assert.equal(state.activeDrawing().circularConservation.series[1].sourceIndex, 1);
-  assert.equal(state.activeDrawing().circularConservation.series[1].losat_gencode, 4);
 
   installShownDrawing('circular');
   state.activeDrawing().circularConservation.enabled = true;
   const serialized = await serializeActiveRenderFiles(state, state.activeDrawing());
   assert.equal(serialized.c_conservation_blasts[0].data, '');
-  assert.equal(serialized.c_conservation_fastas[0], null);
-  assert.equal(serialized.c_conservation_fastas[1].data, btoa(fasta));
+  assert.deepEqual(serialized.c_conservation_fastas[0], []);
+  assert.equal(serialized.c_conservation_fastas[1][0].data, btoa(fasta));
 });
 
 // OV-3019: each ring Generate builds its request from the views the last one
@@ -1073,7 +1076,7 @@ ORIGIN
 test('ring Generates over one comparison FASTA count its bytes once in the History file estimate (OV-3019)', async () => {
   const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
   const { resourceIdOwnedBy } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
-  const { bindDrawingInputFileList } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const genbank = 'LOCUS       REFERENCE                   8 bp    DNA     linear   UNK 01-JAN-1980\nFEATURES             Location/Qualifiers\nORIGIN\n        1 aaccggtt\n//\n';
   const fasta = new File(['>comparison\naaaacccc\n'], 'comparison.fna', { type: 'text/plain' });
   installShownDrawing('circular');
@@ -1086,8 +1089,9 @@ test('ring Generates over one comparison FASTA count its bytes once in the Histo
   Object.assign(drawing.circularConservation, { enabled: true, source: 'losat', reference: 'subject', labels: '' });
   drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length,
     { sourceIndex: 0, fileName: fasta.name, label: 'comparison', color: '#4e79a7', losat_gencode: 11 });
-  bindDrawingInputFileList(state.inputFiles, inputs, 'c_conservation_fastas', [fasta]);
-  bindDrawingInputFileList(state.inputFiles, inputs, 'c_conservation_sequence_sources', []);
+  // One ring whose comparison genome is one file.
+  bindDrawingInputFileTree(state.inputFiles, inputs, 'c_conservation_fastas', [[fasta]]);
+  bindDrawingInputFileTree(state.inputFiles, inputs, 'c_conservation_sequence_sources', []);
   const fileIds = state.inputFiles.collectIds(drawing.files);
   // A ring Generate (run-analysis.js): its request names the comparison FASTA for the search and for the ring.
   const ringGenerate = async () => {
@@ -1095,17 +1099,18 @@ test('ring Generates over one comparison FASTA count its bytes once in the Histo
     const canonical = buildCanonicalRenderRequest({
       state, drawing, filesData,
       resolvedCircularConservation: [{ sourceIndex: 0, name: 'comparison.tsv', text: '', label: 'comparison',
-        color: '#4e79a7', fasta: filesData.c_conservation_fastas[0] }]
+        color: '#4e79a7', fastas: filesData.c_conservation_fastas[0] }]
     });
-    assert.equal(adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing, conservationPairs: 'committed' }), true);
+    // A Generate that searched the rings installs them (`installRings`, which the rings' adoption transition decides).
+    assert.equal(adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing, conservationPairs: new Set(), installRings: true }), true);
     state.inputFiles.collectIds(drawing.files, fileIds);
     return canonical;
   };
   await ringGenerate();
   await ringGenerate();
   const { resources, renderRequest } = await ringGenerate();
-  const [ringFasta] = renderRequest.diagramOptions.conservationFastaFiles;
-  const [view] = drawing.files.c_conservation_fastas;
+  const [[ringFasta]] = renderRequest.diagramOptions.conservationFastaFiles;
+  const [[view]] = drawing.files.c_conservation_fastas;
   assert.ok(fileIds.size > 3, 'every ring Generate bound new views of the comparison FASTA');
   assert.equal(state.inputFiles.estimateBytes([...fileIds].filter((fileId) => (
     state.inputFiles.fileOf({ fileId })?.name === fasta.name)), sessionConfig.inputFilePayload), fasta.size);

@@ -23,6 +23,10 @@ await cp(
   join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'conservation-series.js'),
   join(tempRoot, 'services', 'conservation-series.js')
 );
+// conservation-series.js reads a ring's files through the drawing inputs slice.
+for (const file of ['drawing/inputs.js', 'drawing/slice-handle.js', 'history-files.js']) {
+  await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', file), join(tempRoot, 'services', file));
+}
 // The slice editors and svg-serialization resolve a drawing's ID by its mode.
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempRoot, 'services', 'drawing-view.js'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
@@ -423,7 +427,9 @@ test('managed Conservation removal rebases the Axis only when the row is before 
   });
 });
 
-// OV-2442: a Generate that adopts a LOSAT result replaces each ring's source file. The row keeps its id and its edits.
+// OV-2442: a Generate that adopts a LOSAT result replaces each ring's source file. The rings' adoption moves the row to
+// its ring's new key (`rekeyCircularConservationRows`, the one row re-key writer): the row keeps its id and its edits.
+// The adoption's pairing of rows with rings: tests/web/ring-draft-transitions.test.mjs and circular-rings-setting.test.mjs.
 test('a managed Conservation row keeps its id and edits when its ring gets another source file', () => {
   const ring = { ...conservationSlot(), width: '9px' };
   const state = createState({
@@ -433,11 +439,8 @@ test('a managed Conservation row keeps its id and edits when its ring gets anoth
   });
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
   const drawing = state.activeDrawing();
-  const adopted = editor.keepCircularConservationRowsThrough(drawing, () => {
-    state.files.c_conservation_blasts = [{ name: 'pair.tsv', size: 99, lastModified: 0 }];
-    return true;
-  });
-  assert.equal(adopted, true);
+  state.files.c_conservation_blasts = [{ name: 'pair.tsv', size: 99, lastModified: 0 }];
+  editor.rekeyCircularConservationRows(drawing, new Map([['pair.tsv|1|0|0', 'pair.tsv|99|0|0']]));
   editor.syncCircularConservationSlots(state);
   const [row] = state.adv.circular_track_slots.filter((slot) => slot.renderer === 'sequence_conservation');
   assert.equal(row.id, 'conservation_pair');
@@ -455,21 +458,8 @@ test('a ring whose key does not change keeps its row parameters object', () => {
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
   const row = state.adv.circular_track_slots.find((slot) => slot.id === 'conservation_pair');
   const { params } = row;
-  editor.keepCircularConservationRowsThrough(state.activeDrawing(), () => false);
+  editor.rekeyCircularConservationRows(state.activeDrawing(), new Map([['pair.tsv|1|0|0', 'pair.tsv|1|0|0']]));
   assert.strictEqual(row.params, params);
-});
-
-test('a change of the ring count moves no managed Conservation row', () => {
-  const state = createState({
-    slots: [featureSlot(), conservationSlot(), gcSlot()],
-    conservationEnabled: true,
-    conservationFiles: [{ name: 'pair.tsv', size: 1, lastModified: 0 }]
-  });
-  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
-  editor.keepCircularConservationRowsThrough(state.activeDrawing(), () => {
-    state.files.c_conservation_blasts = [];
-  });
-  assert.equal(state.adv.circular_track_slots.find((slot) => slot.id === 'conservation_pair').params.series_key, 'pair.tsv|1|0|0');
 });
 
 test('Circular measure action updates only the owned scalar and preserves slot identity', () => {
@@ -686,6 +676,19 @@ test('Use custom stack adds the feature density rows the simple stack drew (OV-3
   const ids = state.adv.circular_track_slots.map(({ id }) => id);
   assert.equal(ids[ids.indexOf('features') + 1], 'density_genes', JSON.stringify(ids));
   assert.deepEqual(state.adv.circular_track_slots[ids.indexOf('density_genes')].params, { track: 'genes' });
+});
+
+// OV-3276: a new Circular drawing holds the default stack (`createDefaultCircularTrackSlots`), which no Session saved
+// either; Use custom stack builds it from the simple controls with a row per feature density track, as Linear does.
+test('Use custom stack on a new drawing\'s stack adds the feature density rows (OV-3276)', async () => {
+  const { createDefaultCircularTrackSlots } = await import(pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js')));
+  const state = createState({ slots: createDefaultCircularTrackSlots(), axisIndex: null });
+  state.adv.circular_track_slots_enabled = false;
+  state.adv.feature_density_tracks = [{ id: 'genes' }];
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  editor.setCircularTrackSlotsEnabled(true);
+  const ids = state.adv.circular_track_slots.map(({ id }) => id);
+  assert.equal(ids[ids.indexOf('features') + 1], 'density_genes', JSON.stringify(ids));
 });
 
 // D-51: the slot editor shows each row issue as one sentence in the UI language.

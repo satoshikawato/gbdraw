@@ -263,8 +263,10 @@ export const createCircularSource = (overrides = {}) => ({
  * @property {InputFileRef | (InputFileRef | null)[] | (InputFileRef | null)[][] | null} c_depth one record's series, or a record-major matrix
  * @property {InputFileRef[]} c_conservation_blasts
  * @property {string | null} c_conservation_blasts_source a flag (`'losat-cache'`), not a file
- * @property {(InputFileRef | null)[]} c_conservation_fastas
- * @property {(InputFileRef | null)[]} c_conservation_sequence_sources
+ * @property {InputFileRef[][]} c_conservation_fastas the files of each LOSAT ring's comparison genome, one list per
+ *   ring in source order (a LOSAT-cache replay keeps a ring without files as an empty list beside its table)
+ * @property {InputFileRef[][]} c_conservation_sequence_sources the comparison sequence files of each ring whose
+ *   table was uploaded or replayed (the span export reads them), one list per table place
  * @property {BoundCanonicalComparison[]} linearCanonicalComparisons
  * @property {InputFileRef | null} d_color the Default colors card's file
  * @property {InputFileRef | null} t_color the Specific rules card's file
@@ -293,7 +295,45 @@ export const createCircularSource = (overrides = {}) => ({
 /** @type {readonly CardFileSlot[]} */
 const CARD_FILE_SLOTS = Object.freeze(['d_color', 't_color', 'blacklist', 'whitelist', 'qualifier_priority']);
 
-/** The `DrawingInputFiles` fields that hold a list of refs. @typedef {'c_conservation_blasts' | 'c_conservation_fastas'} InputFileListSlot */
+/** The `DrawingInputFiles` fields that hold a list of refs. @typedef {'c_conservation_blasts'} InputFileListSlot */
+
+/**
+ * The files of each ring's comparison genome, one list per place, an empty
+ * place kept as an empty list: a drawing holds its ring genomes so
+ * (`c_conservation_fastas`, `c_conservation_sequence_sources`). A place that
+ * is one file or null is the form a Session wrote before a ring took several
+ * files (Session 50 and older): the genome of that one file, or none.
+ * Resource IDs read from JSON are read by `ringGenomeIdLists`.
+ * @template T
+ * @param {readonly RingGenomePlace<T>[] | null | undefined} places
+ * @returns {T[][]}
+ */
+export const ringGenomeFileLists = (places) => (places || []).map((place) => (
+  isRingGenomeFileList(place)
+    ? place.filter(/** @returns {file is T} */ (file) => Boolean(file))
+    : (place ? [place] : [])
+));
+/**
+ * A place of a ring genome list: one file (Session 50 and older), a ring's files, or none.
+ * @template T
+ * @typedef {T | readonly (T | null | undefined)[] | null | undefined} RingGenomePlace
+ */
+/**
+ * @template T
+ * @param {RingGenomePlace<T>} place
+ * @returns {place is readonly (T | null | undefined)[]}
+ */
+const isRingGenomeFileList = (place) => Array.isArray(place);
+/**
+ * The resource IDs of a ring genome list read from JSON (a Session's
+ * `webMetadata`), one list per ring, in the forms `ringGenomeFileLists`
+ * reads; what is not a resource ID names no file, as before.
+ * @param {unknown} value
+ * @returns {string[][]}
+ */
+export const ringGenomeIdLists = (value) => (Array.isArray(value) ? value : []).map((/** @type {unknown} */ place) => (
+  (Array.isArray(place) ? place : [place]).filter(/** @returns {id is string} */ (id) => typeof id === 'string' && id !== '')
+));
 
 /**
  * The refs of a file or a list of files, each place kept (null for no file).
@@ -312,6 +352,22 @@ const BOUND_FILE_KEYS = Object.freeze([
   'c_conservation_sequence_sources', 'd_color', 't_color', 'blacklist', 'whitelist', 'qualifier_priority'
 ]);
 const LINEAR_SEQ_FILE_KEYS = Object.freeze(['gb', 'gff', 'fasta', 'depth']);
+// The fields of `files` that hold one list of genome files per ring (`boundRingGenomeLists`).
+const RING_GENOME_KEYS = new Set(['c_conservation_fastas', 'c_conservation_sequence_sources']);
+/**
+ * A bound ring genome field as one list of refs per ring (`ringGenomeFileLists`):
+ * a place nested deeper than a ring's files names no file.
+ * @param {BoundFileValue} bound
+ * @returns {InputFileRef[][]}
+ */
+const boundRingGenomeLists = (bound) => (isBoundFileList(bound) ? bound : []).map((place) => (
+  isBoundFileList(place) ? place : [place]
+).filter(/** @returns {file is InputFileRef} */ (file) => Boolean(file) && !isBoundFileList(file)));
+/**
+ * @param {BoundFileValue} value
+ * @returns {value is readonly BoundFileValue[]}
+ */
+const isBoundFileList = (value) => Array.isArray(value);
 // The fields of `files` that hold card marks (`CircularCardMark`), whose files bind no input.
 const CARD_MARK_KEYS = Object.freeze(['c_depth_rows', 'c_legacy_record_cards']);
 
@@ -520,7 +576,9 @@ const bindFileFields = (store, loaded) => {
   /** @type {Record<string, unknown>} */
   const files = { ...loaded };
   BOUND_FILE_KEYS.forEach((key) => {
-    if (Object.hasOwn(files, key)) files[key] = registerInputFileTree(store, /** @type {LoadedFileValue} */ (files[key]));
+    if (!Object.hasOwn(files, key)) return;
+    const bound = registerInputFileTree(store, /** @type {LoadedFileValue} */ (files[key]));
+    files[key] = RING_GENOME_KEYS.has(key) ? boundRingGenomeLists(bound) : bound;
   });
   if (Array.isArray(files.c_conservation_blasts)) files.c_conservation_blasts = files.c_conservation_blasts.filter((ref) => ref !== null);
   if (Array.isArray(files.linearCanonicalComparisons)) {
@@ -681,7 +739,7 @@ export const idleCircularRecordDiscovery = () => ({
 const membersOf = (slice) => /** @type {InputsMembers} */ (sliceMembers(slice, 'inputs'));
 
 /**
- * A copy of a bound value: lists copied at every depth (a Depth matrix), refs
+ * A copy of a bound value: lists copied at every depth (a Depth matrix, the ring genomes), refs
  * by reference (they are frozen).
  * @template T
  * @param {T} value
@@ -694,8 +752,8 @@ const copyFiles = (files) => ({
   ...files,
   c_depth: copyBound(files.c_depth),
   c_conservation_blasts: [...files.c_conservation_blasts],
-  c_conservation_fastas: [...files.c_conservation_fastas],
-  c_conservation_sequence_sources: [...files.c_conservation_sequence_sources],
+  c_conservation_fastas: copyBound(files.c_conservation_fastas),
+  c_conservation_sequence_sources: copyBound(files.c_conservation_sequence_sources),
   linearCanonicalComparisons: files.linearCanonicalComparisons.map((comparison) => ({ ...comparison }))
 });
 /** @param {LinearSeq} seq @returns {LinearSeq} */
@@ -875,8 +933,9 @@ export const bindDrawingInputFileList = (store, slice, slot, list) => {
 };
 
 /**
- * Bind the drawing's Depth matrix, or its conservation comparison sequences
- * or sequence sources, each place kept (null for none).
+ * Bind the drawing's Depth matrix, each place kept (null for none), or its
+ * rings' comparison genome files or sequence sources, one list per ring
+ * (`boundRingGenomeLists`).
  * @param {Pick<InputFileStore, 'registerFile'>} store
  * @param {InputsSlice} slice
  * @param {'c_depth' | 'c_conservation_fastas' | 'c_conservation_sequence_sources'} slot
@@ -884,7 +943,7 @@ export const bindDrawingInputFileList = (store, slice, slot, list) => {
  */
 export const bindDrawingInputFileTree = (store, slice, slot, value) => {
   const bound = value === null || value === undefined ? (slot === 'c_depth' ? null : []) : registerInputFileTree(store, value);
-  /** @type {Record<string, unknown>} */ (membersOf(slice).files)[slot] = bound;
+  /** @type {Record<string, unknown>} */ (membersOf(slice).files)[slot] = slot === 'c_depth' ? bound : boundRingGenomeLists(bound);
 };
 
 /**

@@ -6,7 +6,7 @@
 import { File } from 'node:buffer';
 import { mock } from 'node:test';
 import { installFakeSvgDom } from '../fake-svg-dom.mjs';
-import { modeDrawing } from './drawing-state.mjs';
+import { addStartLinearDrawing, modeDrawing } from './drawing-state.mjs';
 
 const at = (path) => new URL(path, import.meta.url).href;
 globalThis.window = {
@@ -36,9 +36,13 @@ mock.module(runAnalysisUrl, {
 const { state } = await import(at('../../../gbdraw/web/js/state.js'));
 const { createAppSetup } = await import(at('../../../gbdraw/web/js/app/app-setup.js'));
 createAppSetup();
+await addStartLinearDrawing();
 const rings = modeDrawing(state, 'circular').circularConservation;
 modeDrawing(state, 'circular').files.c_conservation_fastas = [new File(['>r\nACGT\n'], 'ring.fa')];
 rings.source = 'losat'; rings.labels = ''; rings.enabled = false; rings.series.splice(0);
 const before = { enabled: rings.enabled, series: rings.series.length };
-ports.adoptCanonicalRenderArtifacts({ renderRequest: { mode: 'linear', records: [] }, resources: {} }, { adoptOwnedRequest: false });
+// A Linear Generate adopts its request for the Linear drawing it ran on, with no rings it searched (run-analysis.js).
+ports.adoptCanonicalRenderArtifacts({ renderRequest: { mode: 'linear', records: [] }, resources: {} }, {
+  adoptOwnedRequest: false, drawing: modeDrawing(state, 'linear'), conservationPairs: new Set(), ringAdoption: null
+});
 console.log(JSON.stringify({ before, after: { enabled: rings.enabled, series: rings.series.length } }));

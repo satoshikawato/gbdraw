@@ -14,6 +14,15 @@ for (const path of [
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', path), join(tempRoot, path));
 }
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
+const { pythonLinearUnitPlan } = await import(pathToFileURL(join(repoRoot, 'tests', 'web', 'helpers', 'linear-unit-plan.mjs')));
+/**
+ * The unit pairs Python's unit plan says a drawing displays (`gridPairs`) for drawn records, each in its grid row
+ * (null: no grid rows): the reply the Web reads, never a Web derivation (OV-3248).
+ * @param {readonly { uid: string, row: number | null }[]} drawnRows
+ */
+const pythonGridPairs = (drawnRows) => pythonLinearUnitPlan({
+  records: drawnRows.map(({ uid, row }) => ({ recordKey: uid, windows: [], gridRow: row })), pairs: []
+}).gridPairs;
 
 const {
   LINEAR_COMPARISON_MODES,
@@ -21,7 +30,6 @@ const {
   buildLinearComparisonTimeline,
   buildLosatJobSpecs,
   buildPairwiseLosatJobSpecs,
-  canonicalGridDisplayPairs,
   createDefaultLinearComparisonPlan,
   createLinearComparisonEdge,
   linearComparisonEdgeKey,
@@ -727,20 +735,31 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
 }
 
 {
-  // Review F2: a CLI Session's row grid with its middle row turned OFF.
-  // The drawn rows 1 and 3 are adjacent, as Python closes up the empty row.
-  const cell = (uid, row) => ({ uid, row, canonicalRow: row, canonicalColumn: 1, canonicalCardinality: 'exactly_one' });
-  const rows = [cell('a', 1), cell('b', 2), cell('c', 3), cell('d', 4)];
-  const drawn = [{ uid: 'a' }, { uid: 'c' }, { uid: 'd' }];
-  const displayed = canonicalGridDisplayPairs(drawn, rows);
-  assert.ok(displayed);
-  assert.equal(displayed(0, 1), true, 'rows 1 and 3 are adjacent once row 2 is OFF');
-  assert.equal(displayed(1, 2), true);
-  assert.equal(displayed(0, 2), false);
-  assert.equal(displayed(1, 0), false, 'a pair is displayed once, query before subject');
-  // A record without a canonical grid cell leaves the decision to the plan's edges.
-  assert.equal(canonicalGridDisplayPairs(drawn, [cell('a', 1), { uid: 'c', row: 3 }, cell('d', 4)]), null);
-  assert.equal(canonicalGridDisplayPairs([{ uid: 'a' }], rows), null);
+  // OV-3248: the unit pairs a drawing displays are Python's, whatever wrote the rows. Two records above one, as the
+  // Web's Record Layout writes them (rows, no columns) or a records table: a->c and b->c. Rows close up when a record
+  // is turned OFF (a, b in row 1, c in row 2 OFF, d in row 3). Rows of one record each in record order, or no rows:
+  // the plan's edges.
+  assert.deepEqual(pythonGridPairs([{ uid: 'a', row: 1 }, { uid: 'b', row: 1 }, { uid: 'c', row: 2 }]),
+    [{ queryUnit: 0, subjectUnit: 2 }, { queryUnit: 1, subjectUnit: 2 }]);
+  assert.deepEqual(pythonGridPairs([{ uid: 'a', row: 1 }, { uid: 'b', row: 1 }, { uid: 'd', row: 3 }]),
+    [{ queryUnit: 0, subjectUnit: 2 }, { queryUnit: 1, subjectUnit: 2 }]);
+  assert.equal(pythonGridPairs([{ uid: 'a', row: 1 }, { uid: 'c', row: 3 }, { uid: 'd', row: 4 }]), null);
+  assert.equal(pythonGridPairs([{ uid: 'a', row: null }, { uid: 'b', row: null }]), null);
+  // A Web-arranged grid in Collinear, Search between All records: each pair of units in adjacent rows is displayed
+  // once, in the direction of the unit first in request order, and numbered by its own edge.
+  const drawn = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
+  const rows = [{ uid: 'a', row: 1 }, { uid: 'b', row: 1 }, { uid: 'c', row: 2 }];
+  const resolution = resolveLinearComparisonPlan({
+    plan: { mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: [] },
+    sequences: drawn, layout: rows, losatProgram: 'blastp', blastpMode: 'collinear'
+  });
+  const specs = buildLosatJobSpecs({
+    resolution, recordCount: 3, recordUids: ['a', 'b', 'c'], program: 'blastp', blastpMode: 'collinear',
+    collinearInferOrthogroups: true, collinearSearchScope: 'all'
+  });
+  const numbers = numberLosatDisplayPairs(specs, resolution.edges, pythonGridPairs(rows));
+  assert.deepEqual(specs.flatMap((spec, index) => (numbers[index].displayPair
+    ? [[`${spec.queryUid}->${spec.subjectUid}`, numbers[index].pairIndex]] : [])), [['a->c', 0], ['b->c', 1]]);
 }
 
 {
@@ -749,7 +768,7 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
   // edge of its own two records, in either orientation, so the search a->c
   // is shown and numbered by the edge c->a; a pair no edge joins takes an
   // edge by ordinal.
-  const cell = (uid, row) => ({ uid, row, canonicalRow: row, canonicalColumn: 1, canonicalCardinality: 'exactly_one' });
+  const cell = (uid, row) => ({ uid, row });
   const gridSequences = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
   const gridRows = [cell('b', 1), cell('c', 2), cell('a', 3)];
   const resolution = resolveLinearComparisonPlan({
@@ -768,9 +787,13 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
     ['a->c', 'c->a', 1], ['c->a', 'c->a', 1],
     ['b->c', 'b->c', 0], ['c->b', 'b->c', 0]
   ]);
-  const displayed = canonicalGridDisplayPairs(gridSequences, gridRows);
+  // Rows out of record order are a grid: Python's plan displays each adjacent-row pair once, the record first in
+  // request order first (a->c, b->c).
+  const gridPairs = pythonGridPairs(gridSequences.map(({ uid }) => gridRows.find((row) => row.uid === uid)));
+  assert.deepEqual(gridPairs, [{ queryUnit: 0, subjectUnit: 2 }, { queryUnit: 1, subjectUnit: 2 }]);
+  const numbers = numberLosatDisplayPairs(specs, resolution.edges, gridPairs);
   assert.deepEqual(
-    specs.filter((spec) => displayed(spec.queryIndex, spec.subjectIndex)).map((spec) => [spec.edgeKey, spec.ordinal]),
+    specs.filter((_spec, index) => numbers[index].displayPair).map((spec) => [spec.edgeKey, spec.ordinal]),
     [['c->a', 1], ['b->c', 0]],
     'each displayed search has its own card and number'
   );
@@ -782,9 +805,7 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
   // and a 1x4 grid with row 2 OFF (closed up) are the reachable layouts with
   // several adjacent-row pairs per row boundary; each such pair is its own
   // ADJACENT edge. A Selected plan with repeated ordinals is refused.
-  const cell = (uid, row, column = 1) => ({
-    uid, row, canonicalRow: row, canonicalColumn: column, canonicalCardinality: 'exactly_one'
-  });
+  const cell = (uid, row) => ({ uid, row });
   const displayedNumbers = (drawn, rows, plan) => {
     const resolution = resolveLinearComparisonPlan({
       plan, sequences: drawn, layout: rows, losatProgram: 'blastp', blastpMode: 'collinear'
@@ -794,13 +815,14 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
       resolution, recordCount: drawn.length, recordUids: drawn.map(({ uid }) => uid), program: 'blastp',
       blastpMode: 'collinear', collinearInferOrthogroups: true, collinearSearchScope: 'all'
     });
-    const numbers = numberLosatDisplayPairs(specs, resolution.edges, canonicalGridDisplayPairs(drawn, rows));
+    const gridPairs = pythonGridPairs(drawn.map(({ uid }) => rows.find((row) => row.uid === uid)));
+    const numbers = numberLosatDisplayPairs(specs, resolution.edges, gridPairs);
     assert.deepEqual(numbers.map(({ pairIndex }) => pairIndex), specs.map(({ ordinal }) => ordinal));
     return specs.flatMap((spec, index) => (
       numbers[index].displayPair ? [[`${spec.queryUid}->${spec.subjectUid}`, numbers[index].pairIndex]] : []
     ));
   };
-  const square = [cell('a', 1, 1), cell('b', 1, 2), cell('c', 2, 1), cell('d', 2, 2)];
+  const square = [cell('a', 1), cell('b', 1), cell('c', 2), cell('d', 2)];
   const upload = createLinearComparisonEdge({
     queryUid: 'a', subjectUid: 'd', source: 'upload', fileActive: true, file: file('a-d.tsv')
   });
@@ -833,9 +855,7 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
   const vector = JSON.parse(await readFile(join(repoRoot, 'tests', 'fixtures', 'losat_job_plan_cases.json'), 'utf8')).proteinGridCases[0];
   const uids = vector.grid.map((_, index) => String.fromCharCode(97 + index));
   const drawn = uids.map((uid) => ({ uid }));
-  const rows = vector.grid.map(([row, column], index) => ({
-    uid: uids[index], row, canonicalRow: row, canonicalColumn: column, canonicalCardinality: 'exactly_one'
-  }));
+  const rows = vector.grid.map(([row], index) => ({ uid: uids[index], row }));
   const resolution = resolveLinearComparisonPlan({
     plan: { mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: [] },
     sequences: drawn, layout: rows, losatProgram: 'blastp', blastpMode: 'collinear'
@@ -844,7 +864,7 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
     resolution, recordCount: uids.length, recordUids: uids, program: 'blastp', blastpMode: 'collinear',
     collinearInferOrthogroups: vector.inferOrthogroups, collinearSearchScope: vector.searchScope
   });
-  const numbers = numberLosatDisplayPairs(specs, resolution.edges, canonicalGridDisplayPairs(drawn, rows));
+  const numbers = numberLosatDisplayPairs(specs, resolution.edges, pythonGridPairs(rows));
   assert.deepEqual(
     specs.map((spec, index) => [spec.queryIndex, spec.subjectIndex, numbers[index].displayPair, numbers[index].pairIndex]),
     vector.searches

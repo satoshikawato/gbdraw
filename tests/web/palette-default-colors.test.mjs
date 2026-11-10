@@ -289,6 +289,30 @@ test('a restyle paints an Auto key with the applied palette color', async () => 
   assert.deepEqual(plan.operationsByResult[0].featureFills, [{ renderedId: 'f1', color: '#AABBCC' }]);
 });
 
+// OV-3114 (review F1): a type the palette does not list is drawn in the
+// palette's `default` color, as Python draws it and its Legend row shows it
+// (gbdraw/features/colors.py `feature_type_color`). The live compile and the
+// feature popup's palette color read the same owner; it was a fixed #d3d3d3
+// live and nothing in the popup.
+test('a type the palette does not list takes the palette default, live and in the popup', async () => {
+  const { compileDirectEditorMutationPlan } = await import('../../gbdraw/web/js/app/candidate-render.js');
+  const { displayedFeatureAddressing } = await import('../../gbdraw/web/js/services/feature-override-identity.js');
+  const { appliedFeatureColors, appliedFeatureColorOf } = await import('../../gbdraw/web/js/utils/color-utils.js');
+  const state = {
+    paletteDefinitions: ref(PALETTES), appliedPaletteName: ref('default'),
+    appliedPaletteColors: ref({ ...paletteOf('default'), default: '#123456' })
+  };
+  const feature = { id: 'f1', svg_id: 'f1', type: 'D-loop' };
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: displayedFeatureAddressing([feature], ['diagram.svg'], 0), manualSpecificRules: [],
+    livePreview: { drawnTracks: [], domains: ['featureFills'], paletteColors: appliedFeatureColors(state), drawnContext: null }
+  });
+  assert.deepEqual(plan.operationsByResult[0].featureFills, [{ renderedId: 'f1', color: '#123456' }]);
+  assert.equal(appliedFeatureColorOf(state, 'D-loop'), '#123456');
+  assert.equal(appliedFeatureColorOf(state, 'constructor'), '#123456', 'an own key only names a listed type');
+  assert.equal(appliedFeatureColorOf(state, 'CDS'), '#AABBCC');
+});
+
 // PD-OI-088, OIC-028: the dialog stays open and busy until its choice's
 // History step ends, as the popup choice dialogs do (`createDialogChoice`).
 test('the palette dialog closes after the History step of its choice', async () => {
@@ -530,4 +554,21 @@ test('a Default colors edit applies live, or joins the queued palette, without a
   assert.equal(queued.drawing.pendingPaletteName.value, 'forest');
   assert.equal(queued.drawing.pendingPaletteColors.value.tRNA, '#676767');
   assert.equal(JSON.stringify(queued.state.appliedPaletteColors.value), applied);
+});
+
+// OV-3114 (review F1): the Legend row of a drawn type the palette does not
+// list shows the palette's `default` live, as its features do and as Python
+// draws the row; a row that names no drawn type (a region annotation) keeps
+// the color it records.
+test('the Legend row of a drawn type the palette does not list shows the palette default', async () => {
+  const { draftLegendRowColors } = await import('../../gbdraw/web/js/app/candidate-render.js');
+  const pythonRows = new Map([
+    ['D-loop', { key: 'D-loop', color: '#999999' }], ['Prophage', { key: 'Prophage', color: '#010101' }]
+  ]);
+  const compiled = draftLegendRowColors({
+    rules: [], pythonRows, features: [{ type: 'D-loop', fill_color: '#999999' }],
+    originalLegendOrder: ['D-loop', 'Prophage'], paletteColors: { ...paletteOf('default'), default: '#123456' }, drawnTracks: []
+  });
+  assert.equal(compiled.colorOf('D-loop'), '#123456');
+  assert.equal(compiled.colorOf('Prophage'), null);
 });

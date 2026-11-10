@@ -87,6 +87,17 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
   await circularAxisCard.press('Enter');
   await expect(page.getByLabel('Show Coordinate Scale (Circular)')).toBeDisabled();
   await expect(page.locator('[data-scale-visibility-note]')).toHaveText('Show Ticks slot');
+  // Use custom stack builds a new drawing's stack from the simple controls (PD-OI-126, OV-3276): with Show
+  // Coordinate Scale off, it has no Ticks row, so the figure stays as the simple stack drew it.
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.circular_track_slots
+    .some((slot) => slot.renderer === 'ticks'))).toBe(false);
+  await expect(page.getByLabel('Circular scale interval')).toBeDisabled();
+  // An explicit Ticks slot then draws the scale while Show Coordinate Scale stays off.
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.addCircularTrackSlot('ticks');
+    await window.Vue.nextTick();
+  });
+  await expect(page.getByLabel('Show Coordinate Scale (Circular)')).not.toBeChecked();
   await expect(page.getByLabel('Circular scale interval')).toBeEnabled();
 
   expect(await runDiagram(page)).toEqual({

@@ -60,6 +60,7 @@ from gbdraw.io.record_select import (
     drawn_record_units,
     in_draw_order,
     parse_record_selector,
+    record_index_number,
     reverse_records,
     select_record_units,
 )
@@ -280,6 +281,8 @@ class ResolvedRecordProvenance:
     presentation: RecordPresentation
     display: RecordDisplayOptions = field(default_factory=RecordDisplayOptions)
     source_length: int | None = None
+    # The length of every record of the source, each uncropped: the genome a source file is (OV-3143).
+    source_file_length: int | None = None
     detected_topology: Literal["circular", "linear", "unknown"] = "unknown"
     is_cropped: bool = False
     has_collection_region: bool = False
@@ -325,6 +328,7 @@ class ResolvedRecordProvenance:
             source_record_id=self.source_record_id,
             source_record_id_unique=self.source_record_id_unique,
             window_of=self.window_of,
+            source_file_length=self.source_file_length,
         )
 
     @property
@@ -1608,6 +1612,18 @@ def _source_details(
     raise ValidationError("Unsupported record input source.")
 
 
+def _file_source(kind: RecordSourceKind, paths: Sequence[str]) -> RecordInputSource:
+    """The file source :func:`_source_details` reads as ``kind`` and ``paths``: a record held from a file plan
+    (``held_record_origin``) names the file it was read from this way."""
+    if kind == "genbank":
+        return GenBankInputSource(paths[0])
+    if kind == "gff_fasta":
+        return GffFastaInputSource(paths[0], paths[1])
+    if kind == "fasta":
+        return FastaInputSource(paths[0])
+    raise ValidationError(f"A {kind} record source names no file.", diagnostic={"code": "INPUT_INVALID"})
+
+
 def _gff_feature_types(
     gff_candidate_features: Sequence[str] | None, gff_keep_all_features: bool,
 ) -> frozenset[str] | None:
@@ -2039,6 +2055,13 @@ def _detached_record(record: SeqRecord) -> SeqRecord:
     return detached
 
 
+def _uncropped_length(record: SeqRecord) -> int:
+    """The length of a loaded record before the crop its loader applied."""
+
+    length = record.annotations.get("gbdraw_source_length") if record.annotations.get("gbdraw_region_applied") else None
+    return length if isinstance(length, int) else len(record)
+
+
 def resolve_record_inputs(
     record_inputs: Sequence[RecordInput],
     *,
@@ -2087,6 +2110,7 @@ def resolve_record_inputs(
     ])
     for input_index, (record_input, (key, parsed, source_indexes), place) in enumerate(zip(inputs, selections, places)):
         raw_records = parsed.records
+        file_length = sum(_uncropped_length(record) for record in raw_records)
         selector = record_input.selector
         presentation, input_windows = _placed_input(record_input, place)
         source_kind, source_paths = _source_details(record_input.source)
@@ -2142,8 +2166,8 @@ def resolve_record_inputs(
                     if expands and place.column is not None else presentation
                 ),
                 display=record_input.display,
-                source_length=(source_record.annotations.get("gbdraw_source_length")
-                               if source_cropped else len(source_record)),
+                source_length=_uncropped_length(source_record),
+                source_file_length=origin.source_file_length if origin else file_length,
                 detected_topology=detected_topology(source_record, source_kind),
                 is_cropped=source_cropped,
                 source_features=parsed.source_features[source_record_index],
@@ -2377,7 +2401,7 @@ def _resolve_linear_comparison_selector(
     where = f"{table_path}: row {row_number}, column {column!r}"
     diagnostic = {"code": "COMPARISON_INPUT", "row": row_number}
     groups = drawn_record_units(records)
-    number = parse_ascii_integer(selector[1:].strip()) if selector.startswith("#") else None
+    number = record_index_number(selector) if selector.startswith("#") else None
     if number is not None:
         if 0 <= number - 1 < len(groups):
             return groups[number - 1]

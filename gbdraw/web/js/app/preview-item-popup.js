@@ -63,7 +63,7 @@ import { msg, t, tn, tm, tx } from '../utils/i18n.js';
  * @property {WebState['clickedPairwiseMatch']} clickedPairwiseMatch The open match-frame popup.
  * @property {{ value: Element | null }} svgContainer The preview's mounted Result.
  * @property {{ value: string }} mode
- * @property {{ value: ReadonlyArray<{ type?: unknown }> }} extractedFeatures
+ * @property {WebState['extractedFeatures']} extractedFeatures
  * @property {() => DrawingState} activeDrawing The shown drawing, whose Result and record rows the popup shows.
  * @property {{ value: Record<string, Record<string, string>> | null }} paletteDefinitions
  * @property {{ value: string }} appliedPaletteName The palette of the displayed Result.

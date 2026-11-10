@@ -61,6 +61,7 @@ import { SETTINGS_SLICE } from './services/drawing/settings.js';
 import { allocateDrawingId, defaultDrawingName } from './services/drawing-view.js';
 import { FEATURE_EDITOR_STATUS_IDLE } from './services/artifact-slot.js';
 /** @import { FeatureEditorStatus } from './services/artifact-slot.js' */
+/** @import { LosatRuntimeStatus } from './services/losat.js' */
 import { diagnosticError } from './utils/error-normalization.js';
 import {
   createDefaultAdv,
@@ -79,7 +80,9 @@ const processingStatus = ref('');
 // run ends; the next run that shows the overlay starts without them.
 const labelCapacityNotices = /** @type {{ value: readonly LabelCapacityNotice[] }} */ (ref([]));
 const generationCancelRequested = ref(false);
-const errorLog = ref(null);
+/** @import { UserFacingError } from './utils/error-normalization.js' */
+// The shown alert: the one diagnostic model the app shows (`normalizeUserFacingError`), or none.
+const errorLog = typedRef(/** @type {UserFacingError | null} */ (null));
 const sessionTitle = ref('');
 const sessionSavePending = ref(false);
 const sessionImportPending = typedRef(false);
@@ -176,7 +179,7 @@ export const createDefaultPriorityRule = () => ({
 export const createDefaultPaletteDraftState = () => ({
   paletteInstantPreviewEnabled: false,
   appliedPaletteName: 'default',
-  appliedPaletteColors: {}
+  appliedPaletteColors: /** @type {Record<string, string>} */ ({})
 });
 
 export const createDefaultEditorDraftState = () => ({
@@ -198,10 +201,10 @@ const losatExecution = reactive(createDefaultLosatExecution());
 const richFeaturePopup = ref(true);
 
 const losatCacheInfo = ref([]);
-const losatThreadingStatus = ref({
+const losatThreadingStatus = typedRef(/** @type {LosatRuntimeStatus} */ ({
   state: 'unknown',
   message: ''
-});
+}));
 // The temporary copies of the chosen inputs (PD-OI-121): creating the store takes
 // this tab's folder and lock and deletes the folders of closed tabs.
 useInputCopyStore(createBrowserInputCopyStore());
@@ -253,12 +256,12 @@ const linearFoldedSources = reactive(new Set());
 const loadedFonts = typedRef(/** @type {WebFontEntry[]} */ ([]));
 
 // Color & Filter State
-const paletteDefinitions = ref({});
-const paletteNames = ref(['default']);
+const paletteDefinitions = typedRef(/** @type {Record<string, Record<string, string>>} */ ({}));
+const paletteNames = typedRef(['default']);
 const defaultPaletteDraftState = createDefaultPaletteDraftState();
 const paletteInstantPreviewEnabled = ref(defaultPaletteDraftState.paletteInstantPreviewEnabled);
-const appliedPaletteName = ref(defaultPaletteDraftState.appliedPaletteName);
-const appliedPaletteColors = ref(defaultPaletteDraftState.appliedPaletteColors);
+const appliedPaletteName = typedRef(defaultPaletteDraftState.appliedPaletteName);
+const appliedPaletteColors = typedRef(defaultPaletteDraftState.appliedPaletteColors);
 const newSpecRule = reactive(createDefaultSpecificRule());
 /**
  * A built-in color table offered as a preset of the specific rules.
@@ -281,8 +284,9 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 const downloadWhiteBackground = ref(false);
 
 // Feature Color Editor state
-const extractedFeatures = ref([]); // Features from last generation
-const biologicalFeatures = ref([]); // Complete source catalog, including non-rendered features
+/** @import { ExtractedFeature } from './services/feature-metadata-extraction.js' */
+const extractedFeatures = typedRef(/** @type {ExtractedFeature[]} */ ([])); // Features from last generation
+const biologicalFeatures = typedRef(/** @type {ExtractedFeature[]} */ ([])); // Complete source catalog, including non-rendered features
 /** @import { FeatureCatalog } from './services/feature-catalog.js' */
 // Null, or the admitted catalog of the committed Results (`admittedFeatureCatalog`
 // in services/config.js; R11), held by reference.
@@ -296,16 +300,7 @@ const extractedFeatureQualifierNames = computed(() => collectFeatureQualifierNam
 const specificRuleQualifierSuggestions = computed(() =>
   specificColorQualifierSuggestions(extractedFeatureQualifierNames.value, activeDrawing().manualSpecificRules)
 );
-/**
- * What state.js reads of a listed feature (the Features list rows and the
- * extracted features, whose owner has no typedef).
- * @typedef {{
- *   id?: unknown, svg_id?: unknown, record_idx?: unknown, displayRecordId?: unknown,
- *   rendered_svg_id?: unknown, renderedSvgId?: unknown, rendered_feature_svg_id?: unknown,
- *   renderedFeatureSvgId?: unknown
- * }} FeatureListRow
- */
-/** @param {FeatureListRow | null | undefined} feature */
+/** @param {ExtractedFeature | null | undefined} feature */
 const renderedFeatureSvgId = (feature) => {
   return String(
     feature?.rendered_svg_id ||
@@ -348,7 +343,7 @@ const selectedFeatures = computed(() => {
 
   const bySvgId = featuresBySvgId.value instanceof Map ? featuresBySvgId.value : new Map();
   const fallback = new Map();
-  (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((/** @type {FeatureListRow} */ feature) => {
+  (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((feature) => {
     const svgId = renderedFeatureSvgId(feature);
     if (svgId && !fallback.has(svgId)) fallback.set(svgId, feature);
   });
@@ -372,7 +367,7 @@ const setFeatureEditorStatus = (status, error = null) => {
 const featureExtractionPending = ref(false);
 const featureRecordIds = ref([]); // Record IDs for multi-record files
 const selectedFeatureRecordIdx = ref(0); // Currently selected record index
-const resultGenerationKey = ref(0);
+const resultGenerationKey = typedRef(0);
 const featurePanelTab = ref(defaultEditorDraftState.featurePanelTab); // 'colors' | 'labels'
 const featureSearchInput = ref('');
 const featureSearch = ref('');
@@ -391,7 +386,7 @@ const previewFeatureSearchVisible = ref(true);
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
 const autoLabelReflowEnabled = ref(false);
-const labelReflowProcessing = ref(false);
+const labelReflowProcessing = typedRef(false);
 const labelReflowRequestSeq = ref(0);
 const labelReflowForceRequestSeq = ref(0);
 const labelReflowLastError = ref(null);
@@ -549,13 +544,23 @@ const labelOnDialog = reactive({
   featureType: ''
 });
 
-const featureVisibilityScopeDialog = reactive({
+/**
+ * The Change Scope dialog of a feature visibility edit
+ * (`app/feature-editor/visibility-actions.js`). Display values only.
+ * @typedef {object} FeatureVisibilityScopeDialog
+ * @property {boolean} show
+ * @property {VisibilityTarget | null} feat The feature the edit is for.
+ * @property {string} mode The visibility mode the edit sets.
+ * @property {string} previousMode The feature's mode before it, which Cancel shows again.
+ * @property {VisibilityScope[]} scopes The scopes the dialog offers.
+ */
+const featureVisibilityScopeDialog = typedReactive(/** @type {FeatureVisibilityScopeDialog} */ ({
   show: false,
   feat: null,
   mode: 'default',
   previousMode: 'default',
   scopes: []
-});
+}));
 
 // Sidebar resize state
 const sidebarWidth = typedRef(320); // Initial width in pixels
@@ -747,7 +752,7 @@ const featureList = computed(() => {
   const features = extractedFeatures.value;
   const renderedIds = names.length < 2 ? null : metadata?.renderedFeatureIdentities?.renderedIds;
   return {
-    rows: renderedIds instanceof Set ? features.filter((/** @type {FeatureListRow} */ feature) => renderedIds.has(feature.svg_id)) : features,
+    rows: renderedIds instanceof Set ? features.filter((feature) => renderedIds.has(feature.svg_id)) : features,
     drawn: null,
     rendered: null
   };
@@ -765,7 +770,7 @@ const featureListState = (feature) => {
 };
 const featureRecordPickerVisible = computed(() => (
   featureRecordIds.value.length > 1
-  && new Set(featureList.value.rows.map((/** @type {FeatureListRow} */ feature) => (
+  && new Set(featureList.value.rows.map((/** @type {ExtractedFeature} */ feature) => (
     mode.value === 'circular' ? feature.record_idx : feature.displayRecordId
   ))).size > 1
 ));
@@ -815,7 +820,7 @@ const isFeatureDrawerMounted = computed(
 const featureListExpandedIndex = computed(() => (
   featureListExpandedId.value === null
     ? -1
-    : filteredFeatures.value.findIndex((/** @type {FeatureListRow} */ feature) => feature.id === featureListExpandedId.value)
+    : filteredFeatures.value.findIndex((/** @type {ExtractedFeature} */ feature) => feature.id === featureListExpandedId.value)
 ));
 /** @param {number} index */
 const featureListRowTop = (index) => (
@@ -909,7 +914,7 @@ export const sessionOperationAvailability = (
 /** @import { DrawingId } from './services/drawing-view.js' */
 
 /** @import { PythonLegendKey } from './services/legend-svg.js' */
-/** @import { VisibilityFeature } from './services/feature-visibility.js' */
+/** @import { VisibilityFeature, VisibilityScope, VisibilityTarget } from './services/feature-visibility.js' */
 
 // The drawing of a diagram mode: its settings, its editor edits, and the
 // values derived from them, under their former `state` names and kinds (a ref
@@ -930,7 +935,7 @@ const settingsDefaults = (drawingMode) => () => ({
   losatProgram: 'blastn', // 'blastn' | 'tblastx' | 'blastp'
   circularConservation: createDefaultCircularConservation(),
   linearComparisonPlan: createDefaultLinearComparisonPlan(),
-  linearRecordLayoutEnabled: WEB_UX_PROFILE.linear.arrangeInRowsByDefault,
+  linearRecordLayoutEnabled: /** @type {boolean} */ (WEB_UX_PROFILE.linear.arrangeInRowsByDefault),
   linearRecordGap: DEFAULT_LINEAR_RECORD_GAP_PX,
   linearRecordRows: [],
   recordDisplayDrafts: [],
@@ -973,9 +978,9 @@ export const createDrawingState = (id, drawingMode) => {
     }
   });
   const losat = reactive(initial.losat);
-  const losatProgram = ref(initial.losatProgram);
+  const losatProgram = typedRef(initial.losatProgram);
   const linearComparisonPlan = reactive(initial.linearComparisonPlan);
-  const linearRecordLayoutEnabled = ref(initial.linearRecordLayoutEnabled);
+  const linearRecordLayoutEnabled = typedRef(initial.linearRecordLayoutEnabled);
   const linearRecordRows = reactive(initial.linearRecordRows);
   // The keys of the records this drawing leaves out (record-selection D-02):
   // Linear card uids or Circular source selectors `#N`

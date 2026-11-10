@@ -639,8 +639,8 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   // services/history-snapshot.js); it reads the rows through `toRaw`, as state.js does, so Vue records no dependency
   // on each alias key of every row that `featureIdentity` reads.
   const featureSequenceLookup = computed(() => {
-    const biological = /** @type {Record<string, unknown>[] | null} */ (toRaw(biologicalFeatures.value));
-    const extracted = /** @type {Record<string, unknown>[]} */ (Array.isArray(extractedFeatures.value) ? toRaw(extractedFeatures.value) : []);
+    const biological = toRaw(biologicalFeatures.value);
+    const extracted = Array.isArray(extractedFeatures.value) ? toRaw(extractedFeatures.value) : [];
     const hasBiologicalFeatures = Array.isArray(biological) && biological.length > 0;
     const features = hasBiologicalFeatures ? biological : extracted;
     const renderedIdentities = extracted

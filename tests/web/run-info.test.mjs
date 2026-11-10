@@ -19,6 +19,7 @@ const modulePath = join(tempDir, 'js', 'app', 'run-info.js');
 const {
   buildRunInfo,
   LOSAT_DATABASE_SCOPE_NOTE,
+  LOSAT_EVALUE_SCALE_NOTE,
   buildSourceRecipe,
   quoteShellArg,
   reproducibilityLabel,
@@ -691,7 +692,7 @@ test('circular source recipe names comparison genomes with --conservation_sequen
     { resourceId: 'conservation-blast-files-1', representation: 'file' }
   ];
   session.renderRequest.diagramOptions.conservationFastaFiles = [
-    { resourceId: 'conservation-fasta-files-1', representation: 'file' }
+    [{ resourceId: 'conservation-fasta-files-1', representation: 'file' }]
   ];
   session.resources['conservation-blast-files-1'] = resource('conservation-blast-file', 'ring.tsv', '');
   session.resources['conservation-fasta-files-1'] = resource('conservation-fasta-file', 'ring.gb', 'LOCUS       ring\n//\n');
@@ -699,6 +700,29 @@ test('circular source recipe names comparison genomes with --conservation_sequen
   assert.equal(sourceRecipe.available, true, sourceRecipe.unavailableReason);
   assert.ok(sourceRecipe.args.includes('--conservation_sequence'));
   assert.ok(!sourceRecipe.args.includes('--conservation_fasta'));
+  await assertCliParserAccepts(sourceRecipe);
+});
+
+test('circular source recipe gives a ring of several genome files one --conservation_genome', async () => {
+  const session = structuredClone(circularCanonical);
+  const ref = (resourceId) => ({ resourceId, representation: 'file' });
+  session.renderRequest.diagramOptions.conservationBlastFiles = [ref('conservation-blast-files-1'), ref('conservation-blast-files-2')];
+  session.renderRequest.diagramOptions.conservationFastaFiles = [
+    [ref('conservation-fasta-files-1-1'), ref('conservation-fasta-files-1-2')],
+    []
+  ];
+  session.resources['conservation-blast-files-1'] = resource('conservation-blast-file', 'ring.tsv', '');
+  session.resources['conservation-blast-files-2'] = resource('conservation-blast-file', 'ring2.tsv', '');
+  session.resources['conservation-fasta-files-1-1'] = resource('conservation-fasta-file', 'chromosome.gb', 'LOCUS       c\n//\n');
+  session.resources['conservation-fasta-files-1-2'] = resource('conservation-fasta-file', 'plasmid.gb', 'LOCUS       p\n//\n');
+  const sourceRecipe = await buildSourceRecipe(session);
+  assert.equal(sourceRecipe.available, true, sourceRecipe.unavailableReason);
+  const visible = sourceRecipe.args.map((token) => sourceRecipe.fileMetadata.get(token)?.name || token);
+  const first = visible.indexOf('--conservation_genome');
+  const [flag, chromosome, plasmid, secondFlag, noGenome] = visible.slice(first, first + 5);
+  assert.deepEqual([flag, secondFlag, noGenome], ['--conservation_genome', '--conservation_genome', '']);
+  assert.ok(chromosome && plasmid && chromosome !== plasmid);
+  assert.ok(!visible.includes('--conservation_sequence'));
   await assertCliParserAccepts(sourceRecipe);
 });
 
@@ -1054,6 +1078,24 @@ const linearCanonical = canonical({
   assert.equal(sourceRecipe.available, false);
   assert.match(sourceRecipe.unavailableReason, /batch|output/i);
 }
+
+test('a one-record Circular batch, as the CLI writes it, has the Source recipe of its one output (OV-3191)', async () => {
+  const batch = structuredClone(circularCanonical);
+  batch.renderRequest.grouping = 'batch';
+  batch.renderRequest.output = [{ ...batch.renderRequest.output, prefix: 'yeast_c' }];
+  const single = structuredClone(circularCanonical);
+  single.renderRequest.output.prefix = 'yeast_c';
+  const recipe = await buildSourceRecipe(batch);
+
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  assert.deepEqual(recipe.args, (await buildSourceRecipe(single)).args);
+  assert.ok(recipe.semanticCoverage.consumedPaths.includes('output[0].prefix'));
+  await assertCliParserAccepts(recipe);
+
+  const unknownOutputField = structuredClone(batch);
+  unknownOutputField.renderRequest.output[0].futureName = 'x';
+  assert.match((await buildSourceRecipe(unknownOutputField)).unavailableReason, /output\[0\]\.futureName/);
+});
 
 {
   const missingProvenance = structuredClone(circularCanonical);
@@ -1856,16 +1898,20 @@ test('a feature edit or placement whose feature the source lacks makes the Sourc
   }
 });
 
-// PD-OI-018 revision 4 and D-40: Run Info states the LOSAT E-value database.
-test('Run Info states the LOSAT search database only when LOSAT comparisons are present', () => {
+// PD-OI-018 revision 4 and D-40, OV-3143: Run Info states the LOSAT E-value scale.
+test('Run Info states the LOSAT E-value scale only when LOSAT comparisons are present', () => {
   const recipe = { mode: 'linear', available: true, args: ['--gbk', '/a.gb'], fileMetadata: [] };
   const withLosat = buildRunInfo({ mode: 'linear', sourceRecipe: recipe, losatComparisons: true });
-  assert(withLosat.reproducibility.notes.includes(LOSAT_DATABASE_SCOPE_NOTE));
-  assert.match(LOSAT_DATABASE_SCOPE_NOTE, /subject source file/);
-  // The CLI and Python API search the same databases (design D7).
-  assert.doesNotMatch(LOSAT_DATABASE_SCOPE_NOTE, /CLI/);
+  assert(withLosat.reproducibility.notes.includes(LOSAT_EVALUE_SCALE_NOTE));
+  assert.match(LOSAT_EVALUE_SCALE_NOTE, /LOSATN and TLOSATX E-values use one scale for each pair of genomes/);
+  assert.match(LOSAT_EVALUE_SCALE_NOTE, /LOSATP E-values use the proteins of the subject genome as the database size/);
+  assert.doesNotMatch(LOSAT_EVALUE_SCALE_NOTE, /subject source file/);
+  // The CLI and Python API use the same scale (design D7).
+  assert.doesNotMatch(LOSAT_EVALUE_SCALE_NOTE, /CLI/);
   const without = buildRunInfo({ mode: 'linear', sourceRecipe: recipe });
-  assert(!without.reproducibility.notes.includes(LOSAT_DATABASE_SCOPE_NOTE));
+  assert(!without.reproducibility.notes.includes(LOSAT_EVALUE_SCALE_NOTE));
+  // A Result made before stored the database note, which stays true of it and is still shown.
+  assert.deepEqual(shownRunInfoNoteParts([{ text: LOSAT_DATABASE_SCOPE_NOTE }]), [{ text: LOSAT_DATABASE_SCOPE_NOTE }]);
 });
 
 test('Run Info lists the search runtime of Web, CLI and unrecorded raw entries (D9/D10)', () => {
@@ -1927,7 +1973,7 @@ test('OV-1678: in Simplified Chinese the Run info shows its notes, files descrip
   const reason = 'Source recipe unavailable: multiple uploaded inputs use the visible filename "x.gb".';
   assert.equal(english.sourceRecipe.unavailableReason, reason);
   assert.deepEqual(english.reproducibility.notes, [
-    reason, 'Exact replay remains available from the committed canonical session.', LOSAT_DATABASE_SCOPE_NOTE
+    reason, 'Exact replay remains available from the committed canonical session.', LOSAT_EVALUE_SCALE_NOTE
   ]);
   assert.equal(english.downloadBundle.description, 'The Source recipe is unavailable. No Exact replay file is available.');
   assert.equal(english.losatRuntimes[0].text, 'blastn: runtime not recorded');
@@ -1942,7 +1988,9 @@ test('OV-1678: in Simplified Chinese the Run info shows its notes, files descrip
       zh['multiple uploaded inputs use the visible filename "{name}".'].replace('{name}', 'x.gb'));
     assert.equal(errorText(english.sourceRecipe.unavailableReasonParts), shownReason);
     assert.deepEqual(english.reproducibility.noteParts.map((part) => errorText([part])), [
-      shownReason, zh['Exact replay remains available from the committed canonical session.'], zh[LOSAT_DATABASE_SCOPE_NOTE]
+      shownReason, zh['Exact replay remains available from the committed canonical session.'],
+      // A new note reads in English until the translation batch before a release.
+      zh[LOSAT_EVALUE_SCALE_NOTE] ?? LOSAT_EVALUE_SCALE_NOTE
     ]);
     assert.equal(errorText(english.downloadBundle.descriptionParts),
       `${zh['The Source recipe is unavailable.']}${zh['No Exact replay file is available.']}`);
@@ -1974,7 +2022,7 @@ test('the Run info tab shows the notes a reader acts on, from the stored notes',
       count === 1
         ? 'Needs pair_0.tsv from "Download reproducibility files"'
         : 'Needs pair_0.tsv, pair_1.tsv from "Download reproducibility files"',
-      LOSAT_DATABASE_SCOPE_NOTE
+      LOSAT_EVALUE_SCALE_NOTE
     ]);
   }
   const plain = buildRunInfo({ mode: 'circular', args: ['--gbk', '/seq.gb'], fileMetadata: { '/seq.gb': { name: 'seq.gb', kind: 'uploaded' } } });

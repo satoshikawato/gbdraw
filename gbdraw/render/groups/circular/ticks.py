@@ -11,7 +11,10 @@ from ....canvas import CircularCanvasGeometry
 from ....config.models import CircularRenderProfile
 from ....labels.label_style import scale_label_stride
 from ....layout.circular import RadialBand
-from ....layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing
+from ....layout.circular_ink import CircularInk, CircularInkPolygon, CircularInkRing, stroke_meets_ink
+from ....render.drawers.circular.annotations import LeaderSegment
+from ....render.drawers.label_backing import BACKING_PADDING_EM, SectorBacking, sector_backing
+from ....svg.ids import track_slot_svg_id
 from ....svg.circular_ticks import (
     CircularTickLabelGeometry,
     circular_tick_labels,
@@ -61,15 +64,17 @@ class TickGroup:
         tick_side: str = "legacy",
         tick_length_px: float | None = None,
         track_preset: str | None = None,
-        group_id: str,
         slot_id: str,
         record_transform: RecordDisplayTransform | None = None,
+        feature_leaders: Sequence[LeaderSegment] = (),
     ) -> None:
         self.record_transform = record_transform
+        # The record's feature label leaders, drawn before every slot: a number they run behind is backed (OV-3301).
+        self.feature_leaders = tuple(feature_leaders)
         self.gb_record: SeqRecord = gb_record
         self.geometry = geometry
         self.radius: float = float(radius) if radius is not None else geometry.radius
-        self.tick_group = Group(id=group_id)
+        self.tick_group = Group(id=track_slot_svg_id(slot_id, renderer="ticks"))
         self.tick_group.attribs["data-gbdraw-slot-id"] = slot_id
         self.tick_group.attribs["data-gbdraw-slot-renderer"] = "ticks"
         self.total_len: int = len(self.gb_record.seq)
@@ -173,41 +178,76 @@ class TickGroup:
         )
         for tick_path_large in tick_paths_large:
             self.tick_group.add(tick_path_large)
+        for backing in self._label_backings():
+            self.tick_group.add(backing.element())
         for tick_label_path_large in tick_label_paths_large:
             self.tick_group.add(tick_label_path_large)
         return self.tick_group
+
+    def _tick_marks(self) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+        return circular_tick_marks(
+            self.radius,
+            self.total_len,
+            "large",
+            list(range(0, self.total_len, self.tick_large)),
+            self.track_type,
+            self.separate_strands,
+            tick_side=self.tick_side,
+            tick_length_px=self.tick_length_px,
+            length_reference_radius_px=float(self.geometry.radius),
+            record_transform=self.record_transform,
+            length_threshold=self.length_threshold,
+        )
+
+    def _label_rings(self) -> list[CircularInkRing]:
+        """Each label's letters along its circle: centred on its tick at its path radius, as the turns of the circle
+        from the top (a ring across the top runs from its start past 1 to its end)."""
+
+        rings: list[CircularInkRing] = []
+        for _, tick, label in self._tick_labels(self.labelled_ticks):
+            half_turn = 0.5 * label.bbox_width_px / max(1.0, label.path_radius_px) / (2.0 * math.pi)
+            turn = float(tick) / self.total_len
+            band = RadialBand(label.radial_inner_px, label.radial_outer_px)
+            rings.append(CircularInkRing(band, (turn - half_turn) % 1.0, (turn + half_turn) % 1.0))
+        return rings
+
+    def _label_backings(self) -> list[SectorBacking]:
+        """The backings of the numbers a feature label's leader runs behind or within a backing's padding of
+        (OV-3301): as a region label's (``sector_backing``, CIR-RGN-FRONT), stopped before the tick marks and their
+        stroke on the side they lie."""
+
+        pad = BACKING_PADDING_EM * float(self.font_size)
+        rings = [
+            ring
+            for ring in self._label_rings()
+            if any(
+                stroke_meets_ink(leader.start, leader.end, leader.half_width + pad, ring) for leader in self.feature_leaders
+            )
+        ]
+        if not rings:
+            return []
+        radii = [math.hypot(*point) for mark in self._tick_marks() for point in mark]
+        half = 0.5 * float(self.tick_width)
+        backings: list[SectorBacking] = []
+        for ring in rings:
+            outside = not radii or ring.band.inner_px >= max(radii)
+            edge = (max(radii) + half if radii else 0.0) if outside else min(radii) - half
+            low = 2.0 * math.pi * ring.start_turn - 0.5 * math.pi
+            high = low + 2.0 * math.pi * ((ring.end_turn - ring.start_turn) % 1.0)
+            backings.append(
+                sector_backing(ring.band.inner_px, ring.band.outer_px, low, high, float(self.font_size), edge=edge)
+            )
+        return backings
 
     def ink(self) -> tuple[CircularInk, ...]:
         """What the group paints: each large tick mark (butt-capped, ``tick_width`` wide) and each label's letters
         along its circle."""
 
-        ticks_large = list(range(0, self.total_len, self.tick_large))
         half = 0.5 * float(self.tick_width)
-        inks: list[CircularInk] = [
-            CircularInkPolygon.segment(start, end, half)
-            for start, end in circular_tick_marks(
-                self.radius,
-                self.total_len,
-                "large",
-                ticks_large,
-                self.track_type,
-                self.separate_strands,
-                tick_side=self.tick_side,
-                tick_length_px=self.tick_length_px,
-                length_reference_radius_px=float(self.geometry.radius),
-                record_transform=self.record_transform,
-                length_threshold=self.length_threshold,
-            )
-        ] if half > 0 else []
-        for _, tick, label in self._tick_labels(self.labelled_ticks):
-            # The text is centred on its tick along the circle at its path radius.
-            half_turn = 0.5 * label.bbox_width_px / max(1.0, label.path_radius_px) / (2.0 * math.pi)
-            turn = float(tick) / self.total_len
-            inks.append(
-                CircularInkRing(
-                    RadialBand(label.radial_inner_px, label.radial_outer_px), turn - half_turn, turn + half_turn
-                )
-            )
+        inks: list[CircularInk] = (
+            [CircularInkPolygon.segment(start, end, half) for start, end in self._tick_marks()] if half > 0 else []
+        )
+        inks.extend(self._label_rings())
         return tuple(inks)
 
     def get_group(self) -> Group:

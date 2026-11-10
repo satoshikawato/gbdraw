@@ -40,6 +40,7 @@ import { listText, t, tm, tn } from './i18n.js';
  *   | 'legend-edit-rekey-dropped'
  *   | 'feature-recovery-failed'
  *   | 'match-sequences-unrestored'
+ *   | 'record-id-unresolved'
  * } LoadRepairCode
  */
 /**
@@ -303,7 +304,10 @@ const WORDING = {
   ],
   'match-sequences-unrestored': () => [
     t('Comparisons: the sequences of the saved comparison matches could not be read again from the input files; the SVG preview stays, and the next Generate reads them.')
-  ]
+  ],
+  // OV-3311: a stored record ID that reads like a record number, whose place in its file Load could not read.
+  'record-id-unresolved': (repairs) => repairs.map(({ path, stored }) => (
+    t('Records: the record ID "{stored}" ({path}) reads like a record number, and Load could not find one record with that ID in its file; the drawing may now draw that record number instead.', { stored: stored ?? '', path })))
 };
 
 /**

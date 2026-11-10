@@ -17,6 +17,7 @@ const SECTIONS = {
     ['input-genomes', 'Input Genomes'],
     ['region-annotations', 'Region Annotations'],
     ['sequence-search', 'Sequence search'],
+    ['feature-density', 'Feature density'],
     ['pairwise-comparisons', 'Pairwise Comparisons'],
     ['layout', 'Layout'],
     ['font', 'Font'],
@@ -34,6 +35,7 @@ const SECTIONS = {
     ['advanced-comparison', 'Advanced comparison and layout'],
     ['region-annotations', 'Region Annotations'],
     ['sequence-search', 'Sequence search'],
+    ['feature-density', 'Feature density'],
     ['layout', 'Layout'],
     ['font', 'Font'],
     ['titles', 'Titles & Record Labels'],
@@ -336,7 +338,8 @@ test('the section title shows below an entry on hover and on keyboard focus, ins
   // At every pane width the text of the first and of the last entry stays 8 px inside the viewport,
   // and the row neither overflows nor scrolls sideways. The switch takes the right end of the first row, so
   // the Linear entries share what is left: 22 px each when there is room, down to 17 px before the
-  // list wraps onto a second row.
+  // list wraps onto a second row. Entries of a row touch (rows keep 1 px between them), so at 320 px,
+  // the default pane width, all 15 Linear entries fit in one row, about 17.7 px each.
   for (const width of [240, 320, 500]) {
     await page.evaluate((width) => { window.__GBDRAW_APP__.sidebarWidth = width; }, width);
     const layout = await page.evaluate(() => {
@@ -442,6 +445,13 @@ test('with classic scrollbars the row ends on the right edge of the cards', asyn
     await expect.poll(edges).toEqual({ scrollbar: 8, rightEdge: 0 });
     await page.setViewportSize({ width: 1280, height: 2400 });
     await expect.poll(edges).toEqual({ scrollbar: 0, rightEdge: 0 });
+    // The scrollbar narrows the row by 8 px; the Linear entries still fit in one row at the default pane width.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await setMode(page, 'linear');
+    await expect(index(page).getByRole('button')).toHaveCount(SECTIONS.linear.length);
+    await expect.poll(edges).toEqual({ scrollbar: 8, rightEdge: 0 });
+    const tops = await index(page).getByRole('button').evaluateAll((buttons) => buttons.map((button) => Math.round(button.getBoundingClientRect().top)));
+    expect(new Set(tops).size, 'Linear index rows with a scrollbar at 320 px').toBe(1);
   } finally {
     await browser.close();
   }

@@ -8,6 +8,8 @@ elements need no svgwrite validation.
 
 from __future__ import annotations
 
+import base64
+import json
 import re
 import sys
 import tempfile
@@ -364,6 +366,65 @@ def test_every_built_in_palette_passes() -> None:
         )
 
 
+def test_every_built_in_palette_tells_repeats_misc_features_and_other_types_apart() -> None:
+    # OV-3114: repeat_region, misc_feature and ``default`` (the color of every
+    # type the palette does not list, ncRNA in most palettes) were one grey.
+    palettes = color_io.tomllib.loads(
+        (REPO / "gbdraw" / "data" / "color_palettes.toml").read_text(encoding="utf-8")
+    )
+    same = {
+        palette: [colors["repeat_region"], colors["misc_feature"], colors["default"]]
+        for palette, colors in palettes.items()
+        if isinstance(colors, dict)
+        and len({colors["repeat_region"].lower(), colors["misc_feature"].lower(), colors["default"].lower()}) < 3
+    }
+    assert same == {}
+
+
+def test_the_earlier_palette_rows_are_the_v0_14_5_rows_each_palette_has_changed_since() -> None:
+    # OV-3259: Web Load reads a saved row that still holds its palette's 0.14.5
+    # color as the palette's (gbdraw/web/js/utils/color-utils.js
+    # `savedColorsOverPalette`); tools/generate_mode_slice_defaults.mjs holds
+    # those rows. A shallow clone has no tag to compare with.
+    import subprocess
+
+    shown = subprocess.run(
+        ["git", "show", "v0.14.5:gbdraw/data/color_palettes.toml"],
+        cwd=REPO, capture_output=True, text=True, check=False,
+    )
+    if shown.returncode != 0:
+        pytest.skip("the v0.14.5 tag is not in this clone (a shallow CI checkout)")
+    released = color_io.tomllib.loads(shown.stdout)
+    current = color_io.tomllib.loads((REPO / "gbdraw" / "data" / "color_palettes.toml").read_text(encoding="utf-8"))
+    changed = {
+        palette: {key: color for key, color in colors.items() if key in current[palette] and current[palette][key].lower() != color.lower()}
+        for palette, colors in released.items()
+        if isinstance(colors, dict) and palette in current
+    }
+    packaged = json.loads((REPO / "gbdraw" / "data" / "mode-slice-defaults.json").read_text(encoding="utf-8"))
+    assert packaged["earlierPaletteRows"]["release"] == "0.14.5"
+    assert packaged["earlierPaletteRows"]["palettes"] == {palette: rows for palette, rows in changed.items() if rows}
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize("palette", ["default", "edelweiss"])
+def test_a_type_the_palette_does_not_list_is_drawn_and_listed_in_the_palette_default(
+    mode: str, palette: str, tmp_path: Path
+) -> None:
+    # OV-3114 (review F1): D-loop has no palette entry. Its features were filled
+    # with a fixed #d3d3d3 while its Legend row showed the palette's `default`.
+    _run_cli(
+        mode, "--gbk", str(REPO / "tests" / "test_inputs" / "HmmtDNA.gbk"),
+        "-k", "D-loop", "-p", palette, "-o", str(tmp_path / "out"), "-f", "svg",
+    )
+    svg = (tmp_path / "out.svg").read_text(encoding="utf-8")
+    fills = set(re.findall(r'<path [^>]*data-gbdraw-feature-part="block"[^>]*fill="([^"]+)"', svg))
+    legend = re.search(r'<g data-legend-key="D-loop">.*?fill="([^"]+)"', svg, re.S)
+    expected = load_default_colors("", palette).set_index("feature_type").at["default", "color"]
+    assert fills == {expected}
+    assert legend is not None and legend.group(1) == expected
+
+
 @pytest.mark.parametrize("session_path", GALLERY_SESSIONS, ids=lambda path: path.name)
 def test_every_gallery_session_passes_request_preparation(session_path: Path) -> None:
     # Decode and input preparation only: the render-time checks (depth, skew
@@ -462,3 +523,46 @@ def test_orientation_identity_gradient_names_the_collinear_color_key() -> None:
     with pytest.raises(ValidationError, match=re.escape("'#11223344' for feature type 'collinear_block_plus_min'")) as raised:
         group.resolve_match_fill_color(row, 0.5, "#000000")
     assert raised.value.diagnostic == {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR"}
+
+
+def test_a_cli_session_stores_only_the_default_colors_rows_the_user_gave(tmp_path: Path) -> None:
+    # OV-3302: the CLI saved its Default colors table resolved over the palette,
+    # so every palette row became a row of the Session's table and a later
+    # palette change never reached the Session. It stores the user's rows.
+    import base64
+
+    from tests.utils.session_drawing_view import session_view
+
+    _run_cli(
+        "circular", "--gbk", str(REPO / "tests" / "test_inputs" / "HmmtDNA.gbk"),
+        "-d", _tsv(tmp_path, "colors.tsv", "CDS\t#123456\n"),
+        "-o", str(tmp_path / "out"), "-f", "svg", "--session_output", str(tmp_path / "out.gbdraw-session.json"),
+    )
+    session = session_view(json.loads((tmp_path / "out.gbdraw-session.json").read_text(encoding="utf-8")))
+    colors = session["renderRequest"]["diagramOptions"]["colors"]
+    # A file: its rows apply over the palette; a canonical table would be complete.
+    assert colors["defaultColors"] is None
+    ref = colors["defaultColorsFile"]
+    text = base64.b64decode(session["resources"][ref["resourceId"]]["data"]).decode("utf-8")
+    assert [line.split("\t") for line in text.splitlines() if line.strip()] == [["CDS", "#123456"]]
+
+
+
+@pytest.mark.parametrize("session_path", GALLERY_SESSIONS, ids=lambda path: path.name)
+def test_a_gallery_session_stores_no_palette_row_in_its_default_colors(session_path: Path) -> None:
+    # OV-3257: the Gallery refresh stored each request's Default colors resolved
+    # over the palette, so the palette's rows read as user colors and a later
+    # palette change never reached the Session. A stored table holds only the
+    # rows that differ from its palette.
+    document = load_session_document(session_path).to_dict()
+    for drawing in document["drawings"]:
+        colors = drawing["renderRequest"]["diagramOptions"]["colors"]
+        ref = colors.get("defaultColorsFile") or colors.get("defaultColors")
+        if not ref:
+            continue
+        palette = color_io.packaged_color_palettes()[colors.get("defaultColorsPalette") or "default"]
+        text = base64.b64decode(document["resources"][ref["resourceId"]]["data"]).decode("utf-8")
+        rows = [line.split("\t")[:2] for line in text.splitlines() if "\t" in line]
+        rows = [(key.strip(), color.strip().lower()) for key, color in rows if key.strip() != "feature_type"]
+        assert rows, drawing["id"]
+        assert [key for key, color in rows if color == str(palette.get(key, "")).lower()] == []

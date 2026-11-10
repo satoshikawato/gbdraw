@@ -21,14 +21,14 @@ const LINEAR_SESSION = 'BGC0000708-BGC0000713.gbdraw-session.json';
 const RAIL = {
   circular: [
     ['Input', 'Input Genomes'], ['Regions', 'Region Annotations'], ['Search', 'Sequence search'],
-    ['Compare', 'Pairwise Comparisons'],
+    ['Density', 'Feature density'], ['Compare', 'Pairwise Comparisons'],
     ['Layout', 'Layout'], ['Font', 'Font'], ['Titles', 'Titles & Record Labels'], ['Legend', 'Legend'], ['Colors', 'Colors'],
     ['Features', 'Features'], ['Labels', 'Labels'], ['Axis', 'Axis & Scale'],
     ['GC / skew', 'Dinucleotide content/skew'], ['About', 'About & Citation']
   ],
   linear: [
     ['Input', 'Input Genomes'], ['Compare', 'Comparison'], ['Advanced', 'Advanced comparison and layout'],
-    ['Regions', 'Region Annotations'], ['Search', 'Sequence search'], ['Layout', 'Layout'], ['Font', 'Font'], ['Titles', 'Titles & Record Labels'],
+    ['Regions', 'Region Annotations'], ['Search', 'Sequence search'], ['Density', 'Feature density'], ['Layout', 'Layout'], ['Font', 'Font'], ['Titles', 'Titles & Record Labels'],
     ['Legend', 'Legend'], ['Colors', 'Colors'], ['Features', 'Features'], ['Labels', 'Labels'],
     ['Axis', 'Axis & Scale'], ['GC / skew', 'Dinucleotide content/skew'], ['About', 'About & Citation']
   ]
@@ -207,10 +207,10 @@ for (const mode of ['circular', 'linear']) {
         aboutAtBottom: Math.round(wrap.bottom - about.bottom) <= 8, entryHeight: buttons[1].height };
     });
     // Below the drawing bar a docked rail is short of 48 px entries at 1600x1000 (OV-1785 A: only windows at most
-    // 800 px high are compacted), so its entries shrink a little: since Search joined the rail (PD-OI-093 rev 5),
-    // about 47 px in Circular (14 entries) and 44 px in Linear (15).
+    // 800 px high are compacted), so its entries shrink a little: since Feature density joined the rail (PD-OI-126),
+    // about 44 px in Circular (15 entries) and 41 px in Linear (16).
     expect(column).toMatchObject({ width: 60, first: 'Expand settings', inside: true, aboutAtBottom: true });
-    expect(column.entryHeight, 'entry height').toBeGreaterThanOrEqual(mode === 'circular' ? 46.5 : 44);
+    expect(column.entryHeight, 'entry height').toBeGreaterThanOrEqual(mode === 'circular' ? 44 : 41);
     // The hidden control is the same node with its draft.
     expect(await prefix.evaluate((element) => [element.dataset.probe, element.value, element.checkVisibility()]))
       .toEqual(['kept', 'rail-draft', false]);

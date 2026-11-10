@@ -1390,7 +1390,6 @@ export const createFeatureColorActions = ({
     // The row's name or drawn name is no rename; its key names a renamed row back (OV-1216).
     if (!requestedCaption || requestedCaption === normalizeCaption(entry.caption)
       || (requestedCaption !== key && legendRowIsNamed(key, requestedCaption))) {
-      replaceLegendRows(drawing.slices.paint, drawing.legendEntries.value);
       return;
     }
 

@@ -8,6 +8,9 @@ const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { deleteLegendRow, generate, history, open, renameRow } = require('./helpers/live-generate-parity-steps.cjs');
+const { gunzipSync } = require('node:zlib');
+const { load: loadSession, generate: generateLoaded, download } = require('./helpers/mode-transition.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -337,4 +340,74 @@ test('a palette row offers and keeps the color it shows after palette edits', as
     return String(getFeatureFillElements(document.querySelector('.origin-top svg'), svgId)[0]?.getAttribute('fill') || '').toLowerCase();
   }), 'a renamed CDS row keeps its features in the color it shows').toBe(nextCds);
   await expectLiveEqualsGenerate(page, { label: 'rename of a palette row after a palette switch' });
+});
+
+// OV-3259: a Session the 0.14.5 Web saved holds its palette's rows in its colors; the misc_feature and default rows
+// still hold the palette's 0.14.5 gray, and its committed request sets no Default colors row. Load reads them as the
+// palette's colors now, so the next Generate draws them as the command-line replay of that request does: no -d.
+test('a Session the 0.14.5 Web saved takes the palette\'s new misc_feature and default colors, and Generate writes no -d', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const page = await loadSession(browser, 'tests/fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw-session.json.gz');
+  try {
+    const rows = () => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const drawing = state.activeDrawing();
+      const pick = (colors) => ({ misc_feature: colors.misc_feature, default: colors.default });
+      return { draft: pick(drawing.currentColors.value), palette: pick(state.paletteDefinitions.value[drawing.selectedPalette.value]) };
+    });
+    const loaded = await rows();
+    expect(loaded.draft).toEqual(loaded.palette);
+    expect(loaded.draft).not.toEqual({ misc_feature: '#d3d3d3', default: '#d3d3d3' });
+    await generateLoaded(page);
+    const args = await page.evaluate(() => window.__GBDRAW_APP__.lastRunInfo.sourceRecipe.commandArgs);
+    expect(args).not.toContain('-d');
+  } finally {
+    await page.context().close();
+  }
+});
+
+// OV-3257: Save wrote a drawing's whole color table, so a later palette change never reached the Session. A drawing
+// whose colors are its palette's saves none; a user color is saved, and each Session loads to the colors it was saved with.
+test('Save stores no palette colors for an untouched drawing and keeps a user color through Load', async ({ browser }, testInfo) => {
+  test.setTimeout(300_000);
+  const draft = (page) => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const drawing = state.activeDrawing();
+    return { colors: { ...drawing.currentColors.value }, palette: { ...state.paletteDefinitions.value[drawing.selectedPalette.value] } };
+  });
+  const save = async (page, name) => {
+    const path = testInfo.outputPath(`${name}.gbdraw-session.json.gz`);
+    // A titled Session saves without asking for a title.
+    await page.evaluate(async (title) => { (await import('./js/state.js')).state.sessionTitle.value = title; }, name);
+    const bytes = await download(page, 'Save Session', path);
+    return { path, config: shownSavedDrawing(JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'))).config };
+  };
+  const page = await loadSession(browser, 'tests/fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw-session.json.gz');
+  let untouched, edited;
+  try {
+    untouched = await save(page, 'untouched');
+    expect(Object.hasOwn(untouched.config, 'colors')).toBe(false);
+    await evaluateWithRetainedPromise(page, async (color) => {
+      await window.__GBDRAW_HISTORY__.runUndoable('Change color', async () => {
+        window.__GBDRAW_APP__.editDefaultColor('CDS', color);
+        await window.Vue.nextTick();
+      });
+    }, USER_CDS);
+    edited = await save(page, 'edited');
+    expect(edited.config.colors.CDS).toBe(USER_CDS);
+  } finally {
+    await page.context().close();
+  }
+  for (const [saved, cds] of [[untouched, null], [edited, USER_CDS]]) {
+    const loaded = await loadSession(browser, saved.path);
+    try {
+      const { colors, palette } = await draft(loaded);
+      expect(colors).toEqual(cds ? { ...palette, CDS: cds } : palette);
+      await generateLoaded(loaded);
+      const args = await loaded.evaluate(() => window.__GBDRAW_APP__.lastRunInfo.sourceRecipe.commandArgs);
+      expect(args.includes('-d')).toBe(Boolean(cds));
+    } finally {
+      await loaded.context().close();
+    }
+  }
 });

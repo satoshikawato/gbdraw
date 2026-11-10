@@ -241,6 +241,25 @@ def _ray_box(box: Aabb, turns: NDArray[np.float64]) -> tuple[NDArray[np.float64]
     return np.where(missed, np.inf, entry), np.where(missed, -np.inf, exit_)
 
 
+def stroke_meets_ink(start: tuple[float, float], end: tuple[float, float], half_width: float, ink: CircularInk) -> bool:
+    """Whether a straight stroke from ``start`` to ``end`` (butt caps, ``half_width`` to each side) meets ``ink``:
+    rays from the centre through the stroke, at most ``_RAY_STEP_TURNS`` apart and through each corner of both,
+    each asked whether the stroke and the paint share a radius on it."""
+
+    stroke = CircularInkPolygon.segment(start, end, half_width)
+    corners = stroke.ray_turns()
+    middle = float(_turns_of(np.array([math.atan2(0.5 * (start[1] + end[1]), 0.5 * (start[0] + end[0]))]))[0])
+    relative = np.mod(corners - middle + 0.5, 1.0) - 0.5
+    low, high = middle + float(relative.min()), middle + float(relative.max())
+    # The end rays meet the stroke only at its corners: rays strictly between them carry the comparison.
+    turns = np.linspace(low, high, max(2, int(math.ceil((high - low) / _RAY_STEP_TURNS)) + 1) + 2)[1:-1]
+    edges = np.mod(ink.ray_turns() - low, 1.0) + low
+    turns = np.mod(np.concatenate([turns, edges[edges <= high]]), 1.0)
+    stroke_inner, stroke_outer = stroke.spans(turns)
+    ink_inner, ink_outer = ink.spans(turns)
+    return bool(np.any(np.maximum(stroke_inner, ink_inner) <= np.minimum(stroke_outer, ink_outer)))
+
+
 def box_meets_ink(box: Aabb, inks: Sequence[CircularInk], *, threshold_px: float) -> bool:
     """Whether ``box`` (centred on the circle) reaches more than ``threshold_px`` into any of ``inks``."""
 
@@ -270,5 +289,6 @@ __all__ = [
     "CircularInkRing",
     "box_meets_ink",
     "paint_shows",
+    "stroke_meets_ink",
     "stroke_pad_px",
 ]

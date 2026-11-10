@@ -391,8 +391,8 @@ test('comparison availability preserves nulls and duplicate-name source ordering
   });
 
   assert.deepEqual(availability, [
-    { sourceIndex: 0, file: null, availability: 'never-supplied' },
-    { sourceIndex: 1, file: firstFasta, availability: 'recoverable' }
+    { sourceIndex: 0, files: [], availability: 'never-supplied' },
+    { sourceIndex: 1, files: [firstFasta], availability: 'recoverable' }
   ]);
 });
 
@@ -598,6 +598,28 @@ test('keeps missing LOSAT comparison FASTA placeholders aligned with displayed s
     [
       { recordId: 'comparison_b', sequence: 'GGGGTTTT', sourceIndex: 1 }
     ]
+  );
+});
+
+// PR-B review 2, HIGH 1 (b): a ring whose file is missing does not lend its records to a later ring whose first
+// file has the same name; that ring keeps its own records.
+test('gives a ring its own records when an earlier ring of the same file name is missing', async () => {
+  const { reconcileConservationSeries } = await import('../../gbdraw/web/js/services/conservation-series.js');
+  const genomeA = namedTextFile('sequence.fasta', '>comparison_a\nAAAA\n');
+  const genomeB = namedTextFile('sequence.fasta', '>comparison_b\nGGGGTTTTCC\n');
+  const series = reconcileConservationSeries({ sourceFiles: [[genomeA], [genomeB]], previousSeries: [], legacyLabels: [] }).series;
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'circular',
+    cInputType: 'gb',
+    circularSources: [{ gb: textFile(REFERENCE_GB) }],
+    files: { c_conservation_fastas: [[], [genomeB]] },
+    circularConservation: { source: 'losat', series }
+  });
+  assert.deepEqual(
+    sources
+      .filter((source) => source.origin === 'homology-comparison')
+      .map(({ recordId, sourceIndex }) => ({ recordId, sourceIndex })),
+    [{ recordId: 'comparison_b', sourceIndex: 1 }]
   );
 });
 

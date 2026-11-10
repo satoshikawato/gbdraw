@@ -4,6 +4,7 @@ import {
   IMPORTED_COMPARISON_ACTIONS,
   IMPORTED_COMPARISON_DISPOSITIONS,
   classifyImportedComparisonIntent,
+  comparisonFollowsCurrentControls,
   createImportedComparisonIntentState,
   followCommittedComparison,
   importedComparisonExecution,
@@ -260,6 +261,13 @@ assert.deepEqual([emptyReplacement?.code, emptyReplacement?.actions],
 assert.equal(emptyReplacement?.summary,
   'Set up a comparison in the Comparison panel, or choose Clear comparison, then Generate again.');
 assert.equal(importedComparisonExecution({ intent: decisionState, draftResolution: null }).ok, false);
+// OV-3324: Generate takes its cards from the current controls (a whole
+// multi-record card splits, as for an editable comparison) once Replace is
+// chosen; an undecided, inherited or cleared saved comparison keeps the cards
+// it was saved over.
+assert.equal(comparisonFollowsCurrentControls(decisionState), true);
+assert.equal(comparisonFollowsCurrentControls(createImportedComparisonIntentState()), true);
+assert.equal(comparisonFollowsCurrentControls(inheritedState), false);
 
 restoreImportedComparisonIntent(decisionState, decision);
 assert.deepEqual(resolveImportedComparisonAction({
@@ -271,6 +279,9 @@ assert.deepEqual(importedComparisonExecution({
   intent: decisionState,
   draftResolution: { valid: false, hasComparisonIntent: false }
 }), { ok: true, mode: 'clear' });
+assert.equal(comparisonFollowsCurrentControls(decisionState), false);
+restoreImportedComparisonIntent(decisionState, decision);
+assert.equal(comparisonFollowsCurrentControls(decisionState), false);
 
 const committed = {
   renderRequest: request([{
@@ -462,6 +473,24 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
   assert.equal(large.source, heldSource);
   largeHooks.restoreIntentCheckpoint(largeAfter);
   assert.deepEqual(large.source.records, flippedRecords.map(({ recordKey, windows }) => ({ recordKey, windows })));
+}
+
+// The draft branch accepts exactly what the former rule accepted (an editable comparison, or a draft with an
+// edge), over every disposition, action and draft pair.
+for (const disposition of Object.values(IMPORTED_COMPARISON_DISPOSITIONS)) {
+  for (const action of [null, ...Object.values(IMPORTED_COMPARISON_ACTIONS)]) {
+    for (const hasComparisonIntent of [false, true]) {
+      const intent = { disposition, action };
+      if (disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE && action === IMPORTED_COMPARISON_ACTIONS.REPLACE) {
+        continue; // resolveImportedComparisonAction refuses Replace on an editable comparison
+      }
+      const execution = importedComparisonExecution({ intent, draftResolution: { hasComparisonIntent } });
+      if (comparisonFollowsCurrentControls(intent)) {
+        const former = disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE || hasComparisonIntent;
+        assert.equal(execution.ok, former, `${disposition}/${action}/${hasComparisonIntent}`);
+      }
+    }
+  }
 }
 
 console.log('imported comparison intent tests passed');

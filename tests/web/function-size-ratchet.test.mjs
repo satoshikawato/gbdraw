@@ -1,19 +1,22 @@
 // Web function size (docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md;
 // WEB-FUNCTION-SIZE in tools/web-design-rule-guards.json). Every function of
 // the modules under gbdraw/web/js/, except the generated `*.generated.js`
-// ones, has at most MAX_FUNCTION_LINES lines. FUNCTION_LINES lists the longer
-// functions the rule started with, at their length: a listed function may
-// shrink but not grow, and any other function, a new one included, stays
-// within the limit. Lowering or removing an entry is optional; the test names
-// the entries that may be lowered. MAX_FUNCTION_LINES and FUNCTION_LINES are
+// ones, has at most MAX_FUNCTION_STATEMENTS statements. FUNCTION_STATEMENTS
+// lists the larger functions at their size: a listed function may shrink but
+// not grow, and any other function, a new one included, stays within the
+// limit. Lowering or removing an entry is optional; the test names the entries
+// that may be lowered. MAX_FUNCTION_STATEMENTS and FUNCTION_STATEMENTS are
 // registered design-rule allowlists: raising the limit, and adding or raising
 // an entry, are authority-only changes that need the Owner's approval.
 //
 // What counts. A function is each function declaration, function expression,
 // arrow function, method, accessor and constructor, nested ones included. Its
-// lines run from its first token (`export`, `async`, `function`, its name or
-// its parameters; a JSDoc block above it does not count) to its last, so a
-// nested function counts in the functions around it as well.
+// statements are the statements in its body, those of the functions and
+// classes nested in it included, so a nested function counts in the functions
+// around it as well. A block (`{ ... }`) and an empty statement are not
+// statements; an arrow function's expression body (`=> value`) counts as one,
+// its implicit `return`. Comments, JSDoc, blank lines and line breaks change
+// no count.
 //
 // Names. A function is `<path under gbdraw/web/js/>::<qualified name>`, the
 // qualified name being the names of the functions, classes and named object
@@ -33,19 +36,19 @@
 // Its root function is the function at the top level of the module that calls
 // a `create*` factory imported by name from another module (an owner
 // creation); each composition root has exactly one. The logic written in the
-// root is every function of two or more lines whose nearest enclosing function
-// is the root function: a `const f = () => {...}` statement, a function passed
-// inline to a factory as a port, a method of an object literal built in the
-// root, a computed getter, a watch callback. Each counts with its whole span,
-// as above, so the functions nested in it count once, in it. A one-line
-// function written directly in the root function, such as the port
-// `drawingTabs: () => state.drawingTabs.value`, is wiring and does not count;
-// a one-line function inside a counted one counts with its span. Statements
-// written directly in the root body and the other top-level functions of the
-// module are not counted here; the root's whole size stays bounded by
-// MAX_FUNCTION_LINES and FUNCTION_LINES.
-// COMPOSITION_ROOT_LOGIC_LINES records the total lines of that logic per
-// `<path>::<root function>`. A total may shrink but not grow, and every
+// root is every function of two or more statements whose nearest enclosing
+// function is the root function: a `const f = () => {...}` statement, a
+// function passed inline to a factory as a port, a method of an object literal
+// built in the root, a computed getter, a watch callback. Each counts with all
+// its statements, as above, so the functions nested in it count once, in it. A
+// function of one statement written directly in the root function, such as
+// the port `drawingTabs: () => state.drawingTabs.value`, is wiring and does
+// not count; a one-statement function inside a counted one counts with it.
+// Statements written directly in the root body and the other top-level
+// functions of the module are not counted here; the root's whole size stays
+// bounded by MAX_FUNCTION_STATEMENTS and FUNCTION_STATEMENTS.
+// COMPOSITION_ROOT_LOGIC_STATEMENTS records the total statements of that logic
+// per `<path>::<root function>`. A total may shrink but not grow, and every
 // composition root has an entry. When it fails, move the new logic into a
 // module factory and pass it to the root as a port, or shrink other logic in
 // the same root. Adding or raising an entry (a new composition root, a renamed
@@ -63,102 +66,111 @@ import { fileURLToPath } from 'node:url';
 import { WEB_OWNER_GRAPH_DEFAULTS } from '../../tools/web-owner-graph-detectors.mjs';
 import { compareCountBaseline, reportLowerable, typescriptApi } from './helpers/count-baseline.mjs';
 
-const MAX_FUNCTION_LINES = 150;
+// 150 lines at the median density of the functions of 100 to 200 lines when
+// the limit moved from lines to statements (1.76 lines a statement, 2026-11-10).
+const MAX_FUNCTION_STATEMENTS = 85;
 
-const FUNCTION_LINES = {
-  'app/annotations.js::createAnnotationEditor': 332,
-  'app/app-setup.js::createAppSetup': 3853,
-  'app/candidate-render.js::compilePlanBundle': 409,
-  'app/circular-track-slots.js::createCircularTrackSlotEditor': 1443,
-  'app/drawing-list.js::createDrawingList': 220,
-  'app/feature-editor.js::createFeatureEditor': 252,
-  'app/feature-editor/color-actions.js::createFeatureColorActions': 1608,
-  'app/feature-editor/color-actions.js::createFeatureColorActions.continueLegendRenameRequest': 167,
-  'app/feature-editor/label-actions.js::createFeatureLabelActions': 1243,
-  'app/feature-editor/placement-actions.js::createFeaturePlacementActions': 157,
-  'app/feature-editor/rule-actions.js::createFeatureRuleActions': 1150,
-  'app/feature-editor/svg-actions.js::createFeatureSvgActions': 1815,
-  'app/feature-editor/svg-actions.js::createFeatureSvgActions.attachSvgFeatureHandlers': 1095,
-  'app/feature-editor/svg-actions.js::createFeatureSvgActions.attachSvgFeatureHandlers.showAlignmentOverlay': 206,
-  'app/feature-editor/visibility-actions.js::createFeatureVisibilityActions': 715,
-  'app/feature-search/preview-actions.js::createPreviewFeatureSearch': 476,
-  'app/feature-selection.js::createFeatureSelection': 513,
-  'app/font-settings.js::createFontSettings': 324,
-  'app/history-inputs.js::setupHistoryInputs': 181,
-  'app/legend-layout/diagram-drag.js::createDiagramDragActions': 545,
-  'app/legend/drag-actions.js::createLegendDragActions': 223,
-  'app/legend/entry-actions.js::createLegendEntryActions': 889,
-  'app/linear-record-selector.js::createLinearRecordSelector': 320,
-  'app/linear-track-slots.js::createLinearTrackSlotEditor': 1034,
-  'app/orthogroups.js::createOrthogroupEditor': 671,
-  'app/preview-runtime.js::createPreviewRuntime': 947,
-  'app/preview-runtime.js::createPreviewRuntime.bindMountedResult': 159,
-  'app/record-display-options.js::createRecordDisplayControls': 514,
-  'app/record-display/feature-record-rotation.js::createFeatureRecordRotationWorkflow': 279,
-  'app/record-selection.js::createRecordSelection': 183,
-  'app/region-drawing.js::createRegionDrawing': 160,
-  'app/region-select.js::createRegionSelect': 396,
-  'app/results.js::createResultsManager': 285,
-  'app/rule-matching.js::createRulePreparation': 224,
-  'app/run-analysis.js::createRunAnalysis': 4867,
-  'app/run-analysis.js::createRunAnalysis.runAnalysis': 179,
-  'app/run-analysis.js::createRunAnalysis.runAnalysisInternal': 2810,
-  'app/run-analysis.js::createRunAnalysis.runAnalysisInternal.getSeqEntry': 180,
-  'app/run-analysis.js::createRunAnalysis.runAnalysisInternal.runCircularLosatConservation': 157,
-  'app/run-analysis.js::createRunAnalysis.runCommittedCanonicalCandidateInternal': 233,
-  'app/run-info.js::appendConfigOverrides': 160,
-  'app/run-info.js::buildRunInfo': 201,
-  'app/run-info.js::validateCurrentSemanticCoverage': 165,
-  'app/settings-pane.js::createSettingsPaneController': 178,
-  'app/similarity-alignment.js::createSimilarityAlignmentActions': 985,
-  'app/svg-styles.js::createSvgStyles': 186,
-  'app/watchers.js::setupWatchers': 449,
-  'components.js::SettingsSectionIndex.setup': 163,
-  'services/config.js::exportSessionDocument': 193,
-  'services/config.js::importSessionDocument': 1414,
-  'services/diagram-generation.js::runDiagramGeneration': 165,
-  'services/diagram-resource-staging.js::createDiagramResourceTransport': 155,
-  'services/feature-catalog.js::validateAndProjectCatalogItem': 372,
-  'services/feature-override-identity.js::migrateLegacyFeatureOverrides': 152,
-  'services/history-snapshot.js::createHistorySnapshotService': 1116,
-  'services/history.js::createHistoryManager': 1623,
-  'services/history.js::createHistoryRouter': 653,
-  'services/legacy-similarity-alignment.js::materializeLegacySimilarityAlignment': 183,
-  'services/linear-comparisons.js::buildLinearComparisonTimeline': 183,
-  'services/losat.js::runLosatPairsThreaded': 220,
-  'services/losat.js::runLosatPairsThreaded.new Promise()': 179,
-  'services/losat.js::runLosatPairsWithWorkers': 174,
-  'services/match-sequences.js::analyzeCatalogSequenceSourceCoverage': 319,
-  'services/match-sequences.js::createSequenceSourceRegistry': 167,
-  'services/orthogroup-feature-metadata.js::createOrthogroupFeatureProjection': 214,
-  'services/session-feature-recovery.js::alignRecoveredFeatureIdsToRenderedSvg': 181,
-  'services/session-feature-recovery.js::buildSessionFeatureRecoveryPlan': 188,
-  'services/session-request.js::buildComparisons': 273,
-  'services/session-request.js::buildConfigOverrides': 187,
-  'services/session-request.js::projectCanonicalRenderInput': 399,
-  'services/session-request.js::projectCanonicalSessionRequest': 1106,
-  'services/session-request.js::trackPlanProjection': 201,
-  'services/session-resources.js::buildSessionDrawingResources': 376,
-  'services/track-slot-validation.js::collectCustomTrackIssues': 588,
-  'services/track-slot-validation.js::collectCustomTrackIssues.forEach()': 350,
-  'services/track-slot-validation.js::validateTrackSlotBindingInvariants': 175,
-  'workers/diagram-generation-worker.js::runGeneration': 231,
-  'workers/losat-threaded-worker.js::runThreadedLosat': 191
+const FUNCTION_STATEMENTS = {
+  'app/align-at-feature.js::createFeatureAnchorAction': 94,
+  'app/annotations.js::createAnnotationEditor': 218,
+  'app/app-setup.js::createAppSetup': 1104,
+  'app/candidate-render.js::compilePlanBundle': 227,
+  'app/circular-conservation.js::createCircularConservationComparisonFiles': 86,
+  'app/circular-record-controls.js::createCircularSourceEdits': 86,
+  'app/circular-track-slots.js::createCircularTrackSlotEditor': 870,
+  'app/drawing-list.js::createDrawingList': 118,
+  'app/feature-editor/color-actions.js::createFeatureColorActions': 928,
+  'app/feature-editor/label-actions.js::createFeatureLabelActions': 761,
+  'app/feature-editor/label-actions.js::createFeatureLabelActions.loadLabelOverrideTable': 86,
+  'app/feature-editor/placement-actions.js::createFeaturePlacementActions': 100,
+  'app/feature-editor/rule-actions.js::createFeatureRuleActions': 650,
+  'app/feature-editor/svg-actions.js::createFeatureSvgActions': 1181,
+  'app/feature-editor/svg-actions.js::createFeatureSvgActions.attachSvgFeatureHandlers': 778,
+  'app/feature-editor/svg-actions.js::createFeatureSvgActions.attachSvgFeatureHandlers.showAlignmentOverlay': 159,
+  'app/feature-editor/visibility-actions.js::createFeatureVisibilityActions': 362,
+  'app/feature-search/preview-actions.js::createPreviewFeatureSearch': 239,
+  'app/feature-selection.js::createFeatureSelection': 321,
+  'app/font-settings.js::createFontSettings': 185,
+  'app/history-inputs.js::setupHistoryInputs': 127,
+  'app/history-list.js::createHistoryControls': 93,
+  'app/label-fit-dialog.js::createLabelFitDialog': 105,
+  'app/legend-layout/diagram-drag.js::createDiagramDragActions': 338,
+  'app/legend/drag-actions.js::createLegendDragActions': 154,
+  'app/legend/entry-actions.js::createLegendEntryActions': 485,
+  'app/legend/entry-actions.js::createLegendEntryActions.prepareFileLegendEntries': 98,
+  'app/linear-comparison-edits.js::createLinearComparisonGapEdits': 98,
+  'app/linear-comparison-edits.js::createLinearComparisonPairEdits': 102,
+  'app/linear-record-selector.js::createLinearRecordSelector': 155,
+  'app/linear-track-slots.js::createLinearTrackSlotEditor': 649,
+  'app/orthogroups.js::createOrthogroupEditor': 340,
+  'app/preview-runtime.js::createPreviewRuntime': 382,
+  'app/record-display-options.js::createRecordDisplayControls': 313,
+  'app/record-display/feature-record-rotation.js::createFeatureRecordRotationWorkflow': 165,
+  'app/record-selection.js::createRecordSelection': 115,
+  'app/region-drawing.js::createRegionDrawing': 94,
+  'app/region-select.js::createRegionSelect': 240,
+  'app/results.js::createResultsManager': 142,
+  'app/rule-matching.js::createRulePreparation': 130,
+  'app/run-analysis.js::createRunAnalysis': 2164,
+  'app/run-analysis.js::createRunAnalysis.runAnalysis': 111,
+  'app/run-analysis.js::createRunAnalysis.runAnalysisInternal': 1202,
+  'app/run-analysis.js::createRunAnalysis.runCommittedCanonicalCandidateInternal': 110,
+  'app/run-info.js::appendConfigOverrides': 100,
+  'app/run-info.js::appendInputArgs': 92,
+  'app/sequence-search.js::createSequenceSearch': 89,
+  'app/settings-pane.js::createSettingsPaneController': 123,
+  'app/similarity-alignment.js::createSimilarityAlignmentActions': 591,
+  'app/svg-styles.js::createSvgStyles': 97,
+  'app/svg-styles.js::createSvgStyles.applyPaletteToSvg': 87,
+  'app/ui.js::createPreviewTransformInteraction': 88,
+  'app/watchers.js::setupWatchers': 224,
+  'components.js::FileUploader.setup': 121,
+  'components.js::SettingsSectionIndex.setup': 115,
+  'services/config.js::importSessionDocument': 583,
+  'services/diagram-generation.js::runDiagramGeneration': 96,
+  'services/diagram-resource-staging.js::createDiagramResourceTransport': 87,
+  'services/feature-catalog.js::validateAndProjectCatalogItem': 203,
+  'services/feature-override-identity.js::migrateLegacyFeatureOverrides': 94,
+  'services/history-snapshot.js::createHistorySnapshotService': 399,
+  'services/history.js::createHistoryManager': 897,
+  'services/history.js::createHistoryRouter': 449,
+  'services/legend-layout.js::buildCircularLegendLayout': 97,
+  'services/losat.js::runLosatPairsThreaded': 136,
+  'services/losat.js::runLosatPairsThreaded.new Promise()': 116,
+  'services/losat.js::runLosatPairsWithWorkers': 115,
+  'services/match-sequences.js::analyzeCatalogSequenceSourceCoverage': 134,
+  'services/match-sequences.js::createSequenceSourceRegistry': 91,
+  'services/orthogroup-feature-metadata.js::createOrthogroupFeatureProjection': 113,
+  'services/session-feature-recovery.js::alignRecoveredFeatureIdsToRenderedSvg': 98,
+  'services/session-request.js::buildComparisons': 113,
+  'services/session-request.js::projectCanonicalRenderInput': 119,
+  'services/session-request.js::projectCanonicalSessionRequest': 339,
+  'services/session-request.js::trackPlanProjection': 145,
+  'services/session-resources.js::buildSessionDrawingResources': 206,
+  'services/svg-result-ingestion.js::applyLegendOperations': 96,
+  'services/svg-result-ingestion.js::recordSavedEditBases': 94,
+  'services/track-slot-validation.js::collectCustomTrackIssues': 192,
+  'services/track-slot-validation.js::collectCustomTrackIssues.forEach()': 104,
+  'services/track-slot-validation.js::validateTrackSlotBindingInvariants': 98,
+  'utils/contract-repair.js::repairPlace': 121,
+  'workers/diagram-generation-worker.js::runGeneration': 97,
+  'workers/losat-threaded-worker.js::runThreadedLosat': 104
 };
 
-const COMPOSITION_ROOT_LOGIC_LINES = {
-  'app/app-setup.js::createAppSetup': 1114,
-  'app/feature-editor.js::createFeatureEditor': 3,
-  'app/legend-layout.js::createLegendLayout': 74,
-  'app/legend.js::createLegendManager': 19
+const COMPOSITION_ROOT_LOGIC_STATEMENTS = {
+  'app/app-setup.js::createAppSetup': 635,
+  'app/feature-editor.js::createFeatureEditor': 0,
+  'app/legend-layout.js::createLegendLayout': 56,
+  'app/legend.js::createLegendManager': 21
 };
 
 const REPOSITORY_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WEB_JS = join(REPOSITORY_ROOT, 'gbdraw', 'web', 'js');
 const TSCONFIG = join(REPOSITORY_ROOT, 'tests', 'web', 'types', 'tsconfig.json');
 
-// The functions of one parsed source file: [{ name, line, lines, parent }],
-// `line` being the first line of the function and `parent` the nearest
+// The functions of one parsed source file: [{ name, line, start, end,
+// statements, parent }], `line` being the first line of the function, `start`
+// and `end` its first and last positions in the text, and `parent` the nearest
 // function around it (null at the top level of the module).
 const functionsOf = (source, SyntaxKind) => {
   const FUNCTIONS = new Set([
@@ -176,6 +188,25 @@ const functionsOf = (source, SyntaxKind) => {
     SyntaxKind.ConditionalExpression, SyntaxKind.BinaryExpression
   ]);
   const CALLS = new Set([SyntaxKind.CallExpression, SyntaxKind.NewExpression]);
+  const STATEMENTS = new Set([
+    SyntaxKind.VariableStatement, SyntaxKind.ExpressionStatement, SyntaxKind.IfStatement, SyntaxKind.DoStatement,
+    SyntaxKind.WhileStatement, SyntaxKind.ForStatement, SyntaxKind.ForInStatement, SyntaxKind.ForOfStatement,
+    SyntaxKind.ContinueStatement, SyntaxKind.BreakStatement, SyntaxKind.ReturnStatement, SyntaxKind.WithStatement,
+    SyntaxKind.SwitchStatement, SyntaxKind.LabeledStatement, SyntaxKind.ThrowStatement, SyntaxKind.TryStatement,
+    SyntaxKind.DebuggerStatement, SyntaxKind.FunctionDeclaration, SyntaxKind.ClassDeclaration
+  ]);
+  const expressionBody = (node) => node.kind === SyntaxKind.ArrowFunction && node.body.kind !== SyntaxKind.Block;
+  // The statements of a function body, nested ones included; an expression
+  // body, the function's own or a nested arrow function's, is one.
+  const statementsOf = (body) => {
+    let count = body.kind === SyntaxKind.Block ? 0 : 1;
+    const walk = (node) => {
+      if (STATEMENTS.has(node.kind) || expressionBody(node)) count += 1;
+      node.forEachChild(walk);
+    };
+    walk(body);
+    return count;
+  };
   const BINDINGS = new Set([
     SyntaxKind.VariableDeclaration, SyntaxKind.PropertyAssignment, SyntaxKind.PropertyDeclaration,
     SyntaxKind.Parameter, SyntaxKind.BindingElement
@@ -229,8 +260,11 @@ const functionsOf = (source, SyntaxKind) => {
       const name = nameOf(node);
       if (name !== null) inner = [...scope, name];
       if (FUNCTIONS.has(node.kind)) {
-        const line = lineOf(node.getStart(source));
-        innerEnclosing = { name: inner.join('.'), line, lines: lineOf(node.end) - line + 1, parent: enclosing };
+        const start = node.getStart(source);
+        innerEnclosing = {
+          name: inner.join('.'), line: lineOf(start), start, end: node.end,
+          statements: statementsOf(node.body), parent: enclosing
+        };
         found.push(innerEnclosing);
       }
     }
@@ -259,11 +293,11 @@ const measure = async (files, read = functionsOf) => {
 };
 
 // The root functions of one parsed composition root module and the logic
-// written in it: { roots, logic, oneLine }, `roots` and `logic` as functionsOf
+// written in it: { roots, logic, wiring }, `roots` and `logic` as functionsOf
 // entries. A root function is a top-level function that calls a `create*`
 // factory the module imports by name. `logic` lists the functions of two or
-// more lines whose parent is the only root function, and `oneLine` counts its
-// one-line ones, which are wiring.
+// more statements whose parent is the only root function, and `wiring` counts
+// its functions of one statement or none.
 const compositionRootOf = (source, SyntaxKind) => {
   const functions = functionsOf(source, SyntaxKind);
   const factories = new Set(source.statements
@@ -271,22 +305,22 @@ const compositionRootOf = (source, SyntaxKind) => {
       && statement.importClause.namedBindings && statement.importClause.namedBindings.kind === SyntaxKind.NamedImports)
     .flatMap((statement) => statement.importClause.namedBindings.elements.map((element) => element.name.text))
     .filter((name) => /^create[A-Z]/.test(name)));
-  const creationLines = [];
+  const creations = [];
   const visit = (node) => {
     if (node.kind === SyntaxKind.CallExpression && node.expression.kind === SyntaxKind.Identifier
       && factories.has(node.expression.text)) {
-      creationLines.push(source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1);
+      creations.push(node.getStart(source));
     }
     node.forEachChild(visit);
   };
   visit(source);
-  const roots = functions.filter(({ parent, line, lines }) => parent === null
-    && creationLines.some((creation) => creation >= line && creation < line + lines));
+  const roots = functions.filter(({ parent, start, end }) => parent === null
+    && creations.some((creation) => creation >= start && creation < end));
   const written = roots.length === 1 ? functions.filter(({ parent }) => parent === roots[0]) : [];
   return {
     roots,
-    logic: written.filter(({ lines }) => lines > 1),
-    oneLine: written.filter(({ lines }) => lines === 1).length
+    logic: written.filter(({ statements }) => statements > 1),
+    wiring: written.filter(({ statements }) => statements <= 1).length
   };
 };
 
@@ -297,7 +331,7 @@ const rootFunctionProblem = (path, roots) => (roots.length === 1 ? null
     + `${roots.length ? ` (${roots.map(({ name, line }) => `${name} at line ${line}`).join(', ')})` : ''}; `
     + 'a composition root creates its owners in one root function');
 
-test('a function is measured from its first token to its last and named by its binding', async () => {
+test('a function counts the statements in its body and is named by its binding', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'web-function-size-'));
   const file = join(directory, 'fixture.js');
   writeFileSync(file, [
@@ -330,66 +364,108 @@ test('a function is measured from its first token to its last and named by its b
   ].join('\n'));
   try {
     const functions = (await measure([file])).get(file);
-    assert.deepEqual(functions.map(({ name, line, lines }) => `${line}+${lines} ${name}`), [
-      '2+14 outer',
-      '3+3 outer.inner',
-      '6+3 outer.forEach()',
-      '9+3 outer.ready',
-      '12+1 outer.doubled',
-      '13+1 outer.actions.run',
-      '13+1 outer.actions.stop',
-      '17+1 Store.constructor',
-      '18+1 Store.size',
-      '19+1 Store.handler',
-      '21+1 window.onload',
-      '22+1 pick',
-      '22+1 pick.choose',
-      '23+1 map()',
-      '24+1 (anonymous)',
-      '25+1 default'
+    assert.deepEqual(functions.map(({ name, line, statements }) => `${line} ${name}: ${statements}`), [
+      '2 outer: 12',
+      '3 outer.inner: 1',
+      '6 outer.forEach(): 1',
+      '9 outer.ready: 1',
+      '12 outer.doubled: 1',
+      '13 outer.actions.run: 1',
+      '13 outer.actions.stop: 1',
+      '17 Store.constructor: 0',
+      '18 Store.size: 1',
+      '19 Store.handler: 0',
+      '21 window.onload: 0',
+      '22 pick: 1',
+      '22 pick.choose: 1',
+      '23 map(): 0',
+      '24 (anonymous): 0',
+      '25 default: 0'
     ]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
-test('no Web function is longer than MAX_FUNCTION_LINES or its FUNCTION_LINES entry', async (t) => {
-  assert.deepEqual(Object.keys(FUNCTION_LINES), Object.keys(FUNCTION_LINES).sort(), 'keep FUNCTION_LINES sorted by key');
-  Object.entries(FUNCTION_LINES).forEach(([key, lines]) => {
-    assert.ok(Number.isInteger(lines) && lines > MAX_FUNCTION_LINES,
-      `FUNCTION_LINES['${key}'] must be an integer above MAX_FUNCTION_LINES (${MAX_FUNCTION_LINES})`);
+test('comments, JSDoc, blank lines and line breaks change no statement count', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'web-function-statements-'));
+  const compact = join(directory, 'compact.js');
+  const spread = join(directory, 'spread.js');
+  writeFileSync(compact, [
+    'export function sum(items) { const total = items.reduce((all, item) => all + item, 0); '
+      + 'if (total > 0) { return total; } return items.map((item) => { return item; }); }',
+    ''
+  ].join('\n'));
+  writeFileSync(spread, [
+    '/**',
+    ' * @param {number[]} items',
+    ' */',
+    'export function sum(items) {',
+    '  // A comment.',
+    '  const total = items.reduce(',
+    '    (all, item) => all + item,',
+    '    0',
+    '  );',
+    '',
+    '  if (total > 0) {',
+    '    return total;',
+    '  }',
+    '  return items.map((item) => {',
+    '    return item;',
+    '  });',
+    '}',
+    ''
+  ].join('\n'));
+  try {
+    const measured = await measure([compact, spread]);
+    const counts = (file) => measured.get(file).map(({ name, statements }) => `${name}: ${statements}`);
+    // total, the expression body of the reduce() callback, if, its return,
+    // return, and the return of the map() callback.
+    assert.deepEqual(counts(compact), ['sum: 6', 'sum.total: 1', 'sum.map(): 1']);
+    assert.deepEqual(counts(spread), counts(compact));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('no Web function has more statements than MAX_FUNCTION_STATEMENTS or its FUNCTION_STATEMENTS entry', async (t) => {
+  assert.deepEqual(Object.keys(FUNCTION_STATEMENTS), Object.keys(FUNCTION_STATEMENTS).sort(),
+    'keep FUNCTION_STATEMENTS sorted by key');
+  Object.entries(FUNCTION_STATEMENTS).forEach(([key, statements]) => {
+    assert.ok(Number.isInteger(statements) && statements > MAX_FUNCTION_STATEMENTS,
+      `FUNCTION_STATEMENTS['${key}'] must be an integer above MAX_FUNCTION_STATEMENTS (${MAX_FUNCTION_STATEMENTS})`);
   });
   const paths = readdirSync(WEB_JS, { recursive: true })
     .map((path) => path.split(sep).join('/'))
     .filter((path) => path.endsWith('.js') && !path.endsWith('.generated.js'))
     .sort();
   const measured = await measure(paths.map((path) => join(WEB_JS, path)));
-  // The longest function of each key.
-  const longest = new Map();
+  // The largest function of each key.
+  const largest = new Map();
   paths.forEach((path) => measured.get(join(WEB_JS, path)).forEach((found) => {
     const key = `${path}::${found.name}`;
-    if (!longest.has(key) || found.lines > longest.get(key).lines) longest.set(key, { path, ...found });
+    if (!largest.has(key) || found.statements > largest.get(key).statements) largest.set(key, { path, ...found });
   }));
   // A key without an entry counts as 0, so every function above the limit is
   // compared, and every listed one, to name the entries that may be lowered.
-  const observed = Object.fromEntries([...longest]
-    .filter(([key, { lines }]) => lines > MAX_FUNCTION_LINES || Object.hasOwn(FUNCTION_LINES, key))
-    .map(([key, { lines }]) => [key, lines]));
-  const { above, lowerable } = compareCountBaseline(observed, FUNCTION_LINES);
-  const failures = above.map(({ key, observed: lines, recorded }) => {
-    const { path, line, name } = longest.get(key);
-    return `gbdraw/web/js/${path}:${line} ${name}: ${lines} lines (limit ${MAX_FUNCTION_LINES}, `
-      + `FUNCTION_LINES ${recorded || 'none'})`;
+  const observed = Object.fromEntries([...largest]
+    .filter(([key, { statements }]) => statements > MAX_FUNCTION_STATEMENTS || Object.hasOwn(FUNCTION_STATEMENTS, key))
+    .map(([key, { statements }]) => [key, statements]));
+  const { above, lowerable } = compareCountBaseline(observed, FUNCTION_STATEMENTS);
+  const failures = above.map(({ key, observed: statements, recorded }) => {
+    const { path, line, name } = largest.get(key);
+    return `gbdraw/web/js/${path}:${line} ${name}: ${statements} statements (limit ${MAX_FUNCTION_STATEMENTS}, `
+      + `FUNCTION_STATEMENTS ${recorded || 'none'})`;
   });
   t.diagnostic(`functions: ${[...measured.values()].reduce((sum, found) => sum + found.length, 0)} in ${paths.length} modules, `
-    + `${Object.keys(observed).length} above ${MAX_FUNCTION_LINES} lines`);
-  reportLowerable(t, 'FUNCTION_LINES', lowerable.map((entry) => entry.replace(/ -> 0$/, ' -> removed')));
-  assert.deepEqual(failures, [], `functions above ${MAX_FUNCTION_LINES} lines, or above their FUNCTION_LINES entry. `
-    + 'Split them at an owner boundary (gbdraw/web/CLAUDE.md "Module ownership"); adding or raising an entry '
-    + `in FUNCTION_LINES needs the Owner's approval.\n  ${failures.join('\n  ')}`);
+    + `${Object.keys(observed).length} above ${MAX_FUNCTION_STATEMENTS} statements`);
+  reportLowerable(t, 'FUNCTION_STATEMENTS', lowerable.map((entry) => entry.replace(/ -> 0$/, ' -> removed')));
+  assert.deepEqual(failures, [], `functions above ${MAX_FUNCTION_STATEMENTS} statements, or above their FUNCTION_STATEMENTS `
+    + 'entry. Split them at an owner boundary (gbdraw/web/CLAUDE.md "Module ownership"); adding or raising an entry '
+    + `in FUNCTION_STATEMENTS needs the Owner's approval.\n  ${failures.join('\n  ')}`);
 });
 
-test('the logic of a composition root is every function of two or more lines written directly in its root function', async () => {
+test('the logic of a composition root is every function of two or more statements written directly in its root function', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'web-root-logic-'));
   const file = join(directory, 'fixture.js');
   writeFileSync(file, [
@@ -401,7 +477,8 @@ test('the logic of a composition root is every function of two or more lines wri
     'export const createRoot = ({ watch }) => {',
     '  const owner = createOwner({',
     '    onPick: (item) => {',
-    '      return item;',
+    '      const picked = item;',
+    '      return picked;',
     '    },',
     '    getValue: () => 0,',
     '    getNext: () =>',
@@ -411,25 +488,26 @@ test('the logic of a composition root is every function of two or more lines wri
     '    const nested = () => 1;',
     '    return nested();',
     '  };',
+    '  const reset = () => { owner.value = 0; run(); };',
     '  watch(() => owner.value, () => {',
     '    run();',
     '  });',
     '  const steps = { first() { return 1; } };',
-    '  return { owner, run, steps, get size() { return 0; } };',
+    '  return { owner, run, reset, steps, get size() { return 0; } };',
     '};',
     ''
   ].join('\n'));
   try {
-    const { roots, logic, oneLine } = (await measure([file], compositionRootOf)).get(file);
-    assert.deepEqual(roots.map(({ name, line, lines }) => `${line}+${lines} ${name}`), ['6+19 createRoot']);
-    assert.deepEqual(logic.map(({ name, line, lines }) => `${line}+${lines} ${name}`), [
-      '8+3 createRoot.owner.onPick',
-      '12+2 createRoot.owner.getNext',
-      '15+4 createRoot.run',
-      '19+3 createRoot.watch()'
+    const { roots, logic, wiring } = (await measure([file], compositionRootOf)).get(file);
+    assert.deepEqual(roots.map(({ name, line }) => `${line} ${name}`), ['6 createRoot']);
+    assert.deepEqual(logic.map(({ name, line, statements }) => `${line} ${name}: ${statements}`), [
+      '8 createRoot.owner.onPick: 2',
+      '16 createRoot.run: 3',
+      '20 createRoot.reset: 2'
     ]);
-    // getValue, the getter of watch(), steps.first and size.
-    assert.equal(oneLine, 4);
+    // getValue, getNext, the getter and the callback of watch(), steps.first
+    // and size: one statement each.
+    assert.equal(wiring, 6);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -468,33 +546,35 @@ test('a composition root module without exactly one root function fails by name'
   }
 });
 
-test('the logic written in each composition root does not grow beyond COMPOSITION_ROOT_LOGIC_LINES', async (t) => {
-  const recorded = COMPOSITION_ROOT_LOGIC_LINES;
-  assert.deepEqual(Object.keys(recorded), Object.keys(recorded).sort(), 'keep COMPOSITION_ROOT_LOGIC_LINES sorted by key');
-  Object.entries(recorded).forEach(([key, lines]) => {
-    assert.ok(Number.isInteger(lines) && lines >= 0, `COMPOSITION_ROOT_LOGIC_LINES['${key}'] must be an integer of 0 or more`);
+test('the logic written in each composition root does not grow beyond COMPOSITION_ROOT_LOGIC_STATEMENTS', async (t) => {
+  const recorded = COMPOSITION_ROOT_LOGIC_STATEMENTS;
+  assert.deepEqual(Object.keys(recorded), Object.keys(recorded).sort(), 'keep COMPOSITION_ROOT_LOGIC_STATEMENTS sorted by key');
+  Object.entries(recorded).forEach(([key, statements]) => {
+    assert.ok(Number.isInteger(statements) && statements >= 0,
+      `COMPOSITION_ROOT_LOGIC_STATEMENTS['${key}'] must be an integer of 0 or more`);
   });
   const paths = [...WEB_OWNER_GRAPH_DEFAULTS.compositionRoots].sort();
   const measured = await measure(paths.map((path) => join(WEB_JS, path)), compositionRootOf);
   const observed = {};
   const rows = new Map();
   const rootProblems = paths.flatMap((path) => {
-    const { roots, logic, oneLine } = measured.get(join(WEB_JS, path));
+    const { roots, logic, wiring } = measured.get(join(WEB_JS, path));
     const problem = rootFunctionProblem(path, roots);
     if (problem !== null) return [problem];
     const key = `${path}::${roots[0].name}`;
-    observed[key] = logic.reduce((sum, { lines }) => sum + lines, 0);
-    rows.set(key, { path, root: roots[0], functions: logic.length, oneLine });
+    observed[key] = logic.reduce((sum, { statements }) => sum + statements, 0);
+    rows.set(key, { path, root: roots[0], functions: logic.length, wiring });
     return [];
   });
   assert.deepEqual(rootProblems, [], rootProblems.join('\n'));
-  rows.forEach(({ root, functions, oneLine }, key) => t.diagnostic(`${key}: ${observed[key]} lines in ${functions} `
-    + `functions of two or more lines; ${oneLine} one-line functions not counted (the root function has ${root.lines} lines)`));
+  rows.forEach(({ root, functions, wiring }, key) => t.diagnostic(`${key}: ${observed[key]} statements in ${functions} `
+    + `functions of two or more statements; ${wiring} functions of one statement or none not counted `
+    + `(the root function has ${root.statements} statements)`));
   // An entry whose key is no root function now, whatever its value (0 too).
   const stale = Object.keys(recorded).filter((key) => !Object.hasOwn(observed, key));
   const rootFunctionOf = new Map([...rows.values()].map(({ path, root }) => [path, root.name]));
   const { above, lowerable } = compareCountBaseline(observed, recorded);
-  reportLowerable(t, 'COMPOSITION_ROOT_LOGIC_LINES', [
+  reportLowerable(t, 'COMPOSITION_ROOT_LOGIC_STATEMENTS', [
     ...lowerable.filter((entry) => !stale.some((key) => entry.startsWith(`${key} `))),
     ...stale.map((key) => {
       const path = key.slice(0, key.indexOf('::'));
@@ -505,17 +585,17 @@ test('the logic written in each composition root does not grow beyond COMPOSITIO
   const failures = [
     ...Object.keys(observed).filter((key) => !Object.hasOwn(recorded, key)).map((key) => {
       const { path, root } = rows.get(key);
-      return `gbdraw/web/js/${path}:${root.line} ${root.name}: ${observed[key]} lines of logic in a composition root `
-        + 'without a COMPOSITION_ROOT_LOGIC_LINES entry (a new composition root or a renamed root function)';
+      return `gbdraw/web/js/${path}:${root.line} ${root.name}: ${observed[key]} statements of logic in a composition `
+        + 'root without a COMPOSITION_ROOT_LOGIC_STATEMENTS entry (a new composition root or a renamed root function)';
     }),
-    ...above.filter(({ key }) => Object.hasOwn(recorded, key)).map(({ key, observed: lines, recorded: entry }) => {
+    ...above.filter(({ key }) => Object.hasOwn(recorded, key)).map(({ key, observed: statements, recorded: entry }) => {
       const { path, root, functions } = rows.get(key);
-      return `gbdraw/web/js/${path}:${root.line} ${root.name}: ${lines} lines of logic in ${functions} functions `
-        + `of two or more lines (COMPOSITION_ROOT_LOGIC_LINES ${entry})`;
+      return `gbdraw/web/js/${path}:${root.line} ${root.name}: ${statements} statements of logic in ${functions} `
+        + `functions of two or more statements (COMPOSITION_ROOT_LOGIC_STATEMENTS ${entry})`;
     })
   ];
   assert.deepEqual(failures, [], 'the logic written in a composition root grew. Move the new logic into a module '
     + 'factory and pass it to the root as a port, or shrink other logic in the same root '
     + '(docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md "Web function size"); adding or raising an entry in '
-    + `COMPOSITION_ROOT_LOGIC_LINES needs the Owner's approval.\n  ${failures.join('\n  ')}`);
+    + `COMPOSITION_ROOT_LOGIC_STATEMENTS needs the Owner's approval.\n  ${failures.join('\n  ')}`);
 });

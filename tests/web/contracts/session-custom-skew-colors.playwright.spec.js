@@ -232,6 +232,11 @@ const changePaletteThroughUi = async (page) => {
   const next = options.find((value) => value && value !== current);
   expect(next).toBeTruthy();
   await palette.selectOption(next);
+  // OV-3114: the Session's committed Default colors table (a gbdraw 0.14 writer's) sets misc_feature and default
+  // to #d3d3d3, which its palette no longer holds, so a switch asks whether to keep those two colors.
+  const dialog = page.getByRole('dialog', { name: 'Change palette' });
+  await expect(dialog).toContainText(`Keep your 2 changed colors from the "${current}" palette (misc_feature and default)?`);
+  await dialog.getByRole('button', { name: "Use the palette's colors", exact: true }).click();
   await expect(palette).toHaveValue(next);
   return next;
 };

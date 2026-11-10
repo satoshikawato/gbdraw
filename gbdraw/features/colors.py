@@ -44,12 +44,16 @@ def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -
     return build_specific_color_rules(color_table), build_default_color_map(default_colors)
 
 
+def feature_type_color(default_color_map: Mapping[str, str], feature_type: str) -> str:
+    """The color of a feature type: its palette entry, else the palette's ``default``.
 
+    The one owner of this color: drawn features without a matching rule and
+    the Legend row of their type both read it (OV-3114).
+    """
 
-
-
-
-
+    if feature_type in default_color_map:
+        return default_color_map[feature_type]
+    return default_color_map.get("default", "#d3d3d3")
 
 
 def get_color_with_info(
@@ -79,7 +83,7 @@ def get_color_with_info(
         return matched_rule
 
     # Fallback to default color if no specific rule matched
-    return default_color_map.get(feature.type, "#d3d3d3"), None
+    return feature_type_color(default_color_map, feature.type), None
 
 
 def get_color(
@@ -172,5 +176,6 @@ __all__ = [
     "precompute_used_color_rules",
     "build_default_color_map",
     "build_specific_color_rules",
+    "feature_type_color",
     "preprocess_color_tables",
 ]

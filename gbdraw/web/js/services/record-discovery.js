@@ -7,8 +7,12 @@ import { genbankHeaderIds, pythonStrip, scanGenBankHeader } from './genbank-head
 import { ORGANISM_NAME_RULE } from '../contracts/schema.generated.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { circularInputComplete, circularSourceInputs } from './input-types.js';
-import { recordIdentity, resliceCardRows } from './record-draw-selection.js';
+import {
+  circularInputComplete, circularSourceInputs, inputTypeOfSourceKind, inputTypeSpec
+} from './input-types.js';
+import { recordIdentity, recordSelectorNumber, resliceCardRows } from './record-draw-selection.js';
+import { storedRecordIdOf } from './stored-leaf-readings.js';
+import { sessionResourceReadOwner } from './session-resource-backing.js';
 import { isRecordMajorDepthFileMatrix } from './depth-track-state.js';
 import {
   bytesToText,
@@ -23,6 +27,7 @@ import {
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { InputTypeSpec } from './input-types.js' */
+/** @import { UnreadStoredRecord } from './stored-leaf-readings.js' */
 /** @import { CircularCardMark, CircularSource, DrawingInputFiles } from './drawing/inputs.js' */
 
 /**
@@ -727,18 +732,21 @@ const fastPathRecords = async (files, parse) => {
 // frame, the ring comparison sequence with its digest, and what Generate reads
 // for LOSAT (the parsed sequences, the Circular reference FASTA, and the
 // Worker's FASTA and protein extractions). Each read is kept once per File
-// object (or per GFF3 and FASTA pair) and key: an uploaded File and a Session
-// resource view never change their bytes. A failed read is not kept; each
-// reader keeps an error it treats as final in its own state.
+// object (or per ordered list of Files) and key, and once per resource for the
+// views of one Session resource (`sessionResourceReadOwner`): an uploaded File
+// never changes its bytes, nor does a Session resource once its table is adopted.
+// A failed read is not kept; each reader keeps an error it treats as final in
+// its own state. A read of several Files (a GFF3 and its FASTA, the files of a
+// ring's comparison genome) is kept per ordered list of them.
 /**
- * @typedef {{ reads: Map<string, Promise<unknown>>, paired: WeakMap<FileLike, FileReads> }} FileReads
+ * @typedef {{ reads: Map<string, Promise<unknown>>, paired: WeakMap<object, FileReads> }} FileReads
  */
-/** @type {WeakMap<FileLike, FileReads>} */
+/** @type {WeakMap<object, FileReads>} */
 const fileReads = new WeakMap();
 
 /**
- * @param {WeakMap<FileLike, FileReads>} byFile
- * @param {FileLike} file
+ * @param {WeakMap<object, FileReads>} byFile
+ * @param {object} file A File, or the resource of a Session resource view (`sessionResourceReadOwner`).
  * @returns {FileReads}
  */
 const fileReadsOf = (byFile, file) => {
@@ -749,16 +757,19 @@ const fileReadsOf = (byFile, file) => {
 
 /**
  * @template T
- * @param {readonly [FileLike] | readonly [FileLike, FileLike]} files The File, or a GFF3 File and its FASTA File.
+ * @param {readonly [FileLike, ...FileLike[]]} files The File; a GFF3 File and its FASTA File; or the Files of a ring's
+ *   comparison genome, in the listed order.
  * @param {string} key What is read from them: its kind, then `:` and the settings of the reading.
  * @param {() => Promise<T>} read
  * @param {number} [limit] How many reads of this kind the File keeps, the oldest dropped first.
  * @returns {Promise<T>}
  */
 export const readOncePerFile = (files, key, read, limit = Infinity) => {
-  const [file, pairedFile] = files;
-  const owner = fileReadsOf(fileReads, file);
-  const { reads } = pairedFile ? fileReadsOf(owner.paired, pairedFile) : owner;
+  const [file, ...pairedFiles] = files;
+  const { reads } = pairedFiles.reduce(
+    (owner, pairedFile) => fileReadsOf(owner.paired, sessionResourceReadOwner(pairedFile)),
+    fileReadsOf(fileReads, sessionResourceReadOwner(file))
+  );
   const held = /** @type {Promise<T> | undefined} */ (reads.get(key));
   if (held) return held;
   if (Number.isFinite(limit)) {
@@ -938,10 +949,11 @@ export const discoverSequenceRecords = async ({
 };
 
 /**
- * A ring comparison file as the Python ring reader reads it (D12): the LOSAT
- * query FASTA, the label the file names itself (GenBank / DDBJ: first
- * record's DEFINITION, then organism) or null (FASTA), and the ID of each
- * record of the FASTA, in its order ('' for a FASTA entry without an ID).
+ * A ring's comparison genome as the Python ring reader reads it (D12): the
+ * LOSAT query FASTA of every record of its files, in the listed order, the
+ * label its first file names itself (GenBank / DDBJ: first record's
+ * DEFINITION, then organism) or null (FASTA), and the ID of each record of
+ * the FASTA, in its order ('' for a FASTA entry without an ID).
  * @typedef {{ fasta: string, recordLabel: string | null, recordIds: readonly string[] }} ComparisonSequence
  */
 /**
@@ -955,22 +967,22 @@ const isComparisonSequenceReply = (payload) => {
   return typeof fasta === 'string' && (recordLabel === null || typeof recordLabel === 'string')
     && Array.isArray(recordIds) && recordIds.every((recordId) => typeof recordId === 'string');
 };
-// Only the Python ring reader reads the file; there is no fast path. Add Seq and
-// every Generate share one read per file (OV-1545), frozen, as every reader gets it.
+// Only the Python ring reader reads the files; there is no fast path. Add Seq and
+// every Generate share one read per genome (OV-1545), frozen, as every reader gets it.
 /**
  * @param {{
- *   file: FileLike,
+ *   files: readonly [FileLike, ...FileLike[]],
  *   runHelperOperation?: HelperOperationRunner<ComparisonSequencePayload>
- * }} options
+ * }} options The files of one comparison genome, in the listed order.
  * @returns {Promise<ComparisonSequence>}
  */
 export const readComparisonSequence = ({
-  file,
+  files,
   runHelperOperation = runDiagramHelperOperation
-}) => readOncePerFile([file], 'comparison-sequence', async () => {
+}) => readOncePerFile(files, 'comparison-sequence', async () => {
   const { result } = await runHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE,
-    { files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }] }
+    { files: await Promise.all(files.map(async (file) => ({ role: 'source', bytes: await cloneFileBytesForTransfer(file) }))) }
   );
   if (result && 'error' in result) throw result.error;
   if (!isComparisonSequenceReply(result)) {
@@ -1002,7 +1014,7 @@ export const readComparisonSequenceRecords = (file, runHelperOperation = runDiag
       && await fastPathRecords([file], (text) => parseSequenceRecordText(text, 'fasta'))) {
       return Object.freeze(records.map(({ id, sequence }) => record(id, sequence)));
     }
-    const { fasta, recordIds } = await readComparisonSequence({ file, runHelperOperation });
+    const { fasta, recordIds } = await readComparisonSequence({ files: [file], runHelperOperation });
     const sequences = parseSequenceRecordsFast(fasta, 'fasta');
     if (sequences.length !== recordIds.length) {
       throw diagnosticError('HELPER_PROTOCOL', {}, {
@@ -1013,14 +1025,14 @@ export const readComparisonSequenceRecords = (file, runHelperOperation = runDiag
   })
 );
 
-// The SHA-256 of a ring file's FASTA, the LOSAT cache key Generate builds from
-// it (OV-1565): digested once per File, beside its FASTA. Only Generate asks.
+// The SHA-256 of a ring genome's FASTA, the LOSAT cache key Generate builds from
+// it (OV-1565): digested once per genome, beside its FASTA. Only Generate asks.
 /**
  * @param {Parameters<typeof readComparisonSequence>[0]} options
  * @returns {Promise<string>}
  */
 export const readComparisonSequenceDigest = (options) => readOncePerFile(
-  [options.file], 'comparison-sequence-sha256',
+  options.files, 'comparison-sequence-sha256',
   async () => sha256Hex(textToBytes((await readComparisonSequence(options)).fasta))
 );
 
@@ -1091,6 +1103,47 @@ const INPUT_RECORD_READERS = Object.freeze({
 export const discoverInputRecords = (spec, primaryFile, pairedFile) => (
   INPUT_RECORD_READERS[spec.sourceKind].read(primaryFile, pairedFile)
 );
+
+/**
+ * The place (`#k`, its file's record list as Python reads it) of each stored record whose selector is a record ID
+ * that a record text reads as a `#N`, by `storedRecordIdKey`: Load gives a Linear card, the Circular Record select
+ * and a Circular record range that place, so they draw the record of that ID, as Python does (OV-3311). `unresolved`
+ * lists each such record whose file cannot be listed or holds no single record with the ID; it keeps its text.
+ * Only such a record's files are read, so a Session without one reads none.
+ * @param {readonly { at: string, renderRequest: unknown }[]} requests Each stored request, by where the file holds
+ *   its set (`storedResultSets`).
+ * @param {(resourceId: string) => FileLike} fileOf A view of the stored resource on the table Load adopted: a card's
+ *   later read of the file is this read (`readOncePerFile`).
+ * @returns {Promise<{ places: Map<string, string>, unresolved: { path: string, recordId: string }[] }>}
+ */
+export const readStoredRecordIdPlaces = async (requests, fileOf) => {
+  /** @type {Map<string, string>} */
+  const places = new Map();
+  /** @type {{ path: string, recordId: string }[]} */
+  const unresolved = [];
+  const read = new Set();
+  for (const { at, renderRequest } of requests) {
+    const records = typeof renderRequest === 'object' && renderRequest !== null
+      ? /** @type {{ readonly records?: unknown }} */ (renderRequest).records : null;
+    if (!Array.isArray(records)) continue;
+    for (const [index, record] of /** @type {(UnreadStoredRecord | null)[]} */ (records).entries()) {
+      const named = storedRecordIdOf(record);
+      if (!named || recordSelectorNumber(named.recordId) === null) continue;
+      const { recordId, resourceIds, key } = named;
+      const spec = inputTypeSpec(inputTypeOfSourceKind(record?.source?.kind));
+      if (read.has(key)) continue;
+      read.add(key);
+      const [primaryFile, pairedFile] = resourceIds;
+      const listed = await Promise.resolve()
+        .then(() => discoverInputRecords(spec, fileOf(primaryFile), pairedFile === undefined ? null : fileOf(pairedFile)))
+        .catch(() => []);
+      const matches = listed.filter((entry) => entry.recordId === recordId);
+      if (matches.length === 1) places.set(key, matches[0].selector);
+      else unresolved.push({ path: `${at}renderRequest.records[${index}].selector.value`, recordId });
+    }
+  }
+  return { places, unresolved };
+};
 
 /** @param {Readonly<InputTypeSpec>} spec The helper operation a failed read of this input names. */
 export const inputRecordsOperation = (spec) => INPUT_RECORD_READERS[spec.sourceKind].operation;

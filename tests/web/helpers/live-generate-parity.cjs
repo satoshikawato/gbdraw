@@ -278,9 +278,37 @@ const expectLiveEqualsGenerate = async (page, { allowed = ALLOWED_DIFFERENCES, l
   return { live, generated, differences, tolerated };
 };
 
+// A case that runs former cases as steps on one page checks that each step
+// starts from the state the first step started from, which is the state each
+// former case started from: the displayed Result as semanticSnapshot reads it,
+// and the request the last Generate committed.
+const readStepStart = async (page) => ({
+  drawn: await semanticSnapshot(page),
+  committed: await page.evaluate(async () => {
+    const { getCommittedCanonicalSession } = await import('/gbdraw/web/js/services/config.js');
+    return JSON.parse(JSON.stringify(getCommittedCanonicalSession().renderRequest));
+  })
+});
+/**
+ * The check for the steps of one case: its first call keeps the state the
+ * first step starts from; each later call expects that state.
+ * @param {import('@playwright/test').Page} page
+ * @returns {(step: string) => Promise<void>}
+ */
+const sameStepStart = (page) => {
+  /** @type {{ drawn: unknown, committed: unknown } | null} */
+  let first = null;
+  return async (step) => {
+    const start = await readStepStart(page);
+    if (first) expect(start, `${step}: starts from the state the first step started from`).toEqual(first);
+    else first = start;
+  };
+};
+
 module.exports = {
   diffSemanticSnapshots,
   expectLiveEqualsGenerate,
+  sameStepStart,
   semanticSnapshot,
   settleLive,
   showResult

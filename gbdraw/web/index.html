@@ -3640,6 +3640,7 @@
                                                 :key="modeOption.key"
                                                 type="button"
                                                 :data-linear-comparison-losat-mode-option="modeOption.key"
+                                                :data-comparison-focus="modeOption.active ? 'losat-options' : null"
                                                 :aria-pressed="modeOption.active"
                                                 :disabled="!semanticMutationAvailable || (!modeOption.selectable)"
                                                 @click="setLinearComparisonLosatMode(modeOption.key)"
@@ -3899,7 +3900,7 @@
                                                 @click="downloadLosatPair(pair.edgeKey, pair.draft?.losatFilenameActive ? pair.draft.losatFilename : pair.resolved?.losatFilenameActive ? pair.resolved.losatFilename : '')"
                                                 class="btn btn-secondary px-1.5 py-0.5 text-[10px]"
                                             ><i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}</button>
-                                            <details class="linear-pair-file-name min-w-0 flex-1">
+                                            <details class="linear-pair-file-name min-w-0 flex-1" @toggle="$event.currentTarget.open && readShownRecords('linear')">
                                                 <summary class="text-[10px] font-normal text-slate-500" :aria-label="t('Raw LOSAT file name for #{from} to #{to}', { from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })">{{ t('File name') }}</summary>
                                                 <label class="linear-primary-label block" :for="`linear-raw-name-${pair.edgeKey}`">{{ t('Raw LOSAT filename') }}</label>
                                                 <input
@@ -3936,7 +3937,7 @@
                                                         @click="downloadLosatPair(windowPair.edgeKey, pair.resolved?.windowLosatFilenames?.[windowPair.edgeKey] || '')"
                                                         class="btn btn-secondary px-1.5 py-0.5 text-[10px]"
                                                     ><i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}</button>
-                                                    <details class="linear-pair-file-name min-w-0 flex-1">
+                                                    <details class="linear-pair-file-name min-w-0 flex-1" @toggle="$event.currentTarget.open && readShownRecords('linear')">
                                                         <summary class="text-[10px] font-normal text-slate-500" :aria-label="t('Raw LOSAT file name for #{from} to #{to}', { from: linearWindowPairSide(pair.queryIndex, windowPair.queryWindow), to: linearWindowPairSide(pair.subjectIndex, windowPair.subjectWindow) })">{{ t('File name') }}</summary>
                                                         <label class="linear-primary-label block" :for="`linear-raw-name-${windowPair.edgeKey}`">{{ t('Raw LOSAT filename') }}</label>
                                                         <input
@@ -4074,8 +4075,8 @@
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-cache')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                 <div class="linear-primary-label">{{ t('LOSAT cache') }}</div>
-                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)" :aria-describedby="losatCacheInfo.length === 0 ? 'linear-losat-cache-reason' : null"><i class="ph ph-trash" aria-hidden="true"></i> {{ losatCacheInfo.length === 0 ? t('Clear LOSAT results') : tn(losatCacheInfo.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}</button>
-                                <p v-if="losatCacheInfo.length === 0" id="linear-losat-cache-reason" class="ui-hint">{{ t('No LOSAT results yet') }}</p>
+                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (clearableLosatResultCount === 0)" :aria-describedby="clearableLosatResultCount === 0 ? 'linear-losat-cache-reason' : null"><i class="ph ph-trash" aria-hidden="true"></i> {{ clearableLosatResultCount === 0 ? t('Clear LOSAT results') : tn(clearableLosatResultCount, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}</button>
+                                <p v-if="clearableLosatResultCount === 0" id="linear-losat-cache-reason" class="ui-hint">{{ t('No LOSAT results yet') }}</p>
                             </section>
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('collinear-details') || linearComparisonUi.sectionKeys.advanced.includes('paralog-links')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
@@ -4325,6 +4326,84 @@
                     </details>
                 </div>
 
+                <!-- Feature density tracks (app/feature-density-tracks.js): each track counts what one query finds in each window.
+                     A track is found by its id; its stack rows follow it. -->
+                <div v-settings-section="'feature-density'" data-setting="feature-density" class="card">
+                    <details>
+                        <summary :aria-label="t('Feature density')"><settings-section-title section="feature-density"></settings-section-title></summary>
+                        <div class="mt-2 space-y-2 pt-2 border-t border-slate-200" data-feature-density-tracks>
+                            <span class="input-label text-[10px]">{{ t('Feature density tracks') }} <setting-note id="feature-density-timing" setting="feature-density"></setting-note> <help-tip id="help-feature-density-tracks" :text="t('Each track counts the features one query finds in each window of every record, as a heatmap or a histogram. The query is a feature type (* for every type), with an optional qualifier, value regex and length range.')"></help-tip></span>
+                            <button type="button" class="btn btn-secondary text-[10px] w-full px-2" @click="addFeatureDensityTrack()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add feature density track') }}</button>
+                            <div
+                                v-for="(track, i) in adv.feature_density_tracks"
+                                :key="track.id"
+                                :data-feature-density-track="track.id"
+                                class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1"
+                            >
+                                <div class="flex items-center justify-between gap-1">
+                                    <div class="min-w-0 flex items-center gap-1 text-[9px] font-semibold text-slate-500">
+                                        <span class="shrink-0">#{{ i + 1 }}</span>
+                                        <span class="truncate font-mono" :title="track.id">{{ track.id }}</span>
+                                    </div>
+                                    <div class="flex items-center justify-end gap-0.5">
+                                        <button :aria-label="t('Move track {id} up', { id: track.id })" type="button" @click="moveFeatureDensityTrack(track.id, -1)" :disabled="!semanticMutationAvailable || i === 0" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" :title="t('Move track up')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Move track {id} down', { id: track.id })" type="button" @click="moveFeatureDensityTrack(track.id, 1)" :disabled="!semanticMutationAvailable || i === adv.feature_density_tracks.length - 1" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" :title="t('Move track down')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Duplicate track {id}', { id: track.id })" type="button" @click="duplicateFeatureDensityTrack(track.id)" :disabled="!semanticMutationAvailable" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" :title="t('Duplicate track')"><i class="ph ph-copy" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Delete track {id}', { id: track.id })" type="button" @click="removeFeatureDensityTrack(track.id)" :disabled="!semanticMutationAvailable" class="h-6 w-6 text-red-500 hover:text-red-700 disabled:opacity-30" :title="t('Delete track')"><i class="ph ph-trash" aria-hidden="true"></i></button>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-12 gap-1 px-1 text-[9px] font-semibold uppercase text-slate-500">
+                                    <span class="col-span-4">{{ t('Feature Type') }}</span>
+                                    <span class="col-span-4">{{ t('Qualifier') }}</span>
+                                    <span class="col-span-4">{{ t('Value regex') }}</span>
+                                </div>
+                                <div class="grid grid-cols-12 gap-1">
+                                    <select :value="track.query.featureType" @change="setFeatureDensityTrackField(track.id, 'featureType', $event.target.value)" :aria-label="t('Track {id} feature type', { id: track.id })" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
+                                        <option v-if="!featureVisibilityFeatureSuggestions.includes(track.query.featureType)" :value="track.query.featureType">{{ track.query.featureType }}</option>
+                                        <option v-for="value in featureVisibilityFeatureSuggestions" :key="`fd-type-${value}`" :value="value">{{ value }}</option>
+                                    </select>
+                                    <input v-committed-value="track.query.qualifier ?? ''" @change="setFeatureDensityTrackField(track.id, 'qualifier', $event.target.value)" :aria-label="t('Track {id} qualifier', { id: track.id })" list="feature-visibility-qualifier-options" :placeholder="t('qualifier')" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
+                                    <input v-committed-value="track.query.value ?? ''" @change="setFeatureDensityTrackField(track.id, 'value', $event.target.value)" :aria-label="t('Track {id} value regex', { id: track.id })" :placeholder="t('value regex')" class="form-input form-input-compact col-span-4 font-mono" :disabled="!semanticMutationAvailable">
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Shortest (bp)') }}</span>
+                                        <input type="number" min="0" step="1" v-committed-value="track.query.minLength ?? ''" @change="setFeatureDensityTrackField(track.id, 'minLength', $event.target.value)" :aria-label="t('Track {id} shortest length', { id: track.id })" :placeholder="t('Any')" class="form-input form-input-compact" :disabled="!semanticMutationAvailable"></label>
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Longest (bp)') }}</span>
+                                        <input type="number" min="0" step="1" v-committed-value="track.query.maxLength ?? ''" @change="setFeatureDensityTrackField(track.id, 'maxLength', $event.target.value)" :aria-label="t('Track {id} longest length', { id: track.id })" :placeholder="t('Any')" class="form-input form-input-compact" :disabled="!semanticMutationAvailable"></label>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Style') }}</span>
+                                        <select :value="track.style" @change="setFeatureDensityTrackField(track.id, 'style', $event.target.value)" :aria-label="t('Track {id} style', { id: track.id })" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                            <option v-for="style in featureDensityTrackChoices.styles" :key="style" :value="style">{{ tm(featureDensityChoiceWords[style] ?? style) }}</option>
+                                        </select></label>
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Value') }}</span>
+                                        <select :value="track.metric" @change="setFeatureDensityTrackField(track.id, 'metric', $event.target.value)" :aria-label="t('Track {id} value', { id: track.id })" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                            <option v-for="metric in featureDensityTrackChoices.metrics" :key="metric" :value="metric">{{ tm(featureDensityChoiceWords[metric] ?? metric) }}</option>
+                                        </select></label>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Window (bp)') }}</span>
+                                        <auto-value-field :visible="autoValueVisible(track.window, 'dinucleotideWindow')" :text="autoValueText('dinucleotideWindow')">
+                                            <input type="number" min="1" step="1" v-committed-value="track.window ?? ''" @change="setFeatureDensityTrackField(track.id, 'window', $event.target.value)" :aria-label="t('Track {id} window', { id: track.id })" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        </auto-value-field></label>
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Step (bp)') }}</span>
+                                        <auto-value-field :visible="autoValueVisible(track.step, 'dinucleotideStep')" :text="autoValueText('dinucleotideStep')">
+                                            <input type="number" min="1" step="1" v-committed-value="track.step ?? ''" @change="setFeatureDensityTrackField(track.id, 'step', $event.target.value)" :aria-label="t('Track {id} step', { id: track.id })" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        </auto-value-field></label>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <span class="input-label text-[10px]">{{ t('Color') }}</span>
+                                        <color-value-control :model-value="track.color" @update:model-value="setFeatureDensityTrackField(track.id, 'color', $event)" :fallback="adv.depth_color" :allow-none="false" :aria-label="t('Track {id} color', { id: track.id })"></color-value-control>
+                                    </div>
+                                    <label class="block"><span class="input-label text-[10px]">{{ t('Legend name') }}</span>
+                                        <input v-committed-value="track.caption ?? ''" @change="setFeatureDensityTrackField(track.id, 'caption', $event.target.value)" :aria-label="t('Track {id} Legend name', { id: track.id })" :placeholder="t('Auto')" class="form-input form-input-compact" :disabled="!semanticMutationAvailable"></label>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
                 <div v-if="mode === 'circular'" v-settings-section="'pairwise-comparisons'" data-setting="pairwise-comparisons" class="card">
                     <details>
                         <summary :aria-label="t('Pairwise Comparisons')"><settings-section-title section="pairwise-comparisons"></settings-section-title> <setting-note setting="pairwise-comparisons"></setting-note> <help-tip :text="t('Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison sequence file (FASTA, GenBank, or DDBJ). Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits.')"></help-tip></summary>
@@ -4375,14 +4454,14 @@
                                     </div>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
-                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs flex-auto" :disabled="losatCacheInfo.length === 0" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
+                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs flex-auto" :disabled="losatResultRows.length === 0" :aria-describedby="losatResultRows.length === 0 ? 'circular-losat-cache-reason' : null">
                                         <i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}
                                     </button>
-                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
-                                        <i class="ph ph-trash" aria-hidden="true"></i> {{ losatCacheInfo.length === 0 ? t('Clear LOSAT results') : tn(losatCacheInfo.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}
+                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="!semanticMutationAvailable || (clearableLosatResultCount === 0)" :aria-describedby="clearableLosatResultCount === 0 ? 'circular-losat-cache-reason' : null">
+                                        <i class="ph ph-trash" aria-hidden="true"></i> {{ clearableLosatResultCount === 0 ? t('Clear LOSAT results') : tn(clearableLosatResultCount, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}
                                     </button>
                                 </div>
-                                <p v-if="losatCacheInfo.length === 0" id="circular-losat-cache-reason" class="ui-hint">{{ t('No LOSAT results yet') }}</p>
+                                <p v-if="losatResultRows.length === 0" id="circular-losat-cache-reason" class="ui-hint">{{ clearableLosatResultCount === 0 ? t('No LOSAT results yet') : t('No LOSAT results in this drawing') }}</p>
                             </div>
                             <div v-if="circularConservation.source === 'upload' && circularConservationSeriesRows.length === 0">
                                 <span class="text-[9px] flex items-center">{{ t('Series names') }} <help-tip id="help-circular-comparison-series-names" :text="t('Optional fallback names for rings, one per source. Use new lines or commas.')"></help-tip></span>
@@ -4438,29 +4517,33 @@
                                 </div>
                             </div>
                             <div v-if="circularConservation.source === 'losat' || circularConservationSeriesRows.length > 0" class="space-y-1">
-                                <span v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">{{ t('Comparison sequence files') }} <help-tip :text="t('Add one comparison sequence file (FASTA, GenBank, or DDBJ) per pairwise comparison ring, then set the ring name, color, and default order. Custom Track Slots can override the radial track order.')"></help-tip></span>
+                                <span v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">{{ t('Comparison sequence files') }} <help-tip :text="t('Add a comparison sequence file (FASTA, GenBank, or DDBJ) for each pairwise comparison ring; Add file on a ring adds more files of the same genome. Then set the ring name, color, and default order. Custom Track Slots can override the radial track order.')"></help-tip></span>
                                 <span v-else class="text-[9px] flex items-center">{{ t('Series') }} <help-tip :text="t('Set the ring name, color, and default order for each pairwise comparison source. Custom Track Slots can override the radial track order.')"></help-tip></span>
                                 <div v-for="row in circularConservationSeriesRows" :key="`conservation-series-${row.index}-${row.filename}`" class="grid grid-cols-[1.8rem_minmax(0,1fr)_auto] gap-1.5 items-center">
-                                    <input type="color" v-model="circularConservation.series[row.index].color" @input="refreshCircularConservationSlots()" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="t('Comparison ring color for {file}', { file: row.filename })" :disabled="!semanticMutationAvailable">
+                                    <input type="color" v-model="circularConservation.series[row.index].color" @input="refreshCircularConservationSlots()" class="self-start h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="t('Comparison ring color for {file}', { file: row.filename })" :disabled="!semanticMutationAvailable">
                                     <div class="min-w-0 space-y-0.5">
                                         <input type="text" v-model="circularConservation.series[row.index].label" @input="refreshCircularConservationSlots()" :aria-label="t('Comparison ring label {n}', { n: row.index + 1 })" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
-                                        <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span> - {{ row.filename }}</div>
-                                        <label v-if="circularConservation.source === 'upload'"
-                                               class="flex items-center gap-1 text-[9px] text-slate-500 cursor-pointer">
-                                            <span class="shrink-0">{{ t('Comparison sequence') }}</span>
-                                            <span class="truncate text-slate-600">{{ row.comparisonSequenceFilename || t('Choose file…') }}</span>
-                                            <input type="file"
-                                                   class="hidden"
+                                        <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span><template v-if="circularConservation.source === 'upload'"> - {{ row.filename }}</template></div>
+                                        <!-- The ring's comparison genome: its files in the order added (a LOSAT query, or an uploaded table's optional comparison sequence), each added or removed here. -->
+                                        <div data-ring-row-files class="space-y-0.5">
+                                            <span v-if="circularConservation.source === 'upload'" class="block text-[9px] text-slate-500">{{ t('Comparison sequence') }}</span>
+                                            <div v-for="(name, fileIndex) in row.files" :key="`ring-file-${row.index}-${fileIndex}-${name}`" data-ring-row-file class="flex items-center gap-0.5 text-[9px] text-slate-600">
+                                                <span class="min-w-0 flex-1 truncate" :title="name">{{ name }}</span>
+                                                <button v-if="row.canRemoveFile" type="button" class="btn btn-secondary h-5 w-5 p-0 text-[9px]" @click="removeRingRowFile(row.index, fileIndex)" :disabled="!semanticMutationAvailable || processing" :aria-label="t('Remove {name}', { name })" :title="t('Remove {name}', { name })"><i class="ph ph-x" aria-hidden="true"></i></button>
+                                            </div>
+                                            <input type="file" multiple class="hidden"
                                                    accept=".fa,.fas,.fasta,.fna,.ffn,.gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*,.gz,application/gzip"
-                                                   @change="setCircularConservationCompanionFile(row.sourceIndex, $event)" :disabled="!semanticMutationAvailable">
-                                        </label>
+                                                   :aria-label="t('Add file')"
+                                                   @change="addRingRowFiles(row.index, $event)" :disabled="!semanticMutationAvailable || processing">
+                                            <button type="button" data-history-ignore data-ring-row-file-add class="btn btn-secondary h-5 px-1 text-[9px]" @click="$event.currentTarget.previousElementSibling.click()" :disabled="!semanticMutationAvailable || processing"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add file') }}</button>
+                                        </div>
                                         <div v-if="circularConservation.source === 'losat' && circularConservation.losat_program === 'tblastx'" class="grid grid-cols-[minmax(0,1fr)_4.8rem] gap-1 items-center">
                                             <label class="text-[9px] text-slate-500 truncate">{{ t('Comparison gencode') }}</label>
                                             <input type="number" min="1" step="1" v-model.number="circularConservation.series[row.index].losat_gencode" :aria-label="t('Comparison gencode {n}', { n: row.index + 1 })" placeholder="1" class="form-input px-1 py-0.5 text-[10px] h-6" :disabled="!semanticMutationAvailable">
                                         </div>
                                     </div>
-                                    <!-- While a Generate runs, the controls that rewrite the ring series (these, Add Seq, and the source radios) are disabled: the overlay stops the pointer, not the keyboard (OV-2446). -->
-                                    <div class="flex items-center gap-0.5">
+                                    <!-- While a Generate runs, the controls that rewrite the ring series (these, Add Seq, and the source radios) are disabled: the overlay stops the pointer, not the keyboard (OV-2446). They sit beside the ring's name, apart from its file controls. -->
+                                    <div class="flex items-center gap-0.5 self-start">
                                         <button :aria-label="t('Move series outward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!semanticMutationAvailable || processing || (!canMoveCircularConservationSeries(row.index, -1))" :title="t('Move series outward')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
                                         <button :aria-label="t('Move series inward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, 1)" :disabled="!semanticMutationAvailable || processing || (!canMoveCircularConservationSeries(row.index, 1))" :title="t('Move series inward')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
                                         <button :aria-label="t('Remove series')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeCircularConservationSource(row.index)" :title="t('Remove series')" :disabled="!semanticMutationAvailable || processing"><i class="ph ph-trash" aria-hidden="true"></i></button>
@@ -6677,7 +6760,7 @@
                 :error="errorLog" :recovery="errorDisplay.operation === 'generate' || errorDisplay.operation === 'align' ? generationFailureRecovery : null"
                 class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
                 <div class="mt-2 flex flex-wrap gap-2">
-                    <button v-if="mode === 'linear' && errorDisplay.actions.includes('edit-comparison')" type="button" data-history-ignore @click="showLinearComparisonCause" class="btn btn-secondary btn-sm">{{ t('Show in Comparison') }}</button>
+                    <button v-if="comparisonCauseShown" type="button" data-history-ignore @click="showComparisonCause" class="btn btn-secondary btn-sm">{{ t('Show in Comparison') }}</button>
                     <button v-if="errorDisplay.operation === 'generate' && errorDisplay.actions.includes('retry')" type="button" @click="runAnalysis" :disabled="processing" class="btn btn-secondary btn-sm">{{ t('Retry Generate') }}</button>
                     <button v-if="canRetryAuxiliaryImportFailure" type="button" @click="retryAuxiliaryImportFailure" :disabled="!semanticMutationAvailable" class="btn btn-secondary btn-sm">{{ t('Retry table import') }}</button>
                     <button v-if="canRetryLabelImportFailure" type="button" @click="retryLabelImportFailure" class="btn btn-secondary btn-sm">{{ t('Retry Label TSV import') }}</button>
@@ -6784,8 +6867,14 @@
                 <div v-if="shownInputSummary && shownInputSummary.warnings.length && !shownInputSummaryStale && !processing"
                      role="status" aria-live="polite" aria-atomic="true" data-testid="input-summary-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
-                    <p class="font-semibold">{{ t('Part of the input was not drawn.') }}</p>
-                    <p v-for="(warning, index) in shownInputSummary.warnings" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
+                    <!-- The heading sits over the warnings that leave input out only; a warning of an input drawn in full follows apart. -->
+                    <div v-if="shownInputSummary.leftOutWarnings.length" data-input-warnings="left-out">
+                        <p class="font-semibold">{{ t('Part of the input was not drawn.') }}</p>
+                        <p v-for="(warning, index) in shownInputSummary.leftOutWarnings" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
+                    </div>
+                    <div v-if="shownInputSummary.drawnInWarnings.length" data-input-warnings="drawn-in" :class="{ 'mt-2': shownInputSummary.leftOutWarnings.length }">
+                        <p v-for="(warning, index) in shownInputSummary.drawnInWarnings" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
+                    </div>
                 </div>
                 <!-- A live Feature visibility edit no render drew: the summary's counts are the last render's. -->
                 <div v-if="shownInputSummaryStale && shownInputSummary.warnings.length && !processing"
@@ -9531,7 +9620,7 @@
                         <label class="flex min-w-0 items-start gap-2" :class="row.offered ? 'cursor-pointer' : 'cursor-not-allowed'">
                             <input type="radio" name="label-fit-row" data-history-ignore class="mt-1 shrink-0" :value="row.kind"
                                    :checked="labelFitDialog.selectedKind === row.kind" :disabled="!row.offered"
-                                   @change="labelFitDialog.selectedKind = row.kind">
+                                   @click="chooseLabelFitRow(row.kind)">
                             <span class="min-w-0 flex-1">
                                 <span class="block font-semibold first-letter:uppercase" :class="row.offered ? 'text-slate-800' : ''">{{ tm(row.title) }}</span>
                                 <span v-if="row.offered" class="block text-xs text-slate-600">

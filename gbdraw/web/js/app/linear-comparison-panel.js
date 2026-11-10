@@ -17,8 +17,9 @@ import {
 import { linearRecordPositionTokens } from '../services/linear-record-layout.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { catalogUnitPlaces, isDrawnWindowPairRow, linearWindowPairsByCardEdge } from '../services/linear-units.js';
+import { losatRowsOfDrawing } from '../services/losat-cache.js';
 import { inputSourceFiles } from '../services/input-types.js';
-import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { diagnosticError, losatFailureRepeats, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 import { t } from '../utils/i18n.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
@@ -29,6 +30,7 @@ import { projectLinearComparisonUi } from './comparison-ui.js';
 /** @import { LinearWindowPair } from '../services/linear-units.js' */
 /** @import { LosatCacheInfoEntry } from '../services/config.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
+/** @import { RevealSettingsSection } from './settings-pane.js' */
 
 const { computed, nextTick, watch } = window.Vue;
 
@@ -212,6 +214,7 @@ export const createLinearComparisonTimeline = ({ state, shownLinearSeqs }) => {
  * @property {{ readonly value: { readonly issues: readonly LinearComparisonFocusTarget[] } }} linearComparisonUi
  *   The Comparison card's projection: its issues.
  * @property {RevealSetting} revealSetting The settings pane shows and focuses a control.
+ * @property {RevealSettingsSection} revealSettingsSection The settings pane shows a section and focuses its heading.
  */
 
 /**
@@ -219,7 +222,7 @@ export const createLinearComparisonTimeline = ({ state, shownLinearSeqs }) => {
  * row, an issue's control, a pair's BLAST TSV chooser, and the cause of a Generate error.
  * @param {LinearComparisonFocusPorts} ports
  */
-export const createLinearComparisonFocus = ({ state, mode, errorLog, linearComparisonUi, revealSetting }) => {
+export const createLinearComparisonFocus = ({ state, mode, errorLog, linearComparisonUi, revealSetting, revealSettingsSection }) => {
   /** @param {string} disclosureKey */
   const openLinearComparisonDisclosure = async (disclosureKey) => {
     if (!disclosureKey) return null;
@@ -282,13 +285,29 @@ export const createLinearComparisonFocus = ({ state, mode, errorLog, linearCompa
     return Boolean(uploader);
   };
 
-  // The Generate error's "Show in Comparison": the first issue's
-  // control, the Execution setting for a LOSAT runtime failure, or the
-  // Comparison card when the cause has no control.
-  const showLinearComparisonCause = async () => {
-    const code = normalizeUserFacingError(errorLog.value)?.code;
-    const runtimeCause = code === 'LOSAT_THREADING_UNAVAILABLE' || code === 'LOSAT_RUNTIME'
-      ? { disclosureKey: 'settings', focusTargetKey: 'losat-execution' } : null;
+  // Whether the Generate error offers "Show in Comparison": in Linear for
+  // every error that leads to the comparison settings; in Circular, whose
+  // comparison rings have no issue list, for a LOSAT failure that repeats
+  // (OV-3317, OV-3327), whose options and inputs are in Pairwise Comparisons.
+  const comparisonCauseShown = computed(() => {
+    const error = normalizeUserFacingError(errorLog.value);
+    return Boolean(error?.actions.includes('edit-comparison')) && (mode.value === 'linear' || (error !== null && losatFailureRepeats(error)));
+  });
+  // The Generate error's "Show in Comparison": in Circular, the Pairwise
+  // Comparisons section; in Linear, the first issue's control, the LOSAT mode
+  // when the same search would stop the same way, the Execution setting for
+  // another LOSAT runtime failure, or the Comparison card when the cause has
+  // no control.
+  const showComparisonCause = async () => {
+    if (mode.value !== 'linear') {
+      await revealSettingsSection('pairwise-comparisons');
+      return;
+    }
+    const error = normalizeUserFacingError(errorLog.value);
+    const code = error?.code;
+    const runtimeCause = error && losatFailureRepeats(error) ? { disclosureKey: 'settings', focusTargetKey: 'losat-options' }
+      : code === 'LOSAT_THREADING_UNAVAILABLE' || code === 'LOSAT_RUNTIME'
+        ? { disclosureKey: 'settings', focusTargetKey: 'losat-execution' } : null;
     if (await focusLinearComparisonIssue(linearComparisonUi.value.issues[0] || runtimeCause)) return;
     const card = /** @type {HTMLElement | null} */ (document.querySelector('[data-linear-comparison-card]'));
     if (!card) return;
@@ -298,7 +317,7 @@ export const createLinearComparisonFocus = ({ state, mode, errorLog, linearCompa
   };
   return {
     openLinearComparisonDisclosure, focusLinearComparisonPair, focusLinearComparisonIssue, chooseLinearComparisonPairFile,
-    showLinearComparisonCause
+    comparisonCauseShown, showComparisonCause
   };
 };
 
@@ -332,8 +351,12 @@ export const createLinearLayoutReaders = ({ state, shownDrawingOfMode, losatCach
         : []
     );
   });
+  // The shown Linear drawing's rows, never another drawing's that holds the same pair (OV-3210).
   /** @returns {LosatCacheInfoEntry[]} */
-  const cacheInfoRows = () => (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : []);
+  const cacheInfoRows = () => {
+    const drawing = shownDrawingOfMode('linear');
+    return drawing === null || !Array.isArray(losatCacheInfo.value) ? [] : losatRowsOfDrawing(losatCacheInfo.value, drawing.id);
+  };
   const linearLosatCacheInfoByEdgeKey = computed(() => Object.fromEntries(
     cacheInfoRows()
       .filter((entry) => String(entry?.edgeKey || ''))

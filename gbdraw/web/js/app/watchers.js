@@ -2,6 +2,7 @@
 /** @import { DrawingState } from '../state.js' */
 /** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   importPriorityRows,
@@ -76,7 +77,10 @@ export const createAuxiliaryFileImports = (reactive, store) => {
 /**
  * @typedef {object} WatchersOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {RulePreparation} rulePreparation
+ * @property {RulePreparation['isCurrent']} isRuleInputCurrent
+ *   Whether a snapshot of the rule inputs is still the current inputs (the rule preparation's reader).
+ * @property {RulePreparation['snapshot']} snapshotRuleInputs
+ *   The rule inputs now (the rule preparation's reader).
  * @property {AuxiliaryFileImports['track']} trackAuxiliaryFileImport Holds an import until it settles (`createAuxiliaryFileImports`).
  * @property {(value?: any) => { value: any }} ref Vue `ref`.
  * @property {(getter: () => any) => { readonly value: any }} computed Vue `computed`.
@@ -108,7 +112,7 @@ export const createAuxiliaryFileImports = (reactive, store) => {
 
 /**
  * @typedef {object} AuxiliaryImportFailure
- * @property {unknown} error the error the failure showed
+ * @property {UserFacingError | null} error the error the failure showed
  * @property {FileImportCard} key
  * @property {DrawingState} drawing the drawing whose card failed
  * @property {InputFileRef | null} selection the card's file when it failed
@@ -135,7 +139,7 @@ const withImportFailure = (failures, drawing, failure, drawings) => {
 /** @param {WatchersOptions} options */
 export const setupWatchers = ({
   state,
-  rulePreparation,
+  isRuleInputCurrent, snapshotRuleInputs,
   trackAuxiliaryFileImport,
   ref, computed, watch,
   nextTick,
@@ -309,7 +313,7 @@ export const setupWatchers = ({
     return failure
       && errorLog.value === failure.error
       && drawing.files[failure.key] === failure.selection
-      && (!failure.snapshot || rulePreparation.isCurrent(failure.snapshot))
+      && (!failure.snapshot || isRuleInputCurrent(failure.snapshot))
       ? failure : null;
   };
   const canRetryAuxiliaryImportFailure = computed(() => {
@@ -330,7 +334,7 @@ export const setupWatchers = ({
    * selection, is the message the switch shows again.
    * @param {DrawingState} departing
    * @param {DrawingState} arriving
-   * @returns {unknown} the arriving drawing's card failure error, or null
+   * @returns {UserFacingError | null} the arriving drawing's card failure error, or null
    */
   const auxiliaryImportFailureOnArrival = (departing, arriving) => {
     const left = auxiliaryImportFailureOf(departing);
@@ -494,7 +498,7 @@ export const setupWatchers = ({
     const retainFailure = (inputsBound = key === 't_color') => {
       setAuxiliaryImportFailure(drawing, {
         error: errorLog.value, key, drawing, selection: drawing.files[key], releaseCopy: holdFileCopy(source),
-        snapshot: inputsBound ? rulePreparation.snapshot() : null,
+        snapshot: inputsBound ? snapshotRuleInputs() : null,
         retry: () => {
           const retried = bindCard(drawing, key, source);
           if (!retried) return false;

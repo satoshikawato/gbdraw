@@ -669,6 +669,16 @@ export const sessionResourceSource = (file) => {
 };
 
 /**
+ * What a read of `file` is kept under (`readOncePerFile`): a Session resource view by its resource, so every view of
+ * one resource shares one read of it; any other file by itself. A resource's bytes never change once its table is
+ * adopted (its descriptor is fixed then), so a read of one view is a read of every view; a new Load adopts a new
+ * table, and a replaced file is a new File.
+ * @param {FileLike} file
+ * @returns {object}
+ */
+export const sessionResourceReadOwner = (file) => fileViewBackings.get(file) ?? file;
+
+/**
  * @param {FileLike | null | undefined} file
  * @returns {Promise<Uint8Array> | null}
  */

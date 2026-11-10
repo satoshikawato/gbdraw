@@ -50,6 +50,7 @@ import {
 /** @import { KeptLegendRow, LegendRow } from '../../services/drawing/paint.js' */
 import { diffLegendIntents, legendColorCopies, legendRowRules } from '../../services/specific-color-rules.js';
 import { rekeyLegendRowIds } from '../../services/legend-draft-rows.js';
+import { writeShownSetInventory } from '../../services/artifact-slot.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
 
 /** @param {unknown} value */
@@ -170,6 +171,11 @@ const inAnsweredLegendOrder = (items, added, legendOrder, keyOf, reorder) => {
   slots.forEach((slot, index) => { rows[slot] = ordered[index]; });
   return { items: rows, placed };
 };
+
+// After an artifact install (a switch, a Load): a drawing showing no Result
+// has no inventory (OV-3282). The owner's `adoptShownSetInventory` runs it.
+/** @param {Pick<LegendEntryActionsOptions['state'], 'results' | 'originalLegendOrder'>} state */
+const adoptShownSetInventoryOf = (state) => writeShownSetInventory(state, state.originalLegendOrder.value);
 
 // The Legend entry owner (U3a, R1): its writers edit the drawing's Legend
 // intent (`legendEntries`, `deletedLegendEntries`, the override stores) and
@@ -831,13 +837,10 @@ export const createLegendEntryActions = ({
     return inventory;
   };
 
-  // E1: a Result of the other diagram mode keeps the inventory it was drawn
-  // with while that mode is not shown; a Result loaded from a Session's
-  // `otherModeResult` arrives with its saved one. The inventory a Result
-  // arrives with is the one it left with, which followed every live edit made
-  // while it was shown (a Legend rename takes the row's place in it, OV-348),
-  // so it replaces a stored copy; `adoptResultInventory` adopts it when the
-  // Result is displayed.
+  // E1: a Result of another drawing keeps the inventory it was drawn with; a
+  // loaded one arrives with its saved one. It arrives with the one it left
+  // with, which followed its live edits (OV-348), so it replaces the stored
+  // copy; `adoptResultInventory` adopts it when the Result is displayed.
   /** @param {string | undefined} identity @param {readonly PythonLegendKey[]} inventory */
   const rememberResultInventory = (identity, inventory) => {
     if (!identity || !Array.isArray(inventory)) return;
@@ -1042,6 +1045,7 @@ export const createLegendEntryActions = ({
   return {
     adoptRestoredLegend,
     adoptResultInventory,
+    adoptShownSetInventory: adoptShownSetInventoryOf.bind(null, { results, originalLegendOrder }),
     captureResultInventory,
     deleteLegendEntry,
     extractLegendEntries,

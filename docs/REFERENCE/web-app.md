@@ -50,7 +50,9 @@ gbdraw is installed. Browser security policy still applies. Threaded LOSAT
 also requires a cross-origin-isolated page. Select **Serial** under
 **Execution** when that capability is unavailable; the **Threaded** choice then
 reads **Threaded (unavailable here)**, and Generate with uncached LOSAT jobs
-reports `LOSAT_THREADING_UNAVAILABLE` at the `losat` stage. **Auto** runs threaded
+reports `LOSAT_THREADING_UNAVAILABLE` at the `losat` stage. **Threaded** reports the
+same code when its threads cannot start or keep running in the browser, for example
+when a thread does not start in time. **Auto** runs threaded
 LOSAT wherever the page allows it, for every LOSAT program, and serial LOSAT on a page
 without it or after a threaded job keeps failing. LOSATN task `dc-megablast` runs only
 threaded: with **Serial**, or wherever **Auto** runs serial LOSAT, Generate stops before
@@ -452,7 +454,13 @@ correction, and no **Save Session** when Save itself failed. For an unknown fail
 happened, and it does not guess a cause. A failure in the diagram engine's drawing stage
 that no validation classifies names the Python exception class (for example
 `ValueError`) and offers **Save Session** instead of **Retry Generate**, because
-the same inputs fail the same way. A diagram that was drawn but is too large for
+the same inputs fail the same way. A comparison search that LOSAT stops with its
+own message, shown after **LOSAT reported:**, or that serial LOSAT stops
+unexpectedly, offers no **Retry Generate** either: **Show in Comparison** opens the
+LOSAT mode in the Comparison settings of a Linear diagram, and **Pairwise
+Comparisons** in a Circular diagram. When threaded LOSAT stops unexpectedly even
+after running the search again, the panel names **Serial** and **Auto** and keeps
+**Retry Generate**. A diagram that was drawn but is too large for
 the browser page to receive also offers **Save Session** and no **Retry
 Generate**: draw a smaller region, turn off tracks or labels you do not need, or
 draw it from the saved Session with `gbdraw circular --session` or
@@ -466,7 +474,9 @@ draw, a comparison table whose rows the thresholds all leave out, or a Region
 Annotation set that the custom stack (**Use custom stack**) has no Annotations
 row for shows **Part of the input was not drawn.** under the status line, with the same
 warning the command line prints (see [Input
-summary](command-line.md#input-summary)). **Run Info** lists the shown Result's
+summary](command-line.md#input-summary)). A similarity ring's comparison file
+whose record IDs repeat shows its warning there too, without that heading: the
+ring draws every record. **Run Info** lists the shown Result's
 **Input summary**: what it read and drew, per record and per comparison table.
 Neither is saved in a Session; the next Generate recomputes them.
 
@@ -1094,10 +1104,18 @@ Circular **Pairwise Comparisons** selects **Run LOSAT** or **Upload BLAST TSV**.
 Uploaded comparison tables use **BLAST outfmt 6/7 files** and **Reference side**
 (**Auto (...)**, **Query**, or **Subject**). A browser-generated Circular
 comparison uses the displayed Circular record as the search subject and each
-file under **Comparison sequence files** as a query. A comparison file is FASTA,
-GenBank, or DDBJ, and all records of one file are one genome. The diagram worker
-reads it with the reader of `--conservation_sequence`, so a ring has the CLI raw
-cache key for every format and FASTA layout. A row added from a GenBank or DDBJ
+ring's genome under **Comparison sequence files** as a query. **Add comparison
+sequence** adds a ring for the chosen file. A genome split over several files
+(a chromosome and its plasmids, for example) is one ring: **Add file** on the
+ring row adds files to that ring's genome, and the remove button beside each
+file removes it; the ring keeps its name and color. The files are read in the
+order they were added as one genome, as `--conservation_genome a b` reads them, and two files of one genome that share a record ID are refused. A
+LOSAT ring keeps at least one file; **Remove series** removes the ring. A
+comparison file is FASTA, GenBank, or DDBJ. The diagram worker reads a ring's
+files with the reader of `--conservation_genome`, so a ring has the CLI raw
+cache key for every format and FASTA layout. An uploaded BLAST table's ring
+takes its optional comparison sequence files the same way, under
+**Comparison sequence**. A row added from a GenBank or DDBJ
 file is labelled like the CLI ring without `--conservation_labels`: the first
 record's DEFINITION, or its organism when the DEFINITION is empty. The worker
 reads the label after the row appears, and a typed label is kept. The **Add
@@ -1839,8 +1857,7 @@ the renderer's text measurements; Generate applies it. **Undo** and **Redo** tra
 editor changes. Each change of a checkbox, radio button, select, or button is one step. This
 holds whether you use the pointer, click its label text, or use the keyboard,
 and also when a text field had focus. A text field's edit is its own step. A file chosen for an input is one step, also when a button or label
-opens the picker, such as **Add comparison sequence** or an uploaded BLAST row's **Comparison
-sequence**. In a Session whose Circular rings replay saved LOSAT
+opens the picker, such as **Add comparison sequence** or a ring row's **Add file**. In a Session whose Circular rings replay saved LOSAT
 rows, Undo and Redo of a ring change, such as **Remove series** or **Add comparison sequence**,
 also restore those rows, so a custom stack keeps its ring rows and the next
 Generate gives the loaded diagram. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes (Cmd on macOS), also while a

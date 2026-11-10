@@ -88,8 +88,17 @@ LOSAT_OPTION_FLAGS: Mapping[str, LosatOptionFlags] = MappingProxyType(
         "db_gencode": LosatOptionFlags("-db_gencode", "--db-gencode"),
         "max_hsps": LosatOptionFlags("-max_hsps", "--max-hsps-per-subject"),
         "max_target_seqs": LosatOptionFlags("-max_target_seqs", "--max-target-seqs"),
+        # The effective search space: the genome pair's, so every view of two genomes has one E-value scale
+        # (``gbdraw.comparisons.losat_jobs.genome_search_spaces``).
+        "searchsp": LosatOptionFlags("-searchsp", "--searchsp"),
+        # The database size: the subject genome's protein letters, LOSATP's one E-value scale per subject genome
+        # (``gbdraw.comparisons.losat_jobs.genome_database_sizes``).
+        "dbsize": LosatOptionFlags("-dbsize", "--dbsize"),
     }
 )
+# The option that scales a comparison program's E-values by its genomes, not by the sequences a search reads
+# (OV-3143): the first of these a program takes.
+GENOME_SCALE_OPTIONS: tuple[str, ...] = ("searchsp", "dbsize")
 
 
 def losat_search_flags() -> dict[str, str]:
@@ -115,6 +124,9 @@ class LosatProgram:
     required_options: frozenset[str]
     # The query and subject molecules, in that order.
     molecules: tuple[LosatMolecule, LosatMolecule]
+    # Bases per letter of the search space on the query and subject sides: 3 on a side the program translates
+    # (NCBI counts a translated side in codons), else 1.
+    space_letters: tuple[int, int] = (1, 1)
 
     @property
     def fasta_suffixes(self) -> tuple[str, str]:
@@ -134,7 +146,7 @@ LOSAT_PROGRAMS: Mapping[str, LosatProgram] = MappingProxyType(
             "blastn",
             "nucleotide BLASTN",
             "nucleotide comparison",
-            ("task",),
+            ("task", "searchsp"),
             frozenset({"task"}),
             ("nucleotide", "nucleotide"),
         ),
@@ -143,10 +155,11 @@ LOSAT_PROGRAMS: Mapping[str, LosatProgram] = MappingProxyType(
             "tblastx",
             "translated TBLASTX",
             "translated nucleotide comparison",
-            ("query_gencode", "db_gencode"),
+            ("query_gencode", "db_gencode", "searchsp"),
             # An unset table is the runtime default (1), as in the Web (D17).
             frozenset(),
             ("nucleotide", "nucleotide"),
+            (3, 3),
         ),
         # Protein queries against nucleotide subjects: the locate search
         # (gbdraw.comparisons.locate) and the Web's Sequence search.
@@ -158,13 +171,14 @@ LOSAT_PROGRAMS: Mapping[str, LosatProgram] = MappingProxyType(
             ("db_gencode",),
             frozenset(),
             ("protein", "nucleotide"),
+            (1, 3),
         ),
         "losatp": LosatProgram(
             "losatp",
             "blastp",
             "protein BLASTP",
             "protein colinearity",
-            ("max_hsps", "max_target_seqs"),
+            ("max_hsps", "max_target_seqs", "dbsize"),
             frozenset(),
             ("protein", "protein"),
         ),
@@ -194,6 +208,8 @@ class LosatSearchArgs:
     db_gencode: int | None = None
     max_hsps: int | None = None
     max_target_seqs: int | None = None
+    searchsp: int | None = None
+    dbsize: int | None = None
 
 
 @dataclass(frozen=True)
@@ -447,22 +463,62 @@ def require_losat_task_support(
     )
 
 
-_PROGRAM_SUPPORT: dict[tuple[str, str], bool] = {}
+_HELP_TEXTS: dict[tuple[str, str], str | None] = {}
+
+
+def _subcommand_help(executable: str, search: str) -> str | None:
+    """The ``--help`` text of a LOSAT subcommand, or ``None`` when it fails. Probed once per executable and subcommand."""
+
+    key = (str(executable), str(search))
+    if key not in _HELP_TEXTS:
+        completed = _probe([key[0], key[1], "--help"])
+        _HELP_TEXTS[key] = (
+            f"{completed.stdout}\n{completed.stderr}" if completed is not None and completed.returncode == 0 else None
+        )
+    return _HELP_TEXTS[key]
 
 
 def losat_supports_program(executable: str, search: str) -> bool:
     """Whether a LOSAT runtime has the subcommand ``search``.
 
     Released LOSAT v0.1.0 has ``blastn``, ``tblastx`` and ``blastp`` and
-    answers ``losat tblastn --help`` with an error. Probed once per executable
-    and subcommand.
+    answers ``losat tblastn --help`` with an error.
     """
 
-    key = (str(executable), str(search))
-    if key not in _PROGRAM_SUPPORT:
-        completed = _probe([key[0], key[1], "--help"])
-        _PROGRAM_SUPPORT[key] = completed is not None and completed.returncode == 0
-    return _PROGRAM_SUPPORT[key]
+    return _subcommand_help(executable, search) is not None
+
+
+def losat_takes_genome_scale(
+    program: str | LosatProgram,
+    *,
+    losat_bin: str | None = None,
+    ncbi_blast_bin: str | None = None,
+) -> bool:
+    """Whether the runtime of ``program`` takes its genome-scale option (``-searchsp`` or ``-dbsize``,
+    :data:`GENOME_SCALE_OPTIONS`).
+
+    NCBI BLAST+ does; a LOSAT runtime does when its subcommand help lists it.
+    When it does not (released LOSAT v0.1.0), the search keeps the scale of the
+    sequences it reads, and this logs so once per call.
+    """
+
+    spec = losat_program(program)
+    name = next(option for option in GENOME_SCALE_OPTIONS if option in spec.options)
+    runtime = resolve_losat_runtime(spec, losat_bin=losat_bin, ncbi_blast_bin=ncbi_blast_bin)
+    if runtime.kind != "losat":
+        return True
+    help_text = _subcommand_help(runtime.executable, spec.search)
+    flag = re.escape(LOSAT_OPTION_FLAGS[name].search)
+    if help_text is not None and re.search(rf"(?m)^\s*{flag}\b", help_text) is not None:
+        return True
+    logger.warning(
+        "The LOSAT runtime has no -searchsp or -dbsize (LOSAT v0.1.0, which gbdraw setup-losat installs), so these "
+        "%s searches used the scale of the sequences they searched, not one scale per genome: E-values of cropped, "
+        "windowed, multi-record or multi-file genomes differ from the web app's. One scale per genome needs a newer "
+        "LOSAT than v0.1.0, or NCBI BLAST+ given with --ncbi_blast_bin.",
+        spec.name.upper(),
+    )
+    return False
 
 
 def require_losat_program(

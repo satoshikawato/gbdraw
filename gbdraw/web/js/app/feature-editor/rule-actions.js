@@ -103,7 +103,16 @@ import {
  *   The Legend owner's move of a drawing's Legend records; this owner calls it only for Delete settings' take-back.
  * @property {import('../candidate-render.js').ReadLegendRowColorsPort} readLegendRowColors
  *   The root's colors of a drawing's Legend rows as they show (OV-282): a commit owns a listed row in that color.
- * @property {import('../rule-matching.js').RulePreparation} rulePreparation
+ * @property {import('../rule-matching.js').RulePreparation['isCurrent']} isRuleInputCurrent
+ *   Whether a snapshot of the rule inputs is still the current inputs.
+ * @property {import('../rule-matching.js').RulePreparation['snapshot']} snapshotRuleInputs
+ *   The inputs the rule matches depend on.
+ * @property {import('../rule-matching.js').RulePreparation['isPrepared']} isRulePrepared
+ *   Whether the matches of the rules are prepared.
+ * @property {import('../rule-matching.js').RulePreparation['prepareCandidate']} prepareRuleCandidate
+ *   The rule preparation's preparation of the candidate rules a commit admits.
+ * @property {import('../rule-matching.js').RulePreparation['synthesizeGroup']} synthesizeGroupRules
+ *   Python's rules for coloring a group edit's features as one group.
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoableCheckpoint
  *   History's undoable step that stores a checkpoint of the Result.
@@ -124,7 +133,7 @@ import {
  */
 
 /** @param {FeatureRuleActionsOptions} options */
-export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
+export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, isRuleInputCurrent, snapshotRuleInputs, isRulePrepared, prepareRuleCandidate, synthesizeGroupRules, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
   const {
     newColorFeat,
     newColorVal,
@@ -154,7 +163,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const ruleFailure = ref(null);
   const canRetrySpecificRuleFailure = computed(() => Boolean(ruleFailure.value
     && state.errorLog?.value === ruleFailure.value.error
-    && rulePreparation.isCurrent(ruleFailure.value.snapshot)
+    && isRuleInputCurrent(ruleFailure.value.snapshot)
     && (!ruleFailure.value.presetId || selectedSpecificPreset.value === ruleFailure.value.presetId)));
   const canEditSpecificRuleFailure = computed(() => canRetrySpecificRuleFailure.value
     && Boolean(ruleFailure.value.input?.isConnected));
@@ -301,7 +310,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // when the restored Legend lacks the type's default row (OV-169): Undo of
   // an Apply to all returns the row it recolored, so it needs no Python run.
   // The composition root does not call this for a figure History recorded as
-  // drawn (D-24 (OV-731)).
+  // drawn (D-24 (OV-731)), nor for one recorded as not drawn: History asks for
+  // that one redraw itself (D-174).
   /** @param {Partial<SpecificColorRule>[]} previousRules */
   const followRestoredRules = (previousRules) => {
     const drawing = state.activeDrawing();
@@ -435,7 +445,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       const sameRows = () => drawing.manualSpecificRules.length === current.length
         && current.every((row, index) => drawing.manualSpecificRules[index] === row);
       const results = state.results.value;
-      const inputs = rulePreparation.snapshot();
+      const inputs = snapshotRuleInputs();
       /** @type {Map<Partial<SpecificColorRule>, SpecificColorRule>} */
       const revised = new Map();
       const built = await build(current, (row, patch) => {
@@ -449,9 +459,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       // The row each rule is written into, so a kept or revised row keeps its identity.
       const sourceRows = rules.map(rule => revised.get(rule) || (current.find(row => row === rule) ?? null));
       const reinstalled = !sameRows();
-      const outcome = !reinstalled && rulePreparation.isCurrent(inputs)
+      const outcome = !reinstalled && isRuleInputCurrent(inputs)
         && await commitOnce(drawing, rules, sourceRows, label, commitOptions, answered ? answered.legend : null);
-      const stale = reinstalled || state.results.value !== results || !rulePreparation.isCurrent(inputs);
+      const stale = reinstalled || state.results.value !== results || !isRuleInputCurrent(inputs);
       if (outcome || attempt === 2 || !stale || contentChanged()
         || commitOptions.isCurrent?.() === false
         || state.sessionOperationAvailability?.()) return outcome;
@@ -465,7 +475,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    * @param {Partial<SpecificColorRule>[]} rules
    * @param {Parameters<import('../rule-matching.js').RulePreparation['prepareCandidate']>[1]} [options]
    */
-  const prepareRules = (rules, options) => rulePreparation.prepareCandidate(rules, options);
+  const prepareRules = (rules, options) => prepareRuleCandidate(rules, options);
   // Runs `commit` once the color rule matches of `rules` are prepared; a
   // prepared table answers at once, so the commit runs in the caller's tick.
   // Rules Python must still match wait for the automatic rerender in flight:
@@ -482,7 +492,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const writes = appliedWrites;
     return runWhenPrepared(state, () => {
       const prepare = () => prepareRules(rules, { asGiven: true });
-      return [rulePreparation.isPrepared(rules)
+      return [isRulePrepared(rules)
         || (state.labelReflowProcessing?.value ? rerenderIdle().then(prepare) : prepare())];
     }, commit, () => (appliedWrites !== writes ? runWithRuleMatches(rules, commit) : undefined));
   };
@@ -499,7 +509,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const candidate = await prepareRules(rules);
     if (!candidate) return false;
     const current = () => !state.sessionOperationAvailability?.() && isCurrent()
-      && rulePreparation.isCurrent(candidate.snapshot);
+      && isRuleInputCurrent(candidate.snapshot);
     if (!current()) return false;
     const { intents, previousIntents, ownedCaptions, removedRuleRows, rekeyed, rendererRows } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
     // The placed row is the intent of its name and color, by the key the
@@ -581,7 +591,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    * @param {Element | null} [input] The input a failed commit offers for editing.
    */
   const commitPrepared = (drawing, build, label, afterCommit = () => {}, input = null) => queueRuleWrite(async () => {
-    const snapshot = rulePreparation.snapshot();
+    const snapshot = snapshotRuleInputs();
     const previousError = state.errorLog?.value;
     try {
       const applied = await runSpecificRuleWrite(drawing, build, label, { afterCommit });
@@ -589,7 +599,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       if (applied) ruleFailure.value = null;
       return applied;
     } catch (cause) {
-      if (!rulePreparation.isCurrent(snapshot) || state.errorLog?.value !== previousError) return false;
+      if (!isRuleInputCurrent(snapshot) || state.errorLog?.value !== previousError) return false;
       const error = normalizeUserFacingError(cause, { operation: 'evaluateRules', stage: 'resource-staging' });
       if (state.errorLog) state.errorLog.value = error;
       ruleFailure.value = { error, snapshot, input, retry: () => commitPrepared(drawing, build, label, afterCommit, input) };
@@ -933,7 +943,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     specificRulePresetLoading.value = true;
     // The preset takes its place in the write line when it is chosen.
     return queueRuleWrite(async () => {
-      const presetContext = rulePreparation.snapshot();
+      const presetContext = snapshotRuleInputs();
       const previousError = state.errorLog?.value;
       try {
         const rules = preset.rules.map((/** @type {SpecificRulePreset['rules'][number]} */ rule) => ({ ...rule }));
@@ -948,7 +958,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
           }
         });
       } catch (e) {
-        if (selectedSpecificPreset.value !== presetId || !rulePreparation.isCurrent(presetContext)
+        if (selectedSpecificPreset.value !== presetId || !isRuleInputCurrent(presetContext)
           || state.errorLog?.value !== previousError) return;
         const error = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'resource-staging' });
         if (state.errorLog) state.errorLog.value = error;
@@ -1057,7 +1067,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const groupColorRules = (features, color, caption, scope, joins = null) => async (current, _revise, drawnFeatures) => {
     const labels = features.map((feature) => [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]);
     const joined = joins === null ? null : joinedLegendRow(getLegendRowRules(joins), current, []);
-    const { table, legend } = await rulePreparation.synthesizeGroup({
+    const { table, legend } = await synthesizeGroupRules({
       scope, features, labels, color, caption, joins: joined, drawn: drawnFeatures()
     }, current);
     return { rules: synthesizedRuleTable(table, current), legend };
@@ -1101,7 +1111,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const next = current.map((rule) => (rows.includes(rule) ? revise(rule, patch) : rule));
     const joined = joins === null ? null : joinedLegendRow(getLegendRowRules(joins), current, rows);
     if (!joined && revisesWholeRows(current, next, rows)) return next;
-    const { table, legend } = await rulePreparation.synthesizeGroup({
+    const { table, legend } = await synthesizeGroupRules({
       scope: 'group', features: [], labels: [], color: patch.color, caption: patch.cap, joins: joined, drawn: drawnFeatures()
     }, next);
     return { rules: synthesizedRuleTable(table, next), legend };

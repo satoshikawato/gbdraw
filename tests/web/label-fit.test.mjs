@@ -457,6 +457,91 @@ test('rows Generate did not search are computed one after another when the dialo
   assert.equal(dialog.labelFitDialog.selectedKind, 'outward_vertical');
 });
 
+// OV-3105 (D-108): the dialog computes rows in the report's order, so a row that fits may arrive after a row that
+// draws with the notice. The first row that fits is selected until the user chooses a row; a choice stays for
+// that opening of the dialog.
+test('a row that fits is selected over a row with the notice, until the user chooses a row', async () => {
+  const regionNote = 'the figure is drawn with 1 region label overlap';
+  const notice = (kind) => row(kind, 'found_with_notice', { values: { [Y_OFFSET]: 1.025 }, note: regionNote,
+    canvasSize: { width: 1693, height: 939 } });
+  const arrived = { outward_both: notice('outward_both'), outward_vertical: notice('outward_vertical'),
+    smaller_font: foundRow('smaller_font', 14) };
+  /** @type {Map<string, () => void>} */
+  const releases = new Map();
+  const computeRow = (token, kind) => new Promise((resolve) => {
+    releases.set(kind, () => resolve({ row: arrived[kind] }));
+  });
+  const pending = () => [row('outward_both', 'not_computed'), row('outward_vertical', 'not_computed'),
+    row('smaller_font', 'not_computed')];
+  const settle = async () => { for (let turn = 0; turn < 5; turn += 1) await Promise.resolve(); };
+
+  // Rows arrive in the report's order: the notice row is selected first, then the row that fits replaces it.
+  const auto = dialogHarness({ computeRow });
+  const opened = auto.dialog.openLabelFitDialog(normalizeReport(report(pending(), { drawn: true })),
+    { rowToken: 'circular:1:0', drawing });
+  releases.get('outward_both')();
+  await settle();
+  assert.equal(auto.dialog.labelFitDialog.selectedKind, 'outward_both');
+  releases.get('outward_vertical')();
+  await settle();
+  assert.equal(auto.dialog.labelFitDialog.selectedKind, 'outward_both');
+  releases.get('smaller_font')();
+  await opened;
+  assert.equal(auto.dialog.labelFitDialog.selectedKind, 'smaller_font');
+  assert.equal(auto.dialog.labelFitDialog.rows[0].note, regionNote);
+
+  // A row the user chose stays chosen when a row that fits arrives.
+  releases.clear();
+  const chosen = dialogHarness({ computeRow });
+  const reopened = chosen.dialog.openLabelFitDialog(normalizeReport(report(pending(), { drawn: true })),
+    { rowToken: 'circular:1:0', drawing });
+  releases.get('outward_both')();
+  await settle();
+  releases.get('outward_vertical')();
+  await settle();
+  chosen.dialog.chooseLabelFitRow('outward_vertical');
+  releases.get('smaller_font')();
+  await reopened;
+  assert.equal(chosen.dialog.labelFitDialog.selectedKind, 'outward_vertical');
+  await chosen.dialog.resolveLabelFitChoice('apply');
+  assert.deepEqual(chosen.writes.map(({ values }) => values), [{ [Y_OFFSET]: 1.025 }]);
+
+  // The choice holds for that opening only: opened again, the row that fits takes the selection when it arrives.
+  releases.clear();
+  const again = chosen.dialog.openLabelFitDialog(normalizeReport(report(pending(), { drawn: true })),
+    { rowToken: 'circular:1:0', drawing });
+  releases.get('outward_both')();
+  await settle();
+  releases.get('outward_vertical')();
+  await settle();
+  releases.get('smaller_font')();
+  await again;
+  assert.equal(chosen.dialog.labelFitDialog.selectedKind, 'smaller_font');
+
+  // Apply while the row that fits is computed applies the row shown selected when Apply was pressed.
+  releases.clear();
+  const applied = dialogHarness({ computeRow });
+  void applied.dialog.openLabelFitDialog(normalizeReport(report(pending(), { drawn: true })),
+    { rowToken: 'circular:1:0', drawing });
+  releases.get('outward_both')();
+  await settle();
+  releases.get('outward_vertical')();
+  await settle();
+  const applying = applied.dialog.resolveLabelFitChoice('apply');
+  releases.get('smaller_font')();
+  await applying;
+  assert.deepEqual(applied.writes.map(({ values }) => values), [{ [Y_OFFSET]: 1.025 }]);
+  assert.equal(applied.generates.length, 1);
+
+  // The radio buttons choose through the dialog, so it knows the user's choice: on a click, which a radio already
+  // selected also fires (it fires no change event; the Playwright crossing-leaders case clicks it).
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  assert.match(html, /@click="chooseLabelFitRow\(row\.kind\)"/);
+  assert.doesNotMatch(html, /@change="chooseLabelFitRow/);
+  assert.doesNotMatch(html, /labelFitDialog\.selectedKind = /);
+});
+
 // CAPACITY-STOP (PD-OI-097): labels that need much more room than the map has
 // were not placed, so there are no rows. Python names the ways to make room; the
 // Web words each with its own controls, and the dialog offers only Close.

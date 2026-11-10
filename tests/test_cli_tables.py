@@ -88,7 +88,7 @@ def test_conservation_table_resolves_relative_paths(tmp_path: Path) -> None:
     assert parsed.conservation_blast_files == [str(blast.resolve())]
     assert parsed.labels == ["Reference A"]
     assert parsed.colors == ["#E15759"]
-    assert parsed.comparison_sequence_files == [str(comparison_fasta.resolve())]
+    assert parsed.comparison_sequence_files == [(str(comparison_fasta.resolve()),)]
     assert parsed.path_dependencies[0].column == "blast"
     assert parsed.path_dependencies[0].row_index == 0
     assert parsed.path_dependencies[1].column == "comparison_sequence"

@@ -311,9 +311,9 @@ const publishedSession = async (session, config, layout, projection, features, s
     linearSeqs: projection.files.linearSeqs.map(({ depth }) => ({ depth: depth ?? null })) } };
   const draft = flat ? { ...session, features, config: scoped, ui: { ...(isObject(session.ui) ? session.ui : {}), mode }, webFiles }
     : { config: scoped, ui: { mode }, webFiles };
-  // Override colors merge into the committed request's colors.
+  // Override colors merge into the draft palette's colors, which the split reads from the draft (OV-3257).
   // Only the committed mode's slice is published, so no mode profile feeds the split.
-  const split = await splitDraft(draft, { committedMode: mode, paletteColors: projection.config?.colors || null });
+  const split = await splitDraft(draft, { committedMode: mode });
   const slice = flat ? split.modes[mode] : { ...modeSlice(session), config: split.modes[mode].config };
   const published = flat ? split : { ...session };
   const ui = Object.fromEntries(Object.entries(isObject(published.ui) ? published.ui : {})
@@ -486,9 +486,8 @@ const mergeReplayResources = (prepared, replayed) => {
 /**
  * What the draft split reads besides the draft.
  * @typedef {object} PublicationDraftSplitContext
- * @property {'circular' | 'linear'} committedMode The saved Result's mode.
- * @property {Record<string, unknown> | null} paletteColors The colors of the draft's palette, which override colors
- *   merge into.
+ * @property {'circular' | 'linear'} committedMode The saved Result's mode. The draft's override colors merge into its
+ *   palette's colors, which Python reads from the draft (`mode_split_palette_colors`).
  */
 /**
  * A Web draft with a `config` split into Session 46 mode slices: the draft's other fields, its app-level settings

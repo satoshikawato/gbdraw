@@ -7,6 +7,7 @@ import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js'
 import { ruleMatchesFeature } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 import { evaluatePython } from './helpers/python-evaluator.mjs';
+import { ruleOwnerPorts } from './helpers/rule-preparation-ports.mjs';
 
 const nativeEvaluate = async payload => {
   const response = await evaluatePython(`
@@ -46,7 +47,7 @@ const setup = ({ features = [{ type: 'CDS', svg_id: 'one', qualifiers: { product
   const view = withDrawings(state);
   const actions = createFeatureRuleActions({ state: view, ref: value => ({ value }), computed: get => ({ get value() { return get(); } }),
     readLegendRowColors: (drawing) => displayedLegendRowColors(view, drawing, []),
-    rulePreparation: preparation, isPatternEditAvailable: () => available, nextTick: async () => {},
+    ...ruleOwnerPorts(preparation), isPatternEditAvailable: () => available, nextTick: async () => {},
     ports: { requestAutomaticRerender: () => true },
     runUndoableCheckpoint: transact, runUndoable: transact,
     prepareFileLegendEntries: async (_, { isCurrent }) => isCurrent() && {

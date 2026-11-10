@@ -209,9 +209,15 @@ test('a record drawn in two windows searches each window against the other recor
   const [firstName, secondName] = await rowNames();
   expect(firstName).toMatch(/\.losatn\.w1\.tsv$/);
   expect(secondName).toBe(firstName.replace(/\.w1\.tsv$/, '.w2.tsv'));
+  // OV-3227: the File name field of each window pair shows the name Generate gave it, from the cards' record IDs.
+  expect(firstName).toBe('R2c.R3c.losatn.w1.tsv');
+  for (const [row, filename] of [[0, firstName], [1, secondName]]) {
+    await expect(windowPairs.nth(row).getByRole('textbox')).toHaveAttribute('placeholder', filename);
+  }
   // A name typed on the card pair is the stem of its window pairs' names; it does not become every one's name.
   await page.locator('summary[aria-label="Raw LOSAT file name for #1 to #2"]').click();
   const cardPairName = page.getByRole('textbox', { name: 'Raw LOSAT filename for #1 to #2', exact: true });
+  await expect(cardPairName).toHaveAttribute('placeholder', 'R2c.R3c.losatn.tsv');
   await cardPairName.fill('card-pair');
   await cardPairName.press('Enter');
   await generateAndWaitForResult(page);
@@ -257,6 +263,12 @@ test('a record drawn in two windows searches each window against the other recor
   if (!await loadedPairs.evaluate((element) => element.open)) await loadedPairs.locator(':scope > summary').click();
   await expect(windowPairs).toHaveCount(2);
   await expect(windowPairs.nth(1)).toContainText('#1 window 2 → #2');
+  // OV-3227: a loaded Session's cards are read on demand. The card pair's File name shows no default until it is
+  // opened; opening it reads the cards' records as the record list does, and it then shows the name Generate gives.
+  const loadedCardPairName = page.locator('input[aria-label="Raw LOSAT filename for #1 to #2"]');
+  await expect(loadedCardPairName).toHaveAttribute('placeholder', '');
+  await page.locator('summary[aria-label="Raw LOSAT file name for #1 to #2"]').click();
+  await expect(loadedCardPairName).toHaveAttribute('placeholder', 'R2c.R3c.losatn.tsv');
   const reloaded = page.waitForEvent('download', { timeout: 60_000 });
   await windowPairs.nth(1).getByRole('button', { name: 'Save Raw LOSAT TSV for #1 window 2 to #2', exact: true }).click();
   const loadedDownload = await reloaded;
@@ -679,6 +691,21 @@ test('a main Session 39 with a protein table of a reversed record converts it at
 // OV-1145: Python reads the saved Session: its protein results of the cropped
 // and reversed record are in the search frame (a conversion leaves the request
 // as it is) and tagged; the CLI replay writes `<directory>/cli.svg`.
+// Each drawing's protein searches resolve in its own manifest, one record instance key has two bindings, and the CLI
+// loads the Session (OV-3273).
+const COLLIDING_KEYS_CHECK = `
+import gzip, json, sys
+from gbdraw.analysis.protein_colinearity import validate_protein_raw_entry_references
+from gbdraw.session_io import load_session
+session = json.loads(gzip.decompress(open(sys.argv[1], 'rb').read()))
+drawings = session['drawings']
+proteins = [[e for e in d['losatCache']['entries'] if 'queryRecordInstanceKey' in e] for d in drawings]
+unresolved = sum(not validate_protein_raw_entry_references(e, d['proteinIdentityManifest']) for d, es in zip(drawings, proteins) for e in es)
+bindings = [{k: v['runtimeBindingHash'] for k, v in d['proteinIdentityManifest']['recordInstances'].items()} for d in drawings]
+colliding = any(bindings[0][k] != bindings[1][k] for k in set(bindings[0]) & set(bindings[1]))
+load_session(sys.argv[1])
+print(json.dumps({'drawings': [d['id'] for d in drawings], 'proteins': [len(es) for es in proteins], 'unresolved': unresolved, 'collidingKeys': colliding, 'admitted': True}))
+`;
 const SEARCH_FRAME_CHECK = `
 import json, subprocess, sys
 from pathlib import Path
@@ -734,4 +761,36 @@ test('a Web Similarity groups Generate stores a cropped reversed record in its s
   expect(stored.inSearchFrame).toBe(stored.members);
   const cli = await svgRibbons(page, readFileSync(path.join(directory, 'cli.svg'), 'utf8'));
   expect(ribbonGeometry(cli)).toEqual(web);
+});
+
+// OV-3273 (#1777): a Duplicate keeps its source's card uids, so after the copy's region changes one record instance
+// key names other proteins in each drawing's protein identity manifest. Save writes into each drawing only the protein
+// searches its own manifest resolves, and the CLI loads the Session. The saved Session is the positive fixture
+// tests/fixtures/sessions/BGC0000708-BGC0000709-copy-crop.v51-web.gbdraw-session.json.gz (its provenance names this test).
+test('two Linear LOSATP drawings whose record instance keys collide each save their own searches, and the CLI loads them', async ({ page }, testInfo) => {
+  test.setTimeout(900_000);
+  await openLinearWith(page, [bgc('BGC0000708'), bgc('BGC0000709')]);
+  await useLosat(page, { task: 'blastp', proteinMode: 'orthogroup' });
+  await generateAndWaitForResult(page);
+  const menu = page.locator('.drawing-bar-menu');
+  await menu.locator('summary').click();
+  await menu.getByRole('button', { name: 'Duplicate drawing', exact: true }).click();
+  await settle(page);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearCardWindow(app.linearSeqs[0], 0, 'start', 1);
+    app.setLinearCardWindow(app.linearSeqs[0], 0, 'end', 20000);
+  });
+  await settle(page);
+  await generateAndWaitForResult(page);
+  const file = testInfo.outputPath('copy-crop.gbdraw-session.json.gz');
+  const download = page.waitForEvent('download', { timeout: 180_000 });
+  await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  await answerSessionTitle(page, 'BGC0000708-BGC0000709 two drawings');
+  await (await download).saveAs(file);
+  const { stdout } = await promisify(execFile)('python', ['-c', COLLIDING_KEYS_CHECK, file],
+    { cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 10_000_000 });
+  expect(JSON.parse(stdout.trim().split('\n').pop())).toEqual({
+    drawings: ['linear', 'linear-2'], proteins: [4, 4], unresolved: 0, collidingKeys: true, admitted: true
+  });
 });

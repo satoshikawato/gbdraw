@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import copy
 from collections import Counter
 from collections.abc import Callable
 import csv
@@ -2253,48 +2254,6 @@ def test_refresh_sets_every_stored_output_prefix() -> None:
     assert refresh_gallery_sessions_module._set_output_prefix(session, "card-id") == 0
 
 
-def test_refresh_resolves_web_default_colors_over_their_palette() -> None:
-    # The Web stores the Default colors rows that differ from the palette; the
-    # CLI replay stores them resolved over it, and `finalize` compares the two
-    # (OV-375). A resolved table is left as it is.
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:
-        import tomli as tomllib
-
-    rows = "CDS\t#d3d3d3\nskew_low\t#ad72e3\n"
-    resource = {
-        "kind": "colors-default-colors-file",
-        "size": len(rows),
-        "encoding": "base64",
-        "data": base64.b64encode(rows.encode()).decode(),
-    }
-    session = {
-        "renderRequest": {
-            "diagramOptions": {
-                "colors": {
-                    "defaultColors": None,
-                    "defaultColorsPalette": "orange",
-                    "defaultColorsFile": {"resourceId": "colors-default-colors-file", "representation": "file"},
-                }
-            }
-        },
-        "resources": {"colors-default-colors-file": resource},
-    }
-    palettes = tomllib.loads(Path("gbdraw/data/color_palettes.toml").read_text(encoding="utf-8"))
-
-    assert refresh_gallery_sessions_module._resolve_default_colors(session) == 1
-    text = base64.b64decode(resource["data"]).decode()
-    assert dict(line.split("\t") for line in text.splitlines()) == {
-        **palettes["orange"],
-        "CDS": "#d3d3d3",
-        "skew_low": "#ad72e3",
-    }
-    assert resource["size"] == len(text.encode())
-    assert refresh_gallery_sessions_module._resolve_default_colors(session) == 0
-    assert refresh_gallery_sessions_module._resolve_default_colors({"renderRequest": {"diagramOptions": {}}}) == 0
-
-
 def test_refresh_stores_one_record_sources_as_exactly_one() -> None:
     # The Web writes `all` for a Linear GenBank file without selector; the CLI
     # replay materializes a one-record file as `exactly_one`, and `finalize`
@@ -2567,3 +2526,67 @@ def test_publication_bridge_writes_a_gz_session_through_the_python_session_write
     # Long enough for content-defined cuts, where the two writers' bytes would differ.
     assert len(gzip.decompress(compressed)) > 3 * MIN_CHUNK
     assert compressed == expected.getvalue()
+
+
+def _losat_result(query: str, subject: str, runtime: dict[str, object], text: str) -> dict[str, object]:
+    from gbdraw.comparisons.losat_jobs import losat_fasta_text, sha256_text
+
+    return {
+        "kind": "raw-losat", "identityKind": "nucleotide", "program": "blastn", "flow": "circular-conservation",
+        "outfmt": "6", "args": ["--task", "megablast"], "key": f"{query[:4]}-{subject[:4]}", "text": text,
+        "queryCanonicalHash": sha256_text(losat_fasta_text("q1", query)),
+        "subjectCanonicalHash": sha256_text(losat_fasta_text("s1", subject)),
+        "runtime": runtime,
+    }
+
+
+def test_refresh_searches_again_a_losat_result_of_another_wasm_build(tmp_path: Path) -> None:
+    """A stored result Generate would search again is searched with the shipped LOSAT and keeps its rows."""
+
+    import os
+    import random
+
+    from tools.refresh_gallery_sessions import _search_stale_losat_results
+
+    bases = random.Random(1893)
+    subject = "".join(bases.choice("ACGT") for _ in range(2000))
+    query = subject[500:1100]
+    old_build = {"kind": "losat", "source": "wasm", "version": "0.2.0+000000000000", "program": "blastn"}
+    cli = {"kind": "losat", "source": "explicit", "version": "0.2.0", "program": "blastn"}
+    session = {
+        "resources": {
+            "query": {"name": "q.fna", "data": f">q1\n{query}\n"},
+            "subject": {"name": "s.fna", "data": base64.b64encode(f">s1 x\n{subject}\n".encode()).decode(), "encoding": "base64"},
+        },
+        "losatCache": {"entries": [_losat_result(query, subject, old_build, ""), _losat_result("A" * 40, "C" * 40, cli, "kept")]},
+    }
+    env = dict(os.environ)
+    # The old build's rows differ from the shipped LOSAT's, and the Session draws results made from them.
+    (tmp_path / "differ").mkdir()
+    with pytest.raises(ValueError, match="gives other rows"):
+        _search_stale_losat_results(copy.deepcopy(session), tmp_path / "differ", env=env)
+
+    (tmp_path / "jobs").mkdir()
+    jobs = tmp_path / "jobs" / "jobs.json"
+    (tmp_path / "jobs" / "q.fa").write_text(f">q1\n{query}\n")
+    (tmp_path / "jobs" / "s.fa").write_text(f">s1\n{subject}\n")
+    jobs.write_text(json.dumps([{"program": "blastn", "outfmt": "6", "args": ["--task", "megablast"],
+                                 "query": str(tmp_path / "jobs" / "q.fa"), "subject": str(tmp_path / "jobs" / "s.fa")}]))
+    refresh_gallery_sessions_module._run_publication_bridge("search-losat", jobs, tmp_path / "jobs" / "out.json", env=env)
+    [shipped] = json.loads((tmp_path / "jobs" / "out.json").read_text())
+    assert shipped["text"].startswith("q1\ts1\t100.000\t600\t")
+
+    session["losatCache"]["entries"][0]["text"] = shipped["text"]
+    (tmp_path / "same").mkdir()
+    assert _search_stale_losat_results(session, tmp_path / "same", env=env) == 1
+    stale, reused = session["losatCache"]["entries"]
+    assert stale["runtime"] == shipped["runtime"] != old_build
+    assert stale["text"] == shipped["text"]
+    assert (reused["runtime"], reused["text"]) == (cli, "kept")
+
+    # A searched sequence that no resource holds whole cannot be searched again.
+    stale["runtime"] = old_build
+    stale["queryCanonicalHash"] = "0" * 64
+    (tmp_path / "missing").mkdir()
+    with pytest.raises(ValueError, match="no whole file or record"):
+        _search_stale_losat_results(session, tmp_path / "missing", env=env)

@@ -330,7 +330,11 @@ export const MODE_PROFILE_DATA = deepFreeze({
       "tuckin",
       "middle",
       "spreadout"
-    ]
+    ],
+    "tickLabelLayoutByFeaturePlace": {
+      "after": "label_in_tick_out",
+      "before": "label_out_tick_in"
+    }
   },
   "comparisonDomains": {
     "alignmentLength": {
@@ -360,6 +364,19 @@ export const MODE_PROFILE_DATA = deepFreeze({
   },
   "defaultFontFamily": "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif",
   "featureDensitySlotIdPrefix": "density_",
+  "featureDensityTrack": {
+    "defaultMetric": "count",
+    "defaultStyle": "heatmap",
+    "everyFeatureType": "*",
+    "metrics": [
+      "count",
+      "coverage"
+    ],
+    "styles": [
+      "heatmap",
+      "histogram"
+    ]
+  },
   "featureTypes": [
     "CDS",
     "rRNA",

@@ -10,6 +10,7 @@
 // the notice banner, and the install of the shown drawing
 // (`installShownDrawing`) as ports.
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
 import { msg } from '../utils/i18n.js';
 /** @import { DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from '../services/drawing-view.js' */
@@ -32,7 +33,7 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {WebState} state
  * @property {{ readonly value: SvgResultEntry[] }} results The displayed drawing's Results.
  * @property {{ readonly value: number | string }} selectedResultIndex
- * @property {{ value: unknown }} errorLog The operation error shown, or null.
+ * @property {WebState['errorLog']} errorLog The operation error shown, or null.
  * @property {{ value: boolean }} failedGeneratePreservedResult Whether "Showing the last successful result" shows.
  * @property {(operation?: string) => SessionBusy | null} sessionOperationAvailability
  * @property {() => HistoryBusy | null} historyAvailability Why History's open step owns the state, or null.
@@ -45,7 +46,7 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {() => unknown} suspendSpecificRulePatternDrafts
  * @property {(options?: { clearStatus?: boolean, syncDom?: boolean }) => unknown} clearFeatureSelection
  * @property {(drawing: DrawingState) => void} rememberDepartingResultProjection
- * @property {(departing: DrawingState, arriving: DrawingState) => unknown} auxiliaryImportFailureOnArrival
+ * @property {(departing: DrawingState, arriving: DrawingState) => UserFacingError | null} auxiliaryImportFailureOnArrival
  *   The arriving drawing's card failure error, or null.
  * @property {() => void} resetModeTransientUi
  * @property {(id: DrawingId) => DrawingState} installShownDrawing The one writer of the shown drawing.
@@ -60,6 +61,7 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  *   Keeps the departing slot and takes the arriving drawing's, or null.
  * @property {() => Readonly<ArtifactSlot>} captureArtifactSlot The displayed artifact as a slot.
  * @property {(slot: Readonly<ArtifactSlot> | null, options: { drawing: DrawingIdentity }) => void} installArtifactSlot
+ * @property {() => void} adoptShownSetInventory The Legend owner's: a drawing showing no Result has no inventory.
  */
 
 /**
@@ -73,18 +75,19 @@ export const createDrawingSwitch = ({
   ruleWritePending, suspendSpecificRulePatternDrafts, clearFeatureSelection, rememberDepartingResultProjection,
   auxiliaryImportFailureOnArrival, resetModeTransientUi, installShownDrawing, dismissNotice, switchDrawingSearch,
   rebindAnnotationRecords, clearActiveRuntime, getResultIdentity, presentSelectedResult, rememberResultInventory,
-  artifactSlotsSwap, captureArtifactSlot, installArtifactSlot
+  artifactSlotsSwap, captureArtifactSlot, installArtifactSlot, adoptShownSetInventory
 }) => {
   // E1: shows the artifact of drawing `nextId`. Keeps the displayed one in
   // the departing drawing's slot and installs the arriving slot, or an empty
   // one. The Legend owner
   // keeps each Result's inventory (OV-47): the arriving Result's goes to it,
   // and the binder adopts it when the Result is displayed, as for a batch
-  // Result.
-  /** @param {Readonly<ArtifactSlot>} slot An installed slot. */
+  // Result. The owner then gives a drawing showing no Result none (OV-3282).
+  /** @param {Readonly<ArtifactSlot> | null} slot The installed slot; null: none (an empty slot, or the set a Load restored). */
   const rememberShownResultInventory = (slot) => {
     const shown = results.value[Number(selectedResultIndex.value) || 0];
-    if (shown) rememberResultInventory(getResultIdentity(shown), [...slot.legendInventory]);
+    if (shown && slot) rememberResultInventory(getResultIdentity(shown), [...slot.legendInventory]);
+    adoptShownSetInventory();
   };
   /**
    * The displayed artifact is kept under the drawing it belongs to, which is
@@ -96,7 +99,7 @@ export const createDrawingSwitch = ({
     clearActiveRuntime();
     const arriving = artifactSlotsSwap(captureArtifactSlot(), arrivingDrawing.id);
     installArtifactSlot(arriving, { drawing: arrivingDrawing });
-    if (arriving) rememberShownResultInventory(arriving);
+    rememberShownResultInventory(arriving);
     return arriving;
   };
 
@@ -129,7 +132,7 @@ export const createDrawingSwitch = ({
   // any: read by the switch, the drawing removal, and E1's Generate. Its
   // producers write a `DrawingId`; the normalizer, a leaf, keeps it as text.
   const errorDrawingId = () => /** @type {DrawingId | undefined} */ (
-    normalizeUserFacingError(/** @type {string | Record<string, unknown> | null} */ (errorLog.value))?.context.drawingId);
+    normalizeUserFacingError(errorLog.value)?.context.drawingId);
   // The switch work, steps 1-5, without the gate: `selectDrawing` and a step
   // of the drawing list (`app/drawing-list.js`, which shows a drawing inside
   // its project step, R16-2) call it. Showing the shown drawing does nothing.

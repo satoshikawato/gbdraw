@@ -65,7 +65,8 @@ const buildHarness = ({
   featureId = 'feature:one/[a]',
   labelKey = 'label-1',
   visibilityOverrides = {},
-  rulePreparation = {},
+  isRuleInputCurrent,
+  snapshotRuleInputs,
   evaluateLabelRules = async () => ({ winners: [] }),
   diagramOptions = null,
   showNotice = () => {}
@@ -103,7 +104,8 @@ const buildHarness = ({
     autoLabelReflowEnabled: ref(false),
     labelReflowRequestSeq: ref(0),
     labelReflowForceRequestSeq: ref(0),
-    labelReflowLastError: ref(null)
+    labelReflowLastError: ref(null),
+    ruleMatchingPending: ref(false)
   };
   const actions = createFeatureLabelActions({
     ref, computed: get => ({ get value() { return get(); } }),
@@ -115,7 +117,8 @@ const buildHarness = ({
     },
     currentResults: () => state.results.value,
     getResultIdentity: () => 'result:1',
-    rulePreparation,
+    isRuleInputCurrent,
+    snapshotRuleInputs,
     evaluateLabelRules,
     showNotice,
     getCommittedRequest: () => (diagramOptions ? { diagramOptions } : null)
@@ -363,7 +366,7 @@ for (const [hidden, hide, options] of [
     await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => '*\tCDS\tlabel\t^alpha$\tLOADED\n' }], value: 'labels.tsv' } });
     assert.equal(rowOf(state, 'fa').labelText, 'LOADED', 'the table was applied');
   }, {
-    svg: loadedLabelSvg(), featureId: 'fa', rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
+    svg: loadedLabelSvg(), featureId: 'fa', snapshotRuleInputs: () => ({}), isRuleInputCurrent: () => true,
     evaluateLabelRules: async ({ features }) => ({ winners: features.map(() => 0) })
   }],
   // The port a mode switch calls (watchers.js `resetModeTransientUi`).
@@ -672,7 +675,7 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
     svg: displayed,
     featureId: 'fa',
     showNotice: (notice) => messages.push(notice),
-    rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
+    snapshotRuleInputs: () => ({}), isRuleInputCurrent: () => true,
     async evaluateLabelRules({ features, rules }) {
       evaluated.push(features.map((feature) => feature.label));
       return { winners: features.map((feature) => rules.findIndex((rule) => (
@@ -736,7 +739,7 @@ for (const [name, body, tsv, message] of [
       svg,
       featureId: 'fa',
       showNotice: (notice) => messages.push(notice),
-      rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
+      snapshotRuleInputs: () => ({}), isRuleInputCurrent: () => true,
       async evaluateLabelRules({ features, rules }) {
         return { winners: features.map((feature) => rules.findIndex((rule) => (
           rule.qualifier === 'label' && new RegExp(rule.valueRegex).test(feature.label)
@@ -768,7 +771,7 @@ for (const [name, tsv, bulk, rows] of [
 ]) {
   test(`a Label TSV load: ${name} (OV-1102)`, async () => {
     const harness = buildHarness({
-      svg: loadedLabelSvg(), featureId: 'fa', rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
+      svg: loadedLabelSvg(), featureId: 'fa', snapshotRuleInputs: () => ({}), isRuleInputCurrent: () => true,
       evaluateLabelRules: async ({ features }) => ({ winners: features.map(() => 0) })
     });
     const { state, actions } = harness;
@@ -813,7 +816,7 @@ const heldLabelImport = ({ preparationFollowsRows = false } = {}) => {
     svg,
     featureId: 'fa',
     showNotice: (notice) => messages.push(notice),
-    rulePreparation: { snapshot, isCurrent: (before) => before === snapshot() },
+    snapshotRuleInputs: snapshot, isRuleInputCurrent: (before) => before === snapshot(),
     evaluateLabelRules: ({ features }) => new Promise((resolve) => {
       evaluations.push(() => resolve({ winners: features.map(() => 0) }));
     })
@@ -1168,7 +1171,7 @@ test('Retry of a failed Label TSV import reads the copy of a file that changed o
     const harness = buildHarness({
       svg,
       featureId: 'fa',
-      rulePreparation: { snapshot: () => 'inputs', isCurrent: () => true },
+      snapshotRuleInputs: () => 'inputs', isRuleInputCurrent: () => true,
       evaluateLabelRules: async ({ rules }) => {
         evaluated.push(rules.map((rule) => rule.labelText));
         throw new Error('evaluation failed');

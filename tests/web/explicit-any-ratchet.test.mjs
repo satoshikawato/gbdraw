@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import { compareCountBaseline, reportLowerable, typescriptApi } from './helpers/count-baseline.mjs';
 
 const EXPLICIT_ANY_BASELINE = {
-  'app/annotations.js': 8,
+  'app/annotations.js': 6,
   'app/annotations/record-catalog.js': 2,
   'app/app-setup.js': 7,
   'app/candidate-render.js': 1,
@@ -43,7 +43,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/feature-editor/placement-actions.js': 9,
   'app/feature-editor/rule-actions.js': 27,
   'app/feature-editor/svg-actions.js': 11,
-  'app/feature-editor/visibility-actions.js': 5,
+  'app/feature-editor/visibility-actions.js': 1,
   'app/feature-search/preview-actions.js': 8,
   'app/feature-search/preview-svg.js': 2,
   'app/history-inputs.js': 2,
@@ -61,7 +61,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/rule-matching.js': 15,
   'app/run-analysis.js': 91,
   'app/run-info.js': 4,
-  'app/similarity-alignment.js': 23,
+  'app/similarity-alignment.js': 21,
   'app/svg-styles.js': 6,
   'app/track-slot-edits.js': 4,
   'app/watchers.js': 17,
@@ -75,7 +75,7 @@ const EXPLICIT_ANY_BASELINE = {
   'services/feature-metadata-extraction.js': 3,
   'services/feature-placement.js': 12,
   'services/feature-utils.js': 2,
-  'services/feature-visibility.js': 2,
+  'services/feature-visibility.js': 1,
   'services/file-imports.js': 1,
   'services/gallery-session-publication.js': 9,
   'services/history-snapshot.js': 19,

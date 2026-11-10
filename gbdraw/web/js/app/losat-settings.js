@@ -3,14 +3,16 @@ import { readCollinearSearchScope } from '../services/losat-normalization.js';
 import { requireCurrentCollinearInferOrthogroups } from '../services/current-option-values.js';
 import { buildLosatJobSpecs } from '../services/linear-comparisons.js';
 import { drawsSeveralUnits, linearUnitPlanPayload, planLinearUnitSearch } from '../services/linear-units.js';
-import { losatRecordGencode, losatSearchSequences, planLosatSourceJobs } from '../services/linear-sources.js';
+import {
+  losatRecordGencode, losatSearchSequences, nucleotideLosatArgs, planLosatSourceJobs, proteinLosatArgs
+} from '../services/linear-sources.js';
 import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { getLosatHardwareThreads, resolveLosatThreadPlan } from '../services/losat-thread-plan.js';
 import { losatThreadingPrecondition } from '../services/losat.js';
 import { t, tn } from '../utils/i18n.js';
 /** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
-/** @import { LinearSeq } from '../state.js' */
-/** @import { LinearUnitPlanPayload, LinearUnitSearch, LinearUnitWindowsOf } from '../services/linear-units.js' */
+/** @import { DrawingState, LinearSeq, WebState } from '../state.js' */
+/** @import { LinearUnitPlanPayload, LinearUnitSearch, LinearCardPlacesOf } from '../services/linear-units.js' */
 
 const { computed, ref, watch, onMounted } = window.Vue;
 
@@ -53,48 +55,27 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
 };
 
 /**
- * How LOSAT runs (`state.losatExecution`, one app-level setting for both
- * drawings). A thread value is 'safe', 'available', a count, or blank (Auto),
- * as `resolveLosatThreadPlan` reads it.
- * @typedef {object} LosatExecutionValues
- * @property {string} [executionMode]
- * @property {string | number | null} [threadsPerJob]
- * @property {string | number | null} [parallelWorkers]
- * @property {string | number | null} [totalThreadBudget]
+ * The members of `state.js` this module reads. `losatExecution` is how LOSAT
+ * runs, one app-level setting for both drawings; a thread value in it is
+ * 'safe', 'available', a count, or blank (Auto), as `resolveLosatThreadPlan`
+ * reads it.
+ * @typedef {Pick<WebState, 'activeDrawing' | 'losatExecution' | 'losatThreadingStatus'>} LosatSettingsState
  */
 
 /**
- * A drawing's LOSAT search settings this module reads.
- * @typedef {object} LosatSettingsValues
- * @property {{ mode?: string, collinearInferOrthogroups?: boolean, collinearSearchScope?: string }} [blastp]
+ * The members of a drawing this module reads: its comparison plan as resolved, its LOSAT settings and program, and
+ * its record rows with the records it leaves out.
+ * @typedef {Pick<DrawingState, 'linearComparisonResolution' | 'losat' | 'losatProgram' | 'recordsOff' | 'linearSeqs'>}
+ *   LosatSettingsDrawing
  */
 
 /**
- * The refs and reactive objects of `state.js` this module reads. A ref is
- * `{ value }` because Vue comes from `window.Vue`, which is `any`.
- * @typedef {object} LosatSettingsState
- * @property {() => LosatSettingsDrawing} activeDrawing
- * @property {LosatExecutionValues} losatExecution
- * @property {{ value?: { state?: string } }} [losatThreadingStatus]
- */
-
-/**
- * The members of a drawing (`DrawingState` of state.js) this module reads.
- * @typedef {object} LosatSettingsDrawing
- * @property {{ value: LinearComparisonResolution }} linearComparisonResolution
- * @property {LosatSettingsValues} losat
- * @property {{ value: string }} losatProgram
- * @property {readonly string[]} [recordsOff]
- * @property {readonly LinearSeq[]} linearSeqs its record rows
- * @property {{ value: boolean }} linearRecordLayoutEnabled whether the Record Layout arranges the rows
- */
-
-/**
- * How the estimate plans drawn units: the Worker helper that plans them, and the windows a drawing's request writes for
- * a card (`linearDrawingWindowsOf` of services/config.js).
+ * How the estimate plans drawn units: the Worker helper that plans them, and the places a drawing's request writes for
+ * its drawn cards (`linearDrawingUnitPlaces` of services/config.js).
  * @typedef {object} LosatUnitPlanPorts
  * @property {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} planLinearUnits
- * @property {() => LinearUnitWindowsOf} shownWindowsOf The windows each card of the shown drawing writes in its request.
+ * @property {() => LinearCardPlacesOf} shownPlacesOf The places the drawn cards of the shown drawing write in its
+ *   request.
  */
 
 /**
@@ -105,14 +86,14 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  * @param {(drawing: LosatSettingsDrawing) => LinearComparisonResolution} readResolution
  * @param {LosatUnitPlanPorts} ports
  */
-const watchLosatUnitPlan = (state, readResolution, { planLinearUnits, shownWindowsOf }) => {
+const watchLosatUnitPlan = (state, readResolution, { planLinearUnits, shownPlacesOf }) => {
   const unitPlanKey = computed(() => {
     const drawing = state.activeDrawing();
     const resolution = readResolution(drawing);
     const drawn = drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff);
     if (resolution.valid === false || !resolution.hasLosatIntent || !drawsSeveralUnits(drawn)) return '';
     try {
-      return JSON.stringify(linearUnitPlanPayload(drawn, resolution, shownWindowsOf()));
+      return JSON.stringify(linearUnitPlanPayload(drawn, resolution, shownPlacesOf()));
     } catch {
       return 'refused'; // A window Generate refuses while it is typed: no plan, as when the helper fails.
     }
@@ -125,13 +106,32 @@ const watchLosatUnitPlan = (state, readResolution, { planLinearUnits, shownWindo
     let search = null;
     try {
       search = await planLinearUnitSearch(drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff),
-        readResolution(drawing), shownWindowsOf(), planLinearUnits);
+        readResolution(drawing), shownPlacesOf(), planLinearUnits);
     } catch {
       search = null;
     }
     if (unitPlanKey.value === key) unitPlan.value = { key, search };
   }, { immediate: true });
   return { unitPlanKey, unitPlan };
+};
+
+/**
+ * The arguments the job estimate plans a drawing's searches with: Generate's builders with no E-value scale. A scale
+ * is one per genome pair, and a source batch is one, so it never splits a batch; the translation tables of TLOSATX
+ * records do.
+ * @param {LosatSettingsDrawing} drawing
+ * @param {readonly (LinearSeq | undefined)[]} sequences The searched records, by record index.
+ * @returns {(query: number, subject: number) => string[]}
+ */
+const estimateLosatArgs = (drawing, sequences) => (query, subject) => {
+  const program = drawing.losatProgram.value;
+  if (program !== 'blastn' && program !== 'tblastx') {
+    return proteinLosatArgs({ pairwise: drawing.losat.blastp?.mode === 'pairwise', candidateLimit: null, databaseSize: null });
+  }
+  return nucleotideLosatArgs({
+    program, task: drawing.losat.blastn.task, queryGencode: losatRecordGencode(sequences[query]),
+    dbGencode: losatRecordGencode(sequences[subject]), searchSpace: null
+  });
 };
 
 /**
@@ -184,9 +184,7 @@ export const createLosatSettings = ({ state, ...unitPlanPorts }) => {
       return planLosatSourceJobs({
         ...search,
         specs,
-        buildArgs: (query, subject) => (program === 'tblastx'
-          ? [losatRecordGencode(search.sequences[query]), losatRecordGencode(search.sequences[subject])]
-          : [])
+        buildArgs: estimateLosatArgs(drawing, search.sequences)
       }).jobs.length;
     } catch {
       return 0;

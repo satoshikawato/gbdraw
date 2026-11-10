@@ -237,3 +237,34 @@ def test_losatp_jobs_and_raw_keys_match_web(case: dict) -> None:
         )]
         for query, subject in specs
     ] == case["expected"]["rawKeys"]
+
+
+# One E-value scale per genome (OV-3143, PD-OI-018 revision 6): the command line searches each figure of the shared
+# cases with the expected raw-cache args, and Python plans the Web's searches of that figure the scales of the reply;
+# tests/web/linear-sources.test.mjs builds the Web's args from the reply.
+
+
+def _search_space_cases() -> list[dict]:
+    return json.loads((FIXTURES / "losat_job_plan_cases.json").read_text(encoding="utf-8"))["searchSpaceCases"]
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("case", _search_space_cases(), ids=_case_id)
+def test_the_command_line_and_the_web_plan_search_with_the_args_of_the_shared_cases(
+    case: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.test_genome_search_space import (
+        DE3, LAMBDA, _captured_cli_request, _run, _run_losatp, _split_de3, _table, web_genome_scales,
+    )
+
+    captured = _captured_cli_request(monkeypatch)
+    left, right = _split_de3(tmp_path)
+    paths = {"LAMBDA": LAMBDA, "DE3": DE3, "DE3A": left, "DE3B": right}
+    table = ["--records_table", str(_table(tmp_path, [row.format(**paths) for row in case["table"]]))]
+    if case["program"] == "blastp":
+        _sizes, session = _run_losatp(tmp_path, table, mode=case["mode"])
+    else:
+        _spaces, session = _run(tmp_path, table, program=_PROGRAMS[case["program"]])
+    entries = session["losatCache"]["entries"]
+    assert sorted(entry["args"] for entry in entries) == sorted(args for *_pair, args in case["expected"]["args"])
+    assert web_genome_scales(captured[0], tmp_path / "web") == case["reply"]

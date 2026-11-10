@@ -3,11 +3,14 @@
 /** @import { ChangeTrackLayout, ChangeTrackVisibility } from './track-slot-edits.js' */
 /** @import { AskChoice } from './app-messages.js' */
 /** @import { DepthSourceChange } from '../services/depth-track-state.js' */
+/** @import { RingKeyChanges } from '../services/conservation-series.js' */
 import {
   CONSERVATION_SLOT_MANAGER,
+  NO_RING_KEY_CHANGES,
+  circularRingSources,
   isManagedConservationSlot,
-  normalizeFileList,
   orderedConservationSources,
+  ringKeyAfter,
   safeConservationSlotId
 } from '../services/conservation-series.js';
 import {
@@ -72,6 +75,7 @@ import {
   clampCircularTrackAxisIndex,
   cloneParams,
   createDefaultCircularTrackSlots,
+  circularStacksNoSessionSaved,
   DEFAULT_SLOT_IDS,
   DEFAULT_TICK_LABEL_LAYOUT,
   effectiveSlotPlacement,
@@ -101,6 +105,7 @@ import {
   normalizeGapText
 } from '../services/circular-track-slot-model.js';
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
+/** @import { FeatureDensityRowEdit } from '../services/feature-density-tracks.js' */
 /** @import { OverlaySlotReference, TrackSlotRow } from '../services/track-slot-validation.js' */
 /**
  * What the slot helpers read of the Web state (`state.js`): the shown mode.
@@ -406,25 +411,10 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
 };
 
 /** @param {DrawingState} drawing */
-const conservationSourceFiles = (drawing) => {
-  const blasts = normalizeFileList(drawing.files.c_conservation_blasts);
-  if (
-    String(drawing?.circularConservation?.source || '').trim().toLowerCase() === 'upload' ||
-    (
-      drawing.files.c_conservation_blasts_source === 'losat-cache' &&
-      blasts.length > 0
-    )
-  ) {
-    return blasts;
-  }
-  return normalizeFileList(drawing.files.c_conservation_fastas);
-};
-
-/** @param {DrawingState} drawing */
 const conservationEntries = (drawing) => {
   if (drawing?.circularConservation?.enabled !== true) return [];
   return orderedConservationSources(
-    conservationSourceFiles(drawing),
+    circularRingSources(drawing),
     drawing.circularConservation
   );
 };
@@ -439,22 +429,40 @@ const managedConservationSlotKey = (slot) => String(slot?.params?.series_key || 
 
 /**
  * The managed ring rows no source draws: a row whose source has gone, and a
- * second row of one source.
+ * second row of one source. A row's key is read after `keyChanges`, the change
+ * that leaves `entries` (`RingKeyChanges`).
  * @param {readonly CircularTrackSlot[]} slots
  * @param {readonly ConservationSlotEntry[]} entries
+ * @param {RingKeyChanges} [keyChanges]
  * @returns {Set<CircularTrackSlot>}
  */
-const managedRowsWithoutSource = (slots, entries) => {
+const managedRowsWithoutSource = (slots, entries, keyChanges = NO_RING_KEY_CHANGES) => {
   const desiredKeys = new Set(entries.map((entry) => String(entry.sourceKey || '')));
   /** @type {Set<string>} */
   const presentKeys = new Set();
   return new Set(slots.filter((slot) => {
     if (!isManagedConservationSlot(slot)) return false;
-    const key = managedConservationSlotKey(slot);
+    const key = ringKeyAfter(keyChanges, managedConservationSlotKey(slot));
     if (!key || !desiredKeys.has(key) || presentKeys.has(key)) return true;
     presentKeys.add(key);
     return false;
   }));
+};
+
+/**
+ * The one move of the managed ring rows to their rings' new keys (`RingKeyChanges`), at every change of the rings:
+ * a row keeps its id, by which other rows anchor to it, and its edits; a row whose ring went carries no key, so the
+ * next sync takes it out. It runs with the stack off too, so the rows the stack turns back on are their rings'.
+ * @param {DrawingState} drawing @param {RingKeyChanges} keyChanges
+ */
+const rekeyCircularConservationRows = (drawing, keyChanges) => {
+  if (keyChanges.size === 0 || !Array.isArray(drawing.adv.circular_track_slots)) return;
+  drawing.adv.circular_track_slots.forEach((/** @type {CircularTrackSlot} */ slot) => {
+    if (!isManagedConservationSlot(slot)) return;
+    const current = managedConservationSlotKey(slot);
+    const key = ringKeyAfter(keyChanges, current);
+    if (key !== current) slot.params = { ...slot.params, series_key: key };
+  });
 };
 
 /**
@@ -541,6 +549,20 @@ const presetTemplateSlots = (drawing, preset) => {
     }), circularGeometryShortcutsForState(drawing))
   ];
 };
+
+/**
+ * Changes a Circular drawing's stack rows for a feature density track (the Feature density section,
+ * app/feature-density-tracks.js) through the feature placement transition, as this editor's own edits go (R10):
+ * `edit` changes the rows, and `normalize` runs the editor's normalizer after it.
+ * @param {ChangeTrackLayout} changeTrackLayout
+ * @param {DrawingState} drawing
+ * @param {FeatureDensityRowEdit} edit
+ * @param {(drawing: DrawingState) => void} normalize
+ */
+export const editCircularFeatureDensityRows = (changeTrackLayout, drawing, edit, normalize) => changeTrackLayout(() => {
+  drawing.adv.circular_track_slots_axis_index = edit(drawing.adv.circular_track_slots, drawing.adv.circular_track_slots_axis_index);
+  normalize(drawing);
+});
 
 /**
  * @typedef {object} CircularTrackSlotEditorOptions
@@ -1030,44 +1052,19 @@ export const createCircularTrackSlotEditor = ({
 
   /**
    * The slot ids of the managed ring rows a change of the comparison sources
-   * takes out of the stack, from the sources it would leave. It writes nothing.
+   * takes out of the stack, from the sources it would leave and how it would
+   * move the rings' keys (`RingKeyChanges`). It writes nothing.
    * The rows follow their sources only while the stack is in use
    * (`refreshCircularConservationSlots`).
    * @param {DrawingState} drawing @param {readonly ConservationSlotEntry[]} entries
+   * @param {RingKeyChanges} [keyChanges]
    * @returns {Set<string>}
    */
-  const circularConservationRowsLeaving = (drawing, entries) => (
+  const circularConservationRowsLeaving = (drawing, entries, keyChanges = NO_RING_KEY_CHANGES) => (
     drawing.adv.circular_track_slots_enabled === true
-      ? new Set([...managedRowsWithoutSource(drawing.adv.circular_track_slots, entries)].map((slot) => String(slot.id)))
+      ? new Set([...managedRowsWithoutSource(drawing.adv.circular_track_slots, entries, keyChanges)].map((slot) => String(slot.id)))
       : new Set()
   );
-
-  /**
-   * A Generate's adoption of the LOSAT result it built from the current draft, whose rows take the place of the FASTA
-   * or of the rows an earlier search wrote. A managed row names its ring by the source file's key (`series_key`), so it
-   * moves to the new key here and keeps its id, by which other rows anchor to it, and its edits (OV-2442).
-   * Precondition, which the caller checks: the draft's ring at each place in the series is the new request's ring at
-   * that place, because the series at adoption has the keys, in order, it had when the request was built. Do not call
-   * it otherwise, as for the committed request a rotation, an alignment, or a placement adopts, or for a Generate whose
-   * rings changed while it ran, since a row would move to another ring. Without the call the rows are replaced at the
-   * adoption's reconcile: their ids and edits are lost, and no row is on another ring.
-   * @template T
-   * @param {DrawingState} drawing @param {() => T} replaceSources
-   * @returns {T}
-   */
-  const keepCircularConservationRowsThrough = (drawing, replaceSources) => {
-    const before = conservationEntries(drawing);
-    const replaced = replaceSources();
-    const after = conservationEntries(drawing);
-    if (before.length !== after.length) return replaced;
-    const keyAfter = new Map(before.map((entry, index) => [String(entry.sourceKey), String(after[index].sourceKey)]));
-    drawing.adv.circular_track_slots.forEach((/** @type {CircularTrackSlot} */ slot) => {
-      const current = managedConservationSlotKey(slot);
-      const key = keyAfter.get(current);
-      if (isManagedConservationSlot(slot) && key && key !== current) slot.params = { ...slot.params, series_key: key };
-    });
-    return replaced;
-  };
 
   /** @param {DrawingState} drawing */
   const syncConservationSlots = (drawing) => {
@@ -1155,7 +1152,7 @@ export const createCircularTrackSlotEditor = ({
     drawing.adv.circular_track_slots_enabled = Boolean(enabled);
     if (!drawing.adv.circular_track_slots_enabled) return;
     const rows = drawing.adv.circular_track_slots;
-    if (!Array.isArray(rows) || isUnsavedDefaultStack(rows, [normalizeCircularTrackSlots([], drawing.adv.nt, drawing.form.track_type)])) {
+    if (!Array.isArray(rows) || isUnsavedDefaultStack(rows, circularStacksNoSessionSaved(drawing.adv.nt, drawing.form.track_type))) {
       // A stack no Session saved is built from the simple controls, with the feature density rows (OV-3174).
       resetSlotsToPreset(drawing, drawing.form.track_type);
     } else {
@@ -1936,7 +1933,7 @@ export const createCircularTrackSlotEditor = ({
     changeCircularDepthSources,
     circularDepthSourceLoss,
     circularConservationRowsLeaving,
-    keepCircularConservationRowsThrough,
+    rekeyCircularConservationRows,
     ...featureSlotEdits(trackLayoutWithVisibility(changeTrackLayout, changeTrackVisibility), {
       resetCircularTrackSlotsFromSimpleControls,
       resetCircularTrackSlotsToPreset,

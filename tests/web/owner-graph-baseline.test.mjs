@@ -28,17 +28,10 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|featureRecordRotation<-featureRecordRotationAction': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|legendLayout<-previewRuntime': 1,
-  'owner-graph.injection-edge.v1|app/feature-editor.js|labelActions<-rulePreparation': 1,
-  'owner-graph.injection-edge.v1|app/feature-editor.js|ruleActions<-rulePreparation': 1,
-  'owner-graph.injection-edge.v1|app/feature-editor.js|visibilityActions<-rulePreparation': 1,
   // owner-graph.whole-object-port.v1
-  'owner-graph.whole-object-port.v1|app/feature-editor/label-actions.js|createFeatureLabelActions|rulePreparation': 1,
-  'owner-graph.whole-object-port.v1|app/feature-editor/rule-actions.js|createFeatureRuleActions|rulePreparation': 1,
-  'owner-graph.whole-object-port.v1|app/feature-editor/visibility-actions.js|createFeatureVisibilityActions|rulePreparation': 1,
   'owner-graph.whole-object-port.v1|app/run-analysis.js|createRunAnalysis|previewRuntime': 1,
   'owner-graph.whole-object-port.v1|app/run-analysis.js|createRunAnalysis|rulePreparation': 1,
   'owner-graph.whole-object-port.v1|services/history-snapshot.js|createHistorySnapshotService|fileStore': 1,
-  'owner-graph.whole-object-port.v1|services/history.js|createHistoryManager|fileStore': 1,
   // heavy-derived.trigger-site.v2 (sites per module; includes calls of a
   // producer port such as rulePreparation.run handed to an owner)
   'heavy-derived.trigger-site.v2|rulePreparation|app/app-setup.js': 2,

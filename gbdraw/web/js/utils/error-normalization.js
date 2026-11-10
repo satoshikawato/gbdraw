@@ -7,7 +7,8 @@ import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 const msg = (text) => text;
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'checkExportLimit', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
   'addRegionAnnotation', 'convertLosatpPairsToGenomicPayload', 'decideAutoOrientation', 'deriveRegionDrawing', 'extractCdsProteinFasta', 'extractFirstFasta', 'findInOtherFiles',
-  'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'planCardWindows', 'planLinearUnits', 'planRecordPlaces',
+  'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'planCardWindows', 'planGenomeScales', 'planLinearUnits',
+  'planRecordPlaces',
   'promoteLegacyLosatpCache', 'readAllSequenceRecords', 'readComparisonSequence', 'readFeatureOverrideTable', 'readRecordSpanSequences', 'readSearchQueries', 'registerFonts', 'resolveFeatureAnchor', 'resolveLegacyProteinReferences',
   'resolveSimilarityAlignment', 'searchHitAnnotationSet', 'synthesizeColorRules', 'upgradeLegacySession', 'validateConfigOverrides', 'session-save', 'session-load']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
@@ -35,6 +36,8 @@ placement strict compress reserve gapAfter gap_after innerRadius inner_radius ou
 const REASONS = Object.freeze({
   CROSS_ORIGIN_ISOLATION: 'This page is not cross-origin isolated.', SHARED_MEMORY: 'This browser does not provide SharedArrayBuffer.',
   WORKERS: 'This browser does not provide Web Workers.', THREADED_WASM: 'The threaded LOSAT runtime could not start.',
+  // A threaded run whose host could not run LOSAT's threads (services/losat-runtime.js `losatThreadsFailure`, OV-3316).
+  THREADS_FAILED: 'The threaded LOSAT engine could not start or keep its threads running in this browser.',
   DECORATION_IDENTITY: 'Source, region, mode, grouping or record identity changed, is unknown, or is ambiguous.',
   DECORATION_TARGET: 'The decoration target is missing or ambiguous.',
   DECORATION_METADATA: 'Composition metadata is invalid or unavailable.',
@@ -125,10 +128,16 @@ const REASONS = Object.freeze({
   // The LOSATP converter named another derived identity than Generate looked up (run-analysis.js).
   DERIVED_KEY_MISMATCH: 'The converted LOSATP comparison does not match the settings it was looked up with. If Retry fails the same way, save the Session and report the problem.',
   RING_LOSAT_PROGRAM: 'Choose LOSATN or TLOSATX for comparison rings.',
-  RING_LOSAT_INPUT: 'Give one comparison sequence file per ring, without BLAST tables, and use the reference file as the subject.',
+  RING_LOSAT_INPUT: 'Give each ring one or more comparison sequence files, without BLAST tables, and use the reference file as the subject.',
   SEQUENCE_MISSING: 'Use a comparison file that contains the sequence (FASTA, or GenBank or DDBJ with an ORIGIN sequence).',
   UNAVAILABLE: 'Install LOSAT or NCBI BLAST+, or select a runtime executable.',
   FAILED: 'The search runtime exited with an error; check its message and inputs.',
+  // A trap of LOSAT's code (services/losat-runtime.js `losatTrapFailure`, OV-3327), in Sequence search and Find in
+  // other files; Generate says it in its own first sentence (`losatTrapped`).
+  TRAP: 'LOSAT stopped unexpectedly.',
+  // A trap left after the threaded pool's retries (services/losat-runtime.js `losatThreadedTrapFailure`), in the same
+  // two searches; Generate says it in its own first sentence (`losatThreadedTrapped`).
+  THREADED_TRAP: 'LOSAT stopped unexpectedly in threaded execution; Serial or Auto execution may run the search.',
   OUTPUT: 'The search output was not BLAST outfmt 6 rows for the searched records.',
   JSON_FORMAT: 'Use valid JSON.', VISIBILITY_ACTION: 'Use show, off, or exclude_matching; accepted aliases are on, hide, false, and 0.',
   TARGET_RECORD: 'Choose an available target record.',
@@ -397,6 +406,21 @@ const PHRASES = Object.freeze({
   largestInputs: 'Largest inputs: {inputs}.',
   // INPUT_UNREADABLE of a gzip input over its expanded cap: the file the browser read, and the cap in MiB.
   inputFile: 'File: {name}.', gzipLimit: 'gbdraw reads gzip files that expand to at most {limit} MiB.',
+  // LOSAT_RUNTIME of a LOSAT run that exited with an error (services/losat-runtime.js `losatRunFailure`): LOSAT's
+  // own first error line, shown as written (`shownLosatMessage`).
+  losatReported: 'LOSAT reported: {message}',
+  // The first sentence of a LOSAT failure that repeats (`losatFailureRepeats`) on Generate, in place of the code's
+  // message and the reason's sentence: the one action leads to the comparison settings, never to Retry (OV-3317).
+  losatRefused: 'LOSAT stopped the comparison search. Generating again with the same settings and inputs stops the same way; change what LOSAT names below, then Generate again.',
+  losatTrapped: 'LOSAT stopped unexpectedly during the comparison search. Generating again with the same settings and inputs stops the same way; change the comparison settings or inputs, then Generate again.',
+  // The first sentence of a threaded trap on Generate, in place of the code's message and the reason's sentence: the
+  // serial engine may run the search, so it names Serial and Auto and keeps Retry.
+  losatThreadedTrapped: 'LOSAT stopped unexpectedly in threaded execution. Select Serial or Auto execution, or change the comparison settings or inputs, then Generate again.',
+  // LOSAT_RUNTIME in Sequence search (OV-3288) and Find in other files: the code's message names Generate, which
+  // neither search uses; each runs from its own Search button.
+  searchFailed: 'The search could not run or returned unusable output. Check the search settings, then click Search again.',
+  // LOSAT_THREADING_UNAVAILABLE in the same two searches.
+  searchThreadsUnavailable: 'Threaded LOSAT execution is unavailable in this browser environment. Select Serial or Auto execution, then click Search again.',
   sessionSaveRemedy: 'Remove or replace the largest inputs with smaller ones, then save again.',
   // EXPORT_LIMIT (gbdraw/render/export_limits.py): the limit and size in the format's unit, and what would fit.
   exportSizePx: 'PNG is limited to {limit} px per side, and this figure is {width} x {height} px.',
@@ -416,6 +440,14 @@ const PHRASES = Object.freeze({
   liveEditChange: 'Change the edit, or change the settings and use Generate.',
   operationError: 'Operation error'
 });
+// A code's message for one operation, where the code's own message names a step that operation does not have.
+/** @type {Readonly<Record<string, Readonly<Record<string, string>>>>} */
+const OPERATION_MESSAGES = Object.freeze({
+  LOSAT_RUNTIME: Object.freeze({ searchHitAnnotationSet: PHRASES.searchFailed, findInOtherFiles: PHRASES.searchFailed }),
+  LOSAT_THREADING_UNAVAILABLE: Object.freeze({
+    searchHitAnnotationSet: PHRASES.searchThreadsUnavailable, findInOtherFiles: PHRASES.searchThreadsUnavailable
+  })
+});
 /**
  * One sentence or phrase of a user-facing error text. `text` is the English
  * template and its catalog key; each `{name}` takes `params[name]`: a part is
@@ -428,6 +460,12 @@ const PHRASES = Object.freeze({
  * @property {true} [verbatim]
  */
 const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+/**
+ * LOSAT's words as the summary shows them: the hyphens that start an option name (`-searchsp`) are non-breaking, so a
+ * line never ends between them and the name. The Diagnostics keep the words as LOSAT wrote them.
+ * @param {string} message
+ */
+const shownLosatMessage = (message) => message.replace(/(^|[\s'"(<[])(-+)/g, (_whole, before, hyphens) => before + '\u2011'.repeat(hyphens.length));
 /** A count as Python's export message writes it (`32,767`). @param {number} value */
 const grouped = (value) => value.toLocaleString('en-US');
 
@@ -536,6 +574,7 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {'file'} [sessionSizeKind] Set when the two sizes are those of the gzip file, not of its expanded JSON.
  * @property {string} [largestInputs] The file names of the largest inputs of a Session that Save refused.
  * @property {string} [inputName] The name of the input file that could not be read (a gzip file over its expanded cap).
+ * @property {string} [losatMessage] The first line LOSAT wrote about a run that exited with an error, as written.
  * @property {number} [limit] An export format's size limit per side, in its unit (EXPORT_LIMIT), or the expanded size
  *   cap of a gzip input in MiB (GZIP_EXPANDED_SIZE).
  * @property {number} [width] The figure's width in the export format's unit (EXPORT_LIMIT).
@@ -817,6 +856,9 @@ const contextFor = (value) => {
   if (inputs) context.largestInputs = inputs;
   const inputName = typeof value.inputName === 'string' ? value.inputName.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
   if (inputName) context.inputName = inputName;
+  // LOSAT's own words: one line of at most 200 characters, shown as text.
+  const losatMessage = typeof value.losatMessage === 'string' ? value.losatMessage.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
+  if (losatMessage) context.losatMessage = losatMessage;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
   if (typeof value.drawingId === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value.drawingId)) context.drawingId = value.drawingId;
@@ -952,6 +994,31 @@ const trackRoomParts = ({ keptInsidePx, keptInsideTracks, slotTrack }) => {
   return parts;
 };
 
+/**
+ * Whether the same LOSAT search would stop the same way: LOSAT exited with an error and said why (`losatMessage`,
+ * services/losat-runtime.js `losatRunFailure`, OV-3317), or LOSAT's code trapped (`losatTrapFailure`, OV-3327). The
+ * failure offers the comparison settings and never Retry.
+ * @param {{ code: string, context: UserFacingContext }} error
+ * @returns {boolean}
+ */
+export const losatFailureRepeats = (error) => error.code === 'LOSAT_RUNTIME'
+  && (error.context.losatMessage !== undefined || error.context.reason === 'TRAP');
+
+/**
+ * The first sentence of a failure: the code's message for its operation where the code's own names a step that
+ * operation does not have (`OPERATION_MESSAGES`), else for a threaded trap or a LOSAT failure that repeats the sentence
+ * that says so, which also stands for the reason's sentence (`coversReason`), else the code's message.
+ * @param {{ code: string, operation: string, context: UserFacingContext }} error
+ * @returns {{ text: string, coversReason: boolean }}
+ */
+const leadSentence = (error) => {
+  const operationMessages = Object.hasOwn(OPERATION_MESSAGES, error.code) ? OPERATION_MESSAGES[error.code] : {};
+  if (Object.hasOwn(operationMessages, error.operation)) return { text: operationMessages[error.operation], coversReason: false };
+  if (error.code === 'LOSAT_RUNTIME' && error.context.reason === 'THREADED_TRAP') return { text: PHRASES.losatThreadedTrapped, coversReason: true };
+  if (!losatFailureRepeats(error)) return { text: DEFINITIONS[error.code][0], coversReason: false };
+  return { text: error.context.reason === 'TRAP' ? PHRASES.losatTrapped : PHRASES.losatRefused, coversReason: true };
+};
+
 /** @typedef {{ operation?: string | null, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} UserFacingOptions A null operation is read as no known operation. */
 
 /**
@@ -978,7 +1045,8 @@ export const normalizeUserFacingError = (value, {
     if (item?.code !== 'CLEANUP_FAILED' || item?.stage !== 'cleanup') continue;
     result.secondary.push({ code: 'CLEANUP_FAILED', stage: 'cleanup' });
   }
-  const [message, actions] = DEFINITIONS[result.code];
+  const actions = DEFINITIONS[result.code][1];
+  const lead = leadSentence(result);
   const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath, featureCaption, sessionTable, diagramMode } = result.context;
   const { featureId, featureType, featureStart, featureEnd, featureCount, field, reason, position, columnCount, recordCount } = result.context;
   const { recordName, recordPosition, codepoint } = result.context;
@@ -989,7 +1057,7 @@ export const normalizeUserFacingError = (value, {
   const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
     .filter(Boolean).join(', ');
   const { queryRecordIndex, subjectRecordIndex, labelFitCounts, labelCapacityOuter, labelCapacityInner, exceptionType } = result.context;
-  const { sessionBytes, sessionByteLimit, sessionSizeKind, largestInputs, inputName } = result.context;
+  const { sessionBytes, sessionByteLimit, sessionSizeKind, largestInputs, inputName, losatMessage } = result.context;
   const { limit, width, height, rowLength, dpi } = result.context;
   const exportSize = (reason === 'PNG_SIZE' || reason === 'PDF_SIZE') && limit !== undefined && width !== undefined
     && height !== undefined && { text: reason === 'PNG_SIZE' ? PHRASES.exportSizePx : PHRASES.exportSizePt,
@@ -1006,7 +1074,7 @@ export const normalizeUserFacingError = (value, {
   const pieces = [
     saveOverCap
       ? { text: sessionSizeKind === 'file' ? PHRASES.sessionFileNotSaved : PHRASES.sessionNotSaved, params: { size: (/** @type {number} */ (sessionBytes) / 1048576).toFixed(1), limit: Math.round(/** @type {number} */ (sessionByteLimit) / 1048576) } }
-      : reason !== 'REPLY_TOO_LARGE' && { text: message },
+      : reason !== 'REPLY_TOO_LARGE' && { text: lead.text },
     saveOverCap && largestInputs !== undefined && { text: PHRASES.largestInputs, params: { inputs: largestInputs } },
     saveOverCap && { text: PHRASES.sessionSaveRemedy },
     diagramMode !== undefined && { text: diagramMode === 'linear' ? PHRASES.diagramLinear : PHRASES.diagramCircular },
@@ -1033,8 +1101,9 @@ export const normalizeUserFacingError = (value, {
     exportSize && rowLength !== undefined && { text: PHRASES.exportRowLength, params: { length: grouped(rowLength) } },
     exportSize && dpi !== undefined && { text: PHRASES.exportDpi, params: { dpi } },
     ...figureSizeSentences,
-    sessionVersionGuidance(result.context) || (figureSizeSentences.length > 0 ? null
-      : (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null)),
+    !lead.coversReason && (sessionVersionGuidance(result.context) || (figureSizeSentences.length > 0 ? null
+      : (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null))),
+    losatMessage !== undefined && { text: PHRASES.losatReported, params: { message: shownLosatMessage(losatMessage) } },
     reason === 'NOT_NUCLEOTIDE' && letter && { text: PHRASES.letter, params: { letter } },
     reason === 'NOT_SEQUENCE' && letter && { text: PHRASES.queryLetter, params: { letter } },
     innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },
@@ -1065,6 +1134,7 @@ export const normalizeUserFacingError = (value, {
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
   // A table stored in a Session is corrected in the Session file, not in this page.
   result.actions = sessionTable !== undefined || saveOverCap ? ['select-input']
+    : losatFailureRepeats(result) ? ['edit-comparison']
     : [...(reason !== undefined && Object.hasOwn(REASON_ACTIONS, reason) ? REASON_ACTIONS[reason] : actions)];
   return result;
 };

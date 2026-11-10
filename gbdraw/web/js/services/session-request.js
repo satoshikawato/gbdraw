@@ -5,7 +5,8 @@ import {
   recordSourceOf, recordSourceSlotIds
 } from './input-types.js';
 /** @import { InputType, LinearSeqWindow } from './drawing/inputs.js' */
-import { cardCropWindow } from './drawing/inputs.js';
+/** @import { LosatRequestRing } from './circular-conservation-keys.js' */
+import { cardCropWindow, ringGenomeFileLists, ringGenomeIdLists } from './drawing/inputs.js';
 /** @import { InputSlot } from './input-types.js' */
 import {
   canonicalFeatureOverrides,
@@ -104,7 +105,7 @@ import {
 import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
 import {
   orderedConservationSources,
-  orderedOptionalConservationFiles
+  ringGenomeFilesInRingOrder
 } from './conservation-series.js';
 import {
   resolveLinearRecordEffectiveDefinition,
@@ -163,7 +164,7 @@ import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from './linear-wrap-form.js';
 import { FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH, figureLengthFormValue } from './figure-size-form.js';
 import { featureDensityTrackIds, projectFeatureDensityTracks, requestFeatureDensityTracks } from './feature-density-tracks.js';
-import { NO_STORED_READINGS } from './stored-leaf-readings.js';
+import { NO_STORED_READINGS, storedRecordIdOf } from './stored-leaf-readings.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
   CONFIG_UNSET_NUMBER_PATHS,
@@ -329,21 +330,16 @@ const requestDrawingMode = (drawing) => {
  * @property {readonly { start?: unknown, end?: unknown, reverseComplement?: unknown, column?: unknown }[]} windows Required at
  *   request schema 10, which Load promotes every stored request to first.
  * @property {{ reverseComplement?: unknown } | null} [presentation]
+ * @property {CanonicalRecordSource} source Required at request schema 10.
  */
 /**
  * A record of the request before its display options are bound.
  * @typedef {Omit<CanonicalRecord, 'display'> & { display?: CanonicalRecord['display'] }} RequestDraftRecord
  */
 /**
- * A comparison ring a Generate resolved (LOSAT), as the request reads it.
- * @typedef {object} ResolvedConservationEntry
- * @property {string} [name]
- * @property {string} [text]
- * @property {ResourceEntry | null} [fasta]
- * @property {string} [label]
- * @property {string} [color]
- * @property {string} [sourceKey]
- * @property {string} [seriesKey]
+ * A comparison ring a LOSAT Generate searched, as the request reads it: the one type of Generate's request rings
+ * (`losatRequestRings`), its genome files as the serialized files hold them.
+ * @typedef {LosatRequestRing<ResourceEntry>} ResolvedConservationEntry
  */
 /**
  * A file slot of a Linear record, as the request reads it: a `LinearSeq`
@@ -383,8 +379,8 @@ const requestDrawingMode = (drawing) => {
  * @property {DepthFileSlots | DepthFileSlots[]} [c_depth]
  * @property {FileLike[]} [c_conservation_blasts]
  * @property {string | null} [c_conservation_blasts_source]
- * @property {FileLike[]} [c_conservation_fastas]
- * @property {(ResourceEntry | null)[]} [c_conservation_sequence_sources]
+ * @property {FileLike[][]} [c_conservation_fastas] Each LOSAT ring's comparison genome files.
+ * @property {ResourceEntry[][]} [c_conservation_sequence_sources] Each table's comparison sequence files.
  * @property {{ id?: unknown, file?: ResourceEntry | null }[]} [linearComparisons]
  * @property {RequestCanonicalComparison[]} [linearCanonicalComparisons]
  * @property {HiddenDepthFiles} [hiddenDepth] The Depth slot values a draft that draws no Depth holds: a Generate
@@ -479,7 +475,7 @@ export { CANONICAL_REQUEST_SCHEMA };
 /**
  * @import {
  *   CanonicalCircularDiagramOptions,
- *   CanonicalCircularLayout, CanonicalComparison, CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalLinearTrackSlot, CanonicalCircularTrackSlot, CanonicalRecord,
+ *   CanonicalCircularLayout, CanonicalComparison, CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalLinearTrackSlot, CanonicalCircularTrackSlot, CanonicalRecord, CanonicalRecordSource,
  *   CanonicalRenderRequest,
  *   CanonicalSimilarityAlignmentPlan, CanonicalTableRef
  * } from '../contracts/request.generated.js'
@@ -1246,6 +1242,26 @@ const createResourceBuilder = ({ encode = true } = {}) => {
  * @returns {CanonicalFileRef}
  */
 const fileRef = (resourceId) => ({ resourceId, representation: 'file' });
+/**
+ * Each ring's comparison genome files as resources `<base>-<ring>-<file>` (D-62),
+ * one list of resource IDs per ring.
+ * @param {ResourceBuilder} resources
+ * @param {string} base
+ * @param {readonly (readonly ResourceEntry[])[]} rings
+ */
+const ringFileResources = (resources, base, rings) => rings.map((files, ringIndex) => files.map((entry, fileIndex) => (
+  resources.addFile(`${base}-${ringIndex + 1}-${fileIndex + 1}`, 'conservation-fasta-file', entry)
+)));
+/**
+ * The request's `conservationFastaFiles`: each ring's comparison genome files,
+ * one list of file references per ring (`ringFileResources`).
+ * @param {ResourceBuilder} resources
+ * @param {string} base
+ * @param {readonly (readonly ResourceEntry[])[]} rings
+ * @returns {CanonicalFileRef[][]}
+ */
+const ringFileRefs = (resources, base, rings) => ringFileResources(resources, base, rings)
+  .map((ids) => ids.map((resourceId) => fileRef(resourceId)));
 // The table inputs whose committed file a rebuilt request keeps (`publicationFileRef`).
 const REQUEST_TABLE_FILE_SLOTS = Object.freeze(['d_color', 't_color', 'whitelist', 'qualifier_priority']);
 /**
@@ -1441,9 +1457,8 @@ export const linearWindowsPayload = (seq, { arranged, ordinal, record }) => {
 
 /**
  * The windows a Linear drawing's request writes for a card (`linearWindowsPayload` with the drawing's Record Layout,
- * the card's number among all its cards, and the record the card draws, `recordOf`), for every reader of a card's
- * windows outside the request build: the drawn-unit plan of Generate, of the draft request and of the LOSAT job
- * estimate, and the wrap estimate.
+ * the card's number among all its cards, and the record the card draws, `recordOf`), for the readers of a card's
+ * windows outside the request build that read one card: the wrap estimate and the cards' own window views.
  * @template {Pick<RequestLinearSeq, 'region_start' | 'region_end' | 'region_reverse' | 'windows'>} C
  * @param {{ linearRecordLayoutEnabled?: { value: unknown }, linearSeqs: readonly C[] }} drawing
  * @param {(card: C) => CardRecordFacts} recordOf
@@ -1453,6 +1468,18 @@ export const linearDrawingWindowsOf = (drawing, recordOf) => (card) => linearWin
   arranged: Boolean(drawing.linearRecordLayoutEnabled?.value), ordinal: drawing.linearSeqs.indexOf(card) + 1,
   record: recordOf(card)
 });
+
+/**
+ * Where a Linear drawing's request places its drawn cards (`linearRecordPlacements`, the request's own owner): each
+ * card's windows and grid row, which the drawn-unit plan reads (`planLinearUnits` of Generate, of the draft request,
+ * of the LOSAT job estimate and of Inherit): Python numbers the units and says which unit pairs the drawing displays.
+ * @template {RequestLinearSeq} C
+ * @param {Parameters<typeof linearRecordPlacements>[0] & { linearSeqs: readonly C[] }} drawing
+ * @param {(card: C) => CardRecordFacts} recordOf
+ * @returns {(cards: readonly C[]) => { windows: CanonicalRecord['windows'], gridRow: number | null }[]}
+ */
+export const linearDrawingUnitPlaces = (drawing, recordOf) => (cards) => linearRecordPlacements(drawing, cards, recordOf)
+  .map(({ windows, gridRow }) => ({ windows, gridRow }));
 
 /**
  * The record-wide reverse complement a Linear card's request record writes beside `windows`, its windows as
@@ -1487,14 +1514,29 @@ const cropFieldsOfWindows = (record) => {
   };
 };
 
+/**
+ * A request record's selector as a record text: a Linear card's, the Circular Record select's, or a Circular record
+ * range's (`canonicalRecordSelector`). A record ID that the text would read as a `#N` (`#2`, `#+2`) takes the place
+ * Load read for it in its file (`storedRecordIdOf`, OV-3311), the text the Record select gives such a record, so
+ * the text names the record of that ID; without one it stays.
+ * @param {RequestRecordView | null | undefined} record
+ * @param {StoredLeafReadings} readings
+ */
+const cardRecordText = (record, readings) => {
+  const text = canonicalRecordSelector(record) || '';
+  const stored = storedRecordIdOf(record);
+  const place = stored && readings.get(stored.key);
+  return typeof place === 'string' ? place : text;
+};
+
 // The Linear card fields that hold a request record's selection, windows, and
 // orientation: one window is the card's own crop, several the windows it shows
 // (`createLinearSeq`).
-/** @param {RequestRecordView | null | undefined} record */
-const linearSeqRecordFields = (record) => {
+/** @param {RequestRecordView | null | undefined} record @param {StoredLeafReadings} [readings] */
+const linearSeqRecordFields = (record, readings = NO_STORED_READINGS) => {
   const { only, listed, reverse } = cropFieldsOfWindows(record);
   return {
-    region_record_id: canonicalRecordSelector(record) || '',
+    region_record_id: cardRecordText(record, readings),
     region_start: only?.start ?? null,
     region_end: only?.end ?? null,
     region_reverse: reverse,
@@ -1557,9 +1599,8 @@ export const linearRecordSourceResources = (linearSeqs, inputType) => {
  */
 const linearRecordPlacements = (drawing, seqs, recordOf) => {
   const arranged = Boolean(drawing.linearRecordLayoutEnabled?.value);
-  const resolvedRows = /** @type {{ row: number, canonicalColumn?: number }[]} */ (resolveEffectiveLinearRecordRows(
-    seqs, drawing.linearRecordRows, { enabled: arranged }
-  ));
+  const resolvedRows = arrangedLinearRows(drawing, seqs);
+  const gridRows = linearRecordGridRows(drawing, seqs);
   // The places of the Record Layout's cells, when the stored ones cannot be written as they are: Python reads a place
   // for every record or for none, each its own (OV-3071). Stored places Python reads as they are stay as they are.
   const places = arranged ? linearLayoutPlaces(linearLayoutCells(
@@ -1575,7 +1616,7 @@ const linearRecordPlacements = (drawing, seqs, recordOf) => {
       : written;
     return {
       windows,
-      gridRow: arranged ? (resolvedRows[index]?.row ?? null) : null,
+      gridRow: gridRows[index],
       // A record drawn in several windows places each by its own column (D-14).
       gridColumn: !arranged || windows.length > 1 ? null
         : places ? (places.get(layoutCellKey(seq.uid, null)) ?? null)
@@ -1583,6 +1624,28 @@ const linearRecordPlacements = (drawing, seqs, recordOf) => {
       reverseComplement: linearPresentationReverse(seq, windows)
     };
   });
+};
+
+/**
+ * @param {{ linearRecordLayoutEnabled?: { value: unknown }, linearRecordRows?: LayoutEntry[] }} drawing
+ * @param {readonly { uid?: unknown }[]} seqs
+ */
+const arrangedLinearRows = (drawing, seqs) => /** @type {{ row: number, canonicalColumn?: number }[]} */ (
+  resolveEffectiveLinearRecordRows(seqs, drawing.linearRecordRows, { enabled: Boolean(drawing.linearRecordLayoutEnabled?.value) })
+);
+
+/**
+ * The row each drawn card's record is written in (`presentation.gridRow`): its Record Layout row when the drawing
+ * arranges records in rows, else null. The one owner of that value: the request (`linearRecordPlacements`) and the
+ * reuse check of stored LOSATP results (a genome is the files whose records share a row, PD-OI-018 revision 6) read it.
+ * @param {{ linearRecordLayoutEnabled?: { value: unknown }, linearRecordRows?: LayoutEntry[] }} drawing
+ * @param {readonly { uid?: unknown }[]} seqs The drawn cards, in request order.
+ * @returns {(number | null)[]}
+ */
+export const linearRecordGridRows = (drawing, seqs) => {
+  if (!drawing.linearRecordLayoutEnabled?.value) return seqs.map(() => null);
+  const rows = arrangedLinearRows(drawing, seqs);
+  return seqs.map((_, index) => rows[index]?.row ?? null);
 };
 
 /**
@@ -3451,7 +3514,7 @@ const conservationSeriesForValidation = ({
     : []
   ).map((entry, index) => ({
     ...entry,
-    sourceKey: String(entry?.sourceKey || entry?.seriesKey || `resolved-${index + 1}`),
+    sourceKey: `resolved-${index + 1}`,
     sourceIndex: index,
     orderIndex: index
   }));
@@ -4243,9 +4306,6 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
   const conservation = publicationClone(config?.circularConservation || {
     enabled: false, reference: 'auto', labels: '', series: []
   });
-  if (!String(conservation.labels || '').trim() && conservation.series?.length)
-    // A row is unvalidated: one without a label, null included, gives an empty label (OV-963).
-    conservation.labels = conservation.series.map((/** @type {UnvalidatedFields<'label'>} */ row) => String(row?.label || '').trim()).join(',');
   const stateRefs = {
     paletteDefinitions: { [palette]: {} }, editableLabels: [],
     similarityAlignmentPlan: canonicalLayout.similarityAlignment || null,
@@ -4810,77 +4870,49 @@ const projectCanonicalRenderInput = ({
           entry.file
         )
       ));
-      const comparisonSources = Array.isArray(filesData.c_conservation_sequence_sources)
-        ? filesData.c_conservation_sequence_sources
-        : [];
+      /** @type {ResourceEntry[][]} */
+      const comparisonSources = ringGenomeFileLists(filesData.c_conservation_sequence_sources);
       const orderedComparisonSources = conservationEntries.map(
-        (entry) => comparisonSources[entry.sourceIndex] || null
+        (entry) => comparisonSources[entry.sourceIndex] || []
       );
-      if (orderedComparisonSources.some(Boolean)) {
-        diagramOptions.conservationFastaFiles = orderedComparisonSources.map((entry, index) => (
-          entry
-            ? fileRef(resources.addFile(
-              `conservation-fasta-files-${index + 1}`,
-              'conservation-fasta-file',
-              entry
-            ))
-            : null
-        ));
+      if (orderedComparisonSources.some((files) => files.length > 0)) {
+        // One list of genome files per ring (request schema 10).
+        diagramOptions.conservationFastaFiles = ringFileRefs(resources, 'conservation-fasta-files', orderedComparisonSources);
       }
       Object.assign(diagramOptions, conservationDiagramOptions(drawing.circularConservation, conservationEntries, 'auto'));
       if (conservationBlastsAreDerived) {
         webFiles.conservationBlastSource = 'losat-cache';
       }
     }
-    if (conservationSource === 'losat') {
-      const comparisonFastas = orderedOptionalConservationFiles(
-        filesData.c_conservation_fastas,
-        drawing.circularConservation
-      );
-      if (comparisonFastas.length > 0) {
-        webFiles.conservationLosatFastaSources = comparisonFastas.map(
-          (entry, index) => (
-            entry
-              ? resources.addFile(
-                  `conservation-losat-fasta-files-${index + 1}`,
-                  'conservation-fasta-file',
-                  entry
-                )
-              : null
-          )
-        );
-      }
+    /** @type {readonly ResolvedConservationEntry[]} The rings a Generate searched (none for any other request). */
+    const searchedRings = Array.isArray(resolvedCircularConservation) ? resolvedCircularConservation : [];
+    // Their genome files, read once: each list sits beside its ring's table.
+    const searchedRingFastas = searchedRings.map((entry) => [...entry.fastas]);
+    // A LOSAT drawing's query files: those of the rings a Generate searched, else of the rings in the order
+    // Generate draws them, matched by source key (`ringGenomeFilesInRingOrder`).
+    const losatQueryFastas = conservationSource !== 'losat' ? []
+      : searchedRingFastas.length > 0 ? searchedRingFastas
+        : ringGenomeFilesInRingOrder({ files: filesData, circularConservation: drawing.circularConservation });
+    if (losatQueryFastas.length > 0) {
+      // Each ring's LOSAT query files, one list of resource IDs per ring.
+      webFiles.conservationLosatFastaSources = ringFileResources(resources, 'conservation-losat-fasta-files', losatQueryFastas);
     }
-    if (
-      Array.isArray(resolvedCircularConservation) &&
-      resolvedCircularConservation.length > 0
-    ) {
-      diagramOptions.conservationBlastFiles = resolvedCircularConservation.map(
+    if (searchedRings.length > 0) {
+      diagramOptions.conservationBlastFiles = searchedRings.map(
         (entry, index) => fileRef(resources.addText(
           `conservation-resolved-blast-${index + 1}`,
           'conservation-blast-file',
-          String(entry?.name || `comparison-${index + 1}.tsv`),
-          String(entry?.text || '')
+          String(entry.name || `comparison-${index + 1}.tsv`),
+          entry.text
         ))
       );
-      const comparisonFastas = resolvedCircularConservation.map(
-        (entry, index) => (
-          entry?.fasta
-            ? fileRef(resources.addFile(
-                `conservation-resolved-fasta-${index + 1}`,
-                'conservation-fasta-file',
-                entry.fasta
-              ))
-            : null
-        )
-      );
-      if (comparisonFastas.some(Boolean)) {
-        diagramOptions.conservationFastaFiles = comparisonFastas;
+      if (searchedRingFastas.some((files) => files.length > 0)) {
+        diagramOptions.conservationFastaFiles = ringFileRefs(resources, 'conservation-resolved-fasta', searchedRingFastas);
       }
       Object.assign(diagramOptions, conservationDiagramOptions(drawing.circularConservation,
-        resolvedCircularConservation.map((entry, index) => ({
-          label: String(entry?.label || `Comparison ${index + 1}`),
-          color: String(entry?.color || '#D9EAF7')
+        searchedRings.map((entry, index) => ({
+          label: entry.label || `Comparison ${index + 1}`,
+          color: entry.color || '#D9EAF7'
         })), 'subject'));
       webFiles.conservationBlastSource = 'losat-cache';
     }
@@ -5240,6 +5272,17 @@ const resourceAsLegacyFile = (resources, resourceId) => {
  *   Builds the file a Session binding stands for from its resource id and the
  *   binding's recorded name, type, and modification time.
  */
+
+/**
+ * Each ring's genome files, in their order, from its resource IDs (`ringGenomeIdLists`).
+ * @param {string[][]} idLists
+ * @param {StoredResources} resources
+ * @param {ResourceFileResolver | null} resolveResourceFile
+ */
+const ringResourceFiles = (idLists, resources, resolveResourceFile) => idLists.map((ids) => ids.flatMap((resourceId) => {
+  const file = resolveResourceFile ? resolveResourceFile(resourceId) : resourceAsLegacyFile(resources, resourceId);
+  return file ? [file] : [];
+}));
 
 /**
  * @param {StoredResources} resources
@@ -6105,7 +6148,7 @@ const projectCircularConservationConfig = (options, files) => {
     losat_program: 'blastn',
     subject_gencode: 1,
     reference: String(options.conservationReference || 'auto'),
-    labels: series.map((entry) => entry.label).join(','),
+    labels: '',
     series,
     ring_width: projectOptionalNumber(options.conservationRingWidth, { field: 'conservation_ring_width' }),
     ring_gap: projectOptionalNumber(options.conservationRingGap, { field: 'conservation_ring_gap' })
@@ -6409,7 +6452,7 @@ export const projectCanonicalSessionRequest = ({
         linearSeqs: explicitBindings.linearSeqs.flatMap((sequence, index) => (
           // A key of the map: `fileRecordKeys` lists its keys.
           /** @type {string[]} */ (recordKeysByFile.get(fileRecordKeys[index])).map((uid) => {
-            const fields = linearSeqRecordFields(recordsByKey.get(uid));
+            const fields = linearSeqRecordFields(recordsByKey.get(uid), leafReadings);
             return {
               ...sequence,
               uid,
@@ -6573,7 +6616,7 @@ export const projectCanonicalSessionRequest = ({
         }),
         file_definition: fileDefinition,
         file_subtitle: fileSubtitle,
-        ...linearSeqRecordFields(record)
+        ...linearSeqRecordFields(record, leafReadings)
       };
     });
     files.linearComparisons = [];
@@ -6860,38 +6903,29 @@ export const projectCanonicalSessionRequest = ({
       files.c_conservation_blasts_source = 'losat-cache';
     }
   }
+  // Each ring's genome files, in their order: the request's references
+  // (request schema 10), else the Web metadata's resource IDs, one list per
+  // ring (one ID or null per ring in a Session 50 or older, `ringGenomeIdLists`).
   if (renderRequest.mode === 'circular' && Array.isArray(options.conservationFastaFiles)) {
-    files.c_conservation_sequence_sources = options.conservationFastaFiles.map((/** @type {UnvalidatedFields<'resourceId'>} */ ref) => (
-      ref?.resourceId
-        ? (resolveResourceFile
-            ? resolveResourceFile(ref.resourceId)
-            : resourceAsLegacyFile(resources, ref.resourceId))
-        : null
-    ));
+    files.c_conservation_sequence_sources = ringResourceFiles(ringGenomeIdLists(options.conservationFastaFiles.map(
+      (/** @type {unknown} */ ringFiles) => (Array.isArray(ringFiles) ? ringFiles : [])
+        .map((/** @type {UnvalidatedFields<'resourceId'>} */ ref) => ref?.resourceId)
+    )), resources, resolveResourceFile);
   } else if (
     renderRequest.mode === 'circular'
     && Array.isArray(webMetadata.conservationSequenceSources)
   ) {
-    files.c_conservation_sequence_sources = webMetadata.conservationSequenceSources.map(
-      (/** @type {unknown} */ resourceId) => (resourceId
-        ? (resolveResourceFile
-            ? resolveResourceFile(resourceId)
-            : resourceAsLegacyFile(resources, resourceId))
-        : null)
+    files.c_conservation_sequence_sources = ringResourceFiles(
+      ringGenomeIdLists(webMetadata.conservationSequenceSources), resources, resolveResourceFile
     );
   }
   if (
     renderRequest.mode === 'circular'
     && Array.isArray(webMetadata.conservationLosatFastaSources)
   ) {
-    files.c_conservation_fastas = webMetadata.conservationLosatFastaSources
-      .map((/** @type {unknown} */ resourceId) => (
-        resourceId
-          ? (resolveResourceFile
-              ? resolveResourceFile(resourceId)
-              : resourceAsLegacyFile(resources, resourceId))
-          : null
-      ));
+    files.c_conservation_fastas = ringResourceFiles(
+      ringGenomeIdLists(webMetadata.conservationLosatFastaSources), resources, resolveResourceFile
+    );
   }
   // The tables the request reads. A Web or CLI binding names the file a table
   // was imported from; the writer stored the table derived from it (OV-367).
@@ -7071,7 +7105,7 @@ export const projectCanonicalSessionRequest = ({
       const windows = only ? [only] : listed;
       const source = circularCardOfRecord.get(record);
       return windows.length && source
-        ? [{ source, record: canonicalRecordSelector(record) || '', windows: windows.map((window) => ({ ...window, column: null })) }]
+        ? [{ source, record: cardRecordText(record, leafReadings), windows: windows.map((window) => ({ ...window, column: null })) }]
         : [];
     }))
     : [];
@@ -7093,7 +7127,7 @@ export const projectCanonicalSessionRequest = ({
       ? grouping === 'grid'
       : WEB_UX_PROFILE.circular.gridByDefault,
     circular_record_selector: circularPresentationRecord
-      ? (canonicalRecordSelector(circularPresentationRecord) || '')
+      ? cardRecordText(circularPresentationRecord, leafReadings)
       : '',
     circular_region_start: circularPresentationRegion?.start ?? null,
     circular_region_end: circularPresentationRegion?.end ?? null,
@@ -7541,8 +7575,23 @@ export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) 
   // Schema 9 adds per-feature edits by source identity (design Q4).
   if (promoted.schema < 9) promoted.diagramOptions = { ...promoted.diagramOptions, featureOverrides: [] };
   promoteRecordRegionsToWindows(promoted.records);
+  promoteRingFilesToLists(promoted.diagramOptions);
   promoted.schema = CANONICAL_REQUEST_SCHEMA;
   return promoted;
+};
+
+/**
+ * Schema 10 writes the files of a ring's comparison genome as a list
+ * (`conservationFastaFiles[i]`); schemas 9 and older wrote one file reference
+ * or null per ring, read as a list of that one file or none, as Python's
+ * decoder reads it (`_decode_option_value`), by the Web's one reading of that
+ * older ring form (`ringGenomeFileLists`). Edited in place; a value that is no
+ * array is left to the repair.
+ * @param {unknown} diagramOptions
+ */
+const promoteRingFilesToLists = (diagramOptions) => {
+  if (!isPlainObject(diagramOptions) || !Array.isArray(diagramOptions.conservationFastaFiles)) return;
+  diagramOptions.conservationFastaFiles = ringGenomeFileLists(diagramOptions.conservationFastaFiles);
 };
 
 /**
@@ -8482,10 +8531,10 @@ const normalizePublicationRequestAliases = (request, resources) => {
   }
   if (drawsNoComparison(normalized.comparisons || [])) normalized.comparisons = [];
   const colors = normalized.diagramOptions?.colors;
+  // A Color table as a file or as a canonical table is one table. Default colors
+  // are not aliased: a canonical table is complete, a file applies over the palette.
   if (colors) {
-    colors.defaultColors = colors.defaultColors || colors.defaultColorsFile || null;
     colors.colorTable = colors.colorTable || colors.colorTableFile || null;
-    delete colors.defaultColorsFile;
     delete colors.colorTableFile;
   }
   const options = normalized.diagramOptions;

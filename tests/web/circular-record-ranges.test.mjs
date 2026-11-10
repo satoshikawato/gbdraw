@@ -47,8 +47,8 @@ test('a range finds its record by card and by the name the request gave it there
 
 test('a grid or batch draws its ranged records cropped; a record offered alone draws the fields instead', () => {
   const ranges = readCircularRecordRanges([{ source: 'two', record: 'B', windows: [window] }]);
-  assert.deepEqual([...circularDrawingCroppedRecords(list, drawing(ranges))], ['two:2']);
+  assert.deepEqual([...circularDrawingCroppedRecords(list, drawing(ranges)).keys()], ['two:2']);
   const alone = drawing(ranges, { circular_record_selector: 'two:2' });
   alone.adv.circular_grouping_intent = 'single';
-  assert.deepEqual([...circularDrawingCroppedRecords(list, alone)], []);
+  assert.deepEqual([...circularDrawingCroppedRecords(list, alone).keys()], []);
 });

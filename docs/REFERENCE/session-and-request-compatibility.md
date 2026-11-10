@@ -169,6 +169,12 @@ Session saved with a row per track after the features row; it adds no row to
 a stack you changed. It has no editor for the tracks themselves yet and shows
 how many the drawing has under the track switches.
 
+Request schema 10 also writes `diagramOptions.conservationFastaFiles` as one
+list of file references per similarity ring: the files of the ring's
+comparison genome in the listed order, or an empty list for a ring without
+one. A schema 1–9 request wrote one reference or `null` per ring; it reads as a
+ring of that one file or a ring without a comparison genome.
+
 The Python reader (`gbdraw ... --session` and the Python API) checks a
 schema-10 request against `describe_canonical_request()`: it refuses a key
 outside it, such as an older writer's `depthTrack*` input, and a value of
@@ -604,6 +610,12 @@ Which records Web draws from a CLI session depends on the request:
   also reads that file and selects each drawn record by record ID, or by `#n`
   when another record of the file has the same ID. The file stays one File that
   draws only those records.
+- A record ID that reads like a record number (`#2`, `#+2`), which only the
+  Python API or a hand edit stores, names the record with that ID: Load finds
+  its place in the file and gives the Linear card, the Circular Record select
+  or the Circular record range that place (`#k`). When the file cannot be read,
+  or no single record has that ID, Load lists it in its repair dialog and the
+  text reads as that record number.
 - A Linear record, or the record of a single Circular request, can be drawn
   cropped or reverse-complemented. The session then stores its crop in source
   coordinates as `region` and its orientation as `region.reverseComplement` or
@@ -671,10 +683,17 @@ resource bindings, each with its own filename, MIME type, modification time and
 exact bytes; duplicate payloads can share storage while every occurrence is
 kept). Loading it makes one File card per component, in order, with uid
 `record-<n>` (`source-<n>` when the request drew the files as one source), and
-maps a `#N` record selector to that record where the record counts are known;
+maps a `#N` record selector (`#02` and `#+2` are `#2`) to that record where the record counts are known;
 otherwise the selector stays `#N`, and the Web app places it over the records of
 the cards as they were loaded, taken together in card order. Python validates and preserves a draft binding of a
 Session 41 to 50 without combining its components for rendering.
+
+A Session 51 Circular drawing binds each similarity ring's comparison genome as
+a list of files (`c_conservation_fastas` and `c_conservation_sequence_sources`,
+one list per ring, in the ring's file order), and its
+`conservationLosatFastaSources` and `conservationSequenceSources` hold one list
+of resource IDs per ring. A Session 50 or older wrote one file or none per
+ring; it loads as a ring of that one file, or a ring without files.
 
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings keep their request-derived source initialization;
@@ -1014,6 +1033,16 @@ search arguments. Filenames and display labels do not define cache identity.
 Only affected record pairs rerun when one valid cache key changes. A Session
 stores each raw result once: rows that share a cache key, such as two ring
 files with one sequence, share one entry named by the first row.
+A LOSATN or TLOSATX search whose records are not each the whole of its genome
+(a crop, a window, a file of several records, or files linked through a shared
+row) carries its genome pair's search space (`--searchsp`) in its cache
+arguments. A result saved before gbdraw counted E-values per genome has no
+such argument, so it is not reused for that search: Generate searches again
+and the E-values follow the genome pair. A whole one-record pair keeps its key
+and its saved result. A LOSATP search carries its subject genome's protein
+letters (`--dbsize`) in its cache arguments under the same rule, so a LOSATP
+result saved for a crop, a window, a multi-record file, or a multi-file row is
+searched again too.
 
 Pairwise hit limits, Similarity-group member limits, and Collinear block
 settings are derived options. Changing one recomputes the affected derived

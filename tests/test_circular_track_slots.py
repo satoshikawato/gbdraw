@@ -1130,6 +1130,74 @@ def test_only_a_stack_of_the_presets_rows_keeps_the_preset_lanes(
 
 
 @pytest.mark.circular
+@pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
+@pytest.mark.parametrize(
+    ("stack", "expected_place"),
+    [
+        (("ticks", "features", "gc_content"), "before"),
+        (("features", "ticks", "gc_content"), "after"),
+        (("gc_content", "features", "ticks"), "after"),
+        (("ticks", "gc_content", "features"), "before"),
+    ],
+    ids=["ticks_first", "default_order", "ticks_last", "ticks_above_gc_above_features"],
+)
+def test_a_ticks_row_without_a_layout_takes_the_layout_of_its_place_by_the_features(
+    track_type: str,
+    stack: tuple[str, ...],
+    expected_place: str,
+) -> None:
+    # OV-3189: a ticks row that names no tick_label_layout (as the CLI and a
+    # CLI Session write it) took the preset's layout, labels inside the ticks,
+    # wherever it stood. Above the feature track that put the labels on the
+    # features, far from their ticks. Its place by the first features row now
+    # chooses: before it the labels stand outside, after it the preset's
+    # layout. The Web reads the same table (mode-profiles.generated.js).
+    from gbdraw.canvas import CircularCanvasConfigurator
+    from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
+    from gbdraw.diagrams.circular.presets import (
+        CircularPresetContext,
+        circular_track_preset_table,
+        circular_track_slots_for_preset,
+        circular_track_slots_from_preset_order,
+    )
+
+    record = _load_record()
+    cfg = GbdrawConfig.from_dict(_base_config(track_type=track_type))
+    canvas_config = CircularCanvasConfigurator("test", CircularRenderProfile(cfg), "none", record)
+    context = CircularPresetContext(
+        cfg=cfg,
+        geometry=canvas_config.geometry(),
+        total_length=len(record.seq),
+        strandedness=bool(cfg.canvas.strandedness),
+        show_features=True,
+        show_ticks=True,
+        show_depth=False,
+        show_gc=True,
+        show_skew=False,
+        track_ids=tuple(canvas_config.track_ids.items()),
+    )
+    renderers = {"features": "features", "ticks": "ticks", "gc_content": "dinucleotide_content"}
+    by_place = circular_track_preset_table()["tickLabelLayoutByFeaturePlace"]
+    preset_ticks = next(slot for slot in circular_track_slots_for_preset(track_type, context) if slot.id == "ticks")
+
+    def drawn_layout(params: dict[str, object]) -> object:
+        slots = [
+            CircularTrackSlot(id=slot_id, renderer=renderers[slot_id], params=params if slot_id == "ticks" else {})
+            for slot_id in stack
+        ]
+        plan = circular_track_slots_from_preset_order(slots, track_type, context)
+        return next(slot for slot in plan.slots if slot.id == "ticks").params.get("tick_label_layout")
+
+    assert by_place == {"before": "label_out_tick_in", "after": "label_in_tick_out"}
+    # The preset's own ticks row, after the features, draws the "after" layout.
+    assert preset_ticks.params["tick_label_layout"] == by_place["after"]
+    assert drawn_layout({}) == by_place[expected_place]
+    # A layout the row names is kept wherever the row stands.
+    for layout in ("label_out_tick_in", "label_in_tick_out", "tick_only", "label_only"):
+        assert drawn_layout({"tick_label_layout": layout}) == layout
+
+
+@pytest.mark.circular
 @pytest.mark.parametrize("input_name", ["HmmtDNA.gbk", "NC_005856.1.gb"])
 @pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
 @pytest.mark.parametrize("separate_strands", [True, False])

@@ -5,7 +5,7 @@
 // mode, the session admission, the shown-drawing readers, and the record
 // refresh as ports.
 import { circularDiscoveryForInput } from '../services/record-discovery.js';
-import { circularRecordEntries, circularRecordSelection, formatRecordLength } from '../services/record-options.js';
+import { circularDrawingRecordSet, circularRecordEntries, circularRecordSelection, formatRecordLength } from '../services/record-options.js';
 import { cardHoldsRecordKey, circularRecordsToDraw, recordKeyExpansion } from '../services/record-draw-selection.js';
 import { circularSourceInputs } from '../services/input-types.js';
 import { msg, t, tm, tn } from '../utils/i18n.js';
@@ -137,9 +137,11 @@ export const createCircularRecordPresentation = ({
     : Promise.resolve({ status: 'unavailable', reason: msg('Source inspection is unavailable.') }));
   const circularRecordPresentationEntries = () => circularRecordEntries(circularRecordDiscoveryState.value.records);
 
+  // OV-3340: the records the next Generate draws (`circularDrawingRecordSet`, the request's own owner): the record
+  // the Record select names alone, else the ON records.
   const circularDrawnRecordCount = computed(() => {
     const drawing = shownDrawingOfMode('circular');
-    return drawing ? circularRecordsToDraw(circularRecordPresentationEntries(), drawing.recordsOff).length : 0;
+    return drawing ? circularDrawingRecordSet(circularRecordDiscoveryState.value.records, drawing).records.length : 0;
   });
   const circularRecordPresentationOptions = computed(() => {
     const drawing = state.activeDrawing();
@@ -150,7 +152,8 @@ export const createCircularRecordPresentation = ({
     const shown = selectedRecordName(drawing, current);
     // Without an inspected catalog the saved selector is unverified, not missing.
     const inspected = circularRecordDiscoveryState.value.status === 'ready';
-    const drawnCount = circularDrawnRecordCount.value;
+    // The automatic option describes the all-records choice: the ON records it draws.
+    const drawnCount = circularRecordsToDraw(entries, drawing.recordsOff).length;
     // OV-379: a source whose records are not read says so, as the Linear select does.
     const automaticLabel = circularRecordDiscoveryState.value.status === 'deferred'
       ? tm(RECORDS_NOT_INSPECTED_LABEL)

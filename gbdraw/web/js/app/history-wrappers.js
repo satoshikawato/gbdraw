@@ -15,13 +15,13 @@ import { legendEntryKey } from '../services/drawing/paint.js';
 import { msg } from '../utils/i18n.js';
 /** @import { WebState } from '../state.js' */
 /** @import { KeptLegendRow } from '../services/drawing/paint.js' */
-/** @import { UnresolvedNotice } from '../services/feature-visibility.js' */
+/** @import { UnresolvedNotice, VisibilityTarget } from '../services/feature-visibility.js' */
 /** @import { LegendRowName } from '../services/legend-row-names.js' */
 /** @import { ColorRuleLegendGroup } from '../services/specific-color-rules.js' */
 /** @import { PopupOrigin } from '../utils/popup-bounds.js' */
 /** @import { ColorFeature } from './feature-editor/color-actions.js' */
 /** @import { EditableLabelEntry, LabelTableInput } from './feature-editor/label-actions.js' */
-/** @import { VisibilityScopeChoice, VisibilityTarget } from './feature-editor/visibility-actions.js' */
+/** @import { VisibilityScopeChoice } from './feature-editor/visibility-actions.js' */
 
 const { computed, reactive, ref } = window.Vue;
 

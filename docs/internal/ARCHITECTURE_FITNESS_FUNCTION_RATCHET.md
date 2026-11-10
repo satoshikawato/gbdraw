@@ -478,10 +478,17 @@ and holds the layer table, the limits, and the baselines.
 - Cycles: module-level imports form no cycle. An import inside a function can
   close one; `IMPORT_CYCLE_SIZES` gives each module in such a cycle its size,
   so no module joins a cycle and no cycle grows.
-- Function size: a function stays within `MAX_FUNCTION_LINES` lines and
-  `MAX_FUNCTION_PARAMETERS` parameters. `FUNCTION_LINES` and
-  `FUNCTION_PARAMETERS` hold the larger functions the rule started with at
-  their size.
+- Function size: a function stays within `MAX_FUNCTION_STATEMENTS`
+  statements and `MAX_FUNCTION_PARAMETERS` parameters. `FUNCTION_STATEMENTS`
+  and `FUNCTION_PARAMETERS` hold the larger functions at their size. A
+  function's statements are those in its body, the statements of the
+  functions and classes nested in it included. A docstring is not a
+  statement, and the body of a `lambda` counts as one. Comments, blank lines,
+  and line breaks change no count, so rewording or rewrapping a function
+  neither lowers nor raises it.
+- The statement limit was set on 2026-11-10, when the rule moved from 150
+  lines to statements: 150 lines at the median density of the functions of
+  100 to 200 lines that day, 2.6 lines a statement, is 58 statements.
 - Adding or raising a baseline entry and raising a limit are authority-only
   changes that need the Owner's approval. Lowering or removing an entry is
   optional.
@@ -499,14 +506,21 @@ This is the rule `WEB-FUNCTION-SIZE` of `tools/web-design-rule-guards.json`.
 `gbdraw/web/js/`, except the generated `*.generated.js` ones, with the pinned
 TypeScript, and holds the limit and the baseline.
 
-- A function stays within `MAX_FUNCTION_LINES` lines, the limit Python
-  functions have. `FUNCTION_LINES` holds the longer functions the rule started
-  with at their length; a listed function may shrink but not grow.
+- A function stays within `MAX_FUNCTION_STATEMENTS` statements.
+  `FUNCTION_STATEMENTS` holds the larger functions at their size; a listed
+  function may shrink but not grow.
 - A function is each function declaration, function expression, arrow
-  function, method, accessor, and constructor, nested ones included. Its lines
-  run from its first token to its last, so a nested function counts in the
-  functions around it as well: a `create*` factory counts with every function
-  inside it.
+  function, method, accessor, and constructor, nested ones included. Its
+  statements are those in its body, the statements of the functions and
+  classes nested in it included, so a nested function counts in the functions
+  around it as well: a `create*` factory counts with every function inside it.
+  A block and an empty statement are not statements; an arrow function's
+  expression body (`=> value`) counts as one, its implicit `return`. Comments,
+  JSDoc, blank lines, and line breaks change no count.
+- The limit was set on 2026-11-10 the way the Python one was: 150 lines at the
+  median density of the Web functions of 100 to 200 lines that day, 1.76
+  lines a statement, is 85 statements. Web code has more statements to a line
+  than Python code, whose docstrings and wrapped calls take more lines.
 - A function is named `<path under gbdraw/web/js/>::<qualified name>`, the
   names of the functions, classes, and named object literals around it and its
   own, joined by `.`. A function expression takes the name it is bound to,
@@ -529,30 +543,31 @@ or reused on its own, and it can grow back as wiring leaves the root.
 - The root function of a composition root is its top-level function that
   calls a `create*` factory imported from another module; each composition
   root has exactly one.
-- The logic of a root is every function of two or more lines whose nearest
-  enclosing function is the root function: a `const f = () => {...}`
+- The logic of a root is every function of two or more statements whose
+  nearest enclosing function is the root function: a `const f = () => {...}`
   statement, a function passed inline to a factory as a port, a method of an
   object literal built in the root, a computed getter, and a watch callback
-  alike. Each counts with its whole span, measured as above, so a function
+  alike. Each counts with all its statements, counted as above, so a function
   nested in it counts once, in it.
-- A one-line function written directly in the root function, such as the port
-  `drawingTabs: () => state.drawingTabs.value`, is wiring and does not count:
-  adding a port is what a composition root is for. A port of two or more lines
-  counts, so logic does not leave the count by moving into an inline port. A
-  one-line function inside a counted function counts with that function's
-  span, as the port object of a wrapper such as
+- A function of one statement written directly in the root function, such as
+  the port `drawingTabs: () => state.drawingTabs.value`, is wiring and does
+  not count: adding a port is what a composition root is for. A port of two or
+  more statements counts, so logic does not leave the count by moving into an
+  inline port. A one-statement function inside a counted function counts with
+  that function, as the port object of a wrapper such as
   `loadSessionFromFile = (event) => importSessionFromFile(event, {...})` does.
 - This check does not count statements written directly in the root body
   (setup-time `if`, `for`, or `try` blocks) or the other top-level functions of
   a root module. The root function's whole size stays bounded by
-  `MAX_FUNCTION_LINES` and its `FUNCTION_LINES` entry.
-- `COMPOSITION_ROOT_LOGIC_LINES` records the total lines of that logic per
-  `<path>::<root function>`; the test also reports how many functions make up
-  each total and how many one-line functions it left out. A total may shrink but not grow, and a composition root without
+  `MAX_FUNCTION_STATEMENTS` and its `FUNCTION_STATEMENTS` entry.
+- `COMPOSITION_ROOT_LOGIC_STATEMENTS` records the total statements of that
+  logic per `<path>::<root function>`; the test also reports how many
+  functions make up each total and how many one-statement functions it left
+  out. A total may shrink but not grow, and a composition root without
   an entry fails. There is no limit per function.
 - When the test fails, move the new logic into a module factory and pass it to
   the root as a port, or shrink other logic in the same root by the same
-  number of lines.
+  number of statements.
 - Adding or raising an entry (a new composition root, a renamed root function,
   or more logic) is an authority-only change that needs the Owner's approval.
   An entry whose key names no root function now (the module is no longer a

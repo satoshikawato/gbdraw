@@ -26,14 +26,15 @@ const TWO = 'circular-source-2222';
  * hold the files `files` names by card uid.
  * `named` gives the record ID the Result names a record by; a record its committed request selected by that ID is
  * named by `{ recordId, idSuffices: true }`, as is a record of a file its request drew whole.
- * @param {{ selector: string, named?: Record<string, string | { recordId: string, idSuffices: boolean }>, read?: object[] | null, files?: Record<string, string> }} input
+ * @param {{ selector: string, named?: Record<string, string | { recordId: string, idSuffices: boolean }>, read?: object[] | null, files?: Record<string, string>,
+ *   recordsOff?: string[], canvas?: boolean }} input
  */
-const panelOf = ({ selector, named = {}, read = null, files = { [ONE]: 'one.gb', [TWO]: 'two.gb' } }) => {
+const panelOf = ({ selector, named = {}, read = null, files = { [ONE]: 'one.gb', [TWO]: 'two.gb' }, recordsOff = [], canvas = false }) => {
   const sources = Object.entries(files).map(([uid, name]) => ({ uid, gb: file(name), gff: null, fasta: null }));
   const drawing = {
     id: 'circular', mode: 'circular', inputType: { value: 'gb' }, circularSources: sources,
-    form: { circular_record_selector: selector, multi_record_canvas: false }, adv: { circular_grouping_intent: '' },
-    recordsOff: [], circularRecordList: { value: read ?? [] },
+    form: { circular_record_selector: selector, multi_record_canvas: canvas }, adv: { circular_grouping_intent: '' },
+    recordsOff, circularRecordList: { value: read ?? [] },
     circularRecordDiscovery: read
       ? { status: 'ready', error: '', inputType: 'gb', sources: sources.map((card) => ({ uid: card.uid, primaryFile: card.gb, pairedFile: null, error: '' })) }
       : { status: 'idle', error: '', inputType: '', sources: [] }
@@ -149,4 +150,26 @@ test('the three one-record cards of a Web Session keep their file names (Sakai)'
   const { panel } = panelOf({ selector: '', files, named });
   assert.deepEqual(['a', 'b', 'c'].map(panel.getCircularRecordOrderLabel),
     ['NC_002695.gb: NC_002695.2', 'NC_002128.gb: NC_002128.1', 'NC_002127.gb: NC_002127.1']);
+});
+
+// OV-3340: the status line counts the records the next Generate draws (`circularDrawingRecordSet`): the record the
+// Record select names alone, else the ON records. The automatic option describes the all-records choice, so it keeps
+// the ON count.
+test('the drawn count is the record set the drawing draws; the automatic option keeps the ON count (OV-3340)', () => {
+  const read = [readRecord(TWO, 1, 'TESTA'), readRecord(TWO, 2, 'TESTB')];
+  const files = { [TWO]: 'two.gb' };
+  const automatic = (panel) => panel.circularRecordPresentationOptions.value[0].label;
+  const chosen = panelOf({ selector: `${TWO}:2`, read, files }).panel;
+  assert.equal(chosen.circularDrawnRecordCount.value, 1, 'TESTB alone');
+  assert.equal(automatic(chosen), 'All records (separate diagrams)');
+  const all = panelOf({ selector: '', read, files });
+  assert.equal(all.panel.circularDrawnRecordCount.value, 2);
+  const off = panelOf({ selector: '', read, files, recordsOff: [`${TWO}:1`] }).panel;
+  assert.equal(off.circularDrawnRecordCount.value, 1);
+  assert.equal(automatic(off), '1 of 2 records (separate diagrams)');
+  const chosenOff = panelOf({ selector: `${TWO}:2`, read, files, recordsOff: [`${TWO}:1`] }).panel;
+  assert.equal(chosenOff.circularDrawnRecordCount.value, 1);
+  assert.equal(automatic(chosenOff), '1 of 2 records (separate diagrams)', 'the all-records choice draws the ON records');
+  const canvas = panelOf({ selector: `${TWO}:2`, read, files, canvas: true }).panel;
+  assert.equal(canvas.circularDrawnRecordCount.value, 2, 'a Multi-Record Canvas draws every ON record');
 });

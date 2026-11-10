@@ -475,31 +475,6 @@ export const adjacentRowPairs = (sequences = [], layout = [], allPairs = false) 
 };
 
 /**
- * The display pairs of a collinear comparison laid out by a CLI Session's
- * complete row grid: every pair across adjacent occupied rows of the drawn
- * records, as Python closes up a row that records turned OFF leave empty.
- * Null when the drawn records do not all hold a canonical grid cell; the
- * comparison plan's edges decide then.
- * @param {readonly { uid: string }[]} sequences The drawn records, in request order.
- * @param {readonly { uid: string, row: number, canonicalRow?: number, canonicalColumn?: number,
- *   canonicalCardinality?: string }[]} rows The drawing's record rows.
- * @returns {((queryIndex: number, subjectIndex: number) => boolean) | null}
- */
-export const canonicalGridDisplayPairs = (sequences, rows) => {
-  const cells = sequences.map((seq) => rows.find((entry) => entry.uid === seq.uid));
-  if (cells.length < 2 || !cells.every((entry) => entry?.canonicalRow === entry?.row
-    && Number.isInteger(entry?.canonicalColumn) && Number(entry?.canonicalColumn) > 0
-    && entry?.canonicalCardinality === 'exactly_one')) return null;
-  const pairs = new Set(adjacentRowPairs([...sequences], /** @type {{ uid: string, row: number }[]} */ (cells), true)
-    .map(([upper, lower]) => `${upper}\0${lower}`));
-  return (queryIndex, subjectIndex) => {
-    const query = sequences[queryIndex]?.uid;
-    const subject = sequences[subjectIndex]?.uid;
-    return queryIndex < subjectIndex && (pairs.has(`${query}\0${subject}`) || pairs.has(`${subject}\0${query}`));
-  };
-};
-
-/**
  * @param {string} code
  * @param {string} message
  * @param {LinearComparisonEdgeInit | null} [edge]
@@ -1241,20 +1216,25 @@ export const buildLosatJobSpecs = ({
  * Which searches of a LOSAT run are displayed pairs, and the number of each
  * search (a displayed pair's number names its payload, its `/blast_<n>.txt`
  * file and Run info slot). Every search takes its spec ordinal. A displayed
- * pair is its edge's search in the edge's direction or, for a complete row
- * grid, an adjacent-row pair; each such pair is its own ADJACENT edge
- * (`adjacentRowPairs`), so displayed numbers never repeat (OV-1069). The
- * derived LOSATP identity owner refuses a repeated displayed number.
+ * pair is its edge's search in the edge's direction or, for a drawing whose
+ * units stand in a grid, a unit pair Python's unit plan says the drawing
+ * displays (`gridPairs`: every pair of units in adjacent rows, read in the
+ * direction of the unit first in request order); each such pair is its own
+ * ADJACENT edge (`adjacentRowPairs`), so displayed numbers never repeat
+ * (OV-1069). The derived LOSATP identity owner refuses a repeated displayed number.
  * @param {readonly LosatJobSpec[]} specs
  * @param {readonly LinearComparisonResolvedEdge[]} edges The edges of the comparison plan.
- * @param {((queryIndex: number, subjectIndex: number) => boolean) | null} gridPair
- *   `canonicalGridDisplayPairs` of a drawing laid out by a complete row grid, else null.
+ * @param {readonly { queryUnit: number, subjectUnit: number }[] | null} gridPairs The unit pairs the drawing
+ *   displays when its units stand in a grid (`LinearUnitSearch.gridPairs`), else null.
  * @returns {{ displayPair: boolean, pairIndex: number }[]} One per spec, in spec order.
  */
-export const numberLosatDisplayPairs = (specs, edges, gridPair) => specs.map((spec) => {
-  const edge = edges.find((candidate) => candidate.edgeKey === spec.edgeKey);
-  const displayPair = gridPair
-    ? gridPair(spec.queryIndex, spec.subjectIndex)
-    : Boolean(edge && spec.queryIndex === edge.queryIndex && spec.subjectIndex === edge.subjectIndex);
-  return { displayPair, pairIndex: spec.ordinal };
-});
+export const numberLosatDisplayPairs = (specs, edges, gridPairs) => {
+  const grid = gridPairs && new Set(gridPairs.map(({ queryUnit, subjectUnit }) => `${queryUnit}:${subjectUnit}`));
+  return specs.map((spec) => {
+    const edge = edges.find((candidate) => candidate.edgeKey === spec.edgeKey);
+    const displayPair = grid
+      ? grid.has(`${spec.queryIndex}:${spec.subjectIndex}`)
+      : Boolean(edge && spec.queryIndex === edge.queryIndex && spec.subjectIndex === edge.subjectIndex);
+    return { displayPair, pairIndex: spec.ordinal };
+  });
+};

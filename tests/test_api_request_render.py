@@ -69,7 +69,8 @@ from gbdraw.api.requests import (
 )
 from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.io.record_select import parse_record_selector
-from gbdraw.io.regions import parse_region_spec
+from gbdraw.io.regions import RecordWindow, parse_region_spec
+from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.session_io import validate_current_session_artifacts
 from gbdraw.session_request_codec import CanonicalRequestEncodingError
 
@@ -393,7 +394,7 @@ def _derived_settings_key(options: LinearDiagramOptions, mode: str) -> str:
         records=(_memory_input("a"), _memory_input("b")),
         options=options,
     )
-    settings = request_render_module._request_derived_settings(request, mode)
+    settings = request_render_module._request_derived_settings(request, mode, (0, 1))
     return derived_losatp_cache_key(derived_losatp_identity(
         settings,
         [DerivedLosatpRecord(index, f"runtime-{index}", f"display-{index}", 6, False) for index in (0, 1)],
@@ -485,23 +486,46 @@ def test_inactive_and_render_only_request_options_keep_the_derived_identity() ->
     ) == orthogroup
 
 
-def test_a_row_grid_request_reads_as_explicit_display_pairs() -> None:
-    def explicit(records: tuple[RecordInput, ...], mode: str = "collinear") -> bool:
-        request = LinearDiagramRequest(
-            records=records, options=LinearDiagramOptions(), layout=LinearMultiRecordOptions()
-        )
-        return request_render_module._request_derived_settings(request, mode).explicit_display_pairs
+def test_a_grid_drawing_reads_as_explicit_display_pairs_whatever_wrote_its_rows() -> None:
+    """One rule, whatever wrote the rows (OV-3248): a drawing whose rows hold several records displays every pair of
+    records in adjacent rows (``grid_display_pairs``), so its derived payload is computed with those pairs. A grid
+    arranged in the Web writes rows without columns; a records table writes both; the windows of a record share its
+    row. A drawing whose rows hold one record each, in record order, joins consecutive records."""
 
-    cell = lambda row, column: RecordPresentation(grid_row=row, grid_column=column)  # noqa: E731
-    gridded = (_memory_input("a", presentation=cell(1, 1)), _memory_input("b", presentation=cell(2, 1)))
-    assert explicit(gridded) is True
-    assert explicit(gridded, "orthogroup") is False
-    rows_only = tuple(
-        _memory_input(name, presentation=RecordPresentation(grid_row=row)) for name, row in (("a", 1), ("b", 2))
+    def explicit(records: tuple[RecordInput, ...], mode: str = "collinear") -> bool:
+        plan = plan_request(LinearDiagramRequest(
+            records=records, options=LinearDiagramOptions(), layout=LinearMultiRecordOptions()
+        ))
+        assert isinstance(plan, LinearRequestPlan)
+        rows = resolve_record_row_positions(
+            plan.records, plan.layout.multi_record_positions if plan.layout is not None else None
+        )[1]
+        return request_render_module._request_derived_settings(plan.request, mode, rows).explicit_display_pairs
+
+    def placed(*cells: tuple[str, int, int | None]) -> tuple[RecordInput, ...]:
+        return tuple(
+            _memory_input(name, presentation=RecordPresentation(grid_row=row, grid_column=column))
+            for name, row, column in cells
+        )
+
+    table_grid = placed(("a", 1, 1), ("b", 1, 2), ("c", 2, 1))
+    web_grid = placed(("a", 1, None), ("b", 1, None), ("c", 2, None))
+    assert explicit(table_grid) is True
+    assert explicit(web_grid) is True
+    assert explicit(web_grid, "orthogroup") is False
+    windows = (
+        RecordInput(
+            source=InMemoryRecordSource(_seqrecord("a", "ATGAAATAG" * 4)),
+            windows=(RecordWindow(1, 9), RecordWindow(19, 27)),
+        ),
+        _memory_input("b"),
     )
-    assert explicit(rows_only) is False
+    assert explicit(windows) is True
+    assert explicit(placed(("a", 1, 1), ("b", 2, 1))) is False
+    # One record per row, rows out of record order: the records of adjacent rows are not consecutive.
+    assert explicit(placed(("a", 3, 1), ("b", 1, 1), ("c", 2, 1))) is True
+    assert explicit(placed(("a", 1, None), ("b", 2, None))) is False
     assert explicit((_memory_input("a"), _memory_input("b"))) is False
-    assert explicit(gridded[:1]) is False
 
 
 @pytest.mark.parametrize("mode", ("similarity_groups", "collinear"))
@@ -522,7 +546,7 @@ def test_api_builds_no_derived_entry_without_one_raw_entry_per_search(
 
     def build(raw_entries: tuple[object, ...]) -> tuple[object, ...]:
         return request_render_module._build_current_derived_entries(
-            built.linear_metadata, plan.request, plan.records, linear_artifacts, raw_entries,
+            built.linear_metadata, plan.request, plan.records, plan.layout, linear_artifacts, raw_entries,
         )
 
     (entry,) = build(raw)
@@ -1117,7 +1141,6 @@ def test_option_resolution_clears_shadowed_file_inputs_without_reading(
             feature_visibility_table_file="unused-visibility.tsv",
         ),
         mode="linear",
-        load_comparison_colors=False,
     )
 
     assert resolved.colors is not None
@@ -2422,6 +2445,7 @@ def _build_derived_entries(context: SimpleNamespace) -> tuple[object, ...]:
         context.metadata,
         context.request,
         context.records,
+        None,
         context.artifacts,
         context.raw_entries,
     )

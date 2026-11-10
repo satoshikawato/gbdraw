@@ -344,6 +344,37 @@ export const losatRecordGencode = (sequence) => {
   return Number.isFinite(value) ? value : null;
 };
 
+/**
+ * A search's arguments as the raw cache spells them (`LOSAT_SEARCH_FLAGS`), in Python's order (`losat_cache_args`):
+ * each flag with a value, none without one.
+ * @param {readonly [string, string | number | null][]} options
+ * @returns {string[]}
+ */
+const losatArgs = (options) => options.flatMap(([flag, value]) => (value === null || value === '' ? [] : [flag, String(value)]));
+
+/**
+ * The arguments of a LOSATN or TLOSATX search: LOSATN's task, TLOSATX's translation tables (none for a default
+ * table), and the search space of the genome pair when Python plans one (`plan_genome_scales`, OV-3143). Generate and
+ * the job estimate build them here.
+ * @param {{ program: 'blastn' | 'tblastx', task: string, queryGencode: number | null, dbGencode: number | null,
+ *   searchSpace: string | null }} search
+ * @returns {string[]}
+ */
+export const nucleotideLosatArgs = ({ program, task, queryGencode, dbGencode, searchSpace }) => losatArgs(program === 'blastn'
+  ? [['--task', task], ['--searchsp', searchSpace]]
+  : [['--query-gencode', queryGencode], ['--db-gencode', dbGencode], ['--searchsp', searchSpace]]);
+
+/**
+ * The arguments of a LOSATP search: one HSP per subject protein for Pairwise, the candidate limit, and the proteins of
+ * the subject genome as the database size when Python plans one (`plan_genome_scales`, PD-OI-018 revision 6).
+ * Generate and the job estimate build them here.
+ * @param {{ pairwise: boolean, candidateLimit: number | null, databaseSize: string | null }} search
+ * @returns {string[]}
+ */
+export const proteinLosatArgs = ({ pairwise, candidateLimit, databaseSize }) => losatArgs([
+  ['--max-hsps-per-subject', pairwise ? 1 : null], ['--max-target-seqs', candidateLimit], ['--dbsize', databaseSize]
+]);
+
 /** @typedef {'self' | 'within-source' | 'between-sources'} LosatSourceScope */
 /**
  * One search of the plan: the record indexes of the query and subject sides and the record-pair specs it answers.
@@ -362,14 +393,19 @@ export const losatRecordGencode = (sequence) => {
 // With records turned OFF (D-07), `sequences` lists the drawn records first,
 // whose indexes the specs use, then the OFF records (`losatSearchSequences`):
 // an OFF record is never a query, but stays in its source's database, so
-// turning a record ON or OFF changes no other record's E-value.
+// turning a record ON or OFF changes no other record's E-value. An OFF record
+// has no row and so no genome: it joins a database under the arguments of the
+// drawn subject it is searched with (`buildArgs`'s third index), so the search
+// space of that subject's genome pair (OV-3143) does not keep it out.
 /**
  * @template {Partial<LinearSeq>} S
  * @template {{ queryIndex: number, subjectIndex: number }} Spec
  * @param {{
  *   sequences: readonly S[], specs: readonly Spec[],
- *   buildArgs: (queryIndex: number, subjectIndex: number) => readonly unknown[], drawnCount?: number
- * }} options
+ *   buildArgs: (queryIndex: number, subjectIndex: number, drawnSubjectIndex?: number) => readonly unknown[],
+ *   drawnCount?: number
+ * }} options `buildArgs(query, subject, drawnSubject)` gives a search's arguments: those `subject` takes as a member
+ *   of a database searched with the drawn record `drawnSubject` (by default `subject` itself).
  * @returns {{ jobs: LosatSourceJob<Spec>[], bySpec: Map<Spec, LosatSourceJob<Spec>> }}
  */
 export const planLosatSourceJobs = ({ sequences, specs, buildArgs, drawnCount = sequences.length }) => {
@@ -404,7 +440,9 @@ export const planLosatSourceJobs = ({ sequences, specs, buildArgs, drawnCount = 
       const subjectIndexes = scope === 'self'
         ? [subjectIndex]
         : subjectSource.records.map(({ index }) => index).filter((index) => (
-            index !== queryIndex && JSON.stringify(buildArgs(queryIndex, index)) === argsText
+            index !== queryIndex
+            && JSON.stringify(index < drawnCount ? buildArgs(queryIndex, index) : buildArgs(queryIndex, index, subjectIndex))
+              === argsText
           ));
       job = { queryIndexes, subjectIndexes, args, scope, specs: [] };
       jobs.set(key, job);
@@ -456,7 +494,7 @@ let lastPreparedLosatSides = new Map();
  *   sequences: readonly S[], specs: readonly Spec[],
  *   getEntry: (index: number) => Promise<{ fasta: string }>,
  *   getDigest: (index: number) => Promise<string>,
- *   buildArgs: (queryIndex: number, subjectIndex: number) => readonly unknown[],
+ *   buildArgs: (queryIndex: number, subjectIndex: number, drawnSubjectIndex?: number) => readonly unknown[],
  *   hashText: (text: string) => Promise<string>, protein?: boolean, drawnCount?: number
  * }} options `getDigest(index)` is `hashText` of `getEntry(index).fasta`, read from its owner: a single-record side
  *   whose FASTA is its entry's text takes that digest instead of hashing the text again (OV-1598).

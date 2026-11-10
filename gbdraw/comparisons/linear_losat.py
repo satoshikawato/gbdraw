@@ -17,7 +17,7 @@ from dataclasses import dataclass, replace
 import io
 import logging
 import re
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Callable, Hashable, Mapping, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
 
@@ -25,11 +25,15 @@ from gbdraw.api.options import LinearDiagramOptions, LosatSearchOptions
 from gbdraw.comparisons.losat_jobs import (
     LOSAT_OUTFMT,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+    GenomeSearchSpaces,
+    genome_file_names,
+    genome_search_spaces,
     losat_search_frame_fasta,
     nucleotide_losat_cache_key,
     plan_losat_jobs,
     prepare_losat_batches,
     sha256_text,
+    source_file_name,
     split_losat_batch_result,
 )
 from gbdraw.comparisons.losat_runtime import (
@@ -39,6 +43,7 @@ from gbdraw.comparisons.losat_runtime import (
     LosatRuntimeRecord,
     LosatSearchArgs,
     losat_cache_args,
+    losat_takes_genome_scale,
     require_losat_task_support,
     run_losat_search,
 )
@@ -133,17 +138,100 @@ def losat_edge_filename(
 class NucleotideLosatRecord:
     """One drawn record a Linear nucleotide search reads, with what names and groups it.
 
-    ``source_id`` identifies its source file (one genome); ``record_key`` is the key the Web uses as its sequence UID;
+    ``source_id`` identifies its source file (one genome) and ``source_length`` is the length of every record of that
+    file (``source_genome_length``); ``record_key`` is the key the Web uses as its sequence UID;
     ``label`` names its raw TSVs; ``window`` is its window number when it is one of several windows of a record, else
     ``None``; ``input_index`` is the record input it came from (its translation table).
     """
 
     record: SeqRecord
     source_id: object
+    source_length: int
     record_key: str
     label: str
     window: int | None
     input_index: int
+
+
+def _pair_search_args(
+    search: LosatSearchOptions,
+    *,
+    records: Sequence[SeqRecord],
+    rows_by_record: Sequence[int],
+    source_ids: Sequence[object],
+    source_lengths: Sequence[int],
+    input_indexes: Sequence[int],
+    pairs: Sequence[tuple[int, int]],
+) -> Callable[[int, int], LosatSearchArgs]:
+    """The search options of each record pair, by record indexes.
+
+    The files of a row are one genome, the length of every record of them
+    counted (``source_lengths``), and a search between two rows passes the
+    genome pair's search space as ``-searchsp``
+    (:func:`gbdraw.comparisons.losat_jobs.genome_search_spaces`). A runtime
+    without ``-searchsp`` searches as before, with a warning.
+    """
+
+    gencodes = _record_gencodes(search, input_indexes)
+    space = _genome_search_space(
+        search, records=records, rows_by_record=rows_by_record, source_ids=source_ids,
+        source_lengths=source_lengths, pairs=pairs,
+    )
+
+    def search_args(query: int, subject: int) -> LosatSearchArgs:
+        searchsp = space(query, subject)
+        if search.program == "losatn":
+            return LosatSearchArgs(task=search.losatn_task, searchsp=searchsp)
+        return LosatSearchArgs(query_gencode=gencodes[query], db_gencode=gencodes[subject], searchsp=searchsp)
+
+    return search_args
+
+
+def linear_search_spaces(
+    program: str,
+    *,
+    records: Sequence[SeqRecord],
+    rows_by_record: Sequence[Hashable],
+    source_ids: Sequence[Hashable],
+    source_lengths: Sequence[int],
+) -> GenomeSearchSpaces:
+    """The search space each record-pair search of a LOSATN or TLOSATX ``program`` passes LOSAT, by record indexes:
+    the genome pair's (:func:`gbdraw.comparisons.losat_jobs.genome_search_spaces`), each record searched whole as
+    drawn (a crop or window is its own record), in the program's letters."""
+
+    return genome_search_spaces(
+        rows=rows_by_record,
+        source_ids=source_ids,
+        source_lengths=source_lengths,
+        searched_lengths=[len(record) for record in records],
+        letters=LOSAT_PROGRAMS[program].space_letters,
+    )
+
+
+def _genome_search_space(
+    search: LosatSearchOptions,
+    *,
+    records: Sequence[SeqRecord],
+    rows_by_record: Sequence[int],
+    source_ids: Sequence[object],
+    source_lengths: Sequence[int],
+    pairs: Sequence[tuple[int, int]],
+) -> Callable[[int, int], int | None]:
+
+    spec = LOSAT_PROGRAMS[search.program]
+    space = linear_search_spaces(
+        search.program, records=records, rows_by_record=rows_by_record, source_ids=source_ids,
+        source_lengths=source_lengths,
+    )
+    names = genome_file_names(rows_by_record, source_ids, source_file_name)
+    for warning in dict.fromkeys(space.per_file_warning(query, subject, names) for query, subject in pairs):
+        if warning is not None:
+            logger.warning("%s", warning.message())
+    if all(space(query, subject) is None for query, subject in pairs) or losat_takes_genome_scale(
+        spec, losat_bin=search.runtime.losat_executable, ncbi_blast_bin=search.runtime.ncbi_blast_executable
+    ):
+        return space
+    return lambda _query, _subject: None
 
 
 def resolve_linear_nucleotide_losat(
@@ -175,7 +263,15 @@ def resolve_linear_nucleotide_losat(
             f"{search.program.upper()} found no record pair to compare: place records "
             "in two or more rows, or list pairs."
         )
-    gencodes = _record_gencodes(search, [item.input_index for item in records])
+    search_args = _pair_search_args(
+        search,
+        records=[item.record for item in records],
+        rows_by_record=rows_by_record,
+        source_ids=[item.source_id for item in records],
+        source_lengths=[item.source_length for item in records],
+        input_indexes=[item.input_index for item in records],
+        pairs=pairs,
+    )
     runtime = search.runtime
     if search.program == "losatn" and search.losatn_task != "megablast":
         require_losat_task_support(
@@ -183,11 +279,6 @@ def resolve_linear_nucleotide_losat(
             losat_bin=runtime.losat_executable,
             ncbi_blast_bin=runtime.ncbi_blast_executable,
         )
-
-    def search_args(query: int, subject: int) -> LosatSearchArgs:
-        if search.program == "losatn":
-            return LosatSearchArgs(task=search.losatn_task)
-        return LosatSearchArgs(query_gencode=gencodes[query], db_gencode=gencodes[subject])
 
     # FASTA extraction once per record (CW-02).
     fasta_by_record: dict[int, str] = {}
@@ -295,5 +386,6 @@ __all__ = [
     "NUCLEOTIDE_LOSAT_PROGRAMS",
     "NucleotideLosatRecord",
     "losat_edge_filename",
+    "linear_search_spaces",
     "resolve_linear_nucleotide_losat",
 ]

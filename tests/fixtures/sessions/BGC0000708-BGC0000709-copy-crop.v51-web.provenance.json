@@ -1,0 +1,16 @@
+{
+  "purpose": "Positive fixture of a Web-written Session 51 with two Linear LOSATP drawings whose record instance keys collide (OV-3273, D-197): the copy of a drawing keeps its card uids, so after its region changes, one record instance key names other proteins in each drawing's protein identity manifest. Load then Save must keep each drawing's protein entries to those that resolve in its own manifest, which the CLI requires.",
+  "sourceCommit": "written by the test below on #1777 (branch feat/ring-genome-files) rebased onto dev 18247abd3425; the branch's commits take their final SHAs when #1777 merges",
+  "history": "branch feat/ring-genome-files (#1777); Session 51 is not on main yet (docs/internal/SESSION_FORMAT_HISTORY.md)",
+  "route": "tests/web/gui-audit-20260930-comparisons.playwright.spec.js, test 'two Linear LOSATP drawings whose record instance keys collide each save their own searches, and the CLI loads them': the Linear drawing gets tests/test_inputs/BGC0000708.gbk and BGC0000709.gbk, LOSAT BLASTP Similarity groups (serial, ribbons), Generate; Duplicate drawing; in the copy, card 1 window 1..20000, Generate; Save Session titled 'BGC0000708-BGC0000709 two drawings'. The test writes it to its output folder as copy-crop.gbdraw-session.json.gz; that file was decompressed and written again with gzip -n -9.",
+  "command": "GBDRAW_WEB_TEST_PORT=<free port> node_modules/.bin/playwright test --workers=1 tests/web/gui-audit-20260930-comparisons.playwright.spec.js -g 'whose record instance keys collide' (from the repository root; then gunzip -c <output folder>/copy-crop.gbdraw-session.json.gz | gzip -n -9 > this file). Card uids are random per run, so a regenerated file differs in them, in what names them, and in createdAt.",
+  "inputs": {
+    "tests/test_inputs/BGC0000708.gbk": "9a5f971c5ed8c406b20574fb50aac567609deb787eb1e8d4635050aa264a04b0",
+    "tests/test_inputs/BGC0000709.gbk": "4b66b7e4b78d429d12176e1e36d0e48178c562a9d128d4308b38753af9995255"
+  },
+  "values": "drawings linear (BGC0000708 whole) and linear-2 (its copy, BGC0000708 1..20000), each with 4 protein LOSAT entries (one pair shown, three all-against-all searches with display false), one shared; ui.activeDrawingId linear-2. The record instance key linear-seq-8980be2c-c9d2-430d-bf22-e83ba26fa224 of BGC0000708's card has runtime binding sha256:2720278157... in linear and sha256:be40e4fb1a... in linear-2.",
+  "decompressedSha256": "2a7ccaa61edb412a9600ddbd71591846bd738b0facd4cd5c72e5ad20cd1ce567",
+  "compression": "gzip -n -9",
+  "sessionVersion": 51,
+  "requestSchema": 10
+}

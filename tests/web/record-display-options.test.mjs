@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from '../../gbdraw/web/js/app/record-display-options.js';
+import { linearDrawingWindowsOf } from '../../gbdraw/web/js/services/session-request.js';
 import {
   bindRecordDisplayDrafts, buildRecordDisplayRows, parseRecordDisplayStart, reconcileRecordDisplayDrafts, effectiveRecordReverseComplement, migrateLegacyRecordDisplayDrafts, recordDisplaySurface, requestedRecordTransform, readRecordDisplayDrafts, validateAnchorIntent, validateRecordDisplayDrafts
 } from '../../gbdraw/web/js/services/record-display-model.js';
@@ -216,7 +217,7 @@ const circularControls = ({ linear = false, discovered = true, oneCard = false, 
   const history = createHistory ? createHistory(state) : { runUndoable: (_label, fn) => fn() };
   const linearDiscovery = { status: discovered ? 'ready' : 'loading', error: '' };
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
-    watch: () => {}, linearRecordsFor: (_drawing, seq) => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [],
+    watch: () => {}, linearWindowsOf: linearDrawingWindowsOf, linearRecordsFor: (_drawing, seq) => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [],
     linearRecordStatusFor: () => linearDiscovery.status, linearRecordErrorFor: () => linearDiscovery.error,
     runUndoable: history.runUndoable, getCommittedRequest, getCommittedSession: () => committed });
   // The composition root's port: the pure check over the record display's binding.
@@ -665,7 +666,7 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
     circularRecordDiscovery: { status: 'idle', error: '', inputType: '', sources: [] },
     featureCatalog: { value: { items: [] } } };
   const controls = createRecordDisplayControls({ state: withSourceDrawings(withDrawings(state)), computed: (fn) => ({ get value() { return fn(); } }),
-    watch: () => {}, linearRecordsFor: () => [
+    watch: () => {}, linearWindowsOf: linearDrawingWindowsOf, linearRecordsFor: () => [
       { selector: '#1', recordId: 'first', recordLength: 100, detectedTopology: 'circular' },
       { selector: '#2', recordId: 'second', recordLength: 100, detectedTopology: 'circular' }],
     linearRecordStatusFor: () => 'ready', linearRecordErrorFor: () => '',
@@ -710,7 +711,7 @@ test('a Circular row is cropped, and loses Display start, where Generate crops i
   form.circular_region_start = 1;
   form.circular_region_end = 50;
   form.multi_record_canvas = true;
-  assert.deepEqual(cropped(), [false], 'a Multi-Record Canvas draws whole records');
+  assert.deepEqual(cropped(), [false, false], 'a Multi-Record Canvas draws every record whole (OV-3340)');
   form.multi_record_canvas = false;
   form.circular_region_start = '';
   form.circular_region_end = '';
@@ -734,6 +735,73 @@ test('a Circular grid or batch row drawn from a loaded crop loses Display start'
   assert.deepEqual(circularRows().map((row) => model.controls.surfaceFor(row).startEnabled), [true, true]);
 });
 
+// OV-3341: while Display start is unavailable for a cropped record, the field shows where the drawn crop starts (the
+// Circular 12 o'clock, the Linear left end): the crop's End when it is drawn reverse-complemented, else its Start, never
+// an end of the whole record. The Circular single-record crop, a grid or batch record's loaded crop, and a Linear card's
+// first window alike.
+test('a cropped row shows the start of its drawn crop in Display start (OV-3341)', () => {
+  const model = circularControls();
+  const displayStart = () => model.controls.rows.value.filter((row) => row.scope === 'circular')
+    .map((row) => model.controls.surfaceFor(row).displayStart);
+  const { form } = model.state.activeDrawing();
+  Object.assign(form, { multi_record_canvas: false, circular_record_selector: 'record-2',
+    circular_region_start: 10, circular_region_end: 60, circular_reverse: false });
+  assert.deepEqual(displayStart(), [10], 'a forward crop starts at its Start');
+  form.circular_reverse = true;
+  assert.deepEqual(displayStart(), [60], 'a reverse-complemented crop starts at its End');
+  form.circular_region_end = 200;
+  assert.deepEqual(displayStart(), [100], 'an End past the 100 bp record is drawn to the record end');
+  // A requested start the crop disables is not what the drawing starts at.
+  model.state.recordDisplayDrafts.push({ sourceUid: 'record-2', selector: '#1', recordId: 'second',
+    topologyOverride: null, startCoordinate: 42, reverseComplementOverride: null, anchorIntent: null });
+  assert.deepEqual(displayStart(), [100], 'the crop start, not a kept requested start');
+  form.circular_region_start = '';
+  form.circular_region_end = '';
+  assert.deepEqual(displayStart(), [42], 'uncropped, the requested start shows again (OV-374)');
+  model.state.recordDisplayDrafts.splice(0);
+  form.circular_windows = [{ start: 90, end: 20, reverseComplement: false, column: null, acrossOrigin: true }];
+  assert.deepEqual(displayStart(), [90], 'a window across the origin starts at its Start');
+  form.circular_windows = [];
+  form.circular_reverse = false;
+  form.circular_record_selector = '';
+  form.circular_record_ranges = [{ source: 'record-2', record: '',
+    windows: [{ start: 11, end: 60, reverseComplement: true, column: null, acrossOrigin: false },
+      { start: 70, end: 80, reverseComplement: true, column: null, acrossOrigin: false }] }];
+  assert.deepEqual(displayStart(), [1, 60], 'a grid or batch record\'s loaded crop starts at its first window');
+});
+
+test('a cropped Linear card row shows the start of its first window in Display start (OV-3341)', () => {
+  const model = circularControls({ linear: true });
+  const sequence = model.state.linearSeqs[1];
+  const displayStart = () => model.controls.surfaceFor(
+    model.controls.rows.value.find((entry) => entry.sourceUid === 'record-2')).displayStart;
+  Object.assign(sequence, { region_start: 20, region_end: 70, region_reverse: false });
+  assert.equal(displayStart(), 20);
+  sequence.region_reverse = true;
+  assert.equal(displayStart(), 70);
+  Object.assign(sequence, { region_start: 70, region_end: 20, region_reverse: false });
+  assert.equal(displayStart(), 70, 'an End before the Start draws the reverse complement');
+  Object.assign(sequence, { region_start: null, region_end: null, region_reverse: false, windows: [
+    { start: 30, end: 40, reverseComplement: true, column: null, acrossOrigin: false },
+    { start: 5, end: 15, reverseComplement: false, column: null, acrossOrigin: false }] });
+  assert.equal(displayStart(), 40, 'the first window, reverse-complemented');
+});
+
+// OV-3340: the Topology rows show the records the drawing's record set offers (`circularDrawingRecordSet`), the one
+// owner the request and the drawn count read: a Multi-Record Canvas draws every record whatever the Record select
+// holds.
+test('the Circular Topology rows read the drawing record set (OV-3340)', () => {
+  const model = circularControls({ oneCard: true });
+  const shown = () => model.controls.rows.value.filter((row) => row.scope === 'circular').map((row) => row.selector);
+  const { form } = model.state.activeDrawing();
+  form.multi_record_canvas = false;
+  assert.deepEqual(shown(), ['#1', '#2']);
+  form.circular_record_selector = 'record-1:2';
+  assert.deepEqual(shown(), ['#2'], 'the record chosen alone');
+  form.multi_record_canvas = true;
+  assert.deepEqual(shown(), ['#1', '#2'], 'a Multi-Record Canvas draws every record');
+});
+
 // A2 W5 (R10): the drafts of a replaced source go in the transition that
 // replaced it (`changeRecordSources`), not in a watcher of the sources.
 const sourceControls = () => {
@@ -752,7 +820,7 @@ const sourceControls = () => {
   { circular, linear });
   withSourceDrawings(state);
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
-    watch: (_source, callback) => { callbacks.push(callback); }, linearRecordsFor: () => [],
+    watch: (_source, callback) => { callbacks.push(callback); }, linearWindowsOf: linearDrawingWindowsOf, linearRecordsFor: () => [],
     linearRecordStatusFor: () => 'ready', linearRecordErrorFor: () => '', runUndoable: (_label, fn) => fn(),
     getCommittedRequest: () => null, getCommittedSession: () => null });
   const uids = (drawing) => drawing.recordDisplayDrafts.map(({ sourceUid }) => sourceUid);

@@ -103,6 +103,36 @@ test('an other mode that holds the Depth series Sessions 46 and 47 named is not 
   assert.deepEqual(idsOf(data), ['circular', 'linear']);
 });
 
+// OV-3114: 0.14.5 and earlier wrote repeat_region, misc_feature and default
+// as one gray in the default palette. A Session 46-50's other mode that holds
+// those colors is not used (Python's rule d agrees, the same mutation in
+// tests/test_session_drawings_vectors.py); a drawing of the current app that
+// holds them has colors that differ from its default, so Save keeps it.
+const EARLIER_DEFAULT_COLORS = Object.freeze({
+  CDS: '#54bcf8', rRNA: '#71ee7d', tRNA: '#e8b441', tmRNA: '#ded44e', ncRNA: '#c4fac3',
+  repeat_region: '#d3d3d3', misc_feature: '#d3d3d3', default: '#d3d3d3',
+  skew_high: '#6dded3', skew_low: '#ad72e3', gc_content: '#a1a1a1',
+  pairwise_match: '#d3d3d3', pairwise_match_min: '#FFE7E7', pairwise_match_max: '#FF7272',
+  collinear_block_plus_min: '#f0f1f5', collinear_block_plus: '#8b9cc1',
+  collinear_block_minus_min: '#FFE7E7', collinear_block_minus: '#E15759'
+});
+
+test('an other mode that holds the default colors of 0.14.5 is not used', () => {
+  const data = settingsOnly();
+  data.modes.linear.config.colors = { ...EARLIER_DEFAULT_COLORS };
+  assert.deepEqual(idsOf(data), ['circular']);
+  data.modes.linear.config.colors = { ...EARLIER_DEFAULT_COLORS, default: '#123456' };
+  assert.deepEqual(idsOf(data), ['circular', 'linear']);
+});
+
+test('Save keeps a drawing whose colors are the default colors of 0.14.5', async () => {
+  const { sliceDiffersFromDefault } = await import('../../gbdraw/web/js/services/session-drawings-upgrade.js');
+  const { MODE_SLICE_DEFAULTS } = await import('../../gbdraw/web/js/mode-slice-defaults.generated.js');
+  const current = MODE_SLICE_DEFAULTS.defaults.linear.find((row) => row.domain === 'config' && row.path === 'colors');
+  assert.equal(sliceDiffersFromDefault({ config: { colors: { ...EARLIER_DEFAULT_COLORS } } }, 'linear'), true);
+  assert.equal(sliceDiffersFromDefault({ config: { colors: current?.value } }, 'linear'), false);
+});
+
 test('a Linear record layout counts only when it arranges records', () => {
   const data = settingsOnly();
   data.modes.linear.config.linearRecordLayout.rows = [{ row: 1, uid: 'linear-seq-a' }, { row: 2, uid: 'linear-seq-b' }];

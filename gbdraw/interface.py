@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from functools import wraps
 from inspect import Parameter, signature
-from os import PathLike
+from os import PathLike, fspath
 from pathlib import Path
 from typing import Literal, Mapping, Sequence, TypeAlias, cast
 
@@ -31,7 +31,7 @@ from gbdraw.analysis.protein_colinearity import (
 from gbdraw.annotations import AnnotationOptions, ResolutionWarning
 from gbdraw.api.io import load_gbks as _load_gbks, load_gff_fasta as _load_gff_fasta
 from gbdraw.api.input_summary import log_input_warnings as _log_input_warnings
-from gbdraw.io.comparison_sequences import read_comparison_sequence_records
+from gbdraw.io.comparison_sequences import comparison_genome, read_comparison_sequence_file
 from gbdraw.io.genome import load_fasta as _load_fasta
 from gbdraw.io.record_sequences import detached_records
 from gbdraw.api.options import (
@@ -337,7 +337,9 @@ class ComparisonRingTrackOptions:
     Precomputed rings read ``source`` (a BLAST table). With
     ``ComparisonRingOptions.losat`` the search builds the ring instead:
     ``source`` stays ``None`` and ``comparison_sequence_source`` names the
-    comparison genome file (FASTA, GenBank, or DDBJ). ``losat_gencode`` is the
+    comparison genome: a FASTA, GenBank, or DDBJ file, or a sequence of such
+    files when the genome is split over several (a chromosome and its
+    plasmids), read in the listed order. ``losat_gencode`` is the
     genome's TLOSATX translation table. A ring with ``color=None`` takes the
     ``ComparisonRingOptions.color_scheme`` color of its drawn position.
     """
@@ -345,7 +347,9 @@ class ComparisonRingTrackOptions:
     source: TableSource | None = None
     label: str | None = None
     color: str | None = None
-    comparison_sequence_source: RecordCollection | str | PathLike[str] | None = None
+    comparison_sequence_source: (
+        RecordCollection | str | PathLike[str] | Sequence[str | PathLike[str]] | None
+    ) = None
     losat_gencode: int = 1
 
 
@@ -1046,13 +1050,32 @@ def _ring_color_values(tracks: Sequence[ComparisonRingTrackOptions]) -> dict[str
     return {"conservation_colors": ["" if color is None else color for color in colors]}
 
 
+def _comparison_genome_paths(source: object) -> list[str] | None:
+    """The file paths of a ring's ``comparison_sequence_source``, or None when it is not paths.
+
+    One path or a non-empty sequence of paths; records (a ``SeqRecord`` or a
+    sequence of them) and anything else give None.
+    """
+
+    if isinstance(source, (str, PathLike)):
+        return [fspath(source)]
+    if (
+        isinstance(source, Sequence)
+        and not isinstance(source, bytes)
+        and source
+        and all(isinstance(path, (str, PathLike)) for path in source)
+    ):
+        return [fspath(path) for path in source]
+    return None
+
+
 def _ring_losat_values(comparison_rings: ComparisonRingOptions) -> dict[str, object]:
     """Typed ring LOSAT intent of the introductory options (design 3.4)."""
 
     tracks = tuple(comparison_rings.tracks)
     program = comparison_rings.losat
     assert program is not None  # the only caller checks comparison_rings.losat
-    sequences: list[str] = []
+    sequences: list[str | list[str]] = []
     for index, track in enumerate(tracks, start=1):
         if track.source is not None:
             raise ValidationError(
@@ -1060,18 +1083,19 @@ def _ring_losat_values(comparison_rings: ComparisonRingOptions) -> dict[str, obj
                 "the ring from comparison_sequence_source.",
                 diagnostic={"code": "COMPARISON_INPUT", "reason": "RING_LOSAT_INPUT", "field": "source"},
             )
-        sequence = track.comparison_sequence_source
-        if not isinstance(sequence, (str, PathLike)):
+        paths = _comparison_genome_paths(track.comparison_sequence_source)
+        if paths is None:
             raise ValidationError(
                 f"Comparison ring {index} needs comparison_sequence_source as a FASTA, "
-                "GenBank, or DDBJ file path when losat is set.",
+                "GenBank, or DDBJ file path, or a sequence of them, when losat is set.",
                 diagnostic={
                     "code": "COMPARISON_INPUT",
                     "reason": "RING_LOSAT_INPUT",
                     "field": "comparison_sequence_source",
                 },
             )
-        sequences.append(str(sequence))
+        # CircularDiagramOptions normalizes each ring's paths (_ring_genome_files).
+        sequences.append(paths)
     gencodes = tuple(track.losat_gencode for track in tracks)
     if program != "tlosatx" and (
         comparison_rings.reference_gencode != 1 or any(code != 1 for code in gencodes)
@@ -1208,13 +1232,13 @@ def _interactive_context(
                 comparison_sequence_records.append([])
             elif isinstance(source, SeqRecord):
                 comparison_sequence_records.append([source])
-            elif isinstance(source, Sequence) and not isinstance(source, (str, bytes, PathLike)):
-                comparison_sequence_records.append(list(source))
+            elif (paths := _comparison_genome_paths(source)) is not None:
+                # One genome of every listed file, as the ring search reads it.
+                genome = comparison_genome(tuple(read_comparison_sequence_file(path) for path in paths))
+                comparison_sequence_records.append(list(genome.records))
             else:
-                # Only a str or PathLike path remains after the Sequence branch above.
-                comparison_sequence_records.append(
-                    list(read_comparison_sequence_records(cast("str | PathLike[str]", source)))
-                )
+                # Only a sequence of SeqRecords remains.
+                comparison_sequence_records.append(list(cast("Sequence[SeqRecord]", source)))
     context = _build_prepared_interactive_context(
         prepared,
         comparison_sequence_records=comparison_sequence_records,

@@ -26,14 +26,15 @@ import {
   recordsWithEdits,
   removeRecordEdits
 } from '../services/record-draw-selection.js';
-import { circularRecordEntries, circularRecordRange, circularRecordSelection, resolveDisambiguatedRecordSelection } from '../services/record-options.js';
+import { circularRecordEntries, circularRecordRange, circularRecordSelection } from '../services/record-options.js';
 import { msg } from '../utils/i18n.js';
 import { fileCardLine } from './file-card.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
 /** @import { CircularRecordEntry, LinearSeqWindow } from '../services/drawing/inputs.js' */
 /** @import { CircularRecordRange } from '../services/record-options.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
-/** @import { CircularRecordDiscovery, SequenceRecord } from '../services/record-discovery.js' */
+/** @import { CircularRecordDiscovery } from '../services/record-discovery.js' */
+/** @import { CardRecordFacts } from '../services/linear-card-windows.js' */
 /** @import { RecordDrawKey, RecordEditData, RecordIdentitySources, RecordSettingsOwner } from '../services/record-draw-selection.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { MultiRecordPosition } from '../services/config.js' */
@@ -53,8 +54,9 @@ import { fileCardLine } from './file-card.js';
  * @property {ShownDrawingOfMode} shownDrawingOfMode
  * @property {{ readonly value: LinearSourceGroup[] }} linearSourceGroups The shown Linear drawing's Files.
  * @property {(source: LinearSourceGroup) => string} linearSourceFileName The name a File's card shows.
- * @property {(drawing: DrawingState, seq: LinearSeq) => SequenceRecord[]} linearRecordsFor
- *   The records a Linear card's selector holds (the Linear record selector's `recordsFor`).
+ * @property {(drawing: DrawingState, seq: LinearSeq) => CardRecordFacts} linearCardRecord What a Linear card's record
+ *   list says of the records it draws (app/shown-drawing-readers.js), the one owner of a card's record ID and length,
+ *   which the File name field and Generate read too.
  * @property {(drawing: DrawingState, seq: LinearSeq, drawn: boolean) => AnnotationCatalogSource} linearAnnotationSource
  *   A Linear card as the annotation record catalog reads it.
  * @property {CircularDiscoveryStateOf} getCircularRecordDiscoveryState
@@ -127,16 +129,11 @@ const circularRangeEdits = (form, entries) => {
  * @param {RecordSettingsSourcePorts} ports
  */
 export const createRecordSettingsSources = ({
-  shownDrawingOfMode, linearSourceGroups, linearSourceFileName, linearRecordsFor, linearAnnotationSource,
+  shownDrawingOfMode, linearSourceGroups, linearSourceFileName, linearCardRecord, linearAnnotationSource,
   getCircularRecordDiscoveryState, circularAnnotationSourceKey, takeBackRuleRows
 }) => {
   // Record selection (D-01..D-10): the record sources and edits its owner
   // reads, and the transitions it asks the root for.
-  /** @param {DrawingState} drawing the drawing that holds the card @param {LinearSeq} seq The discovered record a Linear card draws. */
-  const linearCardRecord = (drawing, seq) => {
-    const selection = resolveDisambiguatedRecordSelection(linearRecordsFor(drawing, seq), seq.region_record_id);
-    return selection.record || (selection.entries.length === 1 ? selection.entries[0] : null);
-  };
   /** @param {DrawingState} drawing the drawing that holds the card @param {LinearSeq} seq @returns {RecordSettingsOwner} */
   const linearRecordSettingsOwner = (drawing, seq) => ({
     key: seq.uid, requestKeys: [seq.uid], ownsExpansions: true,
@@ -244,10 +241,11 @@ export const createRecordSettingsSources = ({
       key: group.uid,
       name: linearSourceFileName(group),
       records: cards.map((seq) => {
+        // A card whose record is not read, or whose selector names no record of its file, shows the record it names.
         const record = linearCardRecord(drawing, seq);
         return {
-          key: seq.uid, recordId: String(record?.recordId || seq.region_record_id || ''),
-          length: record?.recordLength ?? null, hasSettings: edited.has(seq.uid) || linearCardHasSettings(seq)
+          key: seq.uid, recordId: record.id || seq.region_record_id, length: record.length,
+          hasSettings: edited.has(seq.uid) || linearCardHasSettings(seq)
         };
       })
     };

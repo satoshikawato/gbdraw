@@ -6,12 +6,12 @@ import { displayedFeatureAddressing } from '../../gbdraw/web/js/services/feature
 
 // The live fill of a feature, as the compile previews the palette and the
 // specific-color rules (their matches prepared by Python, R4). A type the
-// palette does not list takes Python's #d3d3d3, not the palette's `default`
-// key (gbdraw/features/colors.py `default_color_map.get(type, "#d3d3d3")`).
+// palette does not list takes the palette's `default`, as Python draws it
+// (gbdraw/features/colors.py `feature_type_color`; OV-3114).
 const unmatched = { feat: 'CDS', qual: 'gene', val: 'absent', color: '#abcdef' };
 for (const [name, colors, rules, expected] of [
   ['palette default', { default: '#d3d3d3' }, [unmatched], '#d3d3d3'],
-  ['Python\'s fallback, not the palette default', { default: '#123456' }, [unmatched], '#d3d3d3'],
+  ['the palette default for an unlisted type', { default: '#123456' }, [unmatched], '#123456'],
   ['explicit type', { default: '#123456', unlisted_type: '#654321' }, [unmatched], '#654321'],
   ['specific rule', { default: '#123456', unlisted_type: '#654321' }, [{ feat: 'unlisted_type', qual: 'gene', val: 'sample', color: '#aabbcc' }], '#aabbcc'],
   ['hash rule precedence', { default: '#123456' }, [{ feat: 'unlisted_type', qual: 'gene', val: 'sample', color: '#aabbcc' }, { feat: 'unlisted_type', qual: 'hash', val: 'f1', color: '#778899' }], '#778899']

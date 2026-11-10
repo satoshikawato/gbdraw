@@ -32,6 +32,9 @@ const modulePaths = [
   'gbdraw/web/js/services/record-source-coordinates.js',
   'gbdraw/web/js/services/genbank-header.js',
   'gbdraw/web/js/services/conservation-series.js',
+  // conservation-series.js reads a ring's files through the drawing inputs slice.
+  'gbdraw/web/js/services/drawing/inputs.js',
+  'gbdraw/web/js/services/history-files.js',
   'gbdraw/web/js/utils/conservation-colors.generated.js',
   'gbdraw/web/js/utils/color-utils.js',
   'gbdraw/web/js/utils/named-colors.js',

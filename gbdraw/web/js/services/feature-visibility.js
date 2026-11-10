@@ -21,6 +21,7 @@ import { replaceAnnotationTarget } from './drawing/annotation-sets.js';
 import { featureOverrideKey } from './feature-override-identity.js';
 import { createRuleLegendCaptions } from './specific-color-rules.js';
 /** @import { PaintSlice } from './drawing/paint.js' */
+/** @import { ExtractedFeature } from './feature-metadata-extraction.js' */
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
 /** @import { AnnotationRow, AnnotationSetRow, AnnotationSetsSlice } from './drawing/annotation-sets.js' */
 /** @import { AnnotationTarget } from './annotation-state.js' */
@@ -151,6 +152,26 @@ const isHeaderRow = (fields) => {
  *   biological_feature_id?: unknown, biologicalFeatureId?: unknown,
  *   svg_id?: unknown, svgId?: unknown, featureId?: unknown, feature_id?: unknown, id?: unknown
  * }} VisibilityFeature
+ */
+
+/**
+ * A feature the visibility actions read: an extracted or catalog feature under its
+ * snake-case or camel-case names, with the qualifiers and similarity-group fields
+ * the scopes read by name.
+ * @typedef {VisibilityFeature & Record<string, unknown>} VisibilityTarget
+ */
+
+/**
+ * One scope of a visibility edit: this feature, its similarity-group members, or
+ * an exact product or protein ID rule.
+ * @typedef {object} VisibilityScope
+ * @property {string} id
+ * @property {string} label
+ * @property {string} description
+ * @property {VisibilityTarget[]} [features] The members of a `orthogroup` scope.
+ * @property {string} [featureType] The exact-qualifier rule of a `product` or `protein_id` scope.
+ * @property {string} [qualifier]
+ * @property {string} [value]
  */
 
 /**
@@ -584,7 +605,7 @@ const replaceRows = (before, after, write) => {
  *   previousRecords?: FeatureRequestRecord[],
  *   currentRecords?: FeatureRequestRecord[],
  *   retainedRecords?: FeatureRequestRecord[],
- *   biologicalFeatures?: Record<string, any>[],
+ *   biologicalFeatures?: readonly ExtractedFeature[],
  *   moves?: ReadonlyMap<string, string>
  * }} options `retainedRecords`: the records of OFF records, which the request
  *   leaves out without dropping their rows (record selection D-05), with their

@@ -237,6 +237,10 @@ export const CIRCULAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({
   sequence_conservation: Object.freeze(['color', 'fileName', 'label', 'legend_label', 'managed', 'series_key'])
 });
 
+// gbdraw/labels/fit.py: OFFERED_ROW_STATUSES
+/** @type {readonly ['found', 'found_with_notice']} */
+export const LABEL_FIT_OFFERED_ROW_STATUSES = Object.freeze(['found', 'found_with_notice']);
+
 // gbdraw/tracks/linear.py: LINEAR_SLOT_UNREAD_PARAM_KEYS
 /** @type {Readonly<Record<'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'feature_density' | 'spacer' | 'features', readonly string[]>>} */
 export const LINEAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({
@@ -268,6 +272,10 @@ export const AUTOMATIC_ANNOTATION_LANE_SIDES = Object.freeze({
   circular: 'outside',
   linear: 'above'
 });
+
+// gbdraw/api/input_summary.py: INPUT_WARNINGS_OF_DRAWN_INPUT
+/** @type {readonly string[]} */
+export const INPUT_WARNINGS_OF_DRAWN_INPUT = Object.freeze(['comparison_record_id_repeated']);
 
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
@@ -642,7 +650,9 @@ export const LOSAT_SEARCH_FLAGS = Object.freeze({
   "--query-gencode": '-query_gencode',
   "--db-gencode": '-db_gencode',
   "--max-hsps-per-subject": '-max_hsps',
-  "--max-target-seqs": '-max_target_seqs'
+  "--max-target-seqs": '-max_target_seqs',
+  "--searchsp": '-searchsp',
+  "--dbsize": '-dbsize'
 });
 
 // gbdraw/session_request_codec.py: describe_draft_annotation_style()
@@ -683,4 +693,4 @@ export const SCALAR_AXIS_LABELS = Object.freeze({
 });
 
 // gbdraw/io/record_select.py: RECORD_INDEX_SELECTOR_PATTERN
-export const RECORD_INDEX_SELECTOR_PATTERN = '[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*#[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*([0-9]+)[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*';
+export const RECORD_INDEX_SELECTOR_PATTERN = '[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*#[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*\\+?([0-9]+)[\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f\\u205f\\u3000]*';

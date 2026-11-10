@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { LinearSeq } from './drawing/inputs.js' */
 /** @import { LinearComparisonEdge, LinearComparisonLayoutRow, LinearComparisonResolution } from './linear-comparisons.js' */
-/** @import { LinearUnitPlanPayload, LinearUnitRecord, LinearUnitSearch, LinearUnitWindowsOf } from './linear-units.js' */
+/** @import { LinearUnitPlanPayload, LinearUnitRecord, LinearUnitSearch, LinearCardPlacesOf } from './linear-units.js' */
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import { COMPARISON_THRESHOLD_KEYS } from '../mode-profiles.js';
 import {
@@ -575,23 +575,25 @@ export const resolveImportedComparisonAction = ({
 };
 
 /**
+ * Whether the next Generate draws the comparison of the current controls rather than the saved one: an editable
+ * comparison, or a saved one the user chose to Replace. Generate then takes the cards from the current controls too,
+ * splitting a whole multi-record card into one card per record (OV-3324); a saved comparison it keeps (Inherit) or
+ * has not been told what to do with keeps the cards it was saved over, which its record indexes name.
+ * @param {ImportedComparisonIntent} intent
+ */
+export const comparisonFollowsCurrentControls = (intent) => (
+  intent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE || intent.action === IMPORTED_COMPARISON_ACTIONS.REPLACE
+);
+
+/**
  * @param {{ intent: ImportedComparisonIntent | null | undefined, draftResolution: ComparisonDraftResolution | null | undefined }} state
  */
 export const importedComparisonExecution = ({ intent, draftResolution }) => {
-  if (intent?.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
-    return { ok: true, mode: 'draft' };
-  }
-  if (intent?.action === IMPORTED_COMPARISON_ACTIONS.INHERIT) {
-    return { ok: true, mode: 'inherit' };
-  }
-  if (intent?.action === IMPORTED_COMPARISON_ACTIONS.CLEAR) {
-    return { ok: true, mode: 'clear' };
-  }
-  if (intent?.action === IMPORTED_COMPARISON_ACTIONS.REPLACE) {
-    // An invalid draft (issues need an edge, so it has an intent) fails in the run
+  if (intent && comparisonFollowsCurrentControls(intent)) {
+    // After Replace, an invalid draft (issues need an edge, so it has an intent) fails in the run
     // with its own diagnostic, as an editable comparison does. An empty draft
     // would clear the saved comparison instead.
-    if (draftResolution?.hasComparisonIntent === true) {
+    if (intent.action !== IMPORTED_COMPARISON_ACTIONS.REPLACE || draftResolution?.hasComparisonIntent === true) {
       return { ok: true, mode: 'draft' };
     }
     return {
@@ -599,6 +601,12 @@ export const importedComparisonExecution = ({ intent, draftResolution }) => {
       message: 'Set one complete, valid comparison before generating.',
       fallbackCode: 'COMPARISON_REPLACEMENT_EMPTY'
     };
+  }
+  if (intent?.action === IMPORTED_COMPARISON_ACTIONS.INHERIT) {
+    return { ok: true, mode: 'inherit' };
+  }
+  if (intent?.action === IMPORTED_COMPARISON_ACTIONS.CLEAR) {
+    return { ok: true, mode: 'clear' };
   }
   // A reason with its own diagnostic (a missing resource) keeps it; any other
   // reason reports the pending choice instead of the unclassified fallback (OV-303).
@@ -763,7 +771,7 @@ const searchedPipelineOf = (source) => /** @type {SavedPipeline | undefined} */ 
  * @param {{
  *   source: SavedComparisonSource | null,
  *   cards: readonly LinearSeq[],
- *   windowsOf: LinearUnitWindowsOf,
+ *   placesOf: LinearCardPlacesOf,
  *   runHelper: (payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>,
  *   requirePlan: (resolution: LinearComparisonResolution) => LinearComparisonResolution,
  *   plan: { sequences: readonly LinearSeq[], recordsOff: Iterable<unknown>, layout: readonly LinearComparisonLayoutRow[] }
@@ -772,11 +780,11 @@ const searchedPipelineOf = (source) => /** @type {SavedPipeline | undefined} */ 
  *   the drawing no longer allows (its records moved into one row) stops before any search.
  * @returns {Promise<InheritedPipelineSearch | null>}
  */
-export const inheritedPipelineSearch = async ({ source: held, cards, windowsOf, runHelper, requirePlan, plan }) => {
+export const inheritedPipelineSearch = async ({ source: held, cards, placesOf, runHelper, requirePlan, plan }) => {
   const source = toRaw(held);
   const pipeline = source === null ? null : searchedPipelineOf(source);
   if (source === null || pipeline === null) return null;
-  const carry = savedIndexCarrier(source, unitRecordInputs(cards, windowsOf));
+  const carry = savedIndexCarrier(source, unitRecordInputs(cards, placesOf));
   /** @param {LinearComparisonEdge[]} edges The selected record pairs; none plans the records of adjacent rows. */
   const losatPlan = (edges) => requirePlan(resolveLinearComparisonPlan({
     ...plan,
@@ -791,8 +799,8 @@ export const inheritedPipelineSearch = async ({ source: held, cards, windowsOf, 
     queryUnit: carry(pair.queryRecordIndex), subjectUnit: carry(pair.subjectRecordIndex)
   }));
   const unitSearch = pairs.length === 0
-    ? await planLinearUnitSearch(cards, losatPlan([]), windowsOf, runHelper)
-    : await savedPairsUnitSearch(cards, pairs, windowsOf, runHelper, (recordPairs) => losatPlan(recordPairs.map(
+    ? await planLinearUnitSearch(cards, losatPlan([]), placesOf, runHelper)
+    : await savedPairsUnitSearch(cards, pairs, placesOf, runHelper, (recordPairs) => losatPlan(recordPairs.map(
       ({ queryRecordKey, subjectRecordKey }) => createLinearComparisonEdge({
         queryUid: queryRecordKey, subjectUid: subjectRecordKey, source: LINEAR_COMPARISON_SOURCES.LOSAT, included: true
       }))));

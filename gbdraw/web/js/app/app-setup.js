@@ -4,8 +4,8 @@
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
 /** @import { RecordSpanRead } from '../services/diagram-worker-protocol.js' */
 /** @import { LinearUnitPlanPayload } from '../services/linear-units.js' */
+/** @import { PlanGenomeScales } from './run-analysis.js' */
 /** @import { CardWindowRecordInput } from '../contracts/card-windows.generated.js' */
-/** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq } from '../state.js' */
 /** @import { NoticeLink } from './app-messages.js' */
@@ -122,6 +122,7 @@ import {
   writeLosatCacheInfo,
   CIRCULAR_RECORD_FORM_DEFAULTS,
   linearCardWindowPlanRecords,
+  linearDrawingUnitPlaces,
   linearDrawingWindowsOf
 } from '../services/config.js';
 import { artifactSlotAs } from '../services/artifact-slot.js';
@@ -217,7 +218,8 @@ import {
 import { createRightDrawerController } from './right-drawer.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
-import { askTrackSourceRemoval, askingAnnotationTrackAdd, askingTrackRowRemoval, askingTrackRowSwitch } from './track-slot-edits.js';
+import { askTrackSourceRemoval, askingAnnotationTrackAdd, createAskingStackPorts } from './track-slot-edits.js';
+import { createFeatureDensityTrackEditor } from './feature-density-tracks.js';
 import { createAnnotationEditor } from './annotations.js';
 import { createDrawingLegendRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
@@ -265,10 +267,7 @@ import {
 } from '../mode-profiles.js';
 import { joinSentences, msg, t, tm, tx } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
-import {
-  IMPORTED_COMPARISON_DISPOSITIONS,
-  importedComparisonExecution
-} from '../services/imported-comparison-intent.js';
+import { importedComparisonExecution } from '../services/imported-comparison-intent.js';
 import {
   activeDepthTrackIndices,
   compactDepthFileSlots,
@@ -409,6 +408,17 @@ const shownResultRoot = () => state.svgContainer.value?.querySelector('svg') ?? 
 // The Worker helper that plans a Linear request's drawn units (`planLinearUnitSearch`).
 /** @param {LinearUnitPlanPayload} payload */
 const planLinearUnits = (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload);
+/**
+ * The E-value scales of a drawing's LOSAT searches: Python plans the drawing's draft request, as Save writes it, staged
+ * as Generate stages its request (PD-OI-018 revision 6).
+ * @type {PlanGenomeScales}
+ */
+const planDraftGenomeScales = async (drawing, { program, ...facts }) => {
+  const { envelope: { renderRequest, resources } } = await projectDraftRequest(state, drawing, { ...facts, planLinearUnits });
+  return (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_GENOME_SCALES, {
+    canonicalRequest: renderRequest, resources: /** @type {GenerationPayload['resources']} */ (resources), program
+  })).result;
+};
 // The Worker helper that plans a Linear card's window numbers and omitted lengths (PD-OI-124).
 /** @param {{ records: CardWindowRecordInput[] }} payload */
 const planCardWindows = (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_CARD_WINDOWS, payload);
@@ -660,8 +670,11 @@ export const createAppSetup = () => {
   const settingsPaneActions = createSettingsPaneController({ state });
   const {
     openLinearComparisonDisclosure, focusLinearComparisonPair, focusLinearComparisonIssue, chooseLinearComparisonPairFile,
-    showLinearComparisonCause
-  } = createLinearComparisonFocus({ state, mode, errorLog, linearComparisonUi, revealSetting: settingsPaneActions.revealSetting });
+    comparisonCauseShown, showComparisonCause
+  } = createLinearComparisonFocus({
+    state, mode, errorLog, linearComparisonUi, revealSetting: settingsPaneActions.revealSetting,
+    revealSettingsSection: settingsPaneActions.revealSettingsSection
+  });
   const { shownLinearRecordRowFor, linearLayoutTokens, linearLosatCacheInfoByEdgeKey, linearLosatWindowPairs, linearWindowPairSide } = createLinearLayoutReaders({
     state, shownDrawingOfMode, losatCacheInfo
   });
@@ -743,7 +756,9 @@ export const createAppSetup = () => {
   const { rebindAnnotationRecords } = createAnnotationRecordRebind({
     state, getAnnotationRecordCatalog, sessionOperationAvailability
   });
-  const { handleCircularRecordsDiscovered, materializeAutomaticLinearRecords } = createRecordDiscoveryRuns({
+  const {
+    handleCircularRecordsDiscovered, materializeAutomaticLinearRecords, prepareLinearGenerate
+  } = createRecordDiscoveryRuns({
     pendingDiscoveryOf, requestRecordListAfterUpload, listedDrawingOf, rebindAnnotationRecords,
     refreshLinearRecords: linearRecordSelector.refresh
   });
@@ -821,15 +836,16 @@ export const createAppSetup = () => {
   // A restore, or Reset Settings, that rewrites the rules: the rule owner
   // follows the rules `write` replaced. A checkpoint figure History recorded
   // as drawn shows its rules as Python draws them, so its restore asks for no
-  // rerender (D-24 (OV-731)).
+  // rerender (D-24 (OV-731)); one recorded as not drawn is drawn again by
+  // History's own one request (D-174), so the rule owner adds none.
   /**
    * @template T
    * @param {DrawingState} drawing
    * @param {() => Promise<T>} write
-   * @param {{ drawn: boolean }} [restored]
+   * @param {{ drawn?: boolean | undefined }} [restored] `drawn`: History's record of a checkpoint figure; unset when unknown.
    * @returns {Promise<T>}
    */
-  const followRuleEdits = async (drawing, write, { drawn } = { drawn: false }) => {
+  const followRuleEdits = async (drawing, write, { drawn } = {}) => {
     // The rule owner follows the shown drawing; a drawing that is not shown
     // follows its rules when it is shown again (D-15-51).
     if (drawing !== state.activeDrawing()) return write();
@@ -837,7 +853,7 @@ export const createAppSetup = () => {
     specificRuleRestorePorts.retainRulesForRestore(previousRules);
     try {
       const written = await write();
-      if (!drawn) specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
+      if (drawn === undefined) specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
       return written;
     } finally {
       specificRuleRestorePorts.retainRulesForRestore([]);
@@ -925,7 +941,7 @@ export const createAppSetup = () => {
    */
   const readingShownLinearCard = (read) => (seq) => read(state.activeDrawing(), seq);
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
-    linearRecordsFor: linearRecordSelector.recordsFor,
+    linearRecordsFor: linearRecordSelector.recordsFor, linearWindowsOf: linearDrawingWindowsOf,
     linearRecordStatusFor: linearRecordSelector.statusFor,
     linearRecordErrorFor: linearRecordSelector.errorFor,
     runUndoable: history.runUndoable,
@@ -1372,19 +1388,17 @@ export const createAppSetup = () => {
   const linearTrackSlotEditor = createLinearTrackSlotEditor({
     state, changeTrackLayout, changeTrackVisibility: retireShownLegendStyles
   });
-  // PD-OI-104 scenario revisions 6 and 7: a row's own switch, a row's Remove, and
-  // the removal of a Depth file or series ask before they take out of the shown
-  // stack a row that other rows start at or extend to (Add track: OV-3153).
-  /** @param {'circular_track_slots' | 'linear_track_slots'} slotsKey @returns {AskingStackPorts<SwitchedTrackRow>} */
-  const askingStackPorts = (slotsKey) => ({
-    askChoice, runUndoable: history.runUndoable, busy: sessionOperationAvailability, annotationSets: () => state.activeDrawing().annotationSets,
-    rows: () => /** @type {readonly SwitchedTrackRow[]} */ (state.activeDrawing().adv[slotsKey]),
-    mode: /** @type {'circular' | 'linear'} */ (slotsKey === 'circular_track_slots' ? 'circular' : 'linear')
+  // PD-OI-104 scenario revisions 6 and 7: the shown stacks' asking ports (track-slot-edits.js).
+  const { askingStackPorts, askingRowSwitch, askingRowRemoval } = createAskingStackPorts({
+    askChoice, runUndoable: history.runUndoable, busy: sessionOperationAvailability, shownDrawing: () => state.activeDrawing()
   });
-  /** @template {SwitchedTrackRow} Row @param {(slot: Row | null | undefined, enabled: unknown, turnOffReaching?: (() => void) | Event) => unknown} setEnabled @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
-  const askingRowSwitch = (setEnabled, slotsKey) => askingTrackRowSwitch(/** @type {AskingStackPorts<Row>} */ (askingStackPorts(slotsKey)), setEnabled);
-  /** @param {(index: unknown, turnOffReaching?: (() => void) | Event) => unknown} removeRow @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
-  const askingRowRemoval = (removeRow, slotsKey) => askingTrackRowRemoval(askingStackPorts(slotsKey), removeRow);
+  // The Feature density section (app/feature-density-tracks.js); a track's stack rows change through the feature
+  // placement transition (R10) and the mode's normalizer.
+  const featureDensityTrackEditor = createFeatureDensityTrackEditor({
+    shownDrawing: () => state.activeDrawing(), busy: sessionOperationAvailability, askingStackPorts, changeTrackLayout,
+    normalizeStack: (drawing) => (drawing.mode === 'circular'
+      ? circularTrackSlotEditor.normalizeCircularTrackSlots(drawing) : linearTrackSlotEditor.normalizeLinearTrackSlots())
+  });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
     state, getRecordCatalog: () => getAnnotationRecordCatalog(state.activeDrawing()), retireLegendStylesOfUnnamedCaptions: retireShownLegendStyles, askChoice,
@@ -1406,15 +1420,16 @@ export const createAppSetup = () => {
     });
   };
   const {
-    linearRegionNote, linearCardWindowView, linearLayoutCellRows, linearCardWindowsOf, circularRegionNote, circularWindowRows, shownInputSummary, drawnLinearRecordLengths,
-    committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds, shownLinearWrapLeaf, shownLinearWrapReading
+    linearRegionNote, linearCardWindowView, linearLayoutCellRows, linearUnitPlacesOf, linearCardRecord, circularRegionNote, circularWindowRows, shownInputSummary,
+    drawnLinearRecordLengths, committedLinearRecordsOf, awaitLinearRecordDiscovery, decorationsMoved, canvasPadded, shownCommittedRequest, shownRecordIds, shownLinearWrapLeaf, shownLinearWrapReading
   } = createShownDrawingReaders({
     state, shownDrawingOfMode, linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor, refreshLinearRecords: linearRecordSelector.refresh,
-    committedLinearRecordCards, getCommittedCanonicalRenderRequest, windowsOf: linearDrawingWindowsOf, planCardWindows,
+    committedLinearRecordCards, getCommittedCanonicalRenderRequest, windowsOf: linearDrawingWindowsOf,
+    unitPlacesOf: linearDrawingUnitPlaces, planCardWindows,
     cardWindowPlanRecords: linearCardWindowPlanRecords, recordDisplayRows: () => recordDisplayControls.allRows.value || []
   });
-  const losatSettings = createLosatSettings({ state, planLinearUnits, shownWindowsOf: () => linearCardWindowsOf(state.activeDrawing()) });
+  const losatSettings = createLosatSettings({ state, planLinearUnits, shownPlacesOf: () => linearUnitPlacesOf(state.activeDrawing()) });
   // Auto values follow the records the next Generate draws; until they are
   // known the values name their rule.
   const autoValueDisplay = createAutoValueDisplay(state, {
@@ -1620,14 +1635,14 @@ export const createAppSetup = () => {
     }) ?? removeLinearDepthTrack(drawing, index);
   });
   const {
-    clearDerivedCircularConservationBlasts, setCircularConservationSourceFiles, replaceCircularConservationBlasts,
+    setRingGenomeLists, setCircularConservationSourceFiles, replaceCircularConservationBlasts, adoptCircularRingResult,
     askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
     refreshCircularConservationSlots
   } = createCircularConservationSources({
-    state, writeLosatCacheInfo,
+    state, writeLosatCacheInfo, askingStackPorts,
     syncCircularConservationSlots: circularTrackSlotEditor.syncCircularConservationSlots,
-    circularConservationRowsLeaving: circularTrackSlotEditor.circularConservationRowsLeaving,
-    askingStackPorts
+    rekeyCircularConservationRows: circularTrackSlotEditor.rekeyCircularConservationRows,
+    circularConservationRowsLeaving: circularTrackSlotEditor.circularConservationRowsLeaving
   });
   const {
     setCircularConservationUploadFiles, circularConservationSeriesRows, canMoveCircularConservationSeries,
@@ -1638,10 +1653,10 @@ export const createAppSetup = () => {
     reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
   });
   const {
-    settleComparisonRecordLabels, addCircularConservationComparisonFile, setCircularConservationCompanionFile,
-    removeCircularConservationSource
+    settleComparisonRecordLabels, addCircularConservationComparisonFile, addRingRowFiles,
+    removeRingRowFile, removeCircularConservationSource
   } = createCircularConservationComparisonFiles({
-    state, shownAction, writeLosatCacheInfo, runUndoable: history.runUndoable, clearDerivedCircularConservationBlasts,
+    state, shownAction, writeLosatCacheInfo, runUndoable: history.runUndoable, setRingGenomeLists,
     setCircularConservationSourceFiles, reconcileCircularConservation, refreshCircularConservationSlots, askRingSourceRemoval
   });
   // The auxiliary file imports still applying: the watchers add them, Save and
@@ -1739,7 +1754,8 @@ export const createAppSetup = () => {
     readDrawingRecordIdentities,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
-    downloadLosatCache,
+    losatResultRowsOf, clearableLosatResultCount, swapLosatResultRows, losatRowsOf,
+    downloadLosatCache: downloadLosatCacheOfDrawing,
     downloadLosatPair: downloadLosatPairOfDrawing,
     clearLosatCache,
     getLosatPairDefaultName: losatPairDefaultNameOfDrawing,
@@ -1760,8 +1776,10 @@ export const createAppSetup = () => {
         hiddenDepth: true
       })
     ),
-    prepareLinearRecordCatalog,
+    prepareLinearRecordCatalog, planGenomeScales: planDraftGenomeScales,
     readRecordIdentitySources,
+    linearCardRecord,
+    readLinearCardRecords: linearRecordSelector.refresh,
     placeCircularRecordChoices: (drawing) => placeCircularRecordChoices(drawing), // created below, with the record settings
     recordDisplayRows: recordDisplayControls.allRows,
     assertDrawingInputs,
@@ -1773,18 +1791,13 @@ export const createAppSetup = () => {
     moveDrawnLabelVisibility: featureActions.moveDrawnLabelVisibility,
     askChoice,
     showNotice,
-    // A Generate that adopts a Circular LOSAT result reconciles its drawing's
-    // rings; a Linear Generate and a Circular one without such a result leave
-    // them. The ring rows move to its keys only if the draft's rings are those
-    // the request was built from (`keepCircularConservationRowsThrough` states why).
-    adoptCanonicalRenderArtifacts: (canonical, { builtFromDraft = false, ...options }) => {
-      const { drawing } = options;
-      const adopt = () => adoptCanonicalRenderArtifacts(canonical, options);
-      const adopted = builtFromDraft
-        ? circularTrackSlotEditor.keepCircularConservationRowsThrough(drawing, adopt)
-        : adopt();
-      if (adopted) reconcileCircularConservation(drawing);
-    },
+    // Only a Generate that searched its drawing's rings installs them, and the
+    // rings' reconcile pairs them with the rings it searched
+    // (`adoptCircularRingResult`); a Linear Generate, a Generate that searched no
+    // ring and a candidate of the committed request leave them.
+    adoptCanonicalRenderArtifacts: (canonical, { ringAdoption = null, ...options }) => adoptCircularRingResult(
+      options.drawing, (installRings) => adoptCanonicalRenderArtifacts(canonical, { ...options, installRings }), ringAdoption
+    ),
     getCommittedCanonicalSession,
     readCommittedCanonicalRevision,
     commitLiveSettingValues,
@@ -1796,10 +1809,9 @@ export const createAppSetup = () => {
     installGeneratedArtifactOwnerSet: historySnapshots.installGeneratedArtifactOwnerSet,
     installRedrawnArtifact: historySnapshots.installRedrawnArtifact,
     restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
+    emptyKeptProteinIdentityManifests: historySnapshots.emptyKeptProteinIdentityManifests,
     setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
-    runGeneratedArtifactReplacement: (...args) => (
-      history.runUndoableArtifactReplacement(...args)
-    ),
+    runGeneratedArtifactReplacement: (...args) => history.runUndoableArtifactReplacement(...args),
     previewRuntime,
     nextTick,
     onGeneratedArtifactCheckpointCapture: ({ phase, diagnostics } = {}) => {
@@ -1846,6 +1858,8 @@ export const createAppSetup = () => {
   };
   /** @param {string} edgeKey @param {unknown} customName */
   const downloadLosatPair = (edgeKey, customName) => downloadLosatPairOfDrawing(state.activeDrawing(), edgeKey, customName);
+  const losatResultRows = computed(() => losatResultRowsOf(state.activeDrawing()));
+  const downloadLosatCache = () => downloadLosatCacheOfDrawing(state.activeDrawing());
   /** @param {string} edgeKey */
   const getLosatPairDefaultName = (edgeKey) => losatPairDefaultNameOfDrawing(state.activeDrawing(), edgeKey);
   // R1 (c), PD-OI-102: a History step, a checkpoint (Reset Settings, a rule
@@ -1988,7 +2002,7 @@ export const createAppSetup = () => {
     canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, auxiliaryImportFailureOnArrival, resetModeTransientUi
   } = setupWatchers({
     state,
-    rulePreparation,
+    isRuleInputCurrent: rulePreparation.isCurrent, snapshotRuleInputs: rulePreparation.snapshot,
     trackAuxiliaryFileImport: auxiliaryFileImports.track,
     ref, computed, watch,
     nextTick,
@@ -2520,7 +2534,8 @@ export const createAppSetup = () => {
     clearActiveRuntime: previewRuntime.clearActiveRuntime, getResultIdentity: previewRuntime.getResultIdentity,
     presentSelectedResult: previewRuntime.presentSelectedResult,
     rememberResultInventory: legendActions.rememberResultInventory, artifactSlotsSwap: artifactSlots.swap,
-    captureArtifactSlot: historySnapshots.captureArtifactSlot, installArtifactSlot: historySnapshots.installArtifactSlot
+    captureArtifactSlot: historySnapshots.captureArtifactSlot, installArtifactSlot: historySnapshots.installArtifactSlot,
+    adoptShownSetInventory: legendActions.adoptShownSetInventory
   });
   // The operations on the drawing list, each one project step (R11, R16-2).
   const drawingList = createDrawingList({
@@ -2537,25 +2552,26 @@ export const createAppSetup = () => {
       return applyDrawingStyle(withNewDrawingDefaults(state, createDrawingState(drawingId, mode)), source,
         resultsManager.paletteColorsOf(source));
     },
-    // The copy's Result is its source's slot under the copy's ID: the shown
-    // drawing's through `captureArtifactSlot` (it reads `currentResults`, R1).
+    // The copy's Result is its source's slot under its ID (the shown drawing's through `captureArtifactSlot`, R1).
     copyDrawing: (sourceId, copyId) => {
       const drawing = duplicateDrawingState(state.drawingOf(sourceId), copyId);
       const slot = artifactSlots.readOfDrawing(sourceId, state.activeDrawingId.value,
         () => historySnapshots.captureArtifactSlot(), (kept) => kept);
-      return { drawing, slot: slot ? artifactSlotAs(slot, drawing) : null };
+      return { drawing, held: { slot: slot ? artifactSlotAs(slot, drawing) : null, losatRows: losatRowsOf(sourceId), losatClears: historySnapshots.losatClearCount() } };
     },
     // A region drawing is read as Load reads a stored drawing, then made under its new ID.
     regionDrawing: makeRegionDrawing,
     addDrawing: state.addDrawing,
-    // An error that names a drawing leaves with it (R17-29), as it leaves on
-    // a switch away (OV-372): every Delete, its Redo, and the Undo of New and
-    // Duplicate remove a drawing here.
-    removeDrawing: (drawingId) => {
+    // An error that names a drawing leaves with it (R17-29), as on a switch away (OV-372): every Delete, its Redo,
+    // and the Undo of New and Duplicate remove a drawing here, which hands over its slot and LOSAT rows (OV-3209).
+    removeDrawing: (drawingId, left = []) => {
       if (errorDrawingId() === drawingId) errorLog.value = null;
-      return state.removeDrawing(drawingId, artifactSlots);
+      return { slot: state.removeDrawing(drawingId, artifactSlots), losatRows: swapLosatResultRows(drawingId, left), losatClears: historySnapshots.losatClearCount() };
     },
-    putSlot: artifactSlots.putSlot,
+    putHeld: (drawingId, { slot, losatRows, losatClears }) => {
+      const cleared = historySnapshots.putHeldSlot(drawingId, slot, losatClears);
+      return swapLosatResultRows(drawingId, cleared ? [] : losatRows);
+    },
     renameDrawing: state.renameDrawing,
     moveDrawing: state.moveDrawing,
     addDrawingHistory: history.addMember,
@@ -2586,12 +2602,11 @@ export const createAppSetup = () => {
   // Session Load: the loaded Session's artifact slots, before its preview
   // mounts. `opening` is the shown drawing's slot when its set is not the
   // committed one; each `stashed` slot waits in its drawing. The stash starts
-  // again with the loaded Session.
+  // again with the loaded Session. The Legend owner takes the shown set's inventory.
   /** @param {LoadedArtifactSlots} slots */
   const installLoadedArtifactSlots = ({ opening, stashed }) => {
     artifactSlots.replaceLoaded(stashed);
-    if (!opening) return;
-    historySnapshots.installArtifactSlot(opening, { drawing: state.drawingOf(opening.drawingId) });
+    if (opening) historySnapshots.installArtifactSlot(opening, { drawing: state.drawingOf(opening.drawingId) });
     rememberShownResultInventory(opening);
   };
 
@@ -2656,13 +2671,7 @@ export const createAppSetup = () => {
     const patternDrafts = featureActions.captureSpecificRulePatternDrafts();
     return runGeneratedDiagramAnalysis(null, null, null, {
       prepareGenerate: async () => {
-        if (mode.value === 'linear') {
-          if (drawing.importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
-            await materializeAutomaticLinearRecords(drawing);
-          } else {
-            await linearRecordSelector.refresh(drawing);
-          }
-        }
+        if (mode.value === 'linear') await prepareLinearGenerate(drawing);
         if (similarityAlignmentActions?.validateBeforeGenerate) {
           const validation = await similarityAlignmentActions.validateBeforeGenerate();
           if (validation?.status !== 'ok') {
@@ -3103,7 +3112,8 @@ export const createAppSetup = () => {
 
   // Labels that do not fit (LP-D43, LP-D48): the dialog over a Generate that
   // drew nothing, or over crossing leaders from the notice bar.
-  const { labelFitDialog, openLabelFitDialog, resolveLabelFitChoice, editLabelFitRecordText } = createLabelFitDialog({
+  // The dialog's state and the actions its template calls go to the template as they are.
+  const { openLabelFitDialog, ...labelFitTemplate } = createLabelFitDialog({
     reactive,
     computeRow: async (rowToken, kind) => (await runDiagramHelperOperation(
       DIAGRAM_HELPER_OPERATIONS.COMPUTE_LABEL_FIT_ROW, { rowToken, kind }
@@ -3228,7 +3238,7 @@ export const createAppSetup = () => {
   });
 
   const { circularIdentitySources, placeCircularRecordChoices, recordSettingsOwners, recordEditData, recordSourceOf } = createRecordSettingsSources({
-    shownDrawingOfMode, linearSourceGroups, linearSourceFileName, linearRecordsFor: linearRecordSelector.recordsFor,
+    shownDrawingOfMode, linearSourceGroups, linearSourceFileName, linearCardRecord,
     linearAnnotationSource, getCircularRecordDiscoveryState, circularAnnotationSourceKey,
     takeBackRuleRows: featureActions.takeBackRuleRows
   });
@@ -3406,17 +3416,15 @@ export const createAppSetup = () => {
     missingBlastTsvDialog,
     missingBlastTsvRows,
     chooseLinearComparisonPairFile,
-    showLinearComparisonCause,
+    comparisonCauseShown, showComparisonCause,
     runLinearComparisonIssueAction,
     resolveMissingBlastTsv,
-    labelFitDialog,
+    ...labelFitTemplate,
     labelCapacityText,
     labelFitNotice,
     shownInputSummary,
     shownInputSummaryStale,
     openLabelFitNotice,
-    resolveLabelFitChoice,
-    editLabelFitRecordText,
     sessionSaveAvailable,
     sessionLoadAvailable,
     sessionBusyReason,
@@ -3505,6 +3513,7 @@ export const createAppSetup = () => {
     circularConservation: drawingMember('circularConservation'),
     annotationSets: drawingMember('annotationSets'),
     selectedAnnotation,
+    ...featureDensityTrackEditor,
     addAnnotationSet: annotationEditor.addAnnotationSet,
     renameAnnotationSet: annotationEditor.renameAnnotationSet,
     duplicateAnnotationSet: annotationEditor.duplicateAnnotationSet,
@@ -3533,7 +3542,7 @@ export const createAppSetup = () => {
     circularConservationFastaInput,
     circularConservationSeriesRows,
     setCircularConservationUploadFiles,
-    setCircularConservationCompanionFile,
+    addRingRowFiles, removeRingRowFile,
     canMoveCircularConservationSeries,
     moveCircularConservationSeries,
     openCircularConservationComparisonFilePicker,
@@ -3961,10 +3970,12 @@ export const createAppSetup = () => {
     requestPaletteChange,
     selectPalette,
     requestResetColors,
+    losatResultRows, clearableLosatResultCount: computed(clearableLosatResultCount),
     downloadLosatCache,
     downloadLosatPair,
     clearLosatCache,
     getLosatPairDefaultName,
+    readShownRecords,
     getCircularRecordOrderLabel,
     getCircularRecordRow,
     getCircularRecordRowOptions,

@@ -1,18 +1,18 @@
 {
   "schema": 1,
   "repository": "https://github.com/satoshikawato/LOSAT",
-  "commit": "a20ad436abf126c9c06e2b407e95c6eb40146b8b",
-  "commitDate": "2026-11-07T22:52:59+00:00",
+  "commit": "5234c754f31adb6c18ba41d09c3baacc97404bcf",
+  "commitDate": "2026-11-10T05:44:33+00:00",
   "cargoVersion": "0.2.0",
-  "version": "0.2.0+a20ad436abf1",
+  "version": "0.2.0+5234c754f31a",
   "toolchain": {
     "rustc": "rustc 1.92.0 (ded5c06cf 2025-12-08)\nbinary: rustc\ncommit-hash: ded5c06cf21d2b93bffd5d884aa6e96934ee4234\ncommit-date: 2025-12-08\nhost: x86_64-unknown-linux-gnu\nrelease: 1.92.0\nLLVM version: 21.1.3",
     "cargo": "cargo 1.92.0 (344c4567c 2025-10-21)"
   },
   "files": {
     "losat.wasm": {
-      "sha256": "f87dbb7f059eec486dfdb7ee4461e71347087097b77b1b1e227b11989345f113",
-      "size": 9316387,
+      "sha256": "dfd3558b41176c8b2860f6997ba24cbd24afcf4eff2fa59daf84bed5bc0a5619",
+      "size": 9598699,
       "target": "wasm32-wasip1",
       "shape": "serial reactor, direct losat_web_* API (_initialize)",
       "command": "cargo build --release --locked --target wasm32-wasip1 --lib --no-default-features",
@@ -22,8 +22,8 @@
       ]
     },
     "losat-threaded.wasm": {
-      "sha256": "316f677ec987381624cc9216ba50f4eec5eb2e4b8ec6b8cbc3aff42be894c0a4",
-      "size": 14234747,
+      "sha256": "3036f42075e3f8652757a15d894ff05b1dc34764a1b81e94ac88fb9cb3e34cd1",
+      "size": 14607884,
       "target": "wasm32-wasip1-threads",
       "shape": "threaded command (_start, wasi_thread_start; imports env.memory, wasi.thread-spawn)",
       "command": "cargo build --release --locked --target wasm32-wasip1-threads --bin losat --features wasm-threads && node tests/wasi_shared_memory.js guard losat.wasm losat-threaded.wasm",
@@ -34,16 +34,16 @@
         "link-arg=--max-memory=4294901760"
       ],
       "memory": {
-        "initial": 44,
+        "initial": 45,
         "maximum": 65535
       },
       "sharedMemoryGuard": {
         "version": 3,
-        "fill": 1520,
-        "copy": 7731,
+        "fill": 1546,
+        "copy": 7932,
         "grow": 1,
-        "atomic": 30802,
-        "atomic_helpers": 1435
+        "atomic": 31220,
+        "atomic_helpers": 1449
       }
     }
   }

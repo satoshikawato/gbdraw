@@ -588,7 +588,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
             # its source then names a file that lives as long as its key does
             # (OV-1581), and the workspace is removed below.
             validated_paths[resource_id] = resolved
-        source_names = _staged_source_names(_resource_names, validated_paths)
+        source_names = staged_source_names(_resource_names, validated_paths)
         validated_identities = _validate_prepared_resource_identities(
             _resource_identities,
             resource_paths=validated_paths,
@@ -673,7 +673,7 @@ def prepared_input_lookup(
         yield
 
 
-def _staged_source_names(
+def staged_source_names(
     names: Mapping[str, object] | None, resource_paths: Mapping[str, Path]
 ) -> dict[str, str] | None:
     """The file name of each staged resource, by the name of the file the request reads.
@@ -809,4 +809,5 @@ __all__ = [
     "render_canonical_web_request",
     "render_embedded_canonical_web_request",
     "render_staged_canonical_web_request",
+    "staged_source_names",
 ]

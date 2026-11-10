@@ -368,18 +368,31 @@ export const appliedFeatureColors = ({ paletteDefinitions, appliedPaletteName, a
   return colors;
 };
 
-// The palette color of a feature type, else undefined. A type is file text
+// The color of a feature type in a palette: its own entry, else the palette's
+// `default`, as Python draws it (gbdraw/features/colors.py
+// `feature_type_color`; twin `concern:color-precedence`). A type is file text
 // (GFF3), so only an own key of the palette names a color: `constructor` or
-// `toString` is none.
+// `toString` takes the `default`. Undefined when the palette has neither.
+/**
+ * @param {Readonly<Record<string, string>>} colors
+ * @param {unknown} type
+ * @returns {string | undefined}
+ */
+export const paletteFeatureColor = (colors, type) => {
+  const key = String(type ?? '');
+  if (Object.hasOwn(colors, key) && colors[key]) return colors[key];
+  return Object.hasOwn(colors, 'default') && colors.default ? colors.default : undefined;
+};
+
+// The applied palette's color of a feature type (`paletteFeatureColor`).
 /**
  * @param {Parameters<typeof appliedFeatureColors>[0]} state
  * @param {string | undefined} type
  * @returns {string | undefined}
  */
-export const appliedFeatureColorOf = (state, type) => {
-  const colors = appliedFeatureColors(state);
-  return type !== undefined && Object.hasOwn(colors, type) ? colors[type] : undefined;
-};
+export const appliedFeatureColorOf = (state, type) => (
+  type === undefined ? undefined : paletteFeatureColor(appliedFeatureColors(state), type)
+);
 
 // One color, compared: case, a color name, and `#rgb` against `#rrggbb` (D-15).
 /** @param {unknown} colorValue */
@@ -419,6 +432,51 @@ export const buildDefaultColorOverrideTsv = ({
 } = {}) => buildPaletteColorOverrideRows({ colors, paletteColors })
   .map(([key, color]) => `${key}\t${color}`)
   .join('\n');
+
+// OV-3259: which saved colors are the palette's. A Web Session saves a
+// drawing's whole color table, its palette's rows with the user's
+// (`config.colors`), the colors its Result shows (`ui.appliedPaletteColors`),
+// and only the user's rows in its committed Default colors table. A saved row
+// that still holds the color its palette had when a released writer saved it
+// (`earlier`: the rows the palette has changed since) was the palette's own,
+// as that release read it (a row equal to the palette was no user color and
+// wrote no `-d` row), so Load reads it as the palette's color now, as the CLI
+// replay of the committed request draws it. A row stays as saved when the
+// committed table sets it (a user color the last Generate drew), or when the
+// Result shows another color under the same palette (an edit after that
+// Generate). Saved colors without applied colors of their palette (a Session
+// that no Web Generate saved, a palette switched after the Generate) are read
+// as the release read them.
+/**
+ * @param {Readonly<Record<string, unknown>>} colors The saved `config.colors`.
+ * @param {{
+ *   palette: string,
+ *   paletteColors: Readonly<Record<string, string>> | null,
+ *   earlier: Readonly<Record<string, Readonly<Record<string, string>>>>,
+ *   committedColors: () => Readonly<Record<string, unknown>>,
+ *   appliedPaletteName: unknown,
+ *   appliedPaletteColors: Readonly<Record<string, unknown>> | null
+ * }} saved
+ * @returns {Record<string, unknown>}
+ */
+export const savedColorsOverPalette = (colors, saved) => {
+  const palette = currentPaletteName(saved.palette);
+  const earlier = Object.hasOwn(saved.earlier, palette) ? saved.earlier[palette] : null;
+  const paletteColors = saved.paletteColors;
+  if (!earlier || !paletteColors) return { ...colors };
+  const applied = currentPaletteName(String(saved.appliedPaletteName ?? '')) === palette ? saved.appliedPaletteColors : null;
+  /** @param {unknown} left @param {unknown} right */
+  const same = (left, right) => normalizeComparableColor(left) === normalizeComparableColor(right);
+  const rows = Object.entries(earlier).filter(([key, earlierColor]) => (
+    Object.hasOwn(colors, key) && paletteColors[key] && same(colors[key], earlierColor) && !same(earlierColor, paletteColors[key])
+    && (!applied || same(applied[key], colors[key]))
+  ));
+  // The committed table is read only when a row may be the palette's.
+  const committed = rows.length ? saved.committedColors() : {};
+  const result = { ...colors };
+  rows.forEach(([key]) => { if (!Object.hasOwn(committed, key)) result[key] = paletteColors[key]; });
+  return result;
+};
 
 /**
  * @param {{

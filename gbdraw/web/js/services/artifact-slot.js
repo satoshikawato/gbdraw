@@ -3,6 +3,7 @@
 // drawing ID, while another drawing is shown. The History snapshot service
 // captures and installs it (`captureArtifactSlot`, `installArtifactSlot`);
 // Session Save writes it and Session Load builds it (`services/config.js`).
+import { emptyProteinIdentityManifest } from './losat-cache.js';
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 /** @import { PythonLegendKey } from './legend-svg.js' */
 
@@ -21,10 +22,11 @@ export const FEATURE_EDITOR_STATUS_IDLE = Object.freeze({ status: 'idle', error:
  * another is shown. The state ref of every key and the value an empty slot
  * installs, given the mode of the slot's drawing and the current value: the displayed-Result
  * part of the owner set, the selected Result, the feature-editor status, the generated Legend colors and
- * stroke defaults, and the alignment Reset receipt (it binds the
- * committed Linear Session). Draft and project state stays shared: the specific
+ * stroke defaults, the alignment Reset receipt (it binds the
+ * committed Linear Session), and the protein identity manifest its LOSAT
+ * protein rows resolve in (D-197). Draft and project state stays shared: the specific
  * color rules, the file Legend captions, the Linear record orientations, the
- * pending palette, the LOSAT caches and manifests, the alignment plan and
+ * pending palette, the LOSAT caches and legacy protein candidates, the alignment plan and
  * record translations, and every editor intent (R2).
  * @satisfies {Readonly<Record<string, (mode: 'circular' | 'linear', current: any) => any>>}
  */
@@ -57,7 +59,8 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   appliedPaletteColors: (_mode, current) => current,
   similarityAlignmentResetReceipt: () => null,
   originalLegendColors: () => ({}),
-  originalSvgStroke: () => ({ color: null, width: null })
+  originalSvgStroke: () => ({ color: null, width: null }),
+  proteinIdentityManifest: () => emptyProteinIdentityManifest()
 });
 // The cast: `ARTIFACT_SLOT_EMPTY` is the frozen literal above, so its own keys are exactly the keys of its type.
 export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFACT_SLOT_EMPTY)[]} */ (Object.keys(ARTIFACT_SLOT_EMPTY)));
@@ -85,6 +88,57 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFAC
  */
 
 /**
+ * A drawing's generated Legend inventory is its shown Result set's: a set
+ * without a Result has none (OV-3282). The slot holds it by this rule, and the
+ * Legend owner writes the displayed one by it.
+ * @param {readonly unknown[]} results The Result set.
+ * @param {readonly PythonLegendKey[]} inventory The inventory the set was drawn with.
+ * @returns {PythonLegendKey[]}
+ */
+export const resultSetInventory = (results, inventory) => (results.length > 0 ? [...inventory] : []);
+
+/**
+ * The shown Result set's generated Legend inventory and colors, as a restore
+ * (a Session Load, its rollback, a History step) brings them.
+ * @typedef {object} ShownSetLegend
+ * @property {PythonLegendKey[]} originalOrder The inventory the set was drawn with.
+ * @property {Record<string, string>} originalColors Python's color of each generated row, by its key.
+ */
+/**
+ * The refs of the displayed Legend inventory and colors, and of the shown Results that decide them.
+ * @typedef {object} ShownSetLegendRefs
+ * @property {{ readonly value: readonly unknown[] }} results
+ * @property {{ value: PythonLegendKey[] }} originalLegendOrder
+ * @property {{ value: Record<string, string> }} originalLegendColors
+ */
+
+/**
+ * The one writer of the displayed inventory after an artifact install, after
+ * the install wrote the shown Results: `inventory` by the rule of
+ * `resultSetInventory`. The Legend owner calls it after a switch and a Load
+ * (`adoptShownSetInventory`), and `installShownSetLegend` for a restore.
+ * @param {Pick<ShownSetLegendRefs, 'results' | 'originalLegendOrder'>} refs
+ * @param {readonly PythonLegendKey[]} inventory
+ */
+export const writeShownSetInventory = (refs, inventory) => {
+  refs.originalLegendOrder.value = resultSetInventory(refs.results.value, inventory);
+};
+
+/**
+ * A restore's install of the shown set's inventory and colors (a Session
+ * Load, its rollback, a History step), after it wrote the Results. The colors
+ * have one more install: an artifact slot install writes them as a slot key
+ * (`installArtifactSlot` in `history-snapshot.js`), while the slot's
+ * inventory goes beside its values (`legendInventory`).
+ * @param {ShownSetLegendRefs} refs
+ * @param {ShownSetLegend} legend
+ */
+export const installShownSetLegend = (refs, { originalOrder, originalColors }) => {
+  refs.originalLegendColors.value = originalColors;
+  writeShownSetInventory(refs, originalOrder);
+};
+
+/**
  * A slot of `drawing`'s artifact; a value it is not given is the empty
  * slot's for the drawing's mode.
  * @param {{ drawing: DrawingIdentity, values: ArtifactSlot['values'], legendInventory?: ArtifactSlot['legendInventory'],
@@ -104,7 +158,7 @@ export const createArtifactSlot = ({
     values: Object.freeze(Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
       key, Object.hasOwn(values, key) ? values[key] : ARTIFACT_SLOT_EMPTY[key](drawing.mode, null)
     ]))),
-    legendInventory: Object.freeze([...legendInventory]),
+    legendInventory: Object.freeze(resultSetInventory(Object.hasOwn(values, 'results') ? values.results : [], legendInventory)),
     matchSequenceOwner,
     runtimeState,
     transportIdentity,

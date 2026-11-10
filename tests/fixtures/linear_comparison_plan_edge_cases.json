@@ -1,0 +1,384 @@
+{
+  "description": "Admission of the edges of a Linear comparison plan: the Python owner (gbdraw.session_io._validate_comparison_plan_edge) and the Web Save check (session-authority.js validateCurrentComparisonAuthority, with isWindowLosatFilenameEntry) accept or refuse each case alike. edges are checked in order as one plan.",
+  "cases": [
+    {
+      "name": "a valid edge",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": ""
+        }
+      ],
+      "accepted": true
+    },
+    {
+      "name": "a valid edge with window names",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": "",
+          "windowLosatFilenames": {
+            "a:b": "ab.tsv"
+          }
+        }
+      ],
+      "accepted": true
+    },
+    {
+      "name": "an empty window name map",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": "",
+          "windowLosatFilenames": {}
+        }
+      ],
+      "accepted": true
+    },
+    {
+      "name": "an upload edge",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "upload",
+          "losatFilename": ""
+        }
+      ],
+      "accepted": true
+    },
+    {
+      "name": "an edge with a blank LOSAT filename",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": ""
+        }
+      ],
+      "accepted": true
+    },
+    {
+      "name": "two edges with different ids",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": ""
+        },
+        {
+          "id": "e2",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": ""
+        }
+      ],
+      "accepted": true
+    },
+    {
+      "name": "an unknown field",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": "",
+          "extra": 1
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "a retired field",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": "",
+          "blast": "x.tsv"
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "a blank id",
+      "edges": [
+        {
+          "id": " ",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": ""
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "a missing queryUid",
+      "edges": [
+        {
+          "id": "e1",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": ""
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "a blank subjectUid",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": ""
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "a duplicate id",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": ""
+        },
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": ""
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "included is not a boolean",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": 1,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": ""
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "fileActive is not a boolean",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": "yes",
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": ""
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "losatFilenameActive is missing",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "source": "losat",
+          "losatFilename": ""
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "an unknown source",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "blast",
+          "losatFilename": ""
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "losatFilename is not a string",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": null
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "a blank window pair key",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": "",
+          "windowLosatFilenames": {
+            " ": "ab.tsv"
+          }
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "a non-string window pair name",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": "",
+          "windowLosatFilenames": {
+            "a:b": 3
+          }
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "a blank window pair name",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": "",
+          "windowLosatFilenames": {
+            "a:b": "  "
+          }
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "window names that are a list",
+      "edges": [
+        {
+          "id": "e1",
+          "queryUid": "q",
+          "subjectUid": "s",
+          "included": true,
+          "fileActive": false,
+          "losatFilenameActive": false,
+          "source": "losat",
+          "losatFilename": "",
+          "windowLosatFilenames": [
+            "a"
+          ]
+        }
+      ],
+      "accepted": false
+    },
+    {
+      "name": "an edge that is not an object",
+      "edges": [
+        "e1"
+      ],
+      "accepted": false
+    }
+  ]
+}

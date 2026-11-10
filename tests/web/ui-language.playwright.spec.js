@@ -560,7 +560,7 @@ test('rail names stay inside the rail and keep each word on one line, nothing co
       for (const viewport of viewports) {
         await page.setViewportSize(viewport);
         await expect.poll(() => railAndFooterFit(page), { message: `${display}, ${tag} at ${viewport.width}x${viewport.height}` })
-          .toEqual({ ...fit, names: display === 'rail' ? 14 : 0 });
+          .toEqual({ ...fit, names: display === 'rail' ? 15 : 0 });
       }
     }
     await menu(page).selectOption('en');

@@ -405,8 +405,9 @@ const drawingResourceIds = (drawing) => {
   const found = new Set(LAYOUT.drawingResourceFields.flatMap((field) => [...resourceIdsOf(drawing[field])]));
   const webFiles = mapping(drawing.webFiles);
   LAYOUT.resourceIdListFields.forEach((field) => {
+    // One list of IDs per ring: the files of its comparison genome.
     const ids = webFiles[field];
-    if (Array.isArray(ids)) ids.forEach((id) => { if (typeof id === 'string') found.add(id); });
+    if (Array.isArray(ids)) ids.flat().forEach((id) => { if (typeof id === 'string') found.add(id); });
   });
   return found;
 };
@@ -463,11 +464,20 @@ const changedRowValue = (modeSlice, mode, row) => {
   const value = rowValue(modeSlice, row);
   if (value === ABSENT) return ABSENT;
   const fallback = defaultValue(mode, row);
-  if (fallback !== ABSENT && canonical(value) === canonical(fallback)) return ABSENT;
-  // A default a released writer stored is a default, not a setting.
-  return MODE_SLICE_DEFAULTS.earlierDefaults.some((earlier) => earlier.domain === row.domain && earlier.path === row.path
-    && canonical(earlier.value) === canonical(value)) ? ABSENT : value;
+  return fallback !== ABSENT && canonical(value) === canonical(fallback) ? ABSENT : value;
 };
+
+/**
+ * `_is_earlier_default`: whether a value is a default a released writer
+ * stored, which the move of a Session 46-50 reads as a default, not a
+ * setting. Only that move reads it: the current app's Save compares with the
+ * current default (`sliceDiffersFromDefault`).
+ * @param {RegistryRow} row
+ * @param {unknown} value
+ */
+const isEarlierDefault = (row, value) => MODE_SLICE_DEFAULTS.earlierDefaults.some((earlier) => (
+  earlier.domain === row.domain && earlier.path === row.path && canonical(earlier.value) === canonical(value)
+));
 
 /**
  * Whether a drawing's slice (as Save writes it, `buildModeSliceData`) holds a
@@ -493,7 +503,7 @@ const usedBySettings = (slices, mode, other) => {
   const shown = mapping(slices[other]);
   return /** @type {readonly RegistryRow[]} */ (MODE_SCOPED_SETTINGS.rows).some((row) => {
     const value = changedRowValue(own, mode, row);
-    if (value === ABSENT) return false;
+    if (value === ABSENT || isEarlierDefault(row, value)) return false;
     if (row.modes === mode) return true;
     const shownValue = rowValue(shown, row);
     if (shownValue === ABSENT) return true;

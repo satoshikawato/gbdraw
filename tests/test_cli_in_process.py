@@ -50,8 +50,8 @@ def test_in_process_run_answers_as_a_fresh_process(args: list[str], tmp_path: Pa
 def test_in_process_run_leaves_the_process_as_it_found_it(tmp_path: Path) -> None:
     root = logging.getLogger()
     before = (
-        list(root.handlers), root.level, list(sys.argv), os.getcwd(), list(warnings.filters), warnings.showwarning,
-        fonts.registered_fonts(),
+        list(root.handlers), root.level, list(sys.argv), sys.modules["__main__"].__spec__, os.getcwd(),
+        list(warnings.filters), warnings.showwarning, fonts.registered_fonts(),
     )
 
     result = run_gbdraw(["linear", "--gbk", str(LAMBDA), "-o", "out", "-f", "svg"], cwd=tmp_path)
@@ -59,8 +59,8 @@ def test_in_process_run_leaves_the_process_as_it_found_it(tmp_path: Path) -> Non
     assert result.returncode == 0, result.stderr
     assert "INFO:" in result.stderr
     after = (
-        list(root.handlers), root.level, list(sys.argv), os.getcwd(), list(warnings.filters), warnings.showwarning,
-        fonts.registered_fonts(),
+        list(root.handlers), root.level, list(sys.argv), sys.modules["__main__"].__spec__, os.getcwd(),
+        list(warnings.filters), warnings.showwarning, fonts.registered_fonts(),
     )
     assert after == before
 

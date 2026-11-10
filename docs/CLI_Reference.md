@@ -82,6 +82,7 @@ Options (examples):
   --conservation_blast BLAST result file(s) for circular similarity rings (-outfmt 6 or 7)
   --conservation_table TSV manifest for circular BLAST similarity rings
   --conservation_sequence Comparison genome FASTA, GenBank, or DDBJ file(s) for LOSAT rings or interactive span export
+  --conservation_genome The files of one comparison genome, once per ring (a genome split over several files)
   --circular_track_table TSV manifest for circular track slots
   --annotation_table    TSV table for coordinate- or feature-targeted region annotations
 
@@ -140,6 +141,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--conservation_blast BLAST [BLAST ...]]
               [--conservation_table TSV]
               [--conservation_sequence FILE [FILE ...]]
+              [--conservation_genome FILE [FILE ...]]
               [--conservation_reference {query,subject,auto}]
               [--conservation_labels LABEL [LABEL ...]]
               [--conservation_colors COLOR [COLOR ...]]
@@ -408,13 +410,23 @@ options:
                         Precomputed BLAST outfmt 6/7 file(s) for circular
                         similarity rings.
   --conservation_table TSV
-                        TSV manifest with BLAST files for similarity rings,
-                        labels, and colors.
+                        TSV manifest of the similarity rings: BLAST files,
+                        comparison genomes (the files of one genome separated
+                        by ";"), labels, and colors.
   --conservation_sequence FILE [FILE ...]
                         Comparison genome sequence file(s) (FASTA, GenBank, or
                         DDBJ; one file is one genome): the ring queries with
                         --losat, otherwise one per --conservation_blast for
-                        interactive span export.
+                        interactive span export. For a genome in several files
+                        use --conservation_genome.
+  --conservation_genome FILE [FILE ...]
+                        The files of one comparison genome (FASTA, GenBank, or
+                        DDBJ), such as a chromosome and its plasmids; repeat
+                        the option once per ring. The ring reads every file
+                        whole, in the given order, as one genome. Labels,
+                        colors, genetic codes, and --conservation_blast files
+                        align by occurrence. Cannot be combined with
+                        --conservation_sequence or --conservation_table.
   --conservation_reference {query,subject,auto}
                         BLAST side containing displayed circular reference
                         coordinates.
@@ -442,10 +454,11 @@ options:
                         Build the similarity rings with LOSAT: losatn compares
                         nucleotide sequences (LOSAT blastn) and tlosatx their
                         translations (LOSAT tblastx). Each
-                        --conservation_sequence genome is the query and every
-                        record of the reference file (uncropped, also records
-                        not drawn) is the subject. Cannot be combined with
-                        --conservation_blast (default: no LOSAT search).
+                        --conservation_sequence or --conservation_genome
+                        genome is the query and every record of the reference
+                        file (uncropped, also records not drawn) is the
+                        subject. Cannot be combined with --conservation_blast
+                        (default: no LOSAT search).
   --losatn_task {megablast,blastn,dc-megablast}
                         LOSATN search task with --losat losatn. A native
                         runtime that does not support the task stops before
@@ -455,7 +468,7 @@ options:
   --conservation_losat_gencode CODE [CODE ...]
                         TLOSATX genetic code of each comparison genome with
                         --losat tlosatx: one for every ring or one per
-                        --conservation_sequence, in the same order; the
+                        comparison genome, in the same order; the
                         --conservation_table losat_gencode column sets it per
                         row (default: 1).
   --losat_bin PATH      Native LOSAT executable for --losat (default:
@@ -779,6 +792,12 @@ may also carry `fileName`, which is ignored; slot text lowercases keys, so
 an error that names the slot and the parameter; `anchor_slot` and `to_slot`
 belong to annotation slots only.
 
+A `ticks` slot that names no `tick_label_layout` takes it from its place in
+the list: before the first `features` slot (outside the feature track) it
+draws `label_out_tick_in`, labels outside their ticks; after it,
+`label_in_tick_out`, as the default stacks do. The Web app orients a scale row
+the same way.
+
 The Legend lists the rows of the slots in four groups: the GC content, GC
 skew and Depth rows, then the similarity-ring rows (the outermost ring first),
 then the feature density rows, then the annotation rows. Within the GC, Depth,
@@ -811,9 +830,11 @@ Session replay keeps its saved prefix unless an output override is supplied.
 
 Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. Without `--conservation_labels`, a ring is labelled with its table's file name without the last extension (`danio-human.tlosatx.tsv` gives `danio-human.tlosatx`), as in the web app. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are in the search frame of the drawn record (after its crop, on its source strand, 1-based; a row outside it is skipped with a warning) and are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit.
 
-To run the searches instead, use `--losat losatn` or `--losat tlosatx` with one `--conservation_sequence` file per ring (`losatp` is not available for rings). Each comparison genome file (FASTA, GenBank, or DDBJ; all records of one file are one genome) is the LOSAT query, and the subject is the whole reference file: every record that has a sequence (for GFF3 input, every entry of the FASTA file), uncropped, also records that are not drawn, and with several reference files each file whole, in input order. So every ring uses the reference genome as its E-value database, selecting records, a crop, or a reverse complement does not change ring E-values, the raw-cache keys equal the web app's, and `--conservation_reference` resolves to `subject` (`query` is rejected). The search reports positions on the whole reference file; gbdraw puts each row in the search frame of the record it draws (the record after its crop, on its source strand, 1-based), the frame of every ring table, and leaves out rows of records that are not drawn or wholly outside a crop. A row that crosses the crop edge keeps its part inside the crop; only its subject positions change, so its query columns, alignment length, and identity are those of the whole HSP. `--conservation_blast` cannot be combined with `--losat`. Ring order, labels, and colors follow `--conservation_sequence`; without `--conservation_labels`, a GenBank or DDBJ ring is labelled with its DEFINITION (or organism), and a FASTA ring, or a flat file with neither field, with its file name without the last extension (`genome.v2.fasta` gives `genome.v2`). `--losatn_task` applies to LOSATN. For TLOSATX, `--losat_gencode` sets the reference genetic code and `--conservation_losat_gencode` one code for all rings or one per ring; both default to 1 and are never read from `/transl_table`. `--losat_bin`, `--ncbi_blast_bin`, and `--losat_threads` choose the runtime as in Linear mode. `--losat_output_dir DIR` writes one TSV per ring with these rows and `conservation.tsv`, which `--conservation_table` accepts unchanged. A saved Session stores these rows and ring labels, so it replays without LOSAT and keeps its labels. Thresholds, ring geometry, and `--circular_track_slot` work as for precomputed rings.
+To run the searches instead, use `--losat losatn` or `--losat tlosatx` with one `--conservation_sequence` file per ring (`losatp` is not available for rings). Each comparison genome file (FASTA, GenBank, or DDBJ; all records of one file are one genome) is the LOSAT query; for a genome split over several files, such as a chromosome and its plasmids downloaded separately, give `--conservation_genome FILE [FILE ...]` once per ring instead (see below). The subject is the whole reference file: every record that has a sequence (for GFF3 input, every entry of the FASTA file), uncropped, also records that are not drawn, and with several reference files each file whole, in input order. So every ring uses the reference genome as its E-value database, selecting records, a crop, or a reverse complement does not change ring E-values, the raw-cache keys equal the web app's, and `--conservation_reference` resolves to `subject` (`query` is rejected). The search reports positions on the whole reference file; gbdraw puts each row in the search frame of the record it draws (the record after its crop, on its source strand, 1-based), the frame of every ring table, and leaves out rows of records that are not drawn or wholly outside a crop. A row that crosses the crop edge keeps its part inside the crop; only its subject positions change, so its query columns, alignment length, and identity are those of the whole HSP. `--conservation_blast` cannot be combined with `--losat`. Ring order, labels, and colors follow `--conservation_sequence` (or the `--conservation_genome` occurrences); without `--conservation_labels`, a GenBank or DDBJ ring is labelled with its DEFINITION (or organism), and a FASTA ring, or a flat file with neither field, with its file name without the last extension (`genome.v2.fasta` gives `genome.v2`); a ring of several files takes the label of its first file. `--losatn_task` applies to LOSATN. For TLOSATX, `--losat_gencode` sets the reference genetic code and `--conservation_losat_gencode` one code for all rings or one per ring; both default to 1 and are never read from `/transl_table`. `--losat_bin`, `--ncbi_blast_bin`, and `--losat_threads` choose the runtime as in Linear mode. `--losat_output_dir DIR` writes one TSV per ring with these rows and `conservation.tsv`, which `--conservation_table` accepts unchanged. A saved Session stores these rows and ring labels, so it replays without LOSAT and keeps its labels. Thresholds, ring geometry, and `--circular_track_slot` work as for precomputed rings.
 
-For `interactive_svg`, add one `--conservation_sequence` value (FASTA, GenBank, or DDBJ) per `--conservation_blast` value to enable Reference span, Comparison span, and Both spans FASTA actions in the HSP popup. Without it, the reference span remains available and the comparison action explains that no comparison sequence was supplied. These actions export ungapped genomic spans. A reversed coordinate pair is sliced from the lower to the higher coordinate and reverse-complemented.
+A genome in several files is one ring with `--conservation_genome FILE [FILE ...]`, repeated once per ring: `--conservation_genome chromosome.gb plasmid1.gb plasmid2.gb --conservation_genome other.gb` draws two rings. The ring reads every file whole, in the given order, with the records of all files concatenated, so it is the ring of one file that holds those records. Two files of one genome must not share a record ID (`INPUT_INVALID`, `UNIQUE_IDS`). Labels, colors, `--conservation_losat_gencode`, and `--conservation_blast` files align by occurrence. `--conservation_genome` cannot be combined with `--conservation_sequence` or `--conservation_table`; in a table, list the files of one genome in its `comparison_sequence` cell, separated by `;`. `--conservation_genome ''` alone is a ring without a comparison genome (a precomputed ring with no span export).
+
+For `interactive_svg`, add one `--conservation_sequence` value (FASTA, GenBank, or DDBJ) per `--conservation_blast` value (or one `--conservation_genome` per ring) to enable Reference span, Comparison span, and Both spans FASTA actions in the HSP popup. Without it, the reference span remains available and the comparison action explains that no comparison sequence was supplied. These actions export ungapped genomic spans. A reversed coordinate pair is sliced from the lower to the higher coordinate and reverse-complemented.
 
 ## Feature rendering
 
@@ -1012,14 +1033,14 @@ PemoMJNVA.PeseMJNV.tblastx.out	#2	#4
 
 ### `--conservation_table`
 
-Use `--conservation_table` in circular mode to keep BLAST paths, optional comparison sequence paths, ring labels, and colors together. It cannot be combined with `--conservation_blast`, `--conservation_sequence`, `--conservation_labels`, `--conservation_colors`, or `--conservation_losat_gencode`.
+Use `--conservation_table` in circular mode to keep BLAST paths, optional comparison sequence paths, ring labels, and colors together. It cannot be combined with `--conservation_blast`, `--conservation_sequence`, `--conservation_genome`, `--conservation_labels`, `--conservation_colors`, or `--conservation_losat_gencode`.
 
 Allowed columns:
 
 | Column | Required | Meaning |
 | --- | --- | --- |
 | `blast` | yes; rejected with `--losat` | Path to a precomputed BLAST outfmt 6 or 7 file. |
-| `comparison_sequence` | optional; required with `--losat` | Comparison genome (FASTA, GenBank, or DDBJ): the ring query with `--losat`, otherwise used only for interactive comparison-span export. |
+| `comparison_sequence` | optional; required with `--losat` | Comparison genome (FASTA, GenBank, or DDBJ): the ring query with `--losat`, otherwise used only for interactive comparison-span export. The files of a genome split over several files go in one cell, separated by `;` (`chromosome.gb;plasmid.gb`); each path is resolved relative to the table, and an empty path between separators is rejected. |
 | `losat_gencode` | optional | TLOSATX genetic code of the ring with `--losat tlosatx` (empty cells use 1); rejected with `--losat losatn`, unused without `--losat`. |
 | `label` | optional | Similarity ring label. If the column is present, row order supplies the label list. |
 | `color` | optional | SVG color name or `#RRGGBB`. If the column is present, row order supplies the color list; an empty cell takes the `--conservation_color_scheme` color. |

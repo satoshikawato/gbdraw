@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const { runLosatJobsByFile, runUntilCanceled } = await import('../../gbdraw/web/js/services/losat.js');
+const { losatRunFailure } = await import('../../gbdraw/web/js/services/losat-runtime.js');
 
 /** A step whose reply the test gives when it chooses. */
 const held = () => {
@@ -81,7 +82,7 @@ test('each File runs in turn, the status names it, and a failed File keeps its r
     ran.push([job.fileKey, status.at(-1)]);
     if (job.fileKey === 'b') throw new Error('LOSAT exited with status 1');
     return [{ ...job, text: `rows of ${job.fileKey}` }];
-  }, { signal: controller.signal, status: (text) => status.push(text) });
+  }, { signal: controller.signal, status: (text) => status.push(text) }, 'findInOtherFiles');
   assert.deepEqual(ran, [
     ['a', 'Running LOSAT: File 1 of 3'], ['b', 'Running LOSAT: File 2 of 3'], ['c', 'Running LOSAT: File 3 of 3']
   ]);
@@ -103,6 +104,15 @@ test('Cancel during a File stops the run: the abort is thrown and no later File 
       throw canceled;
     }
     return [{ ...job, text: 'rows' }];
-  }, { signal: controller.signal, status: () => {} }), (error) => error === canceled);
+  }, { signal: controller.signal, status: () => {} }, 'findInOtherFiles'), (error) => error === canceled);
   assert.deepEqual(ran, ['a', 'b']);
+});
+
+test('a File whose LOSAT exits with an error says what LOSAT reported and names the Search, not Generate', async () => {
+  const results = await runLosatJobsByFile(jobs.slice(0, 1), async () => {
+    throw losatRunFailure("error: invalid value '9' for '-evalue <REAL>'\n");
+  }, { signal: new AbortController().signal, status: () => {} }, 'findInOtherFiles');
+  assert.match(results[0].error, /^The search could not run or returned unusable output\. Check the search settings, then click Search again\./);
+  assert.match(results[0].error, /LOSAT reported: invalid value '9' for '\u2011evalue <REAL>'$/);
+  assert.doesNotMatch(results[0].error, /Generate/);
 });

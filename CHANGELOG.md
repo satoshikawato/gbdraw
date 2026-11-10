@@ -10,8 +10,25 @@ and full feature descriptions) live under `docs/RELEASE_NOTES_*.md`. This
 file is the short, chronological index; follow the links below for the full
 write-up of a release.
 
+While a release is developed, each pull request writes its entries to its own
+file under [`changelog.d/`](./changelog.d/README.md); the release moves them
+into the `[Unreleased]` list below.
+
 ## [Unreleased]
 
+- Fixed: in the Web app, a Linear grid arranged in Record Layout (two records
+  in row 1, one in row 2) with LOSATP Collinear and Search between All records
+  drew a block only between the second record and the third, while the same
+  grid from a records table drew blocks from both records of row 1. Every grid
+  now joins every record pair of adjacent rows, whatever wrote the rows: the
+  Web reads the displayed pairs from the Python unit plan, and Python reads the
+  same rows for the drawing and for the saved LOSATP results (OV-3248). A
+  record drawn in two windows in one row above another record likewise drew a
+  Collinear block (Search between All records) only from its second window;
+  each window now joins the record below, as the CLI drew it. In the CLI, a
+  records table with one record per row whose rows do not follow the record
+  order (rows 3, 1, 2) no longer stops with "Linear comparison endpoints must
+  be in adjacent rows"; its records of adjacent rows are joined (OV-3286).
 - Fixed: in the Web app, Add track with the Annotations renderer gave the new
   row the first Region Annotation set even when that set already had a row,
   so the set was drawn twice without a word (two bracket rings for the tobacco
@@ -169,9 +186,9 @@ write-up of a release.
   eukaryotic chromosome or the share of each window in long terminal repeats.
   Give tracks with `--feature_density_track` or `--feature_density_table` in
   `gbdraw circular` and `gbdraw linear`, or as `FeatureDensityTrack` options in
-  the Python API; a saved Session keeps them and replays them in the CLI. The
-  Web app draws a loaded Session's tracks again at Generate and saves them; its
-  editor for them comes later.
+  the Python API; a saved Session keeps them and replays them in the CLI. In
+  the Web app, the Feature density section adds, changes, copies, reorders and
+  removes tracks, and a custom track stack gets a row for each track you add.
 - Changed: records of 100 Mbp or longer get an Auto GC content and GC skew
   window of 1 Mb and step of 100 kb (before: 100 kb and 10 kb), so a human
   chromosome draws about 2,500 samples per track instead of about 25,000.
@@ -202,6 +219,14 @@ write-up of a release.
   polygon instead of a ring. The rings now follow the circle between samples,
   in the CLI, the Python API, and the Web app. Longer records draw as before
   (OV-2863).
+- Fixed: the Web app and the CLI could draw a GC content, GC skew or Depth
+  line through a different point where two points of the line lay equally far
+  from the straight piece the path simplifies it to: one point of the GC line
+  across the gap of human chromosome 21 sat 0.4 px apart. Which of the two the
+  path kept followed the last bits of the platform's sine and cosine. The path
+  now keeps the first of them on every platform, so the Web app and the CLI
+  draw the same line. Figures that had such a tie move by at most 0.02 px,
+  the path's own tolerance (OV-3190).
 - Fixed: on a Circular Multi-Record Canvas whose `--multi_record_position`
   (Web: Record Order) draws the records in another order than they were given,
   a moved record took another record's feature edits, display start or crop,
@@ -217,6 +242,20 @@ write-up of a release.
   app a click on a moved record's name opened another record's settings
   (OV-2931). Each record now keeps the index it was given; the figure looks
   the same.
+- Changed: a record selector with a plus sign (`#+2`) now names that record
+  everywhere, as Linear `--multi_record_position` already read it; Circular
+  `--multi_record_position`, `--record_id`, `--region`, and the Web app
+  refused it. Both modes' `--multi_record_position` now read one grammar: a
+  row with a plus sign (`#2@+1`) and a record ID that holds `@` or is `none`
+  or `-`, which one mode drew and the other refused, now draw in both. A word
+  such as `none` or `-` that no record has as its ID names the record when
+  only one is drawn, as it did for a record drawn in windows (OV-2988,
+  OV-3312).
+- Fixed: a record that a Session stores by a record ID that reads like a
+  record number (`#2`, `#+2`) now draws that record in the Web app after Load,
+  in a Linear card, the Circular Record select and a Circular record range, as
+  the command line draws it; the Web drew record 2. When Load cannot find one
+  record with that ID in its file, its repair dialog says so (OV-3311).
 - Changed: a Session saved by the command line or the Python API
   (`--save_session`, `--session_output`) no longer depends on the machine or on
   when its input files were last changed: each embedded file stores no guessed
@@ -257,15 +296,35 @@ write-up of a release.
   facing outward keep the larger of the track gap and the margin, as before.
   Figures whose tick labels face no painted edge, such as GC content in the
   default deviation mode, are unchanged (OV-3116, OV-3149, OV-3150).
+- Fixed: a Circular custom track stack that puts the scale above the feature
+  track without naming a tick label layout (for example
+  `--circular_track_slot ticks:ticks --circular_track_slot features:features`)
+  drew the tick labels inside the ticks, on the feature track and far from
+  their ticks, while the Web app drew them outside. Such a scale now draws its
+  labels outside the ticks, next to them and away from the features, in the
+  CLI, the Python API, and the Web app, so a Session saved by the CLI draws
+  the same figure after Load and Generate. A scale below the feature track,
+  as in every default stack, and a scale that names its layout are unchanged
+  (OV-3189).
 - Fixed: in a Circular figure whose custom track stack puts the scale above
-  the feature track (for example `--circular_track_slot ticks:ticks
-  --circular_track_slot features:features`), the tick labels inside the ticks
+  the feature track with its labels inside the ticks (for example
+  `--circular_track_slot ticks:ticks@tick_label_layout=label_in_tick_out
+  --circular_track_slot features:features`), the tick labels
   stood on the outer edge of the feature track, so letters such as the "p" of
   "kbp" touched the CDS arrows. A feature track now counts as a track that
   paints the edge facing the labels: the labels keep their margin from it
   (3.1 px at the default 14 pt), and the feature track and the tracks inside it
   move inward by that much. Figures whose tick labels do not face a feature
   track, such as the default stacks, are unchanged (OV-3192).
+- Fixed: in a Circular figure whose scale stands outside the feature track with
+  its labels outside the ticks, the outer feature labels and the bends of their
+  leader lines stood on the scale's numbers, and the leader lines ran through
+  them (for example "8 kbp" of NC_002333.2 in the multi-record recipe). The
+  outer labels and the bends of their leaders now stay outside the numbers.
+  Where a leader line still runs through a number, or passes within a hair of
+  it, on either side of the feature track, the number is drawn in front of the
+  line on a white backing, as region labels are. Figures where no leader line
+  meets a number are unchanged (OV-3301).
 - Fixed: a custom track stack (**Use custom stack** in the Web app,
   `--circular_track_slot` or `--linear_track_slot` on the command line) with no
   Annotations row for a Region Annotation set left the set out of the figure
@@ -364,6 +423,11 @@ write-up of a release.
   Axis, so the command failed with
   "conflicts with --linear_track_axis_index". The recipe now writes the side
   each slot is drawn on (OV-3157).
+- Fixed (Web app): Run Info gave no Source recipe for a one-record Circular
+  Session saved by the CLI ("batch or multiple-output semantics have no single
+  current CLI projection"). The CLI writes such a drawing as a batch of one
+  output, which the recipe now writes as its `-o`; a drawing of several records
+  drawn as separate diagrams still has none (OV-3191).
 - Changed: every track group in an SVG is now named from its track slot
   (`track_slot_<hash>_<slot id>`) and carries `data-gbdraw-slot-id` and
   `data-gbdraw-slot-renderer`, in both modes and with or without a custom
@@ -383,6 +447,32 @@ write-up of a release.
   with comparison rings ("semantic field ... params.managed has no current CLI
   projection"). The recipe now leaves out the ring rows' own bookkeeping, which
   does not change the figure, and the command draws the same figure (OV-3009).
+- Fixed (Web app): a Rotate, an Align or another change that redraws the
+  Result without a new search undid the edits made to the similarity rings
+  since the last Generate (a removed or moved ring, a new label, color,
+  genetic code or stack row width). Those edits now stay until the next
+  Generate draws them (OV-3194).
+- Fixed (Web app): **Remove series**, Session Load and **Add Seq** could give
+  a similarity ring another ring's name, color, stack row or genetic code, for
+  example after removing a ring above it or loading a Session whose ring
+  genome file was missing. Each ring now keeps its own (OV-3089, OV-3091,
+  OV-3152, OV-3166, OV-3167, OV-3195, OV-3197, OV-3200).
+- Fixed (Web app): editing a Circular drawing's similarity rings, a Generate
+  of a drawing, or the Undo or Redo of a drawing's Generate removed another
+  drawing's results from its LOSAT results list and from **Save Raw LOSAT
+  TSV**, and a Session saved afterwards lost their file names. Those results
+  now stay listed with their names. After another Linear drawing's protein
+  (LOSATP) Generate, a Linear drawing's protein pairs also still download,
+  and a Session saved then keeps them (OV-3196, OV-3201, OV-3207, OV-3213).
+- Fixed (Web app): **Save Raw LOSAT TSV** of a drawing also saved the LOSAT
+  results of the project's other drawings, and **Clear N LOSAT results** and
+  **Save Raw LOSAT TSV** counted and saved twice a table that two similarity
+  rings of one genome share. **Save Raw LOSAT TSV** now saves the shown
+  drawing's own results, each table once. **Clear N LOSAT results** counts
+  each of the project's searches once and, as before, clears the results of
+  every drawing. Generating again after an Undo or Redo reuses the LOSAT
+  searches the project already ran, and **Clear N LOSAT results** counts them
+  (OV-3203, OV-3204, OV-3260).
 - Changed: when the Circular similarity rings are not all one color, each
   Legend row now shows the ring's name with that ring's own identity ramp
   (white to its color), with one scale line under the last ramp, instead of a
@@ -402,6 +492,29 @@ write-up of a release.
   with `--conservation_colors '#6e91b7' '#f4a251' '#8fc4c0' '#e67577'
   '#c6bebb' '#77b26f' '#be92b2' '#f0d369' '#ae8e7c' '#ffafb7'`, repeating
   from ring 11 (PD-OI-110 scenario revision 3).
+- Fixed: in 53 of the 55 packaged palettes, `repeat_region`, `misc_feature` and the
+  color of every type the palette does not list (`default`, which is also the color
+  of `ncRNA` in 48 of them) were one gray or one color, so a Legend showed
+  several rows with the same swatch and the map did not tell them apart. In each of
+  those palettes `misc_feature` is now a sand tone and the unlisted types a
+  blue-gray tone derived from the palette's own `repeat_region` color, which is
+  unchanged (in the `default` palette: `#e3cfab` and `#aebccb`). `earthtones` and
+  `psyche` already differed. The features of an unlisted type (`ncRNA` in most
+  palettes, `D-loop`, `rep_origin`) are now drawn in the palette's `default`
+  color, the color their Legend row shows; they were drawn in `#d3d3d3` whatever
+  the palette, so in a palette whose `default` was not `#d3d3d3` the map and the
+  Legend disagreed. The Web's live preview and the feature popup use the same
+  color. A figure changes only where it draws a `misc_feature` or an unlisted
+  type. To keep the earlier colors, give a Default colors table that sets
+  `misc_feature` and `default` to `#d3d3d3` (`-d/--default_colors colors.tsv`,
+  with the two rows `misc_feature<TAB>#d3d3d3` and `default<TAB>#d3d3d3`; in
+  the Web, Default colors). A Session whose Default colors table sets those rows
+  keeps its colors. A Session the Web saved with gbdraw 0.14.5 or earlier, whose
+  table does not set them, follows the new colors at its next Generate, as its
+  command-line replay already does: the Web now reads its saved `misc_feature`
+  and `default` rows at the palette's 0.14.5 color as the palette's own, not as
+  colors the user changed (OV-3259). A test now requires the three to differ in
+  every palette (OV-3114).
 - Fixed: a Circular Legend on the left or right centred the feature rows and
   the whole block of similarity rings and gradient bars each on its own, with
   the ring names at that block's left edge, so the blocks sat apart. Every
@@ -442,6 +555,17 @@ write-up of a release.
   the previous build ran runs them once more at its first Generate, because a
   saved LOSAT result is reused only by the LOSAT build that wrote it; the
   results are the same.
+- Fixed: in the Web app, a LOSAT search that LOSAT itself ended with an error
+  (for example an option value it refuses) failed with "The operation failed
+  without recognized diagnostic information". The error now says that the
+  comparison search failed and shows LOSAT's own first error line, on the
+  serial and the threaded engine, for comparisons, Sequence search and Find
+  in other files. The two searches word the failure for the search and ask to
+  click Search again. A serial run no longer runs every search a second time on the page
+  after such a failure, and Auto no longer runs it again on the serial engine
+  after the threaded engine reported it; Auto still falls back to serial when
+  a thread of the threaded engine does not start (OV-3304, OV-3287, OV-3288,
+  OV-3289).
 - Added: one Linear row can show several windows of one record, leaving out
   the interval between them. Repeat `--region` for a record, or give the rows of
   a records table that are its windows one value in the new `record_group`
@@ -769,6 +893,25 @@ write-up of a release.
   Web app shows "Region labels overlap other labels or lines (N)."). A
   feature label counts once, whether the region label meets its letters, its
   leader line, or both. The figure is drawn as before.
+- Fixed: on a Circular figure whose region label warns over the outer labels,
+  the label fixes said "Does not fit up to ... offset 2" although they cleared
+  the leader crossings, and the CLI often offered no fix within its 5 s, when
+  no value cleared the region label warning (a region label cut to its circle
+  or lying on another track, for example). These fixes now answer only for the
+  labels they move: they leave out the region label warnings each record
+  already had, and a value that adds one still does not fit. When the first
+  value that clears those labels keeps the region warning, the fix goes on, as
+  before, to the first value whose whole figure fits; if none fits up to the
+  fix's limit, its first value is offered with a note such as "the figure is
+  drawn with 1 region label overlap". The CLI lists such fixes after the fixes
+  that fit and tries every fix's first value before any fix goes on, so when
+  the 5 s limit ends the search, a fix that would fit with more time may show
+  its first value with its note; the Web
+  app's **Choose a fix**
+  keeps its order and first selects a fix that fits. A Linear "separate
+  overlapping features" fix, or a fix offered when nothing was drawn, whose
+  figure is drawn with a region label warning (one the figure had or one the
+  fix adds) now says so too (OV-3105, OV-3108).
 - Fixed: a Circular region label whose letters still met a feature label's
   letters after it moved along its region (for example "Integration" over
   "integrase" on lambda with `--labels out`) was drawn over them. The
@@ -862,6 +1005,27 @@ write-up of a release.
   that DPI (300 when none is given), as the web app's PNG does.
   `gbdraw.api.with_request_output()` gained an optional `dpi` argument (additive)
   (#1663).
+- Added: a Circular similarity ring can compare a genome split over several
+  files, such as a chromosome and plasmids downloaded separately (E. coli
+  O157:H7 Sakai is BA000007.3, AB011548.2 and AB011549.2), without joining the
+  files first. `gbdraw circular --conservation_genome FILE [FILE ...]`, given
+  once per ring, a `comparison_sequence` cell of `--conservation_table` that
+  lists the files separated by `;`, and a list of paths in
+  `CircularDiagramOptions.conservation_sequence_files`, a list of paths in
+  `ComparisonRingTrackOptions.comparison_sequence_source`, and **Add file** on
+  a Web app ring row (which also removes the ring's files) give
+  one ring every record of those files, file after file: the ring of one file
+  that holds them all. The ring is labelled after its first file. `--losat_output_dir` writes
+  the `;` list, so its `conservation.tsv` still reads back unchanged. Two files
+  of one genome that hold the same record ID are refused
+  (`UNIQUE_IDS`). `--conservation_sequence` keeps one file per ring.
+  A comparison file whose own records repeat a record ID still draws as
+  before, and gbdraw now warns (the command line on stderr, the Web app after
+  Generate), naming the file and the ID, that the hover popup and the span
+  export show the first record with that ID.
+  A request now writes each ring's `conservationFastaFiles` entry, and a
+  Session its ring file bindings, as a list of files; a request or Session
+  saved by gbdraw 0.14.5 or earlier reads each ring's one file as before.
 - Added (Web app): a Circular **Show Comparison Rings** setting, beside
   **Show Depth**. Generate draws the comparison rings and runs their LOSAT
   searches or reads their BLAST tables only while it is on. Like **Show

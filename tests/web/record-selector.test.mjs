@@ -73,6 +73,23 @@ assert.deepEqual(unmatchedOptions[1], {
   synthetic: true
 });
 assert.equal(buildRecordOptions(records, 'RecB').some((option) => option.synthetic), false);
+// OV-3325: the select names a stored selector's record as the owner does
+// (`resolveDisambiguatedRecordSelection`: by value, then `#k`, then record ID).
+// The record's option carries the stored value, so the select shows that record
+// chosen; only a selector that names no single record is "not found".
+assert.deepEqual(buildRecordOptions([{ selector: '#1', recordId: 'safe', recordLength: 50 }], '#1'), [
+  { value: '', label: AUTOMATIC_RECORD_OPTION_LABEL, synthetic: false },
+  { value: '#1', label: 'safe (50 bp)', synthetic: false }
+]);
+assert.deepEqual(buildRecordOptions(records, '#2').slice(1), [
+  { value: 'RecA', label: 'RecA (1,234 bp)', synthetic: false },
+  { value: '#2', label: 'RecB (567 bp)', synthetic: false }
+]);
+assert.deepEqual(buildRecordOptions([
+  { selector: '#1', recordId: 'RecA', recordLength: 1234 },
+  { selector: '#2', recordId: 'RecA', recordLength: 1100 }
+], 'RecA')[1], { value: 'RecA', label: 'RecA (not found in current file)', synthetic: true });
+assert.equal(buildRecordOptions(records, '#3')[1].synthetic, true);
 assert.equal(buildRecordOptions([{ ...records[0], recordLength: undefined }])[1].label, 'RecA (length unavailable)');
 
 assert.deepEqual(normalizeSequenceRecords({
@@ -247,6 +264,14 @@ await secondRefresh;
 pending.get(fileA)([{ selector: '#1', recordId: 'Stale', recordLength: 10 }]);
 await firstRefresh;
 assert.equal(controller.optionsFor(state.activeDrawing(), state.linearSeqs[0])[1].value, 'Current');
+// OV-3325: a card that names its one record by "#1" (a hand-edited or older
+// Session) shows that record, with no warning.
+state.linearSeqs[0].region_record_id = '#1';
+assert.equal(controller.warningFor(state.activeDrawing(), state.linearSeqs[0]), '');
+assert.deepEqual(controller.optionsFor(state.activeDrawing(), state.linearSeqs[0]).slice(1), [
+  { value: '#1', label: 'Current (20 bp)', synthetic: false }
+]);
+state.linearSeqs[0].region_record_id = '';
 
 state.linearSeqs.push({ uid: 'row-b', gb: fileA, fasta: null, region_record_id: 'Missing' });
 const readyRefresh = controller.refresh(state.activeDrawing());
