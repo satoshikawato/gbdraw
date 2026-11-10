@@ -367,7 +367,7 @@ const setFeatureEditorStatus = (status, error = null) => {
 const featureExtractionPending = ref(false);
 const featureRecordIds = ref([]); // Record IDs for multi-record files
 const selectedFeatureRecordIdx = ref(0); // Currently selected record index
-const resultGenerationKey = ref(0);
+const resultGenerationKey = typedRef(0);
 const featurePanelTab = ref(defaultEditorDraftState.featurePanelTab); // 'colors' | 'labels'
 const featureSearchInput = ref('');
 const featureSearch = ref('');
@@ -386,7 +386,7 @@ const previewFeatureSearchVisible = ref(true);
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
 const autoLabelReflowEnabled = ref(false);
-const labelReflowProcessing = ref(false);
+const labelReflowProcessing = typedRef(false);
 const labelReflowRequestSeq = ref(0);
 const labelReflowForceRequestSeq = ref(0);
 const labelReflowLastError = ref(null);
@@ -544,13 +544,23 @@ const labelOnDialog = reactive({
   featureType: ''
 });
 
-const featureVisibilityScopeDialog = reactive({
+/**
+ * The Change Scope dialog of a feature visibility edit
+ * (`app/feature-editor/visibility-actions.js`). Display values only.
+ * @typedef {object} FeatureVisibilityScopeDialog
+ * @property {boolean} show
+ * @property {VisibilityTarget | null} feat The feature the edit is for.
+ * @property {string} mode The visibility mode the edit sets.
+ * @property {string} previousMode The feature's mode before it, which Cancel shows again.
+ * @property {VisibilityScope[]} scopes The scopes the dialog offers.
+ */
+const featureVisibilityScopeDialog = typedReactive(/** @type {FeatureVisibilityScopeDialog} */ ({
   show: false,
   feat: null,
   mode: 'default',
   previousMode: 'default',
   scopes: []
-});
+}));
 
 // Sidebar resize state
 const sidebarWidth = typedRef(320); // Initial width in pixels
@@ -904,7 +914,7 @@ export const sessionOperationAvailability = (
 /** @import { DrawingId } from './services/drawing-view.js' */
 
 /** @import { PythonLegendKey } from './services/legend-svg.js' */
-/** @import { VisibilityFeature } from './services/feature-visibility.js' */
+/** @import { VisibilityFeature, VisibilityScope, VisibilityTarget } from './services/feature-visibility.js' */
 
 // The drawing of a diagram mode: its settings, its editor edits, and the
 // values derived from them, under their former `state` names and kinds (a ref

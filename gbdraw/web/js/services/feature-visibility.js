@@ -155,6 +155,26 @@ const isHeaderRow = (fields) => {
  */
 
 /**
+ * A feature the visibility actions read: an extracted or catalog feature under its
+ * snake-case or camel-case names, with the qualifiers and similarity-group fields
+ * the scopes read by name.
+ * @typedef {VisibilityFeature & Record<string, unknown>} VisibilityTarget
+ */
+
+/**
+ * One scope of a visibility edit: this feature, its similarity-group members, or
+ * an exact product or protein ID rule.
+ * @typedef {object} VisibilityScope
+ * @property {string} id
+ * @property {string} label
+ * @property {string} description
+ * @property {VisibilityTarget[]} [features] The members of a `orthogroup` scope.
+ * @property {string} [featureType] The exact-qualifier rule of a `product` or `protein_id` scope.
+ * @property {string} [qualifier]
+ * @property {string} [value]
+ */
+
+/**
  * One feature's visibility change: its identity, the modes before and after
  * (`mode` replaces `after` when a History restore sets it).
  * @typedef {VisibilityFeature & { before?: string, after?: unknown, mode?: unknown }} FeatureVisibilityChange

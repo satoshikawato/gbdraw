@@ -26,28 +26,8 @@ import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 import { replaceVisibilityRules } from '../../services/drawing/visibility-rules.js';
 import { msg, t } from '../../utils/i18n.js';
-/** @import { DrawingState } from '../../state.js' */
-/** @import { FeatureDrawnContext, FeatureVisibilityRuleDraft, VisibilityFeature } from '../../services/feature-visibility.js' */
-
-/**
- * A feature the visibility actions read: an extracted or catalog feature under its
- * snake-case or camel-case names, with the qualifiers and similarity-group fields
- * the scopes read by name.
- * @typedef {VisibilityFeature & Record<string, unknown>} VisibilityTarget
- */
-
-/**
- * One scope of a visibility edit: this feature, its similarity-group members, or
- * an exact product or protein ID rule.
- * @typedef {object} VisibilityScope
- * @property {string} id
- * @property {string} label
- * @property {string} description
- * @property {VisibilityTarget[]} [features] The members of a `orthogroup` scope.
- * @property {string} [featureType] The exact-qualifier rule of a `product` or `protein_id` scope.
- * @property {string} [qualifier]
- * @property {string} [value]
- */
+/** @import { DrawingState, WebState } from '../../state.js' */
+/** @import { FeatureDrawnContext, FeatureVisibilityRuleDraft, VisibilityScope, VisibilityTarget } from '../../services/feature-visibility.js' */
 
 /** @typedef {Partial<VisibilityScope> & { id: string }} VisibilityScopeChoice A scope, or the bare `feature` scope. */
 
@@ -63,16 +43,18 @@ import { msg, t } from '../../utils/i18n.js';
 
 /**
  * @typedef {object} FeatureVisibilityActionsOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Pick<WebState, 'activeDrawing' | 'clickedFeature' | 'errorLog' | 'extractedFeatures' | 'featureCatalog'
+ *   | 'featureVisibilityScopeDialog' | 'labelReflowProcessing' | 'orthogroups' | 'resultGenerationKey' | 'results'
+ *   | 'selectedResultIndex' | 'sessionOperationAvailability' | 'svgContainer'>} state App state (state.js).
  * @property {(options: { domains: readonly string[] }) => boolean} showEditorIntent
  *   The root's port of the editor intent onto the displayed Result (R13), which
  *   compiles Feature visibility with `resolveFeatureDrawn`, as Generate draws it.
  * @property {VisibilityActionsPorts} ports
- * @property {(index: number) => any} selectResult The preview owner's selection of the Result a History command targets.
+ * @property {(index: number) => unknown} selectResult The preview owner's selection of the Result a History command targets.
  * @property {import('../rule-matching.js').RulePreparation['prepareDrawn']} prepareDrawnRuleMatches
  *   The rule preparation's preparation of what `resolveFeatureDrawn` reads (R13).
- * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
- *   The committed canonical request (Python owns the option fields, R7).
+ * @property {() => ({ diagramOptions?: { selectedFeaturesSet?: unknown } | null } | null)} [getCommittedRequest]
+ *   The committed canonical request (Python owns the option fields, R7); this reads its selected feature types.
  * @property {ShowNotice} [showNotice] The root's notice banner: a table import or export reports there.
  */
 
@@ -348,9 +330,10 @@ export const createFeatureVisibilityActions = ({
    * @param {VisibilityTarget[]} features
    */
   const updateClickedFeatureVisibilityFromRules = (drawing, features) => {
-    const clicked = clickedFeature.value?.feat;
-    if (!clicked || !features.some((feature) => sameFeature(feature, clicked))) return;
-    clickedFeature.value.featureVisibility = getFeatureVisibilityOverride(drawing.featureOverrides, clicked);
+    const popup = clickedFeature.value;
+    if (!popup || !features.some((feature) => sameFeature(feature, popup.feat))) return;
+    // A popup's feature row is a visibility target (a widening, as `sameFeature` reads it).
+    popup.featureVisibility = getFeatureVisibilityOverride(drawing.featureOverrides, /** @type {VisibilityTarget} */ (popup.feat));
   };
 
   const nextFrame = () => /** @type {Promise<void>} */ (new Promise((resolve) => {
@@ -431,10 +414,8 @@ export const createFeatureVisibilityActions = ({
    * @param {string} mode
    */
   const showClickedFeatureVisibility = (targetFeatures, mode) => {
-    const clicked = clickedFeature.value?.feat;
-    if (clicked && targetFeatures.some((feature) => sameFeature(feature, clicked))) {
-      clickedFeature.value.featureVisibility = mode;
-    }
+    const popup = clickedFeature.value;
+    if (popup && targetFeatures.some((feature) => sameFeature(feature, popup.feat))) popup.featureVisibility = mode;
   };
 
   // A feature or similarity-group scope: the identity rows of its features.
@@ -656,7 +637,7 @@ export const createFeatureVisibilityActions = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value?.feat) return false;
-    const feat = clickedFeature.value.feat;
+    /** @type {VisibilityTarget} */ const feat = clickedFeature.value.feat;
     const scopes = buildVisibilityScopes(feat);
     const nextMode = normalizeVisibilityMode(modeRaw);
     const previousMode = getFeatureVisibilityOverride(drawing.featureOverrides, feat);
@@ -683,7 +664,7 @@ export const createFeatureVisibilityActions = ({
     }
     const feat = featureVisibilityScopeDialog.feat;
     const nextMode = featureVisibilityScopeDialog.mode;
-    const scope = (featureVisibilityScopeDialog.scopes || []).find((/** @type {VisibilityScope} */ entry) => entry.id === scopeId);
+    const scope = (featureVisibilityScopeDialog.scopes || []).find((entry) => entry.id === scopeId);
     if (!feat || !scope) {
       clearFeatureVisibilityScopeDialog({ restorePrevious: true });
       return false;
