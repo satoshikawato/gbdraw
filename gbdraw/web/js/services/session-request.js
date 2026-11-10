@@ -1243,16 +1243,25 @@ const createResourceBuilder = ({ encode = true } = {}) => {
  */
 const fileRef = (resourceId) => ({ resourceId, representation: 'file' });
 /**
+ * Each ring's comparison genome files as resources `<base>-<ring>-<file>` (D-62),
+ * one list of resource IDs per ring.
+ * @param {ResourceBuilder} resources
+ * @param {string} base
+ * @param {readonly (readonly ResourceEntry[])[]} rings
+ */
+const ringFileResources = (resources, base, rings) => rings.map((files, ringIndex) => files.map((entry, fileIndex) => (
+  resources.addFile(`${base}-${ringIndex + 1}-${fileIndex + 1}`, 'conservation-fasta-file', entry)
+)));
+/**
  * The request's `conservationFastaFiles`: each ring's comparison genome files,
- * one list of file references per ring, resource `<base>-<ring>-<file>` (D-62).
+ * one list of file references per ring (`ringFileResources`).
  * @param {ResourceBuilder} resources
  * @param {string} base
  * @param {readonly (readonly ResourceEntry[])[]} rings
  * @returns {CanonicalFileRef[][]}
  */
-const ringFileRefs = (resources, base, rings) => rings.map((files, ringIndex) => files.map((entry, fileIndex) => (
-  fileRef(resources.addFile(`${base}-${ringIndex + 1}-${fileIndex + 1}`, 'conservation-fasta-file', entry))
-)));
+const ringFileRefs = (resources, base, rings) => ringFileResources(resources, base, rings)
+  .map((ids) => ids.map((resourceId) => fileRef(resourceId)));
 // The table inputs whose committed file a rebuilt request keeps (`publicationFileRef`).
 const REQUEST_TABLE_FILE_SLOTS = Object.freeze(['d_color', 't_color', 'whitelist', 'qualifier_priority']);
 /**
@@ -4879,22 +4888,14 @@ const projectCanonicalRenderInput = ({
     const searchedRings = Array.isArray(resolvedCircularConservation) ? resolvedCircularConservation : [];
     // Their genome files, read once: each list sits beside its ring's table.
     const searchedRingFastas = searchedRings.map((entry) => [...entry.fastas]);
-    if (conservationSource === 'losat') {
-      // The rings a Generate searched, else the rings in the order Generate draws them, matched by source key
-      // (`ringGenomeFilesInRingOrder`).
-      const comparisonFastas = searchedRingFastas.length > 0
-        ? searchedRingFastas
+    // A LOSAT drawing's query files: those of the rings a Generate searched, else of the rings in the order
+    // Generate draws them, matched by source key (`ringGenomeFilesInRingOrder`).
+    const losatQueryFastas = conservationSource !== 'losat' ? []
+      : searchedRingFastas.length > 0 ? searchedRingFastas
         : ringGenomeFilesInRingOrder({ files: filesData, circularConservation: drawing.circularConservation });
-      if (comparisonFastas.length > 0) {
-        // Each ring's LOSAT query files, one list of resource IDs per ring.
-        webFiles.conservationLosatFastaSources = comparisonFastas.map((files, index) => (files || []).map(
-          (entry, fileIndex) => resources.addFile(
-            `conservation-losat-fasta-files-${index + 1}-${fileIndex + 1}`,
-            'conservation-fasta-file',
-            entry
-          )
-        ));
-      }
+    if (losatQueryFastas.length > 0) {
+      // Each ring's LOSAT query files, one list of resource IDs per ring.
+      webFiles.conservationLosatFastaSources = ringFileResources(resources, 'conservation-losat-fasta-files', losatQueryFastas);
     }
     if (searchedRings.length > 0) {
       diagramOptions.conservationBlastFiles = searchedRings.map(
@@ -5271,6 +5272,17 @@ const resourceAsLegacyFile = (resources, resourceId) => {
  *   Builds the file a Session binding stands for from its resource id and the
  *   binding's recorded name, type, and modification time.
  */
+
+/**
+ * Each ring's genome files, in their order, from its resource IDs (`ringGenomeIdLists`).
+ * @param {string[][]} idLists
+ * @param {StoredResources} resources
+ * @param {ResourceFileResolver | null} resolveResourceFile
+ */
+const ringResourceFiles = (idLists, resources, resolveResourceFile) => idLists.map((ids) => ids.flatMap((resourceId) => {
+  const file = resolveResourceFile ? resolveResourceFile(resourceId) : resourceAsLegacyFile(resources, resourceId);
+  return file ? [file] : [];
+}));
 
 /**
  * @param {StoredResources} resources
@@ -6891,33 +6903,29 @@ export const projectCanonicalSessionRequest = ({
       files.c_conservation_blasts_source = 'losat-cache';
     }
   }
-  /** @param {unknown} resourceId */
-  const resourceFile = (resourceId) => (typeof resourceId === 'string' && resourceId
-    ? (resolveResourceFile ? resolveResourceFile(resourceId) : resourceAsLegacyFile(resources, resourceId))
-    : null);
   // Each ring's genome files, in their order: the request's references
   // (request schema 10), else the Web metadata's resource IDs, one list per
   // ring (one ID or null per ring in a Session 50 or older, `ringGenomeIdLists`).
   if (renderRequest.mode === 'circular' && Array.isArray(options.conservationFastaFiles)) {
-    files.c_conservation_sequence_sources = options.conservationFastaFiles.map((/** @type {unknown} */ ringFiles) => (
-      (Array.isArray(ringFiles) ? ringFiles : []).flatMap((/** @type {UnvalidatedFields<'resourceId'>} */ ref) => {
-        const file = resourceFile(ref?.resourceId);
-        return file ? [file] : [];
-      })
-    ));
+    files.c_conservation_sequence_sources = ringResourceFiles(ringGenomeIdLists(options.conservationFastaFiles.map(
+      (/** @type {unknown} */ ringFiles) => (Array.isArray(ringFiles) ? ringFiles : [])
+        .map((/** @type {UnvalidatedFields<'resourceId'>} */ ref) => ref?.resourceId)
+    )), resources, resolveResourceFile);
   } else if (
     renderRequest.mode === 'circular'
     && Array.isArray(webMetadata.conservationSequenceSources)
   ) {
-    files.c_conservation_sequence_sources = ringGenomeIdLists(webMetadata.conservationSequenceSources)
-      .map((ids) => ids.flatMap((resourceId) => { const file = resourceFile(resourceId); return file ? [file] : []; }));
+    files.c_conservation_sequence_sources = ringResourceFiles(
+      ringGenomeIdLists(webMetadata.conservationSequenceSources), resources, resolveResourceFile
+    );
   }
   if (
     renderRequest.mode === 'circular'
     && Array.isArray(webMetadata.conservationLosatFastaSources)
   ) {
-    files.c_conservation_fastas = ringGenomeIdLists(webMetadata.conservationLosatFastaSources)
-      .map((ids) => ids.flatMap((resourceId) => { const file = resourceFile(resourceId); return file ? [file] : []; }));
+    files.c_conservation_fastas = ringResourceFiles(
+      ringGenomeIdLists(webMetadata.conservationLosatFastaSources), resources, resolveResourceFile
+    );
   }
   // The tables the request reads. A Web or CLI binding names the file a table
   // was imported from; the writer stored the table derived from it (OV-367).

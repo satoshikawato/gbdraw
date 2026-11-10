@@ -1740,6 +1740,36 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {ShowNotice} [showNotice] The root's notice banner.
  */
 
+/**
+ * The LOSAT result rows of each drawing, over the app's cache-info rows and raw cache: their readers and the swap of a
+ * drawing's rows as it leaves the drawing store or comes back.
+ * @param {Pick<WebState, 'losatCacheInfo' | 'losatCache'>} refs
+ */
+const losatResultRowsAccess = ({ losatCacheInfo, losatCache }) => {
+  /** @returns {LosatCacheInfoEntry[]} */
+  const cacheInfoRows = () => (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : []);
+  return {
+    cacheInfoRows,
+    /**
+     * The LOSAT results of a drawing, the one reader of its results (#1777 review 9, OV-3203, OV-3204): **Save Raw
+     * LOSAT TSV** and Run Info read its rows, one per cache key, never another drawing's.
+     * @param {DrawingState} drawing
+     */
+    losatResultRowsOf: (drawing) => losatResultRowsOfDrawing(cacheInfoRows(), drawing.id),
+    /** A drawing's rows as written, which a Duplicate copies (OV-3205). @param {DrawingId} drawingId */
+    losatRowsOf: (drawingId) => losatRowsOfDrawing(cacheInfoRows(), drawingId),
+    /** The count of **Clear LOSAT results**: the searches it removes, the whole cache, one per key (PD-OI-022: Clear Cache
+     * invalidates retained evidence), a search only a deleted drawing's rows name included (OV-3211). */
+    clearableLosatResultCount: () => losatCache.value.size,
+    /** A drawing's rows come and go with it (OV-3205, OV-3209); a row whose search a Clear removed meanwhile stays out. @param {DrawingId} drawingId @param {readonly LosatCacheInfoEntry[]} drawingRows */
+    swapLosatResultRows: (drawingId, drawingRows) => {
+      const { rows, held } = losatRowsWithDrawing(cacheInfoRows(), drawingId, drawingRows.filter((row) => losatCache.value.has(row.key)));
+      losatCacheInfo.value = rows;
+      return held;
+    }
+  };
+};
+
 /** @param {RunAnalysisOptions} options */
 export const createRunAnalysis = ({
   state,
@@ -6381,16 +6411,9 @@ export const createRunAnalysis = ({
     }
   };
 
-  /** @returns {LosatCacheInfoEntry[]} */
-  const cacheInfoRows = () => (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : []);
-  /**
-   * The LOSAT results of a drawing, the one reader of its results (#1777 review 9, OV-3203, OV-3204): **Save Raw
-   * LOSAT TSV** and Run Info read its rows, one per cache key, never another drawing's.
-   * @param {DrawingState} drawing
-   */
-  const losatResultRowsOf = (drawing) => losatResultRowsOfDrawing(cacheInfoRows(), drawing.id);
-  /** A drawing's rows as written, which a Duplicate copies (OV-3205). @param {DrawingId} drawingId */
-  const losatRowsOf = (drawingId) => losatRowsOfDrawing(cacheInfoRows(), drawingId);
+  const {
+    cacheInfoRows, losatResultRowsOf, losatRowsOf, clearableLosatResultCount, swapLosatResultRows
+  } = losatResultRowsAccess({ losatCacheInfo, losatCache });
 
   /** @param {DrawingState} drawing */
   const downloadLosatCache = async (drawing) => {
@@ -6427,16 +6450,6 @@ export const createRunAnalysis = ({
       );
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
-  };
-
-  /** The count of **Clear LOSAT results**: the searches it removes, the whole cache, one per key (PD-OI-022: Clear Cache
-   * invalidates retained evidence), a search only a deleted drawing's rows name included (OV-3211). */
-  const clearableLosatResultCount = () => losatCache.value.size;
-  /** A drawing's rows come and go with it (OV-3205, OV-3209); a row whose search a Clear removed meanwhile stays out. @param {DrawingId} drawingId @param {readonly LosatCacheInfoEntry[]} drawingRows */
-  const swapLosatResultRows = (drawingId, drawingRows) => {
-    const { rows, held } = losatRowsWithDrawing(cacheInfoRows(), drawingId, drawingRows.filter((row) => losatCache.value.has(row.key)));
-    losatCacheInfo.value = rows;
-    return held;
   };
 
   const clearLosatCache = () => {

@@ -708,6 +708,20 @@ const coverTrackSlots = (coverage, tracks, mode) => {
   });
 };
 
+/**
+ * The similarity ring files: one BLAST table per ring and the files of each ring's comparison genome.
+ * @param {RecipeCoverage} coverage
+ * @param {CanonicalRenderRequest['diagramOptions']} options
+ */
+const coverConservationFiles = (coverage, options) => {
+  (Array.isArray(options.conservationBlastFiles) ? options.conservationBlastFiles : []).forEach((ref, index) => (
+    coverResourceRef(coverage, ref, `diagramOptions.conservationBlastFiles[${index}]`)));
+  // The files of each ring's comparison genome (request schema 10).
+  (Array.isArray(options.conservationFastaFiles) ? options.conservationFastaFiles : []).forEach((ring, index) => (
+    (Array.isArray(ring) ? ring : []).forEach((ref, fileIndex) => (
+      coverResourceRef(coverage, ref, `diagramOptions.conservationFastaFiles[${index}][${fileIndex}]`)))));
+};
+
 /** @param {CanonicalRenderRequest} request */
 const validateCurrentSemanticCoverage = (request) => {
   /** @type {RecipeCoverage} */
@@ -821,12 +835,7 @@ const validateCurrentSemanticCoverage = (request) => {
       coverage, ref, `${path}.source${Array.isArray(track.source) ? `[${refIndex}]` : ''}`
     ));
   });
-  (Array.isArray(options.conservationBlastFiles) ? options.conservationBlastFiles : []).forEach((ref, index) => (
-    coverResourceRef(coverage, ref, `diagramOptions.conservationBlastFiles[${index}]`)));
-  // The files of each ring's comparison genome (request schema 10).
-  (Array.isArray(options.conservationFastaFiles) ? options.conservationFastaFiles : []).forEach((ring, index) => (
-    (Array.isArray(ring) ? ring : []).forEach((ref, fileIndex) => (
-      coverResourceRef(coverage, ref, `diagramOptions.conservationFastaFiles[${index}][${fileIndex}]`)))));
+  coverConservationFiles(coverage, options);
   if (options.annotations !== undefined) {
     throw recipeUnavailable(msg('canonical annotation semantics have no fully lossless current CLI projection.'));
   }
