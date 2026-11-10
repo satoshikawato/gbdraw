@@ -573,7 +573,8 @@ const settingsPaneDocked = ref(null);
 const settingsPopup = ref(null);
 
 // Legend Editor state
-const originalLegendOrder = ref([]); // Store original order from generation
+// The shown Result's generated Legend inventory: Python's keys of its rows, in the order it drew them.
+const originalLegendOrder = typedRef(/** @type {PythonLegendKey[]} */ ([]));
 const originalLegendColors = ref({}); // Store original colors: { caption: color }
 
 // The Legend editor rows whose stroke options are shown, by caption: app-level
