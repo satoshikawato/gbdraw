@@ -26,8 +26,8 @@ from numpy.typing import NDArray
 from gbdraw.core.record_metadata import (
     _iter_source_features,
     _read_coord_map,
+    RecordContent,
     _source_feature_index,
-    record_content_digest,
 )
 
 WINDOW_SOURCE_ANNOTATION = "gbdraw_window_source"
@@ -46,9 +46,9 @@ class WindowSource:
     record: SeqRecord
     base: int
     step: Literal[-1, 1]
-    # The crop's ``record_content_digest`` when it was cut, while it is a crop of ``record`` as cut: ``None`` when
-    # it was cut from a crop changed since that crop was cut.
-    crop_digest: str | None = None
+    # The crop's content when it was cut, while it is a crop of ``record`` as cut: ``None`` when it was cut from a
+    # crop changed since that crop was cut.
+    crop_content: RecordContent | None = None
     # The source feature indexes of the features the crop was cut with (``keep_window_source``): the one owner of which
     # features the crop cut. A feature that carries any other index (one copied from another crop of ``record``, say)
     # is a feature added to the crop, live and in a Session (``record_metadata._holder_of``, OV-3256). Empty for a
@@ -61,7 +61,7 @@ class WindowSource:
 
     def holds_for(self, crop: SeqRecord) -> bool:
         """Whether ``crop`` is still ``record``'s crop as it was cut, so cutting ``record`` again redraws it."""
-        return self.crop_digest is not None and self.crop_digest == record_content_digest(crop)
+        return self.crop_content is not None and self.crop_content.same_as(RecordContent(crop))
 
     def __deepcopy__(self, _memo: object) -> WindowSource:
         # Nothing writes a source record after it is cut: copies of a crop share it, as they share its sequence.
@@ -82,7 +82,7 @@ def keep_window_source(crop: SeqRecord, record: SeqRecord) -> None:
     cut = frozenset(index for index in carried if index is not None)
     crop.annotations[WINDOW_SOURCE_ANNOTATION] = replace(
         window_source(record),
-        crop_digest=record_content_digest(crop) if as_cut else None,
+        crop_content=RecordContent(crop) if as_cut else None,
         cut_indexes=cut & stored.cut_indexes if isinstance(stored, WindowSource) else cut,
     )
 
@@ -93,19 +93,19 @@ def reversed_window_source(reversed_record: SeqRecord, record: SeqRecord) -> Non
     stored = record.annotations.get(WINDOW_SOURCE_ANNOTATION)
     if isinstance(stored, WindowSource):
         reversed_record.annotations[WINDOW_SOURCE_ANNOTATION] = replace(
-            stored, crop_digest=record_content_digest(reversed_record) if stored.holds_for(record) else None
+            stored, crop_content=RecordContent(reversed_record) if stored.holds_for(record) else None
         )
 
 
-def cut_digest(crop: SeqRecord) -> str | None:
-    """The ``record_content_digest`` ``crop`` had when it was cut (or reverse-complemented as a crop), else ``None``.
+def cut_content(crop: SeqRecord) -> RecordContent | None:
+    """The content ``crop`` had when it was cut (or reverse-complemented as a crop), else ``None``.
 
-    Only a caller that knows the crop changed since in nothing but gbdraw's annotations, which the digest leaves
-    out, may take it as the crop's digest now: it saves hashing the crop again.
+    Only a caller that knows the crop changed since in nothing but gbdraw's annotations, which the content leaves
+    out, may take it as the crop's content now: it saves taking the crop's text again.
     """
 
     stored = (getattr(crop, "annotations", None) or {}).get(WINDOW_SOURCE_ANNOTATION)
-    return stored.crop_digest if isinstance(stored, WindowSource) else None
+    return stored.crop_content if isinstance(stored, WindowSource) else None
 
 
 def window_source(record: SeqRecord) -> WindowSource:
@@ -195,7 +195,7 @@ __all__ = [
     "SlidingWindows",
     "SourcePiece",
     "WindowSource",
-    "cut_digest",
+    "cut_content",
     "keep_window_source",
     "sliding_windows",
     "window_source",

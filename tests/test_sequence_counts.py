@@ -185,25 +185,35 @@ def test_every_byte_counts_as_the_counting_rule_says() -> None:
     assert base_counts.known_prefix_counts(every.tobytes(), positions).tolist() == _oracle(every.tobytes(), positions)
 
 
-def test_a_render_reads_a_file_record_s_bases_once_after_its_parse_pass(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("compress", [False, True], ids=["plain", "gzip"])
+def test_a_render_reads_no_whole_file_record_after_its_parse_pass(
+    compress: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The letter check, the definition's GC % and the GC/skew windows read the parse pass's counts; the one whole
-    read left is the record's content digest. Window edges read their own rows, each once, so at most one more read
-    of the bases however dense the windows (dev read this record six times whole)."""
+    """The letter check, the definition's GC % and the GC/skew windows read the parse pass's counts, and the
+    record's content digest is taken only when a reader compares it, which a render of a file does not: no read
+    of the whole record is left. Window edges read their own rows, each once, so at most one more read of the
+    bases however dense the windows, and of a gzip input at most one more expansion (dev read this record six
+    times whole; a gzip input was also written out expanded)."""
 
+    from gbdraw.io import input_text
     from tests.utils.cli_in_process import run_gbdraw
 
     bases = _random_bases(11, 1_200_000, b"ACGTNacgt")
-    path = _fasta(tmp_path / "g.fasta", bases, width=80)
+    path = _fasta(tmp_path / "g.fasta", bases, width=80, compress=compress)
     whole: list[int] = []
     edges: list[int] = []
+    expanded: list[int] = []
     read, row_bases = record_sequences.RecordSequence._read, record_sequences._SequenceTable._row_bases
+    expand = input_text.GzipExpansion.read
     monkeypatch.setattr(record_sequences.RecordSequence, "_read",
                         lambda self, start, stop: whole.append(stop - start) or read(self, start, stop))
     monkeypatch.setattr(record_sequences._SequenceTable, "_row_bases",
                         lambda self, row: edges.append(len(data := row_bases(self, row))) or data)
+    monkeypatch.setattr(input_text.GzipExpansion, "read",
+                        lambda self, size: expanded.append(len(data := expand(self, size))) or data)
     result = run_gbdraw(["circular", "--fasta", str(path), "-o", str(tmp_path / "out"), "-f", "svg"], cwd=tmp_path)
     assert result.returncode == 0, result.stderr
-    assert sum(whole) == len(bases)
+    assert sum(whole) == 0
     assert sum(edges) <= len(bases)
+    text_bytes = len(bases) + len(bases) // 80 + 8
+    assert sum(expanded) <= (2 * text_bytes + record_sequences._BLOCK_BYTES if compress else 0)

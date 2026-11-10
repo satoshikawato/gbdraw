@@ -34,7 +34,6 @@ from gbdraw.api import (
     save_session_document,
 )
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions, LinearMultiRecordOptions
-from gbdraw.api.request_render import _materialized_record_inputs, resolve_request_records
 from gbdraw.api.requests import GenBankInputSource, RecordCollectionOptions, RecordPresentation, RecordSelector
 from gbdraw.session_container import read_session_container
 from gbdraw.io.regions import RecordWindow
@@ -208,7 +207,7 @@ def test_a_session_redraws_crops_of_a_file_no_longer_at_hand(tmp_path: Path) -> 
         output=RenderOutputRequest(output_prefix="file", output_directory=tmp_path, overwrite=True),
     )
     render_request(request)
-    planned = _materialized_record_inputs(resolve_request_records(request))
+    planned = resolve_request(request).records
     path.unlink()
     live, replay = _replayed(
         LinearDiagramRequest(records=planned, options=options, layout=LinearMultiRecordOptions(),
@@ -264,6 +263,22 @@ def test_a_session_keeps_the_windows_of_a_record_whose_file_is_gone(second: str,
     assert live.count('data-gbdraw-row-mark="gap"') == 1
     assert _saved_windows(tmp_path) == [("w", 2)]
     assert replay == live
+
+
+def test_a_resolved_request_draws_as_it_did_after_its_caller_writes_its_records_back_over_their_file(
+    tmp_path: Path,
+) -> None:
+    """The records ``resolve_request`` hands back hold their bases, and a crop the record it was cut from: the caller
+    may write them back over their file and still draw them (OV-3353)."""
+
+    path = tmp_path / "one.gb"
+    SeqIO.write([_record("src", "linear")], path, "genbank")
+    resolved = resolve_request(_two_windows(GenBankInputSource(str(path)), tmp_path, "src:40001-52000"))
+    render_request(resolved)
+    before = (tmp_path / "live.svg").read_text()
+    SeqIO.write([_record("src", "linear", seed=4)], path, "genbank")
+    render_request(resolved)
+    assert (tmp_path / "live.svg").read_text() == before
 
 
 _MITO = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
