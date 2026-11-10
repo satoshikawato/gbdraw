@@ -34,7 +34,8 @@ GENBANK = INPUTS / "NC_001416.gb"
 
 
 def _reads_its_file(record) -> bool:
-    return isinstance(getattr(record.seq, "_data", None), RecordSequence)
+    data = getattr(record.seq, "_data", None)
+    return isinstance(data, RecordSequence) and not isinstance(data._bases, bytes)
 
 
 def _sequence(path: Path) -> str:
@@ -188,9 +189,9 @@ def test_records_released_while_the_reader_is_locked_do_not_wait_on_it(tmp_path:
             return real_open(path)
         record_sequences.open_input_bytes = collecting_open
         records = read_flat_file_records(source)
-        record_sequences._OPEN.read(records[0].seq._data._table.source, 0, 10)
+        record_sequences._OPEN.read(records[0].seq._data._bases.source, 0, 10)
         assert str(records[0].seq) == str(read_flat_file_records(source)[0].seq)
-        record_sequences._OPEN.read(records[0].seq._data._table.source, 0, 10)  # releases what is queued
+        record_sequences._OPEN.read(records[0].seq._data._bases.source, 0, 10)  # releases what is queued
         assert os.listdir(record_sequences._expansion_directory()) == []  # every gzip copy removed
         print("ok")
         """
@@ -208,7 +209,7 @@ def test_a_gzip_input_is_expanded_once_into_a_file_removed_after_its_records(tmp
     path = tmp_path / "a.gb.gz"
     path.write_bytes(gzip.compress(GENBANK.read_bytes()))
     records = read_flat_file_records(str(path))
-    copies = [Path(table.source.path) for table in (record.seq._data._table for record in records)]
+    copies = [Path(table.source.path) for table in (record.seq._data._bases for record in records)]
     assert copies[0].parent == Path(record_sequences._expansion_directory())
     assert copies[0].exists() and copies[0] != path
     assert str(records[0].seq) == _sequence(GENBANK)
