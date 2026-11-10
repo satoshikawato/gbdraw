@@ -11,9 +11,10 @@ Biopython builds from the same lines: a flat file's sequence in upper case, with
 the coordinate column and the spaces; a FASTA sequence as written, without
 whitespace.
 
-A gzip input is expanded into a temporary file as the pass reads it, because gzip
-cannot be read at an offset; a pass that stops early expands no more, and the
-expansion keeps the cap of :mod:`gbdraw.io.input_text`. The pass
+A gzip input is expanded as the pass reads it (:class:`gbdraw.io.input_text.GzipExpansion`,
+with its cap), and nothing of it is written: the pass keeps a point of the expansion
+every ``_POINT_BYTES`` expanded bytes, and a read at an offset expands from the
+point before it, or goes on from where the last read of that file stopped. The pass
 counts bytes itself and never asks the file for its position, and every read below
 a record sequence goes through ``_SequenceFile.read_at``, the one reader, so the
 Web can put its own range reader there.
@@ -40,8 +41,8 @@ import copy
 import functools
 import itertools
 import os
+import queue
 import re
-import tempfile
 import threading
 import warnings
 import weakref
@@ -77,7 +78,16 @@ from ..core.base_counts import (
 from ..core.sequence_spans import sequence_spans
 from ..exceptions import InputFileError
 from . import input_text
-from .input_text import FlatFileFormat, in_sequence_encoding, is_gzip_file, open_expanded_input, open_input_bytes
+from .input_text import (
+    GZIP_ERRORS,
+    GZIP_START,
+    FlatFileFormat,
+    GzipExpansion,
+    GzipPoint,
+    in_sequence_encoding,
+    is_gzip_file,
+    open_input_bytes,
+)
 
 SequenceFormat = Literal["genbank", "embl", "fasta"]
 
@@ -85,6 +95,8 @@ _BLOCK_BYTES = 1 << 20  # sequential reads of the parse pass; a read this long o
 _CHUNK_BYTES = 64 << 10  # most raw bytes of one indexed chunk (whole lines)
 _CACHE_BYTES = 256 << 20  # decoded bases the block cache keeps, all input files together
 _OPEN_FILES = 16  # input files kept open for reads at offsets, all records together
+_POINT_BYTES = 4 << 20  # expanded bytes of a gzip input between two points a read may start from
+_AHEAD_BLOCKS = 4  # blocks a gzip input is expanded ahead of its parse pass, on a thread of their own
 _BYTE_ORDER_MARK = "﻿"
 _DIGITS = b"0123456789"
 _LETTERS = bytes(range(ord("A"), ord("Z") + 1)) + bytes(range(ord("a"), ord("z") + 1)) + b"*-."
@@ -188,19 +200,112 @@ def _stamp_of(status: os.stat_result) -> _Stamp:
     return status.st_size, status.st_mtime_ns, status.st_ino
 
 
+class _Reader:
+    """One input file open for reads at offsets: the bytes a record sequence reads, from the file as indexed.
+
+    A plain file is read where its bytes lie. A gzip file is expanded from the point
+    of its parse pass before the offset (``_SequenceFile.points``), or on from where
+    the last read stopped when that is nearer: the last block expanded is kept, so
+    reads in order (window edges, a sequence written out) expand each byte once.
+    """
+
+    def __init__(self, source: _SequenceFile) -> None:
+        self._source = source
+        self.handle = open_input_bytes(source.path)
+        self._expansion: GzipExpansion | None = None
+        self._at = 0  # the expanded offset of ``_block``
+        self._block = b""
+
+    def read_at(self, offset: int, size: int) -> bytes:
+        if not self._source.gzip:
+            self.handle.seek(offset)
+            return self.handle.read(size)
+        points = self._source.points
+        point = points[bisect.bisect_right(points, offset, key=_expanded_at) - 1]
+        if self._expansion is None or not (self._at <= offset and point.expanded <= self._at + len(self._block)):
+            self.handle.seek(point.compressed)
+            self._expansion = GzipExpansion(self.handle.read, self._source.name, start=point, verify=False)
+            self._at, self._block = point.expanded, b""
+        pieces: list[bytes] = []
+        position, end = offset, offset + size
+        while position < end:
+            block_end = self._at + len(self._block)
+            if position < block_end:
+                pieces.append(self._block[position - self._at: end - self._at])
+                position += len(pieces[-1])
+            elif block := self._expansion.read(_BLOCK_BYTES):
+                self._at, self._block = block_end, block
+            else:
+                break  # the file ends before the bytes indexed: the caller refuses it
+        return pieces[0] if len(pieces) == 1 else b"".join(pieces)
+
+    def close(self) -> None:
+        self.handle.close()
+
+
+def _expanded_at(point: GzipPoint) -> int:
+    return point.expanded
+
+
+_END = object()
+
+
+def _ahead(blocks: Iterator[bytes]) -> Iterator[bytes]:
+    """``blocks``, made on a thread of their own up to ``_AHEAD_BLOCKS`` ahead of the reader.
+
+    zlib lets go of the interpreter lock while it expands, so a gzip input expands
+    beside the parse pass's own work. Where no thread can start (Pyodide), the
+    blocks are made in turn. A reader that stops early, or a refusal on the way,
+    stops the thread before the file is closed.
+    """
+
+    made: queue.Queue[object] = queue.Queue(maxsize=_AHEAD_BLOCKS)
+    stop = threading.Event()
+
+    def make() -> None:
+        try:
+            for block in blocks:
+                if stop.is_set():
+                    break
+                made.put(block)
+        except BaseException as error:  # handed to the reader, which raises it
+            made.put(error)
+        finally:
+            made.put(_END)
+
+    thread = threading.Thread(target=make, name="gbdraw-gzip-ahead", daemon=True)
+    try:
+        thread.start()
+    except RuntimeError:  # no threads here
+        yield from blocks
+        return
+    item: object = None
+    try:
+        while (item := made.get()) is not _END:
+            if isinstance(item, BaseException):
+                raise item
+            assert isinstance(item, bytes)
+            yield item
+    finally:
+        stop.set()
+        while item is not _END:
+            item = made.get()
+        thread.join()
+
+
 class _OpenFiles:
     """The input files open for reads at offsets: at most ``_OPEN_FILES``, least recently used closed first.
 
     A file is opened by its path when a read needs it, so the number of inputs is
     not bounded by the number of files a process may hold open. Every read checks
     that the file still holds the bytes its records were indexed from. The lock
-    guards only the set of handles: a handle is taken out of it while it is read,
+    guards only the set of readers: a reader is taken out of it while it reads,
     and opening, reading and closing happen outside the lock.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._handles: OrderedDict[int, IO[bytes]] = OrderedDict()
+        self._handles: OrderedDict[int, _Reader] = OrderedDict()
 
     def read(self, source: _SequenceFile, offset: int, size: int) -> bytes:
         _release_pending()
@@ -208,21 +313,20 @@ class _OpenFiles:
             handle = self._handles.pop(source.key, None)
         try:
             if handle is None:
-                handle = open_input_bytes(source.path)
+                handle = _Reader(source)
         except OSError as error:
             raise source.changed() from error
         try:
-            if _stamp(handle) != source.stamp:
+            if _stamp(handle.handle) != source.stamp:
                 raise source.changed()
-            handle.seek(offset)
-            data = handle.read(size)
+            data = handle.read_at(offset, size)
         except InputFileError:
             handle.close()
             raise
-        except OSError as error:
+        except (OSError, *GZIP_ERRORS) as error:  # a gzip file that no longer expands as indexed changed too
             handle.close()
             raise source.changed() from error
-        closing: list[IO[bytes]] = []
+        closing: list[_Reader] = []
         with self._lock:
             other = self._handles.pop(source.key, None)  # another thread's handle of the same file
             if other is not None:
@@ -244,80 +348,55 @@ class _OpenFiles:
 
 
 _OPEN = _OpenFiles()
-_EXPANSIONS: list[tempfile.TemporaryDirectory[str]] = []
-_EXPANSIONS_LOCK = threading.Lock()
+
+# Inputs whose last record sequence has gone. A finalizer runs at any allocation, also inside
+# the readers' locked sections, so it only queues the input here (deque.append takes no lock);
+# the readers release the queue before they take their locks.
+_RELEASED: deque[int] = deque()
 
 
-def _expansion_directory() -> str:
-    """The one directory of this process's expanded gzip inputs, removed when the process ends."""
-
-    with _EXPANSIONS_LOCK:
-        if not _EXPANSIONS:
-            _EXPANSIONS.append(tempfile.TemporaryDirectory(prefix="gbdraw-inputs-"))
-        return _EXPANSIONS[0].name
-
-
-# Inputs whose last record sequence has gone: (file key, gzip copy). A finalizer runs at any
-# allocation, also inside the readers' locked sections, so it only queues the input here
-# (deque.append takes no lock); the readers release the queue before they take their locks.
-_RELEASED: deque[tuple[int, str | None]] = deque()
-
-
-def _release(file_key: int, copy: str | None) -> None:
-    _RELEASED.append((file_key, copy))
+def _release(file_key: int) -> None:
+    _RELEASED.append(file_key)
 
 
 def _release_pending() -> None:
-    """Close the files of the queued inputs, forget their blocks and remove their gzip copies.
-
-    Called outside every lock of this module.
-    """
+    """Close the files of the queued inputs and forget their blocks. Called outside every lock of this module."""
 
     while True:
         try:
-            file_key, copy = _RELEASED.popleft()
+            file_key = _RELEASED.popleft()
         except IndexError:
             return
         _OPEN.close(file_key)
         _CACHE.drop_file(file_key)
-        if copy is not None:
-            try:
-                os.unlink(copy)
-            except OSError:
-                pass  # removed with its directory already
 
 
 class _SequenceFile:
     """One input file's bytes: read in order by the parse pass, and at offsets by its record sequences.
 
-    A gzip input is expanded into a file of its own (gzip cannot be read at an
-    offset) as the parse pass reads it, removed when the last record sequence of
-    the input goes. A link
-    is followed once: the records read the file it names, so they keep reading
-    after the link goes (the Web Worker links each input into the folder of one
-    request and removes the folder when the request ends).
-    ``read_at`` is the one read below a record sequence. The parse pass records
-    the file's stamp, and a read of a file that changed since is refused with an
-    ``InputFileError``, never answered with other bases.
+    The bytes of a gzip input are its expansion: the parse pass expands it and keeps
+    ``points`` of the expansion, from which a read at an offset expands again
+    (:class:`_Reader`). A link is followed once: the records read the file it names,
+    so they keep reading after the link goes (the Web Worker links each input into
+    the folder of one request and removes the folder when the request ends).
+    ``read_at`` is the one read below a record sequence. The first parse pass records
+    the file's stamp; a later pass (the encoding retry) of a file that changed since,
+    and a read of one, are refused with an ``InputFileError``, never answered with
+    other bases.
     """
 
     def __init__(self, path: str | PathLike[str]) -> None:
         _release_pending()
         self.name = fspath(path)
+        self.path = os.path.realpath(self.name)
         self.encoding = "utf-8"
         self.key = next(_FILE_KEYS)
-        self.stamp: _Stamp = (-1, -1, -1)
-        copy = None
-        if is_gzip_file(self.name):
-            handle, copy = tempfile.mkstemp(dir=_expansion_directory(), prefix="input-")
-            self.stamp = _stamp_of(os.fstat(handle))
-            os.close(handle)
-        self.path = copy or os.path.realpath(self.name)
-        # Bytes of a gzip input written to its copy so far, and whether that is all of them (None: a plain file).
-        self.expanded: int | None = None if copy is None else 0
-        self.expanded_all = copy is None
-        self.original: _Stamp | None = None  # a gzip input's own stamp when its first pass expanded it
-        weakref.finalize(self, _release, self.key, copy)
+        self.stamp: _Stamp | None = None
+        self.gzip = is_gzip_file(self.path)
+        # Where a read of a gzip input may start expanding, in expanded order: the start, then a point at least
+        # every ``_POINT_BYTES`` the parse pass expanded.
+        self.points: list[GzipPoint] = [GZIP_START]
+        weakref.finalize(self, _release, self.key)
         self._tables = 0
 
     def table_key(self) -> int:
@@ -329,56 +408,40 @@ class _SequenceFile:
     def blocks(self) -> Iterator[bytes]:
         """The file's bytes from its start, in order, from a handle of the parse pass's own.
 
-        A gzip input's copy is read as far as it is written, then expanded on: each
-        block is in the copy before the pass sees it.
+        A gzip input is expanded as the pass reads it, under the cap of
+        :mod:`gbdraw.io.input_text`, which refuses only a byte past it that the pass
+        asks for; a pass that stops early expands no more.
         """
 
         with open_input_bytes(self.path) as handle:
-            if self.expanded is None:
-                self.stamp = _stamp(handle)
-            while block := handle.read(_BLOCK_BYTES):
-                yield block
+            stamp = _stamp(handle)
+            if self.stamp is None:
+                self.stamp = stamp
+            elif stamp != self.stamp:
+                raise self.changed()
+            if self.gzip:
+                yield from self._expanded(handle)
+            else:
+                while block := handle.read(_BLOCK_BYTES):
+                    yield block
             if _stamp(handle) != self.stamp:
                 raise self.changed()
-        if not self.expanded_all:
-            yield from self._expand()
 
-    def _expand(self) -> Iterator[bytes]:
-        """A gzip input's bytes past its copy, each written to the copy before it is handed on.
+    def _expanded(self, handle: IO[bytes]) -> Iterator[bytes]:
+        """A gzip input's expansion, a point of it kept every ``_POINT_BYTES`` (the points of a later pass replace
+        those of an earlier one)."""
 
-        A later pass (the encoding retry) expands the input again and passes over what the copy holds, so the
-        input must be the file the first pass expanded. A read stops at the cap (its last block is cut there), so
-        the cap refuses only a byte past it that a reader asks for. A pass refused while it expands leaves no byte
-        of its copy behind.
-        """
+        expansion = GzipExpansion(handle.read, self.name, limit=input_text.MAX_EXPANDED_INPUT_BYTES)
+        points = [GZIP_START]
+        self.points = points
 
-        assert self.expanded is not None
-        try:
-            original = _stamp_of(os.stat(self.name))
-            if self.original is not None and original != self.original:
-                raise self.changed()
-            self.original = original
-            with open_expanded_input(self.name) as expanded, open(self.path, "ab") as copy:
-                skip = self.expanded  # in the copy already: expanded again (the cap counts them) and passed over
-                while skip:
-                    if not (passed := len(expanded.read(min(skip, _BLOCK_BYTES)))):
-                        raise self.changed()
-                    skip -= passed
-                while block := expanded.read(max(1, min(_BLOCK_BYTES, input_text.MAX_EXPANDED_INPUT_BYTES - self.expanded))):
-                    copy.write(block)
-                    copy.flush()
-                    self.expanded += len(block)
-                    self.stamp = _stamp(copy)
-                    yield block
-        except GeneratorExit:
-            raise
-        except BaseException:
-            with open(self.path, "wb"):
-                pass  # the copy of a refused pass: emptied, so a later pass expands the input again
-            self.expanded = 0
-            self.stamp = _stamp_of(os.stat(self.path))
-            raise
-        self.expanded_all = True
+        def expanded() -> Iterator[bytes]:
+            while block := expansion.read(_BLOCK_BYTES):
+                if expansion.expanded - points[-1].expanded >= _POINT_BYTES and (point := expansion.point()) is not None:
+                    points.append(point)
+                yield block
+
+        yield from _ahead(expanded())
 
     def read_at(self, offset: int, size: int) -> bytes:
         """``size`` bytes from ``offset``, all within the file as it was indexed."""
