@@ -229,6 +229,33 @@ def test_showcase_comparisons_keep_worked_example_context() -> None:
             assert "none" not in panel.recipe.extra_args
 
 
+def _option(args: tuple[str, ...], name: str) -> str | None:
+    """The value after ``name`` in ``args``; None when ``name`` is absent or ends them."""
+    index = args.index(name) + 1 if name in args else len(args)
+    return args[index] if index < len(args) else None
+
+
+def test_circular_inner_labels_beside_explicit_inner_tracks_are_radial() -> None:
+    """gbdraw keeps tracks a recipe names in ``--circular_track_order`` and sets horizontal inner
+    labels over them; radial inner labels get their own band (OV-3122)."""
+    horizontal: list[str] = []
+    for figure_id, spec in _figure_specs().items():
+        recipe = spec.recipe
+        panels = recipe.panels if isinstance(recipe, CompositeRecipe) else ()
+        for cli in [recipe, *(panel.recipe for panel in panels)]:
+            if not isinstance(cli, CliRecipe) or cli.subcommand != "circular":
+                continue
+            order = _option(cli.extra_args, "--circular_track_order")
+            if (
+                _option(cli.extra_args, "--labels") == "both"
+                and order is not None
+                and set(order.split(",")) - {"features", "ticks"}
+                and _option(cli.extra_args, "--label_placement") != "radial"
+            ):
+                horizontal.append(figure_id)
+    assert horizontal == []
+
+
 def test_non_layout_linear_showcases_use_on_axis_features_and_line_styling() -> None:
     figures = _figure_specs()
     on_axis_figure_ids = (
@@ -331,11 +358,10 @@ def test_alias_resolution_and_support_asset_materialization(tmp_path: Path) -> N
         figures=_figure_specs(),
     )
     try:
-        aliased = reproducer.resolve_input("NC_000913.gbk", "ecoli_k12_plot", {}, dry_run=False)
+        aliased = reproducer.resolve_input("NC_000913.gbk", "ecoli_k12_plot", dry_run=False)
         support = reproducer.resolve_input(
             "feature_specific_colors.tsv",
             "MjeNMV_feature_specifc_colors_with_labels",
-            {},
             dry_run=False,
         )
         assert aliased is not None
@@ -344,12 +370,7 @@ def test_alias_resolution_and_support_asset_materialization(tmp_path: Path) -> N
         assert support.exists()
         assert "wsv.*-like protein" in support.read_text()
 
-        label_override = reproducer.resolve_input(
-            "label_override.tsv",
-            "tutorial_3_label_override",
-            {},
-            dry_run=False,
-        )
+        label_override = reproducer.resolve_input("label_override.tsv", "tutorial_3_label_override", dry_run=False)
         assert label_override is not None
         # Intermediate inputs never land in the output root, which may be the repository.
         assert label_override.parent == reproducer.support_dir
@@ -410,9 +431,7 @@ def test_missing_report_structure_for_missing_figure(tmp_path: Path) -> None:
         }
         assert payload["generated"] == []
         assert payload["skipped_missing_inputs"] == [figure_id]
-        missing_entry = next(entry for entry in payload["missing_inputs"] if entry["filename"] == missing_filename)
-        assert missing_entry["figures"] == [figure_id]
-        assert missing_entry["could_derive_if_base_inputs_present"] is False
+        assert payload["missing_inputs"] == [{"filename": missing_filename, "figures": [figure_id]}]
     finally:
         reproducer.close()
 
