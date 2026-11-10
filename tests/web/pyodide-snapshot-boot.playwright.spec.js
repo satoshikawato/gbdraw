@@ -12,7 +12,8 @@
 // every other spec boot cold.
 const { test, expect } = require('@playwright/test');
 const { spawn } = require('node:child_process');
-const { rmSync } = require('node:fs');
+const { createHash } = require('node:crypto');
+const { readFileSync, rmSync } = require('node:fs');
 const { join } = require('node:path');
 const { fetchRoute, openApp } = require('./helpers/app-lifecycle.cjs');
 const { generate } = require('./helpers/mode-transition.cjs');
@@ -32,6 +33,17 @@ const changeSnapshotState = (page, change) => page.route(
     await route.fulfill({ response, json: state });
   }
 );
+
+// Records the sha256 of each wheel the page's requests download (GET), into
+// `served`. A routed request bypasses the HTTP cache.
+const recordWheels = (page, served) => page.context().route(/\/gbdraw-[^/]+\.whl(?:\?|$)/, async (route) => {
+  const response = await fetchRoute(route);
+  const body = await response.body();
+  if (route.request().method() === 'GET') {
+    served.push({ url: response.url(), sha256: createHash('sha256').update(body).digest('hex') });
+  }
+  await route.fulfill({ response, body });
+});
 
 // Drops numpy's side modules from the restore: the snapshot memory still
 // holds numpy, imported, with its function table slots empty.
@@ -80,8 +92,13 @@ test('the diagram Worker restores the served Pyodide snapshot and boots cold whe
   expect(restored.boots).toEqual(['snapshot']);
   expect(restored.svg).toContain('<svg');
 
+  // The wheels of the cold boot after a snapshot that fails to download.
+  const coldWheels = [];
   for (const [name, prepare, reason] of [
-    ['snapshot files that fail to download', forceColdPyodideBoot, /^cold after snapshot error: /],
+    ['snapshot files that fail to download', async (page) => {
+      await forceColdPyodideBoot(page);
+      await recordWheels(page, coldWheels);
+    }, /^cold after snapshot error: /],
     [
       'a snapshot built from other inputs',
       (page) => changeSnapshotState(page, (state) => { state.key = '0'.repeat(64); }),
@@ -95,6 +112,15 @@ test('the diagram Worker restores the served Pyodide snapshot and boots cold whe
       expect(fallback.boots[0]).toMatch(reason);
       expect(fallback.svg).toBe(restored.svg);
     });
+  }
+  // The Worker that boots cold installs the wheel the test server serves: each
+  // download is the file on disk. The page downloads it when the Session is
+  // chosen, and each of the two Workers again (a routed request bypasses the
+  // HTTP cache): the one that cannot restore the snapshot and the cold one.
+  expect(coldWheels).toHaveLength(3);
+  for (const served of coldWheels) {
+    const wheelPath = new URL(served.url).pathname.replace(/^\//, '');
+    expect(served.sha256, wheelPath).toBe(createHash('sha256').update(readFileSync(join(process.cwd(), wheelPath))).digest('hex'));
   }
 });
 
