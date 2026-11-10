@@ -377,7 +377,9 @@ test('Save stores no palette colors for an untouched drawing and keeps a user co
   });
   const save = async (page, name) => {
     const path = testInfo.outputPath(`${name}.gbdraw-session.json.gz`);
-    const bytes = await download(page, 'Save Session', path, { title: name });
+    // A titled Session saves without asking for a title.
+    await page.evaluate(async (title) => { (await import('./js/state.js')).state.sessionTitle.value = title; }, name);
+    const bytes = await download(page, 'Save Session', path);
     return { path, config: shownSavedDrawing(JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'))).config };
   };
   const page = await loadSession(browser, 'tests/fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw-session.json.gz');
