@@ -266,10 +266,7 @@ import {
 } from '../mode-profiles.js';
 import { joinSentences, msg, t, tm, tx } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
-import {
-  IMPORTED_COMPARISON_DISPOSITIONS,
-  importedComparisonExecution
-} from '../services/imported-comparison-intent.js';
+import { importedComparisonExecution } from '../services/imported-comparison-intent.js';
 import {
   activeDepthTrackIndices,
   compactDepthFileSlots,
@@ -744,7 +741,9 @@ export const createAppSetup = () => {
   const { rebindAnnotationRecords } = createAnnotationRecordRebind({
     state, getAnnotationRecordCatalog, sessionOperationAvailability
   });
-  const { handleCircularRecordsDiscovered, materializeAutomaticLinearRecords } = createRecordDiscoveryRuns({
+  const {
+    handleCircularRecordsDiscovered, materializeAutomaticLinearRecords, prepareLinearGenerate
+  } = createRecordDiscoveryRuns({
     pendingDiscoveryOf, requestRecordListAfterUpload, listedDrawingOf, rebindAnnotationRecords,
     refreshLinearRecords: linearRecordSelector.refresh
   });
@@ -2658,13 +2657,7 @@ export const createAppSetup = () => {
     const patternDrafts = featureActions.captureSpecificRulePatternDrafts();
     return runGeneratedDiagramAnalysis(null, null, null, {
       prepareGenerate: async () => {
-        if (mode.value === 'linear') {
-          if (drawing.importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
-            await materializeAutomaticLinearRecords(drawing);
-          } else {
-            await linearRecordSelector.refresh(drawing);
-          }
-        }
+        if (mode.value === 'linear') await prepareLinearGenerate(drawing);
         if (similarityAlignmentActions?.validateBeforeGenerate) {
           const validation = await similarityAlignmentActions.validateBeforeGenerate();
           if (validation?.status !== 'ok') {

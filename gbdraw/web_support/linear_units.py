@@ -126,9 +126,11 @@ def plan_linear_units(records: Sequence[object], pairs: Sequence[object]) -> Lin
         record_key = _key(record.get("recordKey"), "record")
         if record_key in units_by_record:
             raise _protocol_error(f"Record {record_key!r} is named twice.")
-        grid_row = record.get("gridRow", 0)
+        if "gridRow" not in record:
+            raise _protocol_error(f"Record {record_key!r} has no gridRow: give a positive whole number or null.")
+        grid_row = record["gridRow"]
         if grid_row is not None and not _positive_whole_number(grid_row):
-            raise _protocol_error(f"Record {record_key!r} needs its grid row: a positive whole number or null.")
+            raise _protocol_error(f"Record {record_key!r} has an invalid gridRow: give a positive whole number or null.")
         try:
             windows = _decode_windows(record.get("windows"), path=f"records[{position}].windows")
         except (CanonicalRequestDecodingError, ValueError) as exc:

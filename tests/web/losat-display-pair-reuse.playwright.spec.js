@@ -280,6 +280,41 @@ test('A grid arranged in the Web draws LOSATP Collinear blocks between every rec
   expect((await generate(page)).links).toEqual(['0->2 1-330 61-360', '1->2 31-360 61-360']);
 });
 
+// OV-3248: the windows of one record share its row, so with GridB below, each window joins GridB, as the CLI draws.
+test('The windows of one record each draw their LOSATP Collinear blocks to the record of the next row', async ({ page }) => {
+  test.setTimeout(420000);
+  await installProteinExecutor(page);
+  await openApp(page);
+  await showDrawing(page, { kind: 'linear' });
+  const sources = [['GridA', [1, 121, 241]], ['GridB', [31, 151, 271]]];
+  for (const [index, [recordId, starts]] of sources.entries()) {
+    if (index > 0) await page.getByRole('button', { name: 'Add sequence' }).first().click();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Choose GenBank / DDBJ File' }).nth(index).click();
+    await (await chooser).setFiles({
+      name: `${recordId}.gbk`, mimeType: 'text/plain', buffer: Buffer.from(makeGenbank(recordId, starts))
+    });
+  }
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(2);
+  const uid = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].uid);
+  await page.locator(`[data-record-selector-uid="${uid}"]`).evaluate((select) => {
+    for (let node = select; node; node = node.parentElement) if (node.tagName === 'DETAILS') node.open = true;
+  });
+  await page.getByRole('button', { name: 'Add window to sequence 1' }).click();
+  const windows = page.locator('[data-record-windows]');
+  for (const [label, value] of [['Window 1 start', '1'], ['Window 1 end', '120'], ['Window 2 start', '121'], ['Window 2 end', '360']]) {
+    const input = windows.getByLabel(`${label} for sequence 1`, { exact: true });
+    await input.fill(value);
+    await input.press('Tab');
+  }
+  await chooseLosatp(page, 'collinear');
+  await page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches', exact: true }).check();
+  await page.getByRole('combobox', { name: 'Collinear search between' }).selectOption('all');
+  await page.getByRole('spinbutton', { name: 'Collinear minimum block genes' }).fill('1');
+  // Drawn units: GridA 1-120 (0), GridA 121-360 (1), GridB (2); window coordinates are the unit's own.
+  expect((await generate(page)).links).toEqual(['0->2 1-90 31-120', '1->2 1-210 151-360']);
+});
+
 // OV-2368: a CDS across a circular record's origin reaches the converter with its
 // arc, so a link or block that uses it covers the arc, as one row on each side of
 // the origin, and never the whole record.
