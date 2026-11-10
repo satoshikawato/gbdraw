@@ -2208,9 +2208,8 @@ export const createRunAnalysis = ({
     return { status: 'error', error, recovery };
   };
 
-  // Raw searches finish before the artifact transaction. Keep only the latest search's entries for retry, without
-  // changing the saved Result. Clear, Session load or a History step that adds entries replaces the cache owner and
-  // invalidates the retry; an Undo or Redo that adds none keeps the cache and so the retry (D-200).
+  // Raw searches finish before the artifact transaction: keep the latest search's entries for retry, Result unchanged.
+  // Clear, Session load or a History step that adds entries ends the retry; one that adds none keeps it (D-200).
   /** @type {{ owner: any, entries: Map<string, any> } | null} */
   let completedLosatSearch = null;
   /**
@@ -3067,10 +3066,8 @@ export const createRunAnalysis = ({
       let requestDrawnUnits = /** @type {LinearUnitSearch | null} */ (null); // The units its comparison indexes count.
       let searchedSavedPipeline = false; // Whether it searched the saved pipeline Inherit runs (OV-3003).
       // The rings the ring searches read and their tables, in ring order (`losatRequestRings`); none without a search.
-      /** @type {SearchedRingAdoption['searched']} */
-      let searchedRings = [];
-      /** @type {{ name: string, text: string }[]} */
-      let searchedRingTables = [];
+      /** @type {SearchedRingAdoption['searched']} */ let searchedRings = [];
+      /** @type {{ name: string, text: string }[]} */ let searchedRingTables = [];
       // The conservation hash pairs the request names: its rings' when it reads them (D-15-124).
       /** @type {ConservationPairs} */
       let conservationPairs = NO_CONSERVATION_PAIRS;
