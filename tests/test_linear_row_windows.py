@@ -684,3 +684,48 @@ def test_ribbons_bound_to_a_moved_feature_start_on_the_row_edge(tmp_path: Path) 
     }
     assert set(starts) == {"1", "2"}
     assert starts["2"] == starts["1"]
+
+
+def _axis_gap_under_row_of_windows(tmp_path: Path, shallow_first: bool) -> float:
+    """The axis gap from a row of two windows (C1 with upper-strand features only, C2 with lower-strand ones) to a
+    short record S below it that lies under the first window only; strands drawn apart, no comparisons."""
+
+    shallow = RecordInput(
+        InMemoryRecordSource(_stranded_record("C1", 2_000, [(100, 400, 1), (500, 900, 1)])),
+        windows=(RecordWindow(1, 1_000),),
+        record_key="c1",
+        presentation=RecordPresentation(label="Row", grid_row=1),
+    )
+    deep = RecordInput(
+        InMemoryRecordSource(_stranded_record("C2", 4_000, [(100, 600, -1), (700, 900, -1)])),
+        windows=(RecordWindow(1, 1_000),),
+        record_key="c2",
+        presentation=RecordPresentation(label="Row", grid_row=1),
+    )
+    short = RecordInput(
+        InMemoryRecordSource(_stranded_record("S", 600, [(100, 500, 1)])),
+        record_key="s",
+        presentation=RecordPresentation(grid_row=2),
+    )
+    request = LinearDiagramRequest(
+        records=(shallow, deep, short) if shallow_first else (deep, shallow, short),
+        layout=LinearMultiRecordOptions(),
+    )
+    overrides = {"canvas.strandedness": True, "canvas.show_gc": False, "canvas.show_skew": False}
+    root = _render(tmp_path, replace(request, options=replace(request.options, config_overrides=overrides)))
+    axes = {
+        g.get("data-gbdraw-record-id"): _translate(g)[1]
+        for g in root.iter(f"{SVG}g")
+        if g.get("data-gbdraw-slot-renderer") == "features"
+    }
+    assert axes["C1"] == axes["C2"]
+    return axes["S"] - axes["C1"]
+
+
+def test_a_row_of_windows_has_one_lower_edge_for_the_row_below(tmp_path: Path) -> None:
+    """A row of windows has one lower edge, as it has one line of numbers and one edge for its ribbons: a record
+    under its shallow window stands as far below it as under its deep window, with or without ribbons."""
+
+    under_shallow = _axis_gap_under_row_of_windows(tmp_path / "shallow", shallow_first=True)
+    under_deep = _axis_gap_under_row_of_windows(tmp_path / "deep", shallow_first=False)
+    assert under_shallow == pytest.approx(under_deep, abs=1e-6)
