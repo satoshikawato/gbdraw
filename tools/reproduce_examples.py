@@ -18,7 +18,8 @@ from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wai
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from types import ModuleType
+from typing import Any, Callable
 
 from Bio import SeqIO
 from PIL import Image
@@ -97,11 +98,45 @@ def png_source_digest(png: bytes) -> str | None:
     return None
 
 
-def rasterized_svg(svg_bytes: bytes) -> bytes:
-    """The SVG bytes gbdraw hands to CairoSVG for ``svg_bytes`` (its layout-measured text runs)."""
-    from gbdraw.render.export import prepare_svg_for_cairosvg
+def raster_input_digest(options: dict[str, Any]) -> bytes:
+    """What one CairoSVG PNG conversion draws from, as gbdraw calls ``svg2png``: the SVG bytes and the
+    options that size the image (scale, output size). ``url`` only locates relative references."""
+    sizing = sorted((key, value) for key, value in options.items() if key not in {"bytestring", "url"})
+    return source_digest([options["bytestring"], repr(sizing).encode("utf-8")]).encode("ascii")
 
-    return prepare_svg_for_cairosvg(svg_bytes)
+
+def recording_svg2png(svg2png: Callable[..., Any], record: Callable[[bytes], None]) -> Callable[..., Any]:
+    """``svg2png`` that first hands ``record`` the ``raster_input_digest`` of each conversion: the one
+    record of a PNG's raster input, whatever gbdraw code prepared the bytes."""
+
+    def convert(**options: Any) -> Any:
+        record(raster_input_digest(options))
+        return svg2png(**options)
+
+    return convert
+
+
+def run_recording_cli(argv: list[str]) -> None:
+    """``gbdraw <argv[1:]>`` with the ``raster_input_digest`` of each PNG it writes appended, one per
+    line, to the file ``argv[0]``."""
+    from gbdraw.cli import main
+    from gbdraw.render.export import get_cairosvg
+
+    record = Path(argv[0])
+
+    def append(digest: bytes) -> None:
+        with record.open("ab") as handle:
+            handle.write(digest + b"\n")
+
+    # The module gbdraw's export converts with: the wrapper sees each call, and converts nothing itself.
+    cairosvg_module = get_cairosvg()
+    cairosvg_module.svg2png = recording_svg2png(cairosvg_module.svg2png, append)
+    sys.argv = ["gbdraw", *argv[1:]]
+    main()
+
+
+# ``python -c RECORDING_CLI <record file> <subcommand> ...`` from the project root: a CLI PNG recipe.
+RECORDING_CLI = "import sys; from tools.reproduce_examples import run_recording_cli; run_recording_cli(sys.argv[1:])"
 
 
 def tracked_input_path(project_root: Path, filename: str) -> Path | None:
@@ -514,7 +549,11 @@ class Reproducer:
         output_prefix: Path,
         fmt: str,
     ) -> list[str]:
-        cmd = [sys.executable, "-m", "gbdraw.cli", recipe.subcommand]
+        if fmt == "png":
+            launcher = ["-c", RECORDING_CLI, str(output_prefix.with_suffix(".raster"))]
+        else:
+            launcher = ["-m", "gbdraw.cli"]
+        cmd = [sys.executable, *launcher, recipe.subcommand]
         if resolved["gbk_files"]:
             cmd.extend(["--gbk", *[str(path) for path in resolved["gbk_files"]]])
         if resolved["gff_files"]:
@@ -547,14 +586,15 @@ class Reproducer:
 
         target_path.parent.mkdir(parents=True, exist_ok=True)
         fmt = target_path.suffix.lstrip(".")
-        # The CLI also writes the SVG it rasterizes; a PNG renders beside it in the temporary root
-        # and reaches the target with that SVG's digest.
+        # A PNG renders in the temporary root, beside the CLI's SVG and the record of what CairoSVG
+        # drew it from, and reaches the target with that record's digest.
         output_prefix = (
             self.temp_root / "cli_png" / figure_id / target_path.stem
             if fmt == "png"
             else target_path.with_suffix("")
         )
         output_prefix.parent.mkdir(parents=True, exist_ok=True)
+        output_prefix.with_suffix(".raster").unlink(missing_ok=True)
         cmd = self._build_command(recipe, resolved, output_prefix, fmt)
         result = subprocess.run(
             cmd,
@@ -570,7 +610,7 @@ class Reproducer:
                 [
                     b"cli-png",
                     repr(recipe).encode("utf-8"),
-                    rasterized_svg(output_prefix.with_suffix(".svg").read_bytes()),
+                    *output_prefix.with_suffix(".raster").read_bytes().splitlines(),
                 ]
             )
             target_path.write_bytes(
@@ -699,13 +739,12 @@ class Reproducer:
             scale = min(target_size[0] / src_width, target_size[1] / src_height)
             render_width = max(1, int(round(src_width * scale)))
             render_height = max(1, int(round(src_height * scale)))
-            svg_bytes = source_path.read_bytes()
-            sources.append(repr((render_width, render_height)).encode("ascii"))
-            sources.append(rasterized_svg(svg_bytes))
+            recording = ModuleType(cairosvg_module.__name__)
+            recording.svg2png = recording_svg2png(cairosvg_module.svg2png, sources.append)
             png_bytes = convert_svg_with_cairosvg(
-                svg_bytes,
+                source_path.read_bytes(),
                 "png",
-                cairosvg_module=cairosvg_module,
+                cairosvg_module=recording,
                 url=str(source_path),
                 output_width=render_width,
                 output_height=render_height,

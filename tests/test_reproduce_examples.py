@@ -16,6 +16,7 @@ from PIL import Image
 from tools.reproduce_examples import (
     PNG_SOURCE_KEY,
     PROJECT_ROOT,
+    RECORDING_CLI,
     Reproducer,
     check_outputs,
     png_source_digest,
@@ -630,6 +631,44 @@ def test_png_figures_carry_the_digest_of_their_sources_and_a_tracked_png_without
     out = capsys.readouterr().out
     assert "1 match, 1 differ" in out
     assert "  examples/python-api-linear.png\n" in out
+
+
+def test_a_cli_png_records_what_cairosvg_draws_not_the_written_svg(tmp_path: Path) -> None:
+    """A change to the SVG the CLI hands to CairoSVG alone, the written SVG unchanged, changes the record
+    a CLI PNG's digest is taken from (OV-3252)."""
+    marked_raster = (
+        "import gbdraw.render.export as export; body = export.raster_svg_body; "
+        "export.raster_svg_body = lambda *args: body(*args).replace('</svg>', '<g/></svg>'); "
+    )
+    outputs = {}
+    for name, prelude in (("plain", ""), ("marked", marked_raster)):
+        prefix = tmp_path / name / "figure"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                prelude + RECORDING_CLI,
+                str(prefix.with_suffix(".raster")),
+                "circular",
+                "--gbk",
+                str(PROJECT_ROOT / "tests" / "test_inputs" / "HmmtDNA.gbk"),
+                "-o",
+                str(prefix),
+                "-f",
+                "png",
+                "--dpi",
+                "96",
+            ],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        outputs[name] = (prefix.with_suffix(".svg").read_bytes(), prefix.with_suffix(".raster").read_bytes())
+    assert outputs["plain"][0] == outputs["marked"][0]
+    assert [len(outputs[name][1].splitlines()) for name in outputs] == [1, 1]
+    assert outputs["plain"][1] != outputs["marked"][1]
 
 
 def test_check_names_figures_without_inputs_and_fails_on_any_other_missing_input(
