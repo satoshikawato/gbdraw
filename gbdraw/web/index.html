@@ -1230,6 +1230,44 @@
             width: 100%;
             height: 100%;
         }
+        /* The similarity-ring hover (app/feature-editor/ring-hover.js): an overlay over the Result, never in it. */
+        .gbdraw-ring-hover-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            overflow: hidden;
+            pointer-events: none;
+        }
+        .gbdraw-ring-hover-overlay[hidden] { display: none; }
+        .gbdraw-ring-hover-overlay > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+        .gbdraw-ring-hover-line { stroke: #1f2937; stroke-width: 1.25; }
+        .gbdraw-ring-hover-popup {
+            position: absolute;
+            min-width: 12rem;
+            max-width: min(22rem, calc(100% - 8px));
+            background: rgba(255, 255, 255, 0.98);
+            border: 1px solid #94a3b8;
+            border-radius: 0.5rem;
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+            color: #334155;
+            font-size: 12px;
+            line-height: 1.35;
+            padding: 0.5rem 0.625rem;
+        }
+        .gbdraw-ring-hover-position { font-weight: 700; color: #1f2937; margin-bottom: 0.25rem; }
+        .gbdraw-ring-hover-row {
+            display: grid;
+            grid-template-columns: 0.75rem minmax(0, 1fr) auto;
+            align-items: center;
+            column-gap: 0.5rem;
+            padding: 0.0625rem 0.25rem;
+            border-radius: 0.25rem;
+        }
+        .gbdraw-ring-hover-row[data-hovered] { background: #e8eef8; font-weight: 700; color: #1f2937; }
+        .gbdraw-ring-hover-swatch { width: 0.75rem; height: 0.75rem; border: 1px solid rgba(15, 23, 42, 0.18); }
+        .gbdraw-ring-hover-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .gbdraw-ring-hover-value { text-align: right; font-variant-numeric: tabular-nums; }
+        .gbdraw-ring-hover-value[data-no-hit] { color: #64748b; }
         .gbdraw-alignment-line { stroke: #2563eb; stroke-width: 1.5; }
         .gbdraw-alignment-line.casing { stroke: #fff; stroke-width: 4; opacity: 0.85; }
         .gbdraw-alignment-arrow { --tone: #2563eb; }

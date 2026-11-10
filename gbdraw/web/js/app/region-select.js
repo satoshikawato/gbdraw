@@ -11,8 +11,8 @@
  */
 import { FEATURE_LABEL_SELECTOR, LEGEND_GROUP_SELECTOR, RECORD_DEFINITION_SELECTOR } from '../services/drawn-groups.js';
 import {
-  axisPosition, circularDragSpan, featureParts, linearDragSpan, linearRowPosition, partsInsideSpan, regionAxisFrame,
-  regionBandPath, regionSpanText, sourceSpanOf
+  axisPosition, circularDragSpan, featureParts, framePoint, linearDragSpan, linearRowPosition, partsInsideSpan,
+  regionAxisFrame, regionBandPath, regionSpanText, sourceSpanOf
 } from '../services/region-axis.js';
 import { copyPendingTextToClipboard } from '../utils/clipboard.js';
 import { normalizeCaughtError } from '../utils/error-normalization.js';
@@ -33,17 +33,6 @@ const BAND_SLACK_PX = 6;
  * @property {number} start
  * @property {number} end
  */
-
-/**
- * A screen point in a record frame's coordinates, and the frame's screen scale.
- * @param {SVGGraphicsElement} frame @param {number} clientX @param {number} clientY
- */
-const framePoint = (frame, clientX, clientY) => {
-  const matrix = frame.getScreenCTM();
-  if (!matrix) return null;
-  const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse());
-  return { point: { x: point.x, y: point.y }, scale: Math.hypot(matrix.a, matrix.b) || 1 };
-};
 
 /**
  * @typedef {'copy' | 'add' | 'query'} RegionAction An action of the Region popup that waits on Python.

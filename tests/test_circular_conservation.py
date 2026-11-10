@@ -459,6 +459,55 @@ def test_circular_api_renders_conservation_ring_and_gradient_legend() -> None:
     assert "Conservation identity" not in svg
 
 
+def test_circular_rings_write_what_the_web_hover_reads() -> None:
+    """PD-OI-110 (hover): each hit names its drawn span and each ring its drawn radii and colour, so the Web reads
+    every ring's identity at a position and the rings' order from what Python drew."""
+
+    canvas = assemble_circular_diagram_from_record(
+        _record(),
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            conservation_dataframes=[
+                _comparison_frame([_hit(subject="rec1", sstart=11, send=60, identity=95.0)]),
+                _comparison_frame([_hit(subject="rec1", sstart=120, send=81, identity=80.0)]),
+            ],
+            conservation_reference="subject",
+            conservation_labels=["A", "B"],
+            conservation_colors=["#e15759", ""],
+            legend="right",
+        ),
+    )
+    root = ET.fromstring(canvas.tostring())
+    rings = {
+        element.get("data-track-label"): element
+        for element in root.iter()
+        if element.tag.rsplit("}", 1)[-1] == "g"
+        and element.get("data-gbdraw-slot-renderer") == "sequence_conservation"
+    }
+    spans = {
+        label: [
+            (path.get("data-display-start"), path.get("data-display-end"))
+            for path in ring.iter()
+            if path.get("data-match-kind") == "homology"
+        ]
+        for label, ring in rings.items()
+    }
+    assert spans == {"A": [("10", "60")], "B": [("80", "120")]}
+    radii = {
+        label: (float(ring.get("data-ring-inner-radius") or "nan"), float(ring.get("data-ring-outer-radius") or "nan"))
+        for label, ring in rings.items()
+    }
+    geometry = {
+        slot["slotId"]: slot for slot in canvas._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+    for label, (inner, outer) in radii.items():
+        slot = geometry[rings[label].get("data-gbdraw-slot-id")]
+        assert inner < outer
+        assert outer - inner == pytest.approx(slot["widthPx"])
+    # The ring with its own colour draws it; the other draws the configured top of the identity ramp.
+    assert {label: ring.get("data-ring-color") for label, ring in rings.items()} == {"A": "#e15759", "B": "#8b9cc1"}
+
+
 def test_circular_api_renders_source_colored_conservation_ring() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),

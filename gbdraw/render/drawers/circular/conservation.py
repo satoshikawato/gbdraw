@@ -12,7 +12,16 @@ from ....core.color import interpolate_color
 from ....layout.circular import RadialBand
 from ....layout.circular_ink import CircularInk, CircularInkRing, stroke_pad_px
 from ....svg.circular_conservation import generate_annular_hsp_path_desc
+from ....svg.path_data import path_number
 from ....layout.record_coordinates import RecordDisplayTransform, SourceInterval
+
+# What the Web's ring hover reads (PD-OI-110): the span of the ring a hit's path draws, in drawn bases (display index
+# of its first base, and of the base after its last), so every ring's identity at a position is read from the drawing.
+HIT_DISPLAY_SPAN_ATTRIBUTES = ("data-display-start", "data-display-end")
+# A ring group's drawn radii (px, inner then outer, in the frame its record is drawn in) and the colour its identity
+# ramp ends in: the order of the rings and the radial line, and the swatch of the ring's row in the hover.
+RING_RADIUS_ATTRIBUTES = ("data-ring-inner-radius", "data-ring-outer-radius")
+RING_COLOR_ATTRIBUTE = "data-ring-color"
 
 
 def _row_float(row: object, name: str, default: float = 0.0) -> float:
@@ -145,6 +154,8 @@ class ConservationDrawer:
                 )
                 for attribute, value in metadata.items():
                     path.attribs[attribute] = str(value)
+                for attribute, value in zip(HIT_DISPLAY_SPAN_ATTRIBUTES, (start, end), strict=True):
+                    path.attribs[attribute] = path_number(value)
                 if projected:
                     path.attribs["id"] = f"{match_id}__fragment{index}"
                     path.attribs["data-gbdraw-match-fragment"] = str(index)
@@ -176,4 +187,4 @@ class ConservationDrawer:
         return tuple(inks)
 
 
-__all__ = ["ConservationDrawer"]
+__all__ = ["HIT_DISPLAY_SPAN_ATTRIBUTES", "RING_COLOR_ATTRIBUTE", "RING_RADIUS_ATTRIBUTES", "ConservationDrawer"]

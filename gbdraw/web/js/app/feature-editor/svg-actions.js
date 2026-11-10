@@ -28,6 +28,8 @@ import { getFeatureOverride } from '../../services/feature-override-identity.js'
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
+import { shownAxisRecords } from '../../services/region-axis.js';
+import { attachRingHover, RING_SELECTOR } from './ring-hover.js';
 import { fillRecordOf, legendEntryKey } from '../../services/drawing/paint.js';
 import { PREVIEW_ITEM_SELECTOR, matchPopupOf, previewItemPopupOf, previewItemTarget } from '../../services/match-frame-popup.js';
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
@@ -296,6 +298,33 @@ export {
  */
 
 /** @typedef {{ svgId: string, identity: FeatureIdentity }} RenderedIdentityEntry */
+
+/**
+ * Places an alignment ring button around a candidate's box in the viewport; hides it without a box.
+ * @param {HTMLElement} ring
+ * @param {{ left: number, right: number, top: number, bottom: number, x: number } | null} box
+ */
+const placeRing = (ring, box) => {
+  ring.hidden = !box;
+  if (!box) return;
+  const width = Math.max(box.right - box.left, 8) + 6;
+  Object.assign(ring.style, { left: (box.x - width / 2) + 'px', top: (box.top - 3) + 'px',
+    width: width + 'px', height: (box.bottom - box.top + 6) + 'px' });
+};
+
+/**
+ * A label centred on `x`, kept inside the viewport.
+ * @param {HTMLElement} label
+ * @param {number} x
+ * @param {number} top
+ * @param {number} frameWidth
+ */
+const placeLabel = (label, x, top, frameWidth) => {
+  label.hidden = false;
+  const width = label.offsetWidth;
+  label.style.left = Math.max(4, Math.min(x - width / 2, frameWidth - width - 4)) + 'px';
+  label.style.top = top + 'px';
+};
 
 /** @param {FeatureSvgActionsOptions} options */
 export const createFeatureSvgActions = ({
@@ -1476,30 +1505,6 @@ export const createFeatureSvgActions = ({
           const y = (box.top + box.bottom) / 2;
           return x < 0 || x > frame.width || y < 0 || y > frame.height ? null : { ...box, x, y };
         };
-        /**
-         * @param {HTMLElement} ring
-         * @param {NonNullable<ReturnType<typeof boxIn>> | null} box
-         */
-        const placeRing = (ring, box) => {
-          ring.hidden = !box;
-          if (!box) return;
-          const width = Math.max(box.right - box.left, 8) + 6;
-          Object.assign(ring.style, { left: (box.x - width / 2) + 'px', top: (box.top - 3) + 'px',
-            width: width + 'px', height: (box.bottom - box.top + 6) + 'px' });
-        };
-        /**
-         * A label centred on `x`, kept inside the viewport.
-         * @param {HTMLElement} label
-         * @param {number} x
-         * @param {number} top
-         * @param {number} frameWidth
-         */
-        const placeLabel = (label, x, top, frameWidth) => {
-          label.hidden = false;
-          const width = label.offsetWidth;
-          label.style.left = Math.max(4, Math.min(x - width / 2, frameWidth - width - 4)) + 'px';
-          label.style.top = top + 'px';
-        };
         // Down from the candidate, then along to the reference line.
         /**
          * @param {NonNullable<ReturnType<typeof boxIn>>} box
@@ -1670,6 +1675,12 @@ export const createFeatureSvgActions = ({
 
       /** @param {Element} matchEl @param {HoverPoint | null | undefined} eventLike */
       const activateMatchHover = (matchEl, eventLike) => {
+        // A similarity ring's hit shows the ring hover (ring-hover.js) instead.
+        if (matchEl.closest(RING_SELECTOR)) {
+          clearHover();
+          hideHoverSummary();
+          return false;
+        }
         handlerState.alignmentOverlay?.setHover(null);
         forgetFeatureHover();
         const matchKey = getMatchHoverKey(matchEl);
@@ -1975,7 +1986,13 @@ export const createFeatureSvgActions = ({
       window.addEventListener?.('pointerup', clearPendingMatch, true);
       window.addEventListener?.('pointercancel', clearPendingMatch, true);
       window.addEventListener?.('blur', clearPendingMatch);
+      const detachRingHover = attachRingHover({
+        svg, isPreviewTransformActive,
+        axisRecords: () => shownAxisRecords({ trackSlotResolvedGeometry: state.trackSlotResolvedGeometry, selectedResultIndex: state.selectedResultIndex }),
+        held: () => Boolean(clickedFeature.value || clickedPairwiseMatch?.value || featureSelectionDrag?.active || previewPopupsHeld())
+      });
       handlerState.cleanup = () => {
+        detachRingHover();
         svg.removeEventListener('mouseover', handleMouseOver);
         svg.removeEventListener('mousemove', handleMouseMove);
         svg.removeEventListener('mouseout', handleMouseOut);

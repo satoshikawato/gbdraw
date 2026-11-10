@@ -37,6 +37,15 @@ into the `[Unreleased]` list below.
   has a row, a dialog asks whether the new row draws one of them again or
   starts without a set; Cancel adds nothing. A row whose renderer is changed
   to Annotations takes the first set without a row too, or none (OV-3153).
+- Added: in the Web app's Result Preview, pointing at a Circular comparison
+  ring draws the other rings at 35%, makes the ring's Legend name bold, draws a
+  line through the pointer, and lists the position (bp) and every ring's
+  identity there, outermost first; pointing at a ring's Legend name shows the
+  same ring and name without the list. On the Multi-Record Canvas the ring
+  stays at full strength in every record. Exports and Sessions are unchanged.
+  Comparison rings in SVG output now name each match's drawn span and each
+  ring's radii and colour (`data-display-start`, `data-display-end`,
+  `data-ring-inner-radius`, `data-ring-outer-radius`, `data-ring-color`).
 - Fixed: in the Python API, a new drawing from a region ignored a Circular
   track slot given as a string (`"depth:depth@width=20px"`): the slot's hand-set
   width was neither kept nor returned to Auto as the same slot given as a

@@ -9,8 +9,9 @@ from ....comparisons.identity_scale import identity_color_domain
 from ....config.models import GbdrawConfig
 from ....layout.circular import RadialBand
 from ....layout.circular_ink import CircularInk, CircularInkRing, paint_shows
-from ....render.drawers.circular.conservation import ConservationDrawer
+from ....render.drawers.circular.conservation import RING_COLOR_ATTRIBUTE, RING_RADIUS_ATTRIBUTES, ConservationDrawer
 from ....svg.circular_conservation import generate_full_annulus_path_desc
+from ....svg.path_data import path_number
 from ....layout.record_coordinates import RecordDisplayTransform
 
 
@@ -130,6 +131,9 @@ class ConservationGroup:
     def _add_elements(self) -> None:
         self._add_background()
         drawer = _conservation_drawer(self.cfg, self.track_color, self.min_identity)
+        for attribute, radius in zip(RING_RADIUS_ATTRIBUTES, (self.inner_radius_px, self.outer_radius_px), strict=True):
+            self.group.attribs[attribute] = path_number(radius)
+        self.group.attribs[RING_COLOR_ATTRIBUTE] = drawer.max_color
         drawer.draw_hits(
             self.group,
             self.hits,
