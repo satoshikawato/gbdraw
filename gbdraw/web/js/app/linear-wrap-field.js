@@ -34,6 +34,12 @@ const TURN_ON_BLOCKED_TEXT = Object.freeze({
   WRAP_RECORD_POSITION: msg('A wrapped record cannot keep a sideways move (from Align at feature, Similarity groups, or a loaded Session). Click Reset record positions under Wrap Rows.'),
   WRAP_TRACK_LAYOUT: msg('Wrapped rows draw their tracks above or below the axis. Move the feature track off the axis in Custom Track Slots.')
 });
+// While Wrap Rows is on, a field text where the Generate refusal's names a step that does nothing then: turning Wrap
+// Rows on moved Track Layout off Features on axis, so only a Custom Track Slots overlay puts the features on the axis.
+/** @type {Readonly<Partial<Record<LinearWrapBlocker, string>>>} */
+const WRAPPED_BLOCKED_TEXT = Object.freeze({
+  WRAP_TRACK_LAYOUT: msg('Wrapped rows draw their tracks above or below the axis. Move the feature track off the axis in Custom Track Slots, or turn Wrap Rows off.')
+});
 
 /** @param {LinearWrapFieldPorts} ports */
 export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInputs, shownWrap, watch }) => {
@@ -68,9 +74,9 @@ export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInput
   const blockers = computed(() => linearWrapBlockers(blockerInputs()));
   // D-29: a blocker keeps Wrap Rows from being turned on or its length changed, never from being turned off.
   const linearWrapBlocked = computed(() => blockers.value.length > 0);
-  // One visible hint names every blocker: while Wrap Rows is on, in the words of its Generate refusal.
+  // One visible hint names every blocker: while Wrap Rows is on, in the words of its Generate refusal where they hold.
   const linearWrapBlockedText = computed(() => joinSentences(...blockers.value.map((blocker) => tm(linearWrapOn.value
-    ? /** @type {string} */ (reasonText(blocker))
+    ? WRAPPED_BLOCKED_TEXT[blocker] ?? /** @type {string} */ (reasonText(blocker))
     : TURN_ON_BLOCKED_TEXT[blocker]))));
   // A drawn record moved sideways, or a Similarity alignment, offers Reset record positions under the hint, which names
   // it (PD-OI-113 scenario revision 2, Q5 A).

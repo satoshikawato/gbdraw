@@ -173,7 +173,7 @@ test('a drawn record moved sideways is a translation the request carries with an
     'another card whose key starts the same');
 });
 
-test('each blocker keeps Wrap Rows from turning on, in its Generate refusal\'s words; Simple-mode Middle is none (case 3)', () => {
+test('each blocker keeps Wrap Rows from turning on, and the hint names it and what to do in the state Wrap Rows is in; Simple-mode Middle is none (case 3)', () => {
   const none = { comparisons: false, sharedRecordRow: false, movedRecords: false, alignmentPlan: false, featureTrackOnAxis: false };
   assert.deepEqual(linearWrapBlockers(none), []);
   assert.deepEqual(linearWrapBlockers({ ...none, comparisons: true }), ['WRAP']);
@@ -209,16 +209,21 @@ test('each blocker keeps Wrap Rows from turning on, in its Generate refusal\'s w
   // Wrap Rows off" the enabled checkbox follows.
   const every = { comparisons: true, sharedRecordRow: true, movedRecords: true, alignmentPlan: true, featureTrackOnAxis: true };
   inputs = every;
-  assert.doesNotMatch(field.linearWrapBlockedText.value, /turn Wrap Rows off/);
-  for (const blocker of linearWrapBlockers(every)) {
-    assert.ok(field.linearWrapBlockedText.value.includes(reasonText(blocker).split('. ')[0]), `${blocker} is named`);
-  }
+  assert.equal(field.linearWrapBlockedText.value, [
+    'A wrapped figure draws no comparisons. Remove the comparison inputs (BLAST, comparison pairs, LOSAT, Similarity groups).',
+    'A wrapped record needs a Record Layout row of its own. Give each record its own row.',
+    'A wrapped record cannot keep a sideways move (from Align at feature, Similarity groups, or a loaded Session). Click Reset record positions under Wrap Rows.',
+    'Wrapped rows draw their tracks above or below the axis. Move the feature track off the axis in Custom Track Slots.'
+  ].join(' '));
   inputs = { ...none, comparisons: true };
   assert.match(field.linearWrapBlockedText.value, /^A wrapped figure draws no comparisons\. Remove the comparison inputs/);
   store.activeDrawing().form.linear_wrap_length = 'auto';
   assert.equal(field.linearWrapBlockedText.value, reasonText('WRAP'));
+  // While Wrap Rows is on, Track Layout cannot be Features on axis, so the one way the feature track is on the axis
+  // is a Custom Track Slots overlay: the hint names that and not Track Layout, which the Generate refusal also names.
   inputs = { ...none, sharedRecordRow: true, featureTrackOnAxis: true };
-  assert.equal(field.linearWrapBlockedText.value, `${reasonText('WRAP_GRID_ROW')} ${reasonText('WRAP_TRACK_LAYOUT')}`);
+  assert.equal(field.linearWrapBlockedText.value, `${reasonText('WRAP_GRID_ROW')} Wrapped rows draw their tracks above or below `
+    + 'the axis. Move the feature track off the axis in Custom Track Slots, or turn Wrap Rows off.');
   store.activeDrawing().form.linear_wrap_length = null;
   assert.equal(field.linearWrapResetsPositions.value, false, 'only a sideways move offers Reset record positions');
   // PD-OI-113 scenario revision 2 (Q4, Q5 A): a drawn record moved sideways, or a plan, shows the button its hint
