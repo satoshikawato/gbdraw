@@ -41,7 +41,7 @@ const setup = ({ colors = editedColors(), instant = true } = {}) => {
   };
   const state = {
     paletteDefinitions: ref(PALETTES), paletteInstantPreviewEnabled: ref(instant), appliedPaletteName: ref('default'),
-    appliedPaletteColors: ref({ ...colors }), activeDrawing: () => drawing, ...drawingStore(drawing, drawing), paletteColorsDialog
+    appliedPaletteColors: ref({ ...colors }), activeDrawing: () => drawing, ...drawingStore(drawing, drawing), sessionOperationAvailability: () => null, paletteColorsDialog
   };
   /** Whether the dialog was open at each History capture. */
   const openAtCapture = [];
@@ -457,7 +457,7 @@ test('a palette named like an inherited member falls back to the default palette
     const linear = drawingOf();
     const state = {
       paletteDefinitions: ref({}), paletteNames: ref([]), appliedPaletteName: ref(''), appliedPaletteColors: ref({}),
-      ...drawingStore(circular, linear), activeDrawing: () => circular
+      ...drawingStore(circular, linear), activeDrawing: () => circular, sessionOperationAvailability: () => null
     };
     assert.equal(createPaletteLoader({ state }).applyPalettes(PALETTES), true);
     assert.equal(circular.selectedPalette.value, 'default', name);
@@ -484,7 +484,7 @@ test('a former palette name is stored, looked up, and listed by its current name
   const circular = drawingOf();
   const state = {
     paletteDefinitions: ref({}), paletteNames: ref([]), appliedPaletteName: ref(''), appliedPaletteColors: ref({}),
-    ...drawingStore(circular, drawingOf()), activeDrawing: () => circular
+    ...drawingStore(circular, drawingOf()), activeDrawing: () => circular, sessionOperationAvailability: () => null
   };
   const herbal = { CDS: '#addc7f', default: '#d3d3d3' };
   assert.equal(createPaletteLoader({ state }).applyPalettes({ ...PALETTES, herbal_garden: herbal }), true);

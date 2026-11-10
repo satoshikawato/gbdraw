@@ -227,7 +227,7 @@ export const setupWatchers = ({
           root,
           result,
           resultIndex,
-          catalogState: state.featureCatalog?.value || null,
+          catalogState: state.featureCatalog.value,
           bindingOptions: {
             isIncrementalEdit,
             skipLegendExtraction: Boolean(skipExtractOnSvgChange.value),
@@ -332,7 +332,7 @@ export const setupWatchers = ({
     return retryableAuxiliaryImportFailure(drawing) !== null;
   });
   const retryAuxiliaryImportFailure = () => {
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     const drawing = state.activeDrawing();
     const failure = retryableAuxiliaryImportFailure(drawing);
@@ -496,7 +496,7 @@ export const setupWatchers = ({
     // the rules on the inputs current when it runs; one it gives up on comes
     // back as false with no error, and is reported here with Retry.
     const isCurrent = () => drawing.files[key] === file && !semanticFileWatchersSuppressed.value
-      && !state.sessionOperationAvailability?.();
+      && !state.sessionOperationAvailability();
     const previousError = errorLog.value;
     // The card names its file by ref; the bytes are the store's. A failure
     // unbinds the card, and the store may then release the file (OV-1674), so
