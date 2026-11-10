@@ -34,6 +34,7 @@ from gbdraw.labels.circular_fit import (
     CircularLabelFitSearch,
     CircularLabelLayout,
     CircularLabelPlacement,
+    ROW_KINDS,
     check_circular_label_fit,
 )
 from gbdraw.labels.fit import (
@@ -842,6 +843,59 @@ def test_a_label_row_takes_one_of_its_next_two_values_when_that_whole_figure_fit
     assert [values for values in calls if set(values) == {Y_OFFSET_PATH}] == [
         {Y_OFFSET_PATH: 1.025}, {Y_OFFSET_PATH: 1.05}, {Y_OFFSET_PATH: 1.075}
     ]
+
+
+def test_every_row_gets_its_first_value_before_any_row_tries_its_next_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-110: the bounded search takes every row's first value first, then the next values of the rows whose figure
+    keeps a region label warning (OV-3110) while the bound allows; without a bound, and row by row as the Web asks,
+    the rows are those of the next-values rule."""
+
+    clock = [0.0]
+
+    class _Clock:
+        @staticmethod
+        def monotonic() -> float:
+            return clock[0]
+
+    monkeypatch.setattr(circular_fit_module, "time", _Clock)
+    layout, full = _region_case(drawn=True, region_clear_y=1.05)
+
+    def ticking(values: Mapping[str, object]) -> LabelFit:
+        clock[0] += 1.0  # each full assembly takes one second
+        return full(values)
+
+    # Six seconds allow the five rows' first values and no more.
+    verify, calls = _fit_assembly(ticking)
+    with pytest.warns(LabelLeadersCrossWarning):
+        checked = check_circular_label_fit([layout], verify, warn_search_seconds=6.0)
+    assert checked is not None
+    bounded = {row.kind: row for row in checked[0].rows}
+    assert len(calls) == 5, calls
+    assert {kind: (row.status, dict(row.values or {})) for kind, row in bounded.items()} == {
+        "outward_vertical": ("found_with_notice", {Y_OFFSET_PATH: 1.025}),
+        "outward_both": ("found_with_notice", {X_OFFSET_PATH: 1.025, Y_OFFSET_PATH: 1.025}),
+        "outward_horizontal": ("found_with_notice", {X_OFFSET_PATH: 1.075}),
+        "smaller_font": ("found", {path: 15.0 for path in FONT_SIZE_PATHS}),
+        "tighter_rows": ("not_found", {}),
+        "combination": ("found_with_notice", {**{path: 16.0 for path in FONT_SIZE_PATHS}, Y_OFFSET_PATH: 1.025}),
+    }
+    # A row asked for later (the Web's per-row computation) tries on from the stored assemblies.
+    later = checked[1].row("outward_vertical")
+    assert (later.status, later.values) == ("found", {Y_OFFSET_PATH: 1.05})
+
+    # Without a bound: the next-values rule, the same as each row computed alone in report order (the Web).
+    verify, calls = _fit_assembly(ticking)
+    with pytest.warns(LabelLeadersCrossWarning):
+        checked = check_circular_label_fit([layout], verify, warn_search_seconds=1e9)
+    assert checked is not None
+    unbounded = {row.kind: row for row in checked[0].rows}
+    assert (unbounded["outward_vertical"].status, unbounded["outward_vertical"].values) == (
+        "found", {Y_OFFSET_PATH: 1.05}
+    )
+    assert len(calls) == 2 + 2 + 3 + 1 + 2, calls
+    verify, _calls = _fit_assembly(ticking)
+    search = CircularLabelFitSearch([layout], verify, offer_notice_rows=False)
+    assert {kind: search.row(kind) for kind in ROW_KINDS if kind in search.row_kinds} == unbounded
 
 
 def test_labels_count_once_by_kind_and_leaders_count_against_the_definition_text() -> None:

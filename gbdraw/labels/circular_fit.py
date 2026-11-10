@@ -464,8 +464,11 @@ class CircularLabelFitSearch:
             tuple[tuple[str, LabelFitValue], ...], LabelFitVerification
         ] = {}
         self._rows: dict[LabelFitRowKind, tuple[LabelFitRow, float | None]] = {}
-        # A row found before the deadline that a later ask may make milder is not kept in ``_rows``.
+        # A row found before the deadline that a later ask may make milder, or whose next values (OV-3110) are still
+        # to try, is not kept in ``_rows``.
         self._unfinished = False
+        # ``rows`` takes every row's first value before any row tries its next values (D-110).
+        self._first_values_only = False
         self._deadline: float | None = None
 
     def row(self, kind: LabelFitRowKind, *, deadline: float | None = None) -> LabelFitRow:
@@ -489,14 +492,23 @@ class CircularLabelFitSearch:
         """The rows that apply, in the dialog order, searched until ``deadline``.
 
         Rows that leave crossings, labels over the definition text, or a
-        region label warning come after the others (LP-D57, OV-3105).
+        region label warning come after the others (LP-D57, OV-3105). Every
+        row's first value comes first; then the rows whose figure keeps a
+        region label warning try their next values while the deadline allows
+        (OV-3110, D-110), so no row waits for another row's next values.
         """
 
-        found: dict[LabelFitRowKind, LabelFitRow] = {}
         order = _SEARCH_ORDER if self._outer_only else _SWITCHES_FIRST_ORDER
-        for kind in order:
-            if kind in self.row_kinds:
-                found[kind] = self.row(kind, deadline=deadline)
+        kinds = [kind for kind in order if kind in self.row_kinds]
+        self._first_values_only = True
+        try:
+            found = {kind: self.row(kind, deadline=deadline) for kind in kinds}
+        finally:
+            self._first_values_only = False
+        for kind in kinds:
+            if kind not in self._rows and found[kind].status != "not_computed":
+                row = self.row(kind, deadline=deadline)
+                found[kind] = found[kind] if row.status == "not_computed" else row
         rows = [found[kind] for kind in ROW_KINDS if kind in found]
         return tuple(sorted(rows, key=lambda row: row.status == "found_with_notice"))
 
@@ -566,6 +578,9 @@ class CircularLabelFitSearch:
         first value is the row, kept out of the cache so a later ask tries on."""
 
         if self._region_warned(found[0]) is None:
+            return found
+        if self._first_values_only:
+            self._unfinished = True
             return found
         try:
             for value in later_values[:REGION_CLEAR_STEPS]:
