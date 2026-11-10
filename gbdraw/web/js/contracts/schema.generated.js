@@ -237,6 +237,10 @@ export const CIRCULAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({
   sequence_conservation: Object.freeze(['color', 'fileName', 'label', 'legend_label', 'managed', 'series_key'])
 });
 
+// gbdraw/labels/fit.py: OFFERED_ROW_STATUSES
+/** @type {readonly ['found', 'found_with_notice']} */
+export const LABEL_FIT_OFFERED_ROW_STATUSES = Object.freeze(['found', 'found_with_notice']);
+
 // gbdraw/tracks/linear.py: LINEAR_SLOT_UNREAD_PARAM_KEYS
 /** @type {Readonly<Record<'dinucleotide_content' | 'dinucleotide_skew' | 'depth' | 'feature_density' | 'spacer' | 'features', readonly string[]>>} */
 export const LINEAR_SLOT_UNREAD_PARAM_KEYS = Object.freeze({

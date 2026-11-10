@@ -17,7 +17,7 @@ from __future__ import annotations
 import math
 import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol, TypeAlias, TypeGuard, get_args
 
 from ..exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
@@ -67,11 +67,14 @@ DEFINITION_ROW_KINDS: frozenset[LabelFitRowKind] = frozenset({"smaller_definitio
 # ``found``: ``values`` fit; ``found_with_notice``: ``values`` leave no
 # overlapping labels but leave crossing leaders or labels over the definition
 # text (LP-D57; offered only when nothing was drawn), or a Circular label row
-# fits the labels it moves while its figure keeps a region label warning
-# (OV-3105), so the figure draws with the notice; ``not_found``: no value
+# fits the labels it moves while its figure keeps region label warnings it
+# already had (OV-3105, D-112), so the figure draws with the notice; ``not_found``: no value
 # within the lever's limit (``reason`` says which); ``not_computed``: the
 # bounded search stopped first.
 LabelFitRowStatus: TypeAlias = Literal["found", "found_with_notice", "not_found", "not_computed"]
+# The statuses whose values Apply can choose, the preferred first: a row that fits before one that draws with the
+# notice (the CLI lists them so, the Web selects so, OV-3105).
+OFFERED_ROW_STATUSES: tuple[LabelFitRowStatus, ...] = ("found", "found_with_notice")
 # A row sets numbers (offsets, font size, spacing), words (label scope,
 # placement) and switches (separate overlapping features).
 LabelFitValue: TypeAlias = bool | float | str
@@ -153,6 +156,26 @@ class LabelShape:
     leader: tuple[Point, ...] = ()
 
 
+# The region label warnings of ``LabelFit``, by field, with their count words (singular, plural): the one list that
+# sums, leaves out and words them (LP-D68, LP-D87, LP-D86, LBL-ROOM-STOP-AT-CENTRE-OMIT, LBL-ROOM-CLIP-FIT-OMIT,
+# RGN-CUT-EMPTY-OMIT).
+_REGION_WARNING_WORDS: Mapping[str, tuple[str, str]] = {
+    "region_overlaps": ("region label overlap", "region label overlaps"),
+    "region_cuts": ("region label cut", "region labels cut"),
+    "region_track_overlaps": ("region label on another track", "region labels on other tracks"),
+    "region_rooms_past_centre": (
+        "region label left out for want of room before the centre",
+        "region labels left out for want of room before the centre",
+    ),
+    "region_rooms_clipped": ("region label left out in clipped slots", "region labels left out in clipped slots"),
+    "region_cuts_left_out": (
+        "region label left out: no letter fits its circle",
+        "region labels left out: no letter fits their circles",
+    ),
+}
+REGION_WARNING_FIELDS: tuple[str, ...] = tuple(_REGION_WARNING_WORDS)
+
+
 @dataclass(frozen=True)
 class LabelFit:
     """Overlapping label pairs, crossing leader pairs, labels over the definition text,
@@ -190,56 +213,36 @@ class LabelFit:
 
         return self.region_rooms_past_centre + self.region_rooms_clipped + self.region_cuts_left_out
 
+    def count(self, field_name: str) -> int:
+        """One count by its field name."""
+
+        count: int = getattr(self, field_name)
+        return count
+
     @property
     def region_warnings(self) -> int:
         """The region label warnings: overlaps, cuts, labels on other tracks, and labels left out."""
 
-        return self.region_overlaps + self.region_cuts + self.region_track_overlaps + self.region_left_out
+        return sum(self.count(name) for name in REGION_WARNING_FIELDS)
 
-    def without_region_warnings(self) -> LabelFit:
-        """The fit with no region label warning: what a row that moves no region label answers for."""
+    def without_region_warnings(self, had: LabelFit) -> LabelFit:
+        """The fit with the region label warnings that ``had`` already had left out, up to its count of each: what a
+        row that moves no region label answers for, so a value that adds a region label warning does not fit
+        (D-112)."""
 
-        return replace(
-            self,
-            region_overlaps=0,
-            region_cuts=0,
-            region_track_overlaps=0,
-            region_rooms_past_centre=0,
-            region_rooms_clipped=0,
-            region_cuts_left_out=0,
-        )
+        left = {name: max(0, self.count(name) - had.count(name)) for name in REGION_WARNING_FIELDS}
+        return replace(self, **left)
 
     @property
     def fits(self) -> bool:
-        return (
-            self.overlap_pairs == 0
-            and self.crossing_pairs == 0
-            and self.definition_overlaps == 0
-            and self.region_overlaps == 0
-            and self.region_cuts == 0
-            and self.region_track_overlaps == 0
-            and self.definition_track_overlaps == 0
-            and self.region_rooms_past_centre == 0
-            and self.region_rooms_clipped == 0
-            and self.region_cuts_left_out == 0
-        )
+        return self == FITS
 
     def __add__(self, other: LabelFit) -> LabelFit:
-        return LabelFit(
-            self.overlap_pairs + other.overlap_pairs,
-            self.crossing_pairs + other.crossing_pairs,
-            self.definition_overlaps + other.definition_overlaps,
-            self.region_overlaps + other.region_overlaps,
-            self.region_cuts + other.region_cuts,
-            self.region_track_overlaps + other.region_track_overlaps,
-            self.definition_track_overlaps + other.definition_track_overlaps,
-            self.region_rooms_past_centre + other.region_rooms_past_centre,
-            self.region_rooms_clipped + other.region_rooms_clipped,
-            self.region_cuts_left_out + other.region_cuts_left_out,
-        )
+        return LabelFit(**{name: self.count(name) + other.count(name) for name in _FIT_FIELDS})
 
 
 FITS = LabelFit(0, 0)
+_FIT_FIELDS: tuple[str, ...] = tuple(item.name for item in fields(LabelFit))
 
 
 @dataclass(frozen=True)
@@ -738,42 +741,23 @@ def _counted(count: int, singular: str, plural: str) -> str:
     return f"{count} {singular if count == 1 else plural}"
 
 
+def _region_counts(fit: LabelFit) -> list[str]:
+    return [
+        _counted(fit.count(name), *_REGION_WARNING_WORDS[name]) for name in REGION_WARNING_FIELDS if fit.count(name)
+    ]
+
+
 def fit_counts(fit: LabelFit) -> str:
     counts: list[str] = []
     # Region labels (LP-D68, LP-D87, RGN-CUT-EMPTY-OMIT, LP-D86, LBL-ROOM-STOP-AT-CENTRE-OMIT,
     # LBL-ROOM-CLIP-FIT-OMIT) and the definition text over a track (D-12) are counted on their own record, which has
     # no other counts.
-    if fit.overlap_pairs or fit.crossing_pairs or not (
-        fit.region_overlaps
-        or fit.region_cuts
-        or fit.region_cuts_left_out
-        or fit.region_track_overlaps
-        or fit.region_rooms_past_centre
-        or fit.region_rooms_clipped
-        or fit.definition_track_overlaps
-    ):
+    if fit.overlap_pairs or fit.crossing_pairs or not (fit.region_warnings or fit.definition_track_overlaps):
         counts.append(_counted(fit.overlap_pairs, "label pair overlaps", "label pairs overlap"))
         counts.append(_counted(fit.crossing_pairs, "leader pair crosses", "leader pairs cross"))
     if fit.definition_overlaps:
         counts.append(f"{_counted(fit.definition_overlaps, 'label covers', 'labels cover')} the definition text")
-    if fit.region_overlaps:
-        counts.append(_counted(fit.region_overlaps, "region label overlap", "region label overlaps"))
-    if fit.region_cuts:
-        counts.append(_counted(fit.region_cuts, "region label cut", "region labels cut"))
-    if fit.region_track_overlaps:
-        counts.append(_counted(fit.region_track_overlaps, "region label on another track", "region labels on other tracks"))
-    if fit.region_rooms_past_centre:
-        counts.append(
-            _counted(fit.region_rooms_past_centre, "region label", "region labels")
-            + " left out for want of room before the centre"
-        )
-    if fit.region_rooms_clipped:
-        counts.append(_counted(fit.region_rooms_clipped, "region label", "region labels") + " left out in clipped slots")
-    if fit.region_cuts_left_out:
-        counts.append(
-            _counted(fit.region_cuts_left_out, "region label left out: no letter fits its circle",
-                     "region labels left out: no letter fits their circles")
-        )
+    counts.extend(_region_counts(fit))
     if fit.definition_track_overlaps:
         counts.append(_counted(fit.definition_track_overlaps, "line overlaps a track", "lines overlap a track"))
     return ", ".join(counts)
@@ -802,15 +786,8 @@ def row_note(row: LabelFitRow) -> str | None:
             _counted(remaining.definition_overlaps, "label still covers", "labels still cover")
             + " the definition text"
         )
-    if remaining.region_overlaps:
-        notes.append(
-            _counted(remaining.region_overlaps, "region label still overlaps", "region labels still overlap")
-            + " other labels or lines"
-        )
-    if other_region_warnings := remaining.region_warnings - remaining.region_overlaps:
-        notes.append(
-            _counted(other_region_warnings, "other region label warning stays", "other region label warnings stay")
-        )
+    if region_counts := _region_counts(remaining):
+        notes.append("the figure keeps " + ", ".join(region_counts))
     return " and ".join(notes) or None
 
 
@@ -1126,6 +1103,8 @@ __all__ = [
     "LabelCapacityRecord",
     "LabelCapacityRemedy",
     "LabelFit",
+    "OFFERED_ROW_STATUSES",
+    "REGION_WARNING_FIELDS",
     "LabelFitOutcome",
     "LabelFitRecord",
     "LabelFitReport",

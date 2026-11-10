@@ -14,13 +14,16 @@
 // the catalogs (`tools/i18n/source-keys.mjs`), and the dialog shows them with `tm()`.
 import { diagnosticError, isFigureLengthText } from '../utils/error-normalization.js';
 import { msg, tn } from '../utils/i18n.js';
+import { LABEL_FIT_OFFERED_ROW_STATUSES } from '../contracts/schema.generated.js';
 /** @import { CanonicalCircularTrackOptions } from '../contracts/request.generated.js' */
 
 /**
  * @typedef {'found' | 'found_with_notice' | 'not_found' | 'not_computed'} LabelFitRowStatus
  * `found_with_notice`: the row leaves no overlapping labels but leaves crossing
- * leaders or labels over the definition text, so the figure draws with the
- * notice bar (LP-D57); its `note` says what it leaves.
+ * leaders or labels over the definition text (LP-D57), or a Circular label row
+ * fits the labels it moves while the figure keeps region label warnings it had
+ * (OV-3105, D-112), so the figure draws with the notice bar; its `note` says
+ * what it leaves.
  */
 /** @typedef {string & { readonly labelFitRowKind: unique symbol }} LabelFitRowKind A Python row kind, such as `outward_vertical`. */
 /** @typedef {string & { readonly configPath: unique symbol }} ConfigPath A dotted config path, such as `labels.spacing.circular`. */
@@ -238,14 +241,22 @@ export const labelCapacityNoticeText = ({ recordId, labelKind, labelCount, fontS
 );
 
 const ROW_STATUSES = new Set(['found', 'found_with_notice', 'not_found', 'not_computed']);
-const OFFERED_STATUSES = new Set(['found', 'found_with_notice']);
+/** @type {ReadonlyMap<string, number>} Python's offered statuses, by preference (0 first). */
+const OFFERED_STATUS_RANK = new Map(LABEL_FIT_OFFERED_ROW_STATUSES.map((status, rank) => [status, rank]));
 
 /**
  * Whether a row's status offers its settings to Apply.
  * @param {string} status
  * @returns {boolean}
  */
-export const labelFitRowOffered = (status) => OFFERED_STATUSES.has(status);
+export const labelFitRowOffered = (status) => OFFERED_STATUS_RANK.has(status);
+
+/**
+ * How Python prefers an offered row's status: 0 for a row that fits, then a row that draws with the notice.
+ * @param {string} status
+ * @returns {number}
+ */
+export const labelFitRowRank = (status) => OFFERED_STATUS_RANK.get(status) ?? OFFERED_STATUS_RANK.size;
 
 const invalid = () => diagnosticError('RESULT_INVALID', {}, { stage: 'result-admission' });
 

@@ -416,22 +416,24 @@ limit. When nothing was drawn and a row has no value that fits, it gives the
 mildest value that leaves no overlapping labels, if there is one, and says how
 many leader pairs still cross or labels still cover the definition text. Such
 a row comes after the others; running again with it draws the figure with the
-warning. The label rows answer for the labels they move, not for region
-labels. When the figure of a row's first value still has a region label
-warning, the next two values of that row are tried, and the first whose whole
-figure fits is the row; otherwise the first value is offered the same way as a
-row that leaves crossings, says how many region labels still overlap other
-labels or lines (or how many other region label warnings stay), and comes after
-the rows that fit.
-The Web app's **Choose a fix** first selects a row that fits, when there is
-one. With several records, one value must fit every record. The outer-label
-rows do not move inner, embedded, or radial labels. For inner, embedded, or radial
-labels, the switches are tried first; the smaller font is then the first
-font size, going down from the current one, at which the whole figure fits, so
-a smaller size than the one offered may not fit.
+warning. The label rows answer for the labels they move: they leave out the
+region label warnings the figure already has, up to as many of each kind, and
+a value that adds a region label warning does not fit. When the figure of a
+row's first value keeps a region label warning, the next two values of that
+row are tried, and the first whose whole figure fits is the row; otherwise the
+first value is offered the same way as a row that leaves crossings and names
+the region label warnings the figure keeps. The CLI lists such a row after the
+rows that fit; the Web app's **Choose a fix** keeps the report's order and
+first selects a row that fits, when there is one. With several records, one
+value must fit every record. The outer-label rows do not move inner, embedded,
+or radial labels. For inner, embedded, or radial labels, the switches are
+tried first; the smaller font is then the first font size, going down from
+the current one, at which the figure fits apart from the region label
+warnings it already has, so a smaller size than the one offered may not fit.
 
-When the figure is drawn anyway, gbdraw searches for 5 seconds and names the
-rows it did not reach. When nothing is drawn, every outer-label row is
+When the figure is drawn anyway, gbdraw searches for 5 seconds, every row's
+first value before any row's next values, and names the rows it did not
+reach. When nothing is drawn, every outer-label row is
 searched; for inner, embedded, or radial labels the switches and then the font
 search share 30 seconds. The first setting is always tried; each later one
 is tried only if drawing the figure once more, as long as the last try took,

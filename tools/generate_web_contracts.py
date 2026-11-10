@@ -126,6 +126,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("LEGACY_SCALAR_AXIS_LABELS", "gbdraw.session_legacy_values", "LEGACY_SCALAR_AXIS_LABELS"),
     # The params keys each track renderer takes without reading them; the Source recipe leaves them out.
     ("CIRCULAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.circular", "CIRCULAR_SLOT_UNREAD_PARAM_KEYS"),
+    # The label fit row statuses Apply can choose, the preferred first: the dialog selects by this order.
+    ("LABEL_FIT_OFFERED_ROW_STATUSES", "gbdraw.labels.fit", "OFFERED_ROW_STATUSES"),
     ("LINEAR_SLOT_UNREAD_PARAM_KEYS", "gbdraw.tracks.linear", "LINEAR_SLOT_UNREAD_PARAM_KEYS"),
     # The media type a Session writer stores for a resource kind gbdraw makes, and for an input file (OV-2964).
     ("WRITTEN_RESOURCE_MEDIA_TYPES", "gbdraw.session_io", "WRITTEN_RESOURCE_MEDIA_TYPES"),

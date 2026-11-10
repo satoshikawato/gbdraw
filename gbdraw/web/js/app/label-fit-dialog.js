@@ -21,7 +21,7 @@
 // room they need from Python's values (`labelCapacityText`, OV-2179). When every
 // row is known not to fit, it lists the same ways under the rows (NO-ROW-WAYS,
 // OV-2180).
-import { labelCapacityRemedyText, labelFitRowOffered, normalizeLabelFitRow } from '../services/label-fit.js';
+import { labelCapacityRemedyText, labelFitRowOffered, labelFitRowRank, normalizeLabelFitRow } from '../services/label-fit.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
 
@@ -141,10 +141,10 @@ const definitionRecordsOf = (report) => {
 };
 
 /**
- * The row to select: the first row that fits, else the first that draws with the notice (OV-3105). Python orders the
- * rows a search computed so, but the rows the dialog computes arrive one by one in the report's order, so a row that
- * fits may come after a selected row with the notice: the selection moves to it unless the selected row is `kept`
- * (the user chose it, or Apply or Cancel waits for the row being computed).
+ * The row to select: the first offered row of Python's preferred status (`labelFitRowRank`: a row that fits, else
+ * one that draws with the notice, OV-3105). The dialog keeps the report's order, and the rows it computes arrive one
+ * by one, so a row that fits may come after a selected row with the notice: the selection moves to it unless the
+ * selected row is `kept` (the user chose it, or Apply or Cancel waits for the row being computed).
  * @param {readonly LabelFitDialogRow[]} rows
  * @param {LabelFitRowKind | ''} selectedKind
  * @param {boolean} kept
@@ -152,9 +152,9 @@ const definitionRecordsOf = (report) => {
  */
 const rowToSelect = (rows, selectedKind, kept) => {
   const selected = rows.find((row) => row.kind === selectedKind && row.offered);
-  if (selected && (kept || selected.status === 'found')) return selected.kind;
-  const offered = rows.filter((row) => row.offered);
-  return (offered.find((row) => row.status === 'found') || offered[0])?.kind || '';
+  if (selected && (kept || labelFitRowRank(selected.status) === 0)) return selected.kind;
+  const offered = rows.filter((row) => row.offered).sort((a, b) => labelFitRowRank(a.status) - labelFitRowRank(b.status));
+  return offered[0]?.kind || '';
 };
 
 /** @param {LabelFitDialogPorts} ports */

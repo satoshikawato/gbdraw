@@ -55,6 +55,7 @@ from .fit import (
     DEFINITION_FONT_PATH,
     DEFINITION_ROW_KINDS,
     FITS,
+    OFFERED_ROW_STATUSES,
     FONT_LIMIT_PT,
     FONT_SIZE_PATHS,
     LabelCapacityRecord,
@@ -445,6 +446,8 @@ class CircularLabelFitSearch:
         self._outer_only = all(layout.outer_only for layout in label_layouts)
         label_layouts = label_layouts or list(self.layouts)
         self._verify_assembly = verify
+        # The region label warnings the figure already has: a label row leaves out only these (D-112).
+        self._figure_fit = sum((layout.fit for layout in self.layouts), FITS)
         # A verification starts only if one more, as long as the last, ends before the deadline; the first one
         # starts whenever the deadline has not passed (OV-2527: a full first assembly is no estimate of it).
         self._verification_seconds = 0.0
@@ -510,7 +513,7 @@ class CircularLabelFitSearch:
                 row = self.row(kind, deadline=deadline)
                 found[kind] = found[kind] if row.status == "not_computed" else row
         rows = [found[kind] for kind in ROW_KINDS if kind in found]
-        return tuple(sorted(rows, key=lambda row: row.status == "found_with_notice"))
+        return tuple(sorted(rows, key=lambda row: row.status in OFFERED_ROW_STATUSES[1:]))
 
     # --- probes ---
 
@@ -536,7 +539,7 @@ class CircularLabelFitSearch:
             started = time.monotonic()
             self._verifications[key] = self._verify_assembly(values)
             self._verification_seconds = time.monotonic() - started
-        return _row_verification(kind, self._verifications[key])
+        return _row_verification(kind, self._verifications[key], self._figure_fit)
 
     # --- rows ---
 
@@ -551,8 +554,8 @@ class CircularLabelFitSearch:
         return computed
 
     def _region_warned(self, row: LabelFitRow) -> LabelFit | None:
-        """The figure's fit when a label row fits the labels it moves but its figure keeps a region label warning,
-        which no label row moves (OV-3105); otherwise None."""
+        """The figure's fit when a label row fits the labels it moves but its figure keeps region label warnings the
+        figure already had, which no label row moves (OV-3105, D-112); otherwise None."""
 
         if row.status != "found" or row.kind in DEFINITION_ROW_KINDS or row.values is None:
             return None
@@ -799,10 +802,13 @@ class CircularLabelFitSearch:
         return None
 
 
-def _row_verification(kind: LabelFitRowKind, verification: LabelFitVerification) -> LabelFitVerification:
+def _row_verification(
+    kind: LabelFitRowKind, verification: LabelFitVerification, figure_fit: LabelFit
+) -> LabelFitVerification:
     """A full assembly as one row reads it: the label rows answer for the labels they move, not for the region
-    labels (``_UNMOVED_LABEL_KINDS``; ``_with_region_notice`` says which warning stays, OV-3105), the definition
-    rows for the definition text over a track (D-12); an assembly that stops is read as it is."""
+    label warnings the figure already had (``figure_fit``, up to its count of each, D-112; ``_UNMOVED_LABEL_KINDS``;
+    ``_with_region_notice`` says which warning stays, OV-3105), so a value that adds one does not fit; the definition
+    rows answer for the definition text over a track (D-12); an assembly that stops is read as it is."""
 
     fit = verification.fit
     if verification.outcome == "stop" or fit is None:
@@ -810,7 +816,7 @@ def _row_verification(kind: LabelFitRowKind, verification: LabelFitVerification)
     if kind in DEFINITION_ROW_KINDS:
         outcome: LabelFitOutcome = "fits" if fit.definition_track_overlaps == 0 else "warn"
     else:
-        outcome = label_fit_outcome([replace(fit.without_region_warnings(), definition_track_overlaps=0)])
+        outcome = label_fit_outcome([replace(fit.without_region_warnings(figure_fit), definition_track_overlaps=0)])
     return replace(verification, outcome=outcome)
 
 

@@ -458,9 +458,10 @@ test('rows Generate did not search are computed one after another when the dialo
 });
 
 // OV-3105 (D-108): the dialog computes rows in the report's order, so a row that fits may arrive after a row that
-// draws with the notice. The first row that fits is selected until the user chooses a row; a choice stays.
+// draws with the notice. The first row that fits is selected until the user chooses a row; a choice stays for
+// that opening of the dialog.
 test('a row that fits is selected over a row with the notice, until the user chooses a row', async () => {
-  const regionNote = '1 region label still overlaps other labels or lines';
+  const regionNote = 'the figure keeps 1 region label overlap';
   const notice = (kind) => row(kind, 'found_with_notice', { values: { [Y_OFFSET]: 1.025 }, note: regionNote,
     canvasSize: { width: 1693, height: 939 } });
   const arrived = { outward_both: notice('outward_both'), outward_vertical: notice('outward_vertical'),
@@ -504,6 +505,18 @@ test('a row that fits is selected over a row with the notice, until the user cho
   assert.equal(chosen.dialog.labelFitDialog.selectedKind, 'outward_vertical');
   await chosen.dialog.resolveLabelFitChoice('apply');
   assert.deepEqual(chosen.writes.map(({ values }) => values), [{ [Y_OFFSET]: 1.025 }]);
+
+  // The choice holds for that opening only: opened again, the row that fits takes the selection when it arrives.
+  releases.clear();
+  const again = chosen.dialog.openLabelFitDialog(normalizeReport(report(pending(), { drawn: true })),
+    { rowToken: 'circular:1:0', drawing });
+  releases.get('outward_both')();
+  await settle();
+  releases.get('outward_vertical')();
+  await settle();
+  releases.get('smaller_font')();
+  await again;
+  assert.equal(chosen.dialog.labelFitDialog.selectedKind, 'smaller_font');
 
   // Apply while the row that fits is computed applies the row shown selected when Apply was pressed.
   releases.clear();
