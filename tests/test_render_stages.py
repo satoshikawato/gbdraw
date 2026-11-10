@@ -870,7 +870,7 @@ def _genbank(path: Path, *record_ids: str) -> Path:
 def _resolve(paths: tuple[Path, ...], *regions: str):
     from gbdraw.api import CircularDiagramRequest, GenBankInputSource, RecordInput
     from gbdraw.api.prepared import prepared_value_identity
-    from gbdraw.api.request_render import normalize_request_records
+    from gbdraw.api.request_render import resolve_request_records
     from gbdraw.api.requests import RecordCardinality, RecordCollectionOptions
     from gbdraw.io.regions import parse_region_spec
 
@@ -891,7 +891,9 @@ def _resolve(paths: tuple[Path, ...], *regions: str):
         path: PreparedResourceIdentity(path.name, path.name, path.stat().st_size) for path in paths
     }
     with PreparedBiologicalInputCache().transaction(resource_paths=identities, diagnostics=None):
-        records = normalize_request_records(request)
+        # The records the render draws: the public ``normalize_request_records`` hands callers copies that hold
+        # their bases (a crop reads them from its record's file), which carry no identity of the transaction.
+        records = resolve_request_records(request).records
         return [(record.id, len(record.seq), prepared_value_identity(record)) for record in records]
 
 
