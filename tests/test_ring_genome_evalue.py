@@ -309,3 +309,46 @@ def test_the_command_line_logs_the_per_file_warning_once(
         "is past the largest LOSAT reads (10), so their E-values are computed per file, not per genome."
     ]
     assert ring_searches[0]["options"].searchsp is None
+
+
+def test_the_web_ring_plan_parses_a_genbank_reference_once_for_the_generate_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Worker's ring planner reads the reference staged under the Generate's resource ids and publishes its parse,
+    so the Generate's render reads that parse: one parse of a GenBank reference for the plan and the render."""
+
+    from gbdraw.api.prepared import PreparedBiologicalInputCache
+    from gbdraw.session_request_codec import encode_canonical_request
+    from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
+    from tests.test_web_helper_prepared_lookup import ROOT, _count_parses, _encoded_resources, _Stage
+
+    source = (ROOT / "gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
+    helpers: dict[str, object] = {}
+    exec(source.split("`", 1)[1].rsplit("`", 1)[0].replace("\\\\", "\\"), helpers)
+    cache = helpers["_WEB_PREPARED_INPUT_CACHE"]
+    assert isinstance(cache, PreparedBiologicalInputCache)
+    call = helpers["call_web_json_helper"]
+    assert callable(call)
+
+    reference = _genbank(tmp_path / "reference.gb", "REF1", "REF2")
+    ring = _fasta(tmp_path / "ring.fasta", "RINGA")
+    encoded = encode_canonical_request(CircularDiagramRequest(
+        records=(RecordInput(GenBankInputSource(reference), cardinality=RecordCardinality.ALL),)
+    ))
+    stage = _Stage(tmp_path / "worker", _encoded_resources(encoded))
+    sources = [record["source"] for record in encoded.payload["records"]]  # type: ignore[index, union-attr]
+    ring_input = {"names": ["ring.fasta"], "files": json.loads(read_comparison_sequence_json(str(ring)))["genomeFiles"]}
+    parses = _count_parses(monkeypatch)
+    _workspace, paths = stage.workspace("helper")
+    reply = json.loads(call(
+        "plan_ring_scales_json", "losatn", json.dumps(sources), json.dumps(paths),
+        json.dumps({resource_id: "reference.gb" for resource_id in paths}), json.dumps([ring_input]),
+        json.dumps(stage.identities),
+    ))
+    assert reply["scales"] == [str(_length("REF1", "REF2") * _length("RINGA"))], reply
+    assert len(parses) == 1
+
+    rendered = stage.render(cache, encoded.payload)  # type: ignore[arg-type]
+    assert "error" not in rendered["reply"], rendered["reply"]
+    assert rendered["metrics"].get("parsedSourceParseCount", 0) == 0  # type: ignore[attr-defined]
+    assert len(parses) == 1

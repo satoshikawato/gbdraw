@@ -4,6 +4,7 @@
 // and its raw cache entry pass it. Real Worker, real Pyodide, real LOSAT Wasm.
 const { test, expect } = require('@playwright/test');
 const { writeFileSync } = require('node:fs');
+const { gzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 
@@ -30,13 +31,16 @@ const genbankRecord = (id, sequence) => [
   '//'
 ].join('\n');
 
-test('a ring of two files searches with the search space of the genome pair Python plans', async ({ page }, testInfo) => {
+// A gzip reference is staged for the plan with the size of its expanded bytes, the size the Generate's request names.
+for (const gzip of [false, true]) test(`a ring of two files searches with the search space of the genome pair Python plans${
+  gzip ? ', from a gzip reference' : ''}`, async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   // The reference: one file of two records (360 + 240 bp); the ring: a chromosome file and a plasmid file.
   const chromosome = bases(977, 360);
   const plasmid = bases(431, 240);
-  const reference = testInfo.outputPath('reference.gbk');
-  writeFileSync(reference, `${genbankRecord('REFCHR', chromosome)}\n${genbankRecord('REFPLS', plasmid)}\n`);
+  const reference = testInfo.outputPath(gzip ? 'reference.gbk.gz' : 'reference.gbk');
+  const text = `${genbankRecord('REFCHR', chromosome)}\n${genbankRecord('REFPLS', plasmid)}\n`;
+  writeFileSync(reference, gzip ? gzipSync(text) : text);
   await openWithGenBank(page, reference);
   await page.evaluate(() => {
     window.__GBDRAW_RING_ARGS__ = [];

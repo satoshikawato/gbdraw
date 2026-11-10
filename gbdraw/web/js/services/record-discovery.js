@@ -25,6 +25,7 @@ import {
 
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { GenerationPayload } from './diagram-generation.js' */
+/** @import { CanonicalRecord } from '../contracts/request.generated.js' */
 /** @import { RingGenomeFileLengths, RingGenomeInput, RingGenomeScales } from '../contracts/card-windows.generated.js' */
 /** @import { InputFileRef } from './history-files.js' */
 /** @import { GenBankHeader } from './genbank-header.js' */
@@ -1058,10 +1059,10 @@ export const readComparisonSequenceDigest = (options) => readOncePerFile(
  * The search space of each ring search, in ring order (`RingGenomeScales`, PD-OI-018 revision 6): Python answers it
  * from the owner the CLI ring search reads (`plan_ring_scales_json` of gbdraw/web_support/comparison_sequences.py), so
  * the page passes the CLI's values and sums no genome. The reference's record sources are staged under the ids the
- * next Generate's request names them by (`requestRecordSources`), so Python parses the reference once, for this plan
- * and that Generate's render; each ring sends the file lengths the ring reader answered (`readComparisonSequence`),
+ * next Generate's request names them by (`requestRecordSources`), so that Generate's render reads this plan's parse
+ * (a GFF3 reference's FASTA is read once more for its length, as on the command line); each ring sends the file lengths the ring reader answered (`readComparisonSequence`),
  * so no ring file is read again. Kept per set of Files, whose bytes never change.
- * @param {{ sources: readonly unknown[], resources: Readonly<Record<string, RawSessionResourceDescriptor>>,
+ * @param {{ sources: readonly CanonicalRecord['source'][], resources: Readonly<Record<string, RawSessionResourceDescriptor>>,
  *   files: readonly FileLike[] }} reference The reference's record sources (`requestRecordSources`).
  * @param {readonly { files: readonly [FileLike, ...FileLike[]] }[]} rings The bound rings, in ring order.
  * @param {'losatn' | 'tlosatx'} program
@@ -1073,7 +1074,8 @@ export const planRingScales = (reference, rings, program) => {
   return readOncePerFile(/** @type {[FileLike, ...FileLike[]]} */ (files), `ring-scales:${program}:${reference.files.length}:${shape}`, async () => {
     /** @type {RingGenomeInput[]} */
     const ringInputs = await Promise.all(rings.map(async ({ files: ringFiles }) => ({
-      names: ringFiles.map((file) => String(file.name ?? '')),
+      // A File without a name is named as Generate's descriptor names it (`serializeFile`).
+      names: ringFiles.map((file) => String(file.name || 'file')),
       files: (await readComparisonSequence({ files: ringFiles })).genomeFiles.map(({ length, recordLengths }) => ({
         length, recordLengths: [...recordLengths]
       }))

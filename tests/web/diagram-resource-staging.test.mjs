@@ -419,20 +419,3 @@ test('a held file that was never staged is not held', async () => {
   assert.deepEqual(prepared.retainedResourceTokens, []);
   assert.deepEqual(prepared.resourceManifest.map(({ resourceId }) => resourceId), ['record-1-genbank']);
 });
-
-test('a gzip Circular reference stages for the LOSAT ring plan with the size of its expanded bytes', async () => {
-  const { gzipSync } = await import('node:zlib');
-  const { requestRecordSources } = await import('../../gbdraw/web/js/services/session-request.js');
-  const text = 'LOCUS       REF1                    2000 bp    DNA     circular UNK 01-JAN-1980\n' +
-    `ORIGIN\n        1 ${'acgt'.repeat(500)}\n//\n`;
-  const file = new File([gzipSync(Buffer.from(text))], 'ref.gb.gz', { lastModified: 1 });
-  // The ring planner stages the reference under the ids the Generate's request names it by (planRingScales).
-  const reference = await requestRecordSources([{ gb: file, gff: null, fasta: null }], 'genbank');
-  assert.ok(reference);
-  assert.equal(reference.resources['record-1-genbank'].size, Buffer.byteLength(text));
-  const prepared = await createDiagramResourceTransport().prepare({
-    request: reference.sources, resources: reference.resources, retain: true
-  });
-  assert.deepEqual(prepared.resourceManifest.map(({ resourceId, size }) => [resourceId, size]),
-    [['record-1-genbank', Buffer.byteLength(text)]]);
-});

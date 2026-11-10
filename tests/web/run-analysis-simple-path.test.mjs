@@ -264,6 +264,7 @@ const {
   buildRunStateData,
   buildUiStateData,
   serializeActiveRenderFiles,
+  serializeFile,
   SESSION_VERSION,
   installShownDrawing
 } = await import('../../gbdraw/web/js/services/config.js');
@@ -400,6 +401,7 @@ const createImmediatePreviewRuntime = ({ onEvent = () => {} } = {}) => {
 const immediatePreviewRuntime = createImmediatePreviewRuntime();
 const generatedArtifactHandleOptions = {
   planGenomeScales: planWholeGenomeScales,
+  serializeInputFile: serializeFile,
   captureGeneratedArtifactHandle: artifactSnapshots.captureGeneratedArtifactHandle,
   captureGeneratedArtifactOwnerSet: artifactSnapshots.captureGeneratedArtifactOwnerSet,
   installGeneratedArtifactOwnerSet: artifactSnapshots.installGeneratedArtifactOwnerSet,
@@ -4198,4 +4200,23 @@ test('a drawing re-added under its ID does not inherit the old drawing\'s unappl
     installShownDrawing('circular');
     state.removeDrawing(id, { takeSlot: () => null });
   }
+});
+
+test('a gzip Circular reference stages for the LOSAT ring plan with the size of its expanded bytes', async () => {
+  const { gzipSync } = await import('node:zlib');
+  const { requestRecordSources } = await import('../../gbdraw/web/js/services/session-request.js');
+  const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
+  const text = 'LOCUS       REF1                    2000 bp    DNA     circular UNK 01-JAN-1980\n' +
+    `ORIGIN\n        1 ${'acgt'.repeat(500)}\n//\n`;
+  const file = new File([gzipSync(Buffer.from(text))], 'ref.gb.gz', { lastModified: 1 });
+  // The ring planner stages the reference under the ids the Generate's request names it by (planRingScales).
+  // Its descriptors are those Generate's request writes (`serializeFile`), as the page passes them.
+  const reference = await requestRecordSources([{ gb: file, gff: null, fasta: null }], 'genbank', serializeFile);
+  assert.ok(reference);
+  assert.equal(reference.resources['record-1-genbank'].size, Buffer.byteLength(text));
+  const prepared = await createDiagramResourceTransport().prepare({
+    request: reference.sources, resources: reference.resources, retain: true
+  });
+  assert.deepEqual(prepared.resourceManifest.map(({ resourceId, size }) => [resourceId, size]),
+    [['record-1-genbank', Buffer.byteLength(text)]]);
 });

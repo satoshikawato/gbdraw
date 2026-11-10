@@ -2,7 +2,7 @@
 /** @import { buildPyodideAssetManifest } from './pyodide-assets.js' */
 /** @import { FontIdentity } from './font-store.js' */
 /** @import { CommittedCanonicalSession } from './session-request.js' */
-/** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 /**
  * A font file the page sends a Worker (init `fonts`, and each font it
@@ -100,7 +100,7 @@ export const DIAGRAM_HELPER_OPERATION_NAMES = Object.freeze(
  * @property {unknown} [canonicalRequest]
  * @property {{ canonicalRequest?: unknown } | null} [projection]
  * @property {unknown} [recordSource]
- * @property {unknown} [referenceSources]
+ * @property {readonly CanonicalRecord['source'][]} [referenceSources]
  */
 
 /**

@@ -110,6 +110,7 @@ import {
   importSession as importSessionFromFile,
   inputFilePayload,
   serializeActiveRenderFiles,
+  serializeFile,
   encodeSessionResources,
   projectDraftRequest,
   makeRegionDrawing,
@@ -1782,7 +1783,7 @@ export const createAppSetup = () => {
       await settleComparisonRecordLabels();
       await auxiliaryFileImports.settle();
     },
-    isCurrentFeature: isCurrentResultFeature, encodeSessionResources,
+    isCurrentFeature: isCurrentResultFeature, encodeSessionResources, serializeInputFile: serializeFile,
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, drawing) => (
       serializeActiveRenderFiles(state, drawing, {
         comparisonPlan: comparisonPlanSnapshot,

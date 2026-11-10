@@ -10,7 +10,7 @@
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { LinearCardPlacesOf, LinearUnitPlace, LinearUnitPlanPayload, LinearUnitSearch, LinearUnitWindow } from '../services/linear-units.js' */
-/** @import { CommittedCanonicalSession, RequestRecordDisplayRow } from '../services/session-request.js' */
+/** @import { CommittedCanonicalSession, DescribeInputFile, RequestRecordDisplayRow } from '../services/session-request.js' */
 /** @import { LiveRedrawLegend } from './legend/entry-actions.js' */
 /** @import { LabelCapacityNotice } from '../services/label-fit.js' */
 /** @import { ConvertedResource } from '../services/main-session-comparison-frame.js' */
@@ -1668,6 +1668,8 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
+ * @property {DescribeInputFile} serializeInputFile The Session owner's descriptor of one input file (`serializeFile`),
+ *   the one Generate's request writes of it; a helper stages a file under it (`requestRecordSources`).
  * @property {EncodeSessionResources} encodeSessionResources The Session file writer's encoding of the inputs
  *   Generate described by their File (the exact replay Session of the reproducibility files, OV-2612).
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, ringAdoption?: SearchedRingAdoption | null,
@@ -1780,7 +1782,7 @@ export const createRunAnalysis = ({
   state,
   rulePreparation = null,
   isCurrentFeature,
-  serializeCanonicalFiles, encodeSessionResources,
+  serializeCanonicalFiles, serializeInputFile, encodeSessionResources,
   adoptCanonicalRenderArtifacts,
   getCommittedCanonicalSession = null,
   readCommittedCanonicalRevision = () => 0,
@@ -3424,12 +3426,13 @@ export const createRunAnalysis = ({
             }));
             // The search space of each ring's genome pair (PD-OI-018 revision 6): Python plans it as for the CLI's ring
             // searches, so both pass one value; a ring searched per file shows Python's warning. The reference is
-            // staged as this Generate's request names it, so Python parses it once, for the plan and the render.
-            const reference = requestRecordSources(drawing.circularSources.map((card) => ({
+            // staged as this Generate's request names it, so the plan's parse is the render's (a GFF3 reference's FASTA
+            // is read once more for its length, as on the command line).
+            const reference = await requestRecordSources(drawing.circularSources.map((card) => ({
               gb: inputFiles.fileOf(card.gb),
               gff: inputFiles.fileOf(card.gff),
               fasta: inputFiles.fileOf(card.fasta)
-            })), drawing.inputType.value);
+            })), drawing.inputType.value, serializeInputFile);
             if (!reference) throw new Error('The Circular reference of the comparison rings lacks a file.');
             const ringScales = await planRingScales(reference, boundRings, circularLosatSuffix);
             const perFileNotice = perFileWarningNotice(showNotice);
@@ -3907,21 +3910,16 @@ export const createRunAnalysis = ({
 
         /** @type {string[]} */
         let proteinRecordInstanceKeys = [];
-        /** @type {Readonly<Record<string, unknown>> | null | undefined} */
+        /** @type {Promise<Readonly<Record<string, unknown>> | null> | undefined} */
         let nextResources;
-        // The record sources this Generate's request will name, read once (OV-1595).
-        const nextRecordResources = () => {
-          // The descriptors' payload owners are the cards' files (the store's), not their refs.
-          if (nextResources === undefined) {
-            nextResources = requestRecordSources(linearSeqs.map((seq) => ({
-              ...seq,
-              gb: inputFiles.fileOf(seq.gb),
-              gff: inputFiles.fileOf(seq.gff),
-              fasta: inputFiles.fileOf(seq.fasta)
-            })), drawing.inputType.value)?.resources ?? null;
-          }
-          return nextResources;
-        };
+        // The record sources this Generate's request will name, read once (OV-1595), with the descriptors the request
+        // writes of the cards' files (OV-3364). A file that cannot be described stages none: the helper sends it.
+        // The descriptors' payload owners are the cards' files (the store's), not their refs.
+        const nextRecordResources = () => (nextResources ??= requestRecordSources(linearSeqs.map((seq) => ({
+          gb: inputFiles.fileOf(seq.gb),
+          gff: inputFiles.fileOf(seq.gff),
+          fasta: inputFiles.fileOf(seq.fasta)
+        })), drawing.inputType.value, serializeInputFile).then((sources) => sources?.resources ?? null, () => null));
 
         const buildProteinRecordInstanceKeys = async () => {
           const used = new Set();
@@ -4005,7 +4003,7 @@ export const createRunAnalysis = ({
               // request cannot be named (a card lacks a file) are the committed drawing's ids used. Another file
               // (of a record turned off only) is sent.
               const committed = requestRecordSource(
-                nextRecordResources() ?? (
+                await nextRecordResources() ?? (
                   typeof getCommittedCanonicalSession === 'function' ? getCommittedCanonicalSession()?.resources : null
                 ),
                 inputSpec.sourceKind, sourceFile, pairedFastaFile ?? null
