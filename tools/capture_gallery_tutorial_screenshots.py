@@ -1521,6 +1521,22 @@ def hide_settings_pane_under_popup(page) -> None:
     )
 
 
+def hide_page_around_settings_pane(page) -> None:
+    """An open-select crop shows a settings control and its menu, which may reach past the
+    Settings pane: hide the rest of the page (header, Result, footer), so the crop's edge cuts
+    no figure, button or text there (OV-3374). Everything keeps its place."""
+
+    page.evaluate(
+        """
+        () => {
+          document.querySelectorAll('.app-header, #result-pane, [data-app-footer]').forEach((element) => {
+            element.style.setProperty('visibility', 'hidden', 'important');
+          });
+        }
+        """
+    )
+
+
 def wait_for_css_transitions(page) -> None:
     """Let running CSS transitions end, so a crop never shows a control mid-change.
 
@@ -1582,6 +1598,8 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
         """
     )
     hide_settings_pane_under_popup(page)
+    if as_text(capture.get("crop")) == "openSelect":
+        hide_page_around_settings_pane(page)
     apply_open_select_overlays(page, capture.get("openSelect"))
     wait_for_css_transitions(page)
 
