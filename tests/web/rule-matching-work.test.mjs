@@ -122,7 +122,7 @@ test('"All features with legend item" over K features with K hash rules does O(K
       findFeaturesWithSameDisplayedLabel: () => [], findFeaturesWithSameIndividualLabel: () => [],
       findFeaturesWithSameLegendItem: (feature) => features.filter((other) => other !== feature),
       findMatchingRegexRule: () => null, getDisplayedFeatureLabel: () => '', getIndividualFeatureLabel: () => '',
-      getEffectiveLegendCaption: caption, effectiveLegendCaptions: () => caption,
+      effectiveLegendCaptions: () => caption,
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
       groupColorRules: groupColorRulesOver(preparation), getLegendRowRules: () => []
     });

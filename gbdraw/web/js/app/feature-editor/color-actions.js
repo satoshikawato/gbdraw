@@ -3,7 +3,7 @@
 /** @import { KeptLegendRow, LegendCaption, LegendRow } from '../../services/drawing/paint.js' */
 /** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from '../../services/legend-svg.js' */
 /** @import { LegendRowName } from '../../services/legend-row-names.js' */
-/** @import { ColorRuleLegendGroup, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
+/** @import { ColorRuleLegendGroup, RuleLegendIntent, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { DrawnTrack } from '../../services/track-legend-rows.js' */
 /** @typedef {import('../rule-matching.js').GroupColorEdit['scope']} RuleSynthesisScope */
 import { displayedLegendRowColors, draftLegendRowColors, LIVE_EDIT_DOMAINS, namedLegendCaption } from '../candidate-render.js';
@@ -41,14 +41,23 @@ import { msg } from '../../utils/i18n.js';
 // R13: the rule owner's lookups and commit of specific-color rules, each a
 // function port this owner declares.
 /**
+ * A Legend row a rule commit draws, named by its name and color (the commit
+ * allocates its key), and where it goes: with `replaces`, in the place of the
+ * row of key `at`, which it replaces with every record stored under that key
+ * (a whole row renamed, OV-158); else right after the row of key `at` (a row
+ * split off by Keep both, D-29). Without one, a row goes where Python's
+ * answer puts it (`legendRowsInOrder`), else where the commit adds it.
+ * @typedef {{ name: string, color: string, at: PythonLegendKey, replaces?: boolean }} LegendPlacement
+ */
+/**
  * What a rule write of this owner passes: the drawing of the action, the Legend
  * rows it replaces, where its new row goes, what runs once it commits, and that
  * it joins its caller's open History step.
  * @typedef {object} CommitRuleOptions
  * @property {DrawingState} [drawing]
  * @property {{ caption: PythonLegendKey, color: string | undefined }[]} [previousLegendIntents]
- * @property {{ name: string, color: string, at: PythonLegendKey, replaces?: boolean } | null} [legendPlacement]
- * @property {(intents: { caption: PythonLegendKey, name?: string, color: string }[]) => void} [afterCommit]
+ * @property {LegendPlacement | null} [legendPlacement]
+ * @property {(intents: RuleLegendIntent[]) => void} [afterCommit]
  * @property {boolean} [joinsOpenStep]
  */
 /**
@@ -56,7 +65,7 @@ import { msg } from '../../utils/i18n.js';
  * @typedef {(build: SpecificRuleBuild, label?: string, options?: CommitRuleOptions) => Promise<unknown>} CommitSpecificRulesPort
  */
 /**
- * The number of features a rule colors (none for a `hash` rule).
+ * The number of features a rule matches (none for a `hash` rule).
  * @typedef {(rule: ColorRule) => number} CountFeaturesMatchingRulePort
  */
 /**
@@ -76,7 +85,7 @@ import { msg } from '../../utils/i18n.js';
  * @typedef {(feature: ColorFeature, caption?: string | null) => ColorFeature[]} FindFeaturesWithSameLegendItemPort
  */
 /**
- * The first rule other than a `hash` rule that colors the feature, or null.
+ * The first rule other than a `hash` rule that matches the feature, or null.
  * @typedef {(feature: ColorFeature) => ColorRule | null} FindMatchingRegexRulePort
  */
 /**
@@ -1145,7 +1154,7 @@ export const createFeatureColorActions = ({
       drawing,
       previousLegendIntents: replacesExistingGroup
         ? [{ caption: legendEntryKey(existingEntry), color: listedRowColor(drawing, existingEntry) }] : [],
-      afterCommit: (/** @type {Array<{ caption: string, name?: string, color: string }>} */ intents) => {
+      afterCommit: (/** @type {RuleLegendIntent[]} */ intents) => {
         if (replacesExistingGroup) {
           // An intent's `caption` is its row's key; its `name` the rule's caption.
           const intent = intents.find(entry => captionsMatch(entry.name ?? entry.caption, caption)
