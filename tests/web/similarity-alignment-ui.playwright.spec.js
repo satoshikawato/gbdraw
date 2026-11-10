@@ -2857,6 +2857,11 @@ test('the drawer list, the docked review panel and the popup it hides follow the
     await page.evaluate(() => window.__GBDRAW_APP__.closeFeaturePopup());
     await closeEditor(page);
     await page.setViewportSize({ width: 1600, height: 1000 });
+    // The wider window refits the figure through the camera's transition, and the feature is
+    // 9 by 5 px: a click at its box before the figure rests lands beside it, on a comparison
+    // ribbon (OV-2726).
+    await roomSettled(page);
+    await cameraSettled(page);
     await page.locator('[data-gbdraw-feature-id="f94b7f30b_record_2"]').click({ force: true });
     await page.locator('.feature-popup [data-similarity-alignment-popup-review]').click();
     const dialog = page.getByRole('dialog', { name: 'Review alignment' });
