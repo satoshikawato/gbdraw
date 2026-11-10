@@ -76,7 +76,10 @@ export const createAuxiliaryFileImports = (reactive, store) => {
 /**
  * @typedef {object} WatchersOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {RulePreparation} rulePreparation
+ * @property {RulePreparation['isCurrent']} isRuleInputCurrent
+ *   Whether a snapshot of the rule inputs is still the current inputs (the rule preparation's reader).
+ * @property {RulePreparation['snapshot']} snapshotRuleInputs
+ *   The rule inputs now (the rule preparation's reader).
  * @property {AuxiliaryFileImports['track']} trackAuxiliaryFileImport Holds an import until it settles (`createAuxiliaryFileImports`).
  * @property {(value?: any) => { value: any }} ref Vue `ref`.
  * @property {(getter: () => any) => { readonly value: any }} computed Vue `computed`.
@@ -135,7 +138,7 @@ const withImportFailure = (failures, drawing, failure, drawings) => {
 /** @param {WatchersOptions} options */
 export const setupWatchers = ({
   state,
-  rulePreparation,
+  isRuleInputCurrent, snapshotRuleInputs,
   trackAuxiliaryFileImport,
   ref, computed, watch,
   nextTick,
@@ -309,7 +312,7 @@ export const setupWatchers = ({
     return failure
       && errorLog.value === failure.error
       && drawing.files[failure.key] === failure.selection
-      && (!failure.snapshot || rulePreparation.isCurrent(failure.snapshot))
+      && (!failure.snapshot || isRuleInputCurrent(failure.snapshot))
       ? failure : null;
   };
   const canRetryAuxiliaryImportFailure = computed(() => {
@@ -494,7 +497,7 @@ export const setupWatchers = ({
     const retainFailure = (inputsBound = key === 't_color') => {
       setAuxiliaryImportFailure(drawing, {
         error: errorLog.value, key, drawing, selection: drawing.files[key], releaseCopy: holdFileCopy(source),
-        snapshot: inputsBound ? rulePreparation.snapshot() : null,
+        snapshot: inputsBound ? snapshotRuleInputs() : null,
         retry: () => {
           const retried = bindCard(drawing, key, source);
           if (!retried) return false;

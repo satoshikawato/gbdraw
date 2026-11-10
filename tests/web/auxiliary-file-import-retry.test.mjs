@@ -45,10 +45,8 @@ const {
   importAuxiliaryTable, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, auxiliaryImportFailureOnArrival
 } = setupWatchers({
   state,
-  rulePreparation: /** @type {any} */ ({
-    snapshot: () => ({ inputs, linearFiles: [], inputFiles: [] }),
-    isCurrent: (before) => before.inputs === inputs
-  }),
+  snapshotRuleInputs: /** @type {any} */ (() => ({ inputs, linearFiles: [], inputFiles: [] })),
+  isRuleInputCurrent: /** @type {any} */ ((before) => before.inputs === inputs),
   trackAuxiliaryFileImport: imports.track,
   ref: (value) => ({ value }),
   computed: (getter) => ({ get value() { return getter(); } }),

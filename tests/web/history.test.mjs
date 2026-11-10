@@ -777,7 +777,7 @@ const createLayoutPreferences = () => ({
   };
   const history = createHistoryManager({
     maxActions: 0,
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     buildIntent: buildState,
     applyIntent: applyState,
     buildCheckpoint: buildState,
@@ -1222,7 +1222,7 @@ const createLayoutPreferences = () => ({
   // The comparison files are the Linear drawing's: its History records them.
   state.mode.value = 'linear';
   const history = createHistoryManager({
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     ...snapshots.drawingHistory('linear')
   });
   await history.captureBaseline('P3 baseline');
@@ -1639,7 +1639,7 @@ const createLayoutPreferences = () => ({
     c_conservation_sequence_sources: [...derivedSources]
   });
   const replayHistory = createHistoryManager({
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     collectCurrentFileIds: snapshots.collectCurrentFileIds,
     ...snapshots.drawingHistory('circular'),
     buildCheckpoint: () => {
@@ -1732,7 +1732,7 @@ const createLayoutPreferences = () => ({
   let artifactBuilds = 0;
   const snapshots = createHistorySnapshotService({ state: withDrawings(state), fileStore, currentResults: () => state.results.value });
   const history = createHistoryManager({
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     collectCurrentFileIds: snapshots.collectCurrentFileIds,
     buildIntent: async () => ({ setting }),
     applyIntent: async (intent) => {
@@ -1793,7 +1793,7 @@ const createLayoutPreferences = () => ({
   const history = createHistoryRouter({
     drawingIds: ['circular'],
     activeDrawingId: () => 'circular',
-    managerOptions: () => ({ fileStore, ...snapshots.drawingHistory('circular') }),
+    managerOptions: () => ({ ...snapshots.drawingHistory('circular') }),
     sessionHistory: snapshots.sessionHistory()
   });
   const draftState = () => ({
@@ -2307,7 +2307,7 @@ const createLayoutPreferences = () => ({
     }, { results: state.results.value });
   };
   const ownerHistory = createHistoryManager({
-    fileStore,
+    estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     buildIntent: async () => ({}),
     applyIntent: async () => {},
     buildCheckpoint: () => {

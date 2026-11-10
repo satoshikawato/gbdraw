@@ -32,7 +32,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.whole-object-port.v1|app/run-analysis.js|createRunAnalysis|previewRuntime': 1,
   'owner-graph.whole-object-port.v1|app/run-analysis.js|createRunAnalysis|rulePreparation': 1,
   'owner-graph.whole-object-port.v1|services/history-snapshot.js|createHistorySnapshotService|fileStore': 1,
-  'owner-graph.whole-object-port.v1|services/history.js|createHistoryManager|fileStore': 1,
   // heavy-derived.trigger-site.v2 (sites per module; includes calls of a
   // producer port such as rulePreparation.run handed to an owner)
   'heavy-derived.trigger-site.v2|rulePreparation|app/app-setup.js': 2,
