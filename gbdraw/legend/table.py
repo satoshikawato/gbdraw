@@ -16,6 +16,7 @@ from gbdraw.core.color import (
     normalize_hex_color,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.features.colors import build_default_color_map, feature_type_color
 from gbdraw.svg.result_records import LEGEND_MERGED_ROW, result_base_attribute
 from gbdraw.legend.sources import (
     ComparisonLegendSource,
@@ -622,18 +623,6 @@ def _other_feature_legend_key(feature_type: str) -> LegendRowKey:
     return _key_of_name("other proteins" if feature_type == "CDS" else f"other {feature_type}s")
 
 
-def _resolve_legend_feature_color(default_colors: DataFrame, feature_type: str) -> str:
-    matching_rows = default_colors[default_colors["feature_type"] == feature_type]
-    if not matching_rows.empty:
-        return str(matching_rows["color"].values[0])
-
-    default_rows = default_colors[default_colors["feature_type"] == "default"]
-    if not default_rows.empty:
-        return str(default_rows["color"].values[0])
-
-    return "#d3d3d3"
-
-
 def _solid_legend_entry(fill: object, stroke: object, width: object) -> dict[str, object]:
     return {"type": "solid", "fill": fill, "stroke": stroke, "width": width}
 
@@ -712,8 +701,10 @@ def _generated_legend_rows(
 ) -> dict[str, dict[str, object]]:
     """The renderer's own legend rows by key, as drawn: feature types, "other ...", and numeric tracks."""
 
+    # A type's row shows the color its features are drawn in (one owner, OV-3114).
+    type_colors = build_default_color_map(default_colors)
     rows: dict[str, dict[str, object]] = {
-        key: _solid_legend_entry(_resolve_legend_feature_color(default_colors, feature_type), *block_stroke)
+        key: _solid_legend_entry(feature_type_color(type_colors, feature_type), *block_stroke)
         for feature_type, key in feature_type_rows(
             feature_specific_colors, features_present, used_color_rules, default_used_features
         )

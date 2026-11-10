@@ -368,18 +368,31 @@ export const appliedFeatureColors = ({ paletteDefinitions, appliedPaletteName, a
   return colors;
 };
 
-// The palette color of a feature type, else undefined. A type is file text
+// The color of a feature type in a palette: its own entry, else the palette's
+// `default`, as Python draws it (gbdraw/features/colors.py
+// `feature_type_color`; twin `concern:color-precedence`). A type is file text
 // (GFF3), so only an own key of the palette names a color: `constructor` or
-// `toString` is none.
+// `toString` takes the `default`. Undefined when the palette has neither.
+/**
+ * @param {Readonly<Record<string, string>>} colors
+ * @param {unknown} type
+ * @returns {string | undefined}
+ */
+export const paletteFeatureColor = (colors, type) => {
+  const key = String(type ?? '');
+  if (Object.hasOwn(colors, key) && colors[key]) return colors[key];
+  return Object.hasOwn(colors, 'default') && colors.default ? colors.default : undefined;
+};
+
+// The applied palette's color of a feature type (`paletteFeatureColor`).
 /**
  * @param {Parameters<typeof appliedFeatureColors>[0]} state
  * @param {string | undefined} type
  * @returns {string | undefined}
  */
-export const appliedFeatureColorOf = (state, type) => {
-  const colors = appliedFeatureColors(state);
-  return type !== undefined && Object.hasOwn(colors, type) ? colors[type] : undefined;
-};
+export const appliedFeatureColorOf = (state, type) => (
+  type === undefined ? undefined : paletteFeatureColor(appliedFeatureColors(state), type)
+);
 
 // One color, compared: case, a color name, and `#rgb` against `#rrggbb` (D-15).
 /** @param {unknown} colorValue */

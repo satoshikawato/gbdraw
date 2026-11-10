@@ -379,6 +379,25 @@ def test_every_built_in_palette_tells_repeats_misc_features_and_other_types_apar
     assert same == {}
 
 
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize("palette", ["default", "edelweiss"])
+def test_a_type_the_palette_does_not_list_is_drawn_and_listed_in_the_palette_default(
+    mode: str, palette: str, tmp_path: Path
+) -> None:
+    # OV-3114 (review F1): D-loop has no palette entry. Its features were filled
+    # with a fixed #d3d3d3 while its Legend row showed the palette's `default`.
+    _run_cli(
+        mode, "--gbk", str(REPO / "tests" / "test_inputs" / "HmmtDNA.gbk"),
+        "-k", "D-loop", "-p", palette, "-o", str(tmp_path / "out"), "-f", "svg",
+    )
+    svg = (tmp_path / "out.svg").read_text(encoding="utf-8")
+    fills = set(re.findall(r'<path [^>]*data-gbdraw-feature-part="block"[^>]*fill="([^"]+)"', svg))
+    legend = re.search(r'<g data-legend-key="D-loop">.*?fill="([^"]+)"', svg, re.S)
+    expected = load_default_colors("", palette).set_index("feature_type").at["default", "color"]
+    assert fills == {expected}
+    assert legend is not None and legend.group(1) == expected
+
+
 @pytest.mark.parametrize("session_path", GALLERY_SESSIONS, ids=lambda path: path.name)
 def test_every_gallery_session_passes_request_preparation(session_path: Path) -> None:
     # Decode and input preparation only: the render-time checks (depth, skew

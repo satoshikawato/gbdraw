@@ -8,7 +8,7 @@
 /** @import { LegendCaption, RecordedLegendColor } from '../services/drawing/paint.js' */
 /** @import { DisplayedLegendState } from '../services/feature-visibility.js' */
 /** @import { AddressedFeature } from '../services/feature-override-identity.js' */
-import { appliedFeatureColors, readCommittedPaint, samePaint } from '../utils/color-utils.js';
+import { appliedFeatureColors, paletteFeatureColor, readCommittedPaint, samePaint } from '../utils/color-utils.js';
 import { hasOwnEntry } from '../utils/own-entry.js';
 import { defaultLegendKeyOrder, isLegendOrderEdited } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
@@ -237,11 +237,18 @@ export const namedLegendCaption = (override, rules) => (
 // The color Python gives a Legend row it draws by itself: a track's row by
 // the slot that draws it (`trackRowColor`: the slot's own color, else the
 // palette's; OV-484), else the palette color of the feature type the row
-// names (`generatedLegendRow`).
-/** @param {PythonLegendKey} key @param {Record<string, string>} palette @param {TrackLegendRows} trackRows */
-const paletteLegendColor = (key, palette, trackRows) => {
+// names (`generatedLegendRow`): a drawn type's color is its features'
+// (`paletteFeatureColor`, the palette's `default` for an unlisted type;
+// OV-3114).
+/**
+ * @param {PythonLegendKey} key @param {Record<string, string>} palette @param {TrackLegendRows} trackRows
+ * @param {ReadonlySet<string>} drawnTypes
+ */
+const paletteLegendColor = (key, palette, trackRows, drawnTypes) => {
   const track = trackRows.get(key);
-  return track ? trackRowColor(track, palette) : palette[generatedLegendRow(key).paletteKey] || '';
+  if (track) return trackRowColor(track, palette);
+  const { paletteKey } = generatedLegendRow(key);
+  return (drawnTypes.has(paletteKey) ? paletteFeatureColor(palette, paletteKey) : palette[paletteKey]) || '';
 };
 
 // The color the draft gives the features of a Legend row (its Python key)
@@ -266,6 +273,7 @@ const paletteLegendColor = (key, palette, trackRows) => {
  */
 export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features = [], originalLegendOrder, paletteColors, drawnTracks, sharedLegendKeys }) => {
   const trackRows = trackLegendRows(drawnTracks, pythonRows, sharedLegendKeys);
+  const drawnTypes = new Set(Array.from(features, (feature) => text(feature?.type)));
   // Read once for both readers: the row keys (`rowsLeftOut`) and the rules that draw a row.
   const ruleMatches = rules.some((rule) => text(rule?.cap)) ? drawnRuleMatches({ rules, features }) : undefined;
   const rowOf = ruleLegendCaptions({ rules: [...rules], pythonRows, features, originalLegendOrder: [...originalLegendOrder] }, ruleMatches);
@@ -285,7 +293,7 @@ export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features =
     ruleCaptions: [...ruleColors.keys()],
     rowOf,
     colorOf: (key) => {
-      const color = normalizePaint(ruleColors.get(key) || paletteLegendColor(key, paletteColors, trackRows), 'legend color');
+      const color = normalizePaint(ruleColors.get(key) || paletteLegendColor(key, paletteColors, trackRows, drawnTypes), 'legend color');
       return color ? /** @type {SwatchColor} */ (color) : null;
     }
   };
@@ -381,15 +389,6 @@ const shownColor = (derived) => (entry) => (
 );
 /** The colors the rows of a drawing without a displayed Result show: the colors they record. */
 export const RECORDED_LEGEND_ROW_COLORS = Object.freeze({ listed: shownColor(new Map()), deleted: shownColor(new Map()) });
-
-// Python's fill of a feature type (gbdraw/features/colors.py
-// `default_color_map.get(feature.type, "#d3d3d3")`): the palette has no
-// fallback key.
-/** @param {Record<string, string>} palette @param {unknown} type */
-const paletteFeatureColor = (palette, type) => {
-  const key = String(type ?? '');
-  return (hasOwn(palette, key) && palette[key]) || '#d3d3d3';
-};
 
 // The stages of one compile and the operation domains each one writes. Generate
 // runs every stage but `rules`; a live display runs the stages of the domains
@@ -557,7 +556,9 @@ const compilePlanBundle = ({
           operations.featureFills.push({ renderedId, color: null });
           return;
         }
-        const color = normalizePaint(rule ? rule.color : paletteFeatureColor(paletteColors, feature.type), 'feature fill');
+        // A palette without the type and a `default` keeps what Python drew.
+        const paint = rule ? rule.color : paletteFeatureColor(paletteColors, feature.type);
+        const color = paint === undefined ? null : normalizePaint(paint, 'feature fill');
         if (color && !samePaint(color, pythonFill(renderedId, feature))) operations.featureFills.push({ renderedId, color });
       });
     });
