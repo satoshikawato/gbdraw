@@ -3193,9 +3193,14 @@ const LIST_FOCUS_PAGE = `<!doctype html><html><body>
 <script type="module">
 import { keepsListFocus } from './js/app/list-focus.js';
 import { committedValue } from './js/app/committed-value.js';
-const state = window.S = Vue.reactive({ rows: [{ id: 'a', name: 'Alpha' }, { id: 'b', name: 'Beta' }], dialog: false });
+const state = window.S = Vue.reactive({
+  rows: [{ id: 'a', name: 'Alpha' }, { id: 'b', name: 'Beta' }, { id: 'c', name: 'Gamma' }], dialog: false
+});
 window.commits = [];
 window.focusouts = [];
+// Every \`change\`, the browser's included, seen before the list can hold it back.
+window.changes = [];
+document.addEventListener('change', (event) => window.changes.push(event.target.getAttribute('aria-label')), true);
 // A commit by the row's place, as the Legend list's rename makes it.
 const commit = (idx, value) => {
   const row = state.rows[idx];
@@ -3235,8 +3240,10 @@ test('A Legend list field ends its edit when a dialog takes its focus, and commi
     await open();
     await typeX();
     if (moveFirst) {
-      await page.evaluate(() => { window.S.rows.reverse(); });
+      // Row a goes to the end, so Vue moves its element: the browser's `change` is held back and owed.
+      await page.evaluate(() => { window.S.rows.push(window.S.rows.shift()); });
       await expect(page.getByLabel('name a', { exact: true })).toBeFocused();
+      expect(await page.evaluate(() => [window.changes, window.commits]), 'a change was held back').toEqual([['name a'], []]);
     }
     await page.evaluate(() => {
       window.removed = document.activeElement;
