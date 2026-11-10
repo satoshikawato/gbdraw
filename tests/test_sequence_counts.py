@@ -258,11 +258,11 @@ def test_a_render_reads_no_whole_file_record_after_its_parse_pass(
     whole: list[int] = []
     edges: list[int] = []
     expanded: list[int] = []
-    read, row_bases = record_sequences.RecordSequence._read, record_sequences._SequenceTable._row_bases
+    read, row_bases = record_sequences.RecordSequence._read, record_sequences._SequenceTable.row_bases
     expand = input_text.GzipExpansion.read
     monkeypatch.setattr(record_sequences.RecordSequence, "_read",
                         lambda self, start, stop: whole.append(stop - start) or read(self, start, stop))
-    monkeypatch.setattr(record_sequences._SequenceTable, "_row_bases",
+    monkeypatch.setattr(record_sequences._SequenceTable, "row_bases",
                         lambda self, *args: edges.append(len(data := row_bases(self, *args))) or data)
     monkeypatch.setattr(input_text.GzipExpansion, "read",
                         lambda self, size: expanded.append(len(data := expand(self, size))) or data)
@@ -304,8 +304,8 @@ def test_the_auto_windows_of_a_record_of_1_mbp_or_more_read_no_bases(
     bases = _random_bases(13, 1_234_567, b"ACGTNacgt")
     path = _fasta(tmp_path / "m.fasta", bases, width=80)
     edges: list[int] = []
-    row_bases = record_sequences._SequenceTable._row_bases
-    monkeypatch.setattr(record_sequences._SequenceTable, "_row_bases",
+    row_bases = record_sequences._SequenceTable.row_bases
+    monkeypatch.setattr(record_sequences._SequenceTable, "row_bases",
                         lambda self, *args: edges.append(len(data := row_bases(self, *args))) or data)
     args = ["circular", "--fasta", str(path), "-o", str(tmp_path / "out"), "-f", "svg"]
     if topology == "circular":
@@ -313,3 +313,87 @@ def test_the_auto_windows_of_a_record_of_1_mbp_or_more_read_no_bases(
     result = run_gbdraw(args, cwd=tmp_path)
     assert result.returncode == 0, result.stderr
     assert sum(edges) == 0 if topology == "linear" else len(edges) <= 12 and sum(edges) <= 12 * base_counts.ROW_BASES
+
+
+# The holders of count rows (review of G1b part 2: S-A, S-B, S-C).
+
+
+def test_a_file_s_records_let_it_go_without_a_cyclic_collection_after_counts(tmp_path: Path) -> None:
+    """Rows hold no reader of their bases, so no cycle keeps a table, its file, its handle or its cache blocks
+    alive after the last record goes (a bound method in the rows did until a cyclic collection)."""
+
+    import gc
+    import weakref
+
+    gc.collect()
+    gc.disable()
+    try:
+        records = read_sequence_file_records(str(_fasta(tmp_path / "c.fasta", _random_bases(23, 50_000))), "fasta")
+        table = records[0].seq._data._bases
+        known_base_counts_at(records[0].seq, np.array([12_345, 50_000], dtype=np.int64))
+        known_base_counts_at(sequence_view(records[0].seq, 101, 40_000, strand=-1), np.array([7, 999], dtype=np.int64))
+        gone = [weakref.ref(table), weakref.ref(table.source)]
+        del records, table
+        assert [ref() for ref in gone] == [None, None]
+        held = len(record_sequences._HELD)
+        seq = Seq(_random_bases(29, 5_000))
+        known_base_counts_at(sequence_view(seq, 3, 4_000), np.array([1_234], dtype=np.int64))
+        assert len(record_sequences._HELD) == held + 1
+        del seq
+        assert len(record_sequences._HELD) == held
+    finally:
+        gc.enable()
+
+
+def test_first_counts_from_many_threads_agree(tmp_path: Path) -> None:
+    """A record's rows are built when its parse pass ends, and bases held in memory build theirs once under a
+    lock, so threads asking for the first counts at once all get them (lazy rows raised IndexError)."""
+
+    import sys
+    import threading
+
+    bases = _random_bases(31, 300_000)
+    (record,) = read_sequence_file_records(str(_fasta(tmp_path / "t.fasta", bases)), "fasta")
+    assert record.seq._data._bases._rows is not None  # built by the parse pass, before any reader
+    expected = [row[0] for row in _oracle(bases, [len(bases)])]
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)
+    try:
+        for seq in (record.seq, Seq(bases), Seq(bases)):
+            results: list[list[int]] = []
+            barrier = threading.Barrier(8)
+
+            def count(seq: Seq = seq) -> None:
+                barrier.wait()
+                results.append(known_base_counts(sequence_view(seq, 0, len(bases))).tolist())
+
+            threads = [threading.Thread(target=count) for _ in range(8)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            assert results == [expected] * 8
+    finally:
+        sys.setswitchinterval(interval)
+
+
+def test_an_api_render_of_a_read_record_counts_its_bases_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A record the Python API reads holds its bases in memory and keeps the rows its parse pass counted: the
+    render counts no base again (it counted the 2 Mbp eight more times, rebuilding rows per call)."""
+
+    import gbdraw
+
+    path = _fasta(tmp_path / "api.fasta", _random_bases(19, 2_000_000, b"ACGTNacgt"), width=80)
+    counted = [0]
+    real = record_sequences.count_rows
+
+    def count_rows(data: bytes, *args: object) -> object:
+        counted[0] += len(data)
+        return real(data, *args)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(record_sequences, "count_rows", count_rows)
+    records = gbdraw.read_fasta(str(path))
+    parsed = counted[0]
+    assert parsed <= path.stat().st_size  # the parse pass, once
+    assert "<svg" in gbdraw.draw_circular(records).to_svg()
+    assert counted[0] == parsed
