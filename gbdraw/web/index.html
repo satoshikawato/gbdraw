@@ -9609,7 +9609,7 @@
                         <label class="flex min-w-0 items-start gap-2" :class="row.offered ? 'cursor-pointer' : 'cursor-not-allowed'">
                             <input type="radio" name="label-fit-row" data-history-ignore class="mt-1 shrink-0" :value="row.kind"
                                    :checked="labelFitDialog.selectedKind === row.kind" :disabled="!row.offered"
-                                   @change="labelFitDialog.selectedKind = row.kind">
+                                   @change="chooseLabelFitRow(row.kind)">
                             <span class="min-w-0 flex-1">
                                 <span class="block font-semibold first-letter:uppercase" :class="row.offered ? 'text-slate-800' : ''">{{ tm(row.title) }}</span>
                                 <span v-if="row.offered" class="block text-xs text-slate-600">

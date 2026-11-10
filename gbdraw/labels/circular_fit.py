@@ -486,8 +486,8 @@ class CircularLabelFitSearch:
     def rows(self, *, deadline: float | None = None) -> tuple[LabelFitRow, ...]:
         """The rows that apply, in the dialog order, searched until ``deadline``.
 
-        Rows that leave crossings or labels over the definition text come
-        after the others (LP-D57).
+        Rows that leave crossings, labels over the definition text, or a
+        region label warning come after the others (LP-D57, OV-3105).
         """
 
         found: dict[LabelFitRowKind, LabelFitRow] = {}
@@ -530,10 +530,22 @@ class CircularLabelFitSearch:
         if kind in self._rows:
             return self._rows[kind]
         self._unfinished = False
-        computed = self._compute(kind)
+        row, value = self._compute(kind)
+        computed = self._with_region_notice(row), value
         if not self._unfinished:
             self._rows[kind] = computed
         return computed
+
+    def _with_region_notice(self, row: LabelFitRow) -> LabelFitRow:
+        """A label row that fits the labels it moves draws with the notice when its figure keeps a region label
+        warning, which no label row moves (OV-3105); its grid value still bounds the rows that start from it."""
+
+        if row.status != "found" or row.kind in DEFINITION_ROW_KINDS or row.values is None:
+            return row
+        fit = self._verifications[_settings_key(row.values)].fit
+        if fit is None or not fit.region_warnings:
+            return row
+        return replace(row, status="found_with_notice", remaining=fit)
 
     def _compute(self, kind: LabelFitRowKind) -> tuple[LabelFitRow, float | None]:
         if kind in _SWITCH_VALUES:
@@ -742,8 +754,9 @@ class CircularLabelFitSearch:
 
 
 def _row_verification(kind: LabelFitRowKind, verification: LabelFitVerification) -> LabelFitVerification:
-    """A full assembly as one row reads it: the label rows answer for the labels, the definition rows for the
-    definition text over a track (D-12); an assembly that stops is read as it is."""
+    """A full assembly as one row reads it: the label rows answer for the labels they move, not for the region
+    labels (``_UNMOVED_LABEL_KINDS``; ``_with_region_notice`` says which warning stays, OV-3105), the definition
+    rows for the definition text over a track (D-12); an assembly that stops is read as it is."""
 
     fit = verification.fit
     if verification.outcome == "stop" or fit is None:
@@ -751,7 +764,7 @@ def _row_verification(kind: LabelFitRowKind, verification: LabelFitVerification)
     if kind in DEFINITION_ROW_KINDS:
         outcome: LabelFitOutcome = "fits" if fit.definition_track_overlaps == 0 else "warn"
     else:
-        outcome = label_fit_outcome([replace(fit, definition_track_overlaps=0)])
+        outcome = label_fit_outcome([replace(fit.without_region_warnings(), definition_track_overlaps=0)])
     return replace(verification, outcome=outcome)
 
 

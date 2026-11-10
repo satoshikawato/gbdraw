@@ -3099,7 +3099,7 @@ export const createAppSetup = () => {
 
   // Labels that do not fit (LP-D43, LP-D48): the dialog over a Generate that
   // drew nothing, or over crossing leaders from the notice bar.
-  const { labelFitDialog, openLabelFitDialog, resolveLabelFitChoice, editLabelFitRecordText } = createLabelFitDialog({
+  const { labelFitDialog, openLabelFitDialog, chooseLabelFitRow, resolveLabelFitChoice, editLabelFitRecordText } = createLabelFitDialog({
     reactive,
     computeRow: async (rowToken, kind) => (await runDiagramHelperOperation(
       DIAGRAM_HELPER_OPERATIONS.COMPUTE_LABEL_FIT_ROW, { rowToken, kind }
@@ -3411,7 +3411,7 @@ export const createAppSetup = () => {
     shownInputSummary,
     shownInputSummaryStale,
     openLabelFitNotice,
-    resolveLabelFitChoice,
+    chooseLabelFitRow, resolveLabelFitChoice,
     editLabelFitRecordText,
     sessionSaveAvailable,
     sessionLoadAvailable,

@@ -66,9 +66,11 @@ LabelFitRowKind: TypeAlias = Literal[
 DEFINITION_ROW_KINDS: frozenset[LabelFitRowKind] = frozenset({"smaller_definition_font", "narrow_tracks"})
 # ``found``: ``values`` fit; ``found_with_notice``: ``values`` leave no
 # overlapping labels but leave crossing leaders or labels over the definition
-# text, so the figure draws with the notice (LP-D57; offered only when nothing
-# was drawn); ``not_found``: no value within the lever's limit (``reason`` says
-# which); ``not_computed``: the bounded search stopped first.
+# text (LP-D57; offered only when nothing was drawn), or a Circular label row
+# fits the labels it moves while its figure keeps a region label warning
+# (OV-3105), so the figure draws with the notice; ``not_found``: no value
+# within the lever's limit (``reason`` says which); ``not_computed``: the
+# bounded search stopped first.
 LabelFitRowStatus: TypeAlias = Literal["found", "found_with_notice", "not_found", "not_computed"]
 # A row sets numbers (offsets, font size, spacing), words (label scope,
 # placement) and switches (separate overlapping features).
@@ -187,6 +189,25 @@ class LabelFit:
         """The region labels left out, and so not among the drawn ones a record counts."""
 
         return self.region_rooms_past_centre + self.region_rooms_clipped + self.region_cuts_left_out
+
+    @property
+    def region_warnings(self) -> int:
+        """The region label warnings: overlaps, cuts, labels on other tracks, and labels left out."""
+
+        return self.region_overlaps + self.region_cuts + self.region_track_overlaps + self.region_left_out
+
+    def without_region_warnings(self) -> LabelFit:
+        """The fit with no region label warning: what a row that moves no region label answers for."""
+
+        return replace(
+            self,
+            region_overlaps=0,
+            region_cuts=0,
+            region_track_overlaps=0,
+            region_rooms_past_centre=0,
+            region_rooms_clipped=0,
+            region_cuts_left_out=0,
+        )
 
     @property
     def fits(self) -> bool:
@@ -505,8 +526,8 @@ class LabelFitRow:
     ``values`` maps config paths to the values to set and ``canvas_size`` is
     the (width, height) of the verified figure; both are set only when
     ``status`` is ``found`` or ``found_with_notice``. ``remaining`` is what a
-    ``found_with_notice`` row leaves: crossing leaders and labels over the
-    definition text.
+    ``found_with_notice`` row leaves: crossing leaders, labels over the
+    definition text, and region label warnings.
     """
 
     kind: LabelFitRowKind
@@ -759,8 +780,9 @@ def fit_counts(fit: LabelFit) -> str:
 
 
 def row_note(row: LabelFitRow) -> str | None:
-    """What a ``found_with_notice`` row leaves of what it answers for, in the counts' words: crossing leaders and
-    labels over the definition text for a label row (LP-D57), definition lines over a track for a definition row."""
+    """What a ``found_with_notice`` row leaves, in the counts' words: crossing leaders, labels over the definition
+    text (LP-D57) and region label warnings (OV-3108) for a label row, definition lines over a track for a
+    definition row."""
 
     remaining = row.remaining
     if row.status != "found_with_notice" or remaining is None:
@@ -779,6 +801,15 @@ def row_note(row: LabelFitRow) -> str | None:
         notes.append(
             _counted(remaining.definition_overlaps, "label still covers", "labels still cover")
             + " the definition text"
+        )
+    if remaining.region_overlaps:
+        notes.append(
+            _counted(remaining.region_overlaps, "region label still overlaps", "region labels still overlap")
+            + " other labels or lines"
+        )
+    if other_region_warnings := remaining.region_warnings - remaining.region_overlaps:
+        notes.append(
+            _counted(other_region_warnings, "other region label warning stays", "other region label warnings stay")
         )
     return " and ".join(notes) or None
 

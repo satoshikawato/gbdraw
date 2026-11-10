@@ -416,7 +416,12 @@ limit. When nothing was drawn and a row has no value that fits, it gives the
 mildest value that leaves no overlapping labels, if there is one, and says how
 many leader pairs still cross or labels still cover the definition text. Such
 a row comes after the others; running again with it draws the figure with the
-warning. With several records, one value must fit every record. The outer-label
+warning. The label rows answer for the labels they move, not for region
+labels: a row whose figure still has a region label warning is offered the
+same way, says how many region labels still overlap other labels or lines (or
+how many other region label warnings stay), and comes after the rows that fit.
+The Web app's **Choose a fix** first selects a row that fits, when there is
+one. With several records, one value must fit every record. The outer-label
 rows do not move inner, embedded, or radial labels. For inner, embedded, or radial
 labels, the switches are tried first; the smaller font is then the first
 font size, going down from the current one, at which the whole figure fits, so

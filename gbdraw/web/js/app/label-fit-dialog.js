@@ -2,7 +2,9 @@
 // The "Labels do not fit" dialog (LP-D43, LP-D45 SHOW-ALL, LP-D48
 // WARN-NOTICE): the rows of Python's label fit report in its order, each with
 // the settings it changes and the canvas size, or disabled with its reason. A
-// row that leaves crossing leaders says so and draws with the notice (LP-D57).
+// row that leaves crossing leaders or a region label warning says so and draws
+// with the notice (LP-D57, OV-3105); the first row that fits is selected before
+// it, until the user chooses a row.
 // A Generate that drew nothing opens it; crossing leaders or labels over the
 // definition text open it from the notice bar over the drawn figure. Rows a
 // bounded search did not reach are computed here, one after another, by the
@@ -39,7 +41,8 @@ import { msg } from '../utils/i18n.js';
  * @property {readonly LabelFitSetting[]} settings
  * @property {{ width: number, height: number } | null} canvasSize
  * @property {string | null} reason
- * @property {string | null} note What the row leaves (crossing leaders, labels over the definition text).
+ * @property {string | null} note What the row leaves (crossing leaders, labels over the definition text, region
+ *   label warnings).
  */
 /**
  * @typedef {object} LabelFitDialogState
@@ -137,6 +140,23 @@ const definitionRecordsOf = (report) => {
   return [...records.values()];
 };
 
+/**
+ * The row to select: the first row that fits, else the first that draws with the notice (OV-3105). Python orders the
+ * rows a search computed so, but the rows the dialog computes arrive one by one in the report's order, so a row that
+ * fits may come after a selected row with the notice: the selection moves to it unless the selected row is `kept`
+ * (the user chose it, or Apply or Cancel waits for the row being computed).
+ * @param {readonly LabelFitDialogRow[]} rows
+ * @param {LabelFitRowKind | ''} selectedKind
+ * @param {boolean} kept
+ * @returns {LabelFitRowKind | ''}
+ */
+const rowToSelect = (rows, selectedKind, kept) => {
+  const selected = rows.find((row) => row.kind === selectedKind && row.offered);
+  if (selected && (kept || selected.status === 'found')) return selected.kind;
+  const offered = rows.filter((row) => row.offered);
+  return (offered.find((row) => row.status === 'found') || offered[0])?.kind || '';
+};
+
 /** @param {LabelFitDialogPorts} ports */
 export const createLabelFitDialog = ({
   reactive, computeRow, writeRowSettings, withHistory, closeAfterChoice, choicePending, runAnalysis, errorSummary,
@@ -160,6 +180,8 @@ export const createLabelFitDialog = ({
   let reportRemedies = [];
   /** @type {LargerFigure | null} The requested sides the report's `figure_size` remedy names. */
   let reportLargerFigure = null;
+  /** True once the user chose a row in this opening of the dialog. */
+  let rowChosen = false;
 
   const close = () => { dialog.show = false; openCount += 1; };
   // Python names the ways for a stop and for a report whose rows have no value; a row still to compute may fit, so
@@ -174,12 +196,12 @@ export const createLabelFitDialog = ({
     if (index >= 0) dialog.rows[index] = { ...dialog.rows[index], ...update };
     listRemedies();
   };
-  // Python orders the rows that fit before those that draw with the notice.
+  // Apply or Cancel waits for the row being computed: the row shown selected is the one applied.
   const selectFirstOffered = () => {
-    const selected = rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind));
-    if (selected && labelFitRowOffered(selected.status)) return;
-    dialog.selectedKind = dialog.rows.find((row) => row.offered)?.kind || '';
+    dialog.selectedKind = rowToSelect(dialog.rows, dialog.selectedKind, rowChosen || dialog.finishing);
   };
+  /** The user's choice (a row's radio button), which no row computed later replaces. @param {LabelFitRowKind} kind */
+  const chooseLabelFitRow = (kind) => { dialog.selectedKind = kind; rowChosen = true; };
 
   /**
    * @param {number} opened
@@ -230,6 +252,7 @@ export const createLabelFitDialog = ({
     dialog.rows = report.rows.map(displayRow);
     listRemedies();
     dialog.selectedKind = '';
+    rowChosen = false;
     dialog.finishing = false;
     selectFirstOffered();
     dialog.show = true;
@@ -280,5 +303,5 @@ export const createLabelFitDialog = ({
     return dialog.show ? false : showRecordText(recordIndex);
   };
 
-  return { labelFitDialog: dialog, openLabelFitDialog, resolveLabelFitChoice, editLabelFitRecordText };
+  return { labelFitDialog: dialog, openLabelFitDialog, chooseLabelFitRow, resolveLabelFitChoice, editLabelFitRecordText };
 };
