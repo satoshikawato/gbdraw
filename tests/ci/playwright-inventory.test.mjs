@@ -49,7 +49,7 @@ test('comparison browser contracts run in the required PR contract job and full 
   const contracts = collect(...args);
   const full = new Set(collect('test', '--config=tests/web/playwright/functional.config.js'));
   const smoke = new Set(collect('test', '--config=tests/web/playwright/pr-smoke.config.js'));
-  assert.equal(contracts.length, 16);
+  assert.equal(contracts.length, 20);
   assert.ok(contracts.includes('comparison-ui.playwright.spec.js:comparison controls drive appearance and current Session round trips'));
   assert.ok(contracts.includes('linear-multi-record.playwright.spec.js:Collinear inference checkbox skips self searches and reuses matching evidence'));
   assert.ok(contracts.includes('linear-multi-record.playwright.spec.js:protein raw cache survives cancellation and derived options preserve search identity'));
