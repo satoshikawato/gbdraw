@@ -65,7 +65,7 @@ def _random_bases(seed: int, size: int, letters: bytes = b"ACGTNacgtuURY-") -> b
     return np.frombuffer(letters, dtype=np.uint8)[rng.integers(0, len(letters), size=size)].tobytes()
 
 
-@pytest.mark.parametrize("held", ["fasta", "fasta.gz", "genbank", "Seq", "MutableSeq", "bytes"])
+@pytest.mark.parametrize("held", ["fasta", "fasta.gz", "genbank", "Seq", "MutableSeq"])
 def test_counts_of_any_span_equal_a_whole_copy_s_count(held: str, tmp_path: Path, small_rows: int) -> None:
     bases = _random_bases(7, 3_000, b"ACGTNacgtuURY") if held == "genbank" else _random_bases(7, 3_000)
     if held.startswith("fasta"):
@@ -77,7 +77,7 @@ def test_counts_of_any_span_equal_a_whole_copy_s_count(held: str, tmp_path: Path
         seq = record.seq
         bases = bytes(record.seq)
     else:
-        seq = {"Seq": Seq, "MutableSeq": MutableSeq, "bytes": bytes}[held](bases)
+        seq = {"Seq": Seq, "MutableSeq": MutableSeq}[held](bases)
     positions = np.array([40, 0, 2_999, 7, 7, 8, 9, 16, 3_000, 3_200, -5, 1_234], dtype=np.int64)
     assert known_base_counts_at(seq, positions).tolist() == _oracle(bases, positions)
     assert known_base_counts(seq).tolist() == [row[0] for row in _oracle(bases, [len(bases)])]
@@ -238,6 +238,9 @@ def test_every_byte_counts_as_the_counting_rule_says() -> None:
     every = np.frombuffer(bytes(range(256)) * 3, dtype=np.uint8)
     positions = np.arange(0, len(every) + 1, dtype=np.intp)
     assert base_counts.known_prefix_counts(every.tobytes(), positions).tolist() == _oracle(every.tobytes(), positions)
+    # The count rows read the same rule (R4-2): their totals over every byte are the histogram's.
+    rows = base_counts.count_rows(every.tobytes(), 0).rows
+    assert rows.sum(axis=0).tolist() == base_counts.byte_counts(every.tobytes())[base_counts.KNOWN].tolist()
 
 
 @pytest.mark.parametrize("compress", [False, True], ids=["plain", "gzip"])
@@ -375,6 +378,50 @@ def test_first_counts_from_many_threads_agree(tmp_path: Path) -> None:
             assert results == [expected] * 8
     finally:
         sys.setswitchinterval(interval)
+
+
+def test_bases_in_memory_asked_from_many_threads_are_counted_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One holder per bytes object, built under a lock, and its rows counted once under its own lock: threads that
+    first count the same new bases (each through its own ``Seq``) count them once together. Slow holders and slow
+    counts open the window each lock closes; without either lock the bases are counted several times."""
+
+    import threading
+    import time
+
+    bases = _random_bases(33, 20_000)
+    counted: list[int] = []
+    count_rows = record_sequences.count_rows
+
+    def slow_count_rows(data: bytes, *args: object, **kwargs: object) -> base_counts.CountedRows:
+        counted.append(len(data))
+        time.sleep(0.01)
+        return count_rows(data, *args, **kwargs)  # type: ignore[arg-type]
+
+    class SlowHeldBases(record_sequences._HeldBases):
+        __slots__ = ()
+
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            time.sleep(0.01)
+            super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(record_sequences, "count_rows", slow_count_rows)
+    monkeypatch.setattr(record_sequences, "_HeldBases", SlowHeldBases)
+    seqs = [Seq(bases) for _ in range(8)]
+    assert len({id(seq._data) for seq in seqs}) == 1  # one bytes object
+    results: list[list[int]] = []
+    barrier = threading.Barrier(len(seqs))
+
+    def count(seq: Seq) -> None:
+        barrier.wait()
+        results.append(known_base_counts(seq).tolist())
+
+    threads = [threading.Thread(target=count, args=(seq,)) for seq in seqs]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert results == [[row[0] for row in _oracle(bases, [len(bases)])]] * len(seqs)
+    assert sum(counted) == len(bases)
 
 
 def test_an_api_render_of_a_read_record_counts_its_bases_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

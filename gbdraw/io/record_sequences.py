@@ -117,7 +117,6 @@ _FASTA_LINES = 4  # FASTA lines that are not ASCII: Biopython's text rule
 # A run is counted from its raw bytes, a chunk of it per histogram call (any split of a run decodes alone); lines
 # read line by line are counted from their bases.
 _RUN_MATRICES = {_FLAT_RUN: count_matrix(_FLAT_DELETE), _FASTA_RUN: count_matrix(_FASTA_DELETE)}
-_RUN_DELETE = {_FLAT_RUN: _FLAT_DELETE, _FASTA_RUN: _FASTA_DELETE}
 assert _CHUNK_BYTES == SLICE_BYTES and _CHUNK_BYTES <= 1 << 16  # a row's offset in its chunk is a ``uint16``
 _FLAT_KEPT = np.ones(256, dtype=bool)
 _FLAT_KEPT[list(_FLAT_DELETE)] = False
@@ -128,11 +127,10 @@ _EDGE_BATCH = 1 << 20  # most bases of edge rows counted together
 
 class _Rows(NamedTuple):
     """Count rows of a sequence's bases (``gbdraw.core.base_counts``): ``counts[j]`` (A, C, G and T, U as T,
-    either case) counts row ``first + j``, bases ``(first + j) * ROW_BASES`` up to the next row or ``end``.
+    either case) counts row ``j``, bases ``j * ROW_BASES`` up to the next row or ``end``.
     They hold no reader of the bases, so a holder that keeps its rows is not kept alive by them."""
 
     counts: NDArray[np.uint16]
-    first: int
     end: int
 
 
@@ -537,7 +535,7 @@ class _SequenceTable:
         """Join the count rows, once the parse pass has added every line, before any reader can ask for them."""
 
         self._row_offsets = [np.concatenate(self._row_offsets) if self._row_offsets else np.zeros(0, np.uint16)]
-        self._rows = _Rows(self._counts.joined(), 0, self.length)
+        self._rows = _Rows(self._counts.joined(), self.length)
 
     def rows(self) -> _Rows:
         """The count rows of the whole sequence."""
@@ -644,7 +642,7 @@ class _HeldBases:
     def rows(self) -> _Rows:
         with self._lock:
             if self._rows is None:
-                self._rows = _sliced_rows(self.read, 0, self.length)
+                self._rows = _sliced_rows(self.read, self.length)
             return self._rows
 
     def row_bases(self, row: int, size: int) -> bytes:
@@ -671,10 +669,10 @@ class RecordSequence(SequenceDataAbstractBaseClass):
     __slots__ = ("_bases", "_pieces", "_ends", "_reverse", "_translate")
 
     def __init__(
-        self, bases: _Bases | bytes, pieces: tuple[tuple[int, int], ...] | None = None, *,
+        self, bases: _Bases, pieces: tuple[tuple[int, int], ...] | None = None, *,
         reverse: bool = False, translate: bytes | None = None,
     ) -> None:
-        self._bases = _HeldBases(bases) if isinstance(bases, bytes) else bases
+        self._bases = bases
         self._pieces = ((0, self._bases.length),) if pieces is None else pieces
         self._ends = tuple(itertools.accumulate(stop - start for start, stop in self._pieces))
         self._reverse = reverse
@@ -769,21 +767,23 @@ def _viewed(seq: Seq | MutableSeq) -> RecordSequence | None:
 # ``Seq`` shares them): kept while the ``Seq`` that first read them lives, which keeps the bytes and so their
 # identity. The weakref callback takes no lock: it may run inside any allocation.
 _HELD: dict[int, tuple[weakref.ref[Seq], _HeldBases]] = {}
+_HELD_LOCK = threading.Lock()  # one holder per bytes object, so their rows are counted once
 
 
 def _held(seq: Seq, data: bytes, rows: _Rows | None = None) -> _HeldBases:
     key = id(data)
-    entry = _HELD.get(key)
-    if entry is not None and entry[1].bases is data:
-        return entry[1]
-    held = _HeldBases(data, rows)
 
-    def forget(ref: weakref.ref[Seq], key: int = key) -> None:
+    def forget(ref: weakref.ref[Seq], key: int = key) -> None:  # takes no lock: it runs as a finalizer
         if _HELD.get(key, (None,))[0] is ref:
             del _HELD[key]
 
-    _HELD[key] = (weakref.ref(seq, forget), held)
-    return held
+    with _HELD_LOCK:
+        entry = _HELD.get(key)
+        if entry is not None and entry[1].bases is data:
+            return entry[1]
+        held = _HeldBases(data, rows)
+        _HELD[key] = (weakref.ref(seq, forget), held)
+        return held
 
 
 def _then(first: bytes | None, second: bytes | None) -> bytes | None:
@@ -863,7 +863,7 @@ def _counts_at(rows: _Rows, at: NDArray[np.int64], read: Callable[[int, int], by
 
     grid = at // ROW_BASES
     ended = at >= rows.end
-    row = np.where(ended, len(rows.counts), grid - rows.first)
+    row = np.where(ended, len(rows.counts), grid)
     within = np.where(ended, 0, at - grid * ROW_BASES)
     result = _sums_before(rows.counts, row)
     need = np.flatnonzero(within > 0)
@@ -878,7 +878,7 @@ def _counts_at(rows: _Rows, at: NDArray[np.int64], read: Callable[[int, int], by
         while end < len(edge_rows) and size + lengths[end] <= _EDGE_BATCH:
             size += int(lengths[end])
             end += 1
-        bases = b"".join(read(rows.first + int(edge), int(length))
+        bases = b"".join(read(int(edge), int(length))
                          for edge, length in zip(edge_rows[group:end], lengths[group:end]))
         begins = np.concatenate(([0], np.cumsum(lengths[group:end])[:-1]))
         low, high = first[group], first[end] if end < len(first) else len(need)
@@ -890,15 +890,14 @@ def _counts_at(rows: _Rows, at: NDArray[np.int64], read: Callable[[int, int], by
     return result
 
 
-def _sliced_rows(read: Callable[[int, int], bytes], start: int, stop: int) -> _Rows:
-    """The count rows over bases ``start``..``stop - 1`` that ``read`` gives (bases held in memory), counted now on
-    the rows a record's parse pass counts, from the row ``start`` lies in."""
+def _sliced_rows(read: Callable[[int, int], bytes], stop: int) -> _Rows:
+    """The count rows of the bases ``0..stop - 1`` that ``read`` gives (bases held in memory), counted now on the
+    rows a record's parse pass counts."""
 
-    first = start // ROW_BASES
     counts = RowCounts()
-    for low in range(first * ROW_BASES, stop, SLICE_BYTES):
+    for low in range(0, stop, SLICE_BYTES):
         counts.add(count_rows(read(low, min(stop, low + SLICE_BYTES)), low).rows)
-    return _Rows(counts.joined(), first, stop)
+    return _Rows(counts.joined(), stop)
 
 
 @functools.lru_cache(maxsize=8)
@@ -928,7 +927,7 @@ def _count_class(byte: int) -> int:
     return int(np.argmax(counted)) if counted.any() else 4
 
 
-def known_base_counts_at(seq: Seq | MutableSeq | bytes, positions: NDArray[np.int64]) -> NDArray[np.int64]:
+def known_base_counts_at(seq: Seq | MutableSeq, positions: NDArray[np.int64]) -> NDArray[np.int64]:
     """Row ``b`` (A, C, G, T), column ``k``: the count of base ``b`` in ``seq[:positions[k]]`` (clipped to it).
 
     The one reader of base counts (``gbdraw.core.base_counts``: either case, U as T). A record
@@ -940,13 +939,13 @@ def known_base_counts_at(seq: Seq | MutableSeq | bytes, positions: NDArray[np.in
     """
 
     positions = np.clip(np.asarray(positions, dtype=np.int64), 0, len(seq))
-    data = _viewed(seq) if not isinstance(seq, bytes) else RecordSequence(seq)
+    data = _viewed(seq)
     order = None if data is None else _counted_order(data._translate)
     if data is None or order is None:
         def read(low: int, high: int) -> bytes:
             return bytes(seq[low:high])
 
-        return _counts_at(_sliced_rows(read, 0, len(seq)), positions,
+        return _counts_at(_sliced_rows(read, len(seq)), positions,
                           lambda row, size: read(row * ROW_BASES, min(len(seq), row * ROW_BASES + size)))
     length = len(data)
     # On the reverse strand the first p bases are the last p read forward: all of them less the first length - p.
@@ -965,7 +964,7 @@ def known_base_counts_at(seq: Seq | MutableSeq | bytes, positions: NDArray[np.in
     return counts[list(order)]
 
 
-def known_base_counts(seq: Seq | MutableSeq | bytes) -> NDArray[np.int64]:
+def known_base_counts(seq: Seq | MutableSeq) -> NDArray[np.int64]:
     """The counts of A, C, G and T in the whole of ``seq`` (:func:`known_base_counts_at`)."""
 
     return known_base_counts_at(seq, np.array([len(seq)], dtype=np.int64))[:, 0]
