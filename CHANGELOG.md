@@ -474,6 +474,17 @@ into the `[Unreleased]` list below.
   the previous build ran runs them once more at its first Generate, because a
   saved LOSAT result is reused only by the LOSAT build that wrote it; the
   results are the same.
+- Fixed: in the Web app, a LOSAT search that LOSAT itself ended with an error
+  (for example an option value it refuses) failed with "The operation failed
+  without recognized diagnostic information". The error now says that the
+  comparison search failed and shows LOSAT's own first error line, on the
+  serial and the threaded engine, for comparisons, Sequence search and Find
+  in other files. The two searches word the failure for the search and ask to
+  click Search again. A serial run no longer runs every search a second time on the page
+  after such a failure, and Auto no longer runs it again on the serial engine
+  after the threaded engine reported it; Auto still falls back to serial when
+  a thread of the threaded engine does not start (OV-3304, OV-3287, OV-3288,
+  OV-3289).
 - Added: one Linear row can show several windows of one record, leaving out
   the interval between them. Repeat `--region` for a record, or give the rows of
   a records table that are its windows one value in the new `record_group`

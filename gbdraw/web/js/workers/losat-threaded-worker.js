@@ -1,4 +1,6 @@
-import { compileLosatWasm, concatUint8Arrays, losatCommandArgs } from '../services/losat-runtime.js';
+import {
+  compileLosatWasm, concatUint8Arrays, losatCommandArgs, losatRunFailure, reportedLosatFailure
+} from '../services/losat-runtime.js';
 import { LOSAT_WASM_BUILD } from '../services/losat-build.generated.js';
 
 // The shared memory of a job: the initial pages the threaded file imports (recorded from the file), and at most
@@ -38,17 +40,19 @@ const terminateWorkers = async (workers) => {
   await Promise.allSettled(pending);
 };
 
-const attachThreadWorkerOutput = ({ worker, encoder, stdoutChunks, stderrChunks }) => {
+// What a thread writes is LOSAT's output. A thread worker's own error event or `type: 'error'` post reaches
+// `hostFailures` only after `wasi.start` has returned and `exitFailure` has classified the run, so it decides nothing:
+// a thread that does not start or fails reaches the run synchronously through its start and slot state (the other
+// `hostFailures` entries) or through the fault channel.
+const attachThreadWorkerOutput = ({ worker, encoder, stdoutChunks, stderrChunks, hostFailures }) => {
   worker.addEventListener('message', (event) => {
     const data = event.data || {};
     if (data.stderr) stderrChunks.push(encoder.encode(String(data.stderr)));
     if (data.stdout) stdoutChunks.push(encoder.encode(String(data.stdout)));
-    if (data.type === 'error' && data.error) {
-      stderrChunks.push(encoder.encode(`${data.error}\n`));
-    }
+    if (data.type === 'error' && data.error) hostFailures.push(String(data.error));
   });
   worker.addEventListener('error', (event) => {
-    stderrChunks.push(encoder.encode(`${event.message || 'LOSAT WASI thread worker error'}\n`));
+    hostFailures.push(event.message || 'LOSAT WASI thread worker error');
   });
 };
 
@@ -64,6 +68,7 @@ const prepareThreadWorker = ({
   encoder,
   stdoutChunks,
   stderrChunks,
+  hostFailures,
   timeoutMs = WORKER_PREPARE_TIMEOUT_MS
 }) =>
   new Promise((resolve, reject) => {
@@ -129,7 +134,7 @@ const prepareThreadWorker = ({
     try {
       worker = new Worker(childWorkerUrl, { type: 'module' });
       workers.add(worker);
-      attachThreadWorkerOutput({ worker, encoder, stdoutChunks, stderrChunks });
+      attachThreadWorkerOutput({ worker, encoder, stdoutChunks, stderrChunks, hostFailures });
       worker.addEventListener('message', handleMessage);
       worker.addEventListener('error', handleError);
       worker.addEventListener('messageerror', handleMessageError);
@@ -155,6 +160,17 @@ const prepareThreadWorker = ({
       });
     }
   });
+
+/**
+ * The failure of a job that exited with `exitCode`. After a failure of this host while LOSAT ran (a thread that could
+ * not start, a thread worker that failed), a nonzero exit is a host failure: a plain Error, which the page may follow
+ * with the serial engine. Without one, it is LOSAT's own error exit (`losatRunFailure`, OV-3289).
+ */
+const exitFailure = (exitCode, stderrText, hostFailures) => {
+  if (exitCode === 0) return null;
+  if (hostFailures.length === 0) return losatRunFailure(stderrText);
+  return new Error([...hostFailures, stderrText.trim()].filter(Boolean).join('\n'));
+};
 
 const runThreadedLosat = async ({
   module,
@@ -186,7 +202,8 @@ const runThreadedLosat = async ({
     ['subject.fa', new File(encoder.encode(subjectFasta), { readonly: true })]
   ]);
   const stdoutChunks = [];
-  const stderrChunks = [];
+  const stderrChunks = []; // LOSAT's own stderr, of its main thread and its threads
+  const hostFailures = []; // what failed in this host while LOSAT ran (`exitFailure`)
   const stdout = new ConsoleStdout((data) => stdoutChunks.push(data));
   const stderr = new ConsoleStdout((data) => stderrChunks.push(data));
   const stdin = new OpenFile(new File(new Uint8Array(), { readonly: true }));
@@ -213,13 +230,10 @@ const runThreadedLosat = async ({
 
   const waitForThreadStart = ({ tid, worker, controlView, timeoutMs }) => {
     const wait = Atomics.wait(controlView, 0, 0, timeoutMs);
-    if (wait === 'timed-out') {
-      stderrChunks.push(encoder.encode(`timed out waiting for LOSAT WASI thread ${tid} to start after ${Math.round(timeoutMs / 1000)}s\n`));
-      worker.terminate();
-      workers.delete(worker);
-      return -1;
-    }
-    if (Atomics.load(controlView, 0) !== 1) {
+    if (wait === 'timed-out' || Atomics.load(controlView, 0) !== 1) {
+      hostFailures.push(wait === 'timed-out'
+        ? `timed out waiting for LOSAT WASI thread ${tid} to start after ${Math.round(timeoutMs / 1000)}s`
+        : `LOSAT WASI thread ${tid} did not start`);
       worker.terminate();
       workers.delete(worker);
       return -1;
@@ -234,7 +248,7 @@ const runThreadedLosat = async ({
       for (const slot of threadSlots) {
         const state = Atomics.load(slot.readyView, 0);
         if (state === -1) {
-          stderrChunks.push(encoder.encode('LOSAT WASI thread worker entered an error state\n'));
+          hostFailures.push('LOSAT WASI thread worker entered an error state');
           return null;
         }
         if (state === 1 && Atomics.compareExchange(slot.readyView, 0, 1, 2) === 1) {
@@ -246,7 +260,7 @@ const runThreadedLosat = async ({
       const remaining = Math.max(1, Math.min(250, deadline - performance.now()));
       Atomics.wait(preparingSlot.readyView, 0, 0, remaining);
     }
-    stderrChunks.push(encoder.encode(`timed out waiting for reusable LOSAT WASI thread worker slot after ${Math.round(timeoutMs / 1000)}s\n`));
+    hostFailures.push(`timed out waiting for reusable LOSAT WASI thread worker slot after ${Math.round(timeoutMs / 1000)}s`);
     return null;
   };
 
@@ -273,11 +287,11 @@ const runThreadedLosat = async ({
     try {
       worker = new Worker(childWorkerUrl, { type: 'module' });
     } catch (error) {
-      stderrChunks.push(encoder.encode(`${error?.message || error}\n`));
+      hostFailures.push(String(error?.message || error));
       return -1;
     }
     workers.add(worker);
-    attachThreadWorkerOutput({ worker, encoder, stdoutChunks, stderrChunks });
+    attachThreadWorkerOutput({ worker, encoder, stdoutChunks, stderrChunks, hostFailures });
     worker.postMessage({
       type: 'run',
       module: compiledModule,
@@ -330,7 +344,8 @@ const runThreadedLosat = async ({
             workers,
             encoder,
             stdoutChunks,
-            stderrChunks
+            stderrChunks,
+            hostFailures
           })
         )
       );
@@ -339,10 +354,9 @@ const runThreadedLosat = async ({
     const exitCode = wasi.start(instance);
     const stdoutText = new TextDecoder().decode(concatUint8Arrays(stdoutChunks));
     const stderrText = new TextDecoder().decode(concatUint8Arrays(stderrChunks));
-    if (exitCode !== 0) {
-      throw new Error(stderrText.trim() || `LOSAT exited with code ${exitCode}`);
-    }
-    return { text: stdoutText, stderr: stderrText, spawnCount };
+    const failure = exitFailure(exitCode, stderrText, hostFailures);
+    if (failure) throw failure;
+    return { text: stdoutText, stderr: [stderrText.trim(), ...hostFailures].filter(Boolean).join('\n'), spawnCount };
   } finally {
     await terminateWorkers(workers);
   }
@@ -371,6 +385,7 @@ self.onmessage = async (event) => {
       type: 'run',
       ok: false,
       error: error?.message ? String(error.message) : String(error || 'Threaded LOSAT worker failed'),
+      losatReported: reportedLosatFailure(error),
       trap: error instanceof WebAssembly.RuntimeError
     });
   }

@@ -397,6 +397,12 @@ const PHRASES = Object.freeze({
   largestInputs: 'Largest inputs: {inputs}.',
   // INPUT_UNREADABLE of a gzip input over its expanded cap: the file the browser read, and the cap in MiB.
   inputFile: 'File: {name}.', gzipLimit: 'gbdraw reads gzip files that expand to at most {limit} MiB.',
+  // LOSAT_RUNTIME of a LOSAT run that exited with an error (services/losat-runtime.js `losatRunFailure`): LOSAT's
+  // own first error line, shown as written (`shownLosatMessage`).
+  losatReported: 'LOSAT reported: {message}',
+  // LOSAT_RUNTIME in Sequence search (OV-3288) and Find in other files: the code's message names Generate, which
+  // neither search uses; each runs from its own Search button.
+  searchFailed: 'The search could not run or returned unusable output. Check the search settings, then click Search again.',
   sessionSaveRemedy: 'Remove or replace the largest inputs with smaller ones, then save again.',
   // EXPORT_LIMIT (gbdraw/render/export_limits.py): the limit and size in the format's unit, and what would fit.
   exportSizePx: 'PNG is limited to {limit} px per side, and this figure is {width} x {height} px.',
@@ -416,6 +422,11 @@ const PHRASES = Object.freeze({
   liveEditChange: 'Change the edit, or change the settings and use Generate.',
   operationError: 'Operation error'
 });
+// A code's message for one operation, where the code's own message names a step that operation does not have.
+/** @type {Readonly<Record<string, Readonly<Record<string, string>>>>} */
+const OPERATION_MESSAGES = Object.freeze({
+  LOSAT_RUNTIME: Object.freeze({ searchHitAnnotationSet: PHRASES.searchFailed, findInOtherFiles: PHRASES.searchFailed })
+});
 /**
  * One sentence or phrase of a user-facing error text. `text` is the English
  * template and its catalog key; each `{name}` takes `params[name]`: a part is
@@ -428,6 +439,12 @@ const PHRASES = Object.freeze({
  * @property {true} [verbatim]
  */
 const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+/**
+ * LOSAT's words as the summary shows them: the hyphens that start an option name (`-searchsp`) are non-breaking, so a
+ * line never ends between them and the name. The Diagnostics keep the words as LOSAT wrote them.
+ * @param {string} message
+ */
+const shownLosatMessage = (message) => message.replace(/(^|[\s'"(<[])(-+)/g, (_whole, before, hyphens) => before + '\u2011'.repeat(hyphens.length));
 /** A count as Python's export message writes it (`32,767`). @param {number} value */
 const grouped = (value) => value.toLocaleString('en-US');
 
@@ -536,6 +553,7 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {'file'} [sessionSizeKind] Set when the two sizes are those of the gzip file, not of its expanded JSON.
  * @property {string} [largestInputs] The file names of the largest inputs of a Session that Save refused.
  * @property {string} [inputName] The name of the input file that could not be read (a gzip file over its expanded cap).
+ * @property {string} [losatMessage] The first line LOSAT wrote about a run that exited with an error, as written.
  * @property {number} [limit] An export format's size limit per side, in its unit (EXPORT_LIMIT), or the expanded size
  *   cap of a gzip input in MiB (GZIP_EXPANDED_SIZE).
  * @property {number} [width] The figure's width in the export format's unit (EXPORT_LIMIT).
@@ -817,6 +835,9 @@ const contextFor = (value) => {
   if (inputs) context.largestInputs = inputs;
   const inputName = typeof value.inputName === 'string' ? value.inputName.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
   if (inputName) context.inputName = inputName;
+  // LOSAT's own words: one line of at most 200 characters, shown as text.
+  const losatMessage = typeof value.losatMessage === 'string' ? value.losatMessage.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
+  if (losatMessage) context.losatMessage = losatMessage;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
   if (typeof value.drawingId === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value.drawingId)) context.drawingId = value.drawingId;
@@ -978,7 +999,9 @@ export const normalizeUserFacingError = (value, {
     if (item?.code !== 'CLEANUP_FAILED' || item?.stage !== 'cleanup') continue;
     result.secondary.push({ code: 'CLEANUP_FAILED', stage: 'cleanup' });
   }
-  const [message, actions] = DEFINITIONS[result.code];
+  const [codeMessage, actions] = DEFINITIONS[result.code];
+  const operationMessages = Object.hasOwn(OPERATION_MESSAGES, result.code) ? OPERATION_MESSAGES[result.code] : {};
+  const message = Object.hasOwn(operationMessages, result.operation) ? operationMessages[result.operation] : codeMessage;
   const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath, featureCaption, sessionTable, diagramMode } = result.context;
   const { featureId, featureType, featureStart, featureEnd, featureCount, field, reason, position, columnCount, recordCount } = result.context;
   const { recordName, recordPosition, codepoint } = result.context;
@@ -989,7 +1012,7 @@ export const normalizeUserFacingError = (value, {
   const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
     .filter(Boolean).join(', ');
   const { queryRecordIndex, subjectRecordIndex, labelFitCounts, labelCapacityOuter, labelCapacityInner, exceptionType } = result.context;
-  const { sessionBytes, sessionByteLimit, sessionSizeKind, largestInputs, inputName } = result.context;
+  const { sessionBytes, sessionByteLimit, sessionSizeKind, largestInputs, inputName, losatMessage } = result.context;
   const { limit, width, height, rowLength, dpi } = result.context;
   const exportSize = (reason === 'PNG_SIZE' || reason === 'PDF_SIZE') && limit !== undefined && width !== undefined
     && height !== undefined && { text: reason === 'PNG_SIZE' ? PHRASES.exportSizePx : PHRASES.exportSizePt,
@@ -1035,6 +1058,7 @@ export const normalizeUserFacingError = (value, {
     ...figureSizeSentences,
     sessionVersionGuidance(result.context) || (figureSizeSentences.length > 0 ? null
       : (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null)),
+    losatMessage !== undefined && { text: PHRASES.losatReported, params: { message: shownLosatMessage(losatMessage) } },
     reason === 'NOT_NUCLEOTIDE' && letter && { text: PHRASES.letter, params: { letter } },
     reason === 'NOT_SEQUENCE' && letter && { text: PHRASES.queryLetter, params: { letter } },
     innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },

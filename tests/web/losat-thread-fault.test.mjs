@@ -158,7 +158,51 @@ test('a WASI thread refreshes its view of the shared memory right before wasi_th
   assert.equal(new Int32Array(cold.memory.buffer)[0], 1);
 });
 
-const setupPage = async (t, { trappedAttempts = Infinity, trap = true } = {}) => {
+// OV-3289: the threaded job worker tells a host failure from LOSAT's own error exit by where the failure came from,
+// not by its text. `_start` spawns one thread and exits with 3 when the spawn fails; the other `_start` exits with 3.
+const exitingJobModule = (spawnFirst) => moduleBytes(
+  section(1, [[0x60, 1, I32, 1, I32], [0x60, 0, 0], [0x60, 2, I32, I32, 0], [0x60, 1, I32, 0]]),
+  section(2, [
+    [...name('wasi'), ...name('thread-spawn'), 0x00, 0],
+    [...name('wasi_snapshot_preview1'), ...name('proc_exit'), 0x00, 3],
+    [...name('env'), ...name('memory'), ...sharedMemory(1, 16384)]
+  ]),
+  section(3, [[1], [2]]),
+  section(7, [[...name('_start'), 0x00, 2], [...name('wasi_thread_start'), 0x00, 3]]),
+  section(10, [
+    spawnFirst
+      // i32.const 0; call spawn; i32.const 0; i32.lt_s; if; i32.const 3; call proc_exit; end; i32.const 0; call proc_exit
+      ? [...leb(20), 0x00, 0x41, 0x00, 0x10, 0x00, 0x41, 0x00, 0x48, 0x04, 0x40, 0x41, 0x03, 0x10, 0x01, 0x0b, 0x41, 0x00, 0x10, 0x01, 0x0b]
+      // i32.const 3; call proc_exit
+      : [...leb(6), 0x00, 0x41, 0x03, 0x10, 0x01, 0x0b],
+    [...leb(2), 0x00, 0x0b]
+  ])
+);
+
+for (const [label, spawnFirst, reported] of [['a thread that cannot start is a host failure', true, null],
+  ['an error exit of LOSAT itself is a LOSAT failure', false, '']]) {
+  test(`the threaded job worker: ${label}`, async (t) => {
+    const module = exitingJobModule(spawnFirst);
+    assert.ok(WebAssembly.validate(module));
+    restoreGlobalsAfter(t, ['self', 'Worker']);
+    const posted = [];
+    globalThis.self = { postMessage: (message) => posted.push(message) };
+    globalThis.Worker = class { constructor() { throw new Error('simulated: the LOSAT WASI thread worker did not start'); } };
+    await import(`${new URL('js/workers/losat-threaded-worker.js', webRoot).href}?instance=${label.length}-${Date.now()}`);
+    await globalThis.self.onmessage({
+      data: {
+        type: 'run', id: 'job-1', module: await WebAssembly.compile(module), wasiShimUrl, threadsPerJob: 1, faultChannel: '',
+        job: { program: 'blastn', extraArgs: [] }, queryFasta: '>q\nACGT\n', subjectFasta: '>s\nACGT\n'
+      }
+    });
+    assert.equal(posted.length, 1);
+    assert.equal(posted[0].ok, false);
+    assert.equal(posted[0].losatReported, reported);
+    if (spawnFirst) assert.match(posted[0].error, /did not start/);
+  });
+}
+
+const setupPage = async (t, { trappedAttempts = Infinity, trap = true, losatReported, threadedHostFailure = false } = {}) => {
   assert.ok(WebAssembly.validate(threadedJobModule));
   restoreGlobalsAfter(t, ['window', 'crossOriginIsolated', 'fetch', 'Worker']);
   for (const level of ['info', 'warn']) {
@@ -194,7 +238,13 @@ const setupPage = async (t, { trappedAttempts = Infinity, trap = true } = {}) =>
         return;
       }
       queueMicrotask(() => {
-        const data = { id: message.id, type: message.type, ok: true, text: 'q\ts\t100\n' };
+        // `losatReported`: every run's LOSAT exits with an error and reports this (OV-3304). `threadedHostFailure`:
+        // a threaded run fails in its host (a thread that did not start), not in LOSAT (OV-3289).
+        const data = losatReported !== undefined && message.type === 'run'
+          ? { id: message.id, type: 'run', ok: false, error: 'LOSAT_RUNTIME/FAILED', losatReported, trap: false }
+          : threadedHostFailure && this.threaded && message.type === 'run'
+            ? { id: message.id, type: 'run', ok: false, error: 'timed out waiting for LOSAT WASI thread 1 to start after 30s', losatReported: null, trap: false }
+            : { id: message.id, type: message.type, ok: true, text: 'q\ts\t100\n' };
         for (const listener of this.listeners.get('message') || []) listener({ data });
       });
     }
@@ -257,6 +307,45 @@ test('automatic threaded LOSAT falls back to serial execution after its trap ret
   assert.deepEqual(statuses.map((status) => status.state), ['running', 'fallback']);
   assert.deepEqual(workers.map((worker) => worker.threaded), [true, true, true, false]);
   assert.ok(workers.every((worker) => worker.terminated));
+});
+
+// OV-3304: a LOSAT run that exits with an error reaches the page as the LOSAT failure with what LOSAT reported, from
+// either pool, once: the serial pool does not run the jobs again in the page, and the threaded pool retries only traps.
+for (const [label, executionMode, threaded] of [['serial', 'serial', false], ['threaded', 'threaded', true]]) {
+  test(`a ${label} LOSAT failure reaches the page with what LOSAT reported, run once`, async (t) => {
+    const { owner, workers } = await setupPage(t, { trappedAttempts: 0, losatReported: "invalid value '9' for '-searchsp <INT_VALUE>'" });
+    await assert.rejects(
+      settleWithin(owner.runLosatPairsParallel([job], { ...options, executionMode }), 5000, label),
+      (error) => error.code === 'LOSAT_RUNTIME' && error.stage === 'losat' && error.context.reason === 'FAILED'
+        && error.context.losatMessage === "invalid value '9' for '-searchsp <INT_VALUE>'"
+    );
+    assert.deepEqual(workers.map((worker) => worker.threaded), [threaded]);
+  });
+}
+
+// OV-3289: Auto falls back to the serial engine only when the threaded engine's host failed. A LOSAT error exit is
+// reported at once with LOSAT's line, also for task dc-megablast, which the serial engine would refuse instead.
+test('automatic LOSAT reports a threaded LOSAT failure at once, without the serial dc-megablast refusal', async (t) => {
+  const { owner, workers } = await setupPage(t, { trappedAttempts: 0, losatReported: "invalid value '9' for '-searchsp <INT_VALUE>'" });
+  const dcJob = { pairIndex: 0, program: 'blastn', querySequenceKey: 'q', subjectSequenceKey: 's', extraArgs: ['--task', 'dc-megablast'] };
+  const statuses = [];
+  await assert.rejects(
+    settleWithin(owner.runLosatPairsParallel([dcJob], { ...options, onRuntimeStatus: (status) => statuses.push(status) }), 5000, 'auto'),
+    (error) => error.code === 'LOSAT_RUNTIME' && error.context.reason === 'FAILED'
+      && error.context.losatMessage === "invalid value '9' for '-searchsp <INT_VALUE>'"
+  );
+  assert.deepEqual(workers.map((worker) => worker.threaded), [true]);
+  assert.deepEqual(statuses.map((status) => status.state), ['running']);
+});
+
+test('automatic LOSAT falls back to serial execution after a threaded host failure and succeeds', async (t) => {
+  const { owner, workers } = await setupPage(t, { trappedAttempts: 0, threadedHostFailure: true });
+  const statuses = [];
+  const result = await settleWithin(
+    owner.runLosatPairsParallel([job], { ...options, onRuntimeStatus: (status) => statuses.push(status) }), 5000, 'auto');
+  assert.deepEqual(result, [{ ...job, text: 'q\ts\t100\n' }]);
+  assert.deepEqual(statuses.map((status) => status.state), ['running', 'fallback']);
+  assert.deepEqual(workers.map((worker) => worker.threaded), [true, false]);
 });
 
 // CO-01 (PD-OI-018): threaded stays strict without cross-origin isolation and
