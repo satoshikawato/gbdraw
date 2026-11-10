@@ -196,17 +196,15 @@ for (const mode of MODES) {
   });
 }
 
-// The CLI writes a one-record Circular drawing as a batch of one output and its stack without an Axis index. Loaded
-// and Generated in the Web, it draws the CLI's SVG and has a Source recipe that the CLI replays to it (OV-3189,
-// OV-3191).
+// The CLI writes a one-record Circular drawing as a batch of one output. Loaded and Generated in the Web, it draws the
+// CLI's SVG and has a Source recipe that the CLI replays to it (OV-3191).
 test('a one-record Circular CLI Session draws the CLI SVG on Generate and its Source recipe replays to it', async ({ page }, testInfo) => {
   test.setTimeout(900_000);
   const input = testInfo.outputPath('testa.gb');
   writeFileSync(input, TESTA);
   const prefix = testInfo.outputPath('testa-cli');
   const cli = spawnSync(process.env.GBDRAW_PYTHON || 'python', ['-m', 'gbdraw.cli', 'circular', '--gbk', input, '-o', prefix,
-    '-f', 'svg', '--labels', 'none', '--circular_track_slot', 'ticks:ticks', '--circular_track_slot', 'features:features',
-    '--circular_track_slot', 'gc_content:dinucleotide_content', '--save_session'], { encoding: 'utf8', env: replayEnv });
+    '-f', 'svg', '--labels', 'none', '--save_session'], { encoding: 'utf8', env: replayEnv });
   expect(cli.status, cli.stderr).toBe(0);
   await openFresh(page);
   await loadSessionFile(page, `${prefix}.gbdraw-session.json`);

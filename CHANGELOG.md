@@ -327,6 +327,11 @@ write-up of a release.
   Axis, so the command failed with
   "conflicts with --linear_track_axis_index". The recipe now writes the side
   each slot is drawn on (OV-3157).
+- Fixed (Web app): Run Info gave no Source recipe for a one-record Circular
+  Session saved by the CLI ("batch or multiple-output semantics have no single
+  current CLI projection"). The CLI writes such a drawing as a batch of one
+  output, which the recipe now writes as its `-o`; a drawing of several records
+  drawn as separate diagrams still has none (OV-3191).
 - Changed: every track group in an SVG is now named from its track slot
   (`track_slot_<hash>_<slot id>`) and carries `data-gbdraw-slot-id` and
   `data-gbdraw-slot-renderer`, in both modes and with or without a custom
