@@ -1165,7 +1165,7 @@ const ringFields = (drawing) => Object.fromEntries(drawing.circularConservation.
  * @param {File[]} files @param {Record<string, unknown>[]} fields @param {string} [colorScheme]
  */
 const ringDrawing = async (files, fields, colorScheme = 'ten') => {
-  const { reconcileConservationSeries } = await import('../../gbdraw/web/js/services/conservation-series.js');
+  const { isManagedConservationSlot, reconcileConservationSeries } = await import('../../gbdraw/web/js/services/conservation-series.js');
   const { bindDrawingInputFileList, bindDrawingInputFileTree, setConservationBlastsSource } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const genbank = 'LOCUS       REFERENCE                   8 bp    DNA     linear   UNK 01-JAN-1980\nFEATURES             Location/Qualifiers\nORIGIN\n        1 aaccggtt\n//\n';
   installShownDrawing('circular');
@@ -1180,6 +1180,10 @@ const ringDrawing = async (files, fields, colorScheme = 'ten') => {
   setConservationBlastsSource(drawing.slices.inputs, null);
   bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', files.map((file) => [file]));
   bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', []);
+  // The custom stack off and no ring row: an earlier test's ring rows would name rings this drawing does not have.
+  drawing.adv.circular_track_slots_enabled = false;
+  drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length,
+    ...drawing.adv.circular_track_slots.filter((slot) => !isManagedConservationSlot(slot)));
   drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length,
     ...reconcileConservationSeries({ sourceFiles: files, previousSeries: [], legacyLabels: [] }).series
       .map((entry, index) => ({ ...entry, ...fields[index] })));
@@ -1187,7 +1191,7 @@ const ringDrawing = async (files, fields, colorScheme = 'ten') => {
 };
 /**
  * A ring Generate of the drawing (run-analysis.js): the rings it searches (`searchedRingSources`), its request
- * (`losatRequestRings`), and the app's adoption with those rings. `beforeAdoption` runs while it runs; a change of the
+ * (`losatRequestRings`; each ring's table holds its genome file's name), and the app's adoption with those rings. `beforeAdoption` runs while it runs; a change of the
  * rings there makes the draft's rings no longer those it searched (`builtFromDraft`).
  * @returns {Promise<{ canonical: Record<string, any>, rings: Record<string, any>[] }>}
  */
@@ -1200,7 +1204,7 @@ const ringGenerate = async (drawing, tableName = blastTableOf, beforeAdoption = 
   const filesData = await serializeActiveRenderFiles(state, drawing);
   const canonical = buildCanonicalRenderRequest({
     state, drawing, filesData,
-    resolvedCircularConservation: ringKeyHelpers.losatRequestRings(rings, rings.map((ring) => ({ name: tableName(ring.file), text: '' })),
+    resolvedCircularConservation: ringKeyHelpers.losatRequestRings(rings, rings.map((ring) => ({ name: tableName(ring.file), text: `${ring.fileName}\n` })),
       ringGenomeFileLists(filesData.c_conservation_fastas))
   });
   beforeAdoption();
@@ -1377,6 +1381,33 @@ test('a ring kept by a Remove without a Generate keeps its fields through a cand
     assert.deepEqual(ringFields(drawing), { second: ['#00ff00', 1, 11] }, `${what}: Remove`);
     adoptCommittedCandidate(drawing);
     assert.deepEqual(ringFields(drawing), { second: ['#00ff00', 1, 11] }, `${what}: the candidate puts no ring back`);
+  }
+});
+
+// OV-3239: a Remove without a Generate changes only the draft. The committed request keeps its own rings, each
+// with its label, colour and table, through Save and Load; the next candidate of it (a record rotation, an alignment:
+// `projectCommittedEditorIntent`) draws them so, and leaves the kept ring's fields in the draft.
+test('a Remove without a Generate leaves the committed rings through Save, Load and a candidate (OV-3239)', async () => {
+  const { projectCommittedEditorIntent } = await import('../../gbdraw/web/js/services/session-request.js');
+  const drawnRings = (canonical) => {
+    const options = canonical.renderRequest.diagramOptions;
+    return options.conservationBlastFiles.map(({ resourceId }, index) => [options.conservationLabels[index],
+      options.conservationColors[index], Buffer.from(canonical.resources[resourceId].data, 'base64').toString()]);
+  };
+  for (const files of [[ringFasta('a.fna'), ringFasta('b.fna', 'aaaagggg')], [ringFasta('a.fna'), ringFasta('a.fna')]]) {
+    const drawing = await ringDrawing(files,
+      [{ label: 'first', color: '#ff0000', losat_gencode: 4 }, { label: 'second', color: '#00ff00', losat_gencode: 11 }]);
+    await ringGenerate(drawing, files[1].name === 'a.fna' ? () => 'a.circular_conservation.blastn.tsv' : blastTableOf);
+    const committed = [['first', '#ff0000', 'a.fna\n'], ['second', '#00ff00', `${files[1].name}\n`]];
+    assert.deepEqual(drawnRings(getCommittedCanonicalSession()), committed);
+    ringFiles.removeCircularConservationSource(0);
+    const loaded = await savedAndLoaded();
+    const what = files.map(({ name }) => name).join(' and ');
+    assert.deepEqual(drawnRings(getCommittedCanonicalSession()), committed, `${what}: the loaded committed request`);
+    assert.deepEqual(drawnRings(projectCommittedEditorIntent({ committed: getCommittedCanonicalSession(), state, drawing: loaded })),
+      committed, `${what}: the candidate after Load`);
+    adoptCommittedCandidate(loaded);
+    assert.deepEqual(ringFields(loaded), { second: ['#00ff00', 1, 11] }, `${what}: the draft keeps the kept ring`);
   }
 });
 
