@@ -24,6 +24,8 @@ const MITOGENOMES = [
 // The texts of the refusals the field's hint shares (REASONS in gbdraw/web/js/utils/error-normalization.js).
 const COMPARISONS_TEXT = 'A wrapped figure draws no comparisons.';
 const MOVED_TEXT = 'A wrapped record cannot keep a sideways move (from Align at feature, Similarity groups, or a loaded Session). Click Reset record positions under Wrap Rows, or turn Wrap Rows off.';
+// OV-3371: while Wrap Rows is off, its hint says what to remove, not "turn Wrap Rows off".
+const MOVED_OFF_TEXT = 'A wrapped record cannot keep a sideways move (from Align at feature, Similarity groups, or a loaded Session). Click Reset record positions under Wrap Rows.';
 
 const openLinear = async (page, files) => {
   await openFresh(page);
@@ -144,7 +146,7 @@ test('comparisons and a record moved by Align at feature keep Wrap Rows from bei
   await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveText('Records aligned at gene=COX1.', { timeout: 180_000 });
   await settle(page);
   await expect(wrapBox(page)).toBeDisabled();
-  await expect(page.locator('#linear-wrap-blocked')).toHaveText(MOVED_TEXT);
+  await expect(page.locator('#linear-wrap-blocked')).toHaveText(MOVED_OFF_TEXT);
   // Reset record positions moves the records off Align at feature's places, so its notice goes; one Undo puts the
   // positions back and, with them, the block and the notice (Q5 A: Align at feature counts through moved records).
   const reset = page.getByTestId('linear-wrap-reset-positions');
@@ -156,7 +158,7 @@ test('comparisons and a record moved by Align at feature keep Wrap Rows from bei
   await undo(page);
   await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveText('Records aligned at gene=COX1.');
   await expect(wrapBox(page)).toBeDisabled();
-  await expect(page.locator('#linear-wrap-blocked')).toHaveText(MOVED_TEXT);
+  await expect(page.locator('#linear-wrap-blocked')).toHaveText(MOVED_OFF_TEXT);
   // The Undo of Apply ends Align at feature.
   await undo(page);
   await expect(wrapBox(page)).toBeEnabled();
@@ -227,7 +229,7 @@ test('a Similarity alignment blocks Wrap Rows beside comparisons, and Reset reco
   expect(before.drawn.some((x) => x !== 0), 'the alignment draws records moved sideways').toBe(true);
   await expect(wrapBox(page)).toBeDisabled();
   await expect(page.locator('#linear-wrap-blocked')).toContainText(COMPARISONS_TEXT);
-  await expect(page.locator('#linear-wrap-blocked')).toContainText(MOVED_TEXT);
+  await expect(page.locator('#linear-wrap-blocked')).toContainText(MOVED_OFF_TEXT);
   const reset = page.getByTestId('linear-wrap-reset-positions');
   await expect(reset).toBeVisible();
 
@@ -242,12 +244,12 @@ test('a Similarity alignment blocks Wrap Rows beside comparisons, and Reset reco
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(steps + 1);
   // The comparisons still block; the moved-record reason and its button are gone.
   await expect(page.locator('#linear-wrap-blocked')).toContainText(COMPARISONS_TEXT);
-  await expect(page.locator('#linear-wrap-blocked')).not.toContainText(MOVED_TEXT);
+  await expect(page.locator('#linear-wrap-blocked')).not.toContainText(MOVED_OFF_TEXT);
   await expect(reset).toHaveCount(0);
 
   await undo(page);
   expect(await placement()).toEqual(before);
-  await expect(page.locator('#linear-wrap-blocked')).toContainText(MOVED_TEXT);
+  await expect(page.locator('#linear-wrap-blocked')).toContainText(MOVED_OFF_TEXT);
   await expect(reset).toBeVisible();
 });
 
@@ -307,7 +309,7 @@ test('a loaded Session with a record moved sideways blocks Wrap Rows until Reset
   await expect(wrapBox(page)).toBeEnabled();
   await wrapBox(page).uncheck();
   await settle(page);
-  expect(await wrapState(page)).toMatchObject({ wrap: null, blocked: MOVED_TEXT });
+  expect(await wrapState(page)).toMatchObject({ wrap: null, blocked: MOVED_OFF_TEXT });
   await expect(wrapBox(page)).toBeDisabled();
 });
 

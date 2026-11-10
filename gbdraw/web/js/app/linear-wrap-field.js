@@ -9,7 +9,7 @@ import {
   isLinearWrapUnit, linearWrapAmountText, linearWrapBlockers, linearWrapInputValue, linearWrapUnitOf, offersRecordPositionReset
 } from '../services/linear-wrap-form.js';
 import { reasonText } from '../utils/error-normalization.js';
-import { joinSentences, t, tm } from '../utils/i18n.js';
+import { joinSentences, msg, t, tm } from '../utils/i18n.js';
 import { formatBp } from './auto-value-display.js';
 import { computed, ref } from '../utils/reactivity.js';
 
@@ -24,6 +24,16 @@ import { computed, ref } from '../utils/reactivity.js';
  */
 
 /** Which part of the field an edit comes from. @typedef {'on' | 'amount' | 'unit'} LinearWrapFieldPart */
+
+// While Wrap Rows is off, what keeps it from being turned on and what to remove (OV-3371). The Generate refusal's
+// text (`reasonText`) also offers "turn Wrap Rows off", which holds only while it is on.
+/** @type {Readonly<Record<LinearWrapBlocker, string>>} */
+const TURN_ON_BLOCKED_TEXT = Object.freeze({
+  WRAP: msg('A wrapped figure draws no comparisons. Remove the comparison inputs (BLAST, comparison pairs, LOSAT, Similarity groups).'),
+  WRAP_GRID_ROW: msg('A wrapped record needs a Record Layout row of its own. Give each record its own row.'),
+  WRAP_RECORD_POSITION: msg('A wrapped record cannot keep a sideways move (from Align at feature, Similarity groups, or a loaded Session). Click Reset record positions under Wrap Rows.'),
+  WRAP_TRACK_LAYOUT: msg('Wrapped rows draw their tracks above or below the axis. Move the feature track off the axis in Custom Track Slots.')
+});
 
 /** @param {LinearWrapFieldPorts} ports */
 export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInputs, shownWrap, watch }) => {
@@ -58,8 +68,10 @@ export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInput
   const blockers = computed(() => linearWrapBlockers(blockerInputs()));
   // D-29: a blocker keeps Wrap Rows from being turned on or its length changed, never from being turned off.
   const linearWrapBlocked = computed(() => blockers.value.length > 0);
-  // One visible hint names every blocker, in the words of its Generate refusal.
-  const linearWrapBlockedText = computed(() => joinSentences(...blockers.value.map((blocker) => tm(/** @type {string} */ (reasonText(blocker))))));
+  // One visible hint names every blocker: while Wrap Rows is on, in the words of its Generate refusal.
+  const linearWrapBlockedText = computed(() => joinSentences(...blockers.value.map((blocker) => tm(linearWrapOn.value
+    ? /** @type {string} */ (reasonText(blocker))
+    : TURN_ON_BLOCKED_TEXT[blocker]))));
   // A drawn record moved sideways, or a Similarity alignment, offers Reset record positions under the hint, which names
   // it (PD-OI-113 scenario revision 2, Q5 A).
   const linearWrapResetsPositions = computed(() => offersRecordPositionReset(blockerInputs()));
