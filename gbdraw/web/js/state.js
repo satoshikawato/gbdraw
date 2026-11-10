@@ -73,7 +73,7 @@ export { createDefaultAdv, createDefaultCircularConservation, createDefaultForm,
 const { ref, reactive, computed } = window.Vue;
 
 // System State
-const processing = ref(false);
+const processing = typedRef(false);
 const processingStatus = ref('');
 // The labels that may not fit (CAPACITY-WARN), as Python sends their values, shown under the status line until the
 // run ends; the next run that shows the overlay starts without them.
@@ -82,8 +82,8 @@ const generationCancelRequested = ref(false);
 const errorLog = ref(null);
 const sessionTitle = ref('');
 const sessionSavePending = ref(false);
-const sessionImportPending = ref(false);
-const semanticFileWatchersSuppressed = ref(false);
+const sessionImportPending = typedRef(false);
+const semanticFileWatchersSuppressed = typedRef(false);
 const sessionImportRollbackInProgress = ref(false);
 
 const results = ref([]);

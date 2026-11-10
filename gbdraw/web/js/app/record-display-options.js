@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
+/** @import { DrawingState, WebState } from '../state.js' */
 /** @import { CommittedRecord, CommittedRecordRequest } from '../services/feature-identity.js' */
 // Source-bound editable rotation intent. The request service owns serialization.
 import { circularSourceInputs, inputSourceFiles, storedRecordSourceResourceIds } from '../services/input-types.js';
@@ -165,7 +165,9 @@ const circularDisplaySources = (drawing) => {
 
 /**
  * @typedef {object} RecordDisplayControlsOptions
- * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
+ * @property {Pick<WebState, 'activeDrawing' | 'drawingList' | 'drawingOf' | 'featureCatalog' | 'inputFiles'
+ *   | 'processing' | 'semanticFileWatchersSuppressed' | 'sessionImportPending' | 'sessionOperationAvailability'>} state
+ *   the members of the Web state (`state.js`) the controls read
  * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
  * @property {(source: any, callback: (...args: any[]) => void, options?: Record<string, any>) => any} watch Vue `watch`
  * @property {(drawing: DrawingState, sequence: LinearSeq) => SequenceRecord[]} linearRecordsFor a card's records, read in the drawing that holds it
@@ -205,11 +207,7 @@ export const createRecordDisplayControls = ({
         cropped: Boolean(seq.region_start || seq.region_end || seq.windows.length), croppedRecords: new Set(),
         reverse: cropFormReverseComplement(linearCardCropForm(seq)), shown: true })));
   // The sources of every drawing, in the drawings' order.
-  const sources = computed(() => {
-    /** @type {DrawingState[]} */
-    const drawings = state.drawingList();
-    return drawings.flatMap(sourcesOf);
-  });
+  const sources = computed(() => state.drawingList().flatMap(sourcesOf));
   const allRows = computed(() => sources.value.flatMap((source) => source.source
     ? buildRecordDisplayRows({ ...source, selector: '' }).map((row) => ({ ...row, drawingId: source.drawingId,
         cropped: rowCropped(source, row), reverse: source.reverse, paired: source.paired })) : []));
@@ -431,6 +429,7 @@ export const createRecordDisplayControls = ({
     if (request.mode !== drawing.mode || tolerance !== draftFeatureOverlapTolerance(drawing.adv)
       || placements.length !== draftPlacementCount()
       || placements.some((/** @type {{ recordKey: string, biologicalFeatureId: string, placement: Record<string, unknown> }} */ row) => {
+        /** @type {Readonly<Record<string, unknown>> | undefined} */
         const target = drawing.featurePlacementOverrides[
           featureIdentityKey(row.recordKey, row.biologicalFeatureId)]?.placement;
         return !target || ['kind', 'side', 'level'].some((field) => target[field] !== row.placement[field]);
