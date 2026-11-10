@@ -26,7 +26,7 @@ import { t, tn } from '../../utils/i18n.js';
 /** @import { FeatureSearchIndex } from './search-core.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
 /** @import { FeatureElementIndex } from './preview-svg.js' */
-/** @import { EditableLabelEntry } from '../feature-editor/label-actions.js' */
+/** @import { EditableLabelEntry } from '../../services/label-override-table.js' */
 
 /**
  * @typedef {object} PreviewFeatureSearchOptions
