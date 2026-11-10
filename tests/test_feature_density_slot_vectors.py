@@ -39,4 +39,3 @@ def test_the_vectors_cover_both_modes_and_every_track_count() -> None:
     assert {(case["mode"], len(case["trackIds"])) for case in cases} == {
         (mode, count) for mode in ("circular", "linear") for count in (0, 1, 2)
     }
-    assert any(case["kind"] == "stack" and case["axisIndex"] is not None for case in cases)

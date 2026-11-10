@@ -1,8 +1,8 @@
 // The rows Python adds for feature density tracks equal the Web's copy
 // (vector:tests/fixtures/feature_density_slot_vectors.json, tools/twins.json).
 // Each case runs `insertFeatureDensitySlots` over the listed rows, or the Web's
-// default stack builder, with the same track ids and compares the rows and the
-// Axis index. tools/generate_feature_density_slot_vectors.py writes the cases;
+// default stack builder, with the same track ids and compares the rows.
+// tools/generate_feature_density_slot_vectors.py writes the cases;
 // tests/test_feature_density_slot_vectors.py checks them against Python.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -34,7 +34,7 @@ const givenSlot = ({ id, renderer, track, side }) => ({ id, renderer, side, para
 
 test('the feature density rows equal the rows Python gives', () => {
   assert.ok(CASES.length > 0);
-  for (const { id, mode, kind, options, rows, axisIndex, trackIds, expected } of CASES) {
+  for (const { id, mode, kind, options, rows, trackIds, expected } of CASES) {
     if (kind === 'default') {
       const build = mode === 'circular' ? createDefaultCircularTrackSlots : createDefaultLinearTrackSlots;
       const slots = build({ ...options, featureDensityTrackIds: trackIds });
@@ -43,8 +43,19 @@ test('the feature density rows equal the rows Python gives', () => {
       continue;
     }
     const stack = rows.map(givenSlot);
-    const axis = insertFeatureDensitySlots(stack, axisIndex, trackIds, makeSlot(mode));
+    insertFeatureDensitySlots(stack, null, trackIds, makeSlot(mode));
     assert.deepEqual(stack.map(asRow), expected.rows, id);
-    assert.equal(axis, expected.axisIndex, id);
   }
+});
+
+// Web only: Python never combines an Axis index with these rows, so no vector pins this.
+test('the Axis index moves past rows added before it', () => {
+  const run = (renderers, axisIndex) => {
+    const stack = renderers.map((renderer) => ({ id: renderer, renderer }));
+    return [insertFeatureDensitySlots(stack, axisIndex, ['a', 'b'], makeSlot('linear')), stack.length];
+  };
+  assert.deepEqual(run(['features', 'depth', 'gc'], 2), [4, 5]);
+  assert.deepEqual(run(['features', 'depth'], 1), [1, 4]);
+  assert.deepEqual(run(['depth', 'features'], 2), [2, 4]);
+  assert.deepEqual(run(['features'], null), [null, 3]);
 });

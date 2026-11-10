@@ -3,7 +3,7 @@
 
 ``tests/fixtures/feature_density_slot_vectors.json`` holds, per case, the
 feature density track ids, the stack they are added to (one of the default
-stacks, or the listed rows with an Axis index), and the rows Python gives it:
+stacks, or the listed rows), and the rows Python gives it:
 ``gbdraw.tracks.parsing.with_feature_density_slots`` over
 ``default_circular_track_slots`` / ``default_linear_track_slots`` with the slot
 the drawing assemblers make for each track.
@@ -14,10 +14,13 @@ the drawing assemblers make for each track.
   ``insertFeatureDensitySlots``, ``createDefaultCircularTrackSlots`` and
   ``createDefaultLinearTrackSlots`` on the same inputs and compares.
 
+No case holds an Axis index: Python adds these rows only to a stack the reader did
+not write, and an Axis index requires a written stack (``linear_track_axis_index
+requires linear_track_slots`` in ``gbdraw/api/diagram.py``; Circular has none), so
+the two never meet. The Web's own Axis shift is tested without Python vectors.
+
 A row is compared by ``id``, ``renderer`` and ``track`` (the ``track`` param of
-a feature density row; ``side`` too on a feature density row, null when unset). The Axis index is
-the position right after the row that was before the Axis, found by identity in the result
-(Python has no Axis index in a stack; the Web keeps new rows on the side of the row they follow).
+a feature density row; ``side`` too on a feature density row, null when unset).
 
 Usage:
   python tools/generate_feature_density_slot_vectors.py            # rewrite the vectors
@@ -47,12 +50,6 @@ STACK_ROWS: dict[str, list[tuple[str, str]]] = {
     "no_features": [("gc_content", "dinucleotide_content"), ("gc_skew", "dinucleotide_skew")],
     "features_last": [("gc_content", "dinucleotide_content"), ("features", "features")],
     "already_drawn": [("features", "features"), ("density_old", "feature_density"), ("gc_content", "dinucleotide_content")],
-}
-STACK_AXES: dict[str, tuple[int | None, ...]] = {
-    "features_first": (None, 0, 1, 2, 3),
-    "no_features": (None, 0, 1, 2),
-    "features_last": (None, 0, 1, 2),
-    "already_drawn": (None, 1, 3),
 }
 CIRCULAR_DEFAULTS: tuple[dict[str, Any], ...] = (
     {},
@@ -109,9 +106,8 @@ def _default_stack(mode: str, options: dict[str, Any]) -> list[Any]:
     )
 
 
-def _case_name(mode: str, stack: str, tracks: list[str], axis: int | None = None) -> str:
-    axis_text = "" if axis is None else f"-axis{axis}"
-    return f"{mode}-{stack}{axis_text}-{len(tracks)}tracks"
+def _case_name(mode: str, stack: str, tracks: list[str]) -> str:
+    return f"{mode}-{stack}-{len(tracks)}tracks"
 
 
 def cases() -> list[dict[str, Any]]:
@@ -127,23 +123,13 @@ def cases() -> list[dict[str, Any]]:
                     "options": options, "trackIds": tracks, "expected": {"rows": [_row(slot) for slot in slots]},
                 })
             for stack, rows in STACK_ROWS.items():
-                for axis in STACK_AXES[stack]:
-                    given = [_given_slot(mode, row_id, renderer) for row_id, renderer in rows]
-                    slots = with_feature_density_slots(
-                        given, tracks, lambda track_id, mode=mode: _make_density_slot(mode, track_id)
-                    )
-                    after = None
-                    if axis is not None:
-                        # The Axis stays right after the row that was before it, found by identity: a new row
-                        # joins the side of the row it follows. Python's stack has no Axis index (the assembler
-                        # applies one to the finished list), so this is the Web's rule on Python's row order.
-                        after = slots.index(given[axis - 1]) + 1 if axis > 0 else 0
-                    out.append({
-                        "id": _case_name(mode, stack, tracks, axis), "mode": mode, "kind": "stack",
-                        "rows": [_row(slot) for slot in given],
-                        "axisIndex": axis, "trackIds": tracks,
-                        "expected": {"rows": [_row(slot) for slot in slots], "axisIndex": after},
-                    })
+                given = [_given_slot(mode, row_id, renderer) for row_id, renderer in rows]
+                slots = with_feature_density_slots(given, tracks, lambda track_id, mode=mode: _make_density_slot(mode, track_id))
+                out.append({
+                    "id": _case_name(mode, stack, tracks), "mode": mode, "kind": "stack",
+                    "rows": [_row(slot) for slot in given], "trackIds": tracks,
+                    "expected": {"rows": [_row(slot) for slot in slots]},
+                })
     return out
 
 
