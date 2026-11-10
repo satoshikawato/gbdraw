@@ -62,7 +62,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_basic_circular.gbdraw",
             "replayThrough": 2,
             "viewport": {
               "width": 1280,
@@ -102,7 +102,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_basic_circular.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -179,7 +179,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_basic_circular.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -236,7 +236,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_basic_circular.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -293,7 +293,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_basic_circular.gbdraw",
             "viewport": {
               "width": 1400,
               "height": 1000

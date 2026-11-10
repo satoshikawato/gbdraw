@@ -407,10 +407,10 @@ def test_legacy_replay_warns_when_a_reversed_region_has_stored_comparisons(
     monkeypatch.setattr(linear_cli_module, "run_linear_from_namespace", lambda _: None)
     monkeypatch.setattr(linear_cli_module, "save_session_sidecar_if_requested", lambda **_: None)
     request = SessionCliRequest(
-        session_path="stored.gbdraw-session.json", output=None, format=None,
+        session_path="stored.gbdraw", output=None, format=None,
         overwrite=False, save_session=False, session_output=None,
     )
-    document = cast("SessionDocument", SimpleNamespace(_data={}, drawings=()))
+    document = cast("SessionDocument", SimpleNamespace(_data={}, drawings=(), resources=SimpleNamespace(sources={})))
     linear_cli_module.replay_legacy_session(document, request)
     assert ("re-run the comparison" in caplog.text) is warned
 

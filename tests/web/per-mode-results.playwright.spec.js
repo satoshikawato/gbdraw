@@ -7,7 +7,6 @@
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
-const { gunzipSync, gzipSync } = require('node:zlib');
 const { answerChoicePrompt, answerSessionTitle, evaluateWithRetainedPromise, expectNoLoadRepairDialog, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
@@ -15,6 +14,7 @@ const { popup, closeEditor, loadEditorLegendRows } = require('./helpers/mode-tra
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing } = require('./helpers/saved-session.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
+const { readSessionFile, readSessionFileJson, sessionFileBytesOf } = require('./helpers/session-file.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -152,7 +152,7 @@ const save = async (page, path, { again = false, title } = {}) => {
   if (title !== undefined) await answerSessionTitle(page, title);
   if (again) await answerChoicePrompt(page, 'Download the Session again?', 'download');
   await (await download).saveAs(path);
-  return JSON.parse(gunzipSync(readFileSync(path)));
+  return readSessionFile(path);
 };
 
 const dialogPages = new WeakSet();
@@ -162,7 +162,7 @@ const load = async (page, path) => {
     dialogPages.add(page);
   }
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await expectNoLoadRepairDialog(page);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
@@ -445,7 +445,7 @@ test('Save writes every Result and a fresh Load shows each mode\'s own Result', 
   await generate(page);
   const linear = await shown(page);
 
-  const saved = await save(page, info.outputPath('both.gbdraw-session.json.gz'), { title: '' });
+  const saved = await save(page, info.outputPath('both.gbdraw'), { title: '' });
   expect(saved.drawings.map(({ id }) => id)).toEqual(['circular', 'linear']);
   expect(saved.ui.activeDrawingId).toBe('linear');
   expect(savedDrawing(saved, 'linear').renderRequest.mode).toBe('linear');
@@ -454,7 +454,7 @@ test('Save writes every Result and a fresh Load shows each mode\'s own Result', 
 
   const fresh = await freshPage(browser);
   try {
-    await load(fresh, info.outputPath('both.gbdraw-session.json.gz'));
+    await load(fresh, info.outputPath('both.gbdraw'));
     const loadedLinear = await shown(fresh);
     expect(loadedLinear).toMatchObject({ mode: 'linear', generatedDrawingId: 'linear', count: 1, mounted: true });
     expect(await drawing(fresh, loadedLinear.content)).toEqual(await drawing(page, linear.content));
@@ -463,7 +463,7 @@ test('Save writes every Result and a fresh Load shows each mode\'s own Result', 
     expect(loadedCircular).toMatchObject({ mode: 'circular', generatedDrawingId: 'circular', count: 1, mounted: true });
     expect(await drawing(fresh, loadedCircular.content)).toEqual(await drawing(page, circular.content));
 
-    const resaved = await save(fresh, info.outputPath('both-resaved.gbdraw-session.json.gz'), { title: '' });
+    const resaved = await save(fresh, info.outputPath('both-resaved.gbdraw'), { title: '' });
     expect(resaved.ui.activeDrawingId).toBe('circular');
     expect(savedDrawing(resaved, 'circular').renderRequest.mode).toBe('circular');
     expect(savedDrawing(resaved, 'linear').renderRequest.mode).toBe('linear');
@@ -501,15 +501,16 @@ test('a Session with one Result opens on the drawing shown at Save; the other dr
   await expect(labels).toHaveValue(before);
   expect(await shownInventory(page)).toEqual([]);
 
-  const path = info.outputPath('one.gbdraw-session.json.gz');
+  const path = info.outputPath('one.gbdraw');
   const saved = await save(page, path, { title: '' });
   expect(saved.ui.activeDrawingId).toBe('linear');
   expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
   expect(savedDrawing(saved, 'circular').editorState.legend.originalOrder).toEqual(circularInventory);
   expect(savedDrawing(saved, 'linear').results ?? []).toEqual([]);
   expect(savedDrawing(saved, 'linear').editorState.legend.originalOrder).toEqual([]);
-  savedDrawing(saved, 'linear').editorState.legend.originalOrder = circularInventory;
-  writeFileSync(path, gzipSync(JSON.stringify(saved)));
+  const edited = await readSessionFileJson(path);
+  savedDrawing(edited, 'linear').editorState.legend.originalOrder = circularInventory;
+  writeFileSync(path, await sessionFileBytesOf(edited));
   // The drawing with the Result gets its own inventory back.
   await showMode(page, 'circular');
   expect(await shownInventory(page)).toEqual(circularInventory);
@@ -536,7 +537,7 @@ test('a Session with one Result opens on the drawing shown at Save; the other dr
 // shown keeps its evidence: its searches, and its manifest in its own slot.
 test('a Linear BLASTP Result saved while Circular is shown keeps its comparison cache', async ({ page, browser }, info) => {
   test.setTimeout(360_000);
-  const BGC = 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json';
+  const BGC = 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw';
   const cache = (target) => target.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     return { entries: state.losatCache.value.size, manifest: Object.keys(state.proteinIdentityManifest.value?.proteinSets || {}).length };
@@ -555,7 +556,7 @@ test('a Linear BLASTP Result saved while Circular is shown keeps its comparison 
   // The Circular drawing shows its own (empty) manifest; the Linear one waits in its slot.
   expect(await cache(page)).toEqual({ ...loadedCache, manifest: 0 });
 
-  const saved = await save(page, info.outputPath('blastp.gbdraw-session.json.gz'));
+  const saved = await save(page, info.outputPath('blastp.gbdraw'));
   expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
   expect(savedDrawing(saved, 'linear').renderRequest.mode).toBe('linear');
   expect(savedDrawing(saved, 'linear').losatCache.entries).toHaveLength(loadedCache.entries);
@@ -563,7 +564,7 @@ test('a Linear BLASTP Result saved while Circular is shown keeps its comparison 
 
   const fresh = await freshPage(browser);
   try {
-    await load(fresh, info.outputPath('blastp.gbdraw-session.json.gz'));
+    await load(fresh, info.outputPath('blastp.gbdraw'));
     expect(await shown(fresh)).toMatchObject({ mode: 'circular', count: 1, mounted: true });
     expect(await cache(fresh)).toEqual({ ...loadedCache, manifest: 0 });
     await showMode(fresh, 'linear');
@@ -612,7 +613,7 @@ test('Save names the hidden mode whose older Result needs Generate, and Generate
   await settleLive(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
   expect(await shown(page)).toMatchObject({ mode: 'linear', generatedDrawingId: 'linear', count: 1, mounted: true });
-  const saved = await save(page, info.outputPath('older-linear.gbdraw-session.json.gz'));
+  const saved = await save(page, info.outputPath('older-linear.gbdraw'));
   expect(savedDrawing(saved, 'linear').renderRequest.mode).toBe('linear');
   expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
   expect(await drawing(page, savedDrawing(saved, 'circular').results[0].content)).toEqual(await drawing(page, circular.content));
@@ -636,7 +637,7 @@ test('an aligned Linear Result saved while Circular is shown keeps its alignment
       ]) : null
     };
   });
-  await load(page, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
+  await load(page, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw');
   const aligned = await alignment(page);
   expect(aligned.plan).not.toBe('null');
   expect(aligned.committed).not.toBeNull();
@@ -645,13 +646,13 @@ test('an aligned Linear Result saved while Circular is shown keeps its alignment
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBeGreaterThan(0);
   await settleLive(page);
   await generate(page);
-  const saved = await save(page, info.outputPath('aligned.gbdraw-session.json.gz'));
+  const saved = await save(page, info.outputPath('aligned.gbdraw'));
   expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
   expect(savedDrawing(saved, 'linear').renderRequest.layout.similarityAlignment).not.toBeNull();
 
   const fresh = await freshPage(browser);
   try {
-    await load(fresh, info.outputPath('aligned.gbdraw-session.json.gz'));
+    await load(fresh, info.outputPath('aligned.gbdraw'));
     expect(await shown(fresh)).toMatchObject({ mode: 'circular', count: 1, mounted: true });
     expect(await alignment(fresh)).toMatchObject({ plan: aligned.plan, translations: aligned.translations });
     await showMode(fresh, 'linear');
@@ -667,7 +668,7 @@ test('an aligned Linear Result saved while Circular is shown keeps its alignment
 // in `otherModeResult`, and `ui.mode` Circular. The fixture's drawings are laid
 // out Linear first by the Python layout owner (`write_session_drawings`), then
 // `gbdraw linear --session ... --session_output` re-saves it in place (D-15-36).
-const linearTopResavedSession = (info) => {
+const linearTopResavedSession = async (info) => {
   const directory = info.outputPath('cli-resave');
   mkdirSync(directory, { recursive: true });
   execFileSync('python', ['-c', [
@@ -676,19 +677,18 @@ const linearTopResavedSession = (info) => {
     'from gbdraw.cli_utils import session as cli_session',
     'from gbdraw.session import load_session_document, session_drawing_artifacts',
     'from gbdraw.session_drawings import write_session_drawings',
-    'from gbdraw.session_io import load_session, write_session_json',
+    'from tests.utils.session_files import write_session_file',
     'from tests.utils.two_mode_session import two_mode_session',
     'out = Path(sys.argv[1])',
     'two = load_session_document(two_mode_session())',
     "views = {d.mode: dict(session_drawing_artifacts(two, d.id).fields) for d in two.drawings}",
-    "write_session_json(out / 'two.gbdraw-session.json', write_session_drawings([views['linear'], views['circular']], active=1))",
-    "assert cli_session.render_canonical_session_if_present(load_session(str(out / 'two.gbdraw-session.json')),"
+    "write_session_file(out / 'two.gbdraw', write_session_drawings([views['linear'], views['circular']], active=1), two.resources.sources)",
+    "assert cli_session.render_canonical_session_if_present(load_session_document(str(out / 'two.gbdraw')),"
       + " mode='linear', output_override=str(out / 'replayed'), format_override='svg', save_session=False,"
-      + " session_output=str(out / 'resaved.gbdraw-session.json'))"
+      + " session_output=str(out / 'resaved.gbdraw'))"
   ].join('\n'), directory], { cwd: process.cwd(), stdio: 'pipe' });
-  const path = `${directory}/resaved.gbdraw-session.json`;
-  const bytes = readFileSync(path);
-  const session = JSON.parse(bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes);
+  const path = `${directory}/resaved.gbdraw`;
+  const session = await readSessionFile(path);
   expect(session.ui.activeDrawingId).toBe('circular');
   expect(savedDrawing(session, 'linear').renderRequest.mode).toBe('linear');
   expect(savedDrawing(session, 'circular').renderRequest.mode).toBe('circular');
@@ -700,7 +700,7 @@ const linearTopResavedSession = (info) => {
 // projected while Circular is shown.
 test('a CLI re-saved Session opens on its shown mode with each Result in its own mode', async ({ page }, info) => {
   test.setTimeout(480_000);
-  const { path, session } = linearTopResavedSession(info);
+  const { path, session } = await linearTopResavedSession(info);
   const holds = async (label) => {
     const state = await shown(page);
     expect(state.generatedDrawingMode === state.mode || state.count === 0, label).toBe(true);
@@ -723,7 +723,7 @@ test('a CLI re-saved Session opens on its shown mode with each Result in its own
   expect(await drawing(page, linear.content)).toEqual(await drawing(page, savedDrawing(session, 'linear').results[0].content));
   await showMode(page, 'circular');
   expect((await holds('switch back')).identity).toBe(circular.identity);
-  const resaved = await save(page, info.outputPath('web-resaved.gbdraw-session.json.gz'));
+  const resaved = await save(page, info.outputPath('web-resaved.gbdraw'));
   expect(resaved.ui.activeDrawingId).toBe('circular');
   expect(savedDrawing(resaved, 'circular').renderRequest.mode).toBe('circular');
   expect(savedDrawing(resaved, 'linear').renderRequest.mode).toBe('linear');
@@ -738,14 +738,14 @@ test('a Session opened on its other Result set generates the Legend it shows', a
   await showMode(page, 'circular');
   const circularInventory = await shownInventory(page);
   expect(sorted(circularInventory)).toEqual(sorted(CIRCULAR_ROWS));
-  const webPath = info.outputPath('web.gbdraw-session.json.gz');
+  const webPath = info.outputPath('web.gbdraw');
   await save(page, webPath, { title: '' });
-  const resavedPath = info.outputPath('cli-resaved.gbdraw-session.json');
+  const resavedPath = info.outputPath('cli-resaved.gbdraw');
   execFileSync('python', ['-c', [
     'import sys',
     'from gbdraw.cli_utils import session as cli_session',
-    'from gbdraw.session_io import load_session',
-    "assert cli_session.render_canonical_session_if_present(load_session(sys.argv[1]), mode='linear',"
+    'from gbdraw.session import load_session_document',
+    "assert cli_session.render_canonical_session_if_present(load_session_document(sys.argv[1]), mode='linear',"
       + " output_override=sys.argv[3], format_override='svg', save_session=False, session_output=sys.argv[2])"
   ].join('\n'), webPath, resavedPath, info.outputPath('replayed')], { cwd: process.cwd(), stdio: 'pipe' });
   const fresh = await freshPage(browser);
@@ -769,7 +769,7 @@ test('a Session opened on its other Result set generates the Legend it shows', a
 // committed Session and match-sequence owner) and the other mode's Result.
 test('a Load canceled within its History baseline keeps both modes\' Results', async ({ page }, info) => {
   test.setTimeout(480_000);
-  const { path } = linearTopResavedSession(info);
+  const { path } = await linearTopResavedSession(info);
   await openBothSources(page);
   await generate(page);
   await showMode(page, 'linear');
@@ -792,7 +792,7 @@ test('a Load canceled within its History baseline keeps both modes\' Results', a
       config.disposeSessionOperations();
     };
   });
-  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await page.waitForFunction(() => window.__E1_CANCELED_IN_BASELINE__ && !window.__GBDRAW_APP__.sessionImportPending,
     null, { timeout: 180_000 });
   await settleLive(page);
@@ -819,7 +819,7 @@ test('the Undo of a Generate after a legacy configuration Load keeps the loaded 
   const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   const before = await undoCount();
   const rule = { feat: 'CDS', qual: 'product', val: 'x', color: '#ff0000', cap: 'Loaded' };
-  await page.locator('input[accept^=".json,"]').setInputFiles({
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles({
     name: 'legacy-config.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({ form: {}, rules: [rule] }))
@@ -898,7 +898,7 @@ test('a drawing switch waits for a label rerender', async ({ page }) => {
 // same Result under the same root; an edit after it commits into that Result.
 test('an edit after a rolled-back Load commits into the restored Result', async ({ page }) => {
   test.setTimeout(300_000);
-  const LAMBDA = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json';
+  const LAMBDA = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw';
   await load(page, LAMBDA);
   await page.evaluate(async () => {
     window.__E1_ROOT__ = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
@@ -920,7 +920,7 @@ test('an edit after a rolled-back Load commits into the restored Result', async 
       }
     });
   });
-  await page.locator('input[accept^=".json,"]').setInputFiles(LAMBDA);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(LAMBDA);
   await page.waitForFunction(() => window.__E1_INJECTED__ === 1 && !window.__GBDRAW_APP__.sessionImportPending,
     null, { timeout: 180_000 });
   await settleLive(page);
@@ -948,8 +948,8 @@ test('an edit after a rolled-back Load commits into the restored Result', async 
 // again, a mode's own Result has its features, opens a feature popup, and
 // exports itself.
 const UJ02 = [
-  { session: 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', mode: 'circular', other: 'linear', features: 37 },
-  { session: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', mode: 'linear', other: 'circular', features: 73 }
+  { session: 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw', mode: 'circular', other: 'linear', features: 37 },
+  { session: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw', mode: 'linear', other: 'circular', features: 73 }
 ];
 for (const { session, mode, other, features } of UJ02) {
   test(`UJ-02: a ${mode} Result is neither shown nor exported in ${other} and comes back whole`, async ({ page }) => {
@@ -1022,7 +1022,7 @@ test('the displayed Result belongs to the shown mode after every mode path', asy
   await check(page, 'Circular Generate');
   await showMode(page, 'linear');
   await check(page, 'switch to a mode without a Result');
-  const oneResultFile = info.outputPath('linear-draft.gbdraw-session.json.gz');
+  const oneResultFile = info.outputPath('linear-draft.gbdraw');
   await save(page, oneResultFile, { title: '' });
   await generate(page);
   await check(page, 'Linear Generate');
@@ -1050,7 +1050,7 @@ test('the displayed Result belongs to the shown mode after every mode path', asy
     await history(page, 'redo');
     await check(page, `Redo ${step + 1}`);
   }
-  const bothFile = info.outputPath('both.gbdraw-session.json.gz');
+  const bothFile = info.outputPath('both.gbdraw');
   await save(page, bothFile, { again: true, title: '' });
 
   const fresh = await freshPage(browser);
@@ -1065,7 +1065,7 @@ test('the displayed Result belongs to the shown mode after every mode path', asy
     await load(fresh, bothFile);
     const before = await shown(fresh);
     const failure = await evaluateWithRetainedPromise(fresh, async () => {
-      const name = 'tobacco-chloroplast.gbdraw-session.json';
+      const name = 'tobacco-chloroplast.gbdraw';
       const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
       const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
       const result = await importSession({ target: { files: [file], value: 'selected' } }, {

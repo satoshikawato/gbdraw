@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { gunzipSync } from 'node:zlib';
+import { gallerySessionDocument } from './helpers/session-documents.mjs';
 
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 
@@ -29,11 +29,11 @@ const COMPOSITION = 'data-gbdraw-composition';
 const decodeAttribute = (value) => value.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
   .replace(/&amp;/g, '&');
 
-const galleryContent = (base) => {
-  const path = new URL(`../../gbdraw/web/gallery/sessions/${base}.gbdraw-session.json.gz`, import.meta.url);
-  const saved = JSON.parse(gunzipSync(readFileSync(path)).toString('utf8'));
-  return savedDrawingView(saved, saved.ui.activeDrawingId).results[0].content;
-};
+const GALLERY_CONTENT = Object.fromEntries(await Promise.all(['hepatoplasmataceae_collinear', 'majanivirus_orthogroup', 'Vnig_TUMSAT-TG-2018'].map(async (base) => {
+  const saved = await gallerySessionDocument(base);
+  return [base, savedDrawingView(saved, saved.ui.activeDrawingId).results[0].content];
+})));
+const galleryContent = (base) => GALLERY_CONTENT[base];
 const SCHEMA = 'data-gbdraw-composition-schema';
 // The fake DOM keeps attribute text as written; the layout reads the metadata as the DOM decodes it.
 const parseSvg = (content) => {

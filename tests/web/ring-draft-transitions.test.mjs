@@ -10,11 +10,10 @@
 // Generate runs as production builds it: the rings its ring keys read (`searchedRingSources`), the request's rings
 // (`losatRequestRings`) and the request builder (`buildCanonicalRenderRequest`), then the composition root's adoption.
 import assert from 'node:assert/strict';
-import { File } from 'node:buffer';
 import { test } from 'node:test';
 import { isDeepStrictEqual } from 'node:util';
-import { gunzipSync } from 'node:zlib';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { readSavedSession, sessionLoadEvent } from './helpers/session-documents.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
@@ -206,10 +205,10 @@ test('a Generate after a replay Load that lost ring 0\'s genome gives each ring 
   await generate(drawing);
   const rows = Object.fromEntries(ringRows(drawing).map((slot) => [slot.params.label, [slot.id, slot.width]]));
   const result = await exportSession('ring loss', { askChoice: async () => 'download' });
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const saved = await readSavedSession(result.blob);
   const savedDrawing = saved.drawings.find((candidate) => candidate.mode === 'circular');
   savedDrawing.webFiles.bindings.c_conservation_fastas[0].forEach((file, index) => { file.resourceId = `missing-0-${index}`; });
-  const loaded = await importSession({ target: { files: [new File([JSON.stringify(saved)], 'loss.gbdraw.json', { type: 'application/json' })], value: 'x' } },
+  const loaded = await importSession(await sessionLoadEvent(saved),
     { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'ok');
   drawing = circular();
@@ -249,10 +248,10 @@ test('a Generate after a replay Load that lost every ring\'s genome leaves each 
   let drawing = await threeRings(false);
   await generate(drawing);
   const result = await exportSession('every ring lost', { askChoice: async () => 'download' });
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const saved = await readSavedSession(result.blob);
   saved.drawings.find((candidate) => candidate.mode === 'circular').webFiles.bindings.c_conservation_fastas
     .forEach((list, place) => list.forEach((file, index) => { file.resourceId = `missing-${place}-${index}`; }));
-  const loaded = await importSession({ target: { files: [new File([JSON.stringify(saved)], 'lost.gbdraw.json', { type: 'application/json' })], value: 'x' } },
+  const loaded = await importSession(await sessionLoadEvent(saved),
     { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'ok');
   drawing = circular();
@@ -291,11 +290,11 @@ test('a replay Load folds an older Session\'s ring label list into the series, s
   drawing.circularConservation.series[0].label = 'E. coli, K-12';
   await generate(drawing);
   const result = await exportSession('older list', { askChoice: async () => 'download' });
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const saved = await readSavedSession(result.blob);
   const savedRings = saved.drawings.find((candidate) => candidate.mode === 'circular').config.circularConservation;
   // dev and main write the series labels' comma join at a LOSAT Generate's adoption.
   savedRings.labels = savedRings.series.map((entry) => entry.label).join(',');
-  const loaded = await importSession({ target: { files: [new File([JSON.stringify(saved)], 'older.gbdraw.json', { type: 'application/json' })], value: 'x' } },
+  const loaded = await importSession(await sessionLoadEvent(saved),
     { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'ok');
   drawing = circular();

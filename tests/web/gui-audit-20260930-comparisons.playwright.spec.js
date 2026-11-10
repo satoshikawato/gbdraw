@@ -4,12 +4,12 @@
 const { test, expect } = require('@playwright/test');
 const { execFile } = require('node:child_process');
 const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
 const path = require('node:path');
 const { promisify } = require('node:util');
 const { CURRENT_SESSION_VERSION, answerSessionTitle, evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -245,12 +245,12 @@ test('a record drawn in two windows searches each window against the other recor
 
   // OV-2918: after Save Session and Load, the window pairs are listed again and their raw results download, before
   // any Generate.
-  const file = test.info().outputPath('window-pairs.gbdraw-session.json.gz');
+  const file = test.info().outputPath('window-pairs.gbdraw');
   await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'window-pairs'; });
   const saved = page.waitForEvent('download', { timeout: 180_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
   await (await saved).saveAs(file);
-  const savedPlan = JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'))
+  const savedPlan = (await readSessionFile(file))
     .drawings.find(({ mode }) => mode === 'linear').config.linearComparisonPlan;
   // The record pair's plan edge keeps the typed name under the second window pair's unit edge key.
   expect(savedPlan.edges.flatMap(({ windowLosatFilenames = {} }) => Object.entries(windowLosatFilenames)))
@@ -387,7 +387,7 @@ const cliBlastSessions = {
     writeFileSync(path.join(directory, 'R2c.gb'), R2C);
     writeFileSync(path.join(directory, 'R3c.gb'), R3C);
     writeFileSync(path.join(directory, 'R2c_R3c.tsv'), 'R2c\tR3c\t100.000\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n');
-    const session = path.join(directory, 'cli-blast.gbdraw-session.json.gz');
+    const session = path.join(directory, 'cli-blast.gbdraw');
     await promisify(execFile)('python', [
       '-m', 'gbdraw.cli', 'linear', '--gbk', 'R2c.gb', 'R3c.gb', '-b', 'R2c_R3c.tsv',
       '-o', 'cli-blast', '--session_output', session
@@ -398,7 +398,7 @@ const cliBlastSessions = {
   // B3: one multi-record file gives records `record-1:1` and `record-1:2`.
   'current CLI multi-record': async (directory) => {
     writeFileSync(path.join(directory, 'R2c_R3c.tsv'), 'R2c\tR3c\t100.000\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n');
-    const session = path.join(directory, 'cli-multi-record.gbdraw-session.json.gz');
+    const session = path.join(directory, 'cli-multi-record.gbdraw');
     await promisify(execFile)('python', [
       '-m', 'gbdraw.cli', 'linear', '--gbk', path.join(root, 'tests/fixtures/web_comparison_shared_block.gb'),
       '-b', 'R2c_R3c.tsv', '-o', 'cli-multi-record', '--session_output', session
@@ -420,7 +420,7 @@ for (const [source, writeSession] of Object.entries(cliBlastSessions)) {
     mkdirSync(directory, { recursive: true });
     const session = await writeSession(directory);
     await openFresh(page);
-    await page.locator('input[accept^=".json,"]').setInputFiles(session);
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(session);
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
       && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 300_000 });
     await settle(page);
@@ -450,12 +450,12 @@ test('a current CLI Linear Session without a comparison generates without a LOSA
   mkdirSync(directory, { recursive: true });
   writeFileSync(path.join(directory, 'R2c.gb'), R2C);
   writeFileSync(path.join(directory, 'R3c.gb'), R3C);
-  const session = path.join(directory, 'cli-none.gbdraw-session.json.gz');
+  const session = path.join(directory, 'cli-none.gbdraw');
   await promisify(execFile)('python', [
     '-m', 'gbdraw.cli', 'linear', '--gbk', 'R2c.gb', 'R3c.gb', '-o', 'cli-none', '--session_output', session
   ], { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 1_000_000 });
   await openFresh(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(session);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(session);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 300_000 });
   await settle(page);
@@ -478,12 +478,12 @@ test('a CLI Session that draws one file record in two windows loads and regenera
   writeFileSync(path.join(directory, 'records.tsv'), [
     'gbk\trecord_label\trow\tcolumn\tregion', 'R2c.gb\tleft\t1\t1\t1-1000', 'R2c.gb\tright\t1\t2\t2001-3000', ''
   ].join('\n'));
-  const session = path.join(directory, 'cli-twice.gbdraw-session.json.gz');
+  const session = path.join(directory, 'cli-twice.gbdraw');
   await promisify(execFile)('python', [
     '-m', 'gbdraw.cli', 'linear', '--records_table', 'records.tsv', '-o', 'cli-twice', '--session_output', session
   ], { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 1_000_000 });
   await openFresh(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(session);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(session);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 300_000 });
   await settle(page);
@@ -572,7 +572,7 @@ test('after Load, Copy FASTA of a ribbon of a second window gives that window\'s
   const generated = await copied();
   expect(generated.map(({ available }) => available)).toEqual([true, true]);
   expect(generated[0].fasta.split('\n')[0]).toMatch(/coords=2\d{3}\.\.\d{4}/);
-  const file = path.join(directory, 'windows.gbdraw-session.json.gz');
+  const file = path.join(directory, 'windows.gbdraw');
   await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'windows'; });
   const download = page.waitForEvent('download', { timeout: 180_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
@@ -601,17 +601,20 @@ for (const scenario of ['upload', 'losatn']) {
 // of the Web re-save and of the Python upgrade of the same Session (the
 // comparison resources; a Session 39 re-saves its color tables in another kind).
 const PROTEIN_RESOURCES_CHECK = `
-import base64, gzip, hashlib, json, sys
+import base64, hashlib, json, sys
 from gbdraw.session import upgrade_session_document
+from tests.utils.session_files import read_session_payload
 web_path, source = sys.argv[1], sys.argv[2]
-def contents(document):
-    return sorted((entry["kind"], hashlib.sha256(base64.b64decode(entry["data"])).hexdigest())
+def contents(document, read=lambda name, entry: base64.b64decode(entry["data"])):
+    return sorted((entry["kind"], hashlib.sha256(read(name, entry)).hexdigest())
                   for name, entry in document["resources"].items() if name.startswith("comparison-")
                   and entry["kind"] in ("canonical-tsv", "orthogroup-result", "collinearity-result"))
-web = json.loads(gzip.decompress(open(web_path, "rb").read()))
-python = upgrade_session_document(source).document.to_dict()
-print(json.dumps({"version": web["version"], "web": contents(web), "python": contents(python),
-                  "stored": contents(json.loads(gzip.decompress(open(source, "rb").read())))}))
+web = read_session_payload(web_path)
+# A current SessionDocument keeps each resource's bytes beside its descriptor.
+upgraded = upgrade_session_document(source).document
+python = contents(upgraded.to_dict(), lambda name, entry: upgraded.resources.read(name))
+print(json.dumps({"version": web["version"], "web": contents(web), "python": python,
+                  "stored": contents(read_session_payload(source))}))
 `;
 
 test('a Session 47 with protein results of a reversed record shows its figure, then Python converts them once at Load', async ({ page }, testInfo) => {
@@ -648,7 +651,7 @@ test('a Session 47 with protein results of a reversed record shows its figure, t
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(0);
-  const file = path.join(directory, 'web.gbdraw-session.json.gz');
+  const file = path.join(directory, 'web.gbdraw');
   const download = page.waitForEvent('download', { timeout: 180_000 });
   // The Session has a title, so Save asks for none.
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
@@ -676,7 +679,7 @@ test('a main Session 39 with a protein table of a reversed record converts it at
   await loadSessionFile(page, fixture);
   await generateAndWaitForResult(page);
   expect((await committedRibbons(page)).length).toBeGreaterThan(0);
-  const file = path.join(directory, 'web.gbdraw-session.json.gz');
+  const file = path.join(directory, 'web.gbdraw');
   const download = page.waitForEvent('download', { timeout: 180_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
   await (await download).saveAs(file);
@@ -694,10 +697,12 @@ test('a main Session 39 with a protein table of a reversed record converts it at
 // Each drawing's protein searches resolve in its own manifest, one record instance key has two bindings, and the CLI
 // loads the Session (OV-3273).
 const COLLIDING_KEYS_CHECK = `
-import gzip, json, sys
+import json, sys
+from pathlib import Path
 from gbdraw.analysis.protein_colinearity import validate_protein_raw_entry_references
+from gbdraw.session_container import read_session_container
 from gbdraw.session_io import load_session
-session = json.loads(gzip.decompress(open(sys.argv[1], 'rb').read()))
+session = read_session_container(Path(sys.argv[1])).document
 drawings = session['drawings']
 proteins = [[e for e in d['losatCache']['entries'] if 'queryRecordInstanceKey' in e] for d in drawings]
 unresolved = sum(not validate_protein_raw_entry_references(e, d['proteinIdentityManifest']) for d, es in zip(drawings, proteins) for e in es)
@@ -748,7 +753,7 @@ test('a Web Similarity groups Generate stores a cropped reversed record in its s
   await generateAndWaitForResult(page);
   const web = ribbonGeometry(await committedRibbons(page));
   expect(web.length).toBeGreaterThan(0);
-  const file = path.join(directory, 'web.gbdraw-session.json.gz');
+  const file = path.join(directory, 'web.gbdraw');
   const download = page.waitForEvent('download', { timeout: 180_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
   await answerSessionTitle(page, '');
@@ -766,7 +771,7 @@ test('a Web Similarity groups Generate stores a cropped reversed record in its s
 // OV-3273 (#1777): a Duplicate keeps its source's card uids, so after the copy's region changes one record instance
 // key names other proteins in each drawing's protein identity manifest. Save writes into each drawing only the protein
 // searches its own manifest resolves, and the CLI loads the Session. The saved Session is the positive fixture
-// tests/fixtures/sessions/BGC0000708-BGC0000709-copy-crop.v51-web.gbdraw-session.json.gz (its provenance names this test).
+// tests/fixtures/sessions/BGC0000708-BGC0000709-copy-crop.v51-web.gbdraw (its provenance names this test).
 test('two Linear LOSATP drawings whose record instance keys collide each save their own searches, and the CLI loads them', async ({ page }, testInfo) => {
   test.setTimeout(900_000);
   await openLinearWith(page, [bgc('BGC0000708'), bgc('BGC0000709')]);
@@ -783,7 +788,7 @@ test('two Linear LOSATP drawings whose record instance keys collide each save th
   });
   await settle(page);
   await generateAndWaitForResult(page);
-  const file = testInfo.outputPath('copy-crop.gbdraw-session.json.gz');
+  const file = testInfo.outputPath('copy-crop.gbdraw');
   const download = page.waitForEvent('download', { timeout: 180_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
   await answerSessionTitle(page, 'BGC0000708-BGC0000709 two drawings');

@@ -57,7 +57,7 @@ const setMode = (page, mode) => showDrawing(page, { kind: mode });
 
 const loadSession = async (page, name) => {
   page.on('dialog', (dialog) => dialog.accept());
-  await page.locator('input[accept^=".json,"]').setInputFiles(
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(
     join(process.cwd(), 'gbdraw/web/gallery/sessions', name));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
@@ -164,7 +164,7 @@ test('an entry opens its section, brings it to the top, focuses its heading, and
   test.setTimeout(300_000);
   await page.setViewportSize({ width: 1600, height: 1000 });
   await openApp(page);
-  await loadSession(page, 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await loadSession(page, 'BGC0000708-BGC0000713.gbdraw');
   // The test measures scroll distances over Input Genomes with its cards open.
   await openLinearFileCards(page);
   await expect(index(page)).toBeVisible();

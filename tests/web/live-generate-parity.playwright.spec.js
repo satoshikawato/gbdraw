@@ -947,7 +947,7 @@ const loadedWithLinearShown = async (page, browser, testInfo) => {
   await popupEdit(page, 'FL2', { visibility: 'off' });
   await generate(page);
   await switchDrawing(page, 'linear');
-  const saved = testInfo.outputPath('reset-after-load.gbdraw-session.json');
+  const saved = testInfo.outputPath('reset-after-load.gbdraw');
   await download(page, 'Save Session', saved, { title: '' });
   return load(browser, saved);
 };
@@ -994,7 +994,7 @@ test.describe('a Result displayed after its intent changed', () => {
   });
   const allowRerenders = (page) => page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
   const saveAndLoad = async (page, browser, testInfo, name) => {
-    const saved = testInfo.outputPath(`${name}.gbdraw-session.json`);
+    const saved = testInfo.outputPath(`${name}.gbdraw`);
     await download(page, 'Save Session', saved, { title: '' });
     return load(browser, saved);
   };
@@ -1800,7 +1800,7 @@ test('Palette change repaints the skew track and its Legend rows of a loaded Ses
   test.setTimeout(240_000);
   await openFresh(page);
   // A CLI Session of 0.13.0 lists no extracted features, so the Load is awaited by its Result.
-  await page.locator('input[accept^=".json,"]').setInputFiles('tests/fixtures/sessions/scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz');
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles('tests/fixtures/sessions/scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz');
   await expectNoLoadRepairDialog(page);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.svgContainer?.querySelector('g#skew'), null, { timeout: 60_000 });
@@ -1835,7 +1835,7 @@ test('a stroke removed after Load leaves a batch Result that showed it (circular
   await legendRowStroke(page, 'CDS', '#e63946', 3);
   await showResult(page, 1);
   await showResult(page, 0);
-  const saved = testInfo.outputPath('stroked-batch.gbdraw-session.json');
+  const saved = testInfo.outputPath('stroked-batch.gbdraw');
   await download(page, 'Save Session', saved, { title: '' });
   const loaded = await load(browser, saved);
   if (await loaded.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(loaded, 0);
@@ -1858,7 +1858,7 @@ test('a batch Result saved before it showed the paint edits shows them after Loa
   await legendRowStroke(page, 'CDS', '#e63946', 3);
   await popupEdit(page, 'TESTA_0001', { stroke: '#2a9d8f' });
   await legendRowColor(page, 'tRNA', '#7b2cbf');
-  const saved = testInfo.outputPath('stale-batch.gbdraw-session.json');
+  const saved = testInfo.outputPath('stale-batch.gbdraw');
   await download(page, 'Save Session', saved, { title: '' });
   const loaded = await load(browser, saved);
   if (await loaded.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(loaded, 0);
@@ -1907,7 +1907,7 @@ test('a batch Result displayed while Save runs is saved with the edits (circular
   await legendRowColor(page, 'tRNA', '#7b2cbf');
   const [file] = await Promise.all([page.waitForEvent('download'), saveWhileDisplaying(page, 1)]);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex), 'the Save raced the display').toBe(1);
-  const saved = testInfo.outputPath('declined-display.gbdraw-session.json');
+  const saved = testInfo.outputPath('declined-display.gbdraw');
   await file.saveAs(saved);
   await settleLive(page);
   await expectLiveEqualsGenerate(page, { label: 'a batch Result displayed while Save ran' });
@@ -1927,7 +1927,7 @@ test('a batch Result saved with a label edit removed meanwhile shows the label a
   await popupEdit(page, 'TESTB_0001', { labelText: 'edited on B' });
   await showResult(page, 0);
   await appAction(page, 'resetAllLabelTextOverrides');
-  const saved = testInfo.outputPath('label-batch.gbdraw-session.json');
+  const saved = testInfo.outputPath('label-batch.gbdraw');
   await download(page, 'Save Session', saved, { title: '' });
   const loaded = await load(browser, saved);
   if (await loaded.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(loaded, 0);
@@ -2252,12 +2252,12 @@ test.describe('the warm app page', () => {
 
   test('a case saves a Session', async ({ page }) => {
     await openFresh(page);
-    expect(await saveSession(page)).toBe('gbdraw_session.json.gz');
+    expect(await saveSession(page)).toBe('gbdraw_session.gbdraw');
   });
 
   test('the next case saves a Session of that name without the question', async ({ page }) => {
     await openFresh(page);
-    expect(await saveSession(page)).toBe('gbdraw_session.json.gz');
-    expect(warmPage()).toBe('fresh: savedSessions: [] -> ["gbdraw_session.json.gz"]');
+    expect(await saveSession(page)).toBe('gbdraw_session.gbdraw');
+    expect(warmPage()).toBe('fresh: savedSessions: [] -> ["gbdraw_session.gbdraw"]');
   });
 });

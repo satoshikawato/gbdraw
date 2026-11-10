@@ -145,7 +145,7 @@ def _python_replay_svg(session: dict[str, Any], tmp_path: Path, name: str) -> di
 
 
 def _cli_replay_svg(session: dict[str, Any], tmp_path: Path, name: str) -> bytes:
-    path = tmp_path / f"{name}.gbdraw-session.json"
+    path = tmp_path / f"{name}.gbdraw"
     path.write_text(json.dumps(session), encoding="utf-8")
     mode = (session.get("renderRequest") or session["cliInvocation"])["mode"]
     main = getattr(CLI_MODULES[mode], f"{mode}_main")

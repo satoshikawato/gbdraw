@@ -2,11 +2,12 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const { gunzipSync, gzipSync } = require('node:zlib');
+const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, generateAndWaitForResult, openApp, expectSessionLoadedWithoutWarnings, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile, readSessionFileJson, sessionFileBytesOf } = require('./helpers/session-file.cjs');
 const { drawingIds, shownDrawing } = require('./helpers/drawing-bar.cjs');
 const { chooseCoordinates, openRegionDialog } = require('./helpers/region-drawing.cjs');
 const { popupEdit } = require('./helpers/live-generate-parity-steps.cjs');
@@ -17,7 +18,6 @@ const lambda = path.join(root, 'tests/test_inputs/NC_001416.gb');
 const gff = path.join(root, 'tests/test_inputs/NC_013668.gff3');
 const fasta = path.join(root, 'tests/test_inputs/NC_013668.fasta');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
-const readSession = async file => JSON.parse(gunzipSync(await fs.readFile(file)));
 const cases = [
   { name: 'original single', mode: 'circular', args: ['--gbk', mito, '--labels', 'out'], sources: [mito] },
   { name: 'composite', mode: 'circular', args: ['--gbk', mito, lambda, '--multi_record_canvas'], sources: [mito, lambda] },
@@ -42,7 +42,7 @@ const cases = [
 
 const cli = async (mode, args, testInfo, label) => {
   const prefix = testInfo.outputPath(label);
-  const file = `${prefix}.gbdraw-session.json.gz`;
+  const file = `${prefix}.gbdraw`;
   const command = ['-m', 'gbdraw.cli', mode, ...args, '-o', prefix, '--session_output', file];
   const { stdout, stderr } = await promisify(execFile)('python', command, {
     cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: root },
@@ -74,6 +74,7 @@ const snapshot = page => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   const { getCommittedCanonicalSession } = await import('./js/services/config.js');
   const { getSessionResourceSource, readFileBytes } = await import('./js/services/file-content-cache.js');
+  const { sessionResourceStream } = await import('./js/services/session-resource-backing.js');
   const digest = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
     .map(byte => byte.toString(16).padStart(2, '0')).join('');
   const drawing = state.activeDrawing();
@@ -95,7 +96,8 @@ const snapshot = page => page.evaluate(async () => {
         isArray: Array.isArray(file), sha256: await digest(await readFileBytes(file)),
         parts: await Promise.all(parts.map(async part => ({
           resourceId: part.resourceId, name: part.name, type: part.type, lastModified: part.lastModified,
-          sha256: await digest(Uint8Array.from(atob(part.descriptor.data), char => char.charCodeAt(0)))
+          // The bytes the descriptor holds: a loaded container's entry copy, or a base64 text.
+          sha256: await digest(await new Response(await sessionResourceStream(part.descriptor)).arrayBuffer())
         })))
       };
     })),
@@ -118,7 +120,7 @@ const load = async (browser, file, viewport, requirePreview = true) => {
   page.on('pageerror', error => errors.push(String(error)));
   page.on('dialog', async dialog => { dialogs.push(dialog.message()); await dialog.accept(); });
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending)).toBe(true);
   // On a phone a Load with a Result shows the Preview pane, as Generate does.
@@ -129,7 +131,7 @@ const load = async (browser, file, viewport, requirePreview = true) => {
 const loadInto = async (run, file) => {
   const shown = () => run.page.evaluate(() => window.__GBDRAW_APP__.currentResults().map(result => String(result.content || '')).join('\n'));
   const before = await shown();
-  await run.page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await run.page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await expect.poll(async () => !(await run.page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)) && (await shown()) !== before,
     { timeout: 180_000 }).toBe(true);
   await expectSessionLoadedWithoutWarnings(run.page, { timeout: 180_000 });
@@ -146,7 +148,7 @@ for (const entry of cases) {
     for (const phase of ['fresh-cli', 'cli-replay', 'web-cli-replay']) {
       if (phase === 'cli-replay') file = await cli(entry.mode, ['--session', file], testInfo, phase);
       if (phase === 'web-cli-replay') file = await cli(entry.mode, ['--session', webFile], testInfo, phase);
-      const session = await readSession(file);
+      const session = await readSessionFile(file);
       expect(session.version).toBe(CURRENT_SESSION_VERSION);
       expect(shownSavedDrawing(session).renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
       expect(shownSavedDrawing(session).webFiles.bindings.schema).toBe(2);
@@ -218,9 +220,9 @@ for (const entry of cases) {
           const saved = run.page.waitForEvent('download');
           const outcome = await evaluateWithRetainedPromise(run.page, async () => await window.__GBDRAW_APP__.saveSessionWithTitle());
           expect(outcome.status).toBe('saved');
-          webFile = testInfo.outputPath('web-current.gbdraw-session.json.gz');
+          webFile = testInfo.outputPath('web-current.gbdraw');
           await (await saved).saveAs(webFile);
-          const webSession = await readSession(webFile);
+          const webSession = await readSessionFile(webFile);
           expect(shownSavedDrawing(webSession).config.form).toBeTruthy();
         }
         await fs.writeFile(testInfo.outputPath(`${phase}-state.json`), JSON.stringify({
@@ -251,7 +253,7 @@ const windowedLosatpArgs = (mode) => {
 // drew as Similarity groups does, so Inherit draws them without LOSAT (OV-3037).
 // Returns the figure the CLI drew, read from the Load (`svgSemantics`).
 const windowedInherit = async (browser, file) => {
-  const saved = shownSavedDrawing(await readSession(file)).renderRequest;
+  const saved = shownSavedDrawing(await readSessionFile(file)).renderRequest;
   const unitPairs = request => request.comparisons.filter(comparison => comparison.kind === 'precomputedProteinComparison')
     .map(comparison => [comparison.queryRecordIndex, comparison.subjectRecordIndex]);
   expect(saved.records.map(record => record.windows.length)).toEqual([2, 1]);
@@ -313,13 +315,14 @@ for (const mode of ['pairwise', 'collinear']) test(`Session CLI LOSATP ${mode} l
 // draws what the CLI drew from its own search.
 // `expectedSvg`: the figure of the CLI Session `file`, as its Load shows it.
 const windowedPipeline = async (browser, testInfo, file, expectedSvg, pairs) => {
-  const session = await readSession(file);
+  const session = await readSessionFileJson(file);
   const drawing = shownSavedDrawing(session);
   const tables = drawing.renderRequest.comparisons.filter(comparison => comparison.kind === 'precomputedProteinComparison');
   const [marker] = drawing.renderRequest.comparisons.filter(comparison => comparison.kind === 'generatedProteinComparison');
   // The CLI searched each window of BGC0000708 against BGC0000709: units 0 and 1 against unit 2.
   expect(tables.map(table => [table.queryRecordIndex, table.subjectRecordIndex])).toEqual([[0, 2], [1, 2]]);
   expect(marker.mode).toBe('none');
+  // The tables leave the document, so the written file holds no entry of them.
   tables.forEach(table => { delete session.resources[table.resourceId]; });
   drawing.renderRequest.comparisons = [{
     ...marker, mode: 'pairwise',
@@ -327,8 +330,8 @@ const windowedPipeline = async (browser, testInfo, file, expectedSvg, pairs) => 
   }];
   drawing.losatCache = { entries: [] };
   drawing.losatDerivedCache = { entries: [] };
-  const unrendered = testInfo.outputPath(`windowed-pipeline-${pairs.length}.gbdraw-session.json.gz`);
-  await fs.writeFile(unrendered, gzipSync(JSON.stringify(session)));
+  const unrendered = testInfo.outputPath(`windowed-pipeline-${pairs.length}.gbdraw`);
+  await fs.writeFile(unrendered, await sessionFileBytesOf(session));
   const run = await load(browser, unrendered, { width: 1600, height: 1000 });
   try {
     const resolution = run.page.locator('[data-imported-comparison-resolution]');
@@ -362,6 +365,54 @@ test('Session CLI windowed record with LOSAT pairwise regenerates through Inheri
   }
 });
 
+// OV-2732: a Session file container whose drawing the CLI wrote (no Web draft)
+// with a Specific colors table and a Label whitelist loads: Load reads the
+// tables from the input copies, the editors show their rows, and Generate draws
+// the colors of the saved Result.
+test('Session file container of a CLI drawing with a color table and a whitelist loads and draws its colors', async ({ browser }, testInfo) => {
+  test.setTimeout(1_800_000);
+  const tables = path.join(root, 'tests/fixtures/cli_session_cross_surface');
+  const prefix = testInfo.outputPath('container-tables');
+  await promisify(execFile)('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', lambda, '--show_labels', 'all',
+    '-t', path.join(tables, 'colors.tsv'), '--label_whitelist', path.join(tables, 'whitelist.tsv'),
+    '-o', prefix, '--session_output', `${prefix}.gbdraw`], {
+    cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: root }, timeout: 1_800_000, maxBuffer: 1_000_000
+  });
+  const file = `${prefix}.gbdraw`;
+  // The selected Result, the mounted figure and the error, read without the inputs' bytes.
+  const figures = page => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { selected: window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value]?.content || '',
+      mounted: state.svgContainer.value?.querySelector('svg')?.outerHTML || '', error: state.errorLog.value };
+  });
+  const run = await load(browser, file, { width: 1600, height: 1000 });
+  try {
+    const before = await figures(run.page);
+    expect(before.error).toBeNull();
+    const saved = await run.page.evaluate(svgSemantics, before.selected);
+    // The saved Result draws the portal protein in the table's color.
+    expect(saved.features.some(([, , , fill]) => fill === '#ff0000')).toBe(true);
+    expect(await run.page.evaluate(svgSemantics, before.mounted)).toEqual(saved);
+    expect(await run.page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const drawing = state.activeDrawing();
+      return { rules: drawing.manualSpecificRules.map(rule => [rule.feat, rule.qual, rule.val, rule.color]),
+        whitelist: drawing.manualWhitelist.map(row => [row.feat, row.qual, row.key]) };
+    })).toEqual({
+      rules: [['CDS', 'product', 'portal', '#ff0000'], ['CDS', 'gene', '^COX', '#ff0000']],
+      whitelist: [['CDS', 'product', 'terminase'], ['CDS', 'gene', 'COX'], ['CDS', 'gene', 'CYTB']]
+    });
+    await generateAndWaitForResult(run.page);
+    const after = await figures(run.page);
+    expect(after.error).toBeNull();
+    expect(await run.page.evaluate(svgSemantics, after.selected)).toEqual(saved);
+    expect(run.external).toEqual([]);
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
+
 // Where a figure places its legend and title: the size, each composition
 // role's transform, and which legend layout it shows (at 2 decimals).
 const placement = content => {
@@ -381,7 +432,7 @@ const placement = content => {
 // tests/fixtures/sessions/web-region-circular-linear.v51 is this test's Save.
 test('Session Linear region drawing of a Circular record draws the Web figure on the CLI', async ({ browser }, testInfo) => {
   test.setTimeout(900_000);
-  const run = await load(browser, path.join(root, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'),
+  const run = await load(browser, path.join(root, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw'),
     { width: 1600, height: 1000 });
   try {
     await generateAndWaitForResult(run.page);
@@ -404,9 +455,9 @@ test('Session Linear region drawing of a Circular record draws the Web figure on
       return await window.__GBDRAW_APP__.saveSessionWithTitle();
     });
     expect(outcome.status).toBe('saved');
-    const webFile = testInfo.outputPath('web-region.gbdraw-session.json.gz');
+    const webFile = testInfo.outputPath('web-region.gbdraw');
     await (await saved).saveAs(webFile);
-    const session = await readSession(webFile);
+    const session = await readSessionFile(webFile);
     // The Web writes the legend and title placement of the new Linear drawing into its request.
     const request = session.drawings.find(item => item.id === drawing).renderRequest;
     expect(request.mode).toBe('linear');
@@ -467,9 +518,7 @@ test('Session 40 early CLI linear tables survives Web Generate', async ({ browse
 // layout of the commit that wrote the fixture, so it gives only the slots and the fills.
 test('Session CLI feature density tracks survive Web Generate', async ({ browser }, testInfo) => {
   test.setTimeout(600_000);
-  const bytes = gunzipSync(await fs.readFile(path.join(root, 'tests/fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw-session.json.gz')));
-  const file = testInfo.outputPath('feature-density.gbdraw-session.json');
-  await fs.writeFile(file, bytes);
+  const file = path.join(root, 'tests/fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw');
   const prefix = testInfo.outputPath('feature-density-replay');
   await promisify(execFile)('python', ['-m', 'gbdraw.cli', 'circular', '--session', file, '-o', prefix, '-f', 'svg'], {
     cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 1_000_000
@@ -484,7 +533,7 @@ test('Session CLI feature density tracks survive Web Generate', async ({ browser
       ]);
     }, svg);
     const fills = (groups) => groups.map(([id, paths]) => [id, paths.map((item) => item.split('|')[0])]);
-    const stored = await density(JSON.parse(bytes).drawings[0].results[0].content);
+    const stored = await density((await readSessionFileJson(file)).drawings[0].results[0].content);
     expect(stored.map(([id]) => id)).toEqual(['density_genes', 'density_trna']);
     const replayed = await density(await fs.readFile(`${prefix}.svg`, 'utf8'));
     expect(fills(replayed)).toEqual(fills(stored));
@@ -500,7 +549,7 @@ test('Session CLI one circle loads its layout, Generates the CLI figure, saves i
   test.setTimeout(900_000);
   const file = await cli('circular', ['--gbk', mito, lambda, '--one_circle', '--one_circle_gap_degrees', '2.5',
     '--one_circle_no_record_band'], testInfo, 'one-circle');
-  const session = await readSession(file);
+  const session = await readSessionFile(file);
   expect(shownSavedDrawing(session).renderRequest.layout).toMatchObject({
     recordLayout: 'one_circle', oneCircleGapDegrees: 2.5, oneCircleRecordBand: false
   });
@@ -530,9 +579,9 @@ test('Session CLI one circle loads its layout, Generates the CLI figure, saves i
       return await window.__GBDRAW_APP__.saveSessionWithTitle();
     });
     expect(outcome.status).toBe('saved');
-    const webFile = testInfo.outputPath('web-one-circle.gbdraw-session.json.gz');
+    const webFile = testInfo.outputPath('web-one-circle.gbdraw');
     await (await saved).saveAs(webFile);
-    const webDrawing = shownSavedDrawing(await readSession(webFile));
+    const webDrawing = shownSavedDrawing(await readSessionFile(webFile));
     expect(webDrawing.renderRequest.layout).toMatchObject({
       recordLayout: 'one_circle', oneCircleGapDegrees: 2.5, oneCircleMinLength: 1000, oneCircleRecordBand: false
     });
@@ -604,10 +653,10 @@ const noAxisStack = async (browser, run, testInfo, [, mode, slots, axis, stack, 
       .filter(([set]) => slots.some((slot) => slot.includes(`set_id=${set},`))).map(([, row]) => row)
   ].join('\n') + '\n');
   // The CLI writes no output over an earlier stack's: the steps of one case share its output folder.
-  await Promise.all(['no-axis.gbdraw-session.json.gz', 'no-axis.svg'].map((name) => fs.rm(testInfo.outputPath(name), { force: true })));
+  await Promise.all(['no-axis.gbdraw', 'no-axis.svg'].map((name) => fs.rm(testInfo.outputPath(name), { force: true })));
   const file = await cli(mode, ['--gbk', lambda, '--annotation_table', 'regions.tsv',
     ...slots.flatMap((slot) => [`--${mode}_track_slot`, slot]), '-f', 'svg'], testInfo, 'no-axis');
-  const stored = shownSavedDrawing(await readSession(file));
+  const stored = shownSavedDrawing(await readSessionFile(file));
   const [slotsKey, axisKey] = [`${mode}TrackSlots`, `${mode}TrackAxisIndex`];
   expect(stored.renderRequest.diagramOptions.tracks[axisKey]).toBe(null);
   if (run.page) await loadInto(run, file);
@@ -691,7 +740,7 @@ test('Session CLI scale above the features without a tick label layout draws the
   const hmmt = path.join(root, 'tests/test_inputs/HmmtDNA.gbk');
   const file = await cli('circular', ['--gbk', hmmt, '-f', 'svg', '--circular_track_slot', 'ticks:ticks',
     '--circular_track_slot', 'features:features', '--circular_track_slot', 'gc_content:dinucleotide_content'], testInfo, 'ticks-first');
-  const stored = shownSavedDrawing(await readSession(file));
+  const stored = shownSavedDrawing(await readSessionFile(file));
   expect(stored.renderRequest.diagramOptions.tracks.circularTrackSlots.find(({ id }) => id === 'ticks').params).toEqual({});
   const run = await load(browser, file, { width: 1600, height: 1000 });
   try {
@@ -742,7 +791,7 @@ test('Session CLI scale outside the features backs the numbers a leader runs thr
   const hmmt = path.join(root, 'tests/test_inputs/HmmtDNA.gbk');
   const file = await cli('circular', ['--gbk', hmmt, '-f', 'svg', '--circular_track_order', 'ticks,features,gc_content,gc_skew',
     '--circular_track_axis_index', '1', '--labels', 'out', '--label_font_size', '10'], testInfo, 'scale-outside');
-  const stored = shownSavedDrawing(await readSession(file));
+  const stored = shownSavedDrawing(await readSessionFile(file));
   const run = await load(browser, file, { width: 1600, height: 1000 });
   try {
     // The scale group's place and paths (4 decimals, as `svgSemantics`), and the features whose leader line enters

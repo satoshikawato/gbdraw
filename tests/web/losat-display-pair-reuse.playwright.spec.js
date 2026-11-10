@@ -1,9 +1,10 @@
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
-const { readFileSync, writeFileSync } = require('node:fs');
+const { writeFileSync } = require('node:fs');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 // F-4 (OD-3, #694): a LOSAT derived payload holds the displayed direction of
 // each record pair and, for Collinear blocks, whether a CLI grid limits the
@@ -210,13 +211,13 @@ const saveCliGridSession = (testInfo) => {
     '--output', prefix, '--format', 'svg', '--save_session'], {
     env: { ...process.env, PYTHONPATH: process.cwd() }
   });
-  return `${prefix}.gbdraw-session.json`;
+  return `${prefix}.gbdraw`;
 };
 
 const openCollinearGrid = async (page, sessionPath) => {
   await installProteinExecutor(page);
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(sessionPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows.map(
     ({ row, canonicalRow, canonicalColumn }) => [row, canonicalRow, canonicalColumn]
   )), { timeout: 60000 }).toEqual([[1, 1, 1], [1, 1, 2], [2, 2, 1]]);
@@ -413,13 +414,13 @@ const saveCliMultiRecordSession = (testInfo, { genomeScale = true } = {}) => {
     '--losat_threads', '1', '--output', prefix, '--format', 'svg', '--save_session'], {
     env: { ...process.env, PYTHONPATH: process.cwd() }
   });
-  return `${prefix}.gbdraw-session.json`;
+  return `${prefix}.gbdraw`;
 };
 
 const openCliSession = async (page, sessionPath) => {
   await installProteinExecutor(page);
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(sessionPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 60000 })
     .toBe(3);
 };
@@ -455,7 +456,7 @@ test('The Web reuses every raw LOSATP search of a CLI Session over a multi-recor
   expect(run.executorCalls).toBe(0);
   expect(run.links.length).toBeGreaterThan(0);
 
-  const session = JSON.parse(readFileSync(sessionPath, 'utf8'));
+  const session = await readSessionFile(sessionPath);
   expect(shownSavedDrawing(session).renderRequest.records.map((record) => [record.source.resourceId, record.selector]))
     .toEqual([
       ['record-1-genbank', { kind: 'recordId', value: 'FileA1' }],

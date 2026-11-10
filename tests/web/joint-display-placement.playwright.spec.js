@@ -1,12 +1,12 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
-const zlib = require('node:zlib');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, openApp, openLinearFileCards, reveal } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 const replayEnv = { ...process.env };
 delete replayEnv.PYTHONPATH;
@@ -161,8 +161,7 @@ for (const mode of ['circular', 'linear']) {
     const download = await downloadPromise;
     const savedPath = testInfo.outputPath(download.suggestedFilename());
     await download.saveAs(savedPath);
-    const bytes = await fs.readFile(savedPath);
-    const session = JSON.parse((bytes[0] === 0x1f ? zlib.gunzipSync(bytes) : bytes).toString());
+    const session = await readSessionFile(savedPath);
     expect(session.version).toBe(CURRENT_SESSION_VERSION);
     expect(shownSavedDrawing(session).renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
     expect(shownSavedDrawing(session).renderRequest.records[0].display.startCoordinate).toBe(71);
@@ -174,7 +173,7 @@ for (const mode of ['circular', 'linear']) {
     const context = await browser.newContext();
     const loaded = await context.newPage();
     await openApp(loaded);
-    await loaded.locator('input[accept^=".json,"]').setInputFiles(savedPath);
+    await loaded.locator('input[accept*=".gbdraw"]').setInputFiles(savedPath);
     await expect.poll(() => loaded.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
     const loadedResult = await loaded.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
     expect(await svgStructure(loaded, loadedResult)).toEqual(await svgStructure(loaded, savedResult));
@@ -198,7 +197,7 @@ for (const mode of ['circular', 'linear']) {
 test('historical v40/schema6 saves as the joint format without Generate', async ({ page }, testInfo) => {
   test.setTimeout(180000);
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(
     'tests/fixtures/sessions/rendered-v27.v40-schema6.json.gz');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(false);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
@@ -208,8 +207,7 @@ test('historical v40/schema6 saves as the joint format without Generate', async 
   const download = await pending;
   const savedPath = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(savedPath);
-  const bytes = await fs.readFile(savedPath);
-  const saved = JSON.parse(zlib.gunzipSync(bytes));
+  const saved = await readSessionFile(savedPath);
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
   expect(shownSavedDrawing(saved).renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
   expect(shownSavedDrawing(saved).renderRequest.records.every((record) => record.display.isCircular === null
@@ -259,7 +257,7 @@ for (const mode of ['circular', 'linear']) {
     const saved = await pendingSave;
     const savedPath = testInfo.outputPath(saved.suggestedFilename());
     await saved.saveAs(savedPath);
-    await page.locator('input[accept^=".json,"]').setInputFiles(savedPath);
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(savedPath);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(false);
     if (mode === 'linear') {
       await expandLinearRecordControls(page);
@@ -294,7 +292,7 @@ for (const mode of ['circular', 'linear']) {
     const inactiveDownload = await inactiveSave;
     const inactivePath = testInfo.outputPath(inactiveDownload.suggestedFilename());
     await inactiveDownload.saveAs(inactivePath);
-    const inactive = JSON.parse(zlib.gunzipSync(await fs.readFile(inactivePath)));
+    const inactive = await readSessionFile(inactivePath);
     expect(shownSavedDrawing(inactive).results).toEqual([]);
     expect(shownSavedDrawing(inactive).config.recordDisplayDrafts[0]).toMatchObject({ topologyOverride: false, startCoordinate: 71 });
     await page.getByRole('button', { name: 'Reset to detected', exact: true }).click();
@@ -436,7 +434,7 @@ test('loaded replacement draft cannot place or take shortcuts from the prior Res
   await page.getByRole('button', { name: 'Save Session', exact: true }).click();
   const download = await pending, savedPath = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(savedPath);
-  await page.locator('input[accept^=".json,"]').setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(savedPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(false);
   await page.locator('[data-circular-inspect]').click();
   await expect(page.getByRole('spinbutton', { name: 'Display start shared #1', exact: true })).toBeEnabled();

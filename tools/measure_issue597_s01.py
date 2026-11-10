@@ -20,15 +20,16 @@ import psutil
 from playwright.sync_api import sync_playwright
 import websocket
 
+from gbdraw.session_container import is_session_container, read_session_container
 from gbdraw.session_drawings import checked_drawing_views
 
 ROOT = Path(__file__).resolve().parents[1]
 OBSERVER = ROOT / "tests/web/fixtures/issue597-session-measurement.js"
 VIBRIO = (
     ROOT
-    / "gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+    / "gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw"
 )
-IMPORT = 'input[type=file][accept*="application/json"][accept*="application/gzip"]'
+IMPORT = 'input[type=file][accept*=".gbdraw"]'
 TIMEOUT = 1_800_000
 
 
@@ -38,6 +39,8 @@ def sha(path):
 
 def document(path):
     data = path.read_bytes()
+    if is_session_container(data[:4]):
+        return read_session_container(path).document
     return json.loads(gzip.decompress(data) if data[:2] == b"\x1f\x8b" else data)
 
 
@@ -345,7 +348,7 @@ def pipeline(browser, url, port, fixture, out, label):
     }""")
     sampler = MemorySampler(port)
     sampler.start()
-    saved = out / f"{label}-saved.gbdraw-session.json.gz"
+    saved = out / f"{label}-saved.gbdraw"
     with page.expect_download(timeout=TIMEOUT) as download:
         outcome = page.evaluate("""async () => {
           const outcome=await window.__GBDRAW_APP__.saveSessionWithTitle();
@@ -395,15 +398,29 @@ def transport(browser, url, port, fixture, out, label, mode, repetition):
     )
     raw["memory"] = sampler.finish()
     result = compact(raw)
-    # Hash/equivalence serialization is outside responsiveness interval.
+    # Hash/equivalence serialization is outside responsiveness interval. A Session file
+    # is written again as a Session file, its inputs from the chosen file's entries; a
+    # JSON Session as gzip JSON.
+    container = is_session_container(fixture.read_bytes()[:4])
     with page.expect_download(timeout=TIMEOUT) as download:
-        page.evaluate("""async () => {
-          const {compressSessionData}=await import('/gbdraw/web/js/services/session-file.js');
-          const blob=await compressSessionData(window.__s01Candidate);
-          const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='probe.json.gz';a.click();
+        page.evaluate("""async container => {
+          const file=document.querySelector('#file').files[0];
+          const candidate=window.__s01Candidate;
+          const json=()=>new Blob([JSON.stringify(candidate)]).stream();
+          let blob;
+          if (container) {
+            const {openSessionContainerEntry, readSessionContainer, writeSessionContainer}=
+              await import('/gbdraw/web/js/services/session-container.js');
+            const {resources}=await readSessionContainer(file);
+            blob=await writeSessionContainer({document:candidate, documentBytes:json,
+              readResource:id=>openSessionContainerEntry(file, resources[id])});
+          } else {
+            blob=await new Response(json().pipeThrough(new CompressionStream('gzip'))).blob();
+          }
+          const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='probe';a.click();
           setTimeout(()=>URL.revokeObjectURL(a.href),0);
-        }""")
-    reply = out / f"{label}-{mode}-{repetition}.json.gz"
+        }""", container)
+    reply = out / f"{label}-{mode}-{repetition}{'.gbdraw' if container else '.json.gz'}"
     download.value.save_as(reply)
     result["wholeDocumentEqual"] = (
         summary(fixture)["wholeHash"] == summary(reply)["wholeHash"]

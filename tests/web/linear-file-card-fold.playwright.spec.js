@@ -8,15 +8,15 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
-const { gunzipSync } = require('node:zlib');
 const { answerSessionTitle, evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 test.use({ actionTimeout: 20_000 });
 
-const FIVE_FILES = 'BGC0000708-BGC0000713.gbdraw-session.json';
-const ONE_FILE = 'lambda_basic_linear.gbdraw-session.json';
-const TWO_RECORD_FILES = 'vibrio-harveyi-group-collinear.gbdraw-session.json.gz';
+const FIVE_FILES = 'BGC0000708-BGC0000713.gbdraw';
+const ONE_FILE = 'lambda_basic_linear.gbdraw';
+const TWO_RECORD_FILES = 'vibrio-harveyi-group-collinear.gbdraw';
 const genbank = readFileSync(join(__dirname, '../test_inputs/BGC0000708.gbk'));
 
 const cards = (page) => page.locator('[data-linear-source-card]');
@@ -26,7 +26,7 @@ const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUnd
 const sessionSettled = (page) => page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
 
 const loadSession = async (page, path) => {
-  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await sessionSettled(page);
   await page.waitForFunction(() => window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
 };
@@ -243,18 +243,17 @@ test('Save Session holds no fold state, Load Session folds the loaded cards, and
   const saved = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(saved);
   const bytes = readFileSync(saved);
-  const text = (bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8');
   const keys = new Set();
-  JSON.parse(text, (key, value) => { keys.add(key); return value; });
+  JSON.parse(JSON.stringify(await readSessionFile(saved)), (key, value) => { keys.add(key); return value; });
   expect([...keys].filter((key) => /fold/i.test(key)), 'the Session holds no fold state').toEqual([]);
   await expectFolded(page, [false, false, false, false, false]);
 
   // A load that fails leaves every card as the user had it.
   await header(cards(page).nth(1)).press('Enter');
   await expectFolded(page, [false, true, false, false, false]);
-  const broken = testInfo.outputPath('broken.gbdraw-session.json');
-  require('node:fs').writeFileSync(broken, text.slice(0, Math.floor(text.length / 2)));
-  await page.locator('input[accept^=".json,"]').setInputFiles(broken);
+  const broken = testInfo.outputPath('broken.gbdraw');
+  require('node:fs').writeFileSync(broken, bytes.subarray(0, Math.floor(bytes.length / 2)));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(broken);
   await sessionSettled(page);
   await expect(page.locator('[data-session-import-status]')).toHaveCount(0);
   expect(await page.evaluate(() => Boolean(window.__GBDRAW_APP__.errorLog)), 'the broken Session is refused').toBe(true);
@@ -391,7 +390,7 @@ test('a loaded GFF3 + FASTA Session folds a card that holds both of its files', 
   // A fresh page is on GenBank: the load rule reads the input type of the Session it loads.
   await openLinear(page);
   await expect(page.getByRole('radio', { name: 'GenBank', exact: true }).first()).toBeChecked();
-  await page.locator('input[accept^=".json,"]').setInputFiles(saved);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(saved);
   await sessionSettled(page);
   await expect(cards(page)).toHaveCount(1);
   await expectFolded(page, [true]);

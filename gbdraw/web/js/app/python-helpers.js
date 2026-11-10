@@ -313,12 +313,13 @@ def run_canonical_request_wrapper(
         return failure
 
 def _parse_sequence_file(path, fmt):
-    """The records of a GenBank/DDBJ/EMBL file as the CLI parses them (read_flat_file_records), or of a FASTA file."""
+    """The records of a GenBank/DDBJ/EMBL file (read_flat_file_records) or of a FASTA file
+    (read_sequence_file_records) as the CLI parses them, a gzip file expanded."""
     if fmt == "genbank":
         from gbdraw.io.genome import read_flat_file_records
         return read_flat_file_records(path)
-    from Bio import SeqIO
-    return list(SeqIO.parse(path, fmt))
+    from gbdraw.io.genome import read_sequence_file_records
+    return read_sequence_file_records(path, fmt)
 
 def _web_display_circular(is_circular):
     """The record's display option display.isCircular the page sends with an extraction: true, false, or none

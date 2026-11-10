@@ -6,6 +6,7 @@ import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { savedDrawingView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { sessionLoadEvent, readSavedSession } from './helpers/session-documents.mjs';
 
 // Exercise the existing coordinator and gzip writer with browser I/O stubbed.
 globalThis.window = {
@@ -31,7 +32,7 @@ const { adoptCurrentSessionDocument, validateSessionAuthorityInventory } = await
 const savedDocument = async title => {
   const result = await exportSession(title);
   assert.equal(result.status, 'saved');
-  return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  return await readSavedSession(result.blob);
 };
 
 // These files are refused before the Load dialog; a dialog would cancel the
@@ -56,6 +57,54 @@ const asSettingsOnly = (view) => {
 };
 const settingsOnlyView = (saved, id) => asSettingsOnly(savedDrawingView(saved, id));
 
+// A Save's temporary copies (its entries' data) back the Blob the browser downloads, and a page cannot see
+// when a download ends: a later Save never gives them back; they go when the page closes.
+test('a later Save never gives back the temporary copies of a Save handed to the browser', async () => {
+  const { useInputCopyStore } = await import('../../gbdraw/web/js/services/file-content-cache.js');
+  /** @type {Map<string, number>} */
+  const uses = new Map();
+  /** @type {string[]} */
+  const released = [];
+  useInputCopyStore({
+    openWriter: async () => {
+      /** @type {Uint8Array[]} */
+      const parts = [];
+      return {
+        write: async (buffer) => { parts.push(new Uint8Array(buffer.slice(0))); return buffer; },
+        finish: async (token) => {
+          uses.set(token, (uses.get(token) ?? 0) + 1);
+          const blob = new Blob(parts);
+          let used = true;
+          return {
+            read: async () => new Uint8Array(await blob.arrayBuffer()), blob: async () => blob,
+            release: () => {
+              if (!used) return;
+              used = false;
+              released.push(token);
+              uses.set(token, uses.get(token) - 1);
+            }
+          };
+        },
+        abort: () => {}
+      };
+    }
+  });
+  try {
+    const first = await exportSession('handed to the browser');
+    assert.equal(first.status, 'saved');
+    const firstCopies = [...uses.keys()];
+    assert.ok(firstCopies.length > 0, 'the Save wrote its entries to temporary copies');
+    const second = await exportSession('saved after it');
+    assert.equal(second.status, 'saved');
+    assert.deepEqual(released, [], 'the second Save gave back none of the first Save\'s copies');
+    assert.ok(firstCopies.every((token) => uses.get(token) > 0));
+    // The first file still reads whole.
+    assert.ok(await readSavedSession(first.blob));
+  } finally {
+    useInputCopyStore(null);
+  }
+});
+
 // E-OD02, E-OD06: Save refuses a settings-only Session 46 without the
 // settings of its mode; Load reads a missing `form` or `adv` as its default.
 test('OV-591: Save writes form and adv in the settings of its mode, as Python requires; Load reads them as defaults', async () => {
@@ -72,9 +121,7 @@ test('OV-591: Save writes form and adv in the settings of its mode, as Python re
     mutate(view);
     assert.throws(() => validateSessionAuthorityInventory(structuredClone(view), LAST_SETTINGS_ONLY_VERSION), /settings of its mode/, name);
     const document = withSavedDrawingView(saved, 'circular', mutate);
-    const loaded = await importSession({
-      target: { files: [new Blob([JSON.stringify(document)], { type: 'application/json' })], value: 'selected' }
-    }, { confirmLoadRepairs: refuseLoadDialog });
+    const loaded = await importSession(await sessionLoadEvent(document), { confirmLoadRepairs: refuseLoadDialog });
     assert.equal(loaded.status, 'ok', name);
     assert.deepEqual(loaded.repairs ?? [], [], name);
   }
@@ -200,9 +247,7 @@ test('writer and current admission reject invalid scalar drafts without altering
     const invalidBefore = structuredClone(invalid);
     /** @type {unknown} */
     let listed = null;
-    const loaded = await importSession({
-      target: { files: [new Blob([JSON.stringify(invalid)], { type: 'application/json' })], value: 'selected' }
-    }, { confirmLoadRepairs: async (dialog) => { listed = dialog; return false; } });
+    const loaded = await importSession(await sessionLoadEvent(invalid), { confirmLoadRepairs: async (dialog) => { listed = dialog; return false; } });
     assert.equal(loaded.status, 'canceled', text);
     assert.match(JSON.stringify(listed), /circular_track_slots\[0\]\.width/, text);
     assert.deepEqual(invalid, invalidBefore);
@@ -210,3 +255,4 @@ test('writer and current admission reject invalid scalar drafts without altering
     assert.deepEqual(buildConfigData(state.activeDrawing()), before, `drawing after the refused Load of ${text}`);
   }
 });
+

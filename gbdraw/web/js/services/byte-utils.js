@@ -204,7 +204,8 @@ export const isGzipBytes = (bytes) => GZIP_SIGNATURE.every((byte, index) => byte
  * Hands each chunk of `stream` to `onChunk` until the stream ends, and rejects
  * with `overCap()` once the chunks pass `maxBytes`, before that chunk is handed
  * on or another is read. The one capped reader of an expanded stream: a gzip
- * input file (`expandGzipBytes`) and a Session (services/session-file.js).
+ * input file (`expandGzipBytes`, `checkGzipExpandedSize`) and a Session
+ * (services/session-file.js).
  * @param {ReadableStream<Uint8Array>} stream
  * @param {number} maxBytes
  * @param {(chunk: Uint8Array) => void} onChunk
@@ -256,4 +257,34 @@ export const expandGzipBytes = async (bytes, maxBytes, overCap) => {
     offset += chunk.byteLength;
   }
   return expanded;
+};
+
+const GZIP_CHECK_PIECE_BYTES = 1024 * 1024;
+
+/**
+ * Counts the bytes a gzip file expands to, keeping none, and rejects with
+ * `overCap()` once they pass `maxBytes`, where the count stops. It reads
+ * `bytes` through views of 1 MiB pieces, so it copies none of them. Bytes that
+ * are not gzip, or a browser with no `DecompressionStream`, pass unchecked, as
+ * `expandGzipBytes` gives them as they are.
+ * @param {Uint8Array<ArrayBuffer>} bytes
+ * @param {number} maxBytes
+ * @param {() => Error} overCap
+ * @returns {Promise<void>}
+ */
+export const checkGzipExpandedSize = async (bytes, maxBytes, overCap) => {
+  if (!isGzipBytes(bytes) || typeof DecompressionStream !== 'function') return;
+  let start = 0;
+  /** @type {ReadableStream<BufferSource>} */
+  const pieces = new ReadableStream({
+    pull(controller) {
+      if (start >= bytes.byteLength) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(bytes.subarray(start, start + GZIP_CHECK_PIECE_BYTES));
+      start += GZIP_CHECK_PIECE_BYTES;
+    }
+  });
+  await readCappedStream(pieces.pipeThrough(new DecompressionStream('gzip')), maxBytes, () => {}, overCap);
 };

@@ -8,17 +8,16 @@ re-save of a Session, and the Web file bindings.
 
 from __future__ import annotations
 
-import base64
 import hashlib
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Collection, Mapping
 
 from gbdraw import session_io
-from gbdraw.session_io import SessionResourceDescriptor
+from gbdraw.session_io import SessionResourceDescriptor, SessionResources
 from gbdraw.io.filenames import safe_embedded_filename, unique_filename
-from gbdraw.io.input_text import GZIP_ERRORS, read_input_bytes
-from gbdraw.session_contract import SESSION_ID_RE
+from gbdraw.session_container import BytesResourceSource, FileResourceSource, SessionResourceSource
+from gbdraw.session_contract import SESSION_ID_RE, SessionContainerResource
 from gbdraw.session_request_codec import (
     CanonicalRequestEncodingError,
     CanonicalRequestResource,
@@ -81,11 +80,12 @@ def drawing_resource_ids(fields: Mapping[str, object]) -> set[str]:
 
 @dataclass
 class _HeldResource:
-    """A table entry: a Session descriptor, or a request resource to serialize."""
+    """A table entry: a Session resource and its bytes' source, or a request resource to serialize."""
 
     size: int
     name: str
-    descriptor: SessionResourceDescriptor | None = None
+    descriptor: SessionContainerResource | None = None
+    source: SessionResourceSource | None = None
     resource: CanonicalRequestResource | None = None
     digest: str | None = None
 
@@ -100,16 +100,17 @@ class SessionResourceTable:
     by side by sanitized name, so a new name used before (``a/X.fna`` and
     ``b/X.fna``) takes the next number, ``X.2.fna``, the ``--losat_output_dir``
     rule. A table without seed resources gives a request the IDs and names it
-    gets alone.
+    gets alone. :meth:`resources` gives every held resource: its descriptor
+    and its bytes' source, by ID.
     """
 
-    def __init__(self, resources: Mapping[str, SessionResourceDescriptor] | None = None) -> None:
+    def __init__(self, resources: SessionResources | None = None) -> None:
         self._held: dict[str, _HeldResource] = {}
         self._names: set[str] = set()
-        self._payloads: dict[tuple[int, str], str] = {}
         self._next_number = 1
-        for resource_id, descriptor in (resources or {}).items():
-            self._hold_descriptor(resource_id, descriptor)
+        if resources is not None:
+            for resource_id, descriptor in resources.descriptors.items():
+                self._hold_descriptor(resource_id, descriptor, resources.source(resource_id))
 
     def request(self) -> RequestResources:
         """Allocate the resources of one canonical request."""
@@ -117,6 +118,29 @@ class SessionResourceTable:
         return RequestResources(self)
 
     def bind(self, entry: SessionResourceDescriptor, *, preferred_id: str = "") -> str:
+        """The resource of one embedded Web file's bytes (base64 or a depth payload).
+
+        The bytes are decoded once and checked against the entry's size and
+        any ``checksum``; :meth:`bind_resource` binds them.
+        """
+
+        content = session_io._embedded_resource_bytes(entry)
+        descriptor: SessionContainerResource = {
+            "kind": str(entry.get("kind") or "web-file"),
+            "name": str(entry.get("name") or ""),
+            "type": str(entry.get("type") or session_io.INPUT_FILE_MEDIA_TYPE),
+            "size": len(content),
+            "lastModified": int(entry.get("lastModified") or 0),
+        }
+        return self.bind_resource(descriptor, BytesResourceSource(content), preferred_id=preferred_id)
+
+    def bind_resource(
+        self,
+        descriptor: SessionContainerResource,
+        source: SessionResourceSource,
+        *,
+        preferred_id: str = "",
+    ) -> str:
         """The resource of one Web file's bytes; a binding carries its own name.
 
         A held resource with equal bytes is shared. A new resource keeps
@@ -125,27 +149,16 @@ class SessionResourceTable:
         Web writer names it (``services/session-resources.js``).
         """
 
+        held = self._held.get(preferred_id)
+        if held is not None and held.source is source and held.size == descriptor["size"]:
+            return preferred_id
         content: list[bytes] = []
 
         def read() -> bytes:
             if not content:
-                content.append(session_io._embedded_resource_bytes(entry))
+                content.append(session_io.read_source_bytes(source, descriptor["size"]))
             return content[0]
 
-        held = self._held.get(preferred_id)
-        existing = held.descriptor if held is not None else None
-        existing_checksum = existing.get("checksum") if existing is not None else None
-        if entry.get("checksum") and entry is not existing and entry.get("checksum") != existing_checksum:
-            read()
-        if existing is not None and all(
-            entry.get(field) == existing.get(field) for field in ("encoding", "data", "size")
-        ):
-            return preferred_id
-        size, data = entry["size"], entry["data"]
-        if entry.get("encoding") == "base64" and isinstance(data, str):
-            shared = self._payloads.get((size, data))
-            if shared is not None:
-                return shared
         digest: list[str] = []
 
         def entry_digest() -> str:
@@ -153,13 +166,12 @@ class SessionResourceTable:
                 digest.append(hashlib.sha256(read()).hexdigest())
             return digest[0]
 
-        shared = self._find_equal(size, entry_digest, preferred_id=preferred_id)
+        shared = self._find_equal(descriptor["size"], entry_digest, preferred_id=preferred_id)
         if shared is not None:
             return shared
-        content_bytes = read()
-        safe_name = safe_embedded_filename(entry.get("name"), fallback="resource.dat")
+        safe_name = safe_embedded_filename(descriptor.get("name"), fallback="resource.dat")
         if (SESSION_ID_RE.fullmatch(preferred_id) and preferred_id not in self._held
-                and safe_name == entry.get("name") and safe_name not in self._names):
+                and safe_name == descriptor.get("name") and safe_name not in self._names):
             resource_id, name = preferred_id, safe_name
         else:
             while True:
@@ -171,28 +183,28 @@ class SessionResourceTable:
         self._hold_descriptor(
             resource_id,
             {
-                **entry, "kind": str(entry.get("kind") or "web-file"), "name": name,
-                "size": len(content_bytes),
-                "type": str(entry.get("type") or session_io.INPUT_FILE_MEDIA_TYPE),
-                "encoding": "base64", "data": (
-                    entry["data"] if entry.get("encoding") != session_io.DEPTH_FILE_ENCODING
-                    else base64.b64encode(content_bytes).decode("ascii")
-                ),
+                "kind": descriptor["kind"] or "web-file", "name": name,
+                "type": descriptor["type"] or session_io.INPUT_FILE_MEDIA_TYPE,
+                "size": descriptor["size"], "lastModified": descriptor["lastModified"],
             },
+            source,
             digest=digest[0] if digest else None,
         )
         return resource_id
 
-    def descriptors(self) -> dict[str, SessionResourceDescriptor]:
-        """Every held resource as a Session resource descriptor, in table order."""
+    def resources(self) -> SessionResources:
+        """Every held resource, in table order: its descriptor and its bytes' source."""
 
-        return {
-            resource_id: (
-                held.descriptor if held.descriptor is not None
-                else _resource_descriptor(_request_resource(held))
-            )
-            for resource_id, held in self._held.items()
-        }
+        descriptors: dict[str, SessionContainerResource] = {}
+        sources: dict[str, SessionResourceSource] = {}
+        for resource_id, held in self._held.items():
+            if held.descriptor is not None and held.source is not None:
+                descriptors[resource_id], sources[resource_id] = held.descriptor, held.source
+            else:
+                resource = _request_resource(held)
+                descriptors[resource_id] = _resource_descriptor(resource)
+                sources[resource_id] = _resource_source(resource)
+        return SessionResources(descriptors, sources)
 
     def _find_equal(
         self,
@@ -224,7 +236,7 @@ class SessionResourceTable:
         held = self._held[resource_id]
         if held.digest is None:
             held.digest = hashlib.sha256(
-                session_io._embedded_resource_bytes(held.descriptor) if held.descriptor is not None
+                session_io.read_source_bytes(held.source, held.size) if held.source is not None
                 else _resource_bytes(_request_resource(held))
             ).hexdigest()
         return held.digest
@@ -239,18 +251,16 @@ class SessionResourceTable:
     def _hold_descriptor(
         self,
         resource_id: str,
-        descriptor: SessionResourceDescriptor,
+        descriptor: SessionContainerResource,
+        source: SessionResourceSource,
         *,
         digest: str | None = None,
     ) -> None:
         name = safe_embedded_filename(descriptor.get("name"))
         self._held[resource_id] = _HeldResource(
-            size=descriptor["size"], name=name, descriptor=descriptor, digest=digest,
+            size=descriptor["size"], name=name, descriptor=descriptor, source=source, digest=digest,
         )
         self._names.add(name)
-        data = descriptor["data"]
-        if descriptor.get("encoding") == "base64" and isinstance(data, str):
-            self._payloads.setdefault((descriptor["size"], data), resource_id)
 
     def _hold_resource(self, resource: CanonicalRequestResource, *, size: int) -> None:
         name = safe_embedded_filename(resource.name)
@@ -360,29 +370,50 @@ def _resource_size(resource: CanonicalRequestResource) -> int:
 
 
 def _resource_bytes(resource: CanonicalRequestResource) -> bytes:
+    """A resource's bytes as its file holds them: a gzip input stays gzip, as the Session file stores it."""
+
     if resource.content is not None:
         return resource.content
     assert resource.source_path is not None
     try:
-        return read_input_bytes(resource.source_path)
-    except (OSError, *GZIP_ERRORS) as exc:
+        return resource.source_path.read_bytes()
+    except OSError as exc:
         raise CanonicalRequestEncodingError(
             f"Could not read canonical resource: {resource.source_path}"
         ) from exc
 
 
-def _resource_descriptor(resource: CanonicalRequestResource) -> SessionResourceDescriptor:
-    content = _resource_bytes(resource)
+def _resource_descriptor(resource: CanonicalRequestResource) -> SessionContainerResource:
+    """The descriptor of a new resource: its size from its file or its bytes, its
+    ``type`` and ``lastModified`` from :func:`session_io.written_file_metadata`."""
+
+    if resource.source_path is not None:
+        try:
+            size = resource.source_path.stat().st_size
+        except OSError as exc:
+            raise CanonicalRequestEncodingError(
+                f"Could not read canonical resource: {resource.source_path}"
+            ) from exc
+    else:
+        assert resource.content is not None
+        size = len(resource.content)
     metadata = session_io.written_file_metadata(resource.kind)
     return {
         "kind": resource.kind,
         "name": safe_embedded_filename(resource.name),
         "type": metadata["type"],
-        "size": len(content),
+        "size": size,
         "lastModified": metadata["lastModified"],
-        "encoding": "base64",
-        "data": base64.b64encode(content).decode("ascii"),
     }
+
+
+def _resource_source(resource: CanonicalRequestResource) -> SessionResourceSource:
+    """The source of a new resource's bytes: its file as it is on disk, or its bytes."""
+
+    if resource.source_path is not None:
+        return FileResourceSource(resource.source_path)
+    assert resource.content is not None
+    return BytesResourceSource(resource.content)
 
 
 __all__ = ["RequestResources", "SessionResourceTable", "canonical_resource_ids", "drawing_resource_ids"]

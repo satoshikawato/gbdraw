@@ -316,9 +316,9 @@ def test_the_cli_draws_one_circle_gc_in_percent_unless_typed(words: list[str], p
     assert _slot_groups(svg, "dinucleotide_skew") == []
     assert _gc_counts(svg) == ((2, 1) if percent else (0, 0))
     # The saved Session carries every one-circle profile value the user left unset, so a replay draws the same.
-    import json
+    from tests.utils.session_files import read_session_payload
 
-    session = json.loads((tmp_path / "one.gbdraw-session.json").read_text(encoding="utf-8"))
+    session = read_session_payload(tmp_path / "one.gbdraw")
     config = session["drawings"][0]["renderRequest"]["diagramOptions"]["config"]
     for path, value in ONE_CIRCLE_CONFIG_OVERRIDES.items():
         leaf: object = config

@@ -66,7 +66,7 @@ for (const mode of ['circular', 'linear']) {
 }
 
 const { readFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 const { join } = require('node:path');
 const {
   assertDiagramWorkerIdle, assertSessionLoadLeftWorkerIdle, getDiagramWorkerActivity
@@ -105,8 +105,8 @@ const defineSetCardGenbank = (page) => page.evaluate(() => {
 });
 const loadPreview = async (page) => {
   page.on('dialog', dialog => dialog.accept());
-  await page.locator('input[accept^=".json,"]').setInputFiles(fixture(
-    'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(fixture(
+    'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw'));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length === 1);
 };
@@ -382,15 +382,14 @@ test('a saved Session with a FASTA source loads its Result without the Worker', 
     await window.__GBDRAW_APP__.saveSessionWithTitle();
   });
   const saved = await (await download).path();
-  const bytes = readFileSync(saved);
-  const session = JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
+  const session = await readSessionFile(saved);
   const drawing = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId);
   expect(drawing.renderRequest.records[0].source.kind).toBe('fasta');
 
   const fresh = await context.newPage();
   await openApp(fresh);
   fresh.on('dialog', dialog => dialog.accept());
-  await fresh.locator('input[accept^=".json,"]').setInputFiles(saved);
+  await fresh.locator('input[accept*=".gbdraw"]').setInputFiles(saved);
   await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length === 1, null, { timeout: 180000 });
   await assertSessionLoadLeftWorkerIdle(fresh);

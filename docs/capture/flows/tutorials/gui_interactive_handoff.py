@@ -53,7 +53,7 @@ SCENARIO_ID = "T-GUI-09"
 INTERACTIVE_PREFIX = "interactive_human_mitochondrion"
 INTERACTIVE_SVG = f"{INTERACTIVE_PREFIX}.interactive.svg"
 SESSION_TITLE = "interactive_handoff"
-SESSION_FILE = f"{SESSION_TITLE}.gbdraw-session.json.gz"
+SESSION_FILE = f"{SESSION_TITLE}.gbdraw"
 RESTORED_PREFIX = "restored_interactive_figure"
 RESTORED_SVG = f"{RESTORED_PREFIX}.svg"
 

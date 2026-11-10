@@ -7,7 +7,8 @@
 const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { writeFile } = require('node:fs/promises');
-const { gunzipSync } = require('node:zlib');
+const { readSessionFile } = require('./helpers/session-file.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 const { download, load } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { installPageProbe, reveal, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
@@ -267,13 +268,13 @@ const resultDepthRows = async (page) => (await semanticSnapshot(page)).legend
   .map((row) => row.caption).filter((caption) => /depth|coverage/i.test(caption));
 const toggleDepth = async (page) => { await clickTrackCheckbox(page, 'Show Depth'); await settleLive(page); };
 const saveSessionJson = async (page, name) => {
-  const path = test.info().outputPath(`${name}-${Date.now()}.gbdraw-session.json`);
+  const path = test.info().outputPath(`${name}-${Date.now()}.gbdraw`);
   await page.evaluate(async (title) => {
     const { state } = await import('./js/state.js');
     state.sessionTitle.value = title;
   }, name);
   const bytes = await download(page, 'Save Session', path);
-  return JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
+  return (await sessionDocuments()).readSavedSession(new Blob([bytes]));
 };
 // Counts of a caption among the saved Legend entries and every object key of the Session.
 const sessionKeyCount = (saved, key) => {
@@ -513,9 +514,9 @@ test('A Session saved with Depth hidden loads without a Depth row in the list', 
   await toggleDepth(page);
   expect(await depthRows(page), 'hidden before Save').toEqual([]);
   const saved = await saveSessionJson(page, 'depth-hidden');
-  const path = test.info().outputPath(`depth-hidden-reload-${Date.now()}.gbdraw-session.json`);
-  await writeFile(path, JSON.stringify(saved));
-  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  const path = test.info().outputPath(`depth-hidden-reload-${Date.now()}.gbdraw`);
+  await writeFile(path, Buffer.from(await (await (await sessionDocuments()).sessionFileOf(saved)).arrayBuffer()));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(true);
   await settleLive(page);
   expect(await depthRows(page), 'listed after Load').toEqual([]);
@@ -1228,9 +1229,9 @@ for (const mode of ['circular', 'linear']) {
     await switchTo(page, mode);
     expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), `${mode}: after a mode switch and back`).toBeGreaterThan(0);
     const saved = await saveSessionJson(page, `gt-depth-shown-${mode}`);
-    const path = test.info().outputPath(`gt-depth-shown-${mode}-${Date.now()}.gbdraw-session.json`);
-    await writeFile(path, JSON.stringify(saved));
-    await page.locator('input[accept^=".json,"]').setInputFiles(path);
+    const path = test.info().outputPath(`gt-depth-shown-${mode}-${Date.now()}.gbdraw`);
+    await writeFile(path, Buffer.from(await (await (await sessionDocuments()).sessionFileOf(saved)).arrayBuffer()));
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
     await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(true);
     await settleLive(page);
     expect(await resultDepthRows(page), `${mode}: Result after Load`).toEqual(await depthRows(page));
@@ -1265,7 +1266,7 @@ for (const mode of ['circular', 'linear']) {
       }
       await settleLive(page);
       await generate(page);
-      const file = testInfo.outputPath('depth.gbdraw-session.json');
+      const file = testInfo.outputPath('depth.gbdraw');
       const titled = await page.evaluate(async () => Boolean((await import('./js/state.js')).state.sessionTitle?.value));
       await download(page, 'Save Session', file, titled ? {} : { title: 'depth' });
       const loaded = await load(browser, file);
@@ -1348,7 +1349,7 @@ test('GT B9 (PQ-4 A): in a Circular stack Hide GC Content off after a live hide 
 
 test('GT B1: Hide GC Skew keeps an AT skew row in the Result and the Legend list (HmmtDNA_ATskew)', async ({ browser }) => {
   test.setTimeout(300_000);
-  const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw');
   try {
     await settleLive(page);
     const atRows = async () => (await semanticSnapshot(page)).legend.filter((row) => /^AT skew/i.test(row.caption)).map((row) => row.caption);
@@ -1370,7 +1371,7 @@ test('GT B1: Hide GC Skew keeps an AT skew row in the Result and the Legend list
 // History step, equal to Generate; its Undo turns both back on in the draft.
 test('GT B12 (rev 6): Hide GC Content with a row that extends to it turns that row off too (tobacco)', async ({ browser }) => {
   test.setTimeout(300_000);
-  const page = await load(browser, 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw');
   try {
     await settleLive(page);
     const rows = () => page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.adv.circular_track_slots
@@ -1420,8 +1421,8 @@ test('GT B10 (OV-2237): on a Result loaded without a request a hide waits for Ge
 // reaches it leave the Result and the committed request together, and Undo and
 // Redo return both to what they were. A Save after the Undo holds the row.
 const UNDO_SESSIONS = {
-  circular: { session: 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json', record: 'NC_001879.2', set: 'plastome_tint', tint: 'plastome_tint' },
-  linear: { session: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', record: 'NC_001416.1', set: 'marks', tint: 'tint' }
+  circular: { session: 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw', record: 'NC_001879.2', set: 'plastome_tint', tint: 'plastome_tint' },
+  linear: { session: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw', record: 'NC_001416.1', set: 'marks', tint: 'tint' }
 };
 // A stack with one Depth row, `mark` anchored on it, and a tint row that
 // extends to the GC content row, generated. Lambda's Session has GC off, and
@@ -1466,7 +1467,7 @@ const openReachingRows = async (browser, mode) => {
 const savedUndoSession = async (page, file) => {
   const titled = await page.evaluate(async () => Boolean((await import('./js/state.js')).state.sessionTitle?.value));
   await download(page, 'Save Session', file, titled ? {} : { title: 'undo' });
-  return JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'));
+  return readSessionFile(file);
 };
 const committedSlots = (page, mode) => page.evaluate(async (stackMode) => {
   const { getCommittedCanonicalSession } = await import('./js/services/config.js');
@@ -1504,7 +1505,7 @@ const undoOfChoice = async (page, testInfo, { mode, target, reacher, after }) =>
   await history(page, 'undo');
   expect(await overlayElements(page, reacher), 'Undo draws it again').toBe(drawnBefore);
   expect(await committedSlots(page, mode), 'Undo gives the committed request back').toEqual(slotsBefore);
-  const saved = await savedUndoSession(page, testInfo.outputPath(`after-undo-${target}.gbdraw-session.json`));
+  const saved = await savedUndoSession(page, testInfo.outputPath(`after-undo-${target}.gbdraw`));
   expect(slotIds(savedDrawing(saved, mode).renderRequest.diagramOptions.tracks[`${mode}TrackSlots`]), 'a Save after the Undo holds the row').toContain(reacher);
 
   await history(page, 'redo');
@@ -1544,7 +1545,7 @@ for (const mode of ['circular', 'linear']) {
       test.setTimeout(420_000);
       let page = await openReachingRows(browser, mode);
       try {
-        const file = testInfo.outputPath('reached.gbdraw-session.json');
+        const file = testInfo.outputPath('reached.gbdraw');
         await savedUndoSession(page, file);
         await page.context().close();
         page = await load(browser, file);
@@ -1594,11 +1595,11 @@ test('Undo of Hide GC Content with the dialog\'s choice applies at once, with th
     expect(await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS'), 'Redo hides again at once').toBe(0);
     expect(await overlayElements(page, 'plastome_tint')).toBe(0);
     await undoOnce(page);
-    const saved = await savedUndoSession(page, testInfo.outputPath('after-undo.gbdraw-session.json'));
+    const saved = await savedUndoSession(page, testInfo.outputPath('after-undo.gbdraw'));
     expect(slotIds(savedDrawing(saved, 'circular').renderRequest.diagramOptions.tracks.circularTrackSlots)).toEqual(expect.arrayContaining(['gc_content', 'plastome_tint']));
     await expectLiveEqualsGenerate(page, { label: 'Undo of Hide GC Content with its choice' });
     await page.context().close();
-    page = await load(browser, testInfo.outputPath('after-undo.gbdraw-session.json'));
+    page = await load(browser, testInfo.outputPath('after-undo.gbdraw'));
     expect(await overlayElements(page, 'plastome_tint'), 'the loaded Result draws the row').toBe(tint);
     await expectLiveEqualsGenerate(page, { label: 'Load after the Undo' });
   } finally { await page.context().close(); }

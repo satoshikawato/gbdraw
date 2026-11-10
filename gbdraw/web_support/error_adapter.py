@@ -67,7 +67,8 @@ RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING SPLIT_LANES OVERLAY_LANES A
 ORDER RECORD_BOUNDS START_AFTER_END EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK GENBANK_PARSE SEQUENCE_UNDEFINED GFF_NO_FEATURES FASTA_NO_ENTRIES NOT_NUCLEOTIDE NOT_SEQUENCE EMPTY_SEQUENCE RECORD_ID UNIQUE_IDS OUTFMT7_FIELDS UNDERLAY_FEATURE_SLOTS FONT_FILE FONT_EMBEDDING FONT_RASTER LABEL_CAPACITY WRAP
 WRAP_ANCHOR_FEATURE WRAP_RECORD_POSITION WRAP_TRACK_LAYOUT WRAP_SCALE_STYLE WRAP_NORMALIZE_LENGTH WRAP_GRID_ROW
 ONE_CIRCLE_DEPTH ONE_CIRCLE_CONSERVATION ONE_CIRCLE_REGIONS
-SELECTOR_NO_MATCH SELECTOR_AMBIGUOUS ANCHOR_SHARED_ROW ANCHOR_RECORD_CARDS PNG_SIZE PDF_SIZE GZIP_EXPANDED_SIZE""".split()) | frozenset(FIGURE_SIZE_REASONS)
+SELECTOR_NO_MATCH SELECTOR_AMBIGUOUS ANCHOR_SHARED_ROW ANCHOR_RECORD_CARDS PNG_SIZE PDF_SIZE GZIP_EXPANDED_SIZE
+JSON_FORMAT""".split()) | frozenset(FIGURE_SIZE_REASONS)
 # The room each side's labels need when they were not placed (CAPACITY-STOP): bounded numbers, by the key the producer
 # derives from the label kind.
 _LABEL_CAPACITY_KEYS = frozenset(label_capacity_context_key(kind) for kind in get_args(HorizontalLabelKind))
@@ -87,6 +88,12 @@ _DIAGNOSTIC_INTEGER_KEYS = frozenset(
 # printable ASCII text, else its 1-based position (``recordPosition``). The one owner of this bound: the Web shows
 # what it receives.
 _RECORD_NAME = re.compile(r"[\x21-\x7e][\x20-\x7e]{0,79}")
+_CONTROL_CHARACTERS = re.compile(r"[\s\x00-\x1f\x7f]+")
+# The most characters of an input file's name a refusal names (``inputName``, a gzip input over its expanded cap,
+# PD-OI-116), after control characters become spaces. The one owner of this bound: the page reads it from the
+# generated contracts and cuts the names it refuses itself the same way. Other context texts keep at most 80.
+INPUT_NAME_CHARACTERS = 200
+_CONTEXT_TEXT_CHARACTERS = 80
 
 # The engine computes a Result from the request alone, so an unclassified failure
 # in these stages repeats for the same inputs (RENDER_FAILED offers no Retry).
@@ -257,6 +264,12 @@ def _diagnostic(error: BaseException) -> tuple[str, dict] | None:
         known = [track for track in kept_tracks if track in SWITCHED_TRACK_IDS]
         if known:
             context["keptInsideTracks"] = ",".join(dict.fromkeys(known))
+    # The input file a gzip cap refused, by the name of the file the user chose (PD-OI-116).
+    input_name = diagnostic.get("inputName")
+    if diagnostic.get("reason") == "GZIP_EXPANDED_SIZE" and isinstance(input_name, str):
+        shown_name = _CONTROL_CHARACTERS.sub(" ", input_name).strip()[:INPUT_NAME_CHARACTERS].rstrip()
+        if shown_name:
+            context["inputName"] = shown_name
     slot_track = diagnostic.get("slotTrack")
     if diagnostic["code"] == "TRACK_LAYOUT" and isinstance(slot_track, str) and slot_track in SWITCHED_TRACK_IDS:
         context["slotTrack"] = slot_track
@@ -381,7 +394,8 @@ def serialize_web_error(error: BaseException, *, operation: str, stage: str) -> 
     if isinstance(error, StopIteration):
         code, context = "NO_RECORDS", {}
     context = {key: value for key, value in context.items()
-               if (isinstance(value, str) and len(value) <= 80 and
+               if (isinstance(value, str)
+                   and len(value) <= (INPUT_NAME_CHARACTERS if key == "inputName" else _CONTEXT_TEXT_CHARACTERS) and
                    (key != "reason" or value in {"EMPTY_ENDPOINT", "INDEX_ALIGNMENT", "SOURCE_INDEX", "SOURCE_VIEW_CONFLICT"} or code != "COMPARISON_IDENTITY"))
                or (type(value) is int and 0 <= value <= 10_000_000)
                or _is_label_capacity(key, value)

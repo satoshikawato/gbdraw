@@ -331,7 +331,7 @@ def test_a_stored_session_with_the_retired_linear_canvas_padding_draws_as_withou
     assert linear_canvas.pop("canvas_padding") == 50
     drawn = []
     for name, document in (("stored", stored), ("without", without)):
-        session = tmp_path / f"{name}.gbdraw-session.json"
+        session = tmp_path / f"{name}.gbdraw"
         session.write_text(json.dumps(document), encoding="utf-8")
         monkeypatch.setattr(sys, "argv", ["gbdraw", "render", "--session", str(session), "-o", str(tmp_path / name), "-f", "svg"])
         cli_main()

@@ -4,7 +4,6 @@ const { execFileSync } = require('node:child_process');
 const { mkdirSync, readFileSync, readdirSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
-const { gunzipSync } = require('node:zlib');
 
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
 const AUDIT_OUT = resolve(process.env.GBDRAW_AUDIT_OUT || join(tmpdir(), 'gbdraw-audit'));
@@ -84,13 +83,10 @@ const captureHelpers = async (page, dir) => {
   return readdirSync(dir);
 };
 
-const readSession = (file) => {
-  const buffer = readFileSync(file);
-  const gzip = buffer[0] === 0x1f && buffer[1] === 0x8b;
-  return JSON.parse((gzip ? gunzipSync(buffer) : buffer).toString('utf8'));
-};
+// The document of a saved Session file (`.gbdraw`), read by the tests' one Session file reader.
+const readSession = (file) => require(join(REPO_ROOT, 'tests/web/helpers/session-file.cjs')).readSessionFile(file);
 
-const SESSION_INPUT = 'input[accept^=".json,"]';
+const SESSION_INPUT = 'input[accept*=".gbdraw"]';
 
 const loadSession = async (page, file) => {
   const dialogs = [];
@@ -122,7 +118,7 @@ const saveSession = async (page, file, { title } = {}) => {
     const download = await pending;
     await download.saveAs(file);
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending, null, { timeout: 120_000 });
-    return { doc: readSession(file), dialogs, suggested: download.suggestedFilename() };
+    return { doc: await readSession(file), dialogs, suggested: download.suggestedFilename() };
   } finally {
     page.off('dialog', accept);
   }

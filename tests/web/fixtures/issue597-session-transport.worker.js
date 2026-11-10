@@ -1,5 +1,6 @@
 // Disposable S01 measurement only. The application never imports this Worker.
 import { readSessionText } from '/gbdraw/web/js/services/session-file.js';
+import { isSessionContainerFile, openSessionContainerEntry, readSessionContainer } from '/gbdraw/web/js/services/session-container.js';
 
 const LIMIT = 128 * 1024;
 const STRING_BYTES = 256 * 1024;
@@ -106,7 +107,10 @@ self.onmessage = async ({ data }) => {
   };
   try {
     const readStart = performance.now();
-    const text = await readSessionText(file);
+    // A Session file's document is its entry gbdraw-session.json; a JSON Session is the whole file.
+    const container = await isSessionContainerFile(file) ? await readSessionContainer(file) : null;
+    const text = container
+      ? await new Response(openSessionContainerEntry(file, container.documentEntry)).text() : await readSessionText(file);
     stages.readDecodeDecompressMs = performance.now() - readStart;
     const parseStart = performance.now();
     const document = JSON.parse(text);

@@ -4,38 +4,24 @@ const { join, resolve } = require('node:path');
 const { gunzipSync, gzipSync } = require('node:zlib');
 const {
   openApp, expectNoLoadRepairDialog, expectSessionLoadedWithoutWarnings, generateAndWaitForResult, answerLoadRepairs,
-  waitForSessionLoadAtRest
+  getDiagramWorkerActivity, waitForSessionLoadAtRest
 } = require('./helpers/app-lifecycle.cjs');
 const { installImportReadGate } = require('./helpers/session-import-gate.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { gallerySessionBytes } = require('./helpers/session-file.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sessionInputSelector =
-  'input[type="file"][accept*="application/json"][accept*="application/gzip"]';
-const baselineSession = {
-  name: 'HmmtDNA_basic_circular.gbdraw-session.json',
-  mimeType: 'application/json',
-  buffer: readFileSync(join(
-    repoRoot,
-    'gbdraw',
-    'web',
-    'gallery',
-    'sessions',
-    'HmmtDNA_basic_circular.gbdraw-session.json'
-  ))
-};
-const replacementSession = {
-  name: 'delayed-lambda.gbdraw-session.json.gz',
-  mimeType: 'application/gzip',
-  buffer: gzipSync(readFileSync(join(
-    repoRoot,
-    'gbdraw',
-    'web',
-    'gallery',
-    'sessions',
-    'lambda_basic_linear.gbdraw-session.json'
-  )))
-};
+  'input[type="file"][accept*=".gbdraw"]';
+// Gallery Sessions as the Session files a user loads (their bytes are read before the tests).
+const baselineSession = { name: 'HmmtDNA_basic_circular.gbdraw', mimeType: 'application/octet-stream', buffer: Buffer.alloc(0) };
+const replacementSession = { name: 'delayed-lambda.gbdraw', mimeType: 'application/octet-stream', buffer: Buffer.alloc(0) };
+const bgcSession = { name: 'BGC0000708-BGC0000713.gbdraw', mimeType: 'application/octet-stream', buffer: Buffer.alloc(0) };
+test.beforeAll(async () => {
+  baselineSession.buffer = await gallerySessionBytes('HmmtDNA_basic_circular');
+  replacementSession.buffer = await gallerySessionBytes('lambda_basic_linear');
+  bgcSession.buffer = await gallerySessionBytes('BGC0000708-BGC0000713');
+});
 
 // OV-38: the 0.13.0 Gallery Session (version 30, release tag 0.13.0) saved its
 // Circular Custom Track Slots rows with `spacing: null` while the slots were off.
@@ -46,7 +32,7 @@ const galleryV30Session = (edit = () => {}) => {
   const document = JSON.parse(galleryV30Bytes);
   edit(document.config.adv);
   return {
-    name: 'BGC0000708-BGC0000713.gbdraw-session.json.gz',
+    name: 'BGC0000708-BGC0000713.gbdraw',
     mimeType: 'application/gzip',
     buffer: gzipSync(Buffer.from(JSON.stringify(document)))
   };
@@ -540,19 +526,20 @@ const acceptLoadedSession = async (page, title) => {
   };
 };
 
-test('Open Gallery example lists every Gallery example and loads the chosen Circular or Linear .gz Session', async ({ page }) => {
+test('Open Gallery example lists every Gallery example and loads the chosen Circular or Linear Session file', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   const external = await blockExternalRequests(page);
-  // The Linear .gz entry answers with the gzip of the small lambda Session, so
-  // the file-name route of .gz loading runs without a 6 MB download.
-  const gzEntry = galleryCatalog.find((entry) => entry.id === 'majanivirus_orthogroup');
-  expect(gzEntry.session.endsWith('.json.gz')).toBe(true);
-  expect(gzEntry.tags).toContain('Linear');
-  const gzRequests = [];
-  await page.route(`**/gbdraw/web/gallery/${gzEntry.session.slice(2)}`, (route) => {
-    gzRequests.push(route.request().url());
-    return route.fulfill({ status: 200, contentType: 'application/gzip', body: replacementSession.buffer });
+  // Every Gallery Session is a Session file container (D-29). The large
+  // Linear entry answers with the small lambda Session, so its Load runs
+  // without a 6 MB download.
+  expect(galleryCatalog.map((entry) => entry.session).filter((session) => !session.endsWith('.gbdraw'))).toEqual([]);
+  const largeEntry = galleryCatalog.find((entry) => entry.id === 'majanivirus_orthogroup');
+  expect(largeEntry.tags).toContain('Linear');
+  const largeRequests = [];
+  await page.route(`**/gbdraw/web/gallery/${largeEntry.session.slice(2)}`, (route) => {
+    largeRequests.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: 'application/octet-stream', body: replacementSession.buffer });
   });
   await openApp(page);
   const { example, chooser } = exampleControls(page);
@@ -576,15 +563,17 @@ test('Open Gallery example lists every Gallery example and loads the chosen Circ
   await circularLoaded();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('circular');
   await expectExampleFitted(page);
+  // Showing the saved figure starts no Python (D-29).
+  expect(await getDiagramWorkerActivity(page)).toMatchObject({ constructions: 0, runs: 0 });
 
   await openApp(page);
   await example.click();
   const linearLoaded = await acceptLoadedSession(page, 'lambda_basic_linear');
-  await chooser.locator(`[data-gallery-example="${gzEntry.id}"]`).click();
+  await chooser.locator(`[data-gallery-example="${largeEntry.id}"]`).click();
   await linearLoaded();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
   await expectExampleFitted(page);
-  expect(gzRequests).toHaveLength(1);
+  expect(largeRequests).toHaveLength(1);
   expect(external).toEqual([]);
 });
 
@@ -871,9 +860,7 @@ test('the example chooser cancels with focus back on Open Gallery example and ke
 // "Applying an edit".
 test('the first feature popup after a Session load says it is preparing and keeps Save and Load available', async ({ page }) => {
   await openApp(page);
-  await page.locator(sessionInputSelector).setInputFiles(join(
-    repoRoot, 'gbdraw', 'web', 'gallery', 'sessions', 'BGC0000708-BGC0000713.gbdraw-session.json'
-  ));
+  await page.locator(sessionInputSelector).setInputFiles(bgcSession);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   await waitForSessionLoadAtRest(page);
   // The livE CDS of record 1; no ribbon lies under its centre.

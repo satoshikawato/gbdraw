@@ -7,7 +7,6 @@ Design: docs/internal/LOSAT_CLI_API_DESIGN_PROPOSAL_2026-10-03.md sections 3.2,
 from __future__ import annotations
 
 import copy
-import gzip
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,6 +19,7 @@ from gbdraw.api.input_summary import InputSummary
 import gbdraw.linear as linear_cli_module
 from gbdraw.api.requests import LinearDiagramRequest
 from tests.utils.session_drawing_view import session_view
+from tests.utils.session_files import load_session_mapping, read_session_payload
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sessions"
@@ -98,9 +98,7 @@ EQUIVALENT_ARGV = (
 
 
 def _read_session(path: Path) -> dict:
-    opener = gzip.open if path.suffix == ".gz" else open
-    with opener(path, "rt", encoding="utf-8") as handle:
-        return json.load(handle)
+    return read_session_payload(path)
 
 
 def _capture_cli_options(monkeypatch, tmp_path, argv):
@@ -204,7 +202,7 @@ def test_release_0_13_0_bgc_session_argv_replays_with_new_flags(tmp_path):
 
 
 def test_release_0_13_0_protein_session_replays_unchanged_svg(tmp_path, monkeypatch):
-    session_path = tmp_path / "legacy.gbdraw-session.json"
+    session_path = tmp_path / "legacy.gbdraw"
     session_path.write_text(
         json.dumps(_read_session(FIXTURES / "cli-linear-protein.v30.gbdraw-session.json.gz")),
         encoding="utf-8",
@@ -217,7 +215,7 @@ def test_release_0_13_0_protein_session_replays_unchanged_svg(tmp_path, monkeypa
 
     expected = (FIXTURES / "cli-linear-protein.v30.replay.svg").read_bytes()
     assert (tmp_path / "replay.svg").read_bytes() == expected
-    saved = session_view(json.loads((tmp_path / "replay.gbdraw-session.json").read_text(encoding="utf-8")))
+    saved = session_view(read_session_payload(tmp_path / "replay.gbdraw"))
     args = saved["cliInvocation"]["args"]
     assert args[args.index("--losat") : args.index("--losat") + 4] == [
         "--losat", "losatp", "--losatp_mode", "similarity_groups",
@@ -425,11 +423,11 @@ def _as_written(marker):
 
 
 def _round_trip(session_path: Path, tmp_path: Path):
-    from gbdraw.session import load_session_document, materialize_session, session_to_request
+    from gbdraw.session import materialize_session, session_to_request
     from gbdraw.session_request_codec import encode_canonical_request
 
     session = _read_session(session_path)
-    document = load_session_document(session)
+    document = load_session_mapping(session)
     with materialize_session(document, output_directory=tmp_path) as materialized:
         request = session_to_request(materialized)
         encoded = encode_canonical_request(request)
@@ -459,9 +457,9 @@ def test_schema_7_protein_marker_round_trips_wire_names(fixture, tmp_path):
     ("session_path", "mode", "threads"),
     (
         # The Gallery Session stores its collinear result (mode "none").
-        (GALLERY_SESSIONS / "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+        (GALLERY_SESSIONS / "vibrio-harveyi-group-collinear.gbdraw",
          "none", 16),
-        (GALLERY_SESSIONS / "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+        (GALLERY_SESSIONS / "hepatoplasmataceae_orthogroup.gbdraw",
          "none", 32),
     ),
 )

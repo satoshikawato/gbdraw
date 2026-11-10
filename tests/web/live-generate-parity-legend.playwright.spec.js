@@ -1161,7 +1161,7 @@ test('U3a compat: a Session 44 main saved, loaded again for each case', async ({
 test('R15-2: a Legend row the editor added in a Session main saved loads, shows, and survives Generate (linear)', async ({ page }) => {
   test.setTimeout(240_000);
   await openFresh(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles('tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz');
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles('tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz');
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
   if (await page.evaluate(() => window.__GBDRAW_APP__.mode) !== 'linear') {
@@ -1231,7 +1231,7 @@ for (const order of ['stroke then color', 'color then stroke']) {
     const { generated } = await expectLiveEqualsGenerate(page, { label: `${order}, after Undo and Redo` });
     expect(rowStrokedFeatures(generated), 'Generate strokes the same features').toEqual(stroked);
     if (order !== 'stroke then color') return;
-    const saved = testInfo.outputPath('ov288.gbdraw-session.json');
+    const saved = testInfo.outputPath('ov288.gbdraw');
     await download(page, 'Save Session', saved, { title: '' });
     const loaded = await load(browser, saved);
     expect(rowStrokedFeatures(await semanticSnapshot(loaded)), 'Load shows the stroke').toEqual(stroked);
@@ -1338,7 +1338,7 @@ test('OV-307: two Legend color edits and a stroke on a rule\'s own row recolor a
   expect(await shown(await semanticSnapshot(page)), 'two Redo steps return both edits').toEqual(expected);
   const { generated } = await expectLiveEqualsGenerate(page, { label: 'two Legend colors and a stroke on a rule row, after Undo and Redo' });
   expect(await shown(generated), 'Generate draws the same').toEqual(expected);
-  const saved = testInfo.outputPath('ov307.gbdraw-session.json');
+  const saved = testInfo.outputPath('ov307.gbdraw');
   await download(page, 'Save Session', saved, { title: '' });
   const loaded = await load(browser, saved);
   expect(await shown(await semanticSnapshot(loaded), loaded), 'Load shows the same').toEqual(expected);

@@ -34,8 +34,8 @@ def main() -> None:
     for mode in ("circular", "linear"):
         assert "--gbk" in run(mode, "--help")
         run(mode, "--gbk", "HmmtDNA.gbk", "-o", mode,
-            "--session_output", f"{mode}.session.json")
-        run(mode, "--session", f"{mode}.session.json", "-o", f"{mode}-replay")
+            "--session_output", f"{mode}.gbdraw")
+        run(mode, "--session", f"{mode}.gbdraw", "-o", f"{mode}-replay")
         original = ET.parse(f"{mode}.svg").getroot()
         replay = ET.parse(f"{mode}-replay.svg").getroot()
         assert original.tag == "{http://www.w3.org/2000/svg}svg"

@@ -217,7 +217,7 @@ test('feature and match popups stay above the footer when opened low or dragged 
 // lower right, 520 px tall with its content scrolled, over the clicked item.
 // OV-384: the popup (z-50) could lie over the header (z-40) and cover its
 // buttons, such as Undo, when opened near the top-left or dragged up.
-const BGC = 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json';
+const BGC = 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw';
 const LIVE = 'fed46a3a6_record_1';
 
 // The first visible point of an SVG element, where a pointer would reach it.

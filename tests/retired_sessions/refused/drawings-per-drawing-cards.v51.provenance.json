@@ -1,0 +1,8 @@
+{
+  "sourceCommit": "9a9817d30c9e9c488259e6b1961d29473d1889ac",
+  "history": "dev before the Session file container (PR1, PD-OI-127); last written by b1f9eb35528c1ab1c6c8a6ee93904622e7740808",
+  "writer": "the JSON Session 51 fixture tests/fixtures/sessions/drawings-per-drawing-cards.v51.gbdraw-session.json.gz, copied unchanged; JSON Session 51 never reached main and is now refused",
+  "command": "git show 9a9817d30:tests/fixtures/sessions/drawings-per-drawing-cards.v51.gbdraw-session.json.gz > drawings-per-drawing-cards.v51.gbdraw-session.json.gz",
+  "sourceSha256": "4c6a7bf7e7d7f1ad60910b8c4cad563b9e0828dcd7a2da356f765419c6f2144b",
+  "expected": "A Session version 51 file must be a .gbdraw file, not JSON: {path}"
+}

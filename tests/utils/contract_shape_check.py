@@ -19,11 +19,17 @@ def stored_json_files() -> list[Path]:
             "tests/fixtures", "tests/web/fixtures", "tests/test_inputs", "docs/images",
             "gbdraw/web/gallery/sessions",
         )
-        for path in (REPO_ROOT / folder).rglob("*.json*")
-        if path.suffix in {".json", ".gz"}
+        for path in (REPO_ROOT / folder).rglob("*")
+        if path.suffix in {".json", ".gz", ".gbdraw"}
     )
 
 
 def load_json(path: Path) -> object:
+    """A stored JSON file, plain or gzip, or a Session file's document (``gbdraw-session.json``)."""
+
+    if path.suffix == ".gbdraw":
+        from tests.utils.session_files import read_session_text
+
+        return json.loads(read_session_text(path))
     raw = path.read_bytes()
     return json.loads(gzip.decompress(raw) if path.suffix == ".gz" else raw)

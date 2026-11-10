@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { readSavedSession } from './helpers/session-documents.mjs';
 
 const repoRoot = process.cwd();
 // R6 (R1-M3): the Save checks of a Result set, a resource and a Web binding refuse with the typed Session-fields error.
@@ -455,13 +456,13 @@ assert.throws(() => validateSessionAuthorityInventory({
 // (Session 46; the Gallery Sessions are current-writer Sessions).
 {
   const { readFileSync } = await import('node:fs');
-  const read = (name) => {
-    const saved = JSON.parse(readFileSync(join(repoRoot, 'gbdraw/web/gallery/sessions', name), 'utf8'));
+  const read = async (name) => {
+    const saved = await readSavedSession(new Blob([readFileSync(join(repoRoot, 'gbdraw/web/gallery/sessions', name))]));
     // The one-drawing view is the 46 layout this block checks (`modes`, `otherModeResult`).
     return { ...savedDrawingView(saved, saved.ui.activeDrawingId), version: 46 };
   };
-  const circularSession = read('HmmtDNA_basic_circular.gbdraw-session.json');
-  const linearSession = read('lambda_basic_linear.gbdraw-session.json');
+  const circularSession = await read('HmmtDNA_basic_circular.gbdraw');
+  const linearSession = await read('lambda_basic_linear.gbdraw');
   const otherModeResult = {
     renderRequest: linearSession.renderRequest,
     results: linearSession.results,

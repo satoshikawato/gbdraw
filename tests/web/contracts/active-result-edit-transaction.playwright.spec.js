@@ -1,8 +1,8 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { gunzipSync } = require('node:zlib');
 const { shownSavedDrawing } = require('../helpers/saved-session.cjs');
+const { readSessionFile } = require('../helpers/session-file.cjs');
 const {
   CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, openApp
 } = require('../helpers/app-lifecycle.cjs');
@@ -14,7 +14,7 @@ const sourceSessionPath = join(
   'web',
   'gallery',
   'sessions',
-  'HmmtDNA_basic_circular.gbdraw-session.json'
+  'HmmtDNA_basic_circular.gbdraw'
 );
 const BEFORE_COLOR = '#e8b441';
 const AFTER_COLOR = '#2f7fc1';
@@ -219,14 +219,6 @@ test.describe('active Result Feature fill transaction', () => {
     { text: svgText, targetInventory: inventory, caption: TARGET_CAPTION }
   );
 
-  const readSavedSession = (filePath) => {
-    const bytes = readFileSync(filePath);
-    const text = bytes[0] === 0x1f && bytes[1] === 0x8b
-      ? gunzipSync(bytes).toString('utf8')
-      : bytes.toString('utf8');
-    return JSON.parse(text);
-  };
-
   const assertNoUnexpectedErrors = async (page, diagnostics) => {
     expect(diagnostics.pageErrors).toEqual([]);
     expect(diagnostics.consoleErrors).toEqual([]);
@@ -326,7 +318,7 @@ test.describe('active Result Feature fill transaction', () => {
     const sessionDownload = await sessionDownloadPromise;
     const savedSessionPath = await sessionDownload.path();
     expect(savedSessionPath).toBeTruthy();
-    const savedSession = readSavedSession(savedSessionPath);
+    const savedSession = await readSessionFile(savedSessionPath);
     // The shown drawing's edits are its entry (Session 49).
     const savedSlice = shownSavedDrawing(savedSession);
     expect(savedSession).toMatchObject({

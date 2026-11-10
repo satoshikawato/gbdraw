@@ -78,22 +78,22 @@
     },
     {
       "id": "drawings_circular_linear",
-      "session": "tests/fixtures/sessions/drawings-circular-linear.v51.gbdraw-session.json.gz",
+      "session": "tests/fixtures/sessions/drawings-circular-linear.v51.gbdraw",
       "drawings": ["circular", "linear"]
     },
     {
       "id": "drawings_linear_pair",
-      "session": "tests/fixtures/sessions/drawings-linear-pair-losat.v51.gbdraw-session.json.gz",
+      "session": "tests/fixtures/sessions/drawings-linear-pair-losat.v51.gbdraw",
       "drawings": ["linear-2"]
     },
     {
       "id": "drawings_circular_region",
-      "session": "tests/fixtures/sessions/web-region-circular-linear.v51.gbdraw-session.json.gz",
+      "session": "tests/fixtures/sessions/web-region-circular-linear.v51.gbdraw",
       "drawings": ["linear"]
     },
     {
       "id": "python_linear_absent_output",
-      "session": "tests/fixtures/sessions/python-linear-absent-output.v51.gbdraw-session.json.gz",
+      "session": "tests/fixtures/sessions/python-linear-absent-output.v51.gbdraw",
       "drawings": ["linear"]
     }
   ]

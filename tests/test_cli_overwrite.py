@@ -124,7 +124,7 @@ def test_cli_rejects_existing_session_sidecar_before_rendering(
     input_path = tmp_path / "input.gb"
     output_prefix = tmp_path / "diagram"
     output_path = output_prefix.with_suffix(".svg")
-    sidecar_path = tmp_path / "saved.gbdraw-session.json"
+    sidecar_path = tmp_path / "saved.gbdraw"
     _write_genbank(input_path)
     sidecar_path.write_text("keep this session", encoding="utf-8")
 
@@ -254,7 +254,7 @@ def test_circular_batch_output_collision_with_sidecar_is_rejected_before_build(
                 "--format",
                 "svg",
                 "--session_output",
-                str(tmp_path / "sidecar.json"),
+                str(tmp_path / "sidecar.gbdraw"),
                 "--no-gc",
                 "--no-skew",
                 "--legend",
@@ -283,10 +283,10 @@ def test_canonical_replay_rejects_existing_sidecar_before_rendering(
         id="replay-test",
         annotations={"molecule_type": "DNA"},
     )
-    session_path = tmp_path / "source.gbdraw-session.json"
+    session_path = tmp_path / "source.gbdraw"
     output_prefix = tmp_path / "replayed"
     output_path = output_prefix.with_suffix(".svg")
-    sidecar_path = tmp_path / "saved.gbdraw-session.json"
+    sidecar_path = tmp_path / "saved.gbdraw"
     request = request_type(
         records=(RecordInput(source=InMemoryRecordSource(record)),),
         output=RenderOutputRequest(output_prefix="stored"),
@@ -331,7 +331,7 @@ def test_canonical_replay_rejects_diagram_and_sidecar_path_collision(
         id="replay-test",
         annotations={"molecule_type": "DNA"},
     )
-    session_path = tmp_path / "source.gbdraw-session.json"
+    session_path = tmp_path / "source.gbdraw"
     output_prefix = tmp_path / "replayed"
     shared_path = output_prefix.with_suffix(".svg")
     save_session_document(
@@ -374,7 +374,7 @@ def test_canonical_circular_batch_rejects_sidecar_collision_with_any_item(
         )
         for record_id in ("first", "second")
     )
-    session_path = tmp_path / "batch.gbdraw-session.json"
+    session_path = tmp_path / "batch.gbdraw"
     save_session_document(
         session_path,
         CircularBatchRequest(
@@ -418,7 +418,7 @@ def test_circular_implicit_sidecar_collision_is_rejected_before_rendering(
 ) -> None:
     input_path = tmp_path / "input.gb"
     output_path = tmp_path / "overwrite-test.svg"
-    sidecar_path = tmp_path / "overwrite-test.gbdraw-session.json"
+    sidecar_path = tmp_path / "overwrite-test.gbdraw"
     _write_genbank(input_path)
     sidecar_path.write_text("keep this session", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
@@ -448,7 +448,7 @@ def test_circular_explicit_output_implicit_sidecar_preflights_actual_path(
     input_path = tmp_path / "input.gb"
     output_prefix = tmp_path / "explicit-output"
     output_path = output_prefix.with_suffix(".svg")
-    sidecar_path = Path(f"{output_prefix}.gbdraw-session.json")
+    sidecar_path = Path(f"{output_prefix}.gbdraw")
     _write_genbank(input_path)
     sidecar_path.write_text("keep this session", encoding="utf-8")
 
@@ -498,7 +498,7 @@ def test_circular_rejects_unwritable_sidecar_target_before_diagram_build(
     elif target_kind == "file-parent":
         blocked_parent = tmp_path / "blocked-parent"
         blocked_parent.write_text("not a directory", encoding="utf-8")
-        sidecar_path = blocked_parent / "sidecar.json"
+        sidecar_path = blocked_parent / "sidecar.gbdraw"
         expected = "parent path.*not directories"
     else:
         sidecar_path = tmp_path / "sidecar-target"
@@ -601,7 +601,7 @@ def test_failed_no_replace_commit_without_hard_links_leaves_no_output(
 def test_save_session_document_refuses_dangling_symlink_without_overwrite(
     tmp_path: Path,
 ) -> None:
-    output_path = tmp_path / "saved.gbdraw-session.json"
+    output_path = tmp_path / "saved.gbdraw"
     missing_target = tmp_path / "missing-session-target"
     try:
         output_path.symlink_to(missing_target)
@@ -636,7 +636,7 @@ def test_save_session_document_rejects_nonreplaceable_target_with_overwrite(
     target_kind: str,
     tmp_path: Path,
 ) -> None:
-    output_path = tmp_path / "saved.gbdraw-session.json"
+    output_path = tmp_path / "saved.gbdraw"
     if target_kind == "directory":
         output_path.mkdir()
     elif target_kind == "fifo":
@@ -673,7 +673,7 @@ def test_save_session_document_rejects_nonreplaceable_target_with_overwrite(
         assert output_path.is_symlink()
 
 
-@pytest.mark.parametrize("name", ("side\ncar.json", "side\x00car.json"))
+@pytest.mark.parametrize("name", ("side\ncar.gbdraw", "side\x00car.gbdraw"))
 def test_session_sidecar_rejects_control_characters(
     name: str,
     tmp_path: Path,
@@ -692,11 +692,11 @@ def test_session_sidecar_rejects_control_characters(
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 def test_session_replay_requires_current_overwrite_permission(mode: str) -> None:
     default_request = parse_session_pre_args(
-        ["--session", "diagram.gbdraw-session.json"],
+        ["--session", "diagram.gbdraw"],
         mode=mode,
     )
     overwrite_request = parse_session_pre_args(
-        ["--session", "diagram.gbdraw-session.json", "--overwrite"],
+        ["--session", "diagram.gbdraw", "--overwrite"],
         mode=mode,
     )
 
@@ -758,7 +758,7 @@ def test_canonical_session_replay_uses_current_overwrite_permission(
         records=(RecordInput(source=InMemoryRecordSource(record)),),
         output=RenderOutputRequest(overwrite=True),
     )
-    session = build_session_document(stored_request).to_dict()
+    session = build_session_document(stored_request)
     captured: dict[str, bool] = {}
 
     def fake_render(materialized, plans, *, include_feature_catalog=False):
@@ -851,7 +851,7 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
         capturing_build,
     )
     monkeypatch.setattr(session_module, "_write_session_document", fake_write)
-    sidecar_path = tmp_path / "saved.gbdraw-session.json"
+    sidecar_path = tmp_path / "saved.gbdraw"
 
     assert cli_session.render_canonical_session_if_present(
         session,
@@ -924,7 +924,7 @@ def test_saved_cli_invocation_does_not_persist_overwrite_permission() -> None:
             "--overwrite",
             "--save_session",
             "--session_output",
-            "diagram.gbdraw-session.json",
+            "diagram.gbdraw",
         ]
     ) == ["--gbk", "input.gb"]
 

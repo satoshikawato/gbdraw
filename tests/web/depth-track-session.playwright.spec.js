@@ -1,9 +1,10 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { gunzipSync } = require('node:zlib');
 const { showDrawing, showPhonePane, newDrawingFromMenu, drawingTab, shownDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { gallerySessionBytes, readSessionFile } = require('./helpers/session-file.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 const {
   CURRENT_SESSION_VERSION,
   assertDiagramWorkerIdle,
@@ -23,7 +24,7 @@ const {
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
-const bgcSessionPath = join(repoRoot, 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json');
+const bgcSessionPath = join(repoRoot, 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw');
 const hmmtDnaPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
 const repeatRegionGenbankPath = join(repoRoot, 'tests/test_inputs/NC_001454.1.gbk');
 const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000708.gbk');
@@ -882,7 +883,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
     expect(savedPath).toBeTruthy();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForAppShell(page, { waitForPalette: false });
-    await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+    await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
     await expectSessionLoadedWithoutWarnings(page);
     // A phone Load shows the Preview pane; the file cards are in Settings.
     await showPhonePane(page, 'settings');
@@ -1403,7 +1404,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   });
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(bgcSessionPath);
   await waitForSessionLoadAtRest(page);
   const svgExport = page.getByRole('button', { name: 'SVG', exact: true });
   await expect(svgExport).toBeEnabled();
@@ -1626,7 +1627,7 @@ test('preserved Result presentation ignores no-Result Generate failures and non-
   await expect(page.getByText('Showing the last successful result.', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Current changes were not applied.', { exact: true })).toHaveCount(0);
 
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(bgcSessionPath);
   await waitForSessionLoadAtRest(page);
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -1694,7 +1695,7 @@ test('Session preflight rejects invalid canonical data without resetting live st
       if (event.name === 'interactiveReady' && event.status === 'error') window.__SESSION_REJECTIONS__++;
     } };
   });
-  const input = page.locator('input[accept^=".json,"]').first();
+  const input = page.locator('input[accept*=".gbdraw"]').first();
 
   const invalidCanonicalSession = {
     format: 'gbdraw-session',
@@ -2046,9 +2047,7 @@ ORIGIN
   const savedSessionPath = await download.path();
   expect(savedSessionPath).toBeTruthy();
 
-  const exportedSession = JSON.parse(
-    gunzipSync(readFileSync(savedSessionPath)).toString('utf8')
-  );
+  const exportedSession = await readSessionFile(savedSessionPath);
   const legacyLayoutFields = [
     'legend',
     'circularLegendPosition',
@@ -2113,7 +2112,7 @@ ORIGIN
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedSessionPath);
   await expectSessionLoadedWithoutWarnings(page);
 
   expect(await layoutPreferenceTree()).toEqual(expectedPreferences);
@@ -2158,17 +2157,16 @@ ORIGIN
 // request Generate sends is one Python accepts.
 test('a Session legend position outside its mode loads as the mode default and generates (OV-652)', async ({ page }) => {
   test.setTimeout(420000);
-  const session = JSON.parse(readFileSync(
-    join(repoRoot, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json'), 'utf8'
-  ));
-  const shown = shownSavedDrawing(session);
-  expect(shown.ui.layoutPreferences.legend).toBe('left');
-  shown.ui.layoutPreferences.legend = 'Upper_Left';
+  const legendPositionFile = await gallerySessionBytes('lambda_basic_linear', (session) => {
+    const shown = shownSavedDrawing(session);
+    expect(shown.ui.layoutPreferences.legend).toBe('left');
+    shown.ui.layoutPreferences.legend = 'Upper_Left';
+  });
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles({
-    name: 'legend-position.gbdraw-session.json',
-    mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify(session))
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles({
+    name: 'legend-position.gbdraw',
+    mimeType: 'application/octet-stream',
+    buffer: legendPositionFile
   });
   // The file is lossy on purpose: Load lists the position and the one it uses (BA-D25).
   await answerLoadRepairs(page, [
@@ -2206,10 +2204,10 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   const readSessionDownload = async (download) => {
     const filePath = await download.path();
     expect(filePath).toBeTruthy();
-    return JSON.parse(gunzipSync(readFileSync(filePath)).toString('utf8'));
+    return readSessionFile(filePath);
   };
   const loadSession = async (filePath) => {
-    await page.locator('input[accept^=".json,"]').first().setInputFiles(filePath);
+    await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(filePath);
     await expectSessionLoadedWithoutWarnings(page);
     await page.waitForFunction(() => {
       const app = window.__GBDRAW_APP__;
@@ -2537,9 +2535,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   const initialDownload = await initialDownloadPromise;
   const initialPath = await initialDownload.path();
   expect(initialPath).toBeTruthy();
-  const initialSession = JSON.parse(
-    gunzipSync(readFileSync(initialPath)).toString('utf8')
-  );
+  const initialSession = await readSessionFile(initialPath);
   expect(initialSession.version).toBe(CURRENT_SESSION_VERSION);
   const expectedDraft = p3Draft(initialSession);
   expect(expectedDraft.circularEnabled).toBe(true);
@@ -2629,9 +2625,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   const secondDownload = await secondDownloadPromise;
   const secondPath = await secondDownload.path();
   expect(secondPath).toBeTruthy();
-  const secondSession = JSON.parse(
-    gunzipSync(readFileSync(secondPath)).toString('utf8')
-  );
+  const secondSession = await readSessionFile(secondPath);
   expect(p3Draft(secondSession)).toEqual(expectedDraft);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -2868,7 +2862,7 @@ ORIGIN
     dialogs.push(dialog.message());
     await dialog.accept();
   });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles({
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles({
     name: 'rollback.gbdraw-session.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(session))
@@ -3012,7 +3006,7 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
   expect(geometry.args).toContain('HmmtDNA.gbk');
   expect(geometry.args).toContain('--separate_strands');
   expect(geometry.args).toContain('--resolve_overlaps');
-  expect(geometry.exactReplayCommand).toBe('gbdraw linear --session out.gbdraw-session.json');
+  expect(geometry.exactReplayCommand).toBe('gbdraw linear --session out.gbdraw');
   expect(geometry.reproducibilityLevel).toBe('exact-uploaded-files');
   await page.evaluate(() => { window.__GBDRAW_APP__.resultPanelTab = 'run-info'; });
   await expect(page.locator('.run-info-panel').getByText('Source recipe', { exact: true })).toBeVisible();
@@ -3233,13 +3227,13 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
   const download = await downloadPromise;
   const savedSessionPath = await download.path();
   expect(savedSessionPath).toBeTruthy();
-  const savedSession = JSON.parse(gunzipSync(readFileSync(savedSessionPath)).toString('utf8'));
+  const savedSession = await readSessionFile(savedSessionPath);
   expect(savedDrawing(savedSession, linearId).webFiles.bindings.linearSeqs[0].depth[0].name).toBe('sample-a.tsv');
   expect(savedDrawing(savedSession, linearId).webFiles.bindings.linearSeqs[1].depth[1].name).toBe('sample-b.tsv');
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedSessionPath);
   await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
@@ -3391,7 +3385,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedSessionPath);
   await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
@@ -3466,7 +3460,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
 test('BGC session keeps restored feature metadata selectable in the preview', async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(bgcSessionPath);
   await waitForSessionLoadAtRest(page);
 
   const summary = await page.evaluate(() => {
@@ -3536,7 +3530,7 @@ test('BGC session keeps restored feature metadata selectable in the preview', as
 test('BGC session selected feature Hide undo redo keeps visibility and legend stable', async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(bgcSessionPath);
   await waitForSessionLoadAtRest(page);
 
   const featureIds = await page.evaluate(() => {
@@ -3675,16 +3669,17 @@ test('a Circular Session keeps a Depth series without a file and a row whose fil
   const savedPath = await (await pending).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expectSessionLoadedWithoutWarnings(page);
   expect(await depthState()).toEqual(before);
 });
 
-// OV-2240: Save refuses a Session whose expanded JSON is over the cap that Load
-// enforces: nothing is downloaded, and the notice names the size, the cap, and
-// the largest inputs by the names they were uploaded under. The cap is the test
-// hook's small stand-in for 512 MiB.
-test('Save Session over the Load size cap downloads nothing and names the size and the largest inputs (OV-2240)', async ({ page }) => {
+// OV-2240: Save refuses a Session whose settings and results are over the cap
+// that Load enforces: nothing is downloaded, and the notice names their size and
+// the cap. The inputs are entries of the Session file and count toward no cap
+// (receipt session.file-container). The cap is the test hook's small stand-in
+// for 512 MiB.
+test('Save Session over the Load size cap downloads nothing and names the size of the settings and results (OV-2240)', async ({ page }) => {
   test.setTimeout(180_000);
   await openApp(page);
   await circularFileInput(page, 'gb').setInputFiles(hmmtDnaPath);
@@ -3712,49 +3707,9 @@ test('Save Session over the Load size cap downloads nothing and names the size a
   expect([saved.error.operation, saved.error.stage]).toEqual(['session-save', 'write']);
   expect(saved.error.context.sessionByteLimit).toBe(capBytes);
   expect(saved.error.context.sessionBytes).toBeGreaterThan(capBytes);
-  expect(saved.error.context.largestInputs).toContain('My depth (run 1).tsv');
-  expect(saved.error.summary).toContain('The Session was not saved');
-  expect(saved.error.summary).toContain('My depth (run 1).tsv');
-  expect(saved.error.actions).toEqual(['select-input']);
-  await page.waitForTimeout(500);
-  expect(downloads).toEqual([]);
-});
-
-// OV-2245: Save also refuses a Session whose gzip file is over the cap that Load
-// reads; the notice says "file", and nothing is downloaded. The cap is the test
-// hook's small stand-in for 200 MiB.
-test('Save Session over the Load file cap downloads nothing and names the file size and the largest inputs (OV-2245)', async ({ page }) => {
-  test.setTimeout(180_000);
-  await openApp(page);
-  await circularFileInput(page, 'gb').setInputFiles(hmmtDnaPath);
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
-    .toBeGreaterThan(0);
-  const depthTsv = Array.from({ length: 2000 }, (_, index) => `NC_012920.1\t${index * 8 + 1}\t${10 + (index % 7)}`).join('\n');
-  await page.evaluate(async (text) => {
-    const app = window.__GBDRAW_APP__;
-    app.setCircularDepthFile(0, new File([text], 'My depth (run 1).tsv', { type: 'text/tab-separated-values' }));
-    await window.Vue.nextTick();
-  }, depthTsv);
-  const downloads = [];
-  page.on('download', (download) => downloads.push(download.suggestedFilename()));
-  const capBytes = 1024;
-  await page.evaluate((cap) => {
-    window.__GBDRAW_TEST_HOOKS__ = { ...(window.__GBDRAW_TEST_HOOKS__ || {}), maxSessionFileBytes: cap };
-  }, capBytes);
-  const saved = await evaluateWithRetainedPromise(page, async () => {
-    window.__GBDRAW_APP__.sessionTitle = 'ov-2245-over-file-cap';
-    const result = await window.__GBDRAW_APP__.saveSessionWithTitle();
-    return { status: result.status, error: window.__GBDRAW_APP__.errorLog };
-  });
-  expect(saved.status).toBe('error');
-  expect(saved.error.code).toBe('SESSION_SIZE_LIMIT');
-  expect([saved.error.operation, saved.error.stage]).toEqual(['session-save', 'write']);
-  expect(saved.error.context.sessionSizeKind).toBe('file');
-  expect(saved.error.context.sessionByteLimit).toBe(capBytes);
-  expect(saved.error.context.sessionBytes).toBeGreaterThan(capBytes);
-  expect(saved.error.context.largestInputs).toContain('My depth (run 1).tsv');
-  expect(saved.error.summary).toContain('its file would be');
-  expect(saved.error.summary).toContain('My depth (run 1).tsv');
+  expect(saved.error.context.largestInputs).toBeUndefined();
+  expect(saved.error.summary).toContain('The Session was not saved: its settings and results are');
+  expect(saved.error.summary).not.toContain('My depth (run 1).tsv');
   expect(saved.error.actions).toEqual(['select-input']);
   await page.waitForTimeout(500);
   expect(downloads).toEqual([]);
@@ -3776,8 +3731,8 @@ test('a Load takes the loaded Session\'s Depth series, not the previous document
     panel: window.__GBDRAW_APP__.circularDepthTrackRows.length
   }));
   expect(await depthState()).toEqual({ series: 3, panel: 3 });
-  await page.locator('input[accept^=".json,"]').first()
-    .setInputFiles(join(repoRoot, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  await page.locator('input[accept*=".gbdraw"]').first()
+    .setInputFiles(join(repoRoot, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw'));
   await expectSessionLoadedWithoutWarnings(page);
   await page.evaluate(() => window.Vue.nextTick());
   expect(await depthState()).toEqual({ series: 1, panel: 1 });
@@ -3989,9 +3944,9 @@ test('Save Session stores one Depth file used by two series once (D-220)', async
   expect(saved.status, JSON.stringify(saved)).toBe('saved');
   const savedPath = await (await pending).path();
   const bytes = readFileSync(savedPath);
-  const text = (bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8');
-  const session = JSON.parse(text);
-  test.info().annotations.push({ type: 'session-size', description: `expanded ${text.length}, gzip ${bytes.length}` });
+  const session = await (await sessionDocuments()).readSavedSession(new Blob([bytes]));
+  const text = JSON.stringify(session);
+  test.info().annotations.push({ type: 'session-size', description: `expanded ${text.length}, file ${bytes.length}` });
   const depthIds = Object.keys(session.resources).filter((id) => session.resources[id].kind === 'depth-track-file');
   expect(depthIds).toHaveLength(1);
   expect(shownSavedDrawing(session).renderRequest.diagramOptions.depthTracks.flatMap((track) => [track.source].flat().map((s) => s.resourceId ?? s)))
@@ -4003,7 +3958,7 @@ test('Save Session stores one Depth file used by two series once (D-220)', async
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expectSessionLoadedWithoutWarnings(page);
   await waitForSessionLoadAtRest(page);
   expect(await page.evaluate(async () => {

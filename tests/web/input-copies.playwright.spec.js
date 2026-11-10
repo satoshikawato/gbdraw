@@ -7,11 +7,12 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs');
 const path = require('node:path');
-const { gunzipSync, gzipSync } = require('node:zlib');
+const { gzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
-const { openFresh } = require('./helpers/audit-browser.cjs');
+const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { generate } = require('./helpers/mode-transition.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
+const { readSessionFileEntries } = require('./helpers/session-file.cjs');
 
 const SOURCE = path.resolve('tests/test_inputs/NC_001416.gb');
 const OTHER = path.resolve('tests/test_inputs/AP027078.gb');
@@ -59,23 +60,22 @@ const chooseGenBank = async (page, file) => {
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordDiscoveryState.status),
     { timeout: 60_000 }).toBe('ready');
 };
-const genbankResources = (value, found = []) => {
-  if (Array.isArray(value)) value.forEach((member) => genbankResources(member, found));
-  else if (value && typeof value === 'object') {
-    if (value.encoding === 'base64' && value.kind === 'genbank') found.push(Buffer.from(value.data, 'base64'));
-    Object.values(value).forEach((member) => genbankResources(member, found));
-  }
-  return found;
-};
-const saveSession = async (page, title) => {
+// Saves the Session; returns the saved file and each GenBank resource as the file stores it:
+// [{ size (its declared size), method (0 stored, 8 deflated), bytes }].
+const saveSessionFile = async (page, title) => {
   const pending = page.waitForEvent('download', { timeout: 60_000 });
   await evaluateWithRetainedPromise(page, async (sessionTitle) => {
     const app = window.__GBDRAW_APP__;
     app.sessionTitle = sessionTitle;
     await app.saveSessionWithTitle();
   }, title);
-  return genbankResources(JSON.parse(gunzipSync(fs.readFileSync(await (await pending).path())).toString('utf8')));
+  const file = await (await pending).path();
+  const { document, resources } = await readSessionFileEntries(file);
+  const genbank = Object.entries(document.resources).filter(([, descriptor]) => descriptor.kind === 'genbank')
+    .map(([id, descriptor]) => ({ size: descriptor.size, ...resources[id] }));
+  return { file, genbank };
 };
+const saveSession = async (page, title) => (await saveSessionFile(page, title)).genbank.map(({ bytes }) => bytes);
 
 test('a file changed, touched, moved, or deleted after it was chosen Saves and Generates as chosen', async ({ page }, info) => {
   test.setTimeout(480_000);
@@ -144,14 +144,16 @@ test('a file whose copy could not be written is read itself, and refuses once it
   await expect(page.getByText('An input could not be read. Replace or reselect it.')).toBeVisible();
 });
 
-test('a gzip input\'s copy holds its expanded content', async ({ page }, info) => {
-  test.setTimeout(240_000);
+// Receipt session.file-container: a gzip input goes into the Session file as it is.
+test('a gzip input\'s copy holds its gzip bytes, Save stores them as they are, and the loaded Session draws', async ({ page }, info) => {
+  test.setTimeout(480_000);
   const plain = fs.readFileSync(SOURCE);
+  const gzip = gzipSync(plain);
   const gzipped = info.outputPath('NC_001416.gb.gz');
-  fs.writeFileSync(gzipped, gzipSync(plain));
+  fs.writeFileSync(gzipped, gzip);
   await openFresh(page);
   await chooseGenBank(page, gzipped);
-  await expect.poll(() => copySizes(page), { timeout: 30_000 }).toEqual([plain.byteLength]);
+  await expect.poll(() => copySizes(page), { timeout: 30_000 }).toEqual([gzip.byteLength]);
   const copied = await page.evaluate(async () => {
     const base = await (await navigator.storage.getDirectory()).getDirectoryHandle('gbdraw-input-copies');
     for await (const folder of base.values()) {
@@ -159,5 +161,16 @@ test('a gzip input\'s copy holds its expanded content', async ({ page }, info) =
     }
     return null;
   });
-  expect(Buffer.from(copied).equals(plain)).toBe(true);
+  expect(Buffer.from(copied).equals(gzip)).toBe(true);
+  await generate(page);
+  const saved = await saveSessionFile(page, 'gzip input');
+  expect(saved.genbank.map(({ size, method }) => ({ size, method }))).toEqual([{ size: gzip.byteLength, method: 0 }]);
+  expect(saved.genbank[0].bytes.equals(gzip), 'the entry is the gzip file as chosen').toBe(true);
+  // A fresh page loads it and draws it again from the stored gzip bytes.
+  const later = await page.context().newPage();
+  await openFresh(later);
+  await loadSessionFile(later, saved.file);
+  await generate(later);
+  expect(await later.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+  await later.close();
 });

@@ -2,10 +2,11 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { readSessionFileEntries } = require('./helpers/session-file.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sessionFile = {
-  name: 'HmmtDNA_basic_circular.gbdraw-session.json',
+  name: 'HmmtDNA_basic_circular.gbdraw',
   mimeType: 'application/json',
   buffer: readFileSync(join(
     repoRoot,
@@ -13,7 +14,7 @@ const sessionFile = {
     'web',
     'gallery',
     'sessions',
-    'HmmtDNA_basic_circular.gbdraw-session.json'
+    'HmmtDNA_basic_circular.gbdraw'
   ))
 };
 
@@ -133,7 +134,7 @@ test('Save Session is single-flight, paints pending state, and releases every se
   const nativeDialogs = recordNativeDialogs(page);
   await openApp(page);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles(sessionFile);
   await page.waitForFunction(() => (
     window.__GBDRAW_APP__?.sessionImportPending === false
@@ -182,12 +183,14 @@ test('Save Session is single-flight, paints pending state, and releases every se
       compressionConstructors: window.__GBDRAW_SAVE_GATE__.constructorCalls
     };
   });
+  // One Save writes the file once: its document entry and each input it
+  // deflates take one compression stream each (receipt session.file-container).
+  const { resources: entries } = await readSessionFileEntries(await (await downloadPromise).path());
   expect(settled).toEqual({
     statuses: ['saved', 'saved'],
     sameResult: true,
-    compressionConstructors: 1
+    compressionConstructors: 1 + Object.values(entries).filter(({ method }) => method === 8).length
   });
-  await downloadPromise;
 
   const successProbe = await saveProbe(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.sessionTitle)).toBe('single-flight-save');
@@ -355,7 +358,7 @@ test('Rename Session asks in the app dialog with the title selected; Enter renam
   const nativeDialogs = recordNativeDialogs(page);
   await openApp(page);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles(sessionFile);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);
   const before = await page.evaluate(() => window.__GBDRAW_APP__.sessionTitle);
@@ -399,7 +402,7 @@ test('Rename Session is one History step: Undo and Redo move the title apart fro
   test.setTimeout(240_000);
   await openApp(page);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles(sessionFile);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);
   const read = () => page.evaluate(() => ({

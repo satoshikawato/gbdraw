@@ -18,7 +18,7 @@ const vibrioSession = join(
   'web',
   'gallery',
   'sessions',
-  'vibrio-harveyi-group-collinear.gbdraw-session.json.gz'
+  'vibrio-harveyi-group-collinear.gbdraw'
 );
 
 const PREVIEW_ZERO_METRICS = [
@@ -847,7 +847,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   await page.evaluate(() => window.__GBDRAW_VIBRIO_GENERATE_PROBE__.reset());
 
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles(vibrioSession);
   await page.waitForFunction(
     () => window.__GBDRAW_VIBRIO_GENERATE_PROBE__.lifecycle.some(

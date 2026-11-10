@@ -8,9 +8,9 @@ const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { deleteLegendRow, generate, history, open, renameRow } = require('./helpers/live-generate-parity-steps.cjs');
-const { gunzipSync } = require('node:zlib');
 const { load: loadSession, generate: generateLoaded, download } = require('./helpers/mode-transition.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -347,7 +347,7 @@ test('a palette row offers and keeps the color it shows after palette edits', as
 // palette's colors now, so the next Generate draws them as the command-line replay of that request does: no -d.
 test('a Session the 0.14.5 Web saved takes the palette\'s new misc_feature and default colors, and Generate writes no -d', async ({ browser }) => {
   test.setTimeout(180_000);
-  const page = await loadSession(browser, 'tests/fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw-session.json.gz');
+  const page = await loadSession(browser, 'tests/fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw');
   try {
     const rows = () => page.evaluate(async () => {
       const { state } = await import('./js/state.js');
@@ -376,13 +376,13 @@ test('Save stores no palette colors for an untouched drawing and keeps a user co
     return { colors: { ...drawing.currentColors.value }, palette: { ...state.paletteDefinitions.value[drawing.selectedPalette.value] } };
   });
   const save = async (page, name) => {
-    const path = testInfo.outputPath(`${name}.gbdraw-session.json.gz`);
+    const path = testInfo.outputPath(`${name}.gbdraw`);
     // A titled Session saves without asking for a title.
     await page.evaluate(async (title) => { (await import('./js/state.js')).state.sessionTitle.value = title; }, name);
-    const bytes = await download(page, 'Save Session', path);
-    return { path, config: shownSavedDrawing(JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'))).config };
+    await download(page, 'Save Session', path);
+    return { path, config: shownSavedDrawing(await readSessionFile(path)).config };
   };
-  const page = await loadSession(browser, 'tests/fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw-session.json.gz');
+  const page = await loadSession(browser, 'tests/fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw');
   let untouched, edited;
   try {
     untouched = await save(page, 'untouched');

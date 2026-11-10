@@ -181,3 +181,43 @@ test('the hit table writes "aa" after the length of a protein query\'s hit; a nu
   const table = createSearchHitTable(panel, { activeDrawing: () => ({ id: 'linear', annotationSets: [] }), shownRoot: () => null });
   assert.deepEqual(table.hitRows.value.map((row) => table.hitLengthText(row)), ['1234', '237 aa']);
 });
+
+// OV-2947, PD-OI-116: a query FASTA file chosen in the panel is read through the page's one reader of input files
+// (`readFileText`): a gzip query FASTA reads as its plain text, and one that expands past the cap is refused right
+// after it is chosen, with its name and the cap, and nothing is read.
+test('a gzip query FASTA file reads as its plain text, and one past the expanded cap is refused with its name', async () => {
+  const { gzipSync } = await import('node:zlib');
+  const { createSearchQueries } = await import('../../gbdraw/web/js/app/sequence-search/queries.js');
+  const sent = [];
+  const runHelper = async (operation, { files }) => {
+    sent.push(new TextDecoder().decode(files[0].bytes));
+    return { result: { queries: [{ name: 'q1', length: 4, program: 'blastn', reach: 4, fasta: '>q1\nACGT\n' }] } };
+  };
+  const gzipQuery = (name, bytes) => {
+    const gzip = Uint8Array.from(gzipSync(bytes));
+    return { target: { value: name, files: [new File([gzip], name, { type: 'application/gzip' })] } };
+  };
+  const panel = { queryText: '', queries: [], queryError: null, reading: false };
+  const queries = createSearchQueries(panel, runHelper, 'readSearchQueries');
+  const event = gzipQuery('query.fa.gz', '>q1\nACGT\n');
+  await queries.chooseQueryFile(event);
+  assert.equal(panel.queryText, '>q1\nACGT\n');
+  assert.deepEqual(sent, ['>q1\nACGT\n']);
+  assert.equal(panel.queryError, null);
+  assert.equal(event.target.value, '');
+
+  const cap = 1024 * 1024;
+  globalThis.__GBDRAW_TEST_HOOKS__ = { maxExpandedInputBytes: cap };
+  try {
+    const over = gzipQuery('big query.fa.gz', Buffer.alloc(cap + 1, 0x41));
+    await queries.chooseQueryFile(over);
+    assert.equal(sent.length, 1, 'nothing past the cap reaches the reader');
+    assert.equal(panel.queryText, '>q1\nACGT\n', 'the query text stays');
+    const parts = panel.queryError?.summaryParts ?? [];
+    assert.ok(parts.some((part) => part.params?.name === 'big query.fa.gz'), JSON.stringify(parts));
+    assert.ok(parts.some((part) => part.params?.limit === 1), JSON.stringify(parts));
+    assert.equal(over.target.value, '');
+  } finally {
+    delete globalThis.__GBDRAW_TEST_HOOKS__;
+  }
+});

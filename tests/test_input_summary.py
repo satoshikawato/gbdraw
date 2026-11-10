@@ -26,7 +26,8 @@ from gbdraw.api import (
 )
 from gbdraw.api.input_summary import input_summary_lines, input_warnings
 from gbdraw.io.genome import parse_gff_fasta, read_flat_file_records
-from gbdraw.session import build_session_document
+from gbdraw.session import SessionDocument, build_session_document
+from tests.utils.session_files import embedded_session
 from gbdraw.web_support.request_render import (
     _render_staged_canonical_web_request_with_prepared_inputs,
     render_embedded_canonical_web_request,
@@ -242,6 +243,10 @@ def test_cli_summary_names_a_cropped_region(tmp_path: Path) -> None:
     ) in _lines(run)
 
 
+def _embedded(document: SessionDocument) -> dict:
+    return embedded_session(document.to_dict(), document.resources.sources)
+
+
 def test_web_reply_carries_the_lines_and_warnings_the_cli_logs(tmp_path: Path) -> None:
     """Parity: the Web shows the summary the CLI logs, from the same owner."""
 
@@ -252,7 +257,7 @@ def test_web_reply_carries_the_lines_and_warnings_the_cli_logs(tmp_path: Path) -
     )
     rendered = render_request(request)
 
-    document = build_session_document(request).to_dict()
+    document = _embedded(build_session_document(request))
     reply = render_embedded_canonical_web_request(
         document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
     )
@@ -290,10 +295,10 @@ def test_web_reply_carries_the_lines_and_warnings_the_cli_logs(tmp_path: Path) -
 def test_web_reply_warns_about_a_record_with_no_feature(tmp_path: Path) -> None:
     from gbdraw.api import CircularDiagramRequest
 
-    document = build_session_document(CircularDiagramRequest(
+    document = _embedded(build_session_document(CircularDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(ZERO_FEATURES)),),
         output=RenderOutputRequest(output_prefix="empty", formats=("svg",)),
-    )).to_dict()
+    )))
     reply = render_embedded_canonical_web_request(
         document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
     )
@@ -359,7 +364,7 @@ def test_web_reply_names_a_region_set_the_track_stack_leaves_out(tmp_path: Path,
             ),
         )
     )
-    document = build_session_document(request).to_dict()
+    document = _embedded(build_session_document(request))
     reply = render_embedded_canonical_web_request(
         document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
     )

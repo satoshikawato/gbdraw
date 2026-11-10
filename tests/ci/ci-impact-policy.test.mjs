@@ -161,7 +161,7 @@ test('a version-dependent path or the label runs the dev-tier Core matrix on the
     // The path keeps its own capability; python-versions only adds jobs.
     assert.equal(classification.impact, classifyPath(path).impact, path);
   }
-  const gzip = classifyChanges([{ status: 'M', paths: ['gbdraw/io/rsyncable_gzip.py'] }]);
+  const gzip = classifyChanges([{ status: 'M', paths: ['gbdraw/io/input_text.py'] }]);
   assert.deepEqual(gzip.capabilities, ['python-versions', 'python-core']);
   assert.deepEqual(plan(gzip).requiredJobs,
     ['web-change-budget', 'core-pr', 'core', 'gallery', 'examples', 'lint', 'web-contracts-pr', 'web-pr-smoke']);
@@ -203,7 +203,7 @@ test('every package module that imports a version-dependent standard-library mod
     })
     .map((path) => relative(REPOSITORY_ROOT, path).split('\\').join('/'))
     .sort();
-  assert.ok(expected.includes('gbdraw/io/rsyncable_gzip.py'), 'the reader finds the gzip writer');
+  assert.ok(expected.includes('gbdraw/session_container.py'), 'the reader finds the Session file writer');
   const missing = expected.filter((path) => !PYTHON_VERSION_PATHS.includes(path));
   assert.deepEqual(missing, [], 'add these modules to PYTHON_VERSION_PATHS in tools/ci-impact-policy.mjs');
   // Every listed module still exists and still imports such a module.

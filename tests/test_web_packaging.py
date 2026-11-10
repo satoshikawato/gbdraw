@@ -34,6 +34,7 @@ from gbdraw.session_io import (
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
     PROTEIN_LOSAT_CACHE_SCHEMA,
 )
+from gbdraw.session_container import SESSION_DOCUMENT_ENTRY
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 
 
@@ -69,37 +70,37 @@ BROWSER_WHEEL_REQUIRED_RUNTIME_DATA = {
     "gbdraw/web/js/services/standalone-interactivity-assets.js",
 }
 GALLERY_SESSION_FILES = [
-    "BGC0000708-BGC0000713.gbdraw-session.json",
-    "HmmtDNA_basic_circular.gbdraw-session.json",
-    "HmmtDNA_ATskew.gbdraw-session.json",
-    "tobacco-chloroplast.gbdraw-session.json",
-    "hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
-    "ecoli_o157_sakai_rings.gbdraw-session.json.gz",
-    "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
-    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-    "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-    "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
-    "majanivirus_orthogroup.gbdraw-session.json.gz",
-    "lambda_basic_linear.gbdraw-session.json",
+    "BGC0000708-BGC0000713.gbdraw",
+    "HmmtDNA_basic_circular.gbdraw",
+    "HmmtDNA_ATskew.gbdraw",
+    "tobacco-chloroplast.gbdraw",
+    "hepatoplasma_scabrum_depth.gbdraw",
+    "ecoli_o157_sakai_rings.gbdraw",
+    "Vnig_TUMSAT-TG-2018.gbdraw",
+    "vibrio-harveyi-group-collinear.gbdraw",
+    "hepatoplasmataceae_collinear.gbdraw",
+    "hepatoplasmataceae_orthogroup.gbdraw",
+    "majanivirus_orthogroup.gbdraw",
+    "lambda_basic_linear.gbdraw",
 ]
 GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES = {
-    "BGC0000708-BGC0000713.gbdraw-session.json",
-    "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-    "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
-    "majanivirus_orthogroup.gbdraw-session.json.gz",
-    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+    "BGC0000708-BGC0000713.gbdraw",
+    "hepatoplasmataceae_collinear.gbdraw",
+    "hepatoplasmataceae_orthogroup.gbdraw",
+    "majanivirus_orthogroup.gbdraw",
+    "vibrio-harveyi-group-collinear.gbdraw",
 }
 GALLERY_EDITOR_STATE_SESSION_FILES = {
-    "BGC0000708-BGC0000713.gbdraw-session.json",
-    "HmmtDNA_ATskew.gbdraw-session.json",
+    "BGC0000708-BGC0000713.gbdraw",
+    "HmmtDNA_ATskew.gbdraw",
 }
 GALLERY_LOSAT_CACHE_SESSION_FILES = {
-    "ecoli_o157_sakai_rings.gbdraw-session.json.gz",
-    "BGC0000708-BGC0000713.gbdraw-session.json",
-    "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-    "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
-    "majanivirus_orthogroup.gbdraw-session.json.gz",
-    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+    "ecoli_o157_sakai_rings.gbdraw",
+    "BGC0000708-BGC0000713.gbdraw",
+    "hepatoplasmataceae_collinear.gbdraw",
+    "hepatoplasmataceae_orthogroup.gbdraw",
+    "majanivirus_orthogroup.gbdraw",
+    "vibrio-harveyi-group-collinear.gbdraw",
 }
 GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES: set[str] = set()
 
@@ -115,13 +116,10 @@ def _load_verify_module():
 
 
 def _read_session_prefix(path: Path, length: int = 256) -> str:
-    with path.open("rb") as session_file:
-        is_gzip = session_file.read(2) == b"\x1f\x8b"
-    if is_gzip:
-        with gzip.open(path, mode="rt", encoding="utf-8") as session_handle:
-            return session_handle.read(length)
-    with path.open(encoding="utf-8") as session_handle:
-        return session_handle.read(length)
+    """The start of a Session file's document (``gbdraw-session.json``)."""
+
+    with zipfile.ZipFile(path) as archive, archive.open(SESSION_DOCUMENT_ENTRY) as document:
+        return document.read(length).decode("utf-8", errors="replace")
 
 
 def _load_prepare_browser_wheel_module():
@@ -389,8 +387,8 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
     "member",
     [
         "gbdraw/web/gallery/examples.json",
-        "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
-        "gbdraw/web/gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
+        "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw",
+        "gbdraw/web/gallery/sessions/majanivirus_orthogroup.gbdraw",
     ],
 )
 def test_distribution_checks_reject_gallery_catalog_and_sessions(
@@ -1172,7 +1170,7 @@ def test_tobacco_gallery_session_keeps_chloroplast_region_annotations(
     load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> None:
     session = drawing_view(load_cached_gallery_session(
-        GALLERY_ROOT / "sessions" / "tobacco-chloroplast.gbdraw-session.json"
+        GALLERY_ROOT / "sessions" / "tobacco-chloroplast.gbdraw"
     ))
     annotation_sets = (
         session.get("renderRequest", {})
@@ -1209,7 +1207,7 @@ def test_vnig_gallery_session_multirecord_positions_are_restoreable(
     load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> None:
     session = drawing_view(load_cached_gallery_session(
-        GALLERY_ROOT / "sessions" / "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
+        GALLERY_ROOT / "sessions" / "Vnig_TUMSAT-TG-2018.gbdraw"
     ))
     expected_positions = ["#1@1", "#2@1", "#3@2", "#4@2", "#5@2", "#6@2"]
     config_positions = (
@@ -1384,7 +1382,7 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_analytics_flag(
     assert "frame-ancestors 'self'" in headers
     assert "gallery/media/**/*" in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
     assert (
-        "gallery/sessions/*.gbdraw-session.json.gz"
+        "gallery/sessions/*.gbdraw"
         in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
     )
     remote_assets = json.loads(
@@ -1395,17 +1393,20 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_analytics_flag(
         == f"{remote_base}gallery/examples/Vnig_TUMSAT-TG-2018.svg"
     )
     assert (
-        "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
+        "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw"
         not in remote_assets
     )
-    # The Vibrio Session stores its collinear result and exceeds the 25 MiB
-    # Pages asset limit, so the Worker serves it from the pinned commit.
-    assert (
-        remote_assets[
-            "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
-        ]
-        == f"{remote_base}gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
-    )
+    # A Gallery Session over the 25 MiB Pages asset limit is served by the
+    # Worker from the pinned commit; one under it ships in the bundle. (The
+    # Vibrio Session, 28.4 MiB as gzip JSON, is 23.0 MiB as a Session file.)
+    for session in sorted((WEB_ROOT / "gallery" / "sessions").glob("*.gbdraw")):
+        key = f"gallery/sessions/{session.name}"
+        if session.stat().st_size > cloudflare_module.GALLERY_REMOTE_ASSET_LIMIT_BYTES:
+            assert remote_assets[key] == f"{remote_base}{key}"
+            assert not (bundle_path / key).exists()
+        else:
+            assert key not in remote_assets
+            assert (bundle_path / key).read_bytes() == session.read_bytes()
     assert "gallery/examples/vibrio-harveyi-group-collinear.svg" not in remote_assets
     assert all("/main/" not in url for url in remote_assets.values())
     assert not (
@@ -1418,13 +1419,7 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_analytics_flag(
         bundle_path
         / "gallery"
         / "sessions"
-        / "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
-    ).exists()
-    assert not (
-        bundle_path
-        / "gallery"
-        / "sessions"
-        / "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+        / "Vnig_TUMSAT-TG-2018.gbdraw"
     ).exists()
     assert (
         bundle_path / "gallery" / "examples" / "majanivirus_orthogroup.svg"

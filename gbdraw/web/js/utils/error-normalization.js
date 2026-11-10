@@ -1,8 +1,11 @@
 // @ts-check
-// This module imports only the generated mode profiles (a leaf), and declares
-// the identity of utils/i18n.js `msg` instead of importing it, so a test that
-// copies it needs only that leaf beside it.
+// This module imports only generated leaves (the mode profiles and the
+// persisted contracts), and declares the identity of utils/i18n.js `msg`
+// instead of importing it, so a test that copies it needs only those beside it.
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
+import {
+  INPUT_NAME_CHARACTERS, SESSION_CONTAINER_DAMAGED_MESSAGE, SESSION_CONTAINER_NO_DOCUMENT_MESSAGE
+} from '../contracts/schema.generated.js';
 /** @param {string} text */
 const msg = (text) => text;
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'checkExportLimit', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
@@ -189,6 +192,10 @@ const REASONS = Object.freeze({
   SELECT_RECORD_FOR_REGION: 'Choose a Record before setting a region on a multi-record file.',
   DISCOVERY_PENDING: 'Wait for the record list to finish loading, then retry.',
   SESSION_FORMAT: 'Choose a gbdraw Session file.',
+  // A Session file container (gbdraw/session_container.py, services/session-container.js) that Load refuses
+  // whole: the sentence is the refusal (NOT_A_SESSION).
+  CONTAINER_DAMAGED: SESSION_CONTAINER_DAMAGED_MESSAGE,
+  CONTAINER_NO_DOCUMENT: SESSION_CONTAINER_NO_DOCUMENT_MESSAGE,
   SESSION_TOO_NEW: 'This Session was saved by a newer gbdraw.',
   SESSION_VERSION_UNSUPPORTED: 'This gbdraw does not read this Session version.',
   SESSION_TOO_OLD: 'This Session was saved by gbdraw 0.11.0 or older, or by gbdraw.app before 0.12.0, and this version cannot read it. Generate the diagram again from its input files.',
@@ -411,9 +418,17 @@ const PHRASES = Object.freeze({
   exception: 'Python exception: {type}.', applyAgain: 'Review the updated preview and Apply again.',
   schema: 'Load a Session file that this version of gbdraw supports.',
   notASession: 'This file is not a gbdraw Session: it is not valid JSON.',
-  // OV-2240: Save refuses a Session that Load could not open (the cap of services/session-file.js).
-  sessionNotSaved: 'The Session was not saved: it is {size} MB expanded, and the browser loads at most {limit} MB.',
-  sessionFileNotSaved: 'The Session was not saved: its file would be {size} MB, and the browser loads files of at most {limit} MB.',
+  // Receipt session.file-container: the settings and results (`gbdraw-session.json`) over the browser's cap
+  // (services/session-file.js), and browser storage too short for a Session's inputs; sizes in MB to one decimal.
+  sessionNotSaved: 'The Session was not saved: its settings and results are {size} MB, and the browser loads at most {limit} MB.',
+  sessionSaveRemedy: 'Draw a smaller region, or turn off tracks or labels you do not need, then save again.',
+  sessionNotLoaded: 'The Session was not loaded: its settings and results are {size} MB, and the browser loads at most {limit} MB.',
+  sessionCommandLine: 'The gbdraw command line can draw this Session.',
+  storageNotLoaded: 'The Session was not loaded: its inputs need {need} MB of browser storage and {free} MB is free.',
+  storageLoadRemedy: 'Free up disk space, then load it again.',
+  storageNotSaved: 'The Session was not saved: it needs up to {need} MB of browser storage and {free} MB is free.',
+  storageNotSavedNoEstimate: 'The Session was not saved: the browser has no room for it (up to {need} MB).',
+  storageSaveRemedy: 'Free up disk space, or close private windows, then save again.',
   largestInputs: 'Largest inputs: {inputs}.',
   // INPUT_UNREADABLE of a gzip input over its expanded cap: the file the browser read, and the cap in MiB.
   inputFile: 'File: {name}.', gzipLimit: 'gbdraw reads gzip files that expand to at most {limit} MiB.',
@@ -434,7 +449,6 @@ const PHRASES = Object.freeze({
   searchFailed: 'The search could not run or returned unusable output. Check the search settings, then click Search again.',
   // LOSAT_THREADING_UNAVAILABLE in the same two searches.
   searchThreadsUnavailable: 'Threaded LOSAT execution is unavailable in this browser environment. Select Serial or Auto execution, then click Search again.',
-  sessionSaveRemedy: 'Remove or replace the largest inputs with smaller ones, then save again.',
   // EXPORT_LIMIT (gbdraw/render/export_limits.py): the limit and size in the format's unit, and what would fit.
   exportSizePx: 'PNG is limited to {limit} px per side, and this figure is {width} x {height} px.',
   exportSizePt: 'PDF is limited to {limit} pt per side, and this figure is {width} x {height} pt.',
@@ -460,6 +474,11 @@ const OPERATION_MESSAGES = Object.freeze({
   LOSAT_THREADING_UNAVAILABLE: Object.freeze({
     searchHitAnnotationSet: PHRASES.searchThreadsUnavailable, findInOtherFiles: PHRASES.searchThreadsUnavailable
   })
+});
+// The reasons whose Load refusal says the file is not a Session, and that sentence alone.
+/** @type {Readonly<Record<string, string>>} */
+const NOT_A_SESSION = Object.freeze({
+  JSON_FORMAT: PHRASES.notASession, CONTAINER_DAMAGED: REASONS.CONTAINER_DAMAGED, CONTAINER_NO_DOCUMENT: REASONS.CONTAINER_NO_DOCUMENT
 });
 /**
  * One sentence or phrase of a user-facing error text. `text` is the English
@@ -584,9 +603,11 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {string} [readSessionVersions] The Session versions this app reads, as words ("27–33, 39–42, and 44").
  * @property {string} [geneticCodes] The NCBI genetic codes LOSAT reads, as Python names them ("1–6, 9–16, 21–33").
  * @property {string} [cardUid] The Linear card whose LOSAT Gencode was refused, whose input "Show in Comparison" focuses.
- * @property {number} [sessionBytes] The size in bytes of a Session that Save refused: its expanded size, or its gzip file's with `sessionSizeKind`.
- * @property {number} [sessionByteLimit] The size in bytes that Load opens at most.
- * @property {'file'} [sessionSizeKind] Set when the two sizes are those of the gzip file, not of its expanded JSON.
+ * @property {number} [sessionBytes] The size in bytes of the settings and results (`gbdraw-session.json`) of a Session
+ *   that Save or Load refused.
+ * @property {number} [sessionByteLimit] The size in bytes of settings and results that the browser loads at most.
+ * @property {number} [storageNeedBytes] The browser storage in bytes that a refused Load or Save needs.
+ * @property {number} [storageFreeBytes] The free browser storage in bytes the browser estimated; absent with no estimate.
  * @property {string} [largestInputs] The file names of the largest inputs of a Session that Save refused.
  * @property {string} [inputName] The name of the input file that could not be read (a gzip file over its expanded cap).
  * @property {string} [losatMessage] The first line LOSAT wrote about a run that exited with an error, as written.
@@ -868,10 +889,16 @@ const contextFor = (value) => {
     context.sessionBytes = value.sessionBytes;
     context.sessionByteLimit = value.sessionByteLimit;
   }
-  if (context.sessionBytes !== undefined && value.sessionSizeKind === 'file') context.sessionSizeKind = 'file';
+  // A refused Load or Save for browser storage: what it needs, and what is free when the browser estimated it.
+  if (Number.isSafeInteger(value.storageNeedBytes) && value.storageNeedBytes >= 0) {
+    context.storageNeedBytes = value.storageNeedBytes;
+    if (Number.isSafeInteger(value.storageFreeBytes) && value.storageFreeBytes >= 0) context.storageFreeBytes = value.storageFreeBytes;
+  }
   const inputs = typeof value.largestInputs === 'string' ? value.largestInputs.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
   if (inputs) context.largestInputs = inputs;
-  const inputName = typeof value.inputName === 'string' ? value.inputName.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
+  // Python's Generate refusal cuts the name at the same bound (gbdraw/web_support/error_adapter.py).
+  const inputName = typeof value.inputName === 'string'
+    ? value.inputName.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, INPUT_NAME_CHARACTERS).trimEnd() : '';
   if (inputName) context.inputName = inputName;
   // LOSAT's own words: one line of at most 200 characters, shown as text.
   const losatMessage = typeof value.losatMessage === 'string' ? value.losatMessage.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
@@ -929,6 +956,39 @@ const sessionVersionGuidance = ({ reason, sessionVersion, latestSessionVersion, 
     return { text: PHRASES.sessionUnsupported, params: { version: sessionVersion, versions: readSessionVersions } };
   }
   return null;
+};
+
+/**
+ * The sentences of a Session that Save or Load refused for the browser's
+ * limits (receipt session.file-container), or null for any other failure:
+ * browser storage too short (`storageNeedBytes`), or settings and results over
+ * the cap (`sessionBytes`). A JSON Session's refusal without sizes keeps the
+ * code's text.
+ * @param {Pick<UserFacingError, 'code' | 'operation' | 'context'>} result
+ * @returns {ErrorTextPart[] | null}
+ */
+const sessionLimitParts = ({ code, operation, context }) => {
+  const { sessionBytes, sessionByteLimit, storageNeedBytes, storageFreeBytes, largestInputs } = context;
+  const save = operation === 'session-save';
+  if (code !== 'SESSION_SIZE_LIMIT' || (!save && operation !== 'session-load')) return null;
+  /** @param {number} bytes */
+  const megabytes = (bytes) => (bytes / 1048576).toFixed(1);
+  if (storageNeedBytes !== undefined) {
+    const need = megabytes(storageNeedBytes);
+    const free = storageFreeBytes === undefined ? undefined : megabytes(storageFreeBytes);
+    if (!save) {
+      return free === undefined ? null : [{ text: PHRASES.storageNotLoaded, params: { need, free } },
+        { text: PHRASES.storageLoadRemedy }, { text: PHRASES.sessionCommandLine }];
+    }
+    return [free === undefined ? { text: PHRASES.storageNotSavedNoEstimate, params: { need } }
+      : { text: PHRASES.storageNotSaved, params: { need, free } },
+    ...(largestInputs === undefined ? [] : [{ text: PHRASES.largestInputs, params: { inputs: largestInputs } }]),
+    { text: PHRASES.storageSaveRemedy }];
+  }
+  if (sessionBytes === undefined || sessionByteLimit === undefined) return null;
+  const params = { size: megabytes(sessionBytes), limit: Math.round(sessionByteLimit / 1048576) };
+  return save ? [{ text: PHRASES.sessionNotSaved, params }, { text: PHRASES.sessionSaveRemedy }]
+    : [{ text: PHRASES.sessionNotLoaded, params }, { text: PHRASES.sessionCommandLine }];
 };
 
 // The reasons only a Session load gives. `FIELDS` also comes from other work,
@@ -1092,14 +1152,13 @@ export const normalizeUserFacingError = (value, {
   const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
     .filter(Boolean).join(', ');
   const { queryRecordIndex, subjectRecordIndex, labelFitCounts, labelCapacityOuter, labelCapacityInner, exceptionType } = result.context;
-  const { sessionBytes, sessionByteLimit, sessionSizeKind, largestInputs, inputName, losatMessage } = result.context;
+  const { inputName, losatMessage } = result.context;
   const { limit, width, height, rowLength, dpi, geneticCodes } = result.context;
   const exportSize = (reason === 'PNG_SIZE' || reason === 'PDF_SIZE') && limit !== undefined && width !== undefined
     && height !== undefined && { text: reason === 'PNG_SIZE' ? PHRASES.exportSizePx : PHRASES.exportSizePt,
     params: { limit: grouped(limit), width: grouped(width), height: grouped(height) } };
-  // A Save over the cap: the file would not load again, and saving again fails the same way.
-  const saveOverCap = result.code === 'SESSION_SIZE_LIMIT' && result.operation === 'session-save'
-    && sessionBytes !== undefined && sessionByteLimit !== undefined;
+  // A Save or Load over the browser's limits: the refusal's own sentences (receipt session.file-container).
+  const sessionLimit = sessionLimitParts(result);
   // A refused figure size names its control (Figure width, Figure height) in its own sentence, so it shows no
   // Setting line with the internal path.
   const figureSize = reason === 'FIGURE_TOO_NARROW' || reason === 'FIGURE_TOO_SHORT';
@@ -1107,11 +1166,7 @@ export const normalizeUserFacingError = (value, {
   // One part per sentence, in the order the summary shows them.
   /** @type {(ErrorTextPart | null | false | '' | undefined)[]} */
   const pieces = [
-    saveOverCap
-      ? { text: sessionSizeKind === 'file' ? PHRASES.sessionFileNotSaved : PHRASES.sessionNotSaved, params: { size: (/** @type {number} */ (sessionBytes) / 1048576).toFixed(1), limit: Math.round(/** @type {number} */ (sessionByteLimit) / 1048576) } }
-      : reason !== 'REPLY_TOO_LARGE' && { text: lead.text },
-    saveOverCap && largestInputs !== undefined && { text: PHRASES.largestInputs, params: { inputs: largestInputs } },
-    saveOverCap && { text: PHRASES.sessionSaveRemedy },
+    reason !== 'REPLY_TOO_LARGE' && { text: lead.text },
     diagramMode !== undefined && { text: diagramMode === 'linear' ? PHRASES.diagramLinear : PHRASES.diagramCircular },
     sessionTable !== undefined && { text: PHRASES.sessionTable, params: { table: { text: SESSION_TABLE_LABELS[sessionTable] } } },
     inputOrdinal !== undefined && { text: (!CARD_ORDINAL_FIELDS.has(field ?? '') && ORDINAL_LABELS[result.code]) || PHRASES.sequence, params: { n: inputOrdinal } },
@@ -1155,12 +1210,12 @@ export const normalizeUserFacingError = (value, {
     result.operation === 'align' && field === 'direction' && reason === 'SOURCE_VIEW_CONFLICT' && { text: PHRASES.applyAgain },
     sessionLoadRejected(result, field, reason) && { text: PHRASES.schema }
   ];
-  // A file chosen in Load Session that is not JSON is not a Session;
-  // every other Session reason keeps its correction.
-  const notASession = result.operation === 'session-load' && result.code === 'INPUT_INVALID'
-    && field === 'schema' && reason === 'JSON_FORMAT';
-  result.summaryParts = capParts(notASession ? [{ text: PHRASES.notASession }]
-    : pieces.filter(/** @returns {piece is ErrorTextPart} */ (piece) => Boolean(piece)),
+  // A file chosen in Load Session that is not JSON, or a damaged container or one without
+  // gbdraw-session.json, is not a Session; every other Session reason keeps its correction.
+  const notASession = result.operation === 'session-load' && result.code === 'INPUT_INVALID' && field === 'schema'
+    && reason !== undefined && Object.hasOwn(NOT_A_SESSION, reason) ? NOT_A_SESSION[reason] : null;
+  result.summaryParts = capParts(notASession ? [{ text: notASession }] : sessionLimit
+    ?? pieces.filter(/** @returns {piece is ErrorTextPart} */ (piece) => Boolean(piece)),
   Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
   result.summary = renderErrorText(result.summaryParts);
   const detail = [`Code: ${result.code}`, `Operation: ${result.operation}`, `Stage: ${result.stage}`,
@@ -1169,7 +1224,7 @@ export const normalizeUserFacingError = (value, {
   result.details = [{ label: 'Diagnostics', text: detail.slice(0,
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
   // A table stored in a Session is corrected in the Session file, not in this page.
-  result.actions = sessionTable !== undefined || saveOverCap ? ['select-input']
+  result.actions = sessionTable !== undefined || sessionLimit ? ['select-input']
     : comparisonCauseRepeats(result) ? ['edit-comparison']
     : [...(reason !== undefined && Object.hasOwn(REASON_ACTIONS, reason) ? REASON_ACTIONS[reason] : actions)];
   return result;

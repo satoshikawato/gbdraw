@@ -50,14 +50,14 @@ def main():
                 expected = stages['post_search']()
         assert runner['canonical'](result) == runner['canonical'](expected)
         gallery = runner['GALLERIES'][0 if name == 'gallery-collinear' else 1]
-        document = load_session_document(ROOT / f'gbdraw/web/gallery/sessions/{gallery}.gbdraw-session.json.gz')
+        document = load_session_document(ROOT / f'gbdraw/web/gallery/sessions/{gallery}.gbdraw')
         with tempfile.TemporaryDirectory(prefix='gbdraw-s078-fresh-') as directory:
             with materialize_session(document, output_directory=directory) as materialized:
                 request = session_to_request(materialized)
                 options = replace(request.options, orthogroups=result.orthogroups,
                                   collinearity_blocks=result if name == 'gallery-collinear' else ())
                 request = replace(request, options=options)
-                saved = artifacts / f'{name}.gbdraw-session.json'
+                saved = artifacts / f'{name}.gbdraw'
                 save_session_document(saved, request)
                 rendered = render_request(request)
                 assert rendered.output_paths and all(p.is_file() for p in rendered.output_paths)

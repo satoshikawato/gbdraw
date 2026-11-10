@@ -13,9 +13,10 @@ import {
 } from '../../gbdraw/web/js/services/track-legend-rows.js';
 import { fixture as paintFixture } from './helpers/svg-style-fixture.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { readSavedSession } from './helpers/session-documents.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
-const HMMT_AT_SKEW = readJson('../../gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
+const HMMT_AT_SKEW = await readSavedSession(new Blob([readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw', import.meta.url))]));
 // Python's rows of a Result by their keys, where a case reads no drawn fill.
 const drawnRows = (keys) => new Map(keys.map((key) => [key, { key, color: null }]));
 const requestOf = ({ mode, dinucleotide, slots, depthTracks }) => ({

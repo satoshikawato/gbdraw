@@ -20,7 +20,7 @@ const { generate } = require('./helpers/mode-transition.cjs');
 const { PYODIDE_SNAPSHOT_TEST_PATH, forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
-const SESSION = join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
+const SESSION = join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw');
 const GENBANK = join(process.cwd(), 'tests/fixtures/sessions/cli-web-mito.gb');
 
 // Serves the snapshot's state.json changed by `change`.
@@ -72,7 +72,7 @@ const bootAndGenerate = async (browser, prepare = async () => {}) => {
     await prepare(page);
     page.on('dialog', (dialog) => dialog.dismiss());
     await openApp(page);
-    await page.locator('input[accept^=".json,"]').setInputFiles(SESSION);
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(SESSION);
     await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
       && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180_000 }).toBe(true);
     await generate(page);

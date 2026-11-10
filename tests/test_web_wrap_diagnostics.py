@@ -26,6 +26,7 @@ from gbdraw.render.export_limits import check_export_limit
 from gbdraw.web_support.error_adapter import serialize_web_error
 from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 from gbdraw.session import build_session_document
+from tests.utils.session_files import embedded_session
 
 WRAP = "canvas.linear.wrap_length"
 LAMBDA = Path(__file__).parent / "test_inputs" / "NC_001416.gb"
@@ -33,6 +34,10 @@ SORANGIUM = LinearWrapSummary(50_000, 50_000, (13_033_779,))
 SORANGIUM_SIZE = (2_000.0, 45_967.0)
 # A PDF that fits: a PDF has no pixel size.
 PDF_FITS = {"ok": True, "pixels": None}
+
+
+def _embedded_document(document):
+    return embedded_session(document.to_dict(), document.resources.sources)
 
 
 def _config(**overrides: object) -> GbdrawConfig:
@@ -235,13 +240,13 @@ def test_the_web_export_check_crops_each_record_by_the_drawings_rule(web_helpers
 
 
 def _summaries(tmp_path: Path, **overrides: object) -> list[dict]:
-    document = build_session_document(
+    document = _embedded_document(build_session_document(
         LinearDiagramRequest(
             records=(RecordInput(GenBankInputSource(str(LAMBDA))),),
             options=LinearDiagramOptions(config_overrides=overrides),
             output=RenderOutputRequest(output_prefix="web", formats=("svg",)),
         )
-    ).to_dict()
+    ))
     metadata = render_embedded_canonical_web_request(
         document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "workspace"
     )["metadata"]
@@ -270,13 +275,13 @@ def test_a_cropped_record_names_its_source_length_and_the_region_asked_for(tmp_p
     # Review 3 F2 (D-53): the Web tells a cropped record apart by its source length and region, as its card
     # states them; the region is the one the request asked for, also when its end runs past the record.
     def summary(start: int, end: int) -> dict:
-        document = build_session_document(
+        document = _embedded_document(build_session_document(
             LinearDiagramRequest(
                 records=(RecordInput(GenBankInputSource(str(LAMBDA)), region=parse_region_spec("NC_001416.1:5001-35000")),),
                 options=LinearDiagramOptions(config_overrides={WRAP: "auto"}),
                 output=RenderOutputRequest(output_prefix="web", formats=("svg",)),
             )
-        ).to_dict()
+        ))
         request = document["drawings"][0]["renderRequest"]
         # The region as a card states it: the Web sends the fields as typed (a Session writer clamps its own).
         request["records"][0]["windows"][0].update(start=start, end=end)

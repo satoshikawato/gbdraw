@@ -9,6 +9,7 @@ import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { sessionLoadEvent, sessionFileOf, sessionLoadEventOfBytes, readSavedSession } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -352,7 +353,7 @@ ORIGIN
 
 const importSessionPayload = async (payload) => importSession({
   target: {
-    files: [new Blob([JSON.stringify(payload)], { type: 'application/json' })],
+    files: [await sessionFileOf(payload)],
     value: 'selected'
   }
 });
@@ -535,7 +536,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
       recordInstances: {}
     }
   };
-  const file = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  const file = await sessionFileOf(payload);
   const event = { target: { files: [file], value: 'selected' } };
 
   // Load promotes the held request with its context (C-OD14); the legacy
@@ -778,7 +779,7 @@ ORIGIN
       recordInstances: {}
     }
   };
-  const file = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  const file = await sessionFileOf(payload);
   const event = { target: { files: [file], value: 'selected' } };
 
   const result = await importSession(event);
@@ -824,7 +825,7 @@ ORIGIN
   restoredPrimaryArrayBufferReads = 0;
   const sparseResult = await importSession({
     target: {
-      files: [new Blob([JSON.stringify(sparsePayload)], { type: 'application/json' })],
+      files: [await sessionFileOf(sparsePayload)],
       value: 'selected'
     }
   });
@@ -853,7 +854,7 @@ ORIGIN
   restoredPrimaryReads = 0;
   const missingResult = await importSession({
     target: {
-      files: [new Blob([JSON.stringify(missingPayload)], { type: 'application/json' })],
+      files: [await sessionFileOf(missingPayload)],
       value: 'selected'
     }
   });
@@ -1223,7 +1224,7 @@ const savedAndLoaded = async () => {
   const saved = await exportSession('rings', { askChoice: async () => 'download', readKeptArtifacts: () => [] });
   assert.equal(saved?.status, 'saved', JSON.stringify(saved));
   const loaded = await importSession({
-    target: { files: [new File([await saved.blob.arrayBuffer()], 'rings.gbdraw-session.json.gz')], value: 'rings' }
+    target: { files: [new File([await saved.blob.arrayBuffer()], 'rings.gbdraw')], value: 'rings' }
   }, { confirmLoadRepairs: async () => true, installLoadedArtifactSlots: () => {} });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   ringSources.reconcileLoadedCircularConservation(state.activeDrawing(), true);
@@ -1388,23 +1389,24 @@ test('a ring kept by a Remove without a Generate keeps its fields through a cand
 // with its label, colour and table, through Save and Load; the next candidate of it (a record rotation, an alignment:
 // `projectCommittedEditorIntent`) draws them so, and leaves the kept ring's fields in the draft.
 test('a Remove without a Generate leaves the committed rings through Save, Load and a candidate (OV-3239)', async () => {
-  const { projectCommittedEditorIntent } = await import('../../gbdraw/web/js/services/session-request.js');
+  const { projectCommittedEditorIntent, readCanonicalResourceText } = await import('../../gbdraw/web/js/services/session-request.js');
+  // A loaded Session's tables live in its input copies, not in the descriptor: read each through the one reader.
   const drawnRings = (canonical) => {
     const options = canonical.renderRequest.diagramOptions;
-    return options.conservationBlastFiles.map(({ resourceId }, index) => [options.conservationLabels[index],
-      options.conservationColors[index], Buffer.from(canonical.resources[resourceId].data, 'base64').toString()]);
+    return Promise.all(options.conservationBlastFiles.map(async ({ resourceId }, index) => [options.conservationLabels[index],
+      options.conservationColors[index], await readCanonicalResourceText(canonical.resources, resourceId)]));
   };
   for (const files of [[ringFasta('a.fna'), ringFasta('b.fna', 'aaaagggg')], [ringFasta('a.fna'), ringFasta('a.fna')]]) {
     const drawing = await ringDrawing(files,
       [{ label: 'first', color: '#ff0000', losat_gencode: 4 }, { label: 'second', color: '#00ff00', losat_gencode: 11 }]);
     await ringGenerate(drawing, files[1].name === 'a.fna' ? () => 'a.circular_conservation.blastn.tsv' : blastTableOf);
     const committed = [['first', '#ff0000', 'a.fna\n'], ['second', '#00ff00', `${files[1].name}\n`]];
-    assert.deepEqual(drawnRings(getCommittedCanonicalSession()), committed);
+    assert.deepEqual(await drawnRings(getCommittedCanonicalSession()), committed);
     ringFiles.removeCircularConservationSource(0);
     const loaded = await savedAndLoaded();
     const what = files.map(({ name }) => name).join(' and ');
-    assert.deepEqual(drawnRings(getCommittedCanonicalSession()), committed, `${what}: the loaded committed request`);
-    assert.deepEqual(drawnRings(projectCommittedEditorIntent({ committed: getCommittedCanonicalSession(), state, drawing: loaded })),
+    assert.deepEqual(await drawnRings(getCommittedCanonicalSession()), committed, `${what}: the loaded committed request`);
+    assert.deepEqual(await drawnRings(projectCommittedEditorIntent({ committed: getCommittedCanonicalSession(), state, drawing: loaded })),
       committed, `${what}: the candidate after Load`);
     adoptCommittedCandidate(loaded);
     assert.deepEqual(ringFields(loaded), { second: ['#00ff00', 1, 11] }, `${what}: the draft keeps the kept ring`);
@@ -1537,7 +1539,7 @@ test('a ring row the stack lacks goes after the last ring row; a replaced table 
 
 test('legacy standalone config import migrates retired values without a writer envelope', async () => {
   alerts.length = 0;
-  const file = new Blob([JSON.stringify({
+  const file = await sessionFileOf({
     form: {
       prefix: 'legacy-standalone',
       linear_track_layout: 'tuckin'
@@ -1546,7 +1548,7 @@ test('legacy standalone config import migrates retired values without a writer e
       label_placement: 'on_feature',
       multi_record_size_mode: 'sqrt'
     }
-  })], { type: 'application/json' });
+  });
   const event = { target: { files: [file], value: 'selected' } };
 
   const result = await importSession(event);
@@ -1566,11 +1568,11 @@ const frozenV39Session = () => JSON.parse(gunzipSync(readFileSync(new URL(
 ))));
 
 test('current schema-8 alignment retains exact typed anchors and explicit historical receipt absence on import', async () => {
-  const source = JSON.parse(readFileSync(new URL(
-    '../test_inputs/BGC0000708-BGC0000713.gbdraw-session.json',
+  const source = await readSavedSession(new Blob([readFileSync(new URL(
+    '../test_inputs/BGC0000708-BGC0000713.gbdraw',
     import.meta.url
-  )));
-  const file = new Blob([JSON.stringify(source)], { type: 'application/json' });
+  ))]));
+  const file = await sessionFileOf(source);
   const result = await importSession({ target: { files: [file], value: 'selected' } });
 
   assert.equal(result.status, 'ok');
@@ -1590,7 +1592,7 @@ test('visible protein cache entries from the frozen v39 session recover stable e
   const sourcePairs = sessionData.losatCache.entries
     .filter((entry) => entry.display !== false)
     .map((entry) => [entry.queryRecordInstanceKey, entry.subjectRecordInstanceKey]);
-  const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
+  const file = await sessionFileOf(sessionData);
   const result = await importSession(
     { target: { files: [file], value: 'selected' } },
     { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow }
@@ -1648,7 +1650,7 @@ test('a visible cache entry stored against its edge orientation keeps the edge a
     subjectIndex: 1,
     ordinal: 0
   });
-  const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
+  const file = await sessionFileOf(sessionData);
   const result = await importSession(
     { target: { files: [file], value: 'selected' } },
     { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow }
@@ -1680,7 +1682,7 @@ test('a CLI-written visible cache entry stored against its edge orientation take
   for (const field of ['edgeKey', 'queryUid', 'subjectUid', 'queryIndex', 'subjectIndex', 'ordinal']) {
     assert.equal(reversed[field], undefined, field);
   }
-  const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
+  const file = await sessionFileOf(sessionData);
   const result = await importSession(
     { target: { files: [file], value: 'selected' } },
     { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow }
@@ -1705,7 +1707,7 @@ test('a conflicting restored edge key is not exposed under the wrong endpoints',
     visibleEntries[1].subjectRecordInstanceKey
   ].join('->');
   visibleEntries[0].edgeKey = conflictingEdgeKey;
-  const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
+  const file = await sessionFileOf(sessionData);
   const result = await importSession(
     { target: { files: [file], value: 'selected' } },
     { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow }
@@ -1760,9 +1762,7 @@ test('a Session 40 with ring colours opens, shows and generates them unchanged',
 // (`validateSessionLosatArtifacts`, the tests below).
 test('a Session that repeats a raw LOSAT cache key loads without the repeat', async () => {
   const valid = syntheticConservationSession();
-  const accepted = await importSession({
-    target: { files: [new Blob([JSON.stringify(valid)], { type: 'application/json' })], value: 'selected' }
-  });
+  const accepted = await importSession(await sessionLoadEvent(valid));
   assert.equal(accepted.status, 'ok');
   const validKeys = state.losatCacheInfo.value.map((entry) => entry.key);
 
@@ -1773,9 +1773,7 @@ test('a Session that repeats a raw LOSAT cache key loads without the repeat', as
     ...ringC,
     filename: 'comparison-c-copy.circular_conservation.losatn.tsv'
   });
-  const result = await importSession({
-    target: { files: [new Blob([JSON.stringify(repeated)], { type: 'application/json' })], value: 'selected' }
-  });
+  const result = await importSession(await sessionLoadEvent(repeated));
   assert.equal(result.status, 'ok');
   assert.deepEqual(result.repairs.map((repair) => repair.code), ['cache-entry-dropped']);
   // The first entry under the key stays; the repeat is dropped.
@@ -1792,9 +1790,7 @@ test('a Session raw LOSAT cache file name that is no text loads as the default n
   first.filename = {};
   second.filename = 7;
   alerts.length = 0;
-  const result = await importSession({
-    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-  });
+  const result = await importSession(await sessionLoadEvent(session));
   assert.equal(result.status, 'ok');
   assert.deepEqual(result.repairs, []);
   assert.deepEqual(state.losatCacheInfo.value.map((entry) => entry.filename), [
@@ -1810,9 +1806,7 @@ test('a Session raw LOSAT cache entry whose search context is a list is dropped'
   const session = syntheticConservationSession();
   const [, second] = session.losatCache.entries;
   second.searchContext = ['a'.repeat(64)];
-  const result = await importSession({
-    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
-  });
+  const result = await importSession(await sessionLoadEvent(session));
   assert.equal(result.status, 'ok');
   assert.deepEqual(result.repairs.map((repair) => [repair.code, repair.path]), [
     ['cache-entry-dropped', 'losatCache.entries[1]']
@@ -1905,10 +1899,10 @@ for (const version of [39, 40]) {
 for (const unsupportedVersion of [34, 35, 36, 37, 38]) {
   test(`session import rejects branch-internal version ${unsupportedVersion}`, async () => {
     alerts.length = 0;
-    const file = new Blob([JSON.stringify({
+    const file = await sessionFileOf({
       format: 'gbdraw-session',
       version: unsupportedVersion
-    })], { type: 'application/json' });
+    });
     const event = { target: { files: [file], value: 'selected' } };
     const result = await importSession(event);
     assert.equal(result.status, 'error');
@@ -1933,7 +1927,7 @@ for (const key of ['__proto__', 'constructor', 'prototype']) {
     const text = JSON.stringify(syntheticConservationSession())
       .replace('"resources":{', `"resources":{"${key}":{},`);
     assert.ok(text.includes(`"${key}":{}`));
-    const event = { target: { files: [new Blob([text], { type: 'application/json' })], value: 'selected' } };
+    const event = await sessionLoadEventOfBytes(text);
     const result = await importSession(event);
     assert.equal(result.status, 'error');
     assert.deepEqual(

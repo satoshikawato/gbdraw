@@ -1,13 +1,14 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 const { showDrawing, takeLinearOffer } = require('./helpers/drawing-bar.cjs');
 
 const fixture = (name = 'HmmtDNA_basic_circular') => ({
-  name: `${name}.gbdraw-session.json`, mimeType: 'application/json',
-  buffer: readFileSync(`gbdraw/web/gallery/sessions/${name}.gbdraw-session.json`)
+  name: `${name}.gbdraw`, mimeType: 'application/octet-stream',
+  buffer: readFileSync(`gbdraw/web/gallery/sessions/${name}.gbdraw`)
 });
 const setup = async (page) => {
   page.on('dialog', dialog => dialog.accept());
@@ -15,7 +16,7 @@ const setup = async (page) => {
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   await openApp(page);
-  await page.locator('input[type="file"][accept*="application/json"]').setInputFiles(fixture());
+  await page.locator('input[type="file"][accept*=".gbdraw"]').setInputFiles(fixture());
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
   expect(errors).toEqual([]);
 };
@@ -149,9 +150,9 @@ for (const operation of ['save', 'load']) {
       .toBe(operation === 'save' ? 'saved' : 'error');
     if (downloadPromise) {
       const download = await downloadPromise;
-      const path = info.outputPath('exclusive-session.json.gz');
+      const path = info.outputPath('exclusive-session.gbdraw');
       await download.saveAs(path);
-      const saved = JSON.parse(gunzipSync(readFileSync(path)));
+      const saved = await readSessionFile(path);
       expect(saved.ui.zoom).not.toBe(browsedZoom);
       // The drawing changed none of its palette's colors, so Save leaves its colors out (OV-3257).
       const { colors: _paletteColors, ...beforeConfig } = JSON.parse(await page.evaluate(() => window.beforeSession.config));
@@ -175,10 +176,10 @@ test('failed adoption restores source before transients and preserves all admitt
     window.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent: event => rollbackEvents.push(event.name) };
   });
   await capture(page);
-  const replacement = fixture('lambda_basic_linear').buffer.toString('utf8');
+  const replacement = fixture('lambda_basic_linear').buffer.toString('base64');
   const outcome = await evaluateWithRetainedPromise(page, async text => {
     const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
-    return service.importSession({ target: { files: [new File([text], 'replacement.json')], value: '' } }, {
+    return service.importSession({ target: { files: [new File([Uint8Array.from(atob(text), char => char.charCodeAt(0))], 'replacement.gbdraw')], value: '' } }, {
       confirmLoadRepairs: async () => false,
       beforePreviewMount: () => { throw new Error('controlled adoption failure'); }
     });
@@ -295,7 +296,7 @@ for (const failure of ['baseline-error', 'teardown-during-baseline']) {
       });
     });
     await capture(page);
-    const replacement = fixture('lambda_basic_linear').buffer.toString('utf8');
+    const replacement = fixture('lambda_basic_linear').buffer.toString('base64');
     const outcome = await evaluateWithRetainedPromise(page, async ({ text, failure }) => {
       const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
       const history = window.__GBDRAW_HISTORY__;
@@ -307,7 +308,7 @@ for (const failure of ['baseline-error', 'teardown-during-baseline']) {
       };
       try {
         return await window.__GBDRAW_APP__.importSession({ target: {
-          files: [new File([text], 'replacement.json')], value: ''
+          files: [new File([Uint8Array.from(atob(text), char => char.charCodeAt(0))], 'replacement.gbdraw')], value: ''
         } });
       } finally {
         history.initializeIntentBaseline = initialize;
@@ -340,9 +341,9 @@ test('uncataloged multi-record draft Save prepares records privately without exp
     window.draftSave = app.saveSessionWithTitle();
   }, text);
   expect((await evaluateWithRetainedPromise(page, async () => await window.draftSave)).status).toBe('saved');
-  const file = info.outputPath('private-draft.json.gz');
+  const file = info.outputPath('private-draft.gbdraw');
   await (await download).saveAs(file);
-  const saved = JSON.parse(gunzipSync(readFileSync(file)));
+  const saved = await (await sessionDocuments()).readSavedSession(new Blob([readFileSync(file)]));
   expect(shownSavedDrawing(saved).renderRequest.records).toHaveLength(1);
   expect(shownSavedDrawing(saved).renderRequest.records[0]).toMatchObject({ cardinality: 'all', selector: null });
   const resourceId = shownSavedDrawing(saved).renderRequest.records[0].source.resourceId;

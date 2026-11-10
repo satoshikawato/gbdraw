@@ -4,7 +4,7 @@ import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { gunzipSync } from 'node:zlib';
+import { readSavedSession } from '../helpers/session-documents.mjs';
 import { savedDrawingView } from '../helpers/saved-drawing-view.mjs';
 
 const repoRoot = process.cwd();
@@ -41,9 +41,9 @@ const fixturePath = join(
   'web',
   'gallery',
   'sessions',
-  'vibrio-harveyi-group-collinear.gbdraw-session.json.gz'
+  'vibrio-harveyi-group-collinear.gbdraw'
 );
-const saved = JSON.parse(gunzipSync(await readFile(fixturePath)).toString('utf8'));
+const saved = await readSavedSession(new Blob([await readFile(fixturePath)]));
 const fixture = savedDrawingView(saved, saved.ui.activeDrawingId);
 
 test('real Vibrio catalog covers every sequence consumer with a valid sparse catalog', () => {

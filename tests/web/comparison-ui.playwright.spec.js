@@ -1,14 +1,18 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
+const { readSessionFile } = require('./helpers/session-file.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 const { answerLoadRepairs, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
-const bgcSessionPath = 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json';
+const bgcSessionPath = 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw';
 
-const preservedComparisonSession = () => {
-  const session = JSON.parse(readFileSync(bgcSessionPath, 'utf8'));
+const readBgcSession = async () => (await sessionDocuments()).readSavedSession(new Blob([readFileSync(bgcSessionPath)]));
+const sessionFileBytes = async (session) => Buffer.from(await (await (await sessionDocuments()).sessionFileOf(session)).arrayBuffer());
+
+const preservedComparisonSession = async () => {
+  const session = await readBgcSession();
   const drawing = shownSavedDrawing(session);
   const comparisonText = 'unmatched-query\tunmatched-subject\t99\t10\t0\t0\t1\t10\t1\t10\t1e-5\t50\n';
   session.resources['imported-repeated-comparison'] = {
@@ -36,8 +40,8 @@ const preservedComparisonSession = () => {
   return session;
 };
 
-const decisionRequiredComparisonSession = () => {
-  const session = JSON.parse(readFileSync(bgcSessionPath, 'utf8'));
+const decisionRequiredComparisonSession = async () => {
+  const session = await readBgcSession();
   const drawing = shownSavedDrawing(session);
   // Keep this missing-resource check independent of saved alignment validation.
   drawing.renderRequest.layout.similarityAlignment = null;
@@ -526,11 +530,11 @@ test('imported comparison resolutions are explicit and create one History entry 
     .toBe(historyBefore + 1);
 
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles({
-    name: 'decision-required-comparison.gbdraw-session.json',
-    mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify(decisionRequiredComparisonSession()))
+    name: 'decision-required-comparison.gbdraw',
+    mimeType: 'application/octet-stream',
+    buffer: await sessionFileBytes(await decisionRequiredComparisonSession())
   });
   // Load lists the comparison that names a resource the Session lacks (OV-951);
   // the Comparisons panel still asks for a decision after Load.
@@ -639,11 +643,11 @@ test('preserved imported comparison generates only after explicit inheritance', 
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles({
-    name: 'preserved-comparison.gbdraw-session.json',
-    mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify(preservedComparisonSession()))
+    name: 'preserved-comparison.gbdraw',
+    mimeType: 'application/octet-stream',
+    buffer: await sessionFileBytes(await preservedComparisonSession())
   });
   await expectSessionLoadedWithoutWarnings(page);
 
@@ -703,9 +707,7 @@ test('preserved imported comparison generates only after explicit inheritance', 
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle()))
     .toMatchObject({ status: 'saved' });
   const download = await downloadPromise;
-  const savedSession = JSON.parse(
-    gunzipSync(readFileSync(await download.path())).toString('utf8')
-  );
+  const savedSession = await readSessionFile(await download.path());
   const shown = savedDrawing(savedSession, 'linear');
   expect(shown.config.importedComparisonResolution).toEqual({ action: 'INHERIT' });
   expect(shown.renderRequest.comparisons).toEqual(generated.comparisons);
@@ -1174,7 +1176,7 @@ test('comparison controls drive appearance and current Session round trips', { t
   const sessionDownload = await sessionDownloadPromise;
   const sessionPath = await sessionDownload.path();
   const sessionBuffer = readFileSync(sessionPath);
-  const session = JSON.parse(gunzipSync(sessionBuffer).toString('utf8'));
+  const session = await readSessionFile(sessionPath);
   expect(savedDrawing(session, 'linear').config.losat.blastp).toMatchObject({
     mode: 'collinear',
     candidateLimit: 23,
@@ -1196,7 +1198,7 @@ test('comparison controls drive appearance and current Session round trips', { t
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles({
     name: sessionDownload.suggestedFilename(),
     mimeType: 'application/gzip',
@@ -1876,7 +1878,7 @@ test('unmatched uploaded table IDs show a notice that follows the Result through
     page.waitForEvent('download'),
     page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click()
   ]);
-  const savedSession = JSON.parse(gunzipSync(readFileSync(await saved.path())).toString('utf8'));
+  const savedSession = await readSessionFile(await saved.path());
   expect(shownSavedDrawing(savedSession).runMetadata.comparisonWarnings).toMatchObject([{
     code: 'comparison_record_id_unmatched', queryRecordId: 'Co06A', subjectRecordId: 'Co06B',
     rowCount: 1, exampleIds: ['contig_A', 'contig_B'], message
@@ -1889,7 +1891,7 @@ test('unmatched uploaded table IDs show a notice that follows the Result through
   expect(await page.evaluate(() => window.__GBDRAW_APP__.comparisonWarnings)).toEqual([]);
 
   // Loading the saved Session restores the notice with its Result.
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(await saved.path());
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(await saved.path());
   await expect(notice).toBeVisible();
   await expect(notice).toContainText(message);
 });
@@ -2007,7 +2009,7 @@ test('a loaded Session 44 keeps the Collinear Max target seqs through a LOSATP m
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   page.on('dialog', (dialog) => dialog.accept());
   await page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   ).setInputFiles('tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz');
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
@@ -2034,8 +2036,8 @@ test('Record Layout and Selected pairs name every record of a multi-record File 
   page.on('dialog', (dialog) => dialog.accept());
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.locator('input[accept^=".json,"]').setInputFiles(
-    'gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz'
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(
+    'gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw'
   );
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });

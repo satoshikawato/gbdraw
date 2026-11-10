@@ -114,23 +114,25 @@ def write_case(case: dict, directory: Path) -> CaseFiles:
     """
 
     directory.mkdir(parents=True, exist_ok=True)
-    cli_session = directory / "cli.gbdraw-session.json"
-    cli_resave = directory / "cli-resave.gbdraw-session.json"
+    cli_session = directory / "cli.gbdraw"
+    cli_resave = directory / "cli-resave.gbdraw"
     stored = case.get("session")
     if "args" in case:
         svg = run_cli(case["mode"], case["args"], directory / "cli",
                       *(() if stored else ("--session_output", str(cli_session))))
         svgs = {case_drawings(case)[0]: svg}
     if stored:
-        cli_session.write_bytes(gzip.decompress((ROOT / stored).read_bytes()))
+        # A Session file is copied; an older gzip JSON Session is stored plain.
+        data = (ROOT / stored).read_bytes()
+        cli_session.write_bytes(gzip.decompress(data) if data[:2] == b"\x1f\x8b" else data)
     if "args" in case:
         replay_cli(case["mode"], cli_session, directory / "cli-replay", "--session_output", str(cli_resave))
     else:
         svgs = {drawing: replay_cli("render", cli_session, directory / f"cli-{drawing}", drawing=drawing)
                 for drawing in case_drawings(case)}
         run_cli("render", ["--session", str(cli_session)], directory / "cli-replay", "--save_session")
-        (directory / "cli-replay.gbdraw-session.json").rename(cli_resave)
-    python_resaves = {drawing: resave_python(cli_session, directory / f"python-resave-{drawing}.gbdraw-session.json",
+        (directory / "cli-replay.gbdraw").rename(cli_resave)
+    python_resaves = {drawing: resave_python(cli_session, directory / f"python-resave-{drawing}.gbdraw",
                                              drawing if "args" not in case else None)
                       for drawing in svgs}
     return CaseFiles(svgs, cli_session, cli_resave, python_resaves)

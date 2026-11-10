@@ -42,8 +42,8 @@ SCENARIOS = {
     "H-CLI-10": ["cli_annotations_slots.svg"],
     "H-CLI-11": ["cli_feature_presentation.svg"],
     "H-CLI-12": [
-        "cli_session.json",
-        "cli_session.json.gz",
+        "cli_session.gbdraw",
+        "cli_session_resaved.gbdraw",
         "cli_session_roundtrip.svg",
     ],
     "H-CLI-13": [
@@ -161,9 +161,9 @@ def test_session_and_export_recipes_make_overwrite_and_formats_explicit() -> Non
     _, export_recipe = _recipe("H-CLI-13")
 
     assert session_recipe.count("gbdraw circular") == 2
-    assert "--session_output cli_session.json" in session_recipe
-    assert "--session cli_session.json" in session_recipe
-    assert "--session_output cli_session.json.gz" in session_recipe
+    assert "--session_output cli_session.gbdraw" in session_recipe
+    assert "--session cli_session.gbdraw" in session_recipe
+    assert "--session_output cli_session_resaved.gbdraw" in session_recipe
     assert session_recipe.count("--overwrite") == 1
     assert export_recipe.count("gbdraw circular") == 1
     assert "-f svg,interactive_svg,png,pdf,eps,ps" in export_recipe

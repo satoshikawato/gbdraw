@@ -2993,20 +2993,20 @@ def test_a_definition_that_needs_more_room_still_bounds_the_gallery_stack(
 def _gallery_session_drawing(*edits: Callable[[dict[str, Any]], None]) -> tuple[dict[str, Any], str]:
     """The HmmtDNA_ATskew Gallery session drawn after ``edits``: its slot geometry and SVG."""
 
-    import json
     from tempfile import TemporaryDirectory
 
+    from tests.utils.session_files import read_session_payload, write_unchecked_session_file
     from gbdraw.api import load_session_document, materialize_session, session_to_request
     from gbdraw.api.session_compat import build_session_compatible_request_diagram
     from gbdraw.session import session_drawing_artifacts
 
-    source = Path(__file__).parents[1] / "gbdraw" / "web" / "gallery" / "sessions" / "HmmtDNA_ATskew.gbdraw-session.json"
-    session = json.loads(source.read_text(encoding="utf-8"))
+    source = Path(__file__).parents[1] / "gbdraw" / "web" / "gallery" / "sessions" / "HmmtDNA_ATskew.gbdraw"
+    session = read_session_payload(source)
     for edit in edits:
         edit(session)
     with TemporaryDirectory(prefix="gbdraw-gallery-stack-") as output_dir:
-        session_path = Path(output_dir) / "session.gbdraw-session.json"
-        session_path.write_text(json.dumps(session), encoding="utf-8")
+        session_path = Path(output_dir) / "session.gbdraw"
+        write_unchecked_session_file(session_path, session)
         document = load_session_document(session_path)
         with materialize_session(document, output_directory=output_dir) as materialized:
             prepared = build_session_compatible_request_diagram(

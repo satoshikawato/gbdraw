@@ -9,6 +9,8 @@ const { createHash } = require('node:crypto');
 const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, answerSessionTitle, openApp, waitForAppShell, evaluateWithRetainedPromise, getDiagramWorkerActivity, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated, reveal } = require('./helpers/app-lifecycle.cjs');
 const { generate: generateFromButton } = require('./helpers/mode-transition.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -85,7 +87,7 @@ const definitionLines = (page) => page.evaluate(() => {
 });
 
 const loadDefinitionSession = async (page, path) => {
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(path);
   await expectSessionLoadedWithoutWarnings(page);
 };
 
@@ -420,7 +422,8 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
     const download = page.waitForEvent('download');
     expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
     const savedPath = await (await download).path();
-    const saved = JSON.parse(gunzipSync(readFileSync(savedPath)));
+    const { readSavedSession, sessionFileOf } = await sessionDocuments();
+    const saved = await readSavedSession(new Blob([readFileSync(savedPath)]));
     expect(savedDrawing(saved, linearId).config.form.keep_definition_left_aligned).toBe(locked);
     expect(shownSavedDrawing(saved).renderRequest).toEqual(requestBefore);
     // The untouched Circular drawing has no file, changed setting, edit, or
@@ -453,10 +456,10 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
       const runs = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length);
       const pending = evaluateWithRetainedPromise(page, async raw => {
         const result = await window.__GBDRAW_APP__.importSession({
-          target: { files: [new File([raw], 'malformed.gbdraw-session.json')], value: 'selected' }
+          target: { files: [new File([Uint8Array.from(atob(raw), (character) => character.charCodeAt(0))], 'malformed.gbdraw')], value: 'selected' }
         });
         return { status: result.status, error: result.error };
-      }, JSON.stringify(invalid));
+      }, Buffer.from(await (await sessionFileOf(invalid)).arrayBuffer()).toString('base64'));
       if (malformed === null) {
         // A null reads like an omission, the historical OFF (importSessionDocument).
         expect((await pending).status).toBe('ok');
@@ -1547,7 +1550,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
     .toBe('saved');
   const sessionPath = await (await sessionDownloadPromise).path();
-  const session = JSON.parse(gunzipSync(readFileSync(sessionPath)).toString('utf8'));
+  const session = await readSessionFile(sessionPath);
   expect(shownSavedDrawing(session).webFiles.bindings.linearSeqs).toHaveLength(2);
   expect(shownSavedDrawing(session).webFiles.bindings.linearSeqs[0].region_record_id).toBe('AutomaticA');
   expect(shownSavedDrawing(session).renderRequest.records.map((record) => record.cardinality)).toEqual(['exactly_one', 'exactly_one']);
@@ -1569,7 +1572,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(sessionPath);
   await expectSessionLoadedWithoutWarnings(page);
   expect(await page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__)).toBe(0);
 
@@ -2098,7 +2101,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   const sessionPath = await (await sessionDownloadPromise).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
-  await page.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(sessionPath);
   await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.losatCacheInfo?.length === 1);
   const restored = await page.evaluate(async () => {
@@ -2191,18 +2194,19 @@ test('BGC Gallery Session: edge-owned raw LOSAT cache, the File name disclosure 
 
     const imported = await evaluateWithRetainedPromise(page, async () => {
       const response = await fetch(
-        '/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'
+        '/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw'
       );
-      const text = await response.text();
-      const session = JSON.parse(text);
+      const blob = await response.blob();
+      const { readSessionContainer } = await import('./js/services/session-container.js');
+      const session = (await readSessionContainer(blob)).document;
       const shown = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId);
       const sourceVisibleEntries = shown.losatCache.entries.filter(
         (entry) => entry.display !== false
       );
       const file = new File(
-        [text],
-        'BGC0000708-BGC0000713.gbdraw-session.json',
-        { type: 'application/json' }
+        [blob],
+        'BGC0000708-BGC0000713.gbdraw',
+        { type: 'application/octet-stream' }
       );
       const result = await window.__GBDRAW_APP__.importSession({
         target: { files: [file], value: '' }
@@ -3012,8 +3016,8 @@ test('A field that stores each keystroke keeps a refused text through a render o
 const loadCircularSession = async (page) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(
-    join(repoRoot, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json'));
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(
+    join(repoRoot, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw'));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
 };
@@ -3818,7 +3822,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expectSessionLoadedWithoutWarnings(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => seq.region_record_id))).toEqual(['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB']);
@@ -3890,7 +3894,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
 // rows of one File: File order stays available and moves the whole block.
 test('CLI per-record rows keep File order available and move whole File blocks', async ({ page }, testInfo) => {
   test.setTimeout(300000);
-  const session = testInfo.outputPath('cli-file-blocks.gbdraw-session.json.gz');
+  const session = testInfo.outputPath('cli-file-blocks.gbdraw');
   await promisify(execFile)('python', [
     '-m', 'gbdraw.cli', 'linear', '--gbk',
     join(repoRoot, 'tests/fixtures/regex_rules.gb'),
@@ -3934,7 +3938,7 @@ test('Replace on a loaded whole multi-record card splits it on Generate and sear
   test.setTimeout(300000);
   const blast = testInfo.outputPath('testb-regex.tsv');
   writeFileSync(blast, 'TESTB\tREGEX.1\t100\t300\t0\t0\t1\t300\t1\t300\t1e-30\t500\n');
-  const cliSession = testInfo.outputPath('whole-card-cli.gbdraw-session.json.gz');
+  const cliSession = testInfo.outputPath('whole-card-cli.gbdraw');
   await promisify(execFile)('python', [
     '-m', 'gbdraw.cli', 'linear', '--gbk',
     join(repoRoot, 'tests/fixtures/web_batch_two_records.gb'),
@@ -3943,13 +3947,14 @@ test('Replace on a loaded whole multi-record card splits it on Generate and sear
   ], { cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: repoRoot }, timeout: 300000, maxBuffer: 1_000_000 });
   // The CLI writes one card per record; this one draws the whole File, and its comparison names record #2 (TESTB)
   // and record #3 (REGEX.1) of the File's records.
-  const session = JSON.parse(gunzipSync(readFileSync(cliSession)).toString('utf8'));
+  const { readSavedSession, sessionFileOf } = await sessionDocuments();
+  const session = await readSavedSession(new Blob([readFileSync(cliSession)]));
   const saved = shownSavedDrawing(session).renderRequest;
   Object.assign(saved.records[0], { cardinality: 'all', selector: null });
   Object.assign(saved.comparisons.find((comparison) => comparison.kind === 'nucleotideBlast'),
     { queryRecordIndex: 1, subjectRecordIndex: 2 });
-  const wholeSession = testInfo.outputPath('whole-card.gbdraw-session.json');
-  writeFileSync(wholeSession, JSON.stringify(session));
+  const wholeSession = testInfo.outputPath('whole-card.gbdraw');
+  writeFileSync(wholeSession, Buffer.from(await (await sessionFileOf(session)).arrayBuffer()));
 
   await page.addInitScript(() => {
     window.__WHOLE_CARD_SEARCHED__ = [];
@@ -4251,7 +4256,7 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   const savedPath = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows
     .map((entry) => entry.row))).toEqual([1, 1, 2, 2, 3]);
   await page.getByRole('button', { name: 'Advanced comparison and layout', exact: true }).click();
@@ -4398,7 +4403,7 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   const savedPath = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   expect(await page.evaluate(async ([circularId, linearId]) => {
     const { state } = await import('./js/state.js');
@@ -4521,7 +4526,7 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
     const path = await (await saved).path();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForAppShell(page);
-    await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+    await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(path);
     await expect(settings).toHaveAttribute('open', '');
     for (const [index, name] of labels.entries()) {
       await expect(settings.getByRole('combobox', { name, exact: true })).toHaveValue([execution, '2', '1', '2'][index]);
@@ -4642,7 +4647,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   const path = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(path);
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   const restored = await run();
   expect(restored.result, JSON.stringify(restored.error)).toEqual({ status: 'ok' });
@@ -4732,7 +4737,7 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   const savedPath = await saved.path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expect(total).toHaveValue('4');
   await expect(runs).toHaveValue('2');
   await expect(threads).toHaveValue('8');

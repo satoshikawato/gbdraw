@@ -1,13 +1,13 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { readFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
-const seed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
+const seed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw';
 const external = new WeakMap();
 const load = async (browser, file = seed) => {
   const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
@@ -21,7 +21,7 @@ const load = async (browser, file = seed) => {
   external.set(page, attempted);
   page.on('dialog', dialog => dialog.dismiss());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180000 }).toBe(true);
   return page;
@@ -137,8 +137,7 @@ for (const committed of [false, true]) {
       const download = await pending;
       const saved = testInfo.outputPath(download.suggestedFilename());
       await download.saveAs(saved);
-      const bytes = await fs.readFile(saved);
-      const savedSession = shownSavedDrawing(JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString()));
+      const savedSession = shownSavedDrawing(await readSessionFile(saved));
       expect(savedSession.renderRequest.diagramOptions.featurePlacements || []).toEqual(before.committedPlacements);
       await generate(page);
       const generated = await snapshot(page);
@@ -261,7 +260,7 @@ for (const operation of ['replacement', 'removal']) {
 test('no-placement Circular and Linear mode round trips remain generatable', async ({ browser }) => {
   test.setTimeout(240000);
   for (const [file, original, temporary] of [[seed, 'circular', 'linear'],
-    ['gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', 'linear', 'circular']]) {
+    ['gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw', 'linear', 'circular']]) {
     const page = await load(browser, file);
     try {
       await generate(page);

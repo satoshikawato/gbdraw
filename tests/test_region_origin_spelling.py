@@ -8,7 +8,6 @@ origin, so a round trip keeps the window.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -24,6 +23,7 @@ from gbdraw.api.requests import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.regions import RecordWindow, parse_region_spec
+from tests.utils.session_files import read_session_payload
 
 REPO = Path(__file__).resolve().parents[1]
 MITO = REPO / "tests" / "test_inputs" / "HmmtDNA.gbk"  # circular, 16,569 bp
@@ -141,10 +141,10 @@ def test_a_cli_session_of_a_window_across_the_origin_replays_the_figure(
     monkeypatch.chdir(tmp_path)
     _cli(monkeypatch, ["linear", "--gbk", str(MITO), "-o", "w", "-f", "svg", "--save_session",
                        "--region", "16000-1000:origin:rc", "--region", "5000-5600"])
-    document = json.loads((tmp_path / "w.gbdraw-session.json").read_text(encoding="utf-8"))
+    document = read_session_payload(tmp_path / "w.gbdraw")
     [record] = document["drawings"][0]["renderRequest"]["records"]
     assert [(w["start"], w["end"], w["reverseComplement"]) for w in record["windows"]] == [
         (16000, 1000, True), (5000, 5600, False)
     ]
-    _cli(monkeypatch, ["render", "--session", "w.gbdraw-session.json", "-o", "replay", "-f", "svg"])
+    _cli(monkeypatch, ["render", "--session", "w.gbdraw", "-o", "replay", "-f", "svg"])
     assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "w.svg").read_bytes()

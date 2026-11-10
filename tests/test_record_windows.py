@@ -562,9 +562,9 @@ def test_a_comparisons_table_names_a_windowed_record_by_its_record_number(tmp_pa
 
 
 def _saved_request(session: Path) -> dict:
-    import json
+    from tests.utils.session_files import read_session_payload
 
-    document = json.loads(session.read_text(encoding="utf-8"))
+    document = read_session_payload(session)
     return document["drawings"][0]["renderRequest"]
 
 
@@ -593,14 +593,14 @@ def test_a_cli_session_saves_a_record_with_its_windows_and_replays_the_figure(
     for region in regions:
         arguments += ["--region", region]
     main(arguments)
-    [record] = _saved_request(tmp_path / "w.gbdraw-session.json")["records"]
+    [record] = _saved_request(tmp_path / "w.gbdraw")["records"]
     assert record["recordKey"] == "record-1"
     assert record["source"]["kind"] == "genbank" and record["selector"] is None
     expected = [parse_region_spec(region) for region in regions]
     assert [(w["start"], w["end"], w["reverseComplement"]) for w in record["windows"]] == [
         (spec.start, spec.end, spec.reverse_complement) for spec in expected
     ]
-    main(["render", "--session", "w.gbdraw-session.json", "-o", "replay", "-f", "svg"])
+    main(["render", "--session", "w.gbdraw", "-o", "replay", "-f", "svg"])
     assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "w.svg").read_bytes()
 
 
@@ -619,11 +619,11 @@ def test_a_cli_session_of_a_records_table_group_keeps_the_window_columns(
         "gbk\trecord_id\trecord_label\trow\tcolumn\tregion\trecord_group",
     )
     _cli(monkeypatch, ["linear", "--records_table", str(table), "-o", "g", "-f", "svg", "--save_session"])
-    records = _saved_request(tmp_path / "g.gbdraw-session.json")["records"]
+    records = _saved_request(tmp_path / "g.gbdraw")["records"]
     assert [(record["recordKey"], [w["column"] for w in record["windows"]]) for record in records] == [
         ("record-1", [1, 3]), ("record-2", []), ("record-3", []),
     ]
-    _cli(monkeypatch, ["render", "--session", "g.gbdraw-session.json", "-o", "replay", "-f", "svg"])
+    _cli(monkeypatch, ["render", "--session", "g.gbdraw", "-o", "replay", "-f", "svg"])
     assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "g.svg").read_bytes()
 
 
@@ -633,7 +633,7 @@ def test_a_records_table_names_each_record_of_a_file_the_web_draws_whole_in_a_pl
     """OV-3072: a records table writes a file drawn whole one row per record, each with its column; a Session of the
     Web's File card of that file, placed at the first of those columns, draws the same figure. A File card's records
     are keyed ``<card>:<n>``, the table's ``record-<row>``."""
-    import json
+    from tests.utils.session_files import read_session_payload, write_unchecked_session_file
 
     monkeypatch.chdir(tmp_path)
     table = _table(
@@ -642,15 +642,15 @@ def test_a_records_table_names_each_record_of_a_file_the_web_draws_whole_in_a_pl
         "gbk\trecord_id\trow\tcolumn",
     )
     _cli(monkeypatch, ["linear", "--records_table", str(table), "-o", "t", "-f", "svg", "--save_session"])
-    document = json.loads((tmp_path / "t.gbdraw-session.json").read_text(encoding="utf-8"))
+    document = read_session_payload(tmp_path / "t.gbdraw")
     request = document["drawings"][0]["renderRequest"]
     first, _second, last = request["records"]
     request["records"] = [
         {**first, "cardinality": "all", "selector": None},
         {**last, "presentation": {**last["presentation"], "gridColumn": 2}},
     ]
-    (tmp_path / "card.gbdraw-session.json").write_text(json.dumps(document), encoding="utf-8")
-    _cli(monkeypatch, ["render", "--session", "card.gbdraw-session.json", "-o", "card", "-f", "svg"])
+    write_unchecked_session_file(tmp_path / "card.gbdraw", document)
+    _cli(monkeypatch, ["render", "--session", "card.gbdraw", "-o", "card", "-f", "svg"])
     card = (tmp_path / "card.svg").read_text(encoding="utf-8")
     assert 'data-record-key="record-1:2"' in card
     assert card.replace("record-1:2", "record-2").replace("record-1:1", "record-1") == (
@@ -669,7 +669,7 @@ def test_a_cli_session_of_a_records_table_drawing_one_file_record_twice_replays_
         "gbk\trecord_id\trecord_label\trow\tcolumn\tregion",
     )
     _cli(monkeypatch, ["linear", "--records_table", str(table), "-o", "v", "-f", "svg", "--save_session"])
-    request = _saved_request(tmp_path / "v.gbdraw-session.json")
+    request = _saved_request(tmp_path / "v.gbdraw")
     records = request["records"]
     # Both rows read the file itself, each its own window; no in-memory GenBank copy.
     assert [record["source"]["kind"] for record in records] == ["genbank", "genbank", "genbank"]
@@ -677,7 +677,7 @@ def test_a_cli_session_of_a_records_table_drawing_one_file_record_twice_replays_
     assert [
         [(w["start"], w["end"], w["reverseComplement"]) for w in record["windows"]] for record in records
     ] == [[(100, 900, False)], [(2000, 3000, True)], []]
-    _cli(monkeypatch, ["render", "--session", "v.gbdraw-session.json", "-o", "replay", "-f", "svg"])
+    _cli(monkeypatch, ["render", "--session", "v.gbdraw", "-o", "replay", "-f", "svg"])
     assert (tmp_path / "replay.svg").read_bytes() == (tmp_path / "v.svg").read_bytes()
 
 
@@ -708,7 +708,7 @@ def test_a_session_of_a_resolved_request_keeps_the_windows_of_a_file_record(tmp_
     ))
     render_request(resolved)
     live = (tmp_path / "live.svg").read_text(encoding="utf-8")
-    session = tmp_path / "saved.gbdraw-session.json"
+    session = tmp_path / "saved.gbdraw"
     save_session_document(session, resolved)
     records = _saved_request(session)["records"]
     assert [(record["recordKey"], len(record["windows"])) for record in records] == [("mito", 2), ("testa", 0)]

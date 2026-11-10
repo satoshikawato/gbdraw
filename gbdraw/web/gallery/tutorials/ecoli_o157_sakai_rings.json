@@ -113,7 +113,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw",
       "replayThrough": 2,
       "selector": ".card[data-settings-section='input-genomes']",
       "cropPadding": 14,
@@ -145,7 +145,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw",
       "replayThrough": 2,
       "selector": ".card[data-settings-section='basic']",
       "cropPadding": 14,
@@ -180,7 +180,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw",
       "replayThrough": 3,
       "viewport": {
        "width": 1400,
@@ -292,7 +292,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw",
       "replayThrough": 4,
       "viewport": {
        "width": 1280,
@@ -348,7 +348,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw",
       "replayThrough": 4,
       "viewport": {
        "width": 1400,
@@ -425,7 +425,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw",
       "replayThrough": 5,
       "viewport": {
        "width": 1280,
@@ -476,7 +476,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw",
       "replayThrough": 5,
       "viewport": {
        "width": 1400,
@@ -583,7 +583,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw",
       "replayThrough": 6,
       "viewport": {
        "width": 1280,
@@ -629,7 +629,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw",
       "replayThrough": 6,
       "viewport": {
        "width": 1280,
@@ -686,7 +686,7 @@
      },
      "capture": {
       "source": "webapp",
-      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz",
+      "session": "./sessions/ecoli_o157_sakai_rings.gbdraw",
       "replayThrough": 6,
       "viewport": {
        "width": 1400,

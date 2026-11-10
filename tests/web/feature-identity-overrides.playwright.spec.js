@@ -142,7 +142,7 @@ test('OV-01: edits on a cropped record reach their feature, also on CLI replay',
   expect(result[TX].labels).toEqual(['EDITED_X']);
   expect(result[TY].labels).not.toContain('EDITED_X');
 
-  const sessionPath = testInfo.outputPath('ov01.gbdraw-session.json');
+  const sessionPath = testInfo.outputPath('ov01.gbdraw');
   await download(page, 'Save Session', sessionPath, { title: '' });
   const replay = replayOnCli(sessionPath, testInfo.outputPath('ov01-replay'));
   expect(replay.match(/EDITED_X/g) || []).toHaveLength(1);
@@ -308,7 +308,7 @@ test('OV-12: after reordering records the popup shows the edit of the same featu
 // Generate, so the load waits for the committed Result only.
 // `repairs`: the lines the Load dialog lists, answered with [Load] (BA-D25).
 const loadSession = async (page, file, repairs = null) => {
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   if (repairs) await answerLoadRepairs(page, repairs);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
@@ -654,7 +654,7 @@ test('an older Session whose sources cannot be read again fails to load and keep
   });
   const previous = await loaded();
   expect(previous.rows.length).toBe(2);
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   await settle(page);
   await expect(page.locator('[data-app-notice]', { hasText: 'Session loaded' })).toHaveCount(0);

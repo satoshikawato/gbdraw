@@ -5,7 +5,6 @@
 const { test, expect } = require('@playwright/test');
 const path = require('node:path');
 const { readFileSync } = require('node:fs');
-const { gunzipSync } = require('node:zlib');
 const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { drawingIds, drawingTab, offerTab, shownDrawing, showDrawing, takeLinearOffer } = require('./helpers/drawing-bar.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
@@ -27,7 +26,7 @@ test.describe('390 px', () => {
   test('the phone layout shows one picker row and one pane at a time, switched by reveal, Generate and the Editor', async ({ page }) => {
     test.setTimeout(240_000);
     await openApp(page);
-    expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw-session.json')).status).toBe('ok');
+    expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw')).status).toBe('ok');
     // The Session holds one Circular drawing; the list below needs a second one, made through the offer.
     await takeLinearOffer(page);
     await showDrawing(page, { kind: 'circular' });
@@ -144,7 +143,7 @@ test.describe('390 px', () => {
     await openApp(page);
     const tab = (pane) => page.locator(`.phone-pane-tabs [role="tab"][data-phone-pane="${pane}"]`);
     await expect(tab('settings')).toHaveAttribute('aria-selected', 'true');
-    await page.locator('input[accept^=".json,"]').setInputFiles(path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
     await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     expect(await page.locator('.origin-top svg').count()).toBe(0);
@@ -153,9 +152,9 @@ test.describe('390 px', () => {
     // Result switches to Settings.
     await tab('preview').click();
     await expect(tab('preview')).toHaveAttribute('aria-selected', 'true');
-    await page.locator('input[accept^=".json,"]').setInputFiles(path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
     await expect(tab('settings')).toHaveAttribute('aria-selected', 'true');
-    expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw-session.json')).status).toBe('ok');
+    expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw')).status).toBe('ok');
     await expect(tab('preview')).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('.origin-top svg')).toBeVisible();
   });
@@ -210,7 +209,7 @@ test.describe('195 px', () => {
     });
     expect(await label()).toEqual({ text: ['Generate'], lines: [1] });
     await expect(page.locator('.generate-bar button')).toHaveAccessibleName('Generate Diagram');
-    expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw-session.json')).status).toBe('ok');
+    expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw')).status).toBe('ok');
     const previewTab = page.locator('.phone-pane-tabs [role="tab"][data-phone-pane="preview"]');
     if (await previewTab.getAttribute('aria-selected') !== 'true') await previewTab.tap();
     await expect(page.getByRole('region', { name: 'Result Preview' })).toBeVisible();
@@ -458,7 +457,7 @@ test('a one-mode Session Load lists only its own drawings; the offer tab or New 
     return JSON.stringify([drawing.form, drawing.adv]) === JSON.stringify([fresh.form, fresh.adv]);
   }, id);
 
-  const linearOnly = await loadGallerySession(page, 'lambda_basic_linear.gbdraw-session.json');
+  const linearOnly = await loadGallerySession(page, 'lambda_basic_linear.gbdraw');
   expect(linearOnly.status, JSON.stringify(linearOnly.error)).toBe('ok');
   expect(await drawingIds(page)).toEqual(['linear']);
   await expect(page.locator('.drawing-bar [role="tab"]'), 'the bar lists the Linear drawing only').toHaveCount(1);
@@ -470,7 +469,7 @@ test('a one-mode Session Load lists only its own drawings; the offer tab or New 
   expect(await shownDrawing(page)).toEqual({ id: 'circular', kind: 'circular' });
   expect(await atDefaults('circular'), 'the new Circular drawing is at its defaults').toBe(true);
 
-  const circularOnly = await loadGallerySession(page, 'HmmtDNA_basic_circular.gbdraw-session.json');
+  const circularOnly = await loadGallerySession(page, 'HmmtDNA_basic_circular.gbdraw');
   expect(circularOnly.status, JSON.stringify(circularOnly.error)).toBe('ok');
   expect(await drawingIds(page)).toEqual(['circular']);
   await expect(offerTab(page)).toHaveAccessibleName('Linear');
@@ -513,12 +512,12 @@ test('Save then a fresh Load keeps the drawings, their names, and their tab orde
   const downloadPromise = page.waitForEvent('download', { timeout: 120_000 });
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle()))
     .toMatchObject({ status: 'saved' });
-  const saved = gunzipSync(readFileSync(await (await downloadPromise).path())).toString('utf8');
+  const saved = readFileSync(await (await downloadPromise).path()).toString('base64');
   const fresh = await page.context().newPage();
   await openApp(fresh);
   expect(await drawingIds(fresh)).toEqual(['circular']);
-  const outcome = await evaluateWithRetainedPromise(fresh, async (text) => {
-    const file = new File([text], 'drawings.gbdraw-session.json', { type: 'application/json' });
+  const outcome = await evaluateWithRetainedPromise(fresh, async (base64) => {
+    const file = new File([Uint8Array.from(atob(base64), (character) => character.charCodeAt(0))], 'drawings.gbdraw', { type: 'application/octet-stream' });
     return window.__GBDRAW_APP__.importSession({ target: { files: [file], value: 'selected' } });
   }, saved);
   expect(outcome.status).toBe('ok');

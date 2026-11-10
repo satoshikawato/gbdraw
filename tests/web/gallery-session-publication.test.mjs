@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { gunzipSync } from 'node:zlib';
+import { readSavedSession } from './helpers/session-documents.mjs';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
@@ -82,11 +82,7 @@ assert.equal(new Set(sessionNames).size, 12);
 // A Session file as the publication bridge reads it (`tools/publish_gallery_session.mjs`): a Session 51's one
 // drawn drawing as its one-drawing view, an older Session as it is.
 const loadSessionFile = async (path) => {
-  const bytes = await readFile(path);
-  const decoded = bytes[0] === 0x1f && bytes[1] === 0x8b
-    ? gunzipSync(bytes)
-    : bytes;
-  return galleryPublicationView(JSON.parse(decoded.toString('utf8'))).view;
+  return galleryPublicationView(await readSavedSession(new Blob([await readFile(path)]))).view;
 };
 const loadSession = (name) => loadSessionFile(`${sessionRoot}/${name}`);
 // The released Session 44 Gallery files (first-parent main fe6861f0), kept to
@@ -161,7 +157,7 @@ for (const name of sessionNames) {
   } else {
     assert.equal(Object.hasOwn(publishedForm, 'multi_record_canvas'), false, name);
   }
-  if (name === 'tobacco-chloroplast.gbdraw-session.json') {
+  if (name === 'tobacco-chloroplast.gbdraw') {
     assert.equal(slice.config.rules.length, 19, name);
     assert.deepEqual(slice.config.qualifierPriorityRules, [
       { feat: 'CDS', order: 'gene,old_locus_tag' }
@@ -199,7 +195,7 @@ for (const name of sessionNames) {
 // rebinds the receipt as Load does (`readStoredSimilarityAlignmentResetReceipt`), so the published Session's receipt
 // binds the published request.
 {
-  const source = structuredClone(await loadSession('BGC0000708-BGC0000713.gbdraw-session.json'));
+  const source = structuredClone(await loadSession('BGC0000708-BGC0000713.gbdraw'));
   const window = { start: 1, end: 5000, reverseComplement: false, column: null };
   const selector = { kind: 'recordId', value: 'record-1-id' };
   const promoted = structuredClone(source.renderRequest);
@@ -237,7 +233,7 @@ for (const name of ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'l
     /Gallery publication supports Sessions 46-51; Load a Session 27-44 in the app and save it \(Python converts it at Load\); received /);
 }
 
-const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
+const lambda = await loadSession('lambda_basic_linear.gbdraw');
 const admittedLambda = await admitGallerySession(lambda);
 assert.equal(admittedLambda.version, CURRENT_SESSION_VERSION);
 assert.equal(admittedLambda.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA);
@@ -306,7 +302,7 @@ assert.equal((await compareCanonicalRenderRequests({
 
 // The same Default colors rows as a file or as a canonical table are two requests: a canonical table is complete (a
 // missing type draws the fallback grey), a file applies over the palette (BGC holds a file table).
-const bgcPrepared = await prepareGallerySessionForPublication(await loadSession('BGC0000708-BGC0000713.gbdraw-session.json'));
+const bgcPrepared = await prepareGallerySessionForPublication(await loadSession('BGC0000708-BGC0000713.gbdraw'));
 const bgcWithCanonicalDefaultColors = structuredClone(bgcPrepared.session.renderRequest);
 bgcWithCanonicalDefaultColors.diagramOptions.colors.defaultColors = {
   ...bgcWithCanonicalDefaultColors.diagramOptions.colors.defaultColorsFile, representation: 'canonicalTsv'
@@ -573,7 +569,7 @@ assert.rejects(
 // OV-217: a Web-authored Session 46 slice may hold a record display draft with
 // no `scope`; the committed mode's slice must still hold it after publication.
 {
-  const scopeless = await loadSession('vibrio-harveyi-group-collinear.gbdraw-session.json.gz');
+  const scopeless = await loadSession('vibrio-harveyi-group-collinear.gbdraw');
   const mode = scopeless.renderRequest.mode;
   const source = scopeless.modes[mode].config.recordDisplayDrafts;
   assert.ok(source.length > 0);
@@ -591,7 +587,7 @@ assert.rejects(
 // left after an edit. Publication rebuilds from the request's tables, not
 // from the imported files (OV-367).
 {
-  const source = await loadSession('BGC0000708-BGC0000713.gbdraw-session.json');
+  const source = await loadSession('BGC0000708-BGC0000713.gbdraw');
   const tsvResource = (kind, name, text) => ({ kind, name, type: 'text/tab-separated-values',
     size: Buffer.byteLength(text), lastModified: 0, encoding: 'base64', data: Buffer.from(text, 'utf8').toString('base64') });
   const binding = (resourceId, name) => ({ resourceId, name, type: 'text/tab-separated-values', lastModified: 0 });
@@ -635,7 +631,7 @@ assert.rejects(
 // the cards from the request: they keep the uids the records are keyed by, and the published Session rebuilds its
 // own request. Before, Load named the card `record-1` and the publication refused the Session (OV-3022).
 {
-  const saved = await loadSession('ecoli_o157_sakai_rings.gbdraw-session.json.gz');
+  const saved = await loadSession('ecoli_o157_sakai_rings.gbdraw');
   const [card] = saved.webFiles.bindings?.circularSources ?? [{ uid: saved.renderRequest.records[0].recordKey }];
   assert.match(card.uid, /^circular-source-/);
   assert.deepEqual(saved.modes.circular.config.adv.multi_record_positions, [{ selector: card.uid, row: 1 }]);
@@ -651,7 +647,7 @@ assert.rejects(
 // Settings read the names as after that Save (OV-1701); the imported table
 // files stay unpublished (OV-367).
 {
-  const source = await loadSession('BGC0000708-BGC0000713.gbdraw-session.json');
+  const source = await loadSession('BGC0000708-BGC0000713.gbdraw');
   const saved = structuredClone(source);
   const cardRows = saved.renderRequest.records.map((record, index) => ({
     uid: record.recordKey,
@@ -685,7 +681,7 @@ assert.rejects(
   try {
     for (const id of ['circular_records_tables', 'linear_tables', 'linear_blast']) {
       const { mode, args } = cases.find((entry) => entry.id === id);
-      const file = path.join(directory, `${id}.gbdraw-session.json`);
+      const file = path.join(directory, `${id}.gbdraw`);
       execFileSync('python', ['-m', 'gbdraw.cli', mode, ...args, '-o', path.join(directory, id),
         '-f', mode === 'circular' ? 'interactive_svg' : 'svg',
         '--session_output', file], { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
@@ -724,7 +720,7 @@ assert.rejects(
   try {
     const depth = path.join(directory, 'lambda.depth.tsv');
     await writeFile(depth, Array.from({ length: 48502 }, (_, index) => `NC_001416.1\t${index + 1}\t${10 + (index % 50)}\n`).join(''));
-    const file = path.join(directory, 'depth.gbdraw-session.json');
+    const file = path.join(directory, 'depth.gbdraw');
     execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', 'tests/test_inputs/NC_001416.gb',
       '--depth_track', depth, '-o', path.join(directory, 'depth'), '-f', 'interactive_svg', '--session_output', file],
     { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
@@ -740,7 +736,7 @@ assert.rejects(
     assert.deepEqual(readiness.equivalence.differences, [], 'published depth');
     // A style the command states still compares: a rebuild that draws another
     // color is refused (OV-2819 drops only the fields the command left unstated).
-    const stated = path.join(directory, 'stated.gbdraw-session.json');
+    const stated = path.join(directory, 'stated.gbdraw');
     execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', 'tests/test_inputs/NC_001416.gb',
       '--depth_track', depth, '--depth_track_color', '#123456', '-o', path.join(directory, 'stated'), '-f', 'interactive_svg',
       '--session_output', stated], { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
@@ -783,7 +779,7 @@ assert.rejects(
   const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-gallery-cli-slots-'));
   try {
     const data = 'gbdraw/web/tutorial-data/tobacco-plastome-regions';
-    const file = path.join(directory, 'slots.gbdraw-session.json');
+    const file = path.join(directory, 'slots.gbdraw');
     execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', `${data}/NC_001879.gbk`,
       '--annotation_table', `${data}/nicotiana-tabacum-regions.tsv`,
       '--circular_track_slot', 'features:features@side=overlay,lane_direction=split',

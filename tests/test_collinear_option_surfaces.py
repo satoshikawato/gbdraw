@@ -26,6 +26,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw import linear as linear_cli_module
 from gbdraw import session_io
 from gbdraw import session_request_codec as codec
+from tests.utils.session_files import embedded_session, load_session_mapping, read_session_payload
 from gbdraw.interface import _linear_options
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -354,12 +355,10 @@ def test_an_upgrade_replaces_the_removed_anchor_mode_in_both_copies(caplog: pyte
 def test_a_cli_resave_writes_the_replacement_to_its_file(tmp_path: Path) -> None:
     """The re-save builds on the upgrade: the file holds both replacements."""
 
-    import json
-
     from gbdraw.cli_utils.session import render_session_drawings_cli
     from gbdraw.session import load_session_document
 
-    output = tmp_path / "resaved.gbdraw-session.json"
+    output = tmp_path / "resaved.gbdraw"
     render_session_drawings_cli(
         load_session_document(ONE_TO_ONE_FIXTURE),
         drawings=None,
@@ -369,7 +368,7 @@ def test_a_cli_resave_writes_the_replacement_to_its_file(tmp_path: Path) -> None
         session_output=str(output),
     )
 
-    saved = json.loads(output.read_text(encoding="utf-8"))
+    saved = read_session_payload(output)
     assert saved["version"] == session_io.CURRENT_SESSION_VERSION
     assert _stored_anchor_modes(saved) == ["rbh", "rbh"]
 
@@ -429,14 +428,15 @@ def test_a_current_session_with_the_removed_anchor_mode_stays_unchanged_and_read
 ) -> None:
     """A Session 50 written before the fix keeps its bytes; every read repairs it, as before."""
 
-    from gbdraw.session import load_session_document, materialize_session, session_to_request, upgrade_session_document
+    from gbdraw.session import materialize_session, session_to_request, upgrade_session_document
 
-    stored = upgrade_session_document(ONE_TO_ONE_FIXTURE).document.to_dict()
+    upgraded = upgrade_session_document(ONE_TO_ONE_FIXTURE).document
+    stored = embedded_session(upgraded.to_dict(), upgraded.resources.sources)
     settings, blastp = _protein_settings_and_draft(stored)
     settings["collinearityAnchorMode"] = "one_to_one"
     blastp["collinearAnchorMode"] = "one_to_one"
 
-    document = load_session_document(stored)
+    document = load_session_mapping(stored)
     assert upgrade_session_document(document).document is document
     assert _stored_anchor_modes(document.to_dict()) == ["one_to_one", "one_to_one"]
 

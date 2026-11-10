@@ -151,13 +151,13 @@ test('Add files: a drop of several files is one card each and one undo; GFF3 + F
 // OV-2840: a CLI Session of several --gbk files shows one card per file, each named after its own file.
 test('a CLI Session of several --gbk files loads as one File card per file', async ({ page }, testInfo) => {
   test.setTimeout(600_000);
-  const output = testInfo.outputPath('cli.gbdraw-session.json.gz');
+  const output = testInfo.outputPath('cli.gbdraw');
   await promisify(execFile)('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', twoRecords, mito, small,
     '--multi_record_canvas', '-o', testInfo.outputPath('cli'), '--session_output', output],
   { cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: process.cwd() }, timeout: 300_000 });
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(output);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(output);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending), { timeout: 180_000 }).toBe(true);
   await expect.poll(() => cardNames(page)).toEqual([
     'File 1: web_batch_two_records.gb', 'File 2: cli-web-mito.gb', 'File 3: feature_location_search.gb'

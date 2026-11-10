@@ -58,7 +58,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "session": "./sessions/lambda_basic_linear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -97,7 +97,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "session": "./sessions/lambda_basic_linear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -137,7 +137,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "session": "./sessions/lambda_basic_linear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -204,7 +204,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "session": "./sessions/lambda_basic_linear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -245,7 +245,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "session": "./sessions/lambda_basic_linear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -297,7 +297,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "session": "./sessions/lambda_basic_linear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -353,7 +353,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "session": "./sessions/lambda_basic_linear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -421,7 +421,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "session": "./sessions/lambda_basic_linear.gbdraw",
             "viewport": {
               "width": 1900,
               "height": 900

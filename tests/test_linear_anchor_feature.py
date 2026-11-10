@@ -320,9 +320,9 @@ def _cli(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
 
 
 def _stored_request(session_path: Path) -> dict[str, object]:
-    import json
+    from tests.utils.session_files import read_session_payload
 
-    request = json.loads(session_path.read_text(encoding="utf-8"))["drawings"][0]["renderRequest"]
+    request = read_session_payload(session_path)["drawings"][0]["renderRequest"]
     assert "anchorFeature" not in request["diagramOptions"]
     return request
 
@@ -338,11 +338,11 @@ def test_a_session_stores_the_starts_and_translations_the_anchor_resolves_to(tmp
         "--anchor_feature", "gene=COX1", "--save_session", cwd=tmp_path,
     )
     assert saved.returncode == 0, saved.stderr
-    stored = _stored_request(tmp_path / "saved.gbdraw-session.json")
+    stored = _stored_request(tmp_path / "saved.gbdraw")
     drawn = (tmp_path / "saved.svg").read_text(encoding="utf-8")
     assert [entry["x"] for entry in stored["layout"]["recordTranslations"]] == _record_shifts(drawn) == [0.0, 0.0]
     assert [record["display"]["startCoordinate"] for record in stored["records"]] == [5904, 6425]
-    replayed = _cli("--session", "saved.gbdraw-session.json", "-o", "again", cwd=tmp_path)
+    replayed = _cli("--session", "saved.gbdraw", "-o", "again", cwd=tmp_path)
     assert replayed.returncode == 0, replayed.stderr
     assert (tmp_path / "again.svg").read_bytes() == (tmp_path / "saved.svg").read_bytes()
 
@@ -355,11 +355,11 @@ def test_a_session_of_moved_linear_records_stores_their_translations(tmp_path: P
         "-f", "svg", "-o", "saved", "--anchor_feature", "product=dUTPase", "--save_session", cwd=tmp_path,
     )
     assert saved.returncode == 0, saved.stderr
-    layout = _stored_layout(tmp_path / "saved.gbdraw-session.json")
+    layout = _stored_layout(tmp_path / "saved.gbdraw")
     drawn = (tmp_path / "saved.svg").read_text(encoding="utf-8")
     assert [entry["x"] for entry in layout["recordTranslations"]] == _record_shifts(drawn)
     assert _record_shifts(drawn)[1] > 0.0
-    replayed = _cli("--session", "saved.gbdraw-session.json", "-o", "again", cwd=tmp_path)
+    replayed = _cli("--session", "saved.gbdraw", "-o", "again", cwd=tmp_path)
     assert replayed.returncode == 0, replayed.stderr
     assert (tmp_path / "again.svg").read_bytes() == (tmp_path / "saved.svg").read_bytes()
 
@@ -377,7 +377,7 @@ def test_the_python_session_writers_store_the_starts_and_translations_the_anchor
     for index, request in enumerate((_request(anchor_feature=_COX1), _drawn_linear(_request(anchor_feature=_COX1), 0))):
         drawn = _svg(request)
         built = build_session_document(request).to_dict()
-        path = tmp_path / f"saved-{index}.gbdraw-session.json"
+        path = tmp_path / f"saved-{index}.gbdraw"
         save_session_document(path, request)
         assert _stored_request(path)["layout"] == built["drawings"][0]["renderRequest"]["layout"]
         assert [entry["x"] for entry in _stored_layout(path)["recordTranslations"]] == _record_shifts(drawn)

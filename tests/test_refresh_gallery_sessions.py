@@ -13,6 +13,7 @@ import shlex
 import subprocess
 import sys
 from typing import Any
+import zipfile
 from xml.etree import ElementTree as ET
 
 import pytest
@@ -28,6 +29,7 @@ from gbdraw.session_io import (
     load_session,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from tests.utils.session_files import read_session_payload
 from tests.utils.session_drawing_view import drawing_view, drawings_document_of_view, session_view
 import tools.prepare_interactive_gallery_assets as gallery_assets_module
 import tools.refresh_gallery_sessions as refresh_gallery_sessions_module
@@ -52,8 +54,8 @@ from tools.refresh_gallery_sessions import (
     VIBRIO_EXPANDED_HARD_LIMIT,
     VIBRIO_EXPANDED_REGRESSION_CEILING,
     VIBRIO_EXPECTED_RAW_PAIRS,
-    VIBRIO_GZIP_HARD_LIMIT,
-    VIBRIO_GZIP_REGRESSION_CEILING,
+    VIBRIO_FILE_HARD_LIMIT,
+    VIBRIO_FILE_REGRESSION_CEILING,
     VIBRIO_RAW_ENTRY_COUNT,
     _gallery_file_transaction,
     _public_gallery_session_files,
@@ -124,10 +126,10 @@ def test_prepare_gallery_assets_help_imports_without_circular_dependency() -> No
     assert "circular import" not in completed.stderr.lower()
 
 
-def test_session_path_prefers_existing_compressed_gallery_session() -> None:
+def test_session_path_names_the_gallery_session_file() -> None:
     path = _session_path("vibrio-harveyi-group-collinear")
 
-    assert path.name == "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+    assert path.name == "vibrio-harveyi-group-collinear.gbdraw"
 
 
 def test_gallery_artifact_limits_match_phase_two_targets() -> None:
@@ -135,9 +137,9 @@ def test_gallery_artifact_limits_match_phase_two_targets() -> None:
     assert DECODED_METADATA_HARD_LIMIT == 200_000_000
     assert DECODED_METADATA_HARD_LIMIT <= DECODED_METADATA_REGRESSION_CEILING
     assert DECODED_METADATA_REGRESSION_CEILING == 220_000_000
-    assert VIBRIO_GZIP_HARD_LIMIT == 90_000_000
-    assert VIBRIO_GZIP_HARD_LIMIT <= VIBRIO_GZIP_REGRESSION_CEILING
-    assert VIBRIO_GZIP_REGRESSION_CEILING == 95_000_000
+    assert VIBRIO_FILE_HARD_LIMIT == 90_000_000
+    assert VIBRIO_FILE_HARD_LIMIT <= VIBRIO_FILE_REGRESSION_CEILING
+    assert VIBRIO_FILE_REGRESSION_CEILING == 95_000_000
     assert VIBRIO_EXPANDED_HARD_LIMIT == 400_000_000
     assert (
         VIBRIO_EXPANDED_HARD_LIMIT
@@ -238,18 +240,16 @@ def test_session_artifact_measurements_report_component_bytes(
         "losatCache": {"entries": []},
         "losatDerivedCache": {"entries": []},
     }
-    expanded = json.dumps(
-        session,
-        ensure_ascii=False,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    artifact_path = tmp_path / "session.json.gz"
-    artifact_path.write_bytes(gzip.compress(expanded, mtime=0))
+    document = json.dumps(session, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    artifact_path = tmp_path / "session.gbdraw"
+    with zipfile.ZipFile(artifact_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("gbdraw-session.json", document)
+        archive.writestr("resources/record", b"ABC")
 
     measurements = _session_artifact_measurements(session, artifact_path)
 
-    assert measurements["sessionGzipBytes"] == artifact_path.stat().st_size
-    assert measurements["sessionExpandedBytes"] == len(expanded)
+    assert measurements["sessionFileBytes"] == artifact_path.stat().st_size
+    assert measurements["sessionExpandedBytes"] == len(document) + 3
     for key in (
         "resultsBytes",
         "resourcesBytes",
@@ -290,7 +290,7 @@ def test_refresh_reopens_stored_protein_results_in_the_declared_mode() -> None:
     session = _stored_protein_session(
         ["--losat", "losatp", "--losatp_mode", "collinear", "--gbk", "a.gb", "b.gb"]
     )
-    gallery_path = Path("hepatoplasmataceae_collinear.gbdraw-session.json.gz")
+    gallery_path = Path("hepatoplasmataceae_collinear.gbdraw")
 
     assert _reopen_for_publication(gallery_path, session) == 1
     assert session["renderRequest"]["comparisons"] == [
@@ -330,14 +330,14 @@ def test_gallery_protein_results_equal_a_rebuild_from_the_raw_cache(
     trip change the drawing.
     """
 
-    session = session_view(load_session(session_path))
+    session = session_view(read_session_payload(session_path))
     assert stored_protein_result_differences(session) == []
 
 
 def test_current_session_catalog_structure_rejects_duplicate_payloads(
     tmp_path: Path,
 ) -> None:
-    session_path = tmp_path / "duplicate.gbdraw-session.json"
+    session_path = tmp_path / "duplicate.gbdraw"
     item = {
         "resultIndex": 0,
         "resultName": "result",
@@ -386,7 +386,7 @@ def test_current_session_catalog_structure_rejects_duplicate_payloads(
 def test_current_session_catalog_structure_accepts_drawn_selector(
     tmp_path: Path,
 ) -> None:
-    session_path = tmp_path / "current.gbdraw-session.json"
+    session_path = tmp_path / "current.gbdraw"
     session = {
         "resources": {},
         "editorState": {
@@ -550,15 +550,9 @@ def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas
 ) -> None:
     repo_root = Path(__file__).parents[1]
     paths = sorted(
-        (repo_root / "gbdraw" / "web" / "gallery" / "sessions").glob(
-            "*.gbdraw-session.json*"
-        )
+        (repo_root / "gbdraw" / "web" / "gallery" / "sessions").glob("*.gbdraw")
     )
-    paths.extend(
-        sorted(
-            (repo_root / "tests" / "test_inputs").glob("*.gbdraw-session.json*")
-        )
-    )
+    paths.extend(sorted((repo_root / "tests" / "test_inputs").glob("*.gbdraw")))
 
     assert len(paths) == 13
     for path in paths:
@@ -749,7 +743,7 @@ def _linear_geometry_record(
 def test_staged_gallery_validator_requires_fresh_track_geometry(
     tmp_path: Path,
 ) -> None:
-    session_path = tmp_path / "missing-geometry.gbdraw-session.json"
+    session_path = tmp_path / "missing-geometry.gbdraw"
     session = _staged_geometry_session(mode="linear", records=None)
 
     with pytest.raises(ValueError, match="no resolved track-slot run metadata"):
@@ -763,7 +757,7 @@ def test_staged_gallery_validator_requires_fresh_track_geometry(
 def test_staged_gallery_validator_rejects_circular_feature_lane_regression(
     tmp_path: Path,
 ) -> None:
-    session_path = tmp_path / "circular-geometry.gbdraw-session.json"
+    session_path = tmp_path / "circular-geometry.gbdraw"
     tracks = {
         "circularTrackSlots": [
             "features:features@lane_direction=split",
@@ -820,7 +814,7 @@ def test_staged_gallery_validator_rejects_circular_feature_lane_regression(
 def test_staged_gallery_validator_rejects_linear_spacing_regression(
     tmp_path: Path,
 ) -> None:
-    session_path = tmp_path / "linear-geometry.gbdraw-session.json"
+    session_path = tmp_path / "linear-geometry.gbdraw"
     _validate_staged_gallery_session(
         session_path,
         _staged_geometry_session(
@@ -864,7 +858,7 @@ def test_staged_gallery_validator_rejects_linear_spacing_regression(
 def test_staged_gallery_validator_skips_empty_feature_before_numeric_tracks(
     tmp_path: Path,
 ) -> None:
-    session_path = tmp_path / "linear-featureless-geometry.gbdraw-session.json"
+    session_path = tmp_path / "linear-featureless-geometry.gbdraw"
     valid_record = _linear_geometry_record(feature_to_gc_gap=9.0)
     feature = valid_record["slots"][0]
     assert isinstance(feature, dict)
@@ -906,7 +900,7 @@ def test_staged_gallery_validator_skips_empty_feature_before_numeric_tracks(
 def test_staged_gallery_validator_allows_custom_extra_spacing(
     tmp_path: Path,
 ) -> None:
-    session_path = tmp_path / "linear-custom-geometry.gbdraw-session.json"
+    session_path = tmp_path / "linear-custom-geometry.gbdraw"
     _validate_staged_gallery_session(
         session_path,
         _staged_geometry_session(
@@ -971,8 +965,8 @@ def test_refresh_leaves_a_test_input_pipeline_unresolved(
 def test_refresh_records_resolved_track_geometry(
     tmp_path: Path,
 ) -> None:
-    source = tmp_path / "source.gbdraw-session.json"
-    destination = tmp_path / "refreshed.gbdraw-session.json"
+    source = tmp_path / "source.gbdraw"
+    destination = tmp_path / "refreshed.gbdraw"
     source.write_bytes(
         _session_path("HmmtDNA_basic_circular").read_bytes()
     )
@@ -1155,9 +1149,9 @@ def test_declared_command_refresh_keeps_one_file_as_one_resource(
             losat,
         ]
     )
-    declared = tmp_path / "stage" / "declared.gbdraw-session.json"
+    declared = tmp_path / "stage" / "declared.gbdraw"
     declared.parent.mkdir()
-    destination = tmp_path / "published.gbdraw-session.json"
+    destination = tmp_path / "published.gbdraw"
 
     refresh_gallery_sessions_module._declared_command_session(
         command, declared, env=refresh_gallery_sessions_module._cli_env()
@@ -1237,9 +1231,9 @@ def test_declared_circular_command_refresh_keeps_one_file_as_one_resource(
         index = argv.index(position)
         del argv[index - 1 : index + 1]
     command = shlex.join(argv)
-    declared = tmp_path / "stage" / "declared.gbdraw-session.json"
+    declared = tmp_path / "stage" / "declared.gbdraw"
     declared.parent.mkdir()
-    destination = tmp_path / "published.gbdraw-session.json"
+    destination = tmp_path / "published.gbdraw"
 
     refresh_gallery_sessions_module._declared_command_session(
         command, declared, env=refresh_gallery_sessions_module._cli_env(), cwd=tmp_path
@@ -1272,8 +1266,8 @@ def test_gallery_refresh_refuses_a_session_27_44(
 ) -> None:
     # Gallery publication admits Sessions 46-50; Python converts a Session
     # 27-44 when the app loads it.
-    source = tmp_path / "source.gbdraw-session.json"
-    destination = tmp_path / "refreshed.gbdraw-session.json"
+    source = tmp_path / "source.gbdraw"
+    destination = tmp_path / "refreshed.gbdraw"
     source.write_bytes(
         (Path(__file__).parent / "fixtures/sessions/lambda_basic_linear.v40-schema5.json").read_bytes()
     )
@@ -1288,7 +1282,7 @@ def test_gallery_refresh_refuses_a_session_27_44(
 def test_staged_gallery_validator_accepts_current_artifact_schemas(
     tmp_path: Path,
 ) -> None:
-    session_path = tmp_path / "synthetic.gbdraw-session.json"
+    session_path = tmp_path / "synthetic.gbdraw"
     session = {
         "format": "gbdraw-session",
         "version": CURRENT_SESSION_VERSION,
@@ -1370,8 +1364,8 @@ def test_gallery_session_refresh_does_not_partially_replace_on_failure(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    first = tmp_path / "first.gbdraw-session.json"
-    second = tmp_path / "second.gbdraw-session.json"
+    first = tmp_path / "first.gbdraw"
+    second = tmp_path / "second.gbdraw"
     first_original = '{"createdAt":"first-original"}'
     second_original = '{"createdAt":"second-original"}'
     first.write_text(first_original, encoding="utf-8")
@@ -1455,8 +1449,8 @@ def test_gallery_result_sync_updates_track_geometry_result_name(
     }
     writes: list[Path] = []
     monkeypatch.setattr(
-        gallery_assets_module,
-        "write_session_json",
+        refresh_gallery_sessions_module,
+        "_write_session_file",
         lambda path, _payload: writes.append(path),
     )
 
@@ -2131,10 +2125,9 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
     )
 
 
-@pytest.mark.parametrize("compressed", [False, True])
+
 def test_refresh_rewrites_retired_flags_in_the_recorded_cli_invocation(
     tmp_path: Path,
-    compressed: bool,
 ) -> None:
     invocation = {
         "schema": 1,
@@ -2151,16 +2144,14 @@ def test_refresh_rewrites_retired_flags_in_the_recorded_cli_invocation(
         ],
         "fileBindings": [{"argIndex": 3, "slot": "files.linearSeqs[0].gb", "name": "A.gb"}],
     }
-    payload = json.dumps({"keep": [1, 2], "cliInvocation": invocation}).encode()
-    path = tmp_path / ("s.json.gz" if compressed else "s.json")
-    path.write_bytes(gzip.compress(payload) if compressed else payload)
+    # A staged file the publication bridge wrote.
+    path = _write_staged(tmp_path / "s.gbdraw", {"keep": [1, 2], "cliInvocation": invocation})
 
     refresh_gallery_sessions_module._canonicalize_recorded_cli_invocation(
         path, mode="linear", gallery_id="s"
     )
 
-    raw = path.read_bytes()
-    session = json.loads(gzip.decompress(raw) if compressed else raw)
+    session = refresh_gallery_sessions_module._read_session_file(path)
     assert session["keep"] == [1, 2]
     args = session["cliInvocation"]["args"]
     assert args == [
@@ -2183,7 +2174,7 @@ def _published_drawing(path: Path) -> dict[str, Any]:
     """The drawing a refreshed Session shows, as its one-drawing view: a
     Session 49 holds one drawing; a tracked Session 46-48 is its own view."""
 
-    document = load_session(path)
+    document = read_session_payload(path)
     return drawing_view(document) if "drawings" in document else document
 
 
@@ -2303,22 +2294,18 @@ def test_refresh_stores_the_only_record_of_a_circular_source_without_selector() 
     assert refresh_gallery_sessions_module._materialize_one_record_sources(session) == 0
 
 
-def _write_invocation(tmp_path: Path, args: list[str], bindings: list[dict[str, object]]) -> Path:
-    path = tmp_path / "session.json"
-    path.write_text(
-        json.dumps(
-            {
-                "cliInvocation": {
-                    "schema": 1,
-                    "mode": "circular",
-                    "args": args,
-                    "fileBindings": bindings,
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
+def _write_staged(path: Path, payload: dict[str, Any]) -> Path:
+    """A staged Session file of the refresh holding ``payload`` and no resources."""
+
+    refresh_gallery_sessions_module._write_staged_session(path, {**payload, "resources": {}})
     return path
+
+
+def _write_invocation(tmp_path: Path, args: list[str], bindings: list[dict[str, object]]) -> Path:
+    return _write_staged(
+        tmp_path / "session.gbdraw",
+        {"cliInvocation": {"schema": 1, "mode": "circular", "args": args, "fileBindings": bindings}},
+    )
 
 
 def test_recorded_invocation_uses_gallery_id_and_input_file_names(
@@ -2341,7 +2328,7 @@ def test_recorded_invocation_uses_gallery_id_and_input_file_names(
         path, mode="circular", gallery_id="card-id"
     )
 
-    assert json.loads(path.read_text(encoding="utf-8"))["cliInvocation"]["args"] == [
+    assert refresh_gallery_sessions_module._read_session_file(path)["cliInvocation"]["args"] == [
         "--gbk",
         "HmmtDNA.gbk",
         "NC_001416.gb",
@@ -2363,7 +2350,7 @@ def test_recorded_invocation_keeps_relative_inputs(tmp_path: Path) -> None:
         path, mode="circular", gallery_id="card-id"
     )
 
-    assert json.loads(path.read_text(encoding="utf-8"))["cliInvocation"]["args"] == [
+    assert refresh_gallery_sessions_module._read_session_file(path)["cliInvocation"]["args"] == [
         "--output=card-id",
         "--gbk",
         "HmmtDNA.gbk",
@@ -2401,7 +2388,7 @@ def test_declared_command_invocation_keeps_its_declared_inputs(tmp_path: Path) -
         path, mode="circular", gallery_id="card-id", declared_command=True
     )
 
-    assert json.loads(path.read_text(encoding="utf-8"))["cliInvocation"]["args"] == [
+    assert refresh_gallery_sessions_module._read_session_file(path)["cliInvocation"]["args"] == [
         "--gbk",
         "/elsewhere/in.gbk",
         "-o",
@@ -2438,7 +2425,7 @@ def test_gallery_session_refresh_keeps_the_session_created_at(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    tracked = tmp_path / "kept.gbdraw-session.json.gz"
+    tracked = tmp_path / "kept.gbdraw"
     original = {"format": "gbdraw-session", "createdAt": "2026-01-02T03:04:05+00:00", "title": "old"}
     tracked.write_bytes(gzip.compress(json.dumps(original).encode("utf-8"), mtime=0))
 
@@ -2467,7 +2454,7 @@ def test_gallery_session_refresh_keeps_the_session_created_at(
     first_run = tracked.read_bytes()
     refresh_gallery_sessions_module.refresh_gallery_sessions((tracked.name,))
 
-    refreshed = json.loads(gzip.decompress(first_run))
+    refreshed = refresh_gallery_sessions_module._read_session_file(tracked)
     assert refreshed["createdAt"] == original["createdAt"]
     assert refreshed["title"] == "new"
     assert tracked.read_bytes() == first_run
@@ -2484,7 +2471,7 @@ def test_staged_gallery_validator_requires_one_drawn_drawing(tmp_path: Path) -> 
     )
 
     with pytest.raises(ValueError, match="shows 1 drawn drawing; this one has 2"):
-        _validate_staged_gallery_session_49(tmp_path / "two-drawn.gbdraw-session.json", two_drawn)
+        _validate_staged_gallery_session_49(tmp_path / "two-drawn.gbdraw", two_drawn)
 
 
 def test_staged_gallery_validator_requires_the_linear_comparison_plan_through_validate_session(
@@ -2498,60 +2485,58 @@ def test_staged_gallery_validator_requires_the_linear_comparison_plan_through_va
     from gbdraw.exceptions import ValidationError
 
     with pytest.raises(ValidationError, match="Current Web comparison draft requires config.linearComparisonPlan"):
-        _validate_staged_gallery_session(tmp_path / "no-plan.gbdraw-session.json", session)
+        _validate_staged_gallery_session(tmp_path / "no-plan.gbdraw", session)
 
 
-def test_publication_bridge_writes_a_gz_session_through_the_python_session_writer(
+def test_publication_bridge_reads_and_writes_session_files(
     tmp_path: Path,
 ) -> None:
-    """The Node bridge hands its JSON to ``write_serialized_session``; it compresses nothing itself."""
+    """The Node bridge reads a Session file and writes one; the tool checks it
+    when it writes the Session file it publishes."""
 
-    import io
     import os
 
-    from gbdraw.io.rsyncable_gzip import MIN_CHUNK, RsyncableGzipWriter
+    source = _session_path("HmmtDNA_basic_circular")
+    output = tmp_path / "prepared.gbdraw"
+    refresh_gallery_sessions_module._run_publication_bridge("prepare", source, output, env=dict(os.environ))
 
-    output = tmp_path / "prepared.gbdraw-session.json.gz"
-    refresh_gallery_sessions_module._run_publication_bridge(
-        "prepare",
-        _session_path("HmmtDNA_basic_circular"),
-        output,
-        env=dict(os.environ),
+    assert output.read_bytes().startswith(b"PK\x03\x04")
+    session_file = tmp_path / "published.gbdraw"
+    refresh_gallery_sessions_module._write_session_file(
+        session_file, refresh_gallery_sessions_module._read_session_file(output)
     )
-    compressed = output.read_bytes()
-    expected = io.BytesIO()
-    with RsyncableGzipWriter(expected) as writer:
-        writer.write(gzip.decompress(compressed))
-
-    # Long enough for content-defined cuts, where the two writers' bytes would differ.
-    assert len(gzip.decompress(compressed)) > 3 * MIN_CHUNK
-    assert compressed == expected.getvalue()
+    assert session_file.read_bytes().startswith(b"PK\x03\x04")
+    assert load_session(session_file)["resources"] == load_session(source)["resources"]
 
 
 def test_every_gallery_session_writer_writes_one_number_text(tmp_path: Path) -> None:
     """OV-3370: the bridge's write and the tools' Python edits give a Session one JSON text.
 
     The bridge wrote the text of `JSON.stringify` (`0.00001`) and a later edit through Python
-    (`1e-05`), so a Session's bytes depended on which step wrote it last.
+    (`1e-05`), so a Session's bytes depended on which step wrote it last. Both write the Session
+    file through `_write_staged_session`.
     """
 
     import os
 
-    output = tmp_path / "prepared.gbdraw-session.json"
+    from tests.utils.session_files import read_session_text
+
+    output = tmp_path / "prepared.gbdraw"
     refresh_gallery_sessions_module._run_publication_bridge(
         "prepare",
         _session_path("HmmtDNA_basic_circular"),
         output,
         env=dict(os.environ),
     )
-    text = output.read_text(encoding="utf-8")
-    document = json.loads(text)
+    text = read_session_text(output)
 
     # The Session's E-value cutoff, 0.00001, in Python's text.
     assert '"evalue":1e-05' in text and '"evalue":0.00001' not in text
-    edited = tmp_path / "edited.gbdraw-session.json"
-    refresh_gallery_sessions_module.write_gallery_session(edited, document)
-    assert edited.read_text(encoding="utf-8") == text
+    edited = tmp_path / "edited.gbdraw"
+    refresh_gallery_sessions_module._write_staged_session(
+        edited, refresh_gallery_sessions_module._read_session_file(output)
+    )
+    assert read_session_text(edited) == text
 
 
 def _losat_result(query: str, subject: str, runtime: dict[str, object], text: str) -> dict[str, object]:

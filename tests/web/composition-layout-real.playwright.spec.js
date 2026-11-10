@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { gunzipSync } = require('node:zlib');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 const { evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
@@ -438,7 +438,7 @@ const saveSession = async (page) => {
   const path = await download.path();
   expect(path).toBeTruthy();
   const buffer = readFileSync(path);
-  const session = JSON.parse(gunzipSync(buffer).toString('utf8'));
+  const session = await readSessionFile(path);
   return {
     file: {
       name: download.suggestedFilename(),
@@ -478,7 +478,7 @@ const reloadSession = async (page, file, mode, legendSide) => {
     };
   });
   const sessionInput = page.locator(
-    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+    'input[type="file"][accept*=".gbdraw"]'
   );
   await expect(sessionInput).toHaveCount(1);
   await sessionInput.setInputFiles(file);

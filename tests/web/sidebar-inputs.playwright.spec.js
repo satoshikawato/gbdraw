@@ -7,7 +7,7 @@ const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 const loadSession = async (page, name) => {
   page.on('dialog', (dialog) => dialog.accept());
-  await page.locator('input[accept^=".json,"]').setInputFiles(
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(
     join(process.cwd(), 'gbdraw/web/gallery/sessions', name));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
@@ -18,7 +18,7 @@ const loadSession = async (page, name) => {
 test('OV-374: Display start shows the current start after Inspect', async ({ page }) => {
   test.setTimeout(240000);
   await openApp(page);
-  await loadSession(page, 'HmmtDNA_ATskew.gbdraw-session.json');
+  await loadSession(page, 'HmmtDNA_ATskew.gbdraw');
   await page.locator('[data-circular-inspect]').click();
   const start = page.getByLabel(/^Display start NC_012920\.1/);
   await expect(start).toBeVisible({ timeout: 180000 });
@@ -57,7 +57,7 @@ test('OV-374: Display start shows the current start after Inspect', async ({ pag
 test('OV-373: annotation rows name their record before Inspect', async ({ page }) => {
   test.setTimeout(240000);
   await openApp(page);
-  await loadSession(page, 'tobacco-chloroplast.gbdraw-session.json');
+  await loadSession(page, 'tobacco-chloroplast.gbdraw');
   const panel = page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
   await panel.locator('summary').first().click();
   await expect(panel.locator('[data-annotation-record-caption]').first()).toHaveText('NC_001879.2');
@@ -136,7 +136,7 @@ for (const viewport of [{ width: 1024, height: 768 }, { width: 1024, height: 768
     test.setTimeout(240000);
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await openApp(page);
-    await loadSession(page, 'HmmtDNA_ATskew.gbdraw-session.json');
+    await loadSession(page, 'HmmtDNA_ATskew.gbdraw');
     await page.evaluate((width) => {
       const app = window.__GBDRAW_APP__;
       if (width) app.sidebarWidth = width;
@@ -215,7 +215,7 @@ test('OV-1098 at 390x844 the selected-feature bar stays reachable in a short pre
   test.setTimeout(240000);
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
-  await loadSession(page, 'HmmtDNA_basic_circular.gbdraw-session.json');
+  await loadSession(page, 'HmmtDNA_basic_circular.gbdraw');
   await showPhonePane(page, 'preview');
   await page.locator('button[aria-label="Fit to preview"]').click();
   await page.evaluate(() => {
@@ -236,7 +236,7 @@ test('OV-1098 at 390x844 the selected-feature bar stays reachable in a short pre
 test('a color edited under More colors stays there and keeps focus', async ({ page }) => {
   test.setTimeout(240000);
   await openApp(page);
-  await loadSession(page, 'HmmtDNA_ATskew.gbdraw-session.json');
+  await loadSession(page, 'HmmtDNA_ATskew.gbdraw');
   await page.locator('summary[aria-label="Colors"]').click();
   const more = page.locator('[data-default-colors-more]');
   await more.locator('summary').click();
@@ -254,7 +254,7 @@ test('a color edited under More colors stays there and keeps focus', async ({ pa
 test('a color from a Default colors file leaves More colors', async ({ page }) => {
   test.setTimeout(240000);
   await openApp(page);
-  await loadSession(page, 'HmmtDNA_ATskew.gbdraw-session.json');
+  await loadSession(page, 'HmmtDNA_ATskew.gbdraw');
   await page.locator('summary[aria-label="Colors"]').click();
   const more = page.locator('[data-default-colors-more]');
   await more.locator('summary').click();
@@ -277,7 +277,7 @@ test('OV-379: Linear record selects say Not inspected after Session load', async
   test.setTimeout(240000);
   await openApp(page);
   await showDrawing(page, { kind: 'linear' });
-  await loadSession(page, 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await loadSession(page, 'BGC0000708-BGC0000713.gbdraw');
   const labels = await page.locator('select[data-record-selector-uid]').evaluateAll((selects) => (
     selects.map((select) => select.options[select.selectedIndex]?.text || '')));
   expect(labels.length).toBeGreaterThan(0);
@@ -334,7 +334,7 @@ const saveAndReloadSession = async (page) => {
   const saved = await (await download).path();
   await page.reload();
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(saved);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(saved);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
   await openLinearFileCards(page);

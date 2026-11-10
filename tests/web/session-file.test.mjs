@@ -1,40 +1,138 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
 
 const {
   MAX_EXPANDED_SESSION_BYTES,
-  compressSessionData,
-  largeSessionDownloadMegabytes
+  largeSessionDownloadMegabytes,
+  sessionContainerResources,
+  writeSessionFile
 } = await import('../../gbdraw/web/js/services/session-file.js');
+const { openSessionContainerEntry, readSessionContainer } = await import('../../gbdraw/web/js/services/session-container.js');
 const { askBeforeLargeDownload, downloadBlob } = await import('../../gbdraw/web/js/services/text-download.js');
 
-const compressedJsonText = async (value) => gunzipSync(
-  Buffer.from(await (await compressSessionData(value)).arrayBuffer())
-).toString('utf8');
-
+// A Save that keeps every entry in memory: the browser lets no copy be written.
+const NO_COPIES = { keep: null };
+const bytesOf = (text) => new TextEncoder().encode(text);
+const streamOf = (bytes) => new Blob([bytes]).stream();
+/** The Session file of a document with no inputs. */
+const writeDocument = (value, sources = NO_COPIES) => writeSessionFile(value, {
+  readResource: async () => assert.fail('a document with no inputs reads none'), ...sources
+});
+/** The text of `gbdraw-session.json` in the file Save writes for `value`. */
+const documentText = async (value) => {
+  const { blob } = await writeDocument(value);
+  const { documentEntry } = await readSessionContainer(blob);
+  return new Response(openSessionContainerEntry(blob, documentEntry)).text();
+};
 const assertJsonParity = async (value) => {
-  const actual = await compressedJsonText(value);
+  const actual = await documentText(value);
   assert.equal(actual, JSON.stringify(value));
   return JSON.parse(actual);
 };
 
-const payload = {
-  format: 'gbdraw-session',
-  version: 40,
-  resources: {
-    input: { data: 'A'.repeat(4096) }
+// Save writes one Session file container: `gbdraw-session.json`, then one entry per
+// input, read from its source by resource id, gzip bytes stored and others deflated.
+const genome = bytesOf('LOCUS       test\n'.repeat(500));
+const gzipInput = new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3, 4, 5]);
+const sources = {
+  'resource-0001': { kind: 'web-file', name: 'genome.gb', type: 'text/plain', size: genome.byteLength, lastModified: 7 },
+  'resource-0002': { name: 'reads.tsv.gz', size: gzipInput.byteLength, encoding: 'base64', data: 'unused', checksum: 'abc' }
+};
+const containerResources = sessionContainerResources(sources);
+assert.deepEqual(containerResources, {
+  'resource-0001': { kind: 'web-file', name: 'genome.gb', type: 'text/plain', size: genome.byteLength, lastModified: 7 },
+  'resource-0002': { kind: 'web-file', name: 'reads.tsv.gz', type: 'application/octet-stream', size: gzipInput.byteLength, lastModified: 0 }
+});
+const payload = { format: 'gbdraw-session', version: 51, resources: containerResources };
+const read = [];
+const saved = await writeSessionFile(payload, {
+  ...NO_COPIES,
+  readResource: async (resourceId) => {
+    read.push(resourceId);
+    return streamOf(resourceId === 'resource-0001' ? genome : gzipInput);
+  }
+});
+assert.deepEqual(read, ['resource-0001', 'resource-0002']);
+assert.equal(saved.blob.type, 'application/zip');
+const container = await readSessionContainer(saved.blob);
+assert.deepEqual(container.document, payload);
+assert.deepEqual(Object.keys(container.resources), ['resource-0001', 'resource-0002']);
+assert.deepEqual([container.resources['resource-0001'].method, container.resources['resource-0002'].method], [8, 0]);
+const entryBytes = async (resourceId) => new Uint8Array(await new Response(
+  openSessionContainerEntry(saved.blob, container.resources[resourceId])).arrayBuffer());
+assert.deepEqual(await entryBytes('resource-0001'), genome);
+assert.deepEqual(await entryBytes('resource-0002'), gzipInput);
+
+// Each written entry waits in a temporary copy when the browser gives one (J3); the
+// file is read from the copies, which the caller gives back after the download.
+const released = [];
+const copyKeeper = {
+  keep: async (data) => {
+    const blob = await new Response(data).blob();
+    const id = released.length + read.length;
+    read.push(`copy-${id}`);
+    return { copy: { blob: async () => blob, read: async () => new Uint8Array(await blob.arrayBuffer()), release: () => released.push(id) } };
   }
 };
-const blob = await compressSessionData(payload);
-assert.equal(blob.type, 'application/gzip');
-assert.equal(blob.size, blob.arrayBuffer ? (await blob.arrayBuffer()).byteLength : blob.size);
-assert.deepEqual(
-  JSON.parse(gunzipSync(Buffer.from(await blob.arrayBuffer())).toString('utf8')),
-  payload
-);
+read.length = 0;
+const kept = await writeSessionFile(payload, {
+  ...copyKeeper, readResource: async (resourceId) => streamOf(resourceId === 'resource-0001' ? genome : gzipInput)
+});
+assert.equal(read.length, 3, 'the document and each input wait in a copy');
+assert.deepEqual((await readSessionContainer(kept.blob)).document, payload);
+assert.deepEqual(released, []);
+kept.release();
+assert.equal(released.length, 3);
+
+// A copy store whose first write finds no storage: the entries wait in memory instead.
+const memorySave = await writeSessionFile(payload, {
+  keep: async () => ({ copy: null, reason: 'unavailable' }),
+  readResource: async (resourceId) => streamOf(resourceId === 'resource-0001' ? genome : gzipInput)
+});
+assert.deepEqual((await readSessionContainer(memorySave.blob)).document, payload);
+
+// A temporary write the browser refuses deletes what was written and refuses the
+// Save with the storage text's facts: what it needs (inputs and settings and results),
+// what is free, and the largest inputs; with no estimate, no free size.
+const refusedSave = async (estimate) => {
+  const releasedCopies = [];
+  let entries = 0;
+  const originalStorage = Object.getOwnPropertyDescriptor(globalThis.navigator, 'storage');
+  Object.defineProperty(globalThis.navigator, 'storage', { configurable: true, value: estimate ? { estimate } : undefined });
+  try {
+    const error = await writeSessionFile({ ...payload, webFiles: { resourceOriginalNames: { 'resource-0001': 'My genome.gb' } } }, {
+      readResource: async (resourceId) => streamOf(resourceId === 'resource-0001' ? genome : gzipInput),
+      keep: async (data) => {
+        entries += 1;
+        await new Response(data).arrayBuffer();
+        if (entries === 3) return { copy: null, reason: 'write-failed' };
+        return { copy: { blob: async () => new Blob([]), read: async () => new Uint8Array(), release: () => releasedCopies.push(entries) } };
+      }
+    }).then(() => assert.fail('a refused temporary write must not save'), (caught) => caught);
+    return { error, releasedCopies };
+  } finally {
+    if (originalStorage) Object.defineProperty(globalThis.navigator, 'storage', originalStorage);
+    else delete globalThis.navigator.storage;
+  }
+};
+const documentBytes = Buffer.byteLength(JSON.stringify({ ...payload, webFiles: { resourceOriginalNames: { 'resource-0001': 'My genome.gb' } } }));
+const withEstimate = await refusedSave(async () => ({ quota: 5000, usage: 1000 }));
+assert.deepEqual([withEstimate.error.code, withEstimate.error.stage, withEstimate.error.operation], ['SESSION_SIZE_LIMIT', 'write', 'session-save']);
+assert.deepEqual(withEstimate.error.context, {
+  storageNeedBytes: documentBytes + genome.byteLength + gzipInput.byteLength, storageFreeBytes: 4000,
+  largestInputs: 'My genome.gb, reads.tsv.gz'
+});
+assert.equal(withEstimate.releasedCopies.length, 2, 'the copies written before the refusal are given back');
+const withoutEstimate = await refusedSave(null);
+assert.equal(withoutEstimate.error.context.storageFreeBytes, undefined);
+assert.equal(withoutEstimate.error.context.storageNeedBytes, documentBytes + genome.byteLength + gzipInput.byteLength);
+
+// A resource whose bytes are not its declared size is refused, not written short.
+await assert.rejects(writeSessionFile(payload, { ...NO_COPIES, readResource: async () => streamOf(new Uint8Array(3)) }),
+  (error) => error.code === 'RESOURCE_INVALID');
 
 const semanticPayload = {
+  resources: {},
   ordered: { zebra: 1, alpha: 2, nested: [true, null, { value: 'kept' }] },
   omitted: undefined,
   numbers: [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -0, 1.25],
@@ -57,9 +155,10 @@ assert.equal(Object.hasOwn(semanticRoundTrip, 'symbolValue'), false);
 const sliceBoundary = Math.floor((256 * 1024) / 8);
 const boundaryString = `${'x'.repeat(sliceBoundary - 1)}😀${'y'.repeat(sliceBoundary + 5)}`;
 const longString = `${boundaryString}${'\u0001'.repeat(300_000)}${boundaryString}`;
-assert.equal((await assertJsonParity({ longString })).longString, longString);
+assert.equal((await assertJsonParity({ resources: {}, longString })).longString, longString);
 
 const immutablePayload = Object.freeze({
+  resources: Object.freeze({}),
   top: Object.freeze({ value: 'unchanged' }),
   rows: Object.freeze([Object.freeze({ id: 1 })])
 });
@@ -68,7 +167,7 @@ await assertJsonParity(immutablePayload);
 assert.deepEqual(immutablePayload, immutableBefore);
 
 let accessorReads = 0;
-const accessorPayload = { rows: [{ id: 1 }, { id: 2 }] };
+const accessorPayload = { resources: {}, rows: [{ id: 1 }, { id: 2 }] };
 Object.defineProperty(accessorPayload, 'derived', {
   enumerable: true,
   get() {
@@ -78,95 +177,51 @@ Object.defineProperty(accessorPayload, 'derived', {
 });
 const accessorExpected = JSON.stringify(accessorPayload);
 accessorReads = 0;
-assert.equal(await compressedJsonText(accessorPayload), accessorExpected);
+assert.equal(await documentText(accessorPayload), accessorExpected);
 assert.equal(accessorReads, 1, 'bounded subtree probing must not invoke accessors twice');
 
-const currentSession = JSON.parse(readFileSync(new URL(
-  '../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
-  import.meta.url
-), 'utf8'));
+// A Gallery Session's settings and results, as Save writes them.
+const galleryContainer = new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw', import.meta.url);
+const galleryDocument = (await readSessionContainer(new Blob([readFileSync(galleryContainer)]))).document;
+const currentSession = { ...galleryDocument, resources: {} };
 assert.deepEqual(await assertJsonParity(currentSession), currentSession);
 
-const cyclic = {};
+const cyclic = { resources: {} };
 cyclic.self = cyclic;
-await assert.rejects(compressSessionData(cyclic), /cyclic value/);
-await assert.rejects(compressSessionData({ value: 1n }), /BigInt/);
-await assert.rejects(compressSessionData({ value: new Date() }), /unsupported object/);
-await assert.rejects(compressSessionData({ value: new Map() }), /unsupported object/);
+await assert.rejects(writeDocument(cyclic), /cyclic value/);
+await assert.rejects(writeDocument({ resources: {}, value: 1n }), /BigInt/);
+await assert.rejects(writeDocument({ resources: {}, value: new Date() }), /unsupported object/);
+await assert.rejects(writeDocument({ resources: {}, value: new Map() }), /unsupported object/);
 await assert.rejects(
-  compressSessionData({ value: { toJSON: () => 'unsupported' } }),
+  writeDocument({ resources: {}, value: { toJSON: () => 'unsupported' } }),
   /unsupported object/
 );
 
-// OV-2240: Save refuses, before anything is written, a Session whose expanded
-// JSON is over the cap that Load enforces (`MAX_EXPANDED_SESSION_BYTES`). The
-// cap is a test hook's small stand-in here; at or under it the bytes are those
-// of JSON.stringify, as before.
+// Save refuses, before anything is written, settings and results
+// (`gbdraw-session.json`) over the browser's cap (`MAX_EXPANDED_SESSION_BYTES`);
+// the inputs have no cap. The cap is a test hook's small stand-in here; at or
+// under it the bytes are those of JSON.stringify, as before.
 assert.equal(MAX_EXPANDED_SESSION_BYTES, 512 * 1024 * 1024);
-const sizedSession = {
-  format: 'gbdraw-session',
-  resources: {
-    'resource-0001': { name: 'resource-0001-small.gb', size: 10, data: 'A'.repeat(10) },
-    'resource-0002': { name: 'resource-0002-big_run_1_.tsv', size: 700000, data: 'B'.repeat(700000) },
-    'resource-0003': { name: 'resource-0003-mid.fa', size: 400000, data: 'C'.repeat(400000) },
-    'resource-0004': { name: 'resource-0004-tiny.tsv', size: 1, data: 'D' }
-  },
-  // The names the files were uploaded under; a resource without one shows its stored name.
-  webFiles: { resourceOriginalNames: { 'resource-0002': 'big run (1).tsv', 'resource-0003': 'mid.fa', 'resource-0004': 'tiny.tsv' } }
-};
+const sizedSession = { format: 'gbdraw-session', resources: {}, results: ['B'.repeat(700000), 'C'.repeat(400000)] };
 const sizedBytes = Buffer.byteLength(JSON.stringify(sizedSession));
-const withCap = async (cap, run, hook = 'maxExpandedSessionBytes') => {
-  globalThis.__GBDRAW_TEST_HOOKS__ = { [hook]: cap };
+const withCap = async (cap, run) => {
+  globalThis.__GBDRAW_TEST_HOOKS__ = { maxExpandedSessionBytes: cap };
   try {
     return await run();
   } finally {
     delete globalThis.__GBDRAW_TEST_HOOKS__;
   }
 };
-const atCap = await withCap(sizedBytes, () => compressSessionData(sizedSession));
-assert.equal(
-  gunzipSync(Buffer.from(await atCap.arrayBuffer())).toString('utf8'),
-  JSON.stringify(sizedSession),
-  'a Session exactly at the cap is written unchanged'
-);
-const refusal = await withCap(sizedBytes - 1, () => compressSessionData(sizedSession)).then(
-  () => assert.fail('a Session over the cap must not be written'),
-  (error) => error
-);
-assert.deepEqual(
-  [refusal.code, refusal.stage, refusal.operation],
-  ['SESSION_SIZE_LIMIT', 'write', 'session-save']
-);
-assert.deepEqual(refusal.context, {
-  sessionBytes: sizedBytes,
-  sessionByteLimit: sizedBytes - 1,
-  largestInputs: 'big run (1).tsv, mid.fa, resource-0001-small.gb'
-});
-// OV-2245: Save also refuses a gzip file over the cap that Load reads
-// (`MAX_SESSION_FILE_BYTES`), naming the file's size; a file exactly at the cap
-// is written as before. The test hook stands in for 200 MiB.
-const fileBytes = atCap.size;
-const withFileCap = (cap, run) => withCap(cap, run, 'maxSessionFileBytes');
-const atFileCap = await withFileCap(fileBytes, () => compressSessionData(sizedSession));
-assert.equal(
-  gunzipSync(Buffer.from(await atFileCap.arrayBuffer())).toString('utf8'),
-  JSON.stringify(sizedSession),
-  'a Session file exactly at the cap is written unchanged'
-);
-const fileRefusal = await withFileCap(fileBytes - 1, () => compressSessionData(sizedSession)).then(
-  () => assert.fail('a Session file over the cap must not be written'),
-  (error) => error
-);
-assert.deepEqual(
-  [fileRefusal.code, fileRefusal.stage, fileRefusal.operation],
-  ['SESSION_SIZE_LIMIT', 'write', 'session-save']
-);
-assert.deepEqual(fileRefusal.context, {
-  sessionBytes: fileBytes,
-  sessionByteLimit: fileBytes - 1,
-  sessionSizeKind: 'file',
-  largestInputs: 'big run (1).tsv, mid.fa, resource-0001-small.gb'
-});
+const atCap = await withCap(sizedBytes, () => documentText(sizedSession));
+assert.equal(atCap, JSON.stringify(sizedSession), 'a Session exactly at the cap is written unchanged');
+for (const keeper of [NO_COPIES, copyKeeper]) {
+  const refusal = await withCap(sizedBytes - 1, () => writeDocument(sizedSession, keeper)).then(
+    () => assert.fail('a Session over the cap must not be written'),
+    (error) => error
+  );
+  assert.deepEqual([refusal.code, refusal.stage, refusal.operation], ['SESSION_SIZE_LIMIT', 'write', 'session-save']);
+  assert.deepEqual(refusal.context, { sessionBytes: sizedBytes, sessionByteLimit: sizedBytes - 1 });
+}
 // A browser's body reader may reject with a new TypeError instead of the
 // stream's error (Chromium does); the refusal reaches the caller as it was.
 const NativeResponse = globalThis.Response;
@@ -178,7 +233,7 @@ globalThis.Response = class {
   }
 };
 try {
-  const replaced = await withCap(sizedBytes - 1, () => compressSessionData(sizedSession)).then(
+  const replaced = await withCap(sizedBytes - 1, () => writeDocument(sizedSession)).then(
     () => assert.fail('a Session over the cap must not be written'),
     (error) => error
   );
@@ -186,6 +241,7 @@ try {
 } finally {
   globalThis.Response = NativeResponse;
 }
+const blob = saved.blob;
 
 const largeBlob = new Blob(
   [new Uint8Array((50 * 1024 * 1024) + (512 * 1024))],
@@ -229,9 +285,9 @@ globalThis.document = {
   })
 };
 try {
-  downloadBlob(blob, 'exact-session.json.gz');
-  assert.equal(downloadedBlob, blob, 'the measured gzip Blob is downloaded without copying');
-  assert.equal(downloadedName, 'exact-session.json.gz');
+  downloadBlob(blob, 'exact-session.gbdraw');
+  assert.equal(downloadedBlob, blob, 'the measured Session file is downloaded without copying');
+  assert.equal(downloadedName, 'exact-session.gbdraw');
   assert.equal(clicked, true);
 } finally {
   URL.createObjectURL = originalCreateObjectUrl;

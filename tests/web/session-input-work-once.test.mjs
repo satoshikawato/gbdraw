@@ -6,8 +6,6 @@
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
 import { webcrypto } from 'node:crypto';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
@@ -40,7 +38,10 @@ const count = (name) => metrics.filter((metric) => metric.name === name).length;
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { buildSessionResources } = await import('../../gbdraw/web/js/services/session-resources.js');
-const { encodeSessionResources } = await import('../../gbdraw/web/js/services/session-file.js');
+const { gallerySessionFile, writtenResourcesWith } = await import('./helpers/written-resources.mjs');
+const { readSessionContainer } = await import('../../gbdraw/web/js/services/session-container.js');
+// What Save writes for each resource, read as base64 descriptors.
+const encodeSessionResources = writtenResourcesWith(await import('../../gbdraw/web/js/services/session-resource-backing.js'));
 /** Save's resource table: allocated, then encoded by the Session file writer. */
 const savedSession = async (...args) => {
   const built = await buildSessionResources(...args);
@@ -53,12 +54,15 @@ const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-s
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { exportSession, importSession, serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
-test('Save binds a File Generate described with no hash or decode and encodes it once (OV-1559, OV-2612)', async () => {
+test('Save binds a File Generate described with no hash or decode and reads it once (OV-1559, OV-2612)', async () => {
   const text = `>x\n${'ACGT'.repeat(250_000)}\n`;
   const file = new File([text], 'g.fa', { type: '' });
   let reads = 0;
+  let streams = 0;
   const read = file.arrayBuffer.bind(file);
   file.arrayBuffer = async () => { reads += 1; return read(); };
+  const stream = file.stream.bind(file);
+  file.stream = () => { streams += 1; return stream(); };
   // Generate: the request describes the File and stages its bytes (the transfer releases the byte cache).
   const sourceState = boundState({ files: {}, circularSources: [card(file)], linearSeqs: [] });
   const releaseReads = holdReadBytes();
@@ -77,23 +81,24 @@ test('Save binds a File Generate described with no hash or decode and encodes it
   });
   assert.equal(reads, 1);
   assert.equal(count('base64EncodeCount'), 0);
-  // Each Save reads the File once: the page keeps no input bytes between Saves.
+  // Each Save streams the File once and never reads it whole: the page keeps no input bytes between Saves.
   for (const save of [1, 2]) {
     metrics.length = 0;
     const saved = await savedSession(sourceState, committed, bindingDrawings(sourceState));
     assert.deepEqual({
       reads,
+      streams,
       hashes: count('resourceIdentityHashCount'),
       decodes: count('base64DecodeCount'),
       byteReads: count('resourceByteReadCount'),
       encodes: count('base64EncodeCount')
-    }, { reads: 1 + save, hashes: 0, decodes: 0, byteReads: 0, encodes: 1 }, `Save ${save}`);
+    }, { reads: 1, streams: save, hashes: 0, decodes: 0, byteReads: 0, encodes: 0 }, `Save ${save}`);
     assert.deepEqual(Object.keys(saved.resources), ['src']);
     assert.equal(saved.resources.src.data, Buffer.from(text).toString('base64'));
     assert.equal(saved.webFiles.bindings.circularSources[0].gb.resourceId, 'src');
   }
 
-  // A File the committed request does not name is encoded by the Save.
+  // A File the committed request does not name is written by the Save, as bytes.
   metrics.length = 0;
   const other = new File(['other bytes'], 'other.tsv', { type: '' });
   const otherState = boundState({ files: {}, circularSources: [card(other)], linearSeqs: [] }, state.inputFiles);
@@ -109,7 +114,7 @@ test('Save binds a File Generate described with no hash or decode and encodes it
     kind: 'web-file', name: `${otherId}-other.tsv`, type: 'application/octet-stream',
     size: 11, lastModified: other.lastModified, encoding: 'base64', data: Buffer.from('other bytes').toString('base64')
   });
-  assert.equal(count('base64EncodeCount'), 2);
+  assert.equal(count('base64EncodeCount'), 0);
 });
 
 test('Load and two Saves check a slice\'s unmanaged overrides once (OV-1567)', async () => {
@@ -119,16 +124,18 @@ test('Load and two Saves check a slice\'s unmanaged overrides once (OV-1567)', a
     checks.push(payload);
     return { result: { overrides: payload.configOverrides } };
   });
-  const session = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', import.meta.url), 'utf8'));
-  session.drawings.find((entry) => entry.id === session.ui.activeDrawingId).config.unmanagedConfigOverrides = { 'objects.gc_content.percent_background_opacity': 0.42 };
-  const input = { target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' } };
+  // A Session file container (receipt session.file-container): Load reads each input from its entry.
+  const sessionFile = await gallerySessionFile('lambda_basic_linear', (session) => {
+    session.drawings.find((entry) => entry.id === session.ui.activeDrawingId).config.unmanagedConfigOverrides = { 'objects.gc_content.percent_background_opacity': 0.42 };
+  });
+  const input = { target: { files: [new File([sessionFile], 'session.gbdraw')], value: 'selected' } };
   const loaded = await importSession(input, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   const afterLoad = checks.length;
   for (const save of [1, 2]) {
     const result = await exportSession(`OV-1567 ${save}`, { askChoice: async () => 'download' });
     assert.equal(result?.status, 'saved', JSON.stringify(result?.error ?? result));
-    const document = savedDrawingView(JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer()))), 'linear');
+    const document = savedDrawingView(/** @type {Record<string, any>} */ ((await readSessionContainer(result.blob)).document), 'linear');
     assert.deepEqual(document.modes.linear.config.unmanagedConfigOverrides,
       { 'objects.gc_content.percent_background_opacity': 0.42 });
   }

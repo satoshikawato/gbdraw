@@ -667,7 +667,7 @@ const PAGE_PROBE_CLEANUPS = '__GBDRAW_TEST_PROBE_CLEANUPS__';
 // remembers the Session file it downloaded last and asks before it downloads
 // one of that name again; the restore cannot reach that memory, so a page
 // that saved a Session after it booted serves no later case (OV-1001).
-const SESSION_FILE = /session\.json\.gz$/;
+const SESSION_FILE = /\.gbdraw$/;
 
 // Each drawing's user-owned state, by drawing ID in tab order.
 const snapshotDrawings = async (page) => {

@@ -15,6 +15,7 @@ from gbdraw import FeatureOptions
 from gbdraw.api import ColorOptions
 from gbdraw.io.colors import PALETTE_NAME_ALIASES, packaged_color_palettes, require_palette_name
 from tests.utils.session_drawing_view import session_view
+from tests.utils.session_files import read_session_payload
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HUMAN = REPO_ROOT / "gbdraw" / "web" / "tutorial-data" / "human-mitochondrion" / "HmmtDNA.gbk"
@@ -72,7 +73,7 @@ def test_the_former_cli_name_renders_like_the_current_one_and_saves_the_current_
     new = _render(tmp_path, monkeypatch, "new", NEW)
     old = _render(tmp_path, monkeypatch, "old", OLD)
     assert (old / "out.svg").read_bytes() == (new / "out.svg").read_bytes()
-    session = session_view(json.loads((old / "out.gbdraw-session.json").read_text(encoding="utf-8")))
+    session = session_view(read_session_payload(old / "out.gbdraw"))
     assert session["renderRequest"]["diagramOptions"]["colors"]["defaultColorsPalette"] == NEW
     # The invocation record keeps the command line as typed.
     assert session["cliInvocation"]["args"][session["cliInvocation"]["args"].index("-p") + 1] == OLD
@@ -90,14 +91,14 @@ def test_a_released_session_that_names_the_former_palette_replays_like_the_curre
     for palette in (OLD, NEW, "default"):
         directory = tmp_path / palette
         directory.mkdir()
-        session = directory / "in.gbdraw-session.json"
+        session = directory / "in.gbdraw"
         session.write_text(text.replace(f'"{OLD}"', f'"{palette}"'), encoding="utf-8")
         monkeypatch.chdir(directory)
         circular_cli_module.circular_main(
-            ["--session", str(session), "-o", "replay", "-f", "svg", "--session_output", "resaved.json"]
+            ["--session", str(session), "-o", "replay", "-f", "svg", "--session_output", "resaved.gbdraw"]
         )
         svgs[palette] = (directory / "replay.svg").read_bytes()
     assert svgs[OLD] == svgs[NEW]
     assert svgs[NEW] != svgs["default"]
-    resaved = session_view(json.loads((tmp_path / OLD / "resaved.json").read_text(encoding="utf-8")))
+    resaved = session_view(read_session_payload(tmp_path / OLD / "resaved.gbdraw"))
     assert resaved["renderRequest"]["diagramOptions"]["colors"]["defaultColorsPalette"] == NEW

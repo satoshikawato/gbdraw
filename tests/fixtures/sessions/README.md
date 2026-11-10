@@ -377,9 +377,11 @@ Session 48 to drawings (`tests/test_session_compat.py`,
 `drawings-vectors.json` `upgrades`). The route, inputs and checks are in
 `two-mode-linear-shown.v48.provenance.json`.
 
-The four `drawings-*.v51.gbdraw-session.json.gz` files are Session 51
+The four `drawings-*.v51.gbdraw` files are Session 51
 (`drawings`, DESIGN §1), written at 49 and renumbered to 50 (V50a) and 51
-(V51a): only the top-level `version` changed.
+(V51a): only the top-level `version` changed. Each was then converted to a
+Session file container: its inputs became container entries, byte for byte,
+and the rest of the document is unchanged.
 `gbdraw.session_drawings.write_session_drawings(version=49)` wrote each from a
 fixture above, upgraded to Session 48 first, leaving out the resources no
 drawing names: `circular-only` (one Circular drawing,

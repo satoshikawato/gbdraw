@@ -188,8 +188,8 @@ export const PYTHON_VERSION_PATHS = freeze([
   'gbdraw/config/toml.py',
   'gbdraw/io/colors.py',
   'gbdraw/io/input_text.py',
-  'gbdraw/io/rsyncable_gzip.py',
-  'gbdraw/losat_setup.py'
+  'gbdraw/losat_setup.py',
+  'gbdraw/session_container.py'
 ]);
 
 export const isPlaywrightConfigPath = (path) => path === 'playwright.config.js'

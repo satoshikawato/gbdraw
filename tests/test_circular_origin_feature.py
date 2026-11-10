@@ -204,7 +204,7 @@ def test_a_session_stores_the_start_and_replays_the_figure(tmp_path: Path) -> No
 
     encoded = json.dumps(encode_canonical_request(plan_circular_request(_request(origin_feature=_PSBA)).request).payload)
     assert "originFeature" not in encoded and "origin_feature" not in encoded
-    session = tmp_path / "saved.gbdraw-session.json"
+    session = tmp_path / "saved.gbdraw"
     rotated = _cli_svg(tmp_path, "origin", "--origin_feature", "gene=psbA", "--session_output", str(session))
     stored = load_session(session)["drawings"][0]["renderRequest"]
     assert stored["records"][0]["display"]["startCoordinate"] == _PSBA_START

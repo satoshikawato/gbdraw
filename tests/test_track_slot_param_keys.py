@@ -216,7 +216,7 @@ def test_a_session_ring_slot_with_the_web_bookkeeping_keys_draws_as_without_them
             _slot_payload("circular", "ticks", "ticks", {}),
             _slot_payload("circular", "ring", "sequence_conservation", {"source_index": "0", "track_index": "1", **extra}),
         ]
-        path = tmp_path / f"{variant}.gbdraw-session.json"
+        path = tmp_path / f"{variant}.gbdraw"
         path.write_text(json.dumps(document), encoding="utf-8")
         if variant == "unknown":
             with pytest.raises(Exception) as excinfo:
@@ -321,7 +321,7 @@ def test_a_session_slot_left_with_ring_keys_draws_as_without_them(tmp_path: Path
             _slot_payload("circular", "ticks", "ticks", {}),
             _slot_payload("circular", "cmp1", "spacer", extra),
         ]
-        path = tmp_path / f"{variant}.gbdraw-session.json"
+        path = tmp_path / f"{variant}.gbdraw"
         path.write_text(json.dumps(document), encoding="utf-8")
         circular_main(["--session", str(path), "-o", variant, "-f", "svg"])
         svgs[variant] = (tmp_path / f"{variant}.svg").read_bytes()

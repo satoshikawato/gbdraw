@@ -506,8 +506,8 @@ def test_cli_resave_of_a_session_44_to_48_keeps_each_drawings_slice(
 
     main = linear_main if mode == "linear" else circular_main
     source = FIXTURES / f"{fixture}.gbdraw-session.json.gz"
-    first = tmp_path / "first.gbdraw-session.json"
-    second = tmp_path / "second.gbdraw-session.json"
+    first = tmp_path / "first.gbdraw"
+    second = tmp_path / "second.gbdraw"
     for step, (base, sidecar) in enumerate(((source, first), (first, second))):
         main(["--session", str(base), "--output", str(tmp_path / str(step) / "replay"), "--format", "svg",
               "--session_output", str(sidecar)])
@@ -536,9 +536,9 @@ def test_session_48_keeps_what_the_file_cards_imported_through_a_cli_resave(
     }
     session_46["modes"]["linear"]["config"].update(copy.deepcopy(marks))
     validate_session(session_46)
-    source = tmp_path / "marked.gbdraw-session.json"
+    source = tmp_path / "marked.gbdraw"
     source.write_text(json.dumps(session_46), encoding="utf-8")
-    sidecar = tmp_path / "resaved.gbdraw-session.json"
+    sidecar = tmp_path / "resaved.gbdraw"
     linear_main(
         ["--session", str(source), "--output", str(tmp_path / "replay"), "--format", "svg",
          "--session_output", str(sidecar)]
@@ -558,7 +558,7 @@ def test_cli_resave_of_a_config_less_session_44_moves_its_request_annotation_tar
     source.pop("config")
     source_path = tmp_path / "config-less.v44.gbdraw-session.json"
     source_path.write_text(json.dumps(source), encoding="utf-8")
-    sidecar = tmp_path / "replay.gbdraw-session.json"
+    sidecar = tmp_path / "replay.gbdraw"
     caplog.set_level("INFO", logger=cli_session_module.__name__)
 
     linear_main(

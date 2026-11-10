@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
-const { gunzipSync } = require('node:zlib');
+const { readSessionFile, readSessionFileJson } = require('./helpers/session-file.cjs');
 const { load, generate, switchMode, download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
@@ -9,11 +9,11 @@ const { expectLiveEqualsGenerate, settleLive, showResult } = require('./helpers/
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 const seeds = {
-  lambda: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json',
-  tobacco: 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'
+  lambda: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw',
+  tobacco: 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw'
 };
 const upload = async (page, name, linear = true) => {
-  const session = JSON.parse(await fs.readFile(seeds[name], 'utf8'));
+  const session = await readSessionFileJson(seeds[name]);
   const input = linear ? page.getByTestId('linear-genbank-1') : circularFileInput(page, 'gb');
   await input.setInputFiles({ name: `${name}.gb`, mimeType: 'text/plain', buffer: Buffer.from(
     session.resources[shownSavedDrawing(session).renderRequest.records[0].source.resourceId].data, 'base64') });
@@ -143,7 +143,7 @@ for (const mode of ['linear', 'circular']) {
       // The renamed row keeps its key, under which its style stays (D-25).
       await expectRow(page, 'Manual row', styled);
       await expectDrawnName(page, 'Manual row', 'Manual renamed');
-      const saved = testInfo.outputPath(`added-row-style-${mode}.gbdraw-session.json.gz`);
+      const saved = testInfo.outputPath(`added-row-style-${mode}.gbdraw`);
       await download(page, 'Save Session', saved);
       fresh = await load(browser, saved);
       await expectRow(fresh, 'Manual row', styled);
@@ -675,8 +675,6 @@ for (const mode of ['linear', 'circular']) {
   });
 }
 
-// A saved Session file as JSON (gzip or plain).
-const readSession = bytes => JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
 
 // The drawn Legend captions in reading order (top to bottom, then left to right).
 const drawnLegendOrder = page => page.evaluate(() => {
@@ -745,7 +743,7 @@ for (const mode of ['linear', 'circular']) {
         const left = (await legendRowsByCaption(page)).editor;
         expect(left.length, 'GC rows are left').toBeGreaterThan(0);
         expect(left.every(caption => /^GC /.test(caption)), `only GC rows are left: ${left}`).toBe(true);
-        const ov167 = testInfo.outputPath(`ov167-${mode}.gbdraw-session.json.gz`);
+        const ov167 = testInfo.outputPath(`ov167-${mode}.gbdraw`);
         await download(page, 'Save Session', ov167);
         const loaded = await load(browser, ov167);
         try {
@@ -783,8 +781,9 @@ for (const mode of ['linear', 'circular']) {
       expect(await legendRowsByCaption(page)).toEqual(one);
       await expect(deletedList.getByRole('listitem')).toHaveCount(1);
 
-      const saved = testInfo.outputPath(`restore-${mode}.gbdraw-session.json.gz`);
-      const session = readSession(await download(page, 'Save Session', saved));
+      const saved = testInfo.outputPath(`restore-${mode}.gbdraw`);
+      await download(page, 'Save Session', saved);
+      const session = await readSessionFile(saved);
       expect(savedDrawing(session, mode).editorState.legend.deletedEntries.map(entry => entry.caption), 'the Session saves the shorter list').toEqual(['CDS']);
       const restored = await legendLayoutNumbers(page);
       await expectLiveEqualsGenerate(page, { label: `${mode}: Restore` });
@@ -913,7 +912,9 @@ test('M17 and M13 circular: Reset Stroke and Reset all strokes give the strokes 
       await settleLive(page);
       expect(await undoCount(), 'closing it records no step').toBe(start + 1);
 
-      const saved = readSession(await download(page, 'Save Session', testInfo.outputPath('stroke-options.gbdraw-session.json.gz')));
+      const strokeSaved = testInfo.outputPath('stroke-options.gbdraw');
+      await download(page, 'Save Session', strokeSaved);
+      const saved = await readSessionFile(strokeSaved);
       const { legend } = savedDrawing(saved, 'circular').editorState;
       expect(legend.entries.filter(e => Object.hasOwn(e, 'showStroke')), 'the Session does not save the disclosure').toEqual([]);
       expect(Number(legend.strokeOverrides[caption]?.strokeWidth), 'the stroke edit is saved').toBe(2);
@@ -973,7 +974,7 @@ for (const mode of ['linear', 'circular']) {
         }
         expect(await drawnLegendOrder(page), `${direction}, drawn`).toEqual(expected);
       }
-      const saved = testInfo.outputPath(`ov1277-${mode}.gbdraw-session.json.gz`);
+      const saved = testInfo.outputPath(`ov1277-${mode}.gbdraw`);
       await download(page, 'Save Session', saved);
       fresh = await load(browser, saved);
       fresh.setDefaultTimeout(180_000);
@@ -1030,7 +1031,7 @@ test('L1-L8 generated legend categories reconcile while valid category and layou
     }
     await generate(page);
     expect((await inspect(page)).result).toEqual(returned.result);
-    const saved = testInfo.outputPath('legend-replacement.gbdraw-session.json.gz');
+    const saved = testInfo.outputPath('legend-replacement.gbdraw');
     await download(page, 'Save Session', saved);
     fresh = await load(browser, saved);
     await expectEntries(fresh, ['CDS']);
@@ -1075,7 +1076,7 @@ test('G1-G3 rejected candidates preserve A and dormant category intent and manua
     const b = await expectEntries(page, expected);
     await generate(page);
     await expectEntries(page, expected);
-    const saved = testInfo.outputPath('manual-legend.gbdraw-session.json.gz');
+    const saved = testInfo.outputPath('manual-legend.gbdraw');
     await download(page, 'Save Session', saved);
     fresh = await load(browser, saved);
     await generate(fresh);

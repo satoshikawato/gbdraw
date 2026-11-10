@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping as MappingABC, Sequence as SequenceABC
 from copy import deepcopy
 from dataclasses import MISSING, Field, asdict, dataclass, fields, is_dataclass, replace
-from functools import lru_cache
+from functools import lru_cache, partial
 from io import StringIO
 import json
 import logging
@@ -85,7 +85,7 @@ from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
 from gbdraw.api.record_planning import _source_details
 from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
-from gbdraw.io.input_text import GZIP_ERRORS, open_input_text, read_input_bytes
+from gbdraw.io.input_text import GZIP_ERRORS, is_gzip_file, open_input_text, read_input_bytes
 from gbdraw.session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
     LEGACY_FEATURE_TYPES,
@@ -1368,7 +1368,8 @@ def _encode_records(
                     f"record-{first}-{kind}",
                     kind=kind,
                     name=Path(path).name,
-                    content=read_input_bytes(path),
+                    # As the file holds them: a gzip input stays gzip in the Session file.
+                    content=Path(path).read_bytes(),
                 )
             ids = [origins[position].source_record_id for position in members]
             record_indexes = [origins[position].source_record_index for position in members]
@@ -4461,13 +4462,16 @@ def _encode_comparisons(
             # keeps its raw search-frame rows, as the Web writes them (design
             # 3.7); only a reversed persisted endpoint rewrites them.
             content = comparison.search_frame_text
+            # A gzip table is stored as it was read, unless its rows are rewritten.
+            stored = comparison.search_frame_gzip
             if endpoint_frames[0][1] or endpoint_frames[1][1]:
                 content = reverse_endpoint_table_text(content, *endpoint_frames)
+                stored = None
             resource_id = resources.add_bytes(
                 _resource_id(f"comparison-losat-{index}"),
                 kind="nucleotide-blast",
-                name=f"comparison-losat-{index}.tsv",
-                content=content.encode("utf-8"),
+                name=f"comparison-losat-{index}.tsv{'' if stored is None else '.gz'}",
+                content=content.encode("utf-8") if stored is None else stored,
             )
             result.append(
                 {
@@ -4629,6 +4633,20 @@ def _nucleotide_blast_resource(
     )
 
 
+def _read_blast_edge(resource_path: Path, label: str) -> tuple[str, bytes | None, DataFrame]:
+    """The text, gzip bytes (when the file is gzip) and rows of a ``nucleotideBlast`` resource.
+
+    The text and the gzip bytes stay on the edge, so a re-saved Session writes the
+    same resource, a gzip table stored as it is (receipt session.file-container); a
+    gzip table expands as the CLI reads it. The decoder reads them once per Worker
+    resource (``get_or_build_decoded_resource``).
+    """
+
+    text = read_input_bytes(resource_path).decode("utf-8")
+    stored = resource_path.read_bytes() if is_gzip_file(resource_path) else None
+    return text, stored, read_comparison_table(StringIO(text), label=label)
+
+
 def _decode_comparisons(
     value: object,
     *,
@@ -4672,21 +4690,13 @@ def _decode_comparisons(
                     register_prepared_resource_value,
                 )
 
-                # The resource text stays on the edge, so a re-saved Session
-                # writes the same nucleotideBlast resource. Both are read once
-                # per Worker resource.
-                def read_edge(
-                    resource_path: Path = resource_path,
-                    label: str = f"BLAST resource {item['resourceId']!r}",
-                ) -> tuple[str, DataFrame]:
-                    text = resource_path.read_bytes().decode("utf-8")
-                    return text, read_comparison_table(StringIO(text), label=label)
-
                 try:
-                    text, table = get_or_build_decoded_resource(
-                        resource_path, ("nucleotide-blast-edge-v1",), read_edge
+                    text, stored, table = get_or_build_decoded_resource(
+                        resource_path,
+                        ("nucleotide-blast-edge-v2",),
+                        partial(_read_blast_edge, resource_path, f"BLAST resource {item['resourceId']!r}"),
                     )
-                except (OSError, UnicodeError, ValidationError) as exc:
+                except (OSError, UnicodeError, ValidationError, *GZIP_ERRORS) as exc:
                     # The reader's diagnostic plus the record pair the Web names (CI-04).
                     cause = getattr(exc, "diagnostic", None) or (
                         None if isinstance(exc, ValidationError) else {"code": "INPUT_UNREADABLE", "field": "comparison"}
@@ -4701,6 +4711,7 @@ def _decode_comparisons(
                         subject_index,
                         register_prepared_resource_value(table, resource_path),
                         search_frame_text=text,
+                        search_frame_gzip=stored,
                         source_name=resource_path.name,
                     )
                 )

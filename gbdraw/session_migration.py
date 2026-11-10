@@ -24,6 +24,7 @@ from gbdraw.session_io import (
     RETIRED_RENDERED_ID_FEATURE_FIELDS,
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SessionDraftMigration,
+    SessionResources,
     _embedded_entry_bytes,
     _legacy_linear_request_records,
     _project_web_file_binding,
@@ -75,11 +76,11 @@ def replace_current_derived_feature_state(
 
 
 def _project_web_file_inventory(
-    session: Mapping[str, Any],
-) -> dict[str, Any] | None:
+    session: Mapping[str, object],
+    resources: SessionResources,
+) -> dict[str, object] | None:
     web_files = session.get("webFiles")
-    resources = session.get("resources")
-    if not isinstance(web_files, Mapping) or not isinstance(resources, Mapping):
+    if not isinstance(web_files, Mapping) or not isinstance(session.get("resources"), Mapping):
         return None
     bindings = web_files.get("bindings")
     # A drawing without bindings (a Gallery publication) is saved as it is:
@@ -485,32 +486,26 @@ def _inline_files_at_decoded_size(value: Any) -> Any:
 
 
 def project_session_adjunct_for_current_write(
-    session: Mapping[str, Any],
+    session: Mapping[str, object],
+    resources: SessionResources,
     *,
     source_version: int,
-    source_features: Mapping[str, Any] | None = None,
+    source_features: Mapping[str, object] | None = None,
     report: DraftMigrationReport | None = None,
-) -> tuple[dict[str, Any], dict[str, Any] | None]:
+) -> tuple[dict[str, object], dict[str, object] | None]:
     """Detach non-canonical state and migrate released Web-owned field names.
 
     ``source_features`` are the Session's sources read again
     (:func:`read_legacy_source_features`) for the rendered-ID edits of a
     Session without a feature catalog. What the draft migrations tell Load
-    is added to ``report`` when it is given.
+    is added to ``report`` when it is given. ``resources`` are the Session's:
+    its Web file inventory names their bytes' sources.
     """
 
     adjunct = {
         key: value
         for key, value in session.items()
-        if key
-        not in {
-            "format",
-            "version",
-            "createdAt",
-            "renderRequest",
-            "resources",
-            "files",
-        }
+        if key not in {"format", "version", "createdAt", "renderRequest", "resources", "files"}
     }
     if source_version < MODE_SCOPED_SESSION_MIN_VERSION:
         # The older draft migrations, in Web Load's order: the rendered-ID edit
@@ -593,7 +588,7 @@ def project_session_adjunct_for_current_write(
 
             editor_state["featureCatalog"] = promote_legacy_feature_catalog(catalog)
             adjunct["editorState"] = editor_state
-    web_file_inventory = _project_web_file_inventory(session)
+    web_file_inventory = _project_web_file_inventory(session, resources)
     if source_version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         return _split_session_adjunct(adjunct, session, source_version), web_file_inventory
     config = adjunct.get("config")
@@ -623,9 +618,9 @@ def project_session_adjunct_for_current_write(
         web_file_inventory = migrated_files if has_source_file_inventory else None
     else:
         adjunct.pop("config", None)
-    if isinstance(adjunct.get("ui"), Mapping):
-        adjunct["ui"] = dict(adjunct["ui"])
-        adjunct["ui"].pop("blastSource", None)
+    ui = adjunct.get("ui")
+    if isinstance(ui, Mapping):
+        adjunct["ui"] = {key: value for key, value in ui.items() if key != "blastSource"}
     else:
         adjunct.pop("ui", None)
     web_files_value = adjunct.get("webFiles")

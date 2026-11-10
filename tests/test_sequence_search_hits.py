@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import gzip
+from tests.utils.session_files import read_session_payload
 import io
 import json
 import re
@@ -329,13 +329,13 @@ def test_gradient_hits_give_one_query_position_legend_row(mode: str) -> None:
     assert ">start<" in svg and ">end<" in svg
 
 
-FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sessions" / "python-search-hits-gradient.v51.gbdraw-session.json.gz"
+FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sessions" / "python-search-hits-gradient.v51.gbdraw"
 
 
 def test_session_fixture_keeps_the_gradient_through_load_and_save(tmp_path: Path) -> None:
     from gbdraw.session import load_session_document, materialize_session
 
-    stored = json.loads(gzip.decompress(FIXTURE.read_bytes()))["drawings"][0]["renderRequest"]
+    stored = read_session_payload(FIXTURE)["drawings"][0]["renderRequest"]
     with materialize_session(load_session_document(FIXTURE), output_directory=tmp_path) as materialized:
         request = decode_canonical_request(
             stored, resource_paths=materialized.resource_paths, output_directory=tmp_path

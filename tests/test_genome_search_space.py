@@ -21,6 +21,7 @@ import gbdraw.comparisons.losat_runtime as runtime_module
 from gbdraw.comparisons.losat_jobs import genome_database_sizes, genome_search_spaces
 from gbdraw.linear import linear_main
 from tests.utils.session_drawing_view import drawing_view
+from tests.utils.session_files import read_session_payload
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LAMBDA = REPO_ROOT / "tests" / "test_inputs" / "NC_001416.gb"
@@ -123,7 +124,7 @@ def _run(tmp_path: Path, argv: list[str], *, program: str = "losatn", search_spa
     losat, log = _fake_losat(tmp_path, search_space=search_space)
     prefix = tmp_path / "out"
     linear_main([*argv, *THRESHOLDS, "--losat", program, "--losat_bin", losat, "--save_session", "-o", str(prefix)])
-    session = drawing_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
+    session = drawing_view(read_session_payload(prefix.with_suffix(".gbdraw")))
     return _search_spaces(log), session
 
 
@@ -411,7 +412,7 @@ def _run_losatp(
         *argv, *THRESHOLDS, "--losat", "losatp", "--losatp_mode", mode, "--losat_bin", losat,
         "--save_session", "-o", str(prefix),
     ])
-    session = drawing_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
+    session = drawing_view(read_session_payload(prefix.with_suffix(".gbdraw")))
     return _search_spaces(log, "-dbsize"), session
 
 

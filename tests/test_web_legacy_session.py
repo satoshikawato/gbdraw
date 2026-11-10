@@ -13,6 +13,7 @@ import pytest
 from gbdraw.exceptions import GbdrawError
 
 from gbdraw.session import load_session_document, materialize_session, render_session, session_to_request
+from tests.utils.session_files import load_session_mapping
 from gbdraw import session_drawings
 from gbdraw.session_io import (
     CLI_SESSION_ADMISSION,
@@ -20,6 +21,8 @@ from gbdraw.session_io import (
     WEB_READ_SESSION_ADMISSION,
     SessionAdmission,
     SessionDraftMigration,
+    SessionResources,
+    split_resource_bytes,
 )
 from gbdraw.session_migration import session_draft_migration_repairs
 from gbdraw.web_support.feature_catalog import promote_legacy_feature_catalog
@@ -76,7 +79,7 @@ def test_a_legacy_session_becomes_session_49_with_its_results_and_replays_as_bef
     assert len(first["editorState"]["featureCatalog"]["items"]) == len(source["results"])
     with materialize_session(load_session_document(source), output_directory=tmp_path / "old") as materialized:
         old = render_session(materialized)
-    with materialize_session(load_session_document(document), output_directory=tmp_path / "new") as materialized:
+    with materialize_session(load_session_mapping(document), output_directory=tmp_path / "new") as materialized:
         new = render_session(materialized, drawing=first["id"])
     assert len(old.output_paths) == len(new.output_paths) == 1
     replayed = new.output_paths[0].read_text(encoding="utf-8")
@@ -128,11 +131,12 @@ def test_converted_comparison_tables_keep_the_resource_of_their_own_record_pair(
                           "data": base64.b64encode(rows.encode()).decode("ascii"), "size": len(rows)}
             for resource_id, rows in (("forward", row.format(1, 1000)), ("backward", row.format(1001, 2000)))
         }
+        split, sources = split_resource_bytes({"resources": resources})
         converted = search_frame_nucleotide_resources(
             stored, with_rows(row.format(1, 1000), row.format(1001, 2000)), with_rows(row.format(3001, 4000), row.format(4001, 4300)),
-            resources,
+            SessionResources(split["resources"], sources),
         )
-    assert {key: base64.b64decode(value["data"]).decode() for key, value in converted.resources.items()} == {
+    assert {key: converted.resources.read(key).decode() for key in converted.resources.descriptors} == {
         "forward": row.format(3001, 4000), "backward": row.format(4001, 4300),
     }
     assert converted.pair_resources == {}
@@ -231,7 +235,7 @@ def test_stored_results_session_49_cannot_hold_travel_beside_the_document(name: 
     payload = json.loads(legacy_session_to_drawings_json(_text(name)))
     assert set(payload) == REPLY_FIELDS, payload.get("error")
     document = payload["document"]
-    assert load_session_document(document).version == DRAWINGS_SESSION_MIN_VERSION
+    assert load_session_mapping(document).version == DRAWINGS_SESSION_MIN_VERSION
     (drawing_id, stored), = payload["storedResults"].items()
     assert payload["resultSetSources"] == {drawing_id: ""}
     (drawing,) = (drawing for drawing in document["drawings"] if drawing["id"] == drawing_id)

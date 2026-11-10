@@ -95,7 +95,7 @@ test('inherited Feature fill uses the existing scope dialog with atomic Undo and
 }) => {
   const imported = await loadGallerySession(
     page,
-    'HmmtDNA_basic_circular.gbdraw-session.json'
+    'HmmtDNA_basic_circular.gbdraw'
   );
   expect(imported.status).toBe('ok');
 
@@ -217,7 +217,7 @@ test('inherited Feature fill uses the existing scope dialog with atomic Undo and
 const openSharedFeaturePopup = async (page) => {
   const imported = await loadGallerySession(
     page,
-    'HmmtDNA_basic_circular.gbdraw-session.json'
+    'HmmtDNA_basic_circular.gbdraw'
   );
   expect(imported.status).toBe('ok');
 
@@ -424,7 +424,7 @@ test('Cancel closes the Color Change Scope dialog at once after a Session load a
 // and does not clear the feature selection behind it.
 test('a popup scope dialog opens ready and keeps focus while its choice applies', async ({ browser }) => {
   test.setTimeout(180_000);
-  const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw');
   try {
     await page.evaluate(() => {
       const app = window.__GBDRAW_APP__;
@@ -476,7 +476,7 @@ test('a popup scope dialog opens ready and keeps focus while its choice applies'
 // with the value the feature now has, so a stroke edit can follow a fill edit.
 test('the feature popup stays open after a Color or Stroke Change Scope choice (OV-1278)', async ({ browser }) => {
   test.setTimeout(240_000);
-  const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw');
   try {
     const featureId = await page.evaluate(() => {
       const app = window.__GBDRAW_APP__;

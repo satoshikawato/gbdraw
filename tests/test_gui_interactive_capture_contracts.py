@@ -171,16 +171,16 @@ def test_h_gui_13_persists_real_edits_and_keeps_group_semantics_distinct() -> No
     assert 'mode="collinear"' not in source
 
 
-def test_h_gui_14_writes_current_gzip_session_and_uses_a_fresh_context() -> None:
+def test_h_gui_14_writes_a_current_session_file_and_uses_a_fresh_context() -> None:
     source = INTERACTIVE_FLOW.read_text(encoding="utf-8")
     for value in (
         "from gbdraw.session_io import CURRENT_SESSION_VERSION",
         "CURRENT_RENDER_REQUEST_SCHEMA = 10",
-        'SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"',
-        'contents[:2] != b"\\x1f\\x8b"',
-        'with gzip.open(path, "rt", encoding="utf-8")',
+        'SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw"',
+        "if not zipfile.is_zipfile(path):",
+        'archive.namelist()[:1] != ["gbdraw-session.json"]',
         'payload.get("format") != "gbdraw-session"',
-        "base64.b64decode",
+        'name.removeprefix("resources/"): archive.read(name)',
         "FIRST_CIRCULAR_FIXTURE_SHA256",
         "first_capture.close()",
         "second_capture = open_browser_capture",

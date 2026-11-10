@@ -208,6 +208,7 @@ under "Cited ids without a record".
 - [PD-OI-015](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-015-advanced-gui-exposure-policy): Advanced GUI exposure policy. ACCEPTED, concern `diagram-generation.gui-exposure-policy`, scenario revision 1.
 
 - [PD-OI-016](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-016-generation-failure-cancellation-and-stale-result-isolation): Generation failure, cancellation, and stale-result isolation. ACCEPTED, concern `diagram-generation.failure-isolation`, scenario revision 1.
+  - `tests/web/session-import-worker.playwright.spec.js`
 
 - [PD-OI-017](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-017-active-comparison-appearance-controls-remain-reachable): Active comparison appearance controls remain reachable. ACCEPTED, concern `diagram-generation.comparison-appearance-reachability`, scenario revision 1.
 
@@ -813,8 +814,14 @@ under "Cited ids without a record".
 
 - [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap): gzip input expansion cap. ACCEPTED, concern `input.gzip-expansion-cap`, scenario revision 1.
   - `tests/test_gzip_inputs.py`
+  - `tests/web/annotations.test.mjs`
   - `tests/web/byte-utils-capped-stream.test.mjs`
+  - `tests/web/diagram-generation-worker.test.mjs`
+  - `tests/web/file-content-cache.test.mjs`
   - `tests/web/gzip-inputs.playwright.spec.js`
+  - `tests/web/input-copies.test.mjs`
+  - `tests/web/record-metadata-inference.test.mjs`
+  - `tests/web/sequence-search-programs.test.mjs`
 
 - [PD-OI-117](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-117-sequence-search): Sequence search. ACCEPTED, concern `web.sequence-search`, scenario revision 1.
   - `tests/test_sequence_search_hits.py`
@@ -842,14 +849,17 @@ under "Cited ids without a record".
   - `tests/web/file-content-token.test.mjs`
   - `tests/web/session-export-validation.test.mjs`
 
-- [PD-OI-121](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-121-input-file-kept-in-a-browser-copy-after-choosing): Input file kept in a browser copy after choosing. ACCEPTED, concern `input.file-changed-after-choosing`, scenario revision 2, supersedes PD-OI-120 scenario revision 1.
+- [PD-OI-121](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-121-input-file-kept-in-a-browser-copy-after-choosing): Input file kept in a browser copy after choosing. ACCEPTED, concern `input.file-changed-after-choosing`, scenario revision 3, supersedes scenario revision 2.
   - `tests/test_gui_server.py`
   - `tests/web/auxiliary-file-import-retry.test.mjs`
+  - `tests/web/circular-ring-evalue-scale.playwright.spec.js`
   - `tests/web/feature-label-visual-unit.test.mjs`
   - `tests/web/file-content-token.test.mjs`
   - `tests/web/input-copies.playwright.spec.js`
   - `tests/web/input-copies.test.mjs`
   - `tests/web/linear-multi-record.playwright.spec.js`
+  - `tests/web/run-analysis-simple-path.test.mjs`
+  - `tests/web/session-editor-table-texts.test.mjs`
   - `tests/web/session-export-validation.test.mjs`
   - `tests/web/session-resource-backing.test.mjs`
 
@@ -897,6 +907,12 @@ under "Cited ids without a record".
   - `tests/web/feature-density-editor.test.mjs`
   - `tests/web/scale-visibility.playwright.spec.js`
   - `tests/web/settings-pane-rail.playwright.spec.js`
+
+- [PD-OI-127](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-127-session-file-container): Session file container. ACCEPTED, concern `session.file-container`, scenario revision 1.
+  - `tests/fixtures/sessions/cli-circular-gzip-and-plain.v51.provenance.json`
+  - `tests/retired_sessions/refused/drawings-per-drawing-cards.v51.provenance.json`
+  - `tests/test_api_session.py`
+  - `tests/test_gzip_inputs.py`
 
 ### Cited ids without a record
 

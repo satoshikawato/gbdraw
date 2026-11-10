@@ -225,7 +225,7 @@ def test_worker_helper_lists_a_fasta_alone_through_the_fasta_only_loader(tmp_pat
     }
 
 
-FASTA_SESSION = Path(__file__).resolve().parent / "fixtures/sessions/cli-circular-fasta.v51.gbdraw-session.json.gz"
+FASTA_SESSION = Path(__file__).resolve().parent / "fixtures/sessions/cli-circular-fasta.v51.gbdraw"
 
 
 def test_a_session_51_with_a_fasta_source_loads_and_replays(tmp_path: Path) -> None:

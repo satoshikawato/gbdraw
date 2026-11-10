@@ -57,7 +57,7 @@ def main(directory: Path, variant: str = '') -> None:
     with materialize_session(document, output_directory=directory / 'decoded') as materialized:
         web = render_canonical_web_request(drawing_view(document.to_dict())['renderRequest'],
             resource_paths=materialized.resource_paths, output_directory=directory / 'web')
-    save_session_document(directory / 'directions.gbdraw-session.json', drawings=[SessionDrawingSpec(request, state={
+    save_session_document(directory / 'directions.gbdraw', drawings=[SessionDrawingSpec(request, state={
         'results': web_session_results(web),
         'editorState': {'featureCatalog': web['featureCatalog']}})])
 

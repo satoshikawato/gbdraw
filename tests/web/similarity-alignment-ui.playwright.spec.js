@@ -1,12 +1,18 @@
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { mkdirSync, readFileSync } = require('node:fs');
+const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
-const { gunzipSync } = require('node:zlib');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 const { CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerLoadRepairs, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
 const { showPhonePane, paneTop, newDrawingFromMenu, showDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
+
+// A saved Session file in the JSON form a test edits (each container entry back as a base64 descriptor), and back.
+const sessionDocuments = () => import(require('node:url').pathToFileURL(join(__dirname, 'helpers/session-documents.mjs')).href);
+const savedSessionOfBytes = async (bytes) => (await sessionDocuments()).readSavedSession(new Blob([bytes]));
+const savedSessionOf = (file) => savedSessionOfBytes(readFileSync(file));
+const sessionBytesOf = async (document) => Buffer.from(await (await (await sessionDocuments()).sessionFileOf(document)).arrayBuffer());
 
 // The bytes cross into the page as base64: a spread number array is about three times the JSON.
 // The page decodes them and returns their SHA-256, so the file it loads is the file read here.
@@ -131,7 +137,7 @@ const pythonFixture = (testInfo, name, args, file) => {
 const collinearSession = (testInfo, name) => pythonFixture(testInfo, name, (directory) => ['-c',
   'import sys; from pathlib import Path; from tests.test_api_session import _record_local_collinear_session; _record_local_collinear_session(Path(sys.argv[1]))',
   directory
-], 'mixed.gbdraw-session.json').toString('utf8');
+], 'mixed.gbdraw');
 
 const loadAmbiguousSession = async (page, testInfo) => {
   const source = collinearSession(testInfo, 'inparalog-fixture');
@@ -139,7 +145,7 @@ const loadAmbiguousSession = async (page, testInfo) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  const document = JSON.parse(source);
+  const document = await savedSessionOfBytes(source);
   const drawing = savedDrawing(document, 'linear');
   drawing.renderRequest.comparisons = [];
   drawing.editorState.featureCatalog.items.forEach((item) => {
@@ -154,8 +160,8 @@ const loadAmbiguousSession = async (page, testInfo) => {
     losatProgram: 'blastp',
     losat: { blastp: { mode: 'orthogroup' } }
   };
-  const session = Buffer.from(JSON.stringify(document));
-  await importSession(page, session, 'similarity-alignment-inparalog.gbdraw-session.json');
+  const session = await sessionBytesOf(document);
+  await importSession(page, session, 'similarity-alignment-inparalog.gbdraw');
 };
 
 test('alignment rings and the reference line stay transient and share the panel choices', async ({ page }, testInfo) => {
@@ -352,9 +358,9 @@ test('alignment rings and the reference line stay transient and share the panel 
   const sessionDownloadPromise = page.waitForEvent('download');
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const sessionDownload = await sessionDownloadPromise;
-  const sessionPath = testInfo.outputPath('canvas-overlay-session.json.gz');
+  const sessionPath = testInfo.outputPath('canvas-overlay-session.gbdraw');
   await sessionDownload.saveAs(sessionPath);
-  expect(gunzipSync(readFileSync(sessionPath)).toString('utf8'))
+  expect(JSON.stringify(await readSessionFile(sessionPath)))
     .not.toContain('gbdraw-alignment-');
 
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -828,7 +834,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const downloadPromise = page.waitForEvent('download', { timeout: 180000 });
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const download = await downloadPromise;
-  const savedPath = testInfo.outputPath('s06-active-alignment.gbdraw-session.json.gz');
+  const savedPath = testInfo.outputPath('s06-active-alignment.gbdraw');
   await download.saveAs(savedPath);
 
   const freshContext = await browser.newContext();
@@ -843,7 +849,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await importSession(
     freshPage,
     readFileSync(savedPath),
-    's06-active-alignment.gbdraw-session.json.gz'
+    's06-active-alignment.gbdraw'
   );
   const freshState = await freshPage.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -1020,7 +1026,7 @@ const loadOneCandidateSession = async (page, testInfo) => {
   const source = collinearSession(testInfo, 'one-candidate-fixture');
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  const document = JSON.parse(source);
+  const document = await savedSessionOfBytes(source);
   const drawing = savedDrawing(document, 'linear');
   drawing.renderRequest.comparisons = [];
   drawing.editorState.featureCatalog.items.forEach((item) => {
@@ -1041,8 +1047,8 @@ const loadOneCandidateSession = async (page, testInfo) => {
     losatProgram: 'blastp',
     losat: { blastp: { mode: 'orthogroup' } }
   };
-  const session = Buffer.from(JSON.stringify(document));
-  await importSession(page, session, 'one-candidate.gbdraw-session.json');
+  const session = await sessionBytesOf(document);
+  await importSession(page, session, 'one-candidate.gbdraw');
 
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
     await page.locator('.drawer-toggle').click();
@@ -1227,7 +1233,7 @@ test('one usable member applies directly through one Worker resolve and one Hist
   expect((await artifactSnapshot(page)).plan).toBeNull();
   await page.getByRole('button', { name: 'Toggle layout edit mode' }).click();
 
-  await importSession(page, session, 'one-candidate-retry.gbdraw-session.json');
+  await importSession(page, session, 'one-candidate-retry.gbdraw');
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
     await page.locator('.drawer-toggle').click();
   }
@@ -1336,11 +1342,11 @@ test('Align… and Review alignment options… are disabled while a Generate run
 test('released Session 44 schema 7 and catalog 4 load and save through the current writer', async ({ page }, testInfo) => {
   await captureUnhandledRejections(page);
   const source = readFileSync(
-    'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'
+    'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw'
   );
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await importSession(page, source, 'HmmtDNA_basic_circular.gbdraw-session.json');
+  await importSession(page, source, 'HmmtDNA_basic_circular.gbdraw');
   const workers = await page.evaluate(() => window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__ || {
     constructions: 0, instances: []
   });
@@ -1353,14 +1359,14 @@ test('released Session 44 schema 7 and catalog 4 load and save through the curre
     window.__GBDRAW_APP__.saveSessionWithTitle();
   });
   const download = await downloadPromise;
-  const savedPath = testInfo.outputPath('released-session-44-current.gbdraw-session.json.gz');
+  const savedPath = testInfo.outputPath('released-session-44-current.gbdraw');
   await download.saveAs(savedPath);
-  const saved = JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
+  const saved = await readSessionFile(savedPath);
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
   const shown = shownSavedDrawing(saved);
   expect(shown.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
   expect(shown.editorState.featureCatalog.schema).toBe(CURRENT_FEATURE_CATALOG_SCHEMA);
-  const previous = shownSavedDrawing(JSON.parse(source.toString('utf8')));
+  const previous = shownSavedDrawing(await readSessionFile('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw'));
   expect(shown.results.map(({ name }) => name)).toEqual(previous.results.map(({ name }) => name));
   const previewEquivalent = await page.evaluate(({ before, after }) => {
     const parser = new DOMParser();
@@ -1470,8 +1476,8 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, readFileSync(
-    'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'
-  ), 'BGC0000708-BGC0000713.gbdraw-session.json');
+    'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw'
+  ), 'BGC0000708-BGC0000713.gbdraw');
 
   const recordState = (targetPage = page) => targetPage.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -1861,14 +1867,14 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   const downloadPromise = page.waitForEvent('download', { timeout: 180000 });
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const download = await downloadPromise;
-  const savedPath = testInfo.outputPath('record-owned-direction.gbdraw-session.json.gz');
+  const savedPath = testInfo.outputPath('record-owned-direction.gbdraw');
   await download.saveAs(savedPath);
   const freshContext = await browser.newContext();
   const freshPage = await freshContext.newPage();
   await captureUnhandledRejections(freshPage);
   await freshPage.goto(new URL('/gbdraw/web/index.html', page.url()).href, { waitUntil: 'domcontentloaded' });
   await freshPage.waitForFunction(() => window.__GBDRAW_APP__);
-  await importSession(freshPage, readFileSync(savedPath), 'record-owned-direction.gbdraw-session.json.gz');
+  await importSession(freshPage, readFileSync(savedPath), 'record-owned-direction.gbdraw');
   const loaded = await recordState(freshPage);
   expect(loaded).toMatchObject({ plan: saved.plan, translations: saved.translations,
     orientations: saved.orientations, results: saved.results });
@@ -1894,11 +1900,11 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     await evaluateWithRetainedPromise(freshPage,()=>window.__GBDRAW_HISTORY__.undo());
     expect((await recordState(freshPage)).receipt).toEqual(saved.receipt);
   }
-  const corrupt=JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
+  const corrupt=await savedSessionOf(savedPath);
   shownSavedDrawing(corrupt).editorState.alignmentResetReceipt.binding='0'.repeat(64);
   // A receipt that no longer binds the request is dropped with a row before
   // anything changes (receipt 〔確認〕, BA-D25); Cancel keeps the restored receipt.
-  const pendingCorrupt=evaluateWithRetainedPromise(freshPage,async raw=>window.__GBDRAW_APP__.importSession({target:{files:[new File([raw],'corrupted.json')],value:'selected'}}),JSON.stringify(corrupt));
+  const pendingCorrupt=evaluateWithRetainedPromise(freshPage,async raw=>window.__GBDRAW_APP__.importSession({target:{files:[new File([Uint8Array.from(atob(raw),c=>c.charCodeAt(0))],'corrupted.gbdraw')],value:'selected'}}),(await sessionBytesOf(corrupt)).toString('base64'));
   await answerLoadRepairs(freshPage,[`Session file: the field drawings[${corrupt.drawings.indexOf(shownSavedDrawing(corrupt))}].editorState.alignmentResetReceipt could not be read and was left out.`],'cancel');
   expect((await pendingCorrupt).status).toBe('canceled');expect((await recordState(freshPage)).receipt).toEqual(saved.receipt);
   // Re-render the restored Session and compare the complete SVG tree.
@@ -2023,11 +2029,11 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
 const loadDirectionSession = async (page, testInfo, variant = []) => {
   const session = pythonFixture(testInfo, 'direction-fixture', (directory) => [
     'tests/web/helpers/alignment-direction-fixture.py', directory, ...variant
-  ], 'directions.gbdraw-session.json');
+  ], 'directions.gbdraw');
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await importSession(page, session, 'directions.json');
+  await importSession(page, session, 'directions.gbdraw');
   // The fixture has admitted source-bound groups and no comparison run is needed.
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -2150,9 +2156,9 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   await expect(combined).toHaveAccessibleDescription('Not available: the latest Align did not change any record direction.');
   await reset.getByRole('button', { name: 'Cancel', exact: true }).press('Enter');
   // A Session with an Align plan but no Reset receipt (PD-OI-028); the Gallery Session ships an empty one.
-  const historical = JSON.parse(readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json', 'utf8'));
+  const historical = await savedSessionOf('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw');
   shownSavedDrawing(historical).editorState.alignmentResetReceipt = null;
-  await importSession(page, Buffer.from(JSON.stringify(historical)), 'historical-receipt.json');
+  await importSession(page, await sessionBytesOf(historical), 'historical-receipt.gbdraw');
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
   await page.locator('.right-drawer').getByRole('button', { name: 'Similarity groups' }).click();
   await resetButton.click();
@@ -2377,10 +2383,12 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
     await page.setViewportSize({width:1600,height:1000});
     await page.goto('/gbdraw/web/index.html',{waitUntil:'domcontentloaded'});
     await page.waitForFunction(()=>window.__GBDRAW_APP__);
-    let seedPath='gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json';
+    let seedPath='gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw';
     if(entry==='multiple target ambiguity') {
       // Direct evidence comes from the committed resource; drop og_1's edges there.
       const stripped=info.outputPath('bgc-og1-without-edges.json');
+      const plain=info.outputPath('bgc-plain.json');
+      writeFileSync(plain,JSON.stringify(await savedSessionOf(seedPath)));
       execFileSync('python',['-c',[
         'import base64, json, sys', 'from dataclasses import replace',
         'from gbdraw.analysis.protein_colinearity import OrthogroupGraphResult, OrthogroupResult',
@@ -2390,10 +2398,10 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
         "drop = lambda values: {key: value for key, value in values.items() if key != 'og_1'}",
         "data = encode_canonical_typed_resource('orthogroupResult', replace(result, ortholog_edges_by_orthogroup_id=drop(result.ortholog_edges_by_orthogroup_id), path_indexes_by_orthogroup_id=drop(result.path_indexes_by_orthogroup_id)))",
         "entry.update(data=base64.b64encode(data).decode(), size=len(data))", "json.dump(session, open(sys.argv[2], 'w'))"
-      ].join('\n'),seedPath,stripped],{cwd:process.cwd(),stdio:'pipe'});
+      ].join('\n'),plain,stripped],{cwd:process.cwd(),stdio:'pipe'});
       seedPath=stripped;
     }
-    const seed=JSON.parse(readFileSync(seedPath,'utf8'));
+    const seed=seedPath.endsWith('.json')?JSON.parse(readFileSync(seedPath,'utf8')):await savedSessionOf(seedPath);
     if(entry==='multiple target ambiguity') {
       const catalog=shownSavedDrawing(seed).editorState.featureCatalog.items[0];
       const group=catalog.orthogroups.find(group=>group.id==='og_1');
@@ -2405,7 +2413,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
       }
       group.member_count=group.members.length;
     }
-    await importSession(page,Buffer.from(JSON.stringify(seed)),'s06-gallery.gbdraw-session.json');
+    await importSession(page,await sessionBytesOf(seed),'s06-gallery.gbdraw');
     await page.evaluate(async()=>{const app=window.__GBDRAW_APP__;app.openRightDrawerTab('orthogroups');app.selectedOrthogroupId='og_1';app.losatExecution.executionMode='serial';await window.Vue.nextTick()});
     const drawer=page.locator('.right-drawer');
     const reference=drawer.getByLabel('Exact reference record and feature');
@@ -2545,7 +2553,7 @@ test('@pr-smoke native Python engine error reaches Align review and retains choi
   await page.setViewportSize({width:1600,height:1000});
   await page.goto('/gbdraw/web/index.html',{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>window.__GBDRAW_APP__);
-  await importSession(page,readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'),'native-align.json');
+  await importSession(page,readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw'),'native-align.json');
   await page.evaluate(()=>{const a=window.__GBDRAW_APP__;a.openRightDrawerTab('orthogroups');a.selectedOrthogroupId='og_1';a.losatExecution.executionMode='serial';});
   const drawer=page.locator('.right-drawer');
   const key=await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1').find(o=>o.anchor.recordKey==='record-1').key);
@@ -2618,11 +2626,9 @@ test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the 
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   // Save another drawer group than the plan's group.
-  const seeded = JSON.parse(readFileSync(
-    'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json', 'utf8'
-  ));
+  const seeded = await savedSessionOf('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw');
   shownSavedDrawing(seeded).orthogroupState.selectedOrthogroupId = 'og_18';
-  await importSession(page, Buffer.from(JSON.stringify(seeded)), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await importSession(page, await sessionBytesOf(seeded), 'BGC0000708-BGC0000713.gbdraw');
   const plan = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return { reference: state.similarityAlignmentPlan.value?.reference ?? null,
@@ -2660,7 +2666,7 @@ test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the 
   await expect(page.locator('button[title="Align to the selected exact feature"]')).toBeEnabled();
 });
 
-const galleryAlignmentSession = 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json';
+const galleryAlignmentSession = 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw';
 const openPopupReview = async (page, findFeature, argument) => {
   const featureId = await page.evaluate(findFeature, argument);
   expect(featureId).toBeTruthy();
@@ -2704,7 +2710,7 @@ test('the drawer list, the docked review panel and the popup it hides follow the
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw');
   // First, while the Session is just loaded: its notice still changes the Result card's margins.
   await test.step('the drawer list scrolls to the group a new alignment plan selects (OV-1022)', async () => {
     const groupId = await page.evaluate(async () => {
@@ -2799,7 +2805,7 @@ test('the drawer list, the docked review panel and the popup it hides follow the
       await page.setViewportSize({ width, height });
       await page.evaluate(() => window.__GBDRAW_APP__.closeFeaturePopup());
       await closeEditor(page);
-      await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+      await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw');
       await closeEditor(page);
       // A phone user taps Preview to reach the figure (a Load keeps the shown pane).
       await showPhonePane(page, 'preview');
@@ -2973,7 +2979,7 @@ test('a review over a zoomed and panned view survives a mode switch, an end in C
     await page.evaluate((drawingId) => window.__GBDRAW_APP__.selectDrawing(drawingId), ids.circular);
     await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.mode.value)).toBe('circular');
     // A file Session Load with a Result fits its figure (R17-25): the view is the loaded figure's.
-    await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713-other-view.gbdraw-session.json');
+    await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713-other-view.gbdraw');
     await expect.poll(async () => (await figureFit(page)).fitted).toBe(true);
     const loaded = await previewView(page);
     await page.keyboard.press('Escape');
@@ -2985,7 +2991,6 @@ test('a review over a zoomed and panned view survives a mode switch, an end in C
   await test.step('a Session loaded under an open review keeps its own view and Editor when the review closes (A4, R17-25)', async () => {
     await page.setViewportSize({ width: 1600, height: 1000 });
     await page.evaluate(() => window.__GBDRAW_APP__.closeFeaturePopup());
-    const session = JSON.parse(readFileSync(galleryAlignmentSession, 'utf8'));
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
     await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
     const before = await previewView(page);
@@ -2993,7 +2998,7 @@ test('a review over a zoomed and panned view survives a mode switch, an end in C
     await expect.poll(async () => (await previewView(page)).zoom).toBeLessThan(before.zoom);
     // Another Session arrives. A file Session Load with a Result fits its figure (R17-25), so the
     // view is the loaded figure's fit, not the view the review holds.
-    await importSession(page, Buffer.from(JSON.stringify(session)), 'BGC0000708-BGC0000713-other-view.gbdraw-session.json');
+    await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713-other-view.gbdraw');
     await expect.poll(async () => (await figureFit(page)).fitted).toBe(true);
     const loaded = await previewView(page);
     expect(loaded).not.toEqual(before);
@@ -3004,8 +3009,7 @@ test('a review over a zoomed and panned view survives a mode switch, an end in C
     const savedView = await evaluateWithRetainedPromise(page, async () => {
       const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
       const result = await exportSession('saved after load');
-      const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-      const saved = JSON.parse(text);
+      const saved = (await (await import('./js/services/session-container.js')).readSessionContainer(result.blob)).document;
       const { zoom, canvasPan } = saved.drawings.find(({ id }) => id === saved.ui.activeDrawingId).ui;
       return { zoom, pan: canvasPan };
     });
@@ -3030,7 +3034,7 @@ test('the docked review fits the figure to the room of the Result and gives the 
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw');
   const loaded = await loadedState(page);
   const loadedPaneWidth = await page.evaluate(() => window.__GBDRAW_APP__.sidebarWidth);
   await test.step('the docked review takes the popup, the Editor and the view, and gives them back after Cancel and Apply', async () => {
@@ -3071,8 +3075,7 @@ test('the docked review fits the figure to the room of the Result and gives the 
     const savedView = await evaluateWithRetainedPromise(page, async () => {
       const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
       const result = await exportSession('saved during review');
-      const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-      const saved = JSON.parse(text);
+      const saved = (await (await import('./js/services/session-container.js')).readSessionContainer(result.blob)).document;
       const { zoom, canvasPan } = saved.drawings.find(({ id }) => id === saved.ui.activeDrawingId).ui;
       return { status: result.status, zoom, pan: canvasPan };
     });
@@ -3223,8 +3226,7 @@ test('the docked review fits the figure to the room of the Result and gives the 
     const savedView = await evaluateWithRetainedPromise(page, async () => {
       const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
       const result = await exportSession('saved after a fit to the room');
-      const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-      const saved = JSON.parse(text);
+      const saved = (await (await import('./js/services/session-container.js')).readSessionContainer(result.blob)).document;
       const { zoom, canvasPan } = saved.drawings.find(({ id }) => id === saved.ui.activeDrawingId).ui;
       return { zoom, pan: canvasPan };
     });
@@ -3279,7 +3281,7 @@ const openReviewOverOwnView = async (page, { withCircular = false } = {}) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw');
   const ids = {};
   if (withCircular) {
     ids.circular = await newDrawingFromMenu(page, 'circular');
@@ -3338,7 +3340,7 @@ test('live settings before and under an open review are drawn by Apply and keep 
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw');
   const loaded = await recordOrientations(page);
   const loadedAlignment = await loadedPlan(page);
   // OV-1083: a live color changed before the review is drawn by Apply too.
@@ -3545,8 +3547,8 @@ test('majanivirus reviews order the records that need a choice and draw genes in
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await importSession(page, readFileSync('gbdraw/web/gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz'),
-    'majanivirus_orthogroup.gbdraw-session.json.gz');
+  await importSession(page, readFileSync('gbdraw/web/gallery/sessions/majanivirus_orthogroup.gbdraw'),
+    'majanivirus_orthogroup.gbdraw');
   // The majanivirus og_13 review opens with records that need a choice.
   await test.step('records that need a choice come first; a ring or a row chooses, and the chosen box is on the line', async () => {
     const { dialog } = await openPopupReview(page, (groupId) => window.__GBDRAW_APP__.extractedFeatures

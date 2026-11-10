@@ -1,15 +1,15 @@
 const { test, expect } = require('@playwright/test');
-const { readFileSync, writeFileSync } = require('node:fs');
+const { writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
-const { gunzipSync } = require('node:zlib');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { ringSessionUpload } = require('./helpers/ring-session.cjs');
 
-const seed = resolve('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
+const seed = resolve('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw');
 const conservationSession = ringSessionUpload();
-const sessionInput = 'input[type="file"][accept^=".json,"]';
+const sessionInput = 'input[type="file"][accept*=".gbdraw"]';
 
 const preparePage = async (page) => {
   await page.addInitScript(() => {
@@ -124,9 +124,9 @@ for (const inputMethod of ['keyboard', 'pointer']) {
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Save Session', exact: true }).click();
     const download = await downloadPromise;
-    const savedPath = testInfo.outputPath('restored.gbdraw-session.json.gz');
+    const savedPath = testInfo.outputPath('restored.gbdraw');
     await download.saveAs(savedPath);
-    const saved = JSON.parse(gunzipSync(readFileSync(savedPath)));
+    const saved = await readSessionFile(savedPath);
     expect(shownSavedDrawing(saved).config.form.labels_mode).toBe('out');
     expect(await generate(page)).toBe(originalSvg);
 
@@ -653,9 +653,9 @@ test('Reset Settings after a LOSAT ring search keeps the ring rows with their fi
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save Session', exact: true }).click();
-  const savedPath = testInfo.outputPath('rings-off.gbdraw-session.json.gz');
+  const savedPath = testInfo.outputPath('rings-off.gbdraw');
   await (await downloadPromise).saveAs(savedPath);
-  expect(shownSavedDrawing(JSON.parse(gunzipSync(readFileSync(savedPath)))).config.circularConservation.enabled).toBe(false);
+  expect(shownSavedDrawing(await readSessionFile(savedPath)).config.circularConservation.enabled).toBe(false);
   const reopened = await page.context().newPage();
   await preparePage(reopened);
   await loadSession(reopened, savedPath);

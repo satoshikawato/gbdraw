@@ -107,7 +107,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "session": "./sessions/tobacco-chloroplast.gbdraw",
             "replayThrough": 2,
             "selector": ".card[data-settings-section='input-genomes']",
             "cropPadding": 14,
@@ -158,7 +158,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "session": "./sessions/tobacco-chloroplast.gbdraw",
             "replayThrough": 3,
             "viewport": {
               "width": 1400,
@@ -342,7 +342,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "session": "./sessions/tobacco-chloroplast.gbdraw",
             "replayThrough": 4,
             "actions": [
               {
@@ -376,7 +376,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "session": "./sessions/tobacco-chloroplast.gbdraw",
             "replayThrough": 4,
             "viewport": {
               "width": 1400,
@@ -488,7 +488,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "session": "./sessions/tobacco-chloroplast.gbdraw",
             "replayThrough": 5,
             "viewport": {
               "width": 1400,
@@ -702,7 +702,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "session": "./sessions/tobacco-chloroplast.gbdraw",
             "selector": "[data-capture='annotation-set-plastome_regions']",
             "clipSelectors": [
               "[data-setting='region-annotations'] > details > summary",
@@ -776,7 +776,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "session": "./sessions/tobacco-chloroplast.gbdraw",
             "assertAppState": {
               "mode": "circular",
               "adv.circular_track_slots_enabled": true,
@@ -844,7 +844,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "session": "./sessions/tobacco-chloroplast.gbdraw",
             "replayThrough": 6,
             "viewport": {
               "width": 1400,
@@ -926,7 +926,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "session": "./sessions/tobacco-chloroplast.gbdraw",
             "assertAppState": {
               "mode": "circular",
               "adv.circular_track_slots_enabled": true,
@@ -993,7 +993,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "session": "./sessions/tobacco-chloroplast.gbdraw",
             "replayThrough": 7,
             "viewport": {
               "width": 1400,
@@ -1165,7 +1165,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "session": "./sessions/tobacco-chloroplast.gbdraw",
             "replayThrough": 8,
             "openDetails": [
               "Layout"
@@ -1206,7 +1206,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "session": "./sessions/tobacco-chloroplast.gbdraw",
             "replayThrough": 8,
             "viewport": {
               "width": 1400,

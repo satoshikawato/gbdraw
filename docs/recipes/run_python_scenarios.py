@@ -4,10 +4,10 @@
 from __future__ import annotations
 
 import argparse
-import gzip
 import io
 import json
 import os
+import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -362,6 +362,18 @@ def _validate_migrated_tutorial(
             raise RecipeContractError("T-PY-07 changed its Collinear match set.")
 
 
+def _read_session_container(path: Path) -> dict:
+    """The document of a Session file: a ZIP whose first entry is ``gbdraw-session.json``."""
+
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+        if not names or names[0] != "gbdraw-session.json":
+            raise RecipeContractError(
+                f"{path.name} is not a Session container (first entry {names[:1]})."
+            )
+        return json.loads(archive.read("gbdraw-session.json").decode("utf-8"))
+
+
 def _validate_interactive_handoff_tutorial(
     chapter: dict[str, object],
     *,
@@ -425,12 +437,7 @@ def _validate_interactive_handoff_tutorial(
     ):
         raise RecipeContractError("T-PY-08 interactive metadata changed.")
 
-    with gzip.open(
-        outputs["interactive_handoff.gbdraw-session.json.gz"],
-        "rt",
-        encoding="utf-8",
-    ) as handle:
-        session = json.load(handle)
+    session = _read_session_container(outputs["interactive_handoff.gbdraw"])
     if (
         session.get("format") != "gbdraw-session"
         or session.get("version") != CURRENT_SESSION_VERSION
@@ -1125,7 +1132,7 @@ def _validate_typed_request_session_howto(
     outputs: dict[str, Path],
 ) -> None:
     svg_output = outputs["typed_request.svg"]
-    session_output = outputs["typed_request.session.json"]
+    session_output = outputs["typed_request.gbdraw"]
     if not isinstance(namespace.get("request"), CircularDiagramRequest):
         raise RecipeContractError("H-PY-05 did not build a Circular request.")
     plan = namespace.get("plan")
@@ -1165,7 +1172,7 @@ def _validate_typed_request_session_howto(
         raise RecipeContractError("H-PY-05 retained expired session resources.")
     if namespace.get("replay_output_removed") is not True:
         raise RecipeContractError("H-PY-05 left its replay scratch output behind.")
-    payload = json.loads(session_output.read_text(encoding="utf-8"))
+    payload = _read_session_container(session_output)
     if (
         payload.get("format") != "gbdraw-session"
         or payload.get("version") != CURRENT_SESSION_VERSION

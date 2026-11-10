@@ -4,7 +4,8 @@
 // live values and commits them only when it succeeds and the committed
 // Session has not changed since it started. Controls are selected by CSS.
 const { test, expect } = require('@playwright/test');
-const { readFileSync, writeFileSync } = require('node:fs');
+const { readFileSync } = require('node:fs');
+const { writeGallerySessionFile } = require('./helpers/session-file.cjs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, reveal, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { load } = require('./helpers/mode-transition.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
@@ -13,10 +14,10 @@ const { clocksIn, clockNotes } = require('./helpers/timing-notes.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot } = require('./helpers/live-generate-parity.cjs');
 const { open, addColorRule, addVisibilityRule } = require('./helpers/live-generate-parity-steps.cjs');
 
-const TOBACCO = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json';
-const HEPA = 'gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz';
-const LAMBDA = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json';
-const HMMT_AT_SKEW = 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json';
+const TOBACCO = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw';
+const HEPA = 'gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw';
+const LAMBDA = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw';
+const HMMT_AT_SKEW = 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw';
 const LEGEND_FONT = 'input[aria-label="Legend font size"]';
 const PLOT_TITLE = 'input[aria-label="Plot Title"]';
 const LEGEND_FONT_OVERRIDE = 'objects.legends.font_size.short';
@@ -293,7 +294,7 @@ test('tobacco: Legend font size, Legend position, Plot Title and History changes
       await appliedLegendFont(page, size);
       await removeGate(page);
       const applied = await facts(page);
-      const file = testInfo.outputPath('g1-live.gbdraw-session.json');
+      const file = testInfo.outputPath('g1-live.gbdraw');
       const pending = page.waitForEvent('download');
       await save.click();
       const large = page.locator('[data-choice-prompt] [data-choice-prompt-action="download"]');
@@ -320,10 +321,9 @@ test('tobacco: Legend font size, Legend position, Plot Title and History changes
 // case removes them.
 test('tobacco: a loaded Session applies a Legend font size with no Generate', async ({ browser }, testInfo) => {
   test.setTimeout(600_000);
-  const session = JSON.parse(readFileSync(TOBACCO, 'utf8'));
-  delete shownSavedDrawing(session).renderRequest.diagramOptions.configOverrides;
-  const file = testInfo.outputPath('no-overrides.gbdraw-session.json');
-  writeFileSync(file, JSON.stringify(session));
+  const file = await writeGallerySessionFile('tobacco-chloroplast', testInfo.outputPath('no-overrides.gbdraw'), (session) => {
+    delete shownSavedDrawing(session).renderRequest.diagramOptions.configOverrides;
+  });
   const page = await load(browser, file);
   try {
     await settleLive(page);
@@ -953,13 +953,12 @@ test('a Load after a canceled apply applies none of the loaded draft', async ({ 
     expect(canceled.diagramOptions, 'the canceled apply committed nothing').toBe(generated.diagramOptions);
     // The Gallery Session with a draft Legend font size its Result does not
     // draw (and the config overrides object a Generate writes).
-    const session = JSON.parse(readFileSync(TOBACCO, 'utf8'));
-    const drawing = shownSavedDrawing(session);
-    drawing.config.adv.legend_font_size = size + 7;
-    drawing.renderRequest.diagramOptions.configOverrides = {};
-    const file = testInfo.outputPath('pending-legend.gbdraw-session.json');
-    writeFileSync(file, JSON.stringify(session));
-    await page.locator('input[accept^=".json,"]').setInputFiles(file);
+    const file = await writeGallerySessionFile('tobacco-chloroplast', testInfo.outputPath('pending-legend.gbdraw'), (session) => {
+      const drawing = shownSavedDrawing(session);
+      drawing.config.adv.legend_font_size = size + 7;
+      drawing.renderRequest.diagramOptions.configOverrides = {};
+    });
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
     await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
       && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180_000 }).toBe(true);
     await settleLive(page);

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { readFile } from 'node:fs/promises';
+import { readSavedSession } from './helpers/session-documents.mjs';
 
 globalThis.window = { Vue: {
   ref: value => ({ value }), reactive: value => value,
@@ -16,9 +17,9 @@ const { createInputFileStore } = await import('../../gbdraw/web/js/services/hist
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
 
 const empty = canonicalRenderArtifactOwner.capture();
-const saved = JSON.parse(await readFile(
-  'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', 'utf8'
-));
+const saved = await readSavedSession(new Blob([await readFile(
+  'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw'
+)]));
 const canonical = savedDrawingView(saved, saved.ui.activeDrawingId);
 // D-15-124: the conservation hash pairs a request names travel with it.
 const pairsA = new Set(['["a","b"]']);

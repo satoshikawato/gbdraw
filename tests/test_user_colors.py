@@ -31,6 +31,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io import colors as color_io
 from gbdraw.io.colors import is_user_color, load_default_colors, resolve_color_to_hex
 from gbdraw.session import load_session_document, materialize_session, session_to_request
+from tests.utils.session_files import read_session_payload
 
 REPO = Path(__file__).resolve().parents[1]
 EXAMPLES = REPO / "examples"
@@ -529,16 +530,14 @@ def test_a_cli_session_stores_only_the_default_colors_rows_the_user_gave(tmp_pat
     # OV-3302: the CLI saved its Default colors table resolved over the palette,
     # so every palette row became a row of the Session's table and a later
     # palette change never reached the Session. It stores the user's rows.
-    import base64
-
     from tests.utils.session_drawing_view import session_view
 
     _run_cli(
         "circular", "--gbk", str(REPO / "tests" / "test_inputs" / "HmmtDNA.gbk"),
         "-d", _tsv(tmp_path, "colors.tsv", "CDS\t#123456\n"),
-        "-o", str(tmp_path / "out"), "-f", "svg", "--session_output", str(tmp_path / "out.gbdraw-session.json"),
+        "-o", str(tmp_path / "out"), "-f", "svg", "--session_output", str(tmp_path / "out.gbdraw"),
     )
-    session = session_view(json.loads((tmp_path / "out.gbdraw-session.json").read_text(encoding="utf-8")))
+    session = session_view(read_session_payload(tmp_path / "out.gbdraw"))
     colors = session["renderRequest"]["diagramOptions"]["colors"]
     # A file: its rows apply over the palette; a canonical table would be complete.
     assert colors["defaultColors"] is None
@@ -554,7 +553,7 @@ def test_a_gallery_session_stores_no_palette_row_in_its_default_colors(session_p
     # over the palette, so the palette's rows read as user colors and a later
     # palette change never reached the Session. A stored table holds only the
     # rows that differ from its palette.
-    document = load_session_document(session_path).to_dict()
+    document = read_session_payload(session_path)
     for drawing in document["drawings"]:
         colors = drawing["renderRequest"]["diagramOptions"]["colors"]
         ref = colors.get("defaultColorsFile") or colors.get("defaultColors")

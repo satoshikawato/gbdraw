@@ -9,6 +9,7 @@ import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { evaluatePython } from './helpers/python-evaluator.mjs';
+import { readSavedSession } from './helpers/session-documents.mjs';
 
 const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-run-info-'));
@@ -195,13 +196,12 @@ assert.equal(quoteShellArg(''), "''");
 let circularGallerySession = null;
 let linearGallerySession = null;
 for (const { fixture, mode } of [
-  { fixture: 'HmmtDNA_ATskew.gbdraw-session.json', mode: 'circular' },
-  { fixture: 'lambda_basic_linear.gbdraw-session.json', mode: 'linear' }
+  { fixture: 'HmmtDNA_ATskew.gbdraw', mode: 'circular' },
+  { fixture: 'lambda_basic_linear.gbdraw', mode: 'linear' }
 ]) {
-  const saved = JSON.parse(await readFile(
-    join(repoRoot, 'gbdraw', 'web', 'gallery', 'sessions', fixture),
-    'utf8'
-  ));
+  const saved = await readSavedSession(new Blob([await readFile(
+    join(repoRoot, 'gbdraw', 'web', 'gallery', 'sessions', fixture)
+  )]));
   const session = savedDrawingView(saved, saved.ui.activeDrawingId);
   if (mode === 'circular') circularGallerySession = session;
   else linearGallerySession = session;
@@ -1166,7 +1166,7 @@ test('a one-record Circular batch, as the CLI writes it, has the Source recipe o
   assert.equal(info.reproducibility.level, 'requires-helper-files');
   assert.equal(reproducibilityLabel(info.reproducibility.level), 'Source recipe needs helper files');
   assert.match(info.reproducibility.notes.join('\n'), /combined_d\.tsv/);
-  assert.match(info.reproducibility.notes.join('\n'), /\.gbdraw-session\.json/);
+  assert.match(info.reproducibility.notes.join('\n'), /a \.gbdraw file/);
   assert.equal(info.invocation.sessionExportable, false);
 }
 
@@ -1245,7 +1245,7 @@ test('a one-record Circular batch, as the CLI writes it, has the Source recipe o
   assert.equal(info.reproducibility.level, 'session-recommended');
   assert.equal(reproducibilityLabel(info.reproducibility.level), 'Source recipe needs helper files');
   assert.match(info.reproducibility.notes.join('\n'), /Download reproducibility files/);
-  assert.match(info.reproducibility.notes.join('\n'), /session restore/);
+  assert.match(info.reproducibility.notes.join('\n'), /save the Session \(a \.gbdraw file\) and load it again/);
   assert.equal(info.sessionCommand, '');
   assert.equal(info.invocation.sessionExportable, false);
 }

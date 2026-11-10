@@ -19,7 +19,6 @@ from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import compute_feature_hash_from_parts
 from gbdraw.render.export import convert_svg_with_cairosvg, get_cairosvg
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
-from gbdraw.session_io import load_session, write_session_json
 from gbdraw.web_support.feature_catalog import (
     ANCHOR_FEATURE_CATALOG_SCHEMA,
     FEATURE_CATALOG_SCHEMA,
@@ -44,10 +43,6 @@ EXAMPLE_ROOT = GALLERY_ROOT / "examples"
 SESSION_ROOT = GALLERY_ROOT / "sessions"
 SOURCE_ROOT = GALLERY_ROOT / "sources"
 THUMBNAIL_ROOT = GALLERY_ROOT / "thumbnails"
-GZIP_SESSION_SOURCE_NOTE = (
-    "The complete gzip-compressed Session JSON and generated SVG output are stored "
-    "with the gallery assets."
-)
 INTERACTIVE_SVG_HARD_LIMIT = 41_943_040
 DECODED_METADATA_HARD_LIMIT = 200_000_000
 DECODED_METADATA_REGRESSION_CEILING = 220_000_000
@@ -73,9 +68,8 @@ class GallerySessionExample:
     sync_result_svg: bool = True
     interactive_svg: bool = True
     compressed_metadata: bool = False
-    compressed_session: bool = False
     interactive_step: str = ""
-    source_note: str = "Session JSON and generated SVG output are stored with the gallery assets."
+    source_note: str = "The Session file and generated SVG output are stored with the gallery assets."
     command: str = ""
     # Refresh builds the Session from ``command`` and its declared inputs
     # instead of replaying the stored Session. The command runs in
@@ -86,8 +80,7 @@ class GallerySessionExample:
 
     @property
     def session_path(self) -> Path:
-        suffix = ".gbdraw-session.json.gz" if self.compressed_session else ".gbdraw-session.json"
-        return SESSION_ROOT / f"{self.id}{suffix}"
+        return SESSION_ROOT / f"{self.id}.gbdraw"
 
     @property
     def command_cwd(self) -> Path:
@@ -370,8 +363,6 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command_kind="runnable",
         command_note="Download AP027133.gb and the depth table from Files, then run this command in the same directory.",
         command=HEPATOPLASMA_SCABRUM_DEPTH_COMMAND,
-        compressed_session=True,
-        source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
     GallerySessionExample(
         id="ecoli_o157_sakai_rings",
@@ -396,10 +387,9 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command=ECOLI_O157_SAKAI_RINGS_COMMAND,
         # The feature popups of a 5.5-Mbp chromosome hold about 37 MB of metadata.
         compressed_metadata=True,
-        compressed_session=True,
         source_note=(
-            "The interactive SVG with gzip-compressed metadata and the complete gzip-compressed "
-            "Session JSON are stored with the gallery assets."
+            "The interactive SVG with gzip-compressed metadata and the complete Session file "
+            "are stored with the gallery assets."
         ),
     ),
     GallerySessionExample(
@@ -422,8 +412,6 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command=VNIG_COMMAND,
         session_from_command=True,
         command_dir="tests/test_inputs",
-        compressed_session=True,
-        source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
     GallerySessionExample(
         id="hepatoplasmataceae_collinear",
@@ -442,8 +430,6 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command_kind="runnable",
         command_note="Download the five accession-pinned GenBank inputs from Files. The command runs LOSATP locally.",
         command=HEPATOPLASMATACEAE_COLLINEAR_COMMAND,
-        compressed_session=True,
-        source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
     GallerySessionExample(
         id="vibrio-harveyi-group-collinear",
@@ -472,10 +458,9 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
             "GCF_000354175.2_ASM35417v2_genomic.gbff",
         ),
         compressed_metadata=True,
-        compressed_session=True,
         source_note=(
-            "The interactive SVG with gzip-compressed metadata, complete gzip-compressed "
-            "Session JSON, and uncompressed source figure are stored with the gallery assets."
+            "The interactive SVG with gzip-compressed metadata, complete Session file, "
+            "and uncompressed source figure are stored with the gallery assets."
         ),
     ),
     GallerySessionExample(
@@ -495,8 +480,6 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         display_order=70,
         command_kind="runnable",
         command_note="Download the five accession-pinned GenBank inputs from Files. The CLI value remains orthogroup for compatibility.",
-        compressed_session=True,
-        source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
     GallerySessionExample(
         id="BGC0000708-BGC0000713",
@@ -541,8 +524,6 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command_kind="runnable",
         command_note="Download the nine accession-pinned records and both repository-managed color tables from Files.",
         command=MAJANIVIRUS_COMMAND,
-        compressed_session=True,
-        source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
 )
 
@@ -554,9 +535,9 @@ def _format_size(num_bytes: int) -> str:
 
 
 def _load_session(example: GallerySessionExample) -> dict[str, Any]:
-    from tools.refresh_gallery_sessions import _gallery_view
+    from tools.refresh_gallery_sessions import _gallery_view, _read_session_file
 
-    session = load_session(example.session_path)
+    session = _read_session_file(example.session_path)
     if not isinstance(session, dict):
         raise ValueError(f"{example.session_path} did not contain a JSON object.")
     return _gallery_view(session)[0]
@@ -602,7 +583,7 @@ def _session_command(session: dict[str, Any]) -> str:
     raw_args = _session_raw_args(session)
     if raw_args:
         return shlex.join(["gbdraw", mode, *raw_args])
-    return shlex.join(["gbdraw", mode, "--session", "session.gbdraw-session.json"])
+    return shlex.join(["gbdraw", mode, "--session", "session.gbdraw"])
 
 
 # Settings a Web-saved Session stores as configuration overrides (key, with the Session's mode) and the CLI
@@ -1632,10 +1613,15 @@ def _sync_session_result_svg(
                 item["resultName"] = example.id
                 changed = True
     if changed:
-        from tools.refresh_gallery_sessions import _gallery_document, _gallery_view
+        from tools.refresh_gallery_sessions import (
+            _gallery_document,
+            _gallery_view,
+            _read_session_file,
+            _write_session_file,
+        )
 
-        document = load_session(example.session_path)
-        write_session_json(
+        document = _read_session_file(example.session_path)
+        _write_session_file(
             example.session_path,
             _gallery_document(document, session, _gallery_view(document)[1]),
         )

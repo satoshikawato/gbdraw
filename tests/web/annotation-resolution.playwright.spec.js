@@ -1,10 +1,10 @@
 const { test, expect } = require('@playwright/test');
 const { readFile, writeFile } = require('node:fs/promises');
-const { gunzipSync } = require('node:zlib');
 const { join } = require('node:path');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { openApp, generateAndWaitForResult, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 const panel = (page) => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
 const artifact = (page) => page.evaluate(async () => {
@@ -24,8 +24,8 @@ for (const width of [1440, 390]) {
     page.on('console', (message) => consoleText.push(message.text()));
     page.on('dialog', (dialog) => dialog.accept());
     await openApp(page);
-    await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
-      .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));
+    await page.locator('input[type=file][accept*=".gbdraw"]')
+      .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw'));
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     await generateAndWaitForResult(page);
     const control = await artifact(page);
@@ -116,9 +116,9 @@ for (const width of [1440, 390]) {
     expect(await readFile(tsvPath, 'utf8')).toContain('PRIVATE-MISSING');
     const pendingSession = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Save Session', exact: true }).click();
-    const sessionPath = testInfo.outputPath('selectors.gbdraw-session.json.gz');
+    const sessionPath = testInfo.outputPath('selectors.gbdraw');
     await (await pendingSession).saveAs(sessionPath);
-    const session = JSON.parse(gunzipSync(await readFile(sessionPath)));
+    const session = await readSessionFile(sessionPath);
     expect(shownSavedDrawing(session).runMetadata.annotationWarnings).toEqual(all.warnings);
     expect(shownSavedDrawing(session).config.annotationSets.map((set) => set.annotations.length)).toEqual(tables.setCounts);
     const context = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: { width, height: 960 } });
@@ -126,7 +126,7 @@ for (const width of [1440, 390]) {
       const fresh = await context.newPage();
       fresh.on('dialog', (dialog) => dialog.accept());
       await openApp(fresh);
-      await fresh.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]').setInputFiles(sessionPath);
+      await fresh.locator('input[type=file][accept*=".gbdraw"]').setInputFiles(sessionPath);
       await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
       expect(await artifact(fresh)).toEqual(all);
       expect((await getDiagramWorkerActivity(fresh)).instances.flatMap((instance) => instance.runs)).toEqual([]);

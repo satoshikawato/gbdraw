@@ -16,6 +16,7 @@ import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { readSavedSession, sessionFileOf } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -136,8 +137,8 @@ test('a stored record ID that no record or several records hold, or whose file c
 
 // The Load itself: a Session 51 a Python writer could write (no Web draft), whose Linear record is stored as the
 // record ID `#2` in a file that holds records named `first`, `second`, `#2`, `#+2`.
-const pythonWrittenSession = (recordId) => {
-  const session = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', import.meta.url), 'utf8'));
+const pythonWrittenSession = async (recordId) => {
+  const session = await readSavedSession(new Blob([readFileSync(new URL('../../gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw', import.meta.url))]));
   session.resources['record-1-genbank'] = descriptor(genbank, 'record-1-genbank-named.gb');
   const [drawing] = session.drawings;
   for (const field of ['config', 'editorState', 'ui', 'webFiles', 'results', 'features', 'orthogroupState']) delete drawing[field];
@@ -149,18 +150,19 @@ const load = async (session) => {
   const repairs = [];
   metrics.length = 0;
   const loaded = await importSession(
-    { target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' } },
+    // A Session 51 is a .gbdraw file; an older Session is its JSON (`sessionFileOf`).
+    { target: { files: [new File([await sessionFileOf(session)], 'session')], value: 'selected' } },
     { transformLegacyResultSvg, confirmLoadRepairs: async (dialog) => { repairs.push(...dialog.items); return true; } });
   assert.ok(['ok', 'legacy'].includes(loaded.status), JSON.stringify(loaded.error));
   return { card: modeDrawing(state, 'linear').linearSeqs[0].region_record_id, decodes: decodes(), repairs };
 };
 
 test('Load of a Session gives the card the place of its stored record ID and decodes the file once', async () => {
-  const plain = await load(pythonWrittenSession('first'));
+  const plain = await load(await pythonWrittenSession('first'));
   assert.equal(plain.card, 'first');
-  const named = await load(pythonWrittenSession('#2'));
+  const named = await load(await pythonWrittenSession('#2'));
   assert.deepEqual(named, { card: '#3', decodes: plain.decodes, repairs: plain.repairs });
-  const missing = await load(pythonWrittenSession('#9'));
+  const missing = await load(await pythonWrittenSession('#9'));
   assert.equal(missing.card, '#9');
   assert.ok(missing.repairs.some((item) => item.includes('"#9"') && item.includes('reads like a record number')), JSON.stringify(missing.repairs));
 });

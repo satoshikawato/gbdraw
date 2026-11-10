@@ -258,7 +258,7 @@ def test_current_gallery_render_save_replay_do_not_enumerate(name, tmp_path):
     _, stages = runner.build_case(ROOT, pc, cc, name, runner.SEED)
     result = stages["post_search"]()
     gallery = runner.GALLERIES[0 if name == "gallery-collinear" else 1]
-    document = load_session_document(ROOT / f'gbdraw/web/gallery/sessions/{gallery}.gbdraw-session.json.gz')
+    document = load_session_document(ROOT / f'gbdraw/web/gallery/sessions/{gallery}.gbdraw')
     with materialize_session(document, output_directory=tmp_path) as materialized:
         request = session_to_request(materialized)
         options = replace(request.options, orthogroups=result.orthogroups,
@@ -267,7 +267,7 @@ def test_current_gallery_render_save_replay_do_not_enumerate(name, tmp_path):
         with patch.object(OrthologPathCollection, 'iter_paths', side_effect=AssertionError('enumerated')), \
              patch.object(OrthologPathCollection, '_path', side_effect=AssertionError('path object')), \
              patch.object(pc, 'materialize_ortholog_paths', side_effect=AssertionError('materialized')):
-            saved = tmp_path / 'compact-session.json'
+            saved = tmp_path / 'compact-session.gbdraw'
             save_session_document(saved, request)
             with materialize_session(load_session_document(saved), output_directory=tmp_path / 'replay') as replay:
                 decoded = session_to_request(replay)

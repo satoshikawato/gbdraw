@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from gbdraw.exceptions import ValidationError
-from gbdraw.session import SessionDocument
+from tests.utils.session_files import load_session_mapping
 from gbdraw.session_drawings import (
     _identity_problem,
     allocate_drawing_id,
@@ -130,7 +130,7 @@ def _circular_cards(document: dict[str, object]) -> list[dict[str, object]]:
 @pytest.mark.parametrize("case", VECTORS["upgrades"], ids=lambda case: str(case["name"]))
 def test_session_46_to_50_moves_to_the_vector_drawings(case: dict[str, object]) -> None:
     document, facts = drawings_document_from_mode_scoped(_vector_input(case))
-    SessionDocument(document)
+    load_session_mapping(document)
     assert [
         {"id": drawing["id"], "mode": drawing["mode"], "keys": sorted(drawing)}
         for drawing in document["drawings"]
@@ -153,7 +153,7 @@ def _slices(data: dict[str, object]) -> dict[str, dict[str, object]]:
 
 def _ids(data: dict[str, object]) -> list[str]:
     document, _facts = drawings_document_from_mode_scoped(data)
-    SessionDocument(document)
+    load_session_mapping(document)
     return [drawing["id"] for drawing in document["drawings"]]
 
 
@@ -255,7 +255,7 @@ def test_a_shown_mode_without_a_result_opens_the_other_modes_result_first() -> N
     data = _load(FIXTURES / "legend-renamed-rows.v46.gbdraw-session.json.gz")
     data["ui"]["mode"] = "linear"
     document, _facts = drawings_document_from_mode_scoped(data)
-    SessionDocument(document)
+    load_session_mapping(document)
     assert [(drawing["id"], drawing["renderRequest"] is None) for drawing in document["drawings"]] == [
         ("circular", False),
         ("linear", True),

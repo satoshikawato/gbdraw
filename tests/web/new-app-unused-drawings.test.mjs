@@ -9,6 +9,7 @@ import { gunzipSync } from 'node:zlib';
 import test from 'node:test';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { readFileSync } from 'node:fs';
+import { readSavedSession } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -42,6 +43,6 @@ test("a new app's untouched Circular drawing is not saved", async () => {
   state.activeDrawing().form.plot_title = 'Linear only';
   const result = await exportSession('ov-1901', { shownDrawing: state.activeDrawing });
   assert.equal(result.status, 'saved', result.error?.message);
-  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const saved = await readSavedSession(result.blob);
   assert.deepEqual(saved.drawings.map((entry) => entry.id), ['linear']);
 });

@@ -17,12 +17,13 @@ import { sessionResourceReadOwner } from './session-resource-backing.js';
 import { isRecordMajorDepthFileMatrix } from './depth-track-state.js';
 import {
   bytesToText,
-  cloneFileBytesForTransfer,
   getSessionResourceSource,
+  helperInputFile,
   holdReadBytes,
   readFileBytes
 } from './file-content-cache.js';
 
+import { isInputExpansionRefusal } from './session-resource-backing.js';
 /** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 /** @import { GenerationPayload } from './diagram-generation.js' */
 /** @import { CanonicalRecord } from '../contracts/request.generated.js' */
@@ -93,7 +94,7 @@ import {
  * }} SequenceRecord
  */
 
-/** @typedef {{ role: string, bytes: ArrayBuffer }} HelperFile */
+/** @typedef {{ role: string, name?: string, bytes: ArrayBuffer }} HelperFile A file a Worker helper reads, by role; `name` is the chosen file's (`helperInputFile`). */
 
 /**
  * The Worker helper call: `runDiagramHelperOperation` answers it.
@@ -716,6 +717,13 @@ const readFastPathText = async (file) => {
   return browserReaderText(await readFileBytes(file));
 };
 
+// A browser read that fails declines to the Worker, except the gzip cap refusal, which Python gives too (R4).
+/** @param {unknown} error @returns {null} */
+const declineUnlessRefused = (error) => {
+  if (isInputExpansionRefusal(error)) throw error;
+  return null;
+};
+
 // The fast path returns exactly the records the loader reads, or declines.
 /**
  * @param {FileLike[]} files
@@ -726,8 +734,8 @@ const fastPathRecords = async (files, parse) => {
   try {
     const texts = await Promise.all(files.map(readFastPathText));
     return texts.every((text) => typeof text === 'string') ? parse(...texts) : null;
-  } catch {
-    return null;
+  } catch (error) {
+    return declineUnlessRefused(error);
   }
 };
 
@@ -913,10 +921,10 @@ const allSequenceRecordsFromReply = (payload) => {
 export const readAllSequenceRecords = (file, fmt, runHelperOperation = runDiagramHelperOperation) => (
   readOncePerFile([file], `all-sequence-records:${fmt}`, async () => {
     // A browser read that throws (a LOCUS line it cannot read exactly) declines to the Worker too (R4).
-    const { records } = await readParsedSequenceRecords(file, fmt).catch(() => ({ records: null }));
+    const { records } = await readParsedSequenceRecords(file, fmt).catch((error) => ({ records: declineUnlessRefused(error) }));
     if (records && await fastPathRecords([file], (text) => parseSequenceRecordText(text, fmt))) return records;
     const { result } = await runHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_ALL_SEQUENCE_RECORDS, {
-      format: fmt, files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }]
+      format: fmt, files: [await helperInputFile('source', file)]
     });
     return allSequenceRecordsFromReply(result);
   })
@@ -945,7 +953,7 @@ export const discoverSequenceRecords = async ({
       DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS,
       {
         format,
-        files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }]
+        files: [await helperInputFile('source', file)]
       }
     );
     return normalizeSequenceRecords(response.result);
@@ -998,7 +1006,7 @@ export const readComparisonSequence = ({
 }) => readOncePerFile(files, 'comparison-sequence', async () => {
   const { result } = await runHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE,
-    { files: await Promise.all(files.map(async (file) => ({ role: 'source', bytes: await cloneFileBytesForTransfer(file) }))) }
+    { files: await Promise.all(files.map((file) => helperInputFile('source', file))) }
   );
   if (result && 'error' in result) throw result.error;
   if (!isComparisonSequenceReply(result, files.length)) {
@@ -1110,8 +1118,8 @@ export const discoverGffFastaRecords = async ({
       DIAGRAM_HELPER_OPERATIONS.LIST_GFF_FASTA_RECORDS,
       {
         files: [
-          { role: 'gff', bytes: await cloneFileBytesForTransfer(gffFile) },
-          { role: 'fasta', bytes: await cloneFileBytesForTransfer(fastaFile) }
+          await helperInputFile('gff', gffFile),
+          await helperInputFile('fasta', fastaFile)
         ]
       }
     );
@@ -1129,7 +1137,7 @@ export const discoverFastaInputRecords = async ({ file, runHelperOperation = run
   if (!file) throw new Error('A FASTA file is required.');
   return copiedRecords(readOncePerFile([file], 'records:fasta-input', async () => {
     const response = await runHelperOperation(DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS, {
-      format: 'fasta', files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }]
+      format: 'fasta', files: [await helperInputFile('source', file)]
     });
     return normalizeSequenceRecords(response.result);
   }));

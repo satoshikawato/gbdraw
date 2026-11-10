@@ -33,10 +33,11 @@ const boundState = (source, store = createInputFileStore()) => {
 const { buildSessionDrawingResources, buildSessionResources: buildUnencodedSessionResources } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-resources.js'))
 );
-const { encodeSessionResources } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'services', 'session-file.js'))
-);
-// Save allocates the resource table, then the Session file writer encodes it.
+const { writtenResourcesWith } = await import('./helpers/written-resources.mjs');
+const encodeSessionResources = writtenResourcesWith(await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'session-resource-backing.js'))
+));
+// Save allocates the resource table, then the Session file writer writes each resource's bytes (read here as base64).
 const buildSessionResources = async (...args) => {
   const built = await buildUnencodedSessionResources(...args);
   return { ...built, resources: await encodeSessionResources(built.resources) };
@@ -53,10 +54,16 @@ const activeFile = makeFile(activeText, 'circular-display.gb', {
   lastModified: 101
 });
 let activeReads = 0;
+let activeStreams = 0;
 const originalArrayBuffer = activeFile.arrayBuffer.bind(activeFile);
 activeFile.arrayBuffer = async () => {
   activeReads += 1;
   return originalArrayBuffer();
+};
+const originalStream = activeFile.stream.bind(activeFile);
+activeFile.stream = () => {
+  activeStreams += 1;
+  return originalStream();
 };
 const separatelyConstructedDuplicate = makeFile(
   activeText,
@@ -222,7 +229,8 @@ const built = await buildSessionResources(state, committed, bindingDrawings(stat
 releaseSaveReads();
 const bindings = built.webFiles.bindings;
 assert.equal(bindings.schema, 2);
-assert.equal(activeReads, 1, 'one File object used in several roles is read once');
+// Save reads no input whole: a File no Generate described is hashed from one stream of it for all its roles.
+assert.deepEqual({ activeReads, activeStreams }, { activeReads: 0, activeStreams: 1 }, 'one File object used in several roles is streamed once');
 assert.equal(
   bindings.circularSources[0].gb.resourceId,
   bindings.d_color.resourceId,
@@ -333,13 +341,12 @@ const dormantComparisonFile = makeFile(
   'dormant-uploaded-comparison',
   'dormant-comparison.tsv'
 );
+// Save streams a File's bytes into the Session file; it never reads one whole.
 let dormantComparisonReads = 0;
-const dormantComparisonArrayBuffer = dormantComparisonFile.arrayBuffer.bind(
-  dormantComparisonFile
-);
-dormantComparisonFile.arrayBuffer = async () => {
+const dormantComparisonStream = dormantComparisonFile.stream.bind(dormantComparisonFile);
+dormantComparisonFile.stream = () => {
   dormantComparisonReads += 1;
-  return dormantComparisonArrayBuffer();
+  return dormantComparisonStream();
 };
 const dormantSaveState = boundState({
   ...state,

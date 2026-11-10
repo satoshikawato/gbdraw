@@ -10,7 +10,7 @@ const { drawingIds, drawingTab, showDrawing, shownDrawing } = require('./helpers
 
 test.describe.configure({ retries: 0 });
 
-const SESSION = 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json';
+const SESSION = 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw';
 
 /** A point of a record's axis on the screen (as region-select.playwright.spec.js reads it). */
 const axisPoint = (page, recordIndex, position) => page.evaluate(async ({ recordIndex, position }) => {

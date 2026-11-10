@@ -5,22 +5,24 @@ const { promisify } = require('node:util');
 const { openApp, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 
-const singleSeed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
+const singleSeed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw';
 const allPlacements = ['auto', 'main', 'outward', 'inward'];
 
 // A Circular drawing of two GenBank files, one File card each: the CLI writes
 // its Session from a request of two records with their own sources.
 const twoCardSeed = async (testInfo) => {
-  const single = JSON.parse(await fs.readFile(singleSeed, 'utf8'));
-  const lambda = JSON.parse(await fs.readFile('gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', 'utf8'));
+  const { gallerySessionDocument, sessionFileOf } = await sessionDocuments();
+  const single = await gallerySessionDocument('HmmtDNA_basic_circular');
+  const lambda = await gallerySessionDocument('lambda_basic_linear');
   const singleDrawing = shownSavedDrawing(single);
   const lambdaRequest = shownSavedDrawing(lambda).renderRequest;
   const second = { ...lambdaRequest.records[0], recordKey: 'record-2',
     source: { kind: 'genbank', resourceId: 'record-2-genbank' } };
-  const input = testInfo.outputPath('two-source-input.json');
-  const output = testInfo.outputPath('two-source.gbdraw-session.json.gz');
-  await fs.writeFile(input, JSON.stringify({ ...single,
+  const input = testInfo.outputPath('two-source-input.gbdraw');
+  const output = testInfo.outputPath('two-source.gbdraw');
+  await fs.writeFile(input, Buffer.from(await (await sessionFileOf({ ...single,
     drawings: [{ ...singleDrawing, results: [], editorState: { featureCatalog: null },
       ui: { ...singleDrawing.ui, generatedMultiRecordCanvas: true },
       config: { ...singleDrawing.config, form: { ...singleDrawing.config.form, multi_record_canvas: true } },
@@ -28,7 +30,7 @@ const twoCardSeed = async (testInfo) => {
         records: [...singleDrawing.renderRequest.records, second], layout: { multiRecordSizeMode: 'auto',
           multiRecordMinRadiusRatio: 0.55, multiRecordColumnGapRatio: 0.1, multiRecordRowGapRatio: 0.05,
           multiRecordPositions: null } } }],
-    resources: { ...single.resources, 'record-2-genbank': lambda.resources[lambdaRequest.records[0].source.resourceId] } }));
+    resources: { ...single.resources, 'record-2-genbank': lambda.resources[lambdaRequest.records[0].source.resourceId] } })).arrayBuffer()));
   // The normal writer creates matching SVG, feature metadata and current file bindings.
   const { stdout, stderr } = await promisify(execFile)('python', ['-m', 'gbdraw.cli', 'circular',
     '--session', input, '-o', testInfo.outputPath('two-source'), '--session_output', output],
@@ -57,7 +59,7 @@ for (const twoCards of [false, true]) {
       page.on('pageerror', (error) => errors.push(error.message));
       page.on('dialog', (dialog) => dialog.accept());
       await openApp(page);
-      await page.locator('input[accept^=".json,"]').setInputFiles(file);
+      await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
       await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
         && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180000 }).toBe(true);
     };
@@ -147,7 +149,7 @@ for (const twoCards of [false, true]) {
         expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toContain('CARD_RETAINED_LABEL');
         const download = page.waitForEvent('download');
         await page.getByRole('button', { name: 'Save Session', exact: true }).click();
-        const saved = testInfo.outputPath('P5-saved.gbdraw-session.json.gz');
+        const saved = testInfo.outputPath('P5-saved.gbdraw');
         await (await download).saveAs(saved);
         await load(saved);
         expect((await check('P5-loaded')).placements).toEqual(edited.placements);

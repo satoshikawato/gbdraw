@@ -8,9 +8,9 @@ import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { gunzipSync } from 'node:zlib';
 
 import { CANONICAL_REQUEST_DESCRIPTION } from '../../gbdraw/web/js/contracts/request-shape.generated.js';
+import { readSavedSession } from './helpers/session-documents.mjs';
 import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { SHAPE_VIOLATION_REASONS, readSpelling, shapeViolations } from '../../gbdraw/web/js/utils/contract-shape.js';
 
@@ -155,15 +155,15 @@ const storedRequests = (session) => {
   return /** @type {[string, unknown][]} */ ([['renderRequest', renderRequest], ['otherModeResult.renderRequest', other]]);
 };
 
-test('every stored schema-9 request of the Session fixtures and the Gallery fits the description', () => {
+test('every stored schema-9 request of the Session fixtures and the Gallery fits the description', async () => {
   const { root, types } = CANONICAL_REQUEST_DESCRIPTION;
   /** @type {Record<string, unknown>} */
   const problems = {};
   let checked = 0;
   for (const folder of ['tests/fixtures/sessions/', 'gbdraw/web/gallery/sessions/']) {
-    for (const name of readdirSync(new URL(folder, REPO)).filter((file) => /\.json(?:\.gz)?$/.test(file)).sort()) {
-      const raw = readFileSync(new URL(folder + name, REPO));
-      const session = JSON.parse((name.endsWith('.gz') ? gunzipSync(raw) : raw).toString('utf8'));
+    // A Session 51 is a .gbdraw container; the older Sessions are JSON, plain or gzip.
+    for (const name of readdirSync(new URL(folder, REPO)).filter((file) => /\.(?:json(?:\.gz)?|gbdraw)$/.test(file)).sort()) {
+      const session = await readSavedSession(new Blob([readFileSync(new URL(folder + name, REPO))]));
       for (const [where, request] of storedRequests(session)) {
         if (/** @type {{ schema?: unknown } | null | undefined} */ (request)?.schema !== CANONICAL_REQUEST_SCHEMA) continue;
         checked += 1;

@@ -93,8 +93,8 @@ test('background pan preserves screen displacement after text selection and zoom
   test.setTimeout(180000);
   await openApp(page);
   page.on('dialog', (dialog) => dialog.dismiss());
-  await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
-    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
+  await page.locator('input[type=file][accept*=".gbdraw"]')
+    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw'));
   await waitForSessionLoadAtRest(page);
   await startAtFullSize(page, 'Reset layout');
   await settle(page);
@@ -148,8 +148,8 @@ test('preview pan leaves feature and match gestures available', async ({ page })
   await page.setViewportSize({ width: 2520, height: 1327 });
   await openApp(page);
   page.on('dialog', (dialog) => dialog.dismiss());
-  await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
-    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
+  await page.locator('input[type=file][accept*=".gbdraw"]')
+    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw'));
   await waitForSessionLoadAtRest(page);
   await startAtFullSize(page, 'Reset layout');
   for (let i = 0; i < 7; i += 1) await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
@@ -216,8 +216,8 @@ test('a Result saved in Japanese keeps none of the preview match buttons', async
   await page.addInitScript(() => localStorage.setItem('gbdraw.ui-language', 'ja'));
   await openApp(page);
   page.on('dialog', (dialog) => dialog.dismiss());
-  await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
-    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
+  await page.locator('input[type=file][accept*=".gbdraw"]')
+    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw'));
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
   const buttons = page.locator('[data-gbdraw-match-id][role="button"][data-gbdraw-preview-match]');
   await expect.poll(() => buttons.count()).toBeGreaterThan(0);
@@ -245,8 +245,8 @@ test('a pan that ends over a feature or a match opens no popup', async ({ page }
   await page.setViewportSize({ width: 1600, height: 1000 });
   await openApp(page);
   page.on('dialog', (dialog) => dialog.dismiss());
-  await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
-    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
+  await page.locator('input[type=file][accept*=".gbdraw"]')
+    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw'));
   // The Load shows its Result before it ends and then fits the figure (OV-2701):
   // a press point read before that Fit lands beside the moved svg.
   await waitForSessionLoadAtRest(page);
@@ -320,8 +320,8 @@ test('a pan made while another button is held opens no popup', async ({ page }) 
   await page.setViewportSize({ width: 1600, height: 1000 });
   await openApp(page);
   page.on('dialog', (dialog) => dialog.dismiss());
-  await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
-    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
+  await page.locator('input[type=file][accept*=".gbdraw"]')
+    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw'));
   await waitForSessionLoadAtRest(page);
   await settle(page);
   const sections = page.locator('#settings-popup [data-settings-section]');
@@ -363,8 +363,8 @@ test('docked search and controls remain reachable across Preview sizes and Edito
   test.setTimeout(120000);
   await page.setViewportSize({ width: 1440, height: 844 });
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(
-    join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json')
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(
+    join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw')
   );
   await page.waitForFunction(() => window.__GBDRAW_APP__.results.length && window.__GBDRAW_APP__.extractedFeatures.length);
   await startAtFullSize(page);
@@ -579,8 +579,8 @@ test('the Preview feature search is kept per diagram mode', async ({ page }) => 
   await page.setViewportSize({ width: 1440, height: 844 });
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
-  const session = join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
-  await page.locator('input[accept^=".json,"]').setInputFiles(session);
+  const session = join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw');
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(session);
   await page.waitForFunction(() => window.__GBDRAW_APP__.results.length && window.__GBDRAW_APP__.extractedFeatures.length);
   const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
   await search.fill('tRNA');
@@ -601,7 +601,7 @@ test('the Preview feature search is kept per diagram mode', async ({ page }) => 
   expect(await searchState()).toEqual({ input: 'tRNA', query: 'tRNA' });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(1);
 
-  await page.locator('input[accept^=".json,"]').setInputFiles(session);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(session);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
   await expect.poll(searchState).toEqual({ input: '', query: '' });
 });
@@ -617,7 +617,7 @@ for (const mode of ['linear', 'circular']) {
     page.on('dialog', (dialog) => dialog.accept());
     await openApp(page);
     const session = join(process.cwd(), seeds[mode]);
-    await page.locator('input[accept^=".json,"]').setInputFiles(session);
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(session);
     await page.waitForFunction(() => window.__GBDRAW_APP__.results.length && window.__GBDRAW_APP__.extractedFeatures.length);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode);
     const bar = page.locator('.preview-feature-search');
@@ -725,7 +725,7 @@ for (const mode of ['linear', 'circular']) {
     await expect(toggle.locator('.preview-search-count')).toBeVisible();
     await expect(toggle.locator('.preview-search-count')).toHaveText(/^·\s*\d+$/);
 
-    await page.locator('input[accept^=".json,"]').setInputFiles(session);
+    await page.locator('input[accept*=".gbdraw"]').setInputFiles(session);
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
     await expect(bar).toBeVisible();
     await expect(toggle).toHaveAttribute('aria-pressed', 'true');

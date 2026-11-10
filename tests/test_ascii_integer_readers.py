@@ -113,16 +113,12 @@ def test_orthogroup_metadata_alias_refuses_non_ascii_digits(digit: str) -> None:
 
 
 @pytest.mark.parametrize("digit", NON_ASCII_DIGITS)
-def test_session_slot_and_depth_position_refuse_non_ascii_digits(digit: str) -> None:
+def test_session_slot_refuses_non_ascii_digits(digit: str) -> None:
     from gbdraw import session_io
 
     assert session_io._parse_slot("files.seqs[1].gb") == ["files", "seqs", 1, "gb"]
     with pytest.raises(ValidationError, match="Invalid session slot"):
         session_io._parse_slot(f"files.seqs[{digit}].gb")
-    assert session_io._parse_positive_safe_integer("5") == 5
-    assert session_io._parse_positive_safe_integer("+5") == 5
-    assert session_io._parse_positive_safe_integer("-5") is None
-    assert session_io._parse_positive_safe_integer(digit) is None
 
 
 @pytest.mark.parametrize("digit", NON_ASCII_DIGITS)

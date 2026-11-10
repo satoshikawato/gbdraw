@@ -25,10 +25,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import gzip
 import json
 import re
 import sys
+import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
@@ -61,6 +61,7 @@ from gbdraw.layout.spatial import Aabb  # noqa: E402
 from gbdraw.legend.circular_layout import build_circular_legend_layout  # noqa: E402
 from gbdraw.legend.linear_layout import build_linear_legend_layout  # noqa: E402
 from gbdraw.legend.metrics import legend_caption_box  # noqa: E402
+from gbdraw.session_container import SESSION_DOCUMENT_ENTRY  # noqa: E402
 
 SVG = "{http://www.w3.org/2000/svg}"
 NUMBER = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
@@ -167,11 +168,10 @@ def _box_from_payload(payload: dict[str, float]) -> list[float]:
 def _gallery_cases() -> list[dict[str, Any]]:
     cases = []
     for path in sorted(GALLERY_SESSIONS.iterdir()):
-        if not path.name.endswith((".gbdraw-session.json", ".gbdraw-session.json.gz")):
+        if path.suffix != ".gbdraw":
             continue
-        opener = gzip.open if path.name.endswith(".gz") else open
-        with opener(path, "rt", encoding="utf-8") as handle:
-            session = json.load(handle)
+        with zipfile.ZipFile(path) as archive:
+            session = json.loads(archive.read(SESSION_DOCUMENT_ENTRY))
         # A Gallery Session is a Session 51: its Results are its drawing's.
         results = [result for view in checked_drawing_views(session) for result in view.get("results") or []]
         for index, result in enumerate(results):

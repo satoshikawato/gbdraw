@@ -2622,7 +2622,7 @@
                     <a data-gallery-link :href="INTERACTIVE_GALLERY_URL" target="_blank" rel="noopener noreferrer" class="app-gallery-link" :title="t('Gallery & tutorials')" :aria-label="t('Gallery & tutorials')">
                         <i class="ph ph-graduation-cap" aria-hidden="true"></i><span class="app-gallery-link-label">{{ t('Gallery & tutorials') }}<i class="ph ph-arrow-square-out" aria-hidden="true"></i></span>
                     </a>
-                    <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
+                    <input data-history-managed type="file" ref="sessionInput" accept=".gbdraw,.zip,.json,.gz" class="hidden" @change="importSession">
                     <span v-if="sessionBusyReason && !sessionSavePending && !sessionImportPending" data-session-busy-reason role="status" aria-live="polite" class="text-[10px] text-amber-700">{{ sessionBusyReason }}</span>
                     <span v-if="sessionSavePending" data-session-save-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">{{ t('Saving session…') }}</span>
                     <span v-if="sessionImportPending" data-session-import-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">{{ t('Loading session…') }}</span>
@@ -2742,8 +2742,10 @@
                             <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                             <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'fasta'" @change="setCircularInputType('fasta')" value="fasta" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> FASTA</label>
                         </div>
-                        <!-- Add files: a pick or a drop of several files at once; each file (or GFF3 + FASTA pair by file-name stem) becomes a File card. -->
+                        <!-- Add files: a pick or a drop of several files at once; each file (or GFF3 + FASTA pair by file-name stem) becomes a File card,
+                             whose inspection shows a read failure under Source records (no second report). -->
                         <file-uploader data-circular-file-add :label="circularFileCards.addZone.value.label" :model-value="[]" :multiple="true" :drop="true" :parent-step="true"
+                                       :inspection-failed="circularRecordDiscoveryState.status === 'error'"
                                        :file-kind="circularFileCards.addZone.value.fileKinds" :accept="circularFileCards.addZone.value.accept"
                                        @update:model-value="circularFileCards.addFiles($event)"></file-uploader>
                         <p v-if="inputType === 'fasta'" class="ui-hint">{{ t('Records are drawn without features.') }}</p>
@@ -4171,7 +4173,7 @@
                             <div class="flex flex-wrap gap-1">
                                 <button type="button" class="btn btn-secondary text-[10px] flex-auto px-2" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add annotation set') }}</button>
                                 <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-auto px-2" @click="$refs.annotationTsvInput.click()" :disabled="!semanticMutationAvailable"><i aria-hidden="true" class="ph ph-upload-simple"></i> {{ t('Import TSV') }}</button>
-                                <input ref="annotationTsvInput" data-history-managed type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain" class="hidden" @change="importAnnotationTableFile">
+                                <input ref="annotationTsvInput" data-history-managed type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,.gz,application/gzip" class="hidden" @change="importAnnotationTableFile">
                                 <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-auto px-2" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()"><i aria-hidden="true" class="ph ph-download-simple"></i> {{ t('Download TSV') }}</button>
                             </div>
                             <p role="status" aria-live="polite" aria-atomic="true" class="text-[10px] text-slate-600 break-words">{{ annotationImportNotice }}</p>
@@ -4274,7 +4276,7 @@
                                 <textarea id="sequence-search-query" v-committed-value="sequenceSearch.panel.queryText" @input="sequenceSearch.editQueryText($event.target.value)" @change="sequenceSearch.readQueries($event.target.value)" rows="4" spellcheck="false" class="form-input w-full px-1 py-0.5 font-mono text-[10px]" :placeholder="t('Paste one or more sequences in FASTA')" :aria-invalid="sequenceSearch.panel.queryError ? 'true' : 'false'" :aria-describedby="sequenceSearch.panel.queryError ? 'sequence-search-query-error' : null"></textarea>
                                 <p v-if="sequenceSearch.panel.queryError" id="sequence-search-query-error" role="alert" class="text-[10px] text-red-700 break-words">{{ errorText(sequenceSearch.panel.queryError.summaryParts) }}</p>
                                 <button type="button" class="btn btn-secondary text-[10px] w-full" @click="$refs.sequenceSearchQueryInput.click()"><i aria-hidden="true" class="ph ph-upload-simple"></i> {{ t('Choose file') }}</button>
-                                <input ref="sequenceSearchQueryInput" type="file" accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain" class="hidden" :aria-label="t('Query FASTA file')" @change="sequenceSearch.chooseQueryFile">
+                                <input ref="sequenceSearchQueryInput" type="file" accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,.gz,application/gzip" class="hidden" :aria-label="t('Query FASTA file')" @change="sequenceSearch.chooseQueryFile">
                                 <ul v-if="sequenceSearch.panel.queries.length" class="space-y-1" :aria-label="t('Queries')">
                                     <li v-for="query in sequenceSearch.panel.queries" :key="query.name" data-sequence-search-query class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-1 text-[10px]">
                                         <input type="color" v-committed-value="query.color" @change="sequenceSearch.setQueryColor(query.name, $event.target.value)" :disabled="sequenceSearch.panel.colorMode === 'gradient'" :aria-label="t('Hit color of {query}', { query: query.name })" class="h-5 w-6 p-0 border border-slate-300 rounded">
@@ -6178,7 +6180,7 @@
                                     <div v-if="filterMode === 'Blacklist'" class="space-y-2 bg-white p-2 rounded border">
                                         <textarea v-committed-value="manualBlacklist" @input="setBlacklistText($event.target.value)" class="form-input h-20" :placeholder="t('hypothetical, unknown')" :disabled="!semanticMutationAvailable"></textarea>
                                         <div class="ui-hint text-center">{{ t('or') }}</div>
-                                        <file-uploader :label="t('Blacklist File')" :model-value="files.blacklist" @update:model-value="importAuxiliaryTable('blacklist', $event)" file-kind="blacklist" :import-step="true" :after-change="waitForAuxiliaryFileImport" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*" :small="true"></file-uploader>
+                                        <file-uploader :label="t('Blacklist File')" :model-value="files.blacklist" @update:model-value="importAuxiliaryTable('blacklist', $event)" file-kind="blacklist" :import-step="true" :after-change="waitForAuxiliaryFileImport" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*,.gz,application/gzip" :small="true"></file-uploader>
                                     </div>
 
                                     <div v-if="filterMode === 'Whitelist'" class="space-y-2 bg-white p-2 rounded border">
@@ -9145,8 +9147,8 @@
                             <div v-if="!featureExtractionPending && filteredFeatures.length === 0" class="p-4 text-center text-slate-500 text-xs">{{ t('No features found') }}</div>
                         </div>
                         <div class="px-4 py-2 border-t border-slate-200 shrink-0 bg-slate-50 space-y-2">
-                            <input data-history-managed type="file" ref="labelTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadLabelOverrideTable" :disabled="!semanticMutationAvailable">
-                            <input data-history-managed type="file" ref="featureEditTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadFeatureEditTable" :disabled="!semanticMutationAvailable">
+                            <input data-history-managed type="file" ref="labelTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain,.gz,application/gzip" class="hidden" @change="loadLabelOverrideTable" :disabled="!semanticMutationAvailable">
+                            <input data-history-managed type="file" ref="featureEditTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain,.gz,application/gzip" class="hidden" @change="loadFeatureEditTable" :disabled="!semanticMutationAvailable">
                             <div class="flex items-start justify-between gap-2">
                                 <action-menu :label="t('Import / export')" icon="ph-file-arrow-down" :title="t('Export or load label and feature-edit tables')"
                                              :items="[

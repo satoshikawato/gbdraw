@@ -7,7 +7,7 @@ const A = require('./helpers/audit-common.cjs');
 
 const SESSION_DIR = join(A.REPO_ROOT, 'gbdraw/web/gallery/sessions');
 const names = (process.env.AUDIT_SESSIONS
-  || 'tobacco-chloroplast.gbdraw-session.json,HmmtDNA_basic_circular.gbdraw-session.json').split(',');
+  || 'tobacco-chloroplast.gbdraw,HmmtDNA_basic_circular.gbdraw').split(',');
 
 const INIT = () => {
   window.__AUDIT_EVENTS__ = [];

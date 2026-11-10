@@ -586,7 +586,7 @@ const saveAndLoad = async (page, path) => {
     return app.sessionImportPending ? null : getCommittedSvgResultRuntimeIdentity(app.results[app.selectedResultIndex]);
   });
   const before = await shown();
-  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await expect.poll(async () => { const now = await shown(); return now !== null && now !== before; }, { timeout: 180_000 }).toBe(true);
   await settleLive(page);
 };
@@ -957,7 +957,7 @@ const reportRun = async (page, walk, run, { header, shrink, stepsPath }) => {
     try {
       const rerun = await runWalk(page, {
         fixture, reflow: walk.reflow, planned: steps, source: recordedSource(steps),
-        sessionPath: (index) => test.info().outputPath(`shrink-${replay}-step-${index}.gbdraw-session.json`)
+        sessionPath: (index) => test.info().outputPath(`shrink-${replay}-step-${index}.gbdraw`)
       });
       const last = rerun.results[steps.length - 1];
       const reproduced = Boolean(!rerun.error && !rerun.inapplicable && last
@@ -1023,7 +1023,7 @@ export const randomWalkTests = ({ seed, level, walkLength, required = [], shrink
         const walk = { seed, title, fixture: fixture.name, reflow, steps: [] };
         const { run, stepsPath } = await attachingSteps(walk, () => runWalk(page, {
           fixture, reflow, planned: steps, source: drawnSource(random, steps), records: walk.steps,
-          sessionPath: (index) => test.info().outputPath(`walk-step-${index}.gbdraw-session.json`),
+          sessionPath: (index) => test.info().outputPath(`walk-step-${index}.gbdraw`),
           // eslint-disable-next-line no-console
           log: (record) => console.log(`  ${describeRecord(record)}`)
         }));
@@ -1067,7 +1067,7 @@ const readWalkRecord = (path) => {
 /** @param {import('@playwright/test').Page} page @param {WalkRecord} walk @param {RecordedStep[]} records */
 const replayRun = (page, walk, records, log = () => {}) => runWalk(page, {
   fixture: FIXTURES.find(({ name }) => name === walk.fixture), reflow: walk.reflow, planned: walk.steps, source: recordedSource(walk.steps),
-  sessionPath: (index) => test.info().outputPath(`replay-step-${index}.gbdraw-session.json`), records, log
+  sessionPath: (index) => test.info().outputPath(`replay-step-${index}.gbdraw`), records, log
 });
 
 /**
@@ -1121,7 +1121,7 @@ export const recordReplayTest = ({ seed }) => ({
     const walk = { seed, title: test.info().title, fixture: fixture.name, reflow, steps: [] };
     const { run, stepsPath } = await attachingSteps(walk, () => runWalk(page, {
       fixture, reflow, planned: RECORD_REPLAY_STEPS, source: drawnSource(random, RECORD_REPLAY_STEPS), records: walk.steps,
-      sessionPath: (index) => test.info().outputPath(`walk-step-${index}.gbdraw-session.json`)
+      sessionPath: (index) => test.info().outputPath(`walk-step-${index}.gbdraw`)
     }));
     await reportRun(page, walk, run, { header: `seed ${seed}, recorded walk`, shrink: noShrink, stepsPath });
     const recorded = readWalkRecord(stepsPath);

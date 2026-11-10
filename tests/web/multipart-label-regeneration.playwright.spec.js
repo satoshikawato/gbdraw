@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
-const seed = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json';
+const seed = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw';
 const cases = [
   ['M1 single-part label', 'rbcL', 'label'],
   ['M2 multipart label', 'rps12', 'label'],
@@ -40,7 +40,7 @@ for (const [name, gene, action] of cases) {
         };
       });
       await openApp(page);
-      await page.locator('input[accept^=".json,"]').setInputFiles(file);
+      await page.locator('input[accept*=".gbdraw"]').setInputFiles(file);
       await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
         && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180000 }).toBe(true);
     };
@@ -126,7 +126,7 @@ for (const [name, gene, action] of cases) {
       if (action === 'save') {
         const pending = page.waitForEvent('download');
         await page.getByRole('button', { name: 'Save Session', exact: true }).click();
-        const saved = testInfo.outputPath('edited.gbdraw-session.json.gz');
+        const saved = testInfo.outputPath('edited.gbdraw');
         await (await pending).saveAs(saved);
         await load(saved);
       } else if (action === 'mode') {

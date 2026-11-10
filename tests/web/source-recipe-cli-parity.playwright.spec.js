@@ -235,7 +235,7 @@ test('a one-record Circular CLI Session draws the CLI SVG on Generate and its So
     '-f', 'svg', '--labels', 'none', '--save_session'], { encoding: 'utf8', env: replayEnv });
   expect(cli.status, cli.stderr).toBe(0);
   await openFresh(page);
-  await loadSessionFile(page, `${prefix}.gbdraw-session.json`);
+  await loadSessionFile(page, `${prefix}.gbdraw`);
   const current = await generated(page, testInfo, 'cli session');
   expect(current.recipe.available, current.recipe.reason).toBe(true);
   const archive = await bundle(page, testInfo, 'cli session');
@@ -265,7 +265,7 @@ test('a CLI Session of one cropped records-table record opens on that record and
     '-o', prefix, '-f', 'svg', '--labels', 'none', '--save_session'], { encoding: 'utf8', env: replayEnv });
   expect(cli.status, cli.stderr).toBe(0);
   await openFresh(page);
-  await loadSessionFile(page, `${prefix}.gbdraw-session.json`);
+  await loadSessionFile(page, `${prefix}.gbdraw`);
   const select = page.getByLabel('Circular record', { exact: true });
   await expect(select.locator('option:checked')).toHaveText('TESTB (not inspected)');
   await page.getByRole('button', { name: 'Inspect source records', exact: true }).click();

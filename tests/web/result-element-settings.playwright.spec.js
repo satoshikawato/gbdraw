@@ -7,7 +7,7 @@
 // alignment is open; opening it writes no setting, History step, or Result,
 // and leaves no trace in an export.
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { readSessionFileJson, sessionFileBytesOf } = require('./helpers/session-file.cjs');
 const { join } = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
@@ -15,9 +15,9 @@ const { circularFileInput } = require('./helpers/circular-inputs.cjs');
 
 test.use({ actionTimeout: 20_000 });
 
-const CUSTOM_SLOTS_SESSION = 'HmmtDNA_ATskew.gbdraw-session.json';
-const DEFAULT_CIRCULAR_SESSION = 'HmmtDNA_basic_circular.gbdraw-session.json';
-const LINEAR_SESSION = 'BGC0000708-BGC0000713.gbdraw-session.json';
+const CUSTOM_SLOTS_SESSION = 'HmmtDNA_ATskew.gbdraw';
+const DEFAULT_CIRCULAR_SESSION = 'HmmtDNA_basic_circular.gbdraw';
+const LINEAR_SESSION = 'BGC0000708-BGC0000713.gbdraw';
 const SETTINGS_HINT = 'Click to open its settings';
 const MOVE_HINT = 'Turn on Layout edit to move this item';
 // One line each: the hint box stays as wide as the longer sentence.
@@ -44,7 +44,7 @@ const sessionPath = (name) => join(process.cwd(), 'gbdraw/web/gallery/sessions',
 // `file` is a Gallery Session by name, or a Session file as `setInputFiles` takes it.
 const loadSession = async (page, file) => {
   page.on('dialog', (dialog) => dialog.accept());
-  await page.locator('input[accept^=".json,"]').setInputFiles(typeof file === 'string' ? sessionPath(file) : file);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(typeof file === 'string' ? sessionPath(file) : file);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180000 });
   await frames(page);
@@ -528,10 +528,10 @@ test('Linear at 1280 x 720: the scale shows Axis & Scale and the plot title Titl
   await openApp(page);
   // The stored Result, with the definition of its first record named as that of a record called
   // `tick_chr1` is (`<record id>_definition…`): the id reads like a tick group's.
-  const stored = readFileSync(sessionPath(LINEAR_SESSION), 'utf8');
+  const stored = JSON.stringify(await readSessionFileJson(sessionPath(LINEAR_SESSION)));
   expect(stored.split('BGC0000708_definition_record_1')).toHaveLength(2);
-  const session = { name: LINEAR_SESSION, mimeType: 'application/json',
-    buffer: Buffer.from(stored.replace('BGC0000708_definition_record_1', 'tick_chr1_definition_record_1')) };
+  const session = { name: LINEAR_SESSION, mimeType: 'application/octet-stream',
+    buffer: await sessionFileBytesOf(JSON.parse(stored.replace('BGC0000708_definition_record_1', 'tick_chr1_definition_record_1'))) };
   await loadSession(page, session);
   const before = await appState(page);
 

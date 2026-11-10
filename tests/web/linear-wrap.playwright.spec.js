@@ -12,6 +12,7 @@ const path = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 const { download } = require('./helpers/mode-transition.cjs');
 
 const root = path.resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -213,7 +214,7 @@ test('an Align at feature Apply that only rotated leaves Wrap Rows enabled, and 
 test('a Similarity alignment blocks Wrap Rows beside comparisons, and Reset record positions ends it in one step', async ({ page }) => {
   test.setTimeout(480_000);
   await openFresh(page);
-  await loadSessionFile(page, path.join(root, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
+  await loadSessionFile(page, path.join(root, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw'));
   await settle(page);
   const placement = () => page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
@@ -263,17 +264,18 @@ test('a loaded Session with a record moved sideways blocks Wrap Rows until Reset
   const directory = testInfo.outputPath('moved');
   mkdirSync(directory, { recursive: true });
   copyFileSync(LAMBDA, path.join(directory, 'NC_001416.gb'));
-  const session = path.join(directory, 'moved.gbdraw-session.json');
+  const session = path.join(directory, 'moved.gbdraw');
   execFileSync(process.env.PYTHON || 'python', [
     '-m', 'gbdraw.cli', 'linear', '--gbk', 'NC_001416.gb', '--wrap_length', '5000', '-o', 'lambda',
     '--save_session', '--session_output', session
   ], { cwd: directory, stdio: 'pipe', env: { ...process.env, PYTHONPATH: root } });
-  const document = JSON.parse(readFileSync(session, 'utf8'));
+  const { readSavedSession, sessionFileOf } = await sessionDocuments();
+  const document = await readSavedSession(new Blob([readFileSync(session)]));
   const request = document.drawings[0].renderRequest;
   // The record 40 px to the right, as `LinearRecordTranslation(record_key, x=40)` stores it.
   request.layout = { recordGapPx: 24, multiRecordPositions: null, similarityAlignment: null,
     recordTranslations: [{ recordKey: request.records[0].recordKey, x: 40, y: 0 }] };
-  writeFileSync(session, JSON.stringify(document));
+  writeFileSync(session, Buffer.from(await (await sessionFileOf(document)).arrayBuffer()));
 
   await openFresh(page);
   await loadSessionFile(page, session);
@@ -383,7 +385,7 @@ test('Save then Load keeps the length, a loaded wrapped PDF over its limit and a
   await setWrap(page, 300, 'bp');
   expect(await wrapState(page)).toMatchObject({ wrap: 300, amount: '300', unit: 'bp' });
   await generateAndWaitForResult(page);
-  const saved = testInfo.outputPath('wrapped.gbdraw-session.json.gz');
+  const saved = testInfo.outputPath('wrapped.gbdraw');
   await download(page, 'Save Session', saved, { title: '' });
   await wrapBox(page).uncheck();
   await settle(page);
@@ -403,7 +405,7 @@ test('Save then Load keeps the length, a loaded wrapped PDF over its limit and a
   const directory = testInfo.outputPath('cli');
   mkdirSync(directory, { recursive: true });
   copyFileSync(LAMBDA, path.join(directory, 'NC_001416.gb'));
-  const cliSession = path.join(directory, 'cli.gbdraw-session.json');
+  const cliSession = path.join(directory, 'cli.gbdraw');
   execFileSync(process.env.PYTHON || 'python', [
     '-m', 'gbdraw.cli', 'linear', '--gbk', 'NC_001416.gb', '--wrap_length', '5000', '-o', 'lambda',
     '--save_session', '--session_output', cliSession
@@ -437,7 +439,7 @@ test('a loaded Result with a cropped wrapped record: a PDF over the limit makes 
   mkdirSync(directory, { recursive: true });
   copyFileSync(LAMBDA, path.join(directory, 'NC_001416.gb'));
   const cliSession = (rowLength) => {
-    const file = path.join(directory, `crop${rowLength}.gbdraw-session.json`);
+    const file = path.join(directory, `crop${rowLength}.gbdraw`);
     execFileSync(process.env.PYTHON || 'python', [
       '-m', 'gbdraw.cli', 'linear', '--gbk', 'NC_001416.gb', '--region', 'NC_001416.1:5001-35000',
       '--wrap_length', String(rowLength), '-o', `crop${rowLength}`, '--save_session', '--session_output', file

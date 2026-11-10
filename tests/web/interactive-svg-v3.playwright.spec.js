@@ -3,10 +3,10 @@ const { execFile } = require('node:child_process');
 const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { promisify } = require('node:util');
-const { gunzipSync } = require('node:zlib');
 const { test, expect } = require('@playwright/test');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 const {
   CURRENT_FEATURE_CATALOG_SCHEMA,
   CURRENT_REQUEST_SCHEMA,
@@ -351,7 +351,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     await window.__GBDRAW_APP__.saveSessionWithTitle();
   });
   const savedPath = await (await pendingSave).path();
-  const saved = JSON.parse(gunzipSync(fs.readFileSync(savedPath)));
+  const saved = await readSessionFile(savedPath);
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
   expect(shownSavedDrawing(saved).renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
   expect(shownSavedDrawing(saved).renderRequest.records[0].display.startCoordinate).toBe(expectedStart);
@@ -363,7 +363,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), {
     timeout: 180000
   }).toBe(false);
@@ -703,7 +703,7 @@ const installRecordReadCounter = (page) => page.addInitScript(() => {
 });
 
 const loadSessionFile = async (page, sessionPath) => {
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(sessionPath);
   await expectSessionLoadedWithoutWarnings(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending))
     .toBe(false);
@@ -750,7 +750,7 @@ test('Circular Record actions read a loaded Gallery Session without Generate', a
   await installDiagramRequestObserver(page);
   await openApp(page);
   await loadSessionFile(page, join(
-    process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'
+    process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw'
   ));
   await openLoadedRecordActions(page, { query: 'tRNA', recordId: 'NC_012920.1' });
 });
@@ -802,7 +802,7 @@ const writeCliSession = async (testInfo, mode, inputs, args = []) => {
     return path;
   });
   const prefix = testInfo.outputPath(`cli-${mode}`);
-  const session = `${prefix}.gbdraw-session.json`;
+  const session = `${prefix}.gbdraw`;
   await promisify(execFile)('python', [
     '-m', 'gbdraw.cli', mode, '--gbk', ...paths, ...args, '-o', prefix, '-f', 'svg',
     '--session_output', session

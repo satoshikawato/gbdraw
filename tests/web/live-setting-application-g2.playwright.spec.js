@@ -5,7 +5,9 @@
 // their own item and leave the Result as it is until Generate. Controls are
 // selected by CSS; each case is one -g selectable unit and mode.
 const { test, expect } = require('@playwright/test');
-const { readFileSync, writeFileSync } = require('node:fs');
+const { writeFileSync } = require('node:fs');
+const { writeGallerySessionFile } = require('./helpers/session-file.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 const { generateAndWaitForResult, reveal, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { load } = require('./helpers/mode-transition.cjs');
 const { clocksIn } = require('./helpers/timing-notes.cjs');
@@ -13,10 +15,10 @@ const { expectLiveEqualsGenerate } = require('./helpers/live-generate-parity.cjs
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const SESSIONS = 'gbdraw/web/gallery/sessions';
-const TOBACCO = `${SESSIONS}/tobacco-chloroplast.gbdraw-session.json`;
-const LAMBDA = `${SESSIONS}/lambda_basic_linear.gbdraw-session.json`;
-const BGC = `${SESSIONS}/BGC0000708-BGC0000713.gbdraw-session.json`;
-const VIBRIO = `${SESSIONS}/vibrio-harveyi-group-collinear.gbdraw-session.json.gz`;
+const TOBACCO = `${SESSIONS}/tobacco-chloroplast.gbdraw`;
+const LAMBDA = `${SESSIONS}/lambda_basic_linear.gbdraw`;
+const BGC = `${SESSIONS}/BGC0000708-BGC0000713.gbdraw`;
+const VIBRIO = `${SESSIONS}/vibrio-harveyi-group-collinear.gbdraw`;
 // An apply takes seconds; a base without the G2 rows fails each live case at this bound.
 const APPLY_TIMEOUT = 120_000;
 // How long a waiting value is given to (wrongly) redraw the Result.
@@ -113,7 +115,7 @@ const slotScope = (page, id) => page.locator('[data-setting="track-geometry"]').
 
 const run = (name, file, body, timeout = 600_000) => test(name, async ({ browser }, testInfo) => {
   test.setTimeout(timeout);
-  const page = await load(browser, typeof file === 'function' ? file(testInfo) : file);
+  const page = await load(browser, typeof file === 'function' ? await file(testInfo) : file);
   try {
     await settleLive(page);
     await body(page, testInfo);
@@ -263,16 +265,12 @@ run('record-names linear: a record name edited after Session Load is live and eq
 
 // Values that wait: an annotation item with a Legend label (O-8), a features
 // row's Height, and a record name in a card whose File was replaced.
-const tobaccoWithLegendItem = (testInfo) => {
-  const session = JSON.parse(readFileSync(TOBACCO, 'utf8'));
+const tobaccoWithLegendItem = (testInfo) => writeGallerySessionFile('tobacco-chloroplast', testInfo.outputPath('legend-item.gbdraw'), (session) => {
   const irb = (sets) => sets.find((set) => set.id === 'plastome_tint').annotations.find((item) => item.id === 'irb_tint');
   const drawing = shownSavedDrawing(session);
   irb(drawing.renderRequest.diagramOptions.annotations.sets).legendLabel = 'Inverted repeat';
   irb(drawing.config.annotationSets).legendLabel = 'Inverted repeat';
-  const file = testInfo.outputPath('legend-item.gbdraw-session.json');
-  writeFileSync(file, JSON.stringify(session));
-  return file;
-};
+});
 run('annotation-style waits: an item with a Legend label says Applies on Generate and keeps the Result', tobaccoWithLegendItem, async (page) => {
   const rows = page.locator('[data-annotation-row]');
   const scopeOf = (index) => rows.nth(index).locator('[data-setting="annotation-style"]');
@@ -300,7 +298,7 @@ run('track-geometry waits: a features row Height says Applies on Generate and ke
   await expectWaits(page, before);
 }, 900_000);
 run('record-names waits: a record name in a card whose File was replaced keeps the Result', BGC, async (page, testInfo) => {
-  const session = JSON.parse(readFileSync(BGC, 'utf8'));
+  const session = await (await sessionDocuments()).gallerySessionDocument('BGC0000708-BGC0000713');
   const resource = session.resources['record-1-genbank'];
   const file = testInfo.outputPath(resource.name);
   writeFileSync(file, Buffer.from(resource.data, 'base64'));

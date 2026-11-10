@@ -634,6 +634,19 @@ const stageHelperFiles = (pyodide, workspace, files, allowedRoles) => {
   return paths;
 };
 
+// A helper reads each file where the Worker staged it, under its role's name
+// (`HELPER_FILE_NAMES`). A refusal that names that file (a gzip input over its
+// cap, PD-OI-116) names the file the user chose instead, the helper file's
+// `name`, as Generate's refusal names its resource's (gbdraw/web_support/request_render.py).
+export const nameStagedHelperInput = (error, files) => {
+  const staged = error?.context?.inputName;
+  if (typeof staged !== 'string' || !Object.values(HELPER_FILE_NAMES).includes(staged)) return error;
+  const file = (Array.isArray(files) ? files : []).find((entry) => HELPER_FILE_NAMES[String(entry?.role || '')] === staged);
+  const { inputName: _staged, ...context } = error.context;
+  const name = typeof file?.name === 'string' ? file.name : '';
+  return serializeError({ ...error, context: name ? { ...context, inputName: name } : context });
+};
+
 const ensureRenderResourceCache = (pyodide) => {
   if (!pyodide.FS.analyzePath(RENDER_RESOURCE_CACHE).exists) {
     pyodide.FS.mkdir(RENDER_RESOURCE_CACHE);
@@ -1395,7 +1408,11 @@ const runHelperOperation = async ({ operation, payload, requestId } = {}) => {
           spec.fileRoles
         );
         failureStage = 'helper';
-        return spec.run(runtime.pyodide, normalizedPayload, paths, normalizedOperation, workspace);
+        try {
+          return await spec.run(runtime.pyodide, normalizedPayload, paths, normalizedOperation, workspace);
+        } catch (error) {
+          throw nameStagedHelperInput(error, normalizedPayload.files);
+        }
       }
     );
   } catch (error) {
@@ -1677,9 +1694,9 @@ const runFeatureExtraction = async ({
     ? normalizedFiles.find((file) => String(file?.path || '').trim() === normalizedVisibilityPath)
     : null;
   const workspaceFiles = [
-    { role: 'source', bytes: sourceFile?.bytes },
-    ...(fastaFile ? [{ role: 'fasta', bytes: fastaFile.bytes }] : []),
-    ...(visibilityFile ? [{ role: 'visibility', bytes: visibilityFile.bytes }] : [])
+    { role: 'source', name: sourceFile?.name, bytes: sourceFile?.bytes },
+    ...(fastaFile ? [{ role: 'fasta', name: fastaFile.name, bytes: fastaFile.bytes }] : []),
+    ...(visibilityFile ? [{ role: 'visibility', name: visibilityFile.name, bytes: visibilityFile.bytes }] : [])
   ];
 
   let failureStage = 'resource-staging';
@@ -1725,7 +1742,7 @@ const runFeatureExtraction = async ({
       );
     });
   } catch (error) {
-    throw serializeError(error, { operation: 'feature-extraction', stage: failureStage });
+    throw nameStagedHelperInput(serializeError(error, { operation: 'feature-extraction', stage: failureStage }), workspaceFiles);
   }
 };
 

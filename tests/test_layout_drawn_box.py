@@ -414,7 +414,7 @@ def _overlap_depth(p: list[tuple[float, float]], q: list[tuple[float, float]]) -
 
 
 GALLERY_CASES = {
-    "tobacco": (["--session", str(SESSIONS / "tobacco-chloroplast.gbdraw-session.json")], 118),
+    "tobacco": (["--session", str(SESSIONS / "tobacco-chloroplast.gbdraw")], 118),
     "hmmtdna-serif": (
         [
             "--gbk", str(REPO_ROOT / "tests" / "test_inputs" / "HmmtDNA.gbk"), "--separate_strands",
@@ -423,7 +423,7 @@ GALLERY_CASES = {
         ],
         32,
     ),
-    "hmmtdna-basic": (["--session", str(SESSIONS / "HmmtDNA_basic_circular.gbdraw-session.json")], 32),
+    "hmmtdna-basic": (["--session", str(SESSIONS / "HmmtDNA_basic_circular.gbdraw")], 32),
 }
 
 

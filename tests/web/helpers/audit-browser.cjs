@@ -8,7 +8,7 @@ const { circularFileInput } = require('./circular-inputs.cjs');
 
 const BATCH_FIXTURE = 'tests/fixtures/web_batch_two_records.gb';
 const HMMT = 'tests/test_inputs/HmmtDNA.gbk';
-const HMMT_SESSION = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
+const HMMT_SESSION = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw';
 
 const trackPreviewReadiness = (page) => page.addInitScript(() => {
   window.__AUDIT_LIFECYCLE__ = [];
@@ -56,7 +56,7 @@ const openWithGenBank = async (page, path, configure = null) => {
 };
 
 const loadSessionFile = async (page, path) => {
-  await page.locator('input[accept^=".json,"]').setInputFiles(path);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(path);
   await expectNoLoadRepairDialog(page);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.extractedFeatures.length > 0, null, { timeout: 180_000 });

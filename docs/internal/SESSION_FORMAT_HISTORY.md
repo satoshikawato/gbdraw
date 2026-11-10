@@ -13,6 +13,34 @@ only on `dev`. A Session version changes when a breaking change enters `main`;
 a later breaking change made before that version reaches `main` goes into its
 entry ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
+## Unreleased: a Session is a `.gbdraw` container file
+
+A Session is one ZIP file, `<title>.gbdraw`, instead of one JSON file (PD-OI-127).
+Its first entry `gbdraw-session.json` is the Session version 51 document without
+input bytes, and each input is the entry `resources/<id>` (a gzip input stored as
+it is, any other input compressed), so no input is embedded as base64 and the
+Web app can write and read the inputs one at a time. The Session version stays
+51: the document keeps its fields, and only the file around it changes. The
+checksum field is not written for a container (the ZIP's CRC-32 and sizes catch
+damage); the older JSON Sessions keep reading it.
+
+The JSON form of version 51 (`.gbdraw-session.json[.gz]`) never reached `main`,
+so it is retired without a reader: Python refuses it with "A Session version 51
+file must be a .gbdraw file, not JSON: {path}", and the Web app with "Load a
+Session file that this version of gbdraw supports.". Every writer (Web Save
+Session, `save_session_document`, `--session_output`, `--save_session`) writes
+only the container and refuses a name that ends with `.json` or `.json.gz`
+before writing anything. Every reader decides by content, not by name: it opens
+a container of any name and the JSON Sessions 27 to 33, 39 to 42, 44, and 46 to
+50, plain or gzip. A damaged container and a ZIP without `gbdraw-session.json`
+are refused with their own messages. gbdraw 0.14.5 and older read the new file
+as invalid JSON. An older Session converts with
+`gbdraw render --session old.json.gz --session_output new.gbdraw`. The inputs of
+a container have no size limit on the command line and in Python; the Web app
+limits only `gbdraw-session.json` to 512 MiB, and the limits of the JSON
+Sessions (200 MB, 512 MB expanded) stay. The public description is
+[The Session file](../REFERENCE/session-and-request-compatibility.md#the-session-file).
+
 ## Unreleased: Session 51 stores drawings; request schema 10 writes record windows
 
 Session version 51 replaces the two diagram-mode slices of Sessions 46 to 50
@@ -55,7 +83,7 @@ source choice, `config.inputType` / `webFiles.bindings.c_fasta` or a Linear
 card's `fasta` slot), and the CLI writes it for `--fasta` without `--gff` and for
 a records table row with only a `fasta` path. This adds no request schema:
 the kind is a new value of the record source's `kind`. Fixture:
-`tests/fixtures/sessions/cli-circular-fasta.v51.gbdraw-session.json.gz`.
+`tests/fixtures/sessions/cli-circular-fasta.v51.gbdraw`.
 
 Session 51 also stores a Circular drawing's input as File cards (circular
 multi-file input). Its `webFiles.bindings` holds `circularSources`, a list of
@@ -145,7 +173,7 @@ Result no longer lists for that record pair. Python admits it from Session 51
 (`_validate_comparison_plan_edge` in `gbdraw/session_io.py`) and refuses it in a Session 46 to 50; the Web loads such
 a file without it, with a Load row. No renderer reads it. A Session without the key reads as no typed names, so every window pair takes its default name.
 Session 51 has not reached `main`, so the version does not change. Positive fixture:
-`tests/fixtures/sessions/web-linear-window-pair-names.v51.gbdraw-session.json.gz`.
+`tests/fixtures/sessions/web-linear-window-pair-names.v51.gbdraw`.
 
 A Linear request that states no `diagramOptions.output`, or a null `plotTitlePosition`, draws with Python's
 `LinearOutputOptions()` sides: legend `right`, title `bottom` (OV-2491, Owner decision R17-38). The generated
@@ -154,7 +182,7 @@ A Linear request that states no `diagramOptions.output`, or a null `plotTitlePos
 and no layout of its own with its request's sides, opened or not (OV-2493). A new Web Linear drawing keeps its legend
 and title at the bottom and states them in what it saves. The format does not change: Python and the CLI drew such a
 request this way before; only the Web's reading changes. Positive fixture:
-`tests/fixtures/sessions/python-linear-absent-output.v51.gbdraw-session.json.gz` (Python `save_session_document`).
+`tests/fixtures/sessions/python-linear-absent-output.v51.gbdraw` (Python `save_session_document`).
 
 Session 51 also adds an optional `gradient` to a region annotation's style in the canonical request
 (`diagramOptions.annotations.sets[].defaultStyle` and `.annotations[].style`; PR-B, the Web's Sequence search, receipt
@@ -167,7 +195,7 @@ writes the key only when a style has a gradient, so every request without one en
 reader reads an absent or null key as no gradient. This adds no request schema: the key is a new optional field
 of the request description (`CanonicalAnnotationGradient`). Session 51 has not reached `main`, so the version does
 not change; `main`'s build (0.14.5) refuses every Session 51 file. Positive fixture:
-`tests/fixtures/sessions/python-search-hits-gradient.v51.gbdraw-session.json.gz` (Python `save_session_document`).
+`tests/fixtures/sessions/python-search-hits-gradient.v51.gbdraw` (Python `save_session_document`).
 
 Session 51 also adds an optional `keepHighlightOverlay` to an annotation set (`diagramOptions.annotations.sets[]`,
 and the Web draft `config.annotationSets[]`; the same receipt, its custom-stack line): `true` on a set that
@@ -330,7 +358,7 @@ the request's `featureDensityTracks` (the key only when the list is not empty),
 so a CLI Session's tracks survive a Web Generate and Save. A stored config
 without the key reads as no tracks; an entry that leaves the request's track
 shape is dropped with its Load repair row (`services/feature-density-tracks.js`).
-Fixture: `tests/fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw-session.json.gz`.
+Fixture: `tests/fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw`.
 
 ## Unreleased: depth and GC Percent axis label styles
 

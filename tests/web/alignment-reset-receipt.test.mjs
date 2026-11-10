@@ -124,7 +124,7 @@ test('new Align replaces evidence relative to immediately preceding artifact', a
 test('Python and Web admit the same source-bound compact receipt and reject corrupted bindings', async () => {
   const f = fixture(); const receipt = await build(f);
   const session = {...f.after, editorState:{alignmentResetReceipt:receipt}};
-  const script = `import json,sys; from gbdraw.session_io import _validate_alignment_reset_receipt; _validate_alignment_reset_receipt(json.load(sys.stdin))`;
+  const script = `import json,sys; from gbdraw.session_io import _validate_alignment_reset_receipt, split_resource_bytes; document, sources = split_resource_bytes(json.load(sys.stdin)); _validate_alignment_reset_receipt(document, sources)`;
   const valid = spawnSync(process.env.PYTHON || 'python', ['-c', script], {input:JSON.stringify(session),encoding:'utf8'});
   if (valid.error) throw valid.error;
   assert.equal(valid.status, 0, valid.stderr);
@@ -144,7 +144,7 @@ test('Python and Web bind supplementary Unicode record keys in the same determin
   };
   rename(f.before); rename(f.after);
   const receipt = await build(f);
-  const script = 'import json,sys; from gbdraw.session_io import _validate_alignment_reset_receipt; _validate_alignment_reset_receipt(json.load(sys.stdin))';
+  const script = 'import json,sys; from gbdraw.session_io import _validate_alignment_reset_receipt, split_resource_bytes; document, sources = split_resource_bytes(json.load(sys.stdin)); _validate_alignment_reset_receipt(document, sources)';
   const result = spawnSync(process.env.PYTHON || 'python', ['-c',script], {
     input:JSON.stringify({...f.after,editorState:{alignmentResetReceipt:receipt}}),encoding:'utf8'
   });

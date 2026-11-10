@@ -87,7 +87,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "replayThrough": 2,
             "viewport": {
               "width": 1280,
@@ -173,7 +173,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "replayThrough": 3,
             "viewport": {
               "width": 1280,
@@ -235,7 +235,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "replayThrough": 4,
             "viewport": {
               "width": 1800,
@@ -375,7 +375,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "viewport": {
               "width": 1600,
               "height": 1100
@@ -421,7 +421,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "viewport": {
               "width": 1600,
               "height": 1100
@@ -499,7 +499,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "viewport": {
               "width": 1600,
               "height": 1100
@@ -555,7 +555,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "viewport": {
               "width": 1600,
               "height": 1100
@@ -608,7 +608,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "replayThrough": 5,
             "viewport": {
               "width": 1800,
@@ -792,7 +792,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "viewport": {
               "width": 1600,
               "height": 1000
@@ -865,7 +865,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "viewport": {
               "width": 1600,
               "height": 1000
@@ -1112,7 +1112,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "viewport": {
               "width": 1600,
               "height": 1000
@@ -1195,7 +1195,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "replayThrough": 8,
             "viewport": {
               "width": 1800,
@@ -1411,7 +1411,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -1440,7 +1440,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -1492,7 +1492,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw",
             "replayThrough": 10,
             "viewport": {
               "width": 1800,

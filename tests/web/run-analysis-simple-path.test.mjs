@@ -44,6 +44,7 @@ globalThis.confirm = () => true;
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 let activePrimaryReads = 0;
+let activePrimaryStreams = 0;
 let inactiveFileReads = 0;
 
 /** A copy of a canonical Session whose resource descriptors stay shared, as `projectCommittedRecordTransform` copies one. */
@@ -59,6 +60,11 @@ class AuditFile extends Blob {
   async arrayBuffer() {
     activePrimaryReads += 1;
     return super.arrayBuffer();
+  }
+
+  stream() {
+    activePrimaryStreams += 1;
+    return super.stream();
   }
 }
 
@@ -269,7 +275,8 @@ const {
   installShownDrawing
 } = await import('../../gbdraw/web/js/services/config.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/services/session-request.js');
-const { encodeSessionResources } = await import('../../gbdraw/web/js/services/session-file.js');
+const { writeSessionDocumentFile } = await import('../../gbdraw/web/js/services/config.js');
+const { readSessionContainer } = await import('../../gbdraw/web/js/services/session-container.js');
 const { createInputFileStore } = await import(
   '../../gbdraw/web/js/services/history-files.js'
 );
@@ -490,7 +497,8 @@ const storedZipEntries = async (blob) => {
     const dataStart = nameStart + nameLength + extraLength;
     entries.push({
       name: decoder.decode(bytes.subarray(nameStart, nameStart + nameLength)),
-      text: decoder.decode(bytes.subarray(dataStart, dataStart + size))
+      text: decoder.decode(bytes.subarray(dataStart, dataStart + size)),
+      bytes: bytes.slice(dataStart, dataStart + size)
     });
     offset = dataStart + size;
   }
@@ -858,7 +866,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
         });
       } : null;
     },
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => {
       assert.equal(state.processingStatus.value, 'Preparing render inputs and session...');
       return serializeActiveRenderFiles(state, drawing);
@@ -919,7 +927,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.lastRunInfo.value.sourceRecipe.available, true);
   assert.match(state.lastRunInfo.value.sourceRecipe.command, /--gbk active\.gb/);
   assert.doesNotMatch(state.lastRunInfo.value.sourceRecipe.command, /--session/);
-  assert.match(state.lastRunInfo.value.exactReplay.command, /--session audit-simple\.gbdraw-session\.json/);
+  assert.match(state.lastRunInfo.value.exactReplay.command, /--session audit-simple\.gbdraw$/);
   assert.ok(
     lifecycleEvents.indexOf('generate.processing-published')
       < lifecycleEvents.indexOf('test.after-paint-returned')
@@ -962,15 +970,19 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(structuralMetrics.historyReplacementCount, 1);
   assert.equal(structuralMetrics.canonicalReplayFullSerializationCount || 0, 0);
   const readsBeforeReplay = activePrimaryReads;
+  const streamsBeforeReplay = activePrimaryStreams;
   await runner.downloadCliHelperFiles();
   assert.equal(structuralMetrics.canonicalReplayFullSerializationCount, 1);
-  assert.equal(activePrimaryReads, readsBeforeReplay + 1, 'the replay Session reads the input once to encode it');
+  // The replay Session streams the input into its entry once and never reads it whole.
+  assert.deepEqual({ reads: activePrimaryReads - readsBeforeReplay, streams: activePrimaryStreams - streamsBeforeReplay },
+    { reads: 0, streams: 1 });
   assert.equal(downloadedFilename, 'audit-simple-cli-files.zip');
   const helperEntries = await storedZipEntries(downloadedBlob);
   assertDownloadedFilesMatchCommands(state.lastRunInfo.value, helperEntries);
-  const replayEntry = helperEntries.find(({ name }) => name.endsWith('.gbdraw-session.json'));
+  // The exact replay is a Session file container, written by Save's writer (OV-2695).
+  const replayEntry = helperEntries.find(({ name }) => name.endsWith('.gbdraw'));
   assert.ok(replayEntry);
-  const replay = JSON.parse(replayEntry.text);
+  const replay = /** @type {Record<string, any>} */ ((await readSessionContainer(new Blob([replayEntry.bytes]))).document);
   assert.equal(replay.format, 'gbdraw-session');
   assert.equal(replay.version, SESSION_VERSION);
   // A replay Session over the Session limit is refused where the app shows errors, not lost.
@@ -1306,9 +1318,9 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   );
 
   // GE-09: a Cancel with no Worker request keeps the warm Worker and its staged
-  // primary source, so later runs do not read the file again. The second read is the
-  // reproducibility download's, whose replay Session encodes the input (OV-2612).
-  assert.equal(activePrimaryReads, 2);
+  // primary source, so later runs do not read the file again. The reproducibility
+  // download's replay Session streams the input and reads none of it (OV-2612).
+  assert.equal(activePrimaryReads, 1);
   assert.equal(inactiveFileReads, 0);
   assert.equal(adoptedArtifacts, 2);
   assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 12); // Includes the explicit failed-restoration attempt.
@@ -1326,7 +1338,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   workerResponses.push(response(readyResult, validCatalog(readyResult.name)));
   assert.deepEqual(await runner.runAnalysis(), { status: 'ok' });
   assert.equal(state.failedGeneratePreservedResult.value, false);
-  assert.equal(activePrimaryReads, 2);
+  assert.equal(activePrimaryReads, 1);
 
   // Cancel requested while preparation is pending ends before rendering.
   const runCount = () => workerMessages.filter(({ type }) => type === 'run').length;
@@ -1832,7 +1844,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows,
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state, drawing),
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failLateArtifactAdoption) {
@@ -2339,12 +2351,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       state.lastRunInfo.value.reproducibility.notes.join('\n'),
       /Download reproducibility files/
     );
-    assert.match(state.lastRunInfo.value.exactReplay.command, /--session lazy-linear\.gbdraw-session\.json/);
+    assert.match(state.lastRunInfo.value.exactReplay.command, /--session lazy-linear\.gbdraw$/);
     await runner.downloadCliHelperFiles();
     assert.equal(downloadedFilename, 'lazy-linear-cli-files.zip');
     const linearHelperEntries = await storedZipEntries(downloadedBlob);
     assertDownloadedFilesMatchCommands(state.lastRunInfo.value, linearHelperEntries);
-    assert.ok(linearHelperEntries.some(({ name }) => name.endsWith('.gbdraw-session.json')));
+    assert.ok(linearHelperEntries.some(({ name }) => name.endsWith('.gbdraw')));
     const blastEntry = linearHelperEntries.find(({ name }) => name === 'alpha.gbk-2.tsv');
     const comparisonsEntry = linearHelperEntries.find(({ name }) => name === 'comparisons.tsv');
     assert.ok(blastEntry?.text.includes('MIDDLE\tTHIRD'));
@@ -3092,7 +3104,7 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows: { value: [] },
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, active) => serializeActiveRenderFiles(state, active),
     adoptCanonicalRenderArtifacts: () => {},
     getCommittedCanonicalSession: () => null,
@@ -3419,7 +3431,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (snapshot, recordCatalog, drawing) => {
       serializeCalls += 1;
       serializedSnapshot = snapshot;
@@ -3797,7 +3809,7 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
       waits.task += 1;
       return afterTask();
     },
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state, drawing),
     adoptCanonicalRenderArtifacts: () => {},
     prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
@@ -3914,7 +3926,7 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (snapshot, recordCatalog, activeDrawing) => (
       serializeActiveRenderFiles(state, activeDrawing, snapshot)
     ),
@@ -3970,7 +3982,7 @@ test('the History estimate of the Run Info replay file leaves out the input file
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (snapshot, recordCatalog, activeDrawing) => (
       serializeActiveRenderFiles(state, activeDrawing, snapshot)
     ),
@@ -3988,7 +4000,7 @@ test('the History estimate of the Run Info replay file leaves out the input file
   workerResponses.push(response(generated, validCatalog(generated.name)));
   assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
   const runtime = runner.captureGeneratedArtifactRuntimeState();
-  assert.deepEqual(runtime.latestCliHelperFiles.map((file) => file.name), ['large-input.gbdraw-session.json']);
+  assert.deepEqual(runtime.latestCliHelperFiles.map((file) => file.name), ['large-input.gbdraw']);
   assert.ok(genbank.size > 1_000_000);
   assert.ok(runtime.retainedBytes < genbank.size, `${runtime.retainedBytes} counts the ${genbank.size} input bytes`);
 });
@@ -4032,7 +4044,7 @@ test('Circular Generate gives a Depth series without settings its default color'
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows: { value: [] },
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => (
       serializeActiveRenderFiles(state, activeDrawing)
     ),
@@ -4155,7 +4167,7 @@ test('a drawing re-added under its ID does not inherit the old drawing\'s unappl
     state,
     recordDisplayRows: { value: [] },
     readRecordIdentitySources: async () => ({ mode: 'circular', cards: new Map() }),
-    encodeSessionResources,
+    writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => serializeActiveRenderFiles(state, activeDrawing),
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: () => '',
@@ -4202,21 +4214,28 @@ test('a drawing re-added under its ID does not inherit the old drawing\'s unappl
   }
 });
 
-test('a gzip Circular reference stages for the LOSAT ring plan with the size of its expanded bytes', async () => {
-  const { gzipSync } = await import('node:zlib');
+// PD-OI-121 scenario revision 3: Generate passes a gzip input as chosen and the Worker's Python expands it, so the
+// ring plan's reference is staged as Generate's request names it (its gzip bytes and their size), and the plan reads
+// the expanded record (its length is the search space's; the gzip case of circular-ring-evalue-scale.playwright.spec.js).
+test('a gzip Circular reference stages for the LOSAT ring plan as Generate names it, its gzip bytes that expand to the record', async () => {
+  const { gzipSync, gunzipSync } = await import('node:zlib');
   const { requestRecordSources } = await import('../../gbdraw/web/js/services/session-request.js');
   const { createDiagramResourceTransport } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
   const text = 'LOCUS       REF1                    2000 bp    DNA     circular UNK 01-JAN-1980\n' +
     `ORIGIN\n        1 ${'acgt'.repeat(500)}\n//\n`;
-  const file = new File([gzipSync(Buffer.from(text))], 'ref.gb.gz', { lastModified: 1 });
+  const chosen = gzipSync(Buffer.from(text));
+  const file = new File([chosen], 'ref.gb.gz', { lastModified: 1 });
   // The ring planner stages the reference under the ids the Generate's request names it by (planRingScales).
   // Its descriptors are those Generate's request writes (`serializeFile`), as the page passes them.
   const reference = await requestRecordSources([{ gb: file, gff: null, fasta: null }], 'genbank', serializeFile);
   assert.ok(reference);
-  assert.equal(reference.resources['record-1-genbank'].size, Buffer.byteLength(text));
+  assert.equal(reference.resources['record-1-genbank'].size, chosen.length);
   const prepared = await createDiagramResourceTransport().prepare({
     request: reference.sources, resources: reference.resources, retain: true
   });
   assert.deepEqual(prepared.resourceManifest.map(({ resourceId, size }) => [resourceId, size]),
-    [['record-1-genbank', Buffer.byteLength(text)]]);
+    [['record-1-genbank', chosen.length]]);
+  const [staged] = prepared.stagedResources;
+  assert.deepEqual(Buffer.from(staged.bytes), chosen);
+  assert.equal(gunzipSync(Buffer.from(staged.bytes)).toString('utf8'), text);
 });

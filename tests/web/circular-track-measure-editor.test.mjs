@@ -14,6 +14,7 @@ import {
   createDefaultAdv, createDefaultForm, validateCurrentWriterActiveConfig
 } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import { projectCanonicalSessionRequest, readStoredRenderRequest } from '../../gbdraw/web/js/services/session-request.js';
+import { readSavedSession } from './helpers/session-documents.mjs';
 
 // A stored request as Load reads it (the one reader lifts schemas 1 and 2).
 const readStored = (session) => readStoredRenderRequest(session.renderRequest, {
@@ -140,9 +141,9 @@ test('Auto has no canonical unit; explicit clear returns null while typed empty 
   }
 });
 
-const tobaccoSaved = JSON.parse(await readFile(new URL(
-  '../../gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json', import.meta.url
-)));
+const tobaccoSaved = await readSavedSession(new Blob([await readFile(new URL(
+  '../../gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw', import.meta.url
+))]));
 const tobacco = savedDrawingView(tobaccoSaved, tobaccoSaved.ui.activeDrawingId);
 
 test('tobacco Gallery pairs and precision survive read and real canonical request projection without mutation', () => {

@@ -6,7 +6,7 @@ for (const mode of ['circular', 'linear']) {
   test(`B-03 ${mode} mobile search Edit Apply Label accepts pointer input`, async ({ browser }, info) => {
     test.setTimeout(300000);
     const page = await load(browser, mode === 'circular'
-      ? 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json' : seeds.linear, { width: 390, height: 844 });
+      ? 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw' : seeds.linear, { width: 390, height: 844 });
     try {
       if (mode === 'circular') {
         await popup(page); await closeEditor(page);
@@ -64,7 +64,7 @@ for (const mode of ['circular', 'linear']) {
       await generate(page);
       page.removeAllListeners('dialog');
       page.on('dialog', dialog => dialog.accept());
-      const file = info.outputPath('edited.gbdraw-session.json.gz');
+      const file = info.outputPath('edited.gbdraw');
       await download(page, 'Save Session', file);
       const restored = await load(browser, file, { width: 390, height: 844 });
       try {

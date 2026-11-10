@@ -83,7 +83,7 @@ test('incremental color edits survive a drawing round trip, dirty draft, and fre
     const edited = await snapshot(page);
     expect(edited.result).toContain('#c83366');
     expect(edited.result).toContain('#267b91');
-    const savedBefore = testInfo.outputPath('before.gbdraw-session.json.gz');
+    const savedBefore = testInfo.outputPath('before.gbdraw');
     await download(page, 'Save Session', savedBefore);
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     const undone = await snapshot(page);
@@ -98,7 +98,7 @@ test('incremental color edits survive a drawing round trip, dirty draft, and fre
     await switchMode(fresh, 'linear');
     await switchMode(fresh, 'circular');
     await agree(fresh, edited, testInfo, 'two-edits-returned');
-    const savedAfter = testInfo.outputPath('after.gbdraw-session.json.gz');
+    const savedAfter = testInfo.outputPath('after.gbdraw');
     await download(fresh, 'Save Session', savedAfter);
     await fresh.context().close();
     fresh = await load(browser, savedAfter);

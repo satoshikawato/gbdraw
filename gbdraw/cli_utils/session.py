@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence, TypedDict, TypeVar
 
 from gbdraw.api.record_planning import CLI_RECORD_KEY_PREFIX
 from gbdraw.cli_utils.common import add_dpi_arg, add_font_file_args, png_dpi, register_font_files, setup_logging
@@ -32,15 +32,19 @@ from gbdraw.render.formats import (
 )
 from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
 from gbdraw.api.run_metadata import RenderedResult, build_run_metadata
+from gbdraw.session_container import SessionResourceSource
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     CircularSourceCard,
     SessionBuildContext,
     SessionFileBinding,
-    _write_validated_session_json,
+    SessionResourceFile,
+    SessionResources,
+    _write_validated_session_file,
+    refuse_json_session_output,
     build_session_json,
     safe_embedded_filename,
-    serialize_file_entry,
+    file_resource_entry,
 )
 from gbdraw.session_contract import SessionRunMetadata
 from gbdraw.session_migration import (
@@ -56,7 +60,7 @@ if TYPE_CHECKING:
     )
     from gbdraw.api.requests import DiagramRequest
     from gbdraw.render.interactive_svg import InteractiveSvgContext
-    from gbdraw.session import SessionDocument, SessionPngDpi
+    from gbdraw.session import SessionDocument, SessionPngDpi, _DrawingBuild, _SessionDrawingRender
 
 
 logger = logging.getLogger(__name__)
@@ -129,8 +133,8 @@ def add_session_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--session",
         help=(
-            "Regenerate a diagram from a plain or gzip-compressed gbdraw GUI "
-            "session JSON file."
+            "Regenerate a diagram from a gbdraw Session file (.gbdraw, or an "
+            "older .json or .json.gz)."
         ),
         type=str,
     )
@@ -145,15 +149,15 @@ def add_session_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--save_session",
-        help="Write one GUI-loadable .gbdraw-session.json sidecar for this run.",
+        help="Write one GUI-loadable .gbdraw Session file for this run.",
         action="store_true",
     )
     parser.add_argument(
         "--session_output",
         metavar="PATH",
         help=(
-            "Write the session sidecar to PATH; use a .gz suffix for gzip "
-            "compression; implies --save_session."
+            "Write the Session file to PATH (.gbdraw; not .json or .json.gz); "
+            "implies --save_session."
         ),
         type=str,
     )
@@ -237,7 +241,7 @@ def parse_render_args(cmd_args: Sequence[str]) -> SessionCliRequest:
         "--session",
         required=True,
         metavar="FILE",
-        help="The gbdraw Session file (.gbdraw-session.json or .json.gz).",
+        help="The gbdraw Session file (.gbdraw, or an older .json or .json.gz).",
     )
     parser.add_argument(
         "--drawing",
@@ -293,7 +297,7 @@ def parse_render_args(cmd_args: Sequence[str]) -> SessionCliRequest:
         metavar="PATH",
         help=(
             "Write the Session again with the rendered drawings replaced to "
-            "PATH; use a .gz suffix for gzip compression."
+            "PATH (.gbdraw; not .json or .json.gz)."
         ),
     )
     add_dpi_arg(parser)
@@ -325,10 +329,10 @@ def resolve_session_sidecar_path(
     if explicit_path:
         return Path(explicit_path)
     if output_prefix:
-        return Path(f"{output_prefix}.gbdraw-session.json")
+        return Path(f"{output_prefix}.gbdraw")
     if len(outputs) == 1:
-        return outputs[0].svg_path.with_suffix(".gbdraw-session.json")
-    return Path("gbdraw.gbdraw-session.json")
+        return outputs[0].svg_path.with_suffix(".gbdraw")
+    return Path("gbdraw.gbdraw")
 
 
 def preflight_session_sidecar_if_requested(
@@ -351,6 +355,7 @@ def preflight_session_sidecar_if_requested(
         output_prefix=output_prefix,
         outputs=outputs,
     )
+    refuse_json_session_output(sidecar_path)
     preflight_output_paths((sidecar_path,), overwrite=True)
     try:
         sidecar_identity = sidecar_path.resolve(strict=False)
@@ -473,7 +478,8 @@ def save_session_sidecar_if_requested(
     output_prefix: str | None,
     run_result: DiagramRunResult,
     cmd_args: Sequence[str] | None = None,
-    source_session: Mapping[str, Any] | None = None,
+    source_session: Mapping[str, object] | None = None,
+    source_resources: Mapping[str, SessionResourceSource] | None = None,
     cli_invocation_args: Sequence[str] = (),
     file_bindings: Sequence[SessionFileBinding] = (),
     overwrite: bool = False,
@@ -543,12 +549,13 @@ def save_session_sidecar_if_requested(
     context_output_prefix = output_prefix
     if context_output_prefix is None and len(run_result.outputs) == 1:
         context_output_prefix = run_result.outputs[0].output_prefix
-    payload = build_session_json(
+    payload, sources = build_session_json(
         SessionBuildContext(
             mode=run_result.mode,
             output_prefix=context_output_prefix,
             render_formats=run_result.render_formats,
             source_session=source_session,
+            source_resources=source_resources,
             cli_invocation_args=invocation_args,
             file_bindings=tuple(bindings),
             run_metadata=run_result.run_metadata,
@@ -566,7 +573,7 @@ def save_session_sidecar_if_requested(
         _canonical_request_is_resolved=True,
     )
     # build_session_json validated the payload it returned (without "files").
-    _write_validated_session_json(sidecar_path, payload, overwrite=overwrite)
+    _write_validated_session_file(sidecar_path, payload, sources, overwrite=overwrite)
     _warn_custom_fonts_saved_by_name(run_result.canonical_request)
     return sidecar_path
 
@@ -639,7 +646,7 @@ def render_canonical_session_if_present(
 
 
 def _session_sidecar_path(
-    plans: Sequence[Any],
+    plans: Sequence[_SessionDrawingRender],
     *,
     session_output: str | None,
     output_path: Path | None,
@@ -673,15 +680,24 @@ def _session_sidecar_path(
     path = (
         Path(session_output)
         if session_output
-        else output_directory / f"{prefix}.gbdraw-session.json"
+        else output_directory / f"{prefix}.gbdraw"
     )
+    refuse_json_session_output(path)
     return path, prefix
 
 
+def _cache_entries(cache: object) -> Sequence[Mapping[str, object]]:
+    """The entries of a stored LOSAT cache (a checked Session's list), or none."""
+
+    entries = cache.get("entries", ()) if isinstance(cache, Mapping) else ()
+    return entries if isinstance(entries, (list, tuple)) else ()
+
+
 def _rendered_drawing_build(
-    plan: Any,
+    plan: _SessionDrawingRender,
     rendered: RequestRenderResult | CircularBatchRenderResult,
-) -> tuple[Any, dict[str, Any] | None]:
+    resources: SessionResources,
+) -> tuple[_DrawingBuild, dict[str, object] | None]:
     """The re-save of one rendered drawing: its request, Results and artifacts.
 
     ``plan`` is a drawing of the current Session the re-save was upgraded to,
@@ -697,13 +713,14 @@ def _rendered_drawing_build(
     # built from the drawing copies its data once (SessionDocument).
     state, web_file_inventory = project_session_adjunct_for_current_write(
         plan.drawing.artifacts.fields,
+        resources,
         source_version=CURRENT_SESSION_VERSION,
     )
     state = with_current_artifacts(
         state,
         losat_cache_entries=rendered.losat_cache_entries,
         # A replay builds none; the Session keeps the entries it was saved with.
-        losat_derived_cache_entries=state.get("losatDerivedCache", {}).get("entries", ()),
+        losat_derived_cache_entries=_cache_entries(state.get("losatDerivedCache")),
         protein_identity_manifest=rendered.protein_identity_manifest,
         legacy_protein_raw_candidates=rendered.migration_report.protein_raw_candidates,
         legacy_protein_derived_evidence=rendered.migration_report.protein_derived_evidence,
@@ -867,9 +884,9 @@ def render_session_drawings_cli(
             return
         sidecar_path, title_fallback = sidecar
         builds = []
-        web_file_inventory: dict[str, Any] | None = None
+        web_file_inventory: dict[str, object] | None = None
         for plan in plans:
-            build, inventory = _rendered_drawing_build(plan, rendered[plan.drawing.id])
+            build, inventory = _rendered_drawing_build(plan, rendered[plan.drawing.id], base.resources)
             builds.append(build)
             # The drawings of a current Session share their Web file inventory.
             web_file_inventory = web_file_inventory or inventory
@@ -880,7 +897,7 @@ def render_session_drawings_cli(
                 base=base,
                 title=str(plans[0].drawing.artifacts.fields.get("title") or title_fallback),
                 web_file_inventory=web_file_inventory,
-                resources=plans[0].drawing.artifacts.fields["resources"],
+                resources=base.resources,
             ),
             overwrite=overwrite,
         )
@@ -994,10 +1011,69 @@ def strip_session_output_args(cmd_args: Sequence[str]) -> list[str]:
     return result
 
 
+
+class CliLinearSeqFiles(TypedDict):
+    """One Linear record's files (``files.linearSeqs[i]``) and the fields the Web keeps beside them."""
+
+    uid: str
+    gb: SessionResourceFile | None
+    gff: SessionResourceFile | None
+    fasta: SessionResourceFile | None
+    # One file, or one per depth track (``depth[j]``).
+    depth: SessionResourceFile | list[SessionResourceFile | None] | None
+    blast: SessionResourceFile | None
+    losat_gencode: int
+    losat_filename: str
+    definition: str
+    record_subtitle: str
+    region_record_id: str
+    region_start: int | None
+    region_end: int | None
+    region_reverse: bool
+
+
+class CliTableDependency(TypedDict):
+    """A file a CLI table row names, and the slot it is kept in."""
+
+    rowIndex: int
+    rowNumber: int
+    column: str
+    slot: str
+
+
+class CliTable(TypedDict):
+    """A CLI table option's file (``files.cliTables[i]``): where it is in the command and the files it names."""
+
+    argIndex: int
+    kind: str
+    slot: str
+    dependencies: list[CliTableDependency]
+
+
+class CliSessionFiles(TypedDict):
+    """The ``files`` of a CLI Session sidecar: each input file of the command in the
+    slot the Web keeps it in, bound by ``cliInvocation`` (``SessionFileBinding.slot``)."""
+
+    # One File card per Circular record input (``circularSources[i]``).
+    circularSources: list[CircularSourceCard]
+    # One file, or one per Circular depth track (``c_depth[j]``).
+    c_depth: SessionResourceFile | list[SessionResourceFile | None] | None
+    c_conservation_blasts: list[SessionResourceFile | None]
+    c_conservation_fastas: list[SessionResourceFile | None]
+    d_color: SessionResourceFile | None
+    t_color: SessionResourceFile | None
+    blacklist: SessionResourceFile | None
+    whitelist: SessionResourceFile | None
+    qualifier_priority: SessionResourceFile | None
+    linearSeqs: list[CliLinearSeqFiles]
+    cliInputs: list[SessionResourceFile | None]
+    cliTables: list[CliTable]
+
+
 def collect_embedded_files_from_cli_args(
     mode: Literal["circular", "linear"],
     cli_args: Sequence[str],
-) -> tuple[dict[str, Any], tuple[SessionFileBinding, ...]]:
+) -> tuple[CliSessionFiles, tuple[SessionFileBinding, ...]]:
     """Embed local CLI input files and build cliInvocation file bindings."""
 
     files = _empty_files_payload()
@@ -1011,9 +1087,9 @@ def collect_embedded_files_from_cli_args(
         if _is_cli_table_option(mode, token):
             value_index = index + 1
             if value_index < len(cli_args) and _is_embeddable_path(cli_args[value_index]):
-                table_slot = _append_cli_input(files, cli_args[value_index], depth=False)
+                table_slot = _append_cli_input(files, cli_args[value_index])
                 bindings.append(_binding(value_index, table_slot, cli_args[value_index]))
-                table_entry: dict[str, Any] = {
+                table_entry: CliTable = {
                     "argIndex": value_index,
                     "kind": _cli_table_kind(token),
                     "slot": table_slot,
@@ -1026,7 +1102,7 @@ def collect_embedded_files_from_cli_args(
                 ):
                     if not _is_embeddable_path(dependency.path):
                         continue
-                    dependency_slot = _append_cli_input(files, dependency.path, depth=False)
+                    dependency_slot = _append_cli_input(files, dependency.path)
                     table_entry["dependencies"].append(
                         {
                             "rowIndex": dependency.row_index,
@@ -1035,7 +1111,7 @@ def collect_embedded_files_from_cli_args(
                             "slot": dependency_slot,
                         }
                     )
-                files.setdefault("cliTables", []).append(table_entry)
+                files["cliTables"].append(table_entry)
             index += 2
             continue
         if mode == "circular" and token in {"--gbk", "--gff", "--fasta", "--conservation_blast", "--depth_track"}:
@@ -1053,7 +1129,7 @@ def collect_embedded_files_from_cli_args(
                 else:
                     slot = f"files.c_depth[{circular_depth_index}]"
                     circular_depth_index += 1
-                _set_file_slot(files, slot, value, depth=token == "--depth_track")
+                _set_file_slot(files, slot, value)
                 bindings.append(_binding(arg_index, slot, value))
             index = next_index
             continue
@@ -1066,17 +1142,13 @@ def collect_embedded_files_from_cli_args(
                 seq_index = offset
                 if token == "--gbk":
                     slot = f"files.linearSeqs[{seq_index}].gb"
-                    depth = False
                 elif token == "--gff":
                     slot = f"files.linearSeqs[{seq_index}].gff"
-                    depth = False
                 elif token == "--fasta":
                     slot = f"files.linearSeqs[{seq_index}].fasta"
-                    depth = False
                 else:
                     slot = f"files.linearSeqs[{seq_index}].blast"
-                    depth = False
-                _set_file_slot(files, slot, value, depth=depth)
+                _set_file_slot(files, slot, value)
                 bindings.append(_binding(arg_index, slot, value))
             index = next_index
             continue
@@ -1087,7 +1159,7 @@ def collect_embedded_files_from_cli_args(
                 if not _is_embeddable_path(value):
                     continue
                 slot = f"files.linearSeqs[{offset}].depth[{linear_depth_track_index}]"
-                _set_file_slot(files, slot, value, depth=True)
+                _set_file_slot(files, slot, value)
                 bindings.append(_binding(arg_index, slot, value))
             linear_depth_track_index += 1
             index = next_index
@@ -1097,9 +1169,9 @@ def collect_embedded_files_from_cli_args(
             if value_index < len(cli_args) and _is_embeddable_path(cli_args[value_index]):
                 slot = _COMMON_SINGLE_FILE_OPTIONS[token]
                 if slot == "files.cliInputs[]":
-                    slot = _append_cli_input(files, cli_args[value_index], depth=False)
+                    slot = _append_cli_input(files, cli_args[value_index])
                 else:
-                    _set_file_slot(files, slot, cli_args[value_index], depth=False)
+                    _set_file_slot(files, slot, cli_args[value_index])
                 bindings.append(_binding(value_index, slot, cli_args[value_index]))
             index += 2
             continue
@@ -1166,7 +1238,7 @@ _COMMON_SINGLE_FILE_OPTIONS = {
 _CIRCULAR_SOURCE_FILE_KEYS = {"--gbk": "gb", "--gff": "gff", "--fasta": "fasta"}
 
 
-def _empty_files_payload() -> dict[str, Any]:
+def _empty_files_payload() -> CliSessionFiles:
     return {
         "circularSources": [],
         "c_depth": None,
@@ -1224,14 +1296,21 @@ def _binding(arg_index: int, slot: str, path: object) -> SessionFileBinding:
     )
 
 
-def _append_cli_input(files: dict[str, Any], path: object, *, depth: bool) -> str:
+def _append_cli_input(files: CliSessionFiles, path: object) -> str:
     slot = f"files.cliInputs[{len(files['cliInputs'])}]"
-    _set_file_slot(files, slot, path, depth=depth)
+    _set_file_slot(files, slot, path)
     return slot
 
 
-def _set_file_slot(files: dict[str, Any], slot: str, path: object, *, depth: bool) -> None:
-    entry = serialize_file_entry(str(path), depth=depth)
+def _set_file_slot(files: CliSessionFiles, slot: str, path: object) -> SessionResourceFile:
+    """Keep the file ``path`` in ``slot`` of ``files``; the kept entry."""
+
+    entry = file_resource_entry(str(path))
+    _place_file(files, slot, entry)
+    return entry
+
+
+def _place_file(files: CliSessionFiles, slot: str, entry: SessionResourceFile) -> None:
     if slot.startswith("files.circularSources["):
         _set_circular_source_slot(files, slot, entry)
         return
@@ -1251,21 +1330,17 @@ def _set_file_slot(files: dict[str, Any], slot: str, path: object, *, depth: boo
         files["qualifier_priority"] = entry
         return
     if slot.startswith("files.c_conservation_blasts["):
-        index = _slot_index(slot)
-        _ensure_list_size(files["c_conservation_blasts"], index + 1, None)
-        files["c_conservation_blasts"][index] = entry
+        _place_at(files["c_conservation_blasts"], _slot_index(slot), entry)
         return
     if slot.startswith("files.c_depth["):
-        index = _slot_index(slot)
-        if not isinstance(files.get("c_depth"), list):
-            files["c_depth"] = []
-        _ensure_list_size(files["c_depth"], index + 1, None)
-        files["c_depth"][index] = entry
+        depths = files["c_depth"]
+        if not isinstance(depths, list):
+            depths = []
+            files["c_depth"] = depths
+        _place_at(depths, _slot_index(slot), entry)
         return
     if slot.startswith("files.cliInputs["):
-        index = _slot_index(slot)
-        _ensure_list_size(files["cliInputs"], index + 1, None)
-        files["cliInputs"][index] = entry
+        _place_at(files["cliInputs"], _slot_index(slot), entry)
         return
     if slot.startswith("files.linearSeqs["):
         _set_linear_seq_slot(files, slot, entry)
@@ -1273,7 +1348,7 @@ def _set_file_slot(files: dict[str, Any], slot: str, path: object, *, depth: boo
     raise ValidationError(f"Unsupported session file slot: {slot}")
 
 
-def _set_linear_seq_slot(files: dict[str, Any], slot: str, entry: dict[str, Any]) -> None:
+def _set_linear_seq_slot(files: CliSessionFiles, slot: str, entry: SessionResourceFile) -> None:
     prefix = "files.linearSeqs["
     rest = slot[len(prefix):]
     index_text, suffix = rest.split("]", 1)
@@ -1291,35 +1366,39 @@ def _set_linear_seq_slot(files: dict[str, Any], slot: str, entry: dict[str, Any]
     elif suffix == ".depth":
         seq["depth"] = entry
     elif suffix.startswith(".depth["):
-        depth_index = int(suffix[len(".depth["):-1])
-        if not isinstance(seq.get("depth"), list):
-            seq["depth"] = []
-        _ensure_list_size(seq["depth"], depth_index + 1, None)
-        seq["depth"][depth_index] = entry
+        depths = seq["depth"]
+        if not isinstance(depths, list):
+            depths = []
+            seq["depth"] = depths
+        _place_at(depths, int(suffix[len(".depth["):-1]), entry)
     else:
         raise ValidationError(f"Unsupported linear sequence file slot: {slot}")
 
 
-def _set_circular_source_slot(files: dict[str, object], slot: str, entry: Mapping[str, object]) -> None:
+def _set_circular_source_slot(files: CliSessionFiles, slot: str, entry: SessionResourceFile) -> None:
     """Fill ``files.circularSources[<i>].<gb|gff|fasta>``; card ``i`` is the
     request's record input ``i``, so its uid is that input's CLI record key."""
 
     index_text, suffix = slot[len("files.circularSources["):].split("]", 1)
     index = int(index_text)
-    key = suffix.removeprefix(".")
-    if key not in ("gb", "gff", "fasta"):
+    cards = files["circularSources"]
+    while len(cards) <= index:
+        cards.append(CircularSourceCard(uid=f"{CLI_RECORD_KEY_PREFIX}{len(cards) + 1}", gb=None, gff=None, fasta=None))
+    card = cards[index]
+    if suffix == ".gb":
+        card["gb"] = entry
+    elif suffix == ".gff":
+        card["gff"] = entry
+    elif suffix == ".fasta":
+        card["fasta"] = entry
+    else:
         raise ValidationError(
             f"Unsupported session file slot: {slot}",
             diagnostic={"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"},
         )
-    cards = files["circularSources"]
-    assert isinstance(cards, list), "the CLI inventory starts with a list of cards"
-    while len(cards) <= index:
-        cards.append(CircularSourceCard(uid=f"{CLI_RECORD_KEY_PREFIX}{len(cards) + 1}", gb=None, gff=None, fasta=None))
-    cards[index][key] = entry
 
 
-def _ensure_linear_seq(files: dict[str, Any], index: int) -> None:
+def _ensure_linear_seq(files: CliSessionFiles, index: int) -> None:
     linear_seqs = files["linearSeqs"]
     while len(linear_seqs) <= index:
         ordinal = len(linear_seqs) + 1
@@ -1351,9 +1430,15 @@ def _slot_index(slot: str) -> int:
     return int(slot[left + 1:right])
 
 
-def _ensure_list_size(values: list[Any], size: int, fill: Any) -> None:
-    while len(values) < size:
-        values.append(fill)
+_Item = TypeVar("_Item")
+
+
+def _place_at(values: list[_Item | None], index: int, item: _Item) -> None:
+    """Put ``item`` at ``index`` of ``values``, filling the slots before it with None."""
+
+    while len(values) <= index:
+        values.append(None)
+    values[index] = item
 
 
 __all__ = [

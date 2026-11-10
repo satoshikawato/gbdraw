@@ -92,7 +92,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 1000
@@ -167,7 +167,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "replayThrough": 3,
             "viewport": {
               "width": 1280,
@@ -216,7 +216,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "replayThrough": 4,
             "viewport": {
               "width": 1900,
@@ -326,7 +326,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "viewport": {
               "width": 1600,
               "height": 1100
@@ -372,7 +372,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "viewport": {
               "width": 1600,
               "height": 1100
@@ -450,7 +450,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "viewport": {
               "width": 1600,
               "height": 1100
@@ -511,7 +511,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "replayThrough": 5,
             "viewport": {
               "width": 1900,
@@ -588,7 +588,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "viewport": {
               "width": 1600,
               "height": 1100
@@ -641,7 +641,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "replayThrough": 6,
             "viewport": {
               "width": 1900,
@@ -775,7 +775,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 1000
@@ -830,7 +830,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 1000
@@ -861,7 +861,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "viewport": {
               "width": 1900,
               "height": 1000
@@ -921,7 +921,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -993,7 +993,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900

@@ -1,17 +1,17 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
-const { gunzipSync } = require('node:zlib');
+const { readSessionFile, readSessionFileJson } = require('./helpers/session-file.cjs');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { load, generate, switchMode, popup, closeEditor, download, snapshot } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise, reveal } = require('./helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
-const seed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
-const tobacco = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json';
-const lambda = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json';
+const seed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw';
+const tobacco = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw';
+const lambda = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw';
 const source = async (file, name) => {
-  const session = JSON.parse(await fs.readFile(file, 'utf8'));
+  const session = await readSessionFileJson(file);
   return { name, mimeType: 'text/plain', buffer: Buffer.from(
     session.resources[shownSavedDrawing(session).renderRequest.records[0].source.resourceId].data, 'base64') };
 };
@@ -64,9 +64,9 @@ test('V1-V5/V8 individual visibility is reconciled on accepted source replacemen
     expect((await snapshot(page)).featureVisibility).toEqual({ [key]: 'off' });
     await history(page, 'Redo');
     expect((await snapshot(page)).featureVisibility).toEqual({});
-    const file = testInfo.outputPath('source-B.gbdraw-session.json.gz');
-    const bytes = await download(page, 'Save Session', file);
-    const savedSession = JSON.parse(gunzipSync(bytes));
+    const file = testInfo.outputPath('source-B.gbdraw');
+    await download(page, 'Save Session', file);
+    const savedSession = await readSessionFile(file);
     expect(shownSavedDrawing(savedSession).features.featureOverrides).toEqual({});
     fresh = await load(browser, file);
     expect((await snapshot(fresh)).featureVisibility).toEqual({});
@@ -131,7 +131,7 @@ test('composite source replacement and Web-CLI-Web replay do not restore discard
   await fs.writeFile(a, (await source(seed, 'mito.gb')).buffer);
   await fs.writeFile(b, (await source(lambda, 'lambda.gb')).buffer);
   const cli = async (args, name) => {
-    const output = testInfo.outputPath(`${name}.gbdraw-session.json.gz`);
+    const output = testInfo.outputPath(`${name}.gbdraw`);
     await promisify(execFile)('python', ['-m', 'gbdraw.cli', 'circular', ...args,
       '-o', testInfo.outputPath(name), '--session_output', output], {
       cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: process.cwd() },
@@ -153,7 +153,7 @@ test('composite source replacement and Web-CLI-Web replay do not restore discard
     await upload(page, await source(tobacco, 'tobacco.gb'));
     await generate(page);
     expect((await snapshot(page)).featureVisibility).toEqual({});
-    const saved = testInfo.outputPath('replaced.gbdraw-session.json.gz');
+    const saved = testInfo.outputPath('replaced.gbdraw');
     await download(page, 'Save Session', saved);
     const replayed = await cli(['--session', saved], 'replayed');
     fresh = await load(browser, replayed);

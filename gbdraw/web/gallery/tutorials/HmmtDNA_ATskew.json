@@ -93,7 +93,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw",
             "replayThrough": 2,
             "selector": ".card[data-settings-section='input-genomes']",
             "cropPadding": 14,
@@ -153,7 +153,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw",
             "replayThrough": 3,
             "viewport": {
               "width": 1400,
@@ -316,7 +316,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw",
             "replayThrough": 4,
             "viewport": {
               "width": 1400,
@@ -399,7 +399,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw",
             "replayThrough": 5,
             "viewport": {
               "width": 1400,
@@ -496,7 +496,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw",
             "openDetails": [
               "Layout"
             ],
@@ -544,7 +544,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw",
             "replayThrough": 6,
             "viewport": {
               "width": 1400,
@@ -700,7 +700,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw",
             "replayThrough": 7,
             "viewport": {
               "width": 1400,
@@ -831,7 +831,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 1100
@@ -962,7 +962,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 1000
@@ -1016,7 +1016,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw",
             "replayThrough": 9,
             "viewport": {
               "width": 1400,
@@ -1079,7 +1079,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900
@@ -1141,7 +1141,7 @@
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw",
             "viewport": {
               "width": 1280,
               "height": 900

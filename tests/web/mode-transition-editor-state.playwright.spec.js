@@ -61,7 +61,7 @@ for (const mode of ['circular', 'linear']) {
           await check(action);
         }
       }
-      const file = testInfo.outputPath('roundtrip.gbdraw-session.json.gz');
+      const file = testInfo.outputPath('roundtrip.gbdraw');
       await download(page, 'Save Session', file);
       fresh = await load(browser, file);
       expect.soft(labelIntent(await snapshot(fresh))).toEqual(labelIntent(edited));

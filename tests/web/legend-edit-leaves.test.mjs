@@ -7,6 +7,7 @@ import test from 'node:test';
 
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { gallerySessionDocument } from './helpers/session-documents.mjs';
 
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
@@ -108,8 +109,9 @@ test('the four leaves are GUI-managed paths, so a loaded request never keeps the
 const COMPOSITION = 'data-gbdraw-composition';
 const decodeAttribute = (value) => value.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
   .replace(/&amp;/g, '&');
+const galleryDocuments = { HmmtDNA_basic_circular: await gallerySessionDocument('HmmtDNA_basic_circular') };
 const galleryRoot = (base) => {
-  const saved = JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${base}.gbdraw-session.json`, import.meta.url), 'utf8'));
+  const saved = galleryDocuments[base];
   const content = savedDrawingView(saved, saved.ui.activeDrawingId).results[0].content;
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   svg.setAttribute(COMPOSITION, decodeAttribute(svg.getAttribute(COMPOSITION)));

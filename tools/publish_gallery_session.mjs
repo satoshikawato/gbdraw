@@ -5,7 +5,6 @@ import { webcrypto } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gunzipSync } from 'node:zlib';
 import { resolveLinearComparisonPlan } from '../gbdraw/web/js/services/linear-comparisons.js';
 import { isReusableLosatEntry, webLosatRuntimeRecord } from '../gbdraw/web/js/services/losat-cache.js';
 import { runLosatPairDirect } from '../gbdraw/web/js/services/losat-runtime.js';
@@ -24,9 +23,12 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 // The publication's draft split is Python's `split_draft_into_modes`
-// (gbdraw/session_io.py), and its Session files are written by the refresh
-// tool's `write_gallery_session`, so a `.gz` Session is compressed as the CLI's.
-// `tools/refresh_gallery_sessions.py` names its own interpreter in PYTHON.
+// (gbdraw/session_io.py). The bridge reads and writes Session files
+// (`.gbdraw`) through `tools/refresh_gallery_sessions.py`, which calls it: it
+// edits a Session as one JSON payload whose resources hold their bytes as
+// base64 (`_read_session_file`), and writes it back unchecked
+// (`_write_staged_session`); the refresh checks each file where it reads it as
+// a Session. It names its own interpreter in PYTHON.
 const SPLIT_DRAFT = `
 import json, sys
 from gbdraw.session_io import mode_split_palette_colors, split_draft_into_modes
@@ -38,11 +40,18 @@ json.dump(split_draft_into_modes(
     palette_colors=mode_split_palette_colors(payload['draft'].get('config')),
 ), sys.stdout)
 `;
-// One Gallery Session text (OV-3370), not the number text of `JSON.stringify`.
+const READ_SESSION = `
+import json, sys
+from pathlib import Path
+from tools.refresh_gallery_sessions import _read_session_file
+sys.stdout.buffer.write(json.dumps(_read_session_file(Path(sys.argv[1])), ensure_ascii=False).encode('utf-8'))
+`;
+// One Gallery Session text (OV-3370): Python writes every Session file the bridge writes.
 const WRITE_SESSION = `
 import json, sys
-from tools.refresh_gallery_sessions import write_gallery_session
-write_gallery_session(sys.argv[1], json.load(sys.stdin.buffer))
+from pathlib import Path
+from tools.refresh_gallery_sessions import _write_staged_session
+_write_staged_session(Path(sys.argv[1]), json.load(sys.stdin))
 `;
 
 /**
@@ -106,13 +115,9 @@ const {
 
 // A Session file as the publication reads it: the one-drawing view of the
 // drawing it shows, and that drawing's ID and name (Session 51).
-const readSession = async (path) => {
-  const payload = await readFile(path);
-  const decoded = payload[0] === 0x1f && payload[1] === 0x8b
-    ? gunzipSync(payload)
-    : payload;
-  return galleryPublicationView(JSON.parse(decoded.toString('utf8')));
-};
+const readSession = async (path) => galleryPublicationView(
+  JSON.parse(await runPython('Session read', READ_SESSION, [resolvePath(path)], ''))
+);
 
 const writeSession = async (path, session) => {
   await runPython('Session write', WRITE_SESSION, [resolvePath(path)], JSON.stringify(session));

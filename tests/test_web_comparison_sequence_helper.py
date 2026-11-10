@@ -7,6 +7,7 @@ and DDBJ files of one sequence give one raw key in the CLI and the Web.
 
 from __future__ import annotations
 
+from tests.utils.session_files import read_session_payload
 import json
 from pathlib import Path
 
@@ -146,7 +147,7 @@ def test_helper_query_has_the_cli_ring_raw_key(tmp_path: Path) -> None:
     ])
     # One genome in three layouts is one raw key: one search, one entry.
     assert len(_searches(log)) == 1
-    session = json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8"))
+    session = read_session_payload(prefix.with_suffix(".gbdraw"))
     entries = drawing_view(session)["losatCache"]["entries"]
     assert {entry["queryCanonicalHash"] for entry in entries} == helper_hashes
     for entry in entries:

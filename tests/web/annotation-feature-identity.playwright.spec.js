@@ -204,7 +204,7 @@ test('an annotation of one same-coordinate feature in one copy of a record stays
   const shapes = await annotationShapes(page, webSvg, 'feature_1');
   expect(shapes).toHaveLength(1);
 
-  const sessionPath = testInfo.outputPath('twins.gbdraw-session.json');
+  const sessionPath = testInfo.outputPath('twins.gbdraw');
   await download(page, 'Save Session', sessionPath, { title: '' });
   expect(await annotationShapes(page, replayOnCli(sessionPath, testInfo.outputPath('twins-replay')), 'feature_1'))
     .toEqual(shapes);
@@ -213,7 +213,7 @@ test('an annotation of one same-coordinate feature in one copy of a record stays
   try {
     const fresh = await context.newPage();
     await openFresh(fresh);
-    await fresh.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
+    await fresh.locator('input[accept*=".gbdraw"]').setInputFiles(sessionPath);
     await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
       && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
     await settle(fresh);
@@ -285,7 +285,7 @@ test('OV-21: an annotation of a selected Circular feature stays out of Linear re
     };
   });
   await openFresh(page);
-  await loadSessionFile(page, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
+  await loadSessionFile(page, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw');
   await switchMode('circular');
   // The Circular File card has the uid `record-1`, as the card of a CLI
   // Session does (a Web upload's card has a uid of its own): its one record's
@@ -345,7 +345,7 @@ test('R-7: a Session 44 hash annotation of one untransformed feature moves to it
   test.setTimeout(360_000);
   const SESSION = 'tests/fixtures/sessions/selected-feature-annotations.v44.gbdraw-session.json.gz';
   await openFresh(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(SESSION);
+  await page.locator('input[accept*=".gbdraw"]').setInputFiles(SESSION);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
   await settle(page);

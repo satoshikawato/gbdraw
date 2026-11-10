@@ -7,6 +7,8 @@ const { semantics: svgSemantics } = require('./helpers/visual-state.cjs');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { circularFileInput } = require('./helpers/circular-inputs.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
+const sessionDocuments = () => import(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'helpers/session-documents.mjs')).href);
 
 const snapshot = async (page) => {
   // Opening an imported Editor hydrates transient DOM label bindings and its
@@ -247,7 +249,7 @@ test('zoom controls do not overlap the Editor toggle or drawer at each size; hid
   for (const viewport of ISSUE_461_VIEWPORTS) {
     await test.step(`zoom controls do not overlap the Editor toggle or drawer at ${viewport.id}`, async () => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
-      const imported = await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz');
+      const imported = await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw');
       expect(imported.status).toBe('ok');
 
       const toggle = page.locator('.drawer-toggle');
@@ -508,8 +510,8 @@ const assertNoOverlayErrors = (page) => expect(page.overlayDiagnostics).toEqual(
 
 for (const viewport of MOBILE_VIEWPORTS) {
   for (const [journey, filename] of [
-    ['J43', 'HmmtDNA_ATskew.gbdraw-session.json'],
-    ['J44', 'lambda_basic_linear.gbdraw-session.json']
+    ['J43', 'HmmtDNA_ATskew.gbdraw'],
+    ['J44', 'lambda_basic_linear.gbdraw']
   ]) {
     test(`mobile Editor overlays ${viewport.id} ${journey}`, async ({ page }, testInfo) => {
       test.setTimeout(180000);
@@ -606,7 +608,7 @@ test('mobile overlays preserve mode, source replacement, and resize behavior', a
   test.setTimeout(180000);
   await page.setViewportSize({ width: 1366, height: 768 });
   await expect(page.locator('.drawer-toggle')).toHaveCount(0);
-  expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw-session.json')).status).toBe('ok');
+  expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw')).status).toBe('ok');
   const toggle = page.locator('.drawer-toggle');
   for (const viewport of [{ width: 1366, height: 768 }, MOBILE_VIEWPORTS[0], { width: 1366, height: 768 }]) {
     await page.setViewportSize(viewport);
@@ -645,11 +647,9 @@ test('mobile overlays preserve mode, source replacement, and resize behavior', a
   }
   // Replace the actual input bytes through the upload control while retaining
   // the established last-Result availability semantics.
-  const replacement = await page.evaluate(async () => {
-    const session = await (await fetch('/gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json')).json();
-    const resource = session.resources[session.drawings.find((entry) => entry.id === session.ui.activeDrawingId).renderRequest.records[0].source.resourceId];
-    return atob(resource.data);
-  });
+  const lambdaSession = await (await sessionDocuments()).gallerySessionDocument('lambda_basic_linear');
+  const replacement = Buffer.from(lambdaSession.resources[lambdaSession.drawings.find((entry) => entry.id === lambdaSession.ui.activeDrawingId)
+    .renderRequest.records[0].source.resourceId].data, 'base64').toString('latin1');
   await circularFileInput(page, 'gb').setInputFiles({
     name: 'lambda-replacement.gb', mimeType: 'text/plain', buffer: Buffer.from(replacement)
   });
@@ -671,7 +671,7 @@ test('a remembered unavailable Similarity groups tab reopens as Features', async
 }) => {
   const orthogroupImport = await loadGallerySession(
     page,
-    'majanivirus_orthogroup.gbdraw-session.json.gz'
+    'majanivirus_orthogroup.gbdraw'
   );
   expect(orthogroupImport.status).toBe('ok');
   await expect.poll(
@@ -690,7 +690,7 @@ test('a remembered unavailable Similarity groups tab reopens as Features', async
 
   const groupFreeImport = await loadGallerySession(
     page,
-    'HmmtDNA_basic_circular.gbdraw-session.json'
+    'HmmtDNA_basic_circular.gbdraw'
   );
   expect(groupFreeImport.status).toBe('ok');
   await expect.poll(() => page.evaluate(() => ({
@@ -716,7 +716,7 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   test.setTimeout(180000);
   const imported = await loadGallerySession(
     page,
-    'majanivirus_orthogroup.gbdraw-session.json.gz'
+    'majanivirus_orthogroup.gbdraw'
   );
   expect(imported.status).toBe('ok');
   await expect.poll(
@@ -880,7 +880,7 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
 
 test('the feature popup names a record-specific similarity group', async ({ page }) => {
   test.setTimeout(180000);
-  expect((await loadGallerySession(page, 'vibrio-harveyi-group-collinear.gbdraw-session.json.gz')).status).toBe('ok');
+  expect((await loadGallerySession(page, 'vibrio-harveyi-group-collinear.gbdraw')).status).toBe('ok');
   const opened = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const feature = app.extractedFeatures.find((candidate) => {
@@ -898,9 +898,9 @@ test('the feature popup names a record-specific similarity group', async ({ page
 });
 
 for (const liveCase of [
-  { id: 'desktop', session: 'HmmtDNA_basic_circular.gbdraw-session.json' },
-  { id: 'compact Circular', session: 'HmmtDNA_basic_circular.gbdraw-session.json', viewport: { width: 390, height: 740 } },
-  { id: 'compact Linear', session: 'lambda_basic_linear.gbdraw-session.json', viewport: { width: 390, height: 844 } }
+  { id: 'desktop', session: 'HmmtDNA_basic_circular.gbdraw' },
+  { id: 'compact Circular', session: 'HmmtDNA_basic_circular.gbdraw', viewport: { width: 390, height: 740 } },
+  { id: 'compact Linear', session: 'lambda_basic_linear.gbdraw', viewport: { width: 390, height: 844 } }
 ]) {
 test(`individual Feature, Label, and Legend edits update the mounted SVG: ${liveCase.id}`, { tag: liveCase.viewport ? [] : '@pr-smoke' }, async ({
   page
@@ -1108,25 +1108,22 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   const { execFileSync } = require('node:child_process');
   const { mkdirSync, readFileSync } = require('node:fs');
   const { join } = require('node:path');
-  const { gunzipSync } = require('node:zlib');
   const directory = testInfo.outputPath('mixed');
   mkdirSync(directory, { recursive: true });
   execFileSync('python', ['-c',
     'import sys; from pathlib import Path; from tests.test_api_session import _record_local_collinear_session; _record_local_collinear_session(Path(sys.argv[1]))',
     directory
   ], { cwd: process.cwd(), stdio: 'pipe' });
-  const typedSession = readFileSync(join(directory, 'mixed.gbdraw-session.json'), 'utf8');
+  const { readSavedSession, sessionFileOf } = await sessionDocuments();
+  const typedSession = await readSavedSession(new Blob([readFileSync(join(directory, 'mixed.gbdraw'))]));
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   // The Python writer has no Web draft: Load takes the request's projection, and
   // the shown drawing's config holds the comparison plan this test sets.
-  const session = Buffer.from(await page.evaluate(async (source) => {
-    const document = JSON.parse(source);
-    const shown = document.drawings.find((drawing) => drawing.id === document.ui.activeDrawingId);
-    shown.config = { ...shown.config, linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] } };
-    return JSON.stringify(document);
-  }, typedSession));
+  const typedShown = typedSession.drawings.find((drawing) => drawing.id === typedSession.ui.activeDrawingId);
+  typedShown.config = { ...typedShown.config, linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] } };
+  const session = Buffer.from(await (await sessionFileOf(typedSession)).arrayBuffer());
   // The bytes cross into the page as base64 (evaluateWithRetainedPromise writes
   // its argument as JSON; a spread number array is about three times as long),
   // and the page checks that it decoded the bytes read here.
@@ -1139,7 +1136,7 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
     if (result.status !== 'ok') throw new Error(result.error?.stack || result.status);
     return { status: result.status };
   }, { base64: bytes.toString('base64'), name, sha256: createHash('sha256').update(bytes).digest('hex') });
-  expect(await importSession(session, 'mixed.gbdraw-session.json')).toMatchObject({ status: 'ok' });
+  expect(await importSession(session, 'mixed.gbdraw')).toMatchObject({ status: 'ok' });
 
   const verifyGroups = async () => {
     const state = await page.evaluate(async () => {
@@ -1211,7 +1208,7 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   });
   const download = await downloadPromise;
   const saved = readFileSync(await download.path());
-  const document = JSON.parse(gunzipSync(saved).toString('utf8'));
+  const document = await readSessionFile(await download.path());
   expect(document.version).toBe(CURRENT_SESSION_VERSION);
   expect(shownSavedDrawing(document).editorState.featureCatalog.items[0].orthogroups.map((group) => group.id)).toEqual(['og_1', 'og_2']);
   expect(await importSession(saved, download.suggestedFilename())).toMatchObject({ status: 'ok' });
@@ -1223,7 +1220,7 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
     const previous = state.collinearGroups.value;
     let beforePreviewMountCalled = false;
     const result = await importSession({ target: {
-      files: [new File([bytes], 'failed.gbdraw-session.json.gz')], value: 'selected'
+      files: [new File([bytes], 'failed.gbdraw')], value: 'selected'
     } }, { beforePreviewMount: () => {
       beforePreviewMountCalled = true;
       throw new Error('Issue 460 rollback probe');
@@ -1331,7 +1328,7 @@ for (const viewport of [
 ]) {
   test(`compact Editor scroll recovery at ${viewport.width}x${viewport.height}`, async ({ page }, info) => {
     await page.setViewportSize(viewport);
-    expect((await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz')).status).toBe('ok');
+    expect((await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw')).status).toBe('ok');
     await showPhonePane(page, 'preview');
     const initialPageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     const toggle = page.locator('.drawer-toggle');
@@ -1410,8 +1407,8 @@ for (const viewport of [
 }
 
 for (const [mode, session] of [
-  ['circular', 'HmmtDNA_basic_circular.gbdraw-session.json'],
-  ['linear', 'lambda_basic_linear.gbdraw-session.json']
+  ['circular', 'HmmtDNA_basic_circular.gbdraw'],
+  ['linear', 'lambda_basic_linear.gbdraw']
 ]) {
   test(`compact ${mode} pan zoom and responsive transitions preserve artifact and History`, async ({ page }, info) => {
     await page.setViewportSize({ width: 390, height: 740 });
@@ -1510,11 +1507,11 @@ for (const [mode, session] of [
 
 test('compact Editor reconciles availability and restores its tab after failed Session replacement', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 740 });
-  expect((await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz')).status).toBe('ok');
+  expect((await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw')).status).toBe('ok');
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
   const before = await snapshot(page);
   const failure = await evaluateWithRetainedPromise(page, async () => {
-    const name = 'HmmtDNA_basic_circular.gbdraw-session.json';
+    const name = 'HmmtDNA_basic_circular.gbdraw';
     const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
     const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const result = await importSession({ target: { files: [file], value: 'selected' } }, {
@@ -1566,7 +1563,7 @@ test('compact Editor reconciles availability and restores its tab after failed S
     fallback: { showRightDrawer: true, rightDrawerTab: 'features' },
     reset: { showRightDrawer: false, rightDrawerTab: 'features' }
   });
-  expect((await loadGallerySession(page, 'lambda_basic_linear.gbdraw-session.json')).status).toBe('ok');
+  expect((await loadGallerySession(page, 'lambda_basic_linear.gbdraw')).status).toBe('ok');
   expect(await page.evaluate(() => ({
     open: window.__GBDRAW_APP__.showRightDrawer, tab: window.__GBDRAW_APP__.rightDrawerTab
   }))).toEqual({ open: false, tab: 'features' });
@@ -1581,7 +1578,7 @@ test('compact Editor reconciles availability and restores its tab after failed S
 // Q7: without Similarity groups the tab stays visible and disabled, and
 // says why in its tooltip and accessible description.
 test('an unavailable Similarity groups tab states why in its tooltip', async ({ page }) => {
-  expect((await loadGallerySession(page, 'HmmtDNA_basic_circular.gbdraw-session.json')).status).toBe('ok');
+  expect((await loadGallerySession(page, 'HmmtDNA_basic_circular.gbdraw')).status).toBe('ok');
   await page.locator('.drawer-toggle').click();
   const tab = page.locator('.right-drawer').getByRole('button', { name: 'Similarity groups' });
   const reason = 'Similarity groups appear after a Linear comparison with Similarity groups turned on.';

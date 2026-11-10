@@ -108,6 +108,7 @@ gbdraw/
     api/                       Typed library contracts for gbdraw requests, sessions, tables, and rendering.
     interface.py               Small, typed, beginner-facing Python API for gbdraw.
     session.py                 Public canonical session document lifecycle.
+    session_container.py       The Session file: one ZIP container, written and read here.
     session_contract.py        The Session document of the current version, declared once.
     session_drawings.py        Where each drawing of a Session lives: the one owner of the document layout.
     session_io.py              GUI session JSON loading, validation, materialization, and sidecar building.

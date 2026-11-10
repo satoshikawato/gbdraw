@@ -737,13 +737,13 @@ const loadExactSession = async (page, { browserFetch = false } = {}) => {
   if (browserFetch) {
     await page.evaluate(async () => {
       const response = await fetch(
-        '/gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz',
+        '/gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw',
         { cache: 'no-store' }
       );
       if (!response.ok) throw new Error(`Session fetch failed with ${response.status}.`);
       const file = new File(
         [await response.arrayBuffer()],
-        'hepatoplasmataceae_collinear.gbdraw-session.json.gz',
+        'hepatoplasmataceae_collinear.gbdraw',
         { type: 'application/gzip' }
       );
       const transfer = new DataTransfer();

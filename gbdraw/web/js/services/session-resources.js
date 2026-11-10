@@ -1,9 +1,10 @@
 // @ts-check
 import {
+  contentFactsOfStream,
+  contentTokenOfBytes,
   fileDescriptorOf,
   getSessionResourceSource,
-  readFileBytes,
-  sha256Hex
+  storedFileBytes
 } from './file-content-cache.js';
 import {
   adoptCurrentSessionResources,
@@ -12,7 +13,8 @@ import {
   fileBackedReaderOf,
   renamedResourceDescriptor,
   resourcePayloadKey,
-  sessionResourceSource
+  sessionResourceSource,
+  storedResourceBytes
 } from './session-resource-backing.js';
 import { isAdoptedCanonicalSession } from './session-authority.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
@@ -23,7 +25,7 @@ import {
 } from './canonical-resource-references.js';
 
 /** @import { CanonicalRenderEnvelope } from './session-request.js' */
-/** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { FileLike, RawSessionResourceDescriptor, StoredResourceBytes } from './session-resource-backing.js' */
 /** @import { BoundFileValue, CircularSource, DrawingInputFiles, LinearSeq } from './drawing/inputs.js' */
 /**
  * What a Session binds of a drawing (`webBindings`): a Circular drawing's File
@@ -39,13 +41,11 @@ import {
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 
 /**
- * What the allocator reads of a resource's source: a Session resource or the
- * file-backed descriptor Generate made of a File (`descriptor`, `readBytes`),
- * or bytes read from a file.
+ * What the allocator reads of a resource's source: a Session resource, or the
+ * file-backed descriptor of a File (`descriptor`, `readBytes`).
  * @typedef {object} ResourceSource
  * @property {string} [resourceId]
- * @property {RawSessionResourceDescriptor} [descriptor]
- * @property {Uint8Array} [bytes]
+ * @property {RawSessionResourceDescriptor} descriptor
  * @property {() => Promise<Uint8Array>} [readBytes]
  */
 /** @typedef {{ name?: unknown, kind?: unknown, type?: unknown, lastModified?: unknown }} ResourceMetadata */
@@ -53,7 +53,11 @@ import {
  * The shape `sessionResourceSource` returns: a single backing (`descriptor`, `readBytes`).
  * @typedef {ResourceSource} SessionResourceSource
  */
-/** @typedef {ResourceSource & { size: unknown, bytesPromise: Promise<Uint8Array> | null, identityPromise: Promise<string> | null }} ResourceCandidate */
+/**
+ * A source the allocator compares: what the Session file stores for it (`stored`, whose `size` it is
+ * bucketed by) and the content token of those bytes once asked for.
+ * @typedef {ResourceSource & { stored: StoredResourceBytes, size: number, identityPromise: Promise<string> | null }} ResourceCandidate
+ */
 /** @typedef {{ encoded: Map<unknown, Map<unknown, string>>, identities: Map<string, string>, pending: Map<string, ResourceCandidate> }} SizeBucket */
 
 /** @param {unknown} value */
@@ -96,6 +100,50 @@ const sameEncodedPayload = (left, right) => (
  * A committed resource of a Save and the candidate that reads its bytes.
  * @typedef {{ id: string, descriptor: RawSessionResourceDescriptor, candidate: ResourceCandidate }} CommittedPayload
  */
+/**
+ * Reads an encoded source's bytes whole, which checks their size and any
+ * declared checksum (`materializeBytes`): its base64 text holds them whole
+ * already (W-14). A file-backed source is never read whole: the Session
+ * writer checks its size as it streams.
+ * @param {ResourceSource} source
+ */
+const checkEncodedPayload = async (source) => {
+  if (!fileBackedReaderOf(source.descriptor) && source.readBytes) await source.readBytes();
+};
+
+/**
+ * A File no Generate described, as a Save source: a file-backed descriptor of
+ * what the Session file stores for it (`storedFileBytes`), its copy streamed
+ * when the Session is written, with the size and token its first read found;
+ * nothing is read here.
+ * @param {FileLike & { name?: unknown, type?: unknown, lastModified?: unknown }} file
+ * @returns {Promise<ResourceSource>}
+ */
+const storedFileSource = async (file) => {
+  const stored = await storedFileBytes(file);
+  const readStored = async () => new Uint8Array(await new Response(await stored.open()).arrayBuffer());
+  const descriptor = fileBackedDescriptor({
+    kind: 'web-file', name: String(file.name ?? 'file'), type: String(file.type || 'application/octet-stream'),
+    size: stored.size, lastModified: Number(file.lastModified) || 0
+  }, readStored, stored);
+  return { descriptor, readBytes: readStored };
+};
+
+/**
+ * The Save source of a File no Generate described (`storedFileSource`), made
+ * once per Save.
+ * @param {Map<object, Promise<ResourceSource>>} made The sources this Save made, by File.
+ * @param {FileLike & { name?: unknown, type?: unknown, lastModified?: unknown }} file
+ * @returns {Promise<ResourceSource>}
+ */
+const storedFileSourceOnce = (made, file) => {
+  const known = made.get(file);
+  if (known) return known;
+  const source = storedFileSource(file);
+  made.set(file, source);
+  return source;
+};
+
 /**
  * The ID of the first of `earlier` whose bytes equal `entry`'s, or null (D-228).
  * Two encoded texts compare as text, with no read or hash; when either is
@@ -240,7 +288,7 @@ const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
  * records and comparison plan, whose uploaded comparison files the Session
  * also binds; every drawing binds its own five card files (R16-4).
  * A File's bytes stay file-backed (`fileBackedDescriptor`): the Session
- * writer encodes them (`encodeSessionResources` in session-file.js).
+ * writer streams them into the Session file (`writeSessionDocumentFile` in config.js).
  * @param {Record<string, any>} state
  * @param {readonly SessionResourceSet[]} sets
  * @returns {Promise<{ resources: Record<string, RawSessionResourceDescriptor>, written: SessionResourceDrawing[] }>} `written` in the order of `sets`.
@@ -296,39 +344,34 @@ export const buildSessionDrawingResources = async (state, sets) => {
   };
   /** @param {ResourceSource} source */
   const candidateFor = (source) => {
-    // A source has a descriptor, an encoded payload, or bytes.
-    const key = /** @type {WeakKey} */ (source.descriptor || source.bytes);
-    if (candidatesByDescriptor.has(key)) {
-      return /** @type {ResourceCandidate} */ (candidatesByDescriptor.get(key));
-    }
+    const key = /** @type {WeakKey} */ (source.descriptor);
+    const known = candidatesByDescriptor.get(key);
+    if (known) return known;
+    const stored = storedResourceBytes(source.descriptor);
     /** @type {ResourceCandidate} */
-    const candidate = {
-      ...source,
-      size: source.descriptor?.size ?? /** @type {Uint8Array} */ (source.bytes).byteLength,
-      bytesPromise: null,
-      identityPromise: null
-    };
+    const candidate = { ...source, stored, size: stored.size, identityPromise: null };
     candidatesByDescriptor.set(key, candidate);
     return candidate;
   };
-  /** @param {ResourceCandidate} candidate */
-  const bytesFor = candidate => {
-    // A candidate without bytes is a single backing, which has readBytes.
-    candidate.bytesPromise ??= Promise.resolve().then(
-      () => candidate.bytes || /** @type {() => Promise<Uint8Array>} */ (candidate.readBytes)()
-    );
-    return candidate.bytesPromise;
-  };
-  /** @param {ResourceCandidate} candidate */
+  /**
+   * The content token of what the Session file stores for a candidate, so
+   * equal stored bytes are written once: known from a File's first read or a
+   * Load's copy, else hashed from a stream of them, one piece at a time; an
+   * encoded source's bytes, whole in its text already, are hashed whole.
+   * @param {ResourceCandidate} candidate
+   */
   const identityFor = candidate => {
-    candidate.identityPromise ??= bytesFor(candidate).then(bytes => {
-      // readBytes has already validated any declared checksum, which is a string.
-      if (candidate.descriptor?.checksum) {
-        return /** @type {string} */ (candidate.descriptor.checksum).trim().toLowerCase().replace(/^sha256:/, '');
+    candidate.identityPromise ??= (async () => {
+      const { descriptor, readBytes, stored } = candidate;
+      if (!fileBackedReaderOf(descriptor) && readBytes) {
+        const bytes = await readBytes();
+        recordStructuralMetric('resourceIdentityHashCount', 1);
+        return contentTokenOfBytes(bytes);
       }
+      if (stored.token) return stored.token();
       recordStructuralMetric('resourceIdentityHashCount', 1);
-      return sha256Hex(bytes);
-    });
+      return (await contentFactsOfStream(await stored.open())).token;
+    })();
     return candidate.identityPromise;
   };
   /**
@@ -381,20 +424,19 @@ export const buildSessionDrawingResources = async (state, sets) => {
     allocation = allocation.then(async () => {
       const candidate = candidateFor(source);
       const existing = preferredId ? (resources[preferredId] || reserved.get(preferredId)) : undefined;
-      if (source.descriptor?.checksum && source.descriptor !== existing
-        && source.descriptor.checksum !== existing?.checksum) await bytesFor(candidate);
-      if (existing && source.descriptor && sameEncodedPayload(existing, source.descriptor)) {
+      if (source.descriptor.checksum && source.descriptor !== existing
+        && source.descriptor.checksum !== existing?.checksum) await checkEncodedPayload(source);
+      if (existing && sameEncodedPayload(existing, source.descriptor)) {
         return use(preferredId);
       }
       const equivalent = await equivalentId(candidate);
       if (equivalent) return use(equivalent);
       // Preserve the existing collision integrity check through the lazy backing.
-      if (existing) await bytesFor(candidate);
+      if (existing) await checkEncodedPayload(source);
       const descriptor = source.descriptor;
       const safePreferred = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(preferredId)
         && !taken(preferredId)
-        // A source with a `resourceId` (the only way a preferred id arises) has a descriptor.
-        && descriptor?.name === safeResourceLeaf(/** @type {RawSessionResourceDescriptor} */ (descriptor).name)
+        && descriptor.name === safeResourceLeaf(descriptor.name)
         && !usedNames.has(descriptor.name);
       let id = safePreferred ? preferredId : nextResourceId();
       let name = safePreferred ? descriptor.name : `${id}-${safeResourceLeaf(metadata.name)}`;
@@ -402,17 +444,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
         id = nextResourceId();
         name = `${id}-${safeResourceLeaf(metadata.name)}`;
       }
-      if (descriptor) {
-        resources[id] = safePreferred ? descriptor : renamedResourceDescriptor(descriptor, String(name));
-      } else {
-        // Bytes read here are encoded with the other files when the Session is written (`encodeSessionResources`).
-        const bytes = await bytesFor(candidate);
-        resources[id] = fileBackedDescriptor({
-          kind: String(metadata.kind || 'web-file'), name: String(name),
-          type: String(metadata.type || 'application/octet-stream'),
-          size: bytes.byteLength, lastModified: Number(metadata.lastModified) || 0
-        }, async () => bytes);
-      }
+      resources[id] = safePreferred ? descriptor : renamedResourceDescriptor(descriptor, String(name));
       register(id, candidate);
       return id;
     });
@@ -468,7 +500,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
     const source = /** @type {SessionResourceSource & { descriptor: RawSessionResourceDescriptor, readBytes: () => Promise<Uint8Array> }} */ (
       sessionResourceSource(createSessionResourceFileView(committedTable, id))
     );
-    await source.readBytes();
+    await checkEncodedPayload(source);
     aliases.set(id, await allocate(source, source.descriptor));
   }
   /** @type {Map<SessionResourceSet, Map<string, string>>} */
@@ -491,7 +523,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
       const source = /** @type {SessionResourceSource & { descriptor: RawSessionResourceDescriptor, readBytes: () => Promise<Uint8Array> }} */ (
         sessionResourceSource(createSessionResourceFileView(otherTable, id))
       );
-      if (!reuseOther) await source.readBytes();
+      if (!reuseOther) await checkEncodedPayload(source);
       otherAliases.set(id, await allocate(source, source.descriptor, reuseOther ? id : ''));
     }
   }
@@ -505,6 +537,8 @@ export const buildSessionDrawingResources = async (state, sets) => {
   );
   /** @type {Pick<InputFileStore, 'fileOf'>} */
   const inputFiles = state.inputFiles;
+  /** @type {Map<object, Promise<ResourceSource>>} */
+  const storedFileSources = new Map();
   /**
    * The binding of one input file: a binding names it by ref (`state.inputFiles`).
    * @param {InputFileRef | null | undefined} ref
@@ -525,7 +559,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
       }, readFile);
       return bindSource({ descriptor, readBytes: readFile }, file);
     }
-    return bindSource({ bytes: await readFileBytes(file) }, file);
+    return bindSource(await storedFileSourceOnce(storedFileSources, file), file);
   };
 
   /**

@@ -706,10 +706,11 @@ test('file import commits once, separates notices, and preserves draft/Result on
       assert.match(notices.at(-1), /^Could not import annotations: /);
     }
     const before = JSON.stringify(state);
-    input.files = [{ text: async () => { throw new Error('read failure'); } }];
+    // A read the browser refuses is told in the read refusal's words (OV-2948).
+    input.files = [{ name: 'annotations.tsv', arrayBuffer: async () => { throw new DOMException('read failure', 'NotReadableError'); } }];
     await editor.importAnnotationTableFile({ target: input });
     assert.equal(JSON.stringify(state), before);
-    assert.match(notices.at(-1), /^Could not import annotations: read failure/);
+    assert.match(notices.at(-1), /^Could not import annotations: An input could not be read\. Replace or reselect it\./);
     assert.deepEqual(alerts, []);
     let finish;
     input.files = [{ text: () => new Promise((resolve) => { finish = resolve; }) }];
@@ -746,6 +747,30 @@ test('file import commits once, separates notices, and preserves draft/Result on
   } finally {
     if (oldAlert === undefined) delete globalThis.alert;
     else globalThis.alert = oldAlert;
+  }
+});
+
+// PD-OI-116, OV-2948: an annotation TSV whose gzip expands past the cap is refused right after it is chosen, and the
+// panel notice names the file and the cap in the read refusal's words, not its diagnostic code.
+test('a gzip annotation TSV past the expanded cap is refused with its name and the cap', async () => {
+  const { gzipSync } = await import('node:zlib');
+  const state = { annotationSets: [createAnnotationSet({ id: 'before' })], results: [] };
+  const notices = [];
+  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(notice) });
+  const before = JSON.stringify(state);
+  const cap = 1024 * 1024;
+  globalThis.__GBDRAW_TEST_HOOKS__ = { maxExpandedInputBytes: cap };
+  try {
+    const file = new File([Uint8Array.from(gzipSync(Buffer.alloc(cap + 1, 0x41)))], 'big annotations.tsv.gz');
+    const input = { files: [file], value: 'big annotations.tsv.gz' };
+    await editor.importAnnotationTableFile({ target: input });
+    assert.equal(JSON.stringify(state), before);
+    assert.equal(notices.at(-1), 'Could not import annotations: An input could not be read. Replace or reselect it. '
+      + 'File: big annotations.tsv.gz. gbdraw reads gzip files that expand to at most 1 MiB. '
+      + 'Decompress the gzip file and choose the plain file.');
+    assert.equal(input.value, '');
+  } finally {
+    delete globalThis.__GBDRAW_TEST_HOOKS__;
   }
 });
 

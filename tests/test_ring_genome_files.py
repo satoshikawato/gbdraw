@@ -25,6 +25,7 @@ from gbdraw.session_request_codec import (
     encode_canonical_request,
 )
 from tests.utils.session_drawing_view import session_view
+from tests.utils.session_files import read_session_payload
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TUTORIAL = REPO_ROOT / "gbdraw" / "web" / "tutorial-data"
@@ -394,11 +395,11 @@ def test_a_saved_session_stores_every_file_of_the_ring(tmp_path: Path) -> None:
         "--gbk", str(HUMAN), "--conservation_blast", str(DANIO_TSV), "--conservation_reference", "subject",
         "--conservation_genome", str(DANIO), str(DROSOPHILA), "-o", str(prefix), "-f", "svg", "--save_session",
     ])
-    session = session_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
+    session = session_view(read_session_payload(prefix.with_suffix(".gbdraw")))
     [ring] = session["renderRequest"]["diagramOptions"]["conservationFastaFiles"]
     assert [ref["resourceId"] for ref in ring] == ["conservation-fasta-files-1-1", "conservation-fasta-files-1-2"]
     replay = tmp_path / "replay"
-    circular_main(["--session", str(prefix.with_suffix(".gbdraw-session.json")), "-o", str(replay), "-f", "svg"])
+    circular_main(["--session", str(prefix.with_suffix(".gbdraw")), "-o", str(replay), "-f", "svg"])
     assert _svg(replay) == _svg(prefix)
 
 

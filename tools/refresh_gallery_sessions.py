@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -40,15 +41,17 @@ from gbdraw.session_io import (  # noqa: E402
     LOSAT_DERIVED_CACHE_SCHEMA,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
     SessionFileBinding,
+    _write_validated_session_file,
     canonicalize_cli_invocation,
     classify_raw_losat_cache_entry,
+    expand_session_feature_catalog,
     load_session,
     session_mode,
+    split_resource_bytes,
     validate_session,
-    write_serialized_session,
-    write_session_json,
     written_file_metadata,
 )
+from gbdraw.session_container import is_session_container, read_session_container, write_session_container  # noqa: E402
 from gbdraw.session import _keep_resources  # noqa: E402
 from gbdraw.session_drawings import (  # noqa: E402
     _drawing_view,
@@ -67,6 +70,7 @@ from gbdraw.tracks.scalars import ScalarSpec  # noqa: E402
 from tools import test_data  # noqa: E402
 
 if TYPE_CHECKING:
+    from gbdraw.session import SessionDocument
     from tools.prepare_interactive_gallery_assets import GallerySessionExample
 
 
@@ -74,11 +78,11 @@ GALLERY_ROOT = REPO_ROOT / "gbdraw" / "web" / "gallery"
 SESSION_ROOT = GALLERY_ROOT / "sessions"
 TEST_INPUT_SESSION_ROOT = REPO_ROOT / "tests" / "test_inputs"
 SESSION_PUBLICATION_BRIDGE = REPO_ROOT / "tools" / "publish_gallery_session.mjs"
-VIBRIO_SESSION_NAME = "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+VIBRIO_SESSION_NAME = "vibrio-harveyi-group-collinear.gbdraw"
 VIBRIO_RAW_ENTRY_COUNT = 12
-VIBRIO_GZIP_HARD_LIMIT = 90_000_000
+VIBRIO_FILE_HARD_LIMIT = 90_000_000
 VIBRIO_EXPANDED_HARD_LIMIT = 400_000_000
-VIBRIO_GZIP_REGRESSION_CEILING = 95_000_000
+VIBRIO_FILE_REGRESSION_CEILING = 95_000_000
 VIBRIO_EXPANDED_REGRESSION_CEILING = 420_000_000
 GEOMETRY_TOLERANCE_PX = 1e-6
 LINEAR_SHARED_SPACING_RENDERERS = frozenset(
@@ -116,7 +120,7 @@ VIBRIO_EXPECTED_RAW_PAIRS = frozenset(
 )
 
 TEST_INPUT_SESSION_FILES = (
-    "BGC0000708-BGC0000713.gbdraw-session.json",
+    "BGC0000708-BGC0000713.gbdraw",
 )
 
 
@@ -146,8 +150,7 @@ def _validate_gallery_session_inventory() -> None:
         raise ValueError("EXAMPLES contains duplicate session names")
     physical = {
         path.name
-        for pattern in ("*.gbdraw-session.json", "*.gbdraw-session.json.gz")
-        for path in SESSION_ROOT.glob(pattern)
+        for path in SESSION_ROOT.glob("*.gbdraw")
     }
     examples = {example.session_path.name for example in EXAMPLES}
     if configured != physical or configured != examples:
@@ -224,13 +227,7 @@ def _gallery_file_transaction(paths: tuple[Path, ...]):
 
 
 def _session_path(name_or_id: str) -> Path:
-    name = name_or_id
-    if name.endswith((".gbdraw-session.json", ".gbdraw-session.json.gz")):
-        return SESSION_ROOT / name
-    compressed_path = SESSION_ROOT / f"{name}.gbdraw-session.json.gz"
-    if compressed_path.exists():
-        return compressed_path
-    return SESSION_ROOT / f"{name}.gbdraw-session.json"
+    return SESSION_ROOT / (name_or_id if name_or_id.endswith(".gbdraw") else f"{name_or_id}.gbdraw")
 
 
 def _refresh_session_paths(session_names: tuple[str, ...] | None) -> tuple[Path, ...]:
@@ -560,15 +557,10 @@ def _session_artifact_measurements(
     session: Mapping[str, Any],
     artifact_path: Path,
 ) -> dict[str, int]:
-    compressed_bytes = artifact_path.stat().st_size
-    with artifact_path.open("rb") as session_file:
-        is_gzip = session_file.read(2) == b"\x1f\x8b"
-    opener = gzip.open if is_gzip else Path.open
-    with opener(artifact_path, "rb") as session_file:
-        expanded_bytes = sum(
-            len(chunk)
-            for chunk in iter(lambda: session_file.read(1024 * 1024), b"")
-        )
+    file_bytes = artifact_path.stat().st_size
+    # A Session file's entries as they are read: the document and each resource.
+    with zipfile.ZipFile(artifact_path) as archive:
+        expanded_bytes = sum(info.file_size for info in archive.infolist())
 
     editor_state = session.get("editorState")
     editor_without_catalog = (
@@ -576,7 +568,7 @@ def _session_artifact_measurements(
     )
     feature_catalog = editor_without_catalog.pop("featureCatalog", None)
     return {
-        "sessionGzipBytes": compressed_bytes,
+        "sessionFileBytes": file_bytes,
         "sessionExpandedBytes": expanded_bytes,
         "resultsBytes": _serialized_component_bytes(session.get("results")),
         "resourcesBytes": _serialized_component_bytes(
@@ -771,7 +763,7 @@ def _validate_staged_gallery_session(
             "results instead of a pipeline that Generate runs again"
         )
     if (
-        session_path.name == "lambda_basic_linear.gbdraw-session.json"
+        session_path.name == "lambda_basic_linear.gbdraw"
         and request.get("comparisons")
     ):
         raise ValueError(
@@ -866,10 +858,10 @@ def _validate_staged_gallery_session(
             f"Gallery session metrics [{session_path.name}]: "
             f"{_format_session_measurements(measurements)}"
         )
-        if measurements["sessionGzipBytes"] > VIBRIO_GZIP_HARD_LIMIT:
+        if measurements["sessionFileBytes"] > VIBRIO_FILE_HARD_LIMIT:
             raise ValueError(
-                f"{session_path.name} gzip size exceeds the "
-                f"{VIBRIO_GZIP_HARD_LIMIT}-byte hard limit "
+                f"{session_path.name} file size exceeds the "
+                f"{VIBRIO_FILE_HARD_LIMIT}-byte hard limit "
                 f"({_format_session_measurements(measurements)})"
             )
         if (
@@ -967,9 +959,9 @@ def _validate_staged_gallery_session(
 
 
 def _gallery_id(session_path: Path) -> str:
-    """The Gallery id of a Session file: its name without the Session suffix."""
+    """The Gallery id of a Session file: its name without ``.gbdraw``."""
 
-    return session_path.name.split(".gbdraw-session", 1)[0]
+    return session_path.name.removesuffix(".gbdraw")
 
 
 def _set_output_prefix(session: dict[str, Any], prefix: str) -> int:
@@ -1186,10 +1178,65 @@ def _canonicalize_recorded_cli_invocation(
 
 
 def _read_session_file(session_path: Path) -> dict[str, Any]:
-    """Return a Session file's JSON, plain or gzip-compressed."""
+    """A Session file, or an older JSON Session, as one JSON payload whose
+    resources hold their bytes (base64), the form this tool and the
+    publication bridge (``tools/publish_gallery_session.mjs``) edit.
+    """
 
-    payload = session_path.read_bytes()
-    return json.loads(gzip.decompress(payload) if payload[:2] == b"\x1f\x8b" else payload)
+    with session_path.open("rb") as session_file:
+        head = session_file.read(4)
+    if not is_session_container(head):
+        payload = session_path.read_bytes()
+        return json.loads(gzip.decompress(payload) if payload[:2] == b"\x1f\x8b" else payload)
+    container = read_session_container(session_path)
+    document = dict(container.document)
+    resources = {}
+    for resource_id, descriptor in document.get("resources", {}).items():
+        with container.resource(resource_id).open_bytes() as stream:
+            resources[resource_id] = _embedded_descriptor(descriptor, stream.read())
+    return {**document, "resources": resources}
+
+
+def _embedded_descriptor(descriptor: Mapping[str, Any], data: bytes) -> dict[str, Any]:
+    """A resource descriptor with its bytes as base64: the form this tool edits and the bridge reads."""
+
+    return {**descriptor, "encoding": "base64", "data": base64.b64encode(data).decode("ascii")}
+
+
+def _write_session_file(session_path: Path, payload: Mapping[str, Any]) -> None:
+    """Write a payload of :func:`_read_session_file` as the Session file ``session_path``, checked."""
+
+    document, sources = split_resource_bytes(expand_session_feature_catalog(payload))
+    validate_session(document, resource_sources=sources)
+    _write_validated_session_file(session_path, document, sources, overwrite=True)
+
+
+def _session_document(payload: Mapping[str, Any]) -> SessionDocument:
+    """A payload of :func:`_read_session_file` as a checked Session document, its bytes beside it."""
+
+    from gbdraw.session import load_session_document
+    from gbdraw.session_io import SessionResources
+
+    document, sources = split_resource_bytes(payload)
+    return load_session_document(document, resources=SessionResources(document.get("resources", {}), sources))
+
+
+def _write_staged_session(session_path: Path, payload: Mapping[str, Any]) -> None:
+    """Write a payload of :func:`_read_session_file` as the staged Session file
+    ``session_path``, unchecked: the publication bridge's files and the
+    edits between its steps are checked where the refresh reads them as a
+    Session (:func:`_write_session_file`, ``load_session``). A Session of the
+    current version is a Session file; an older one stays the JSON it was
+    released as, since only the current version was ever a container. The
+    publication bridge's writes come here too, so a Session's bytes do not
+    depend on which step wrote it last (OV-3370: Python's number text,
+    ``1e-05``, not ``JSON.stringify``'s ``0.00001``)."""
+
+    if payload.get("version") != CURRENT_SESSION_VERSION:
+        session_path.write_bytes(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        return
+    document, sources = split_resource_bytes(payload)
+    write_session_container(document, sources, session_path)
 
 
 def _gallery_view(document: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
@@ -1240,31 +1287,16 @@ def _one_drawing_document(session: Mapping[str, Any]) -> Mapping[str, Any]:
     return write_session_drawings([view])
 
 
-def write_gallery_session(session_path: str | Path, document: Mapping[str, Any]) -> None:
-    """Write a Gallery Session document as its one JSON text (OV-3370).
-
-    The publication bridge's writes and this tool's edits of a staged Session
-    come here, so a Session's bytes do not depend on which step wrote it last
-    (Python's number text, ``1e-05``, not ``JSON.stringify``'s ``0.00001``).
-    Compressed as the CLI's Sessions are (:func:`write_serialized_session`).
-    """
-
-    write_serialized_session(
-        session_path,
-        json.dumps(document, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
-    )
-
-
 def _edit_staged_session(
     session_path: Path, edit: Callable[[dict[str, Any]], int]
 ) -> None:
     """Rewrite a staged Session file when ``edit`` changes the view of its
-    drawing (:func:`_gallery_view`), through :func:`write_gallery_session`."""
+    drawing (:func:`_gallery_view`), through :func:`_write_staged_session`."""
 
     document = _read_session_file(session_path)
     session, drawing_id = _gallery_view(document)
     if edit(session):
-        write_gallery_session(session_path, _gallery_document(document, session, drawing_id))
+        _write_staged_session(session_path, _gallery_document(document, session, drawing_id))
 
 
 def _keep_created_at(tracked_path: Path, staged_path: Path) -> None:
@@ -1456,6 +1488,7 @@ def _resolved_protein_comparisons(
     from gbdraw.api.request_render import stored_protein_result_request
     from gbdraw.session import materialize_session, render_session, session_to_request
     from gbdraw.session_request_codec import encode_canonical_request
+    from gbdraw.session_io import SessionResources
     from gbdraw.session_resources import SessionResourceTable
 
     modes = {
@@ -1476,7 +1509,7 @@ def _resolved_protein_comparisons(
         for entry in (session.get("losatCache") or {}).get("entries") or []
     }
     with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-resolve-") as output_dir:
-        with materialize_session(_one_drawing_document(session), output_directory=output_dir) as materialized:
+        with materialize_session(_session_document(_one_drawing_document(session)), output_directory=output_dir) as materialized:
             typed = session_to_request(materialized)
             rendered = render_session(materialized)
             metadata = getattr(rendered, "linear_metadata", None)
@@ -1489,11 +1522,16 @@ def _resolved_protein_comparisons(
                     f"the {mode} result needs {len(searched)} LOSATP search(es) "
                     "that the raw cache does not hold"
                 )
-            table = SessionResourceTable(session["resources"])
+            held, sources = split_resource_bytes({"resources": session["resources"]})
+            table = SessionResourceTable(SessionResources(held["resources"], sources))
             comparisons = encode_canonical_request(
                 stored_protein_result_request(typed, metadata), table=table
             ).payload["comparisons"]
-            return comparisons, table.descriptors()
+            resources = table.resources()
+            return comparisons, {
+                resource_id: _embedded_descriptor(descriptor, resources.read(resource_id))
+                for resource_id, descriptor in resources.descriptors.items()
+            }
 
 
 def _store_resolved_protein_comparisons(session_path: Path) -> None:
@@ -1509,7 +1547,7 @@ def _store_resolved_protein_comparisons(session_path: Path) -> None:
     the same.
     """
 
-    document = load_session(session_path)
+    document = _read_session_file(session_path)
     session, drawing_id = _gallery_view(document)
     try:
         resolved = _resolved_protein_comparisons(session)
@@ -1521,7 +1559,7 @@ def _store_resolved_protein_comparisons(session_path: Path) -> None:
     session["renderRequest"]["comparisons"] = comparisons
     for resource_id in _referenced_resource_ids(comparisons):
         session["resources"].setdefault(resource_id, dict(descriptors[resource_id]))
-    write_session_json(session_path, _gallery_document(document, session, drawing_id))
+    _write_staged_session(session_path, _gallery_document(document, session, drawing_id))
 
 
 def _resource_bytes(session: Mapping[str, Any], resource_id: str) -> bytes:
@@ -1612,7 +1650,7 @@ def check_stored_protein_results(session_names: tuple[str, ...] | None = None) -
 
     stale = 0
     for session_path in _refresh_session_paths(session_names):
-        differences = stored_protein_result_differences(_gallery_view(load_session(session_path))[0])
+        differences = stored_protein_result_differences(_gallery_view(_read_session_file(session_path))[0])
         for difference in differences:
             print(f"{session_path.name}: {difference}")
         stale += bool(differences)
@@ -1726,7 +1764,8 @@ def _refresh_one_session(
     declared_command: bool = False,
 ) -> None:
     gallery_id = _gallery_id(session_path)
-    document = load_session(session_path)
+    load_session(session_path)
+    document = _read_session_file(session_path)
     session, drawing_id = _gallery_view(document)
     mode = session_mode(session)
     if mode not in {"circular", "linear"}:
@@ -1735,21 +1774,21 @@ def _refresh_one_session(
     env = _cli_env()
     with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-session-") as tmpdir:
         staging_root = Path(tmpdir)
-        prepared_path = staging_root / f"prepared-{session_path.name}"
-        replayed_path = staging_root / f"replayed-{session_path.name}"
+        # The bridge and the CLI read and write Session files (.gbdraw); the
+        # bridge's are checked when the CLI or the final write reads them.
+        publication_input_path = staging_root / f"input-{gallery_id}.gbdraw"
+        prepared_path = staging_root / f"prepared-{gallery_id}.gbdraw"
+        prepared_session_path = staging_root / f"prepared-checked-{gallery_id}.gbdraw"
+        replayed_path = staging_root / f"replayed-{gallery_id}.gbdraw"
+        finalized_staged_path = staging_root / f"finalized-{gallery_id}.gbdraw"
         finalized_path = staging_root / session_path.name
-        publication_input_path = session_path
         # The Output Prefix is part of the request the publication rebuilds and
         # `finalize` keeps, so it is set on the input, before `prepare`.
-        if _reopen_for_publication(session_path, session) + _set_output_prefix(
-            session, gallery_id
-        ) + _store_written_file_metadata(session) + _search_stale_losat_results(
-            session, staging_root, env=env
-        ):
-            publication_input_path = (
-                staging_root / f"canonicalized-{session_path.name}"
-            )
-            write_session_json(publication_input_path, _gallery_document(document, session, drawing_id))
+        _reopen_for_publication(session_path, session)
+        _set_output_prefix(session, gallery_id)
+        _store_written_file_metadata(session)
+        _search_stale_losat_results(session, staging_root, env=env)
+        _write_staged_session(publication_input_path, _gallery_document(document, session, drawing_id))
         del session, document
         gc.collect()
         _run_publication_bridge(
@@ -1767,6 +1806,7 @@ def _refresh_one_session(
         _edit_staged_session(prepared_path, _materialize_one_record_sources)
         if not _is_test_input_session(session_path):
             _store_resolved_protein_comparisons(prepared_path)
+        _write_session_file(prepared_session_path, _read_session_file(prepared_path))
         subprocess.run(
             [
                 sys.executable,
@@ -1774,7 +1814,7 @@ def _refresh_one_session(
                 "gbdraw.cli",
                 mode,
                 "--session",
-                str(prepared_path),
+                str(prepared_session_path),
                 "-f",
                 "interactive_svg",
                 "-o",
@@ -1789,18 +1829,17 @@ def _refresh_one_session(
         if _is_test_input_session(session_path):
             # A CLI re-save stores the protein results it computed (OV-1068);
             # a test input keeps the pipelines its specs run on Generate.
-            pipelines = _gallery_view(load_session(prepared_path))[0]["renderRequest"]["comparisons"]
+            pipelines = _gallery_view(_read_session_file(prepared_path))[0]["renderRequest"]["comparisons"]
             _edit_staged_session(replayed_path, lambda staged: _with_comparisons(pipelines, staged))
         _run_publication_bridge(
             "finalize",
             prepared_path,
             replayed_path,
-            finalized_path,
+            finalized_staged_path,
             env=env,
         )
-        finalized = load_session(finalized_path)
-        validate_session(finalized)
-        del finalized
+        _write_session_file(finalized_path, _read_session_file(finalized_staged_path))
+        load_session(finalized_path)
         gc.collect()
         shutil.move(str(finalized_path), destination_path or session_path)
 
@@ -1868,7 +1907,8 @@ def refresh_gallery_sessions(
             else:
                 _refresh_one_session(session_path, destination_path=staged_path)
             _keep_created_at(session_path, staged_path)
-            staged_session = load_session(staged_path)
+            load_session(staged_path)
+            staged_session = _read_session_file(staged_path)
             _validate_staged_gallery_session(
                 session_path,
                 staged_session,
@@ -1897,7 +1937,7 @@ def prepare_gallery_assets() -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Regenerate bundled session JSON files with the current CLI/session schema. "
+            "Regenerate the bundled Session files with the current CLI/session schema. "
             "By default, gallery SVG sources, thumbnails, and examples.json are refreshed afterwards."
         )
     )
@@ -1913,7 +1953,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-assets",
         action="store_true",
-        help="Only refresh session JSON files; skip gallery SVG/thumbnail/examples.json preparation.",
+        help="Only refresh the Session files; skip gallery SVG/thumbnail/examples.json preparation.",
     )
     parser.add_argument(
         "--skip-session-refresh",

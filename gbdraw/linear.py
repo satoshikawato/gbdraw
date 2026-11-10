@@ -1215,6 +1215,7 @@ def replay_legacy_session(
             output_prefix=args.output,
             run_result=run_result,
             source_session=session,
+            source_resources=document.resources.sources,
             cli_invocation_args=run_spec.cli_invocation_args,
             file_bindings=run_spec.file_bindings,
             overwrite=session_request.overwrite,

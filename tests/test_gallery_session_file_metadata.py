@@ -4,27 +4,27 @@ input's modification time. ``written_file_metadata`` is the one owner of that me
 
 from __future__ import annotations
 
-import gzip
-import json
 from pathlib import Path
 
 import pytest
 
+from gbdraw.session_container import read_session_container
 from gbdraw.session_io import written_file_metadata
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SESSIONS = sorted(
     [
-        *(REPO_ROOT / "gbdraw" / "web" / "gallery" / "sessions").glob("*.gbdraw-session.json*"),
-        *(REPO_ROOT / "tests" / "test_inputs").glob("*.gbdraw-session.json*"),
+        *(REPO_ROOT / "gbdraw" / "web" / "gallery" / "sessions").glob("*.gbdraw"),
+        *(REPO_ROOT / "tests" / "test_inputs").glob("*.gbdraw"),
     ]
 )
 
 
 def _read(path: Path) -> dict[str, object]:
-    raw = path.read_bytes()
-    return json.loads(gzip.decompress(raw) if path.suffix == ".gz" else raw)
+    """The document of a Session file (``gbdraw-session.json``), whose resource descriptors hold the metadata."""
+
+    return dict(read_session_container(path).document)
 
 
 def machine_file_metadata(document: dict[str, object]) -> list[str]:
@@ -78,6 +78,10 @@ def test_machine_metadata_is_found_in_a_resource_and_its_binding() -> None:
         "resources.record-1-genbank",
         "drawings[0].webFiles.bindings.linearSeqs[0].gb",
     ]
+
+
+def test_every_gallery_session_file_is_checked() -> None:
+    assert len(SESSIONS) > 1
 
 
 @pytest.mark.parametrize("path", SESSIONS, ids=lambda path: path.name)

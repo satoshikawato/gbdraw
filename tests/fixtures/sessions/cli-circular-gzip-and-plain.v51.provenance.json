@@ -1,0 +1,13 @@
+{
+  "purpose": "Positive fixture of the Session file container (PD-OI-127): one gzip input stored as it is (method 0) and one plain input deflated (method 8)",
+  "writer": "gbdraw/circular.py --session_output (CLI sidecar), run from the feat/session-container worktree through the worktree CLI shim",
+  "writerCommit": "8c4a8869dfe6330037f9320082d30d5d08a03c54 (branch feat/session-container on dev b5d5336e8, regenerated after the dev merges since 1308c2fce changed the written document: the tick labels of the drawn SVG (OV-3300), the grouping and output of a one-record CLI drawing (OV-3297) and the run metadata; the inputs and the rest of the document are unchanged)",
+  "command": "gbdraw circular --gbk HmmtDNA.gbk.gz -t color_table.tsv -o gzip_and_plain -f svg --session_output cli-circular-gzip-and-plain.v51.gbdraw",
+  "workingDirectory": "a scratch folder holding HmmtDNA.gbk.gz (gzip -n -9 of tests/test_inputs/HmmtDNA.gbk) and color_table.tsv (one line: CDS, product, cytochrome b, #e41a1c)",
+  "inputs": {
+    "HmmtDNA.gbk.gz": "3f3ddb9d5f33ee2920eefdc897fd5e77f3cc33526d32817a06b43d5da71316b6"
+  },
+  "sha256": "3ab66e78bad007cc9cb0e7a00b7f7b93e82356b5940e01496cbb967552a151f3",
+  "sessionVersion": 51,
+  "requestSchema": 10
+}

@@ -1,11 +1,11 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
-const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const { load, generate, download } = require('./helpers/mode-transition.cjs');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { reveal, getDiagramWorkerActivity, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { savedDrawing } = require('./helpers/saved-session.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 const inspect = (page, mode) => page.evaluate(async mode => {
   const { state: s } = await import('./js/state.js');
@@ -73,7 +73,7 @@ for (const width of [1440, 390]) {
     test(`four annotation/style outcomes combine through History/Session/export ${mode} ${width}px`, async ({ browser }, testInfo) => {
       test.setTimeout(900000);
       const seed = mode === 'circular' ? 'tobacco-chloroplast' : 'BGC0000708-BGC0000713';
-      const page = await load(browser, `gbdraw/web/gallery/sessions/${seed}.gbdraw-session.json`, { width, height: 1000 });
+      const page = await load(browser, `gbdraw/web/gallery/sessions/${seed}.gbdraw`, { width, height: 1000 });
       let restored;
       const consoleText = [];
       page.on('console', message => consoleText.push(message.text()));
@@ -249,8 +249,8 @@ for (const width of [1440, 390]) {
         const hidden = await inspect(page, mode);
         expect(hidden.request.diagramOptions.tracks[`${mode}TrackSlots`].map(slot => slot.id)).toEqual(
           final.request.diagramOptions.tracks[`${mode}TrackSlots`].map(slot => slot.id).filter(id => id !== 'gc_content' && !linked.includes(id)));
-        const sessionPath = testInfo.outputPath('combined-disabled.gbdraw-session.json.gz');
-        const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', sessionPath)));
+        const sessionPath = testInfo.outputPath('combined-disabled.gbdraw');
+        const saved = (await download(page, 'Save Session', sessionPath), await readSessionFile(sessionPath));
         const drawing = savedDrawing(saved, mode);
         expect(drawing.runMetadata.annotationWarnings).toEqual(final.warnings);
         expect(drawing.renderRequest).toEqual(hidden.request);
@@ -268,8 +268,8 @@ for (const width of [1440, 390]) {
         const regenerated = await inspect(restored, mode);
         expect(artifact(regenerated)).toEqual(artifact(final));
         expect(await restored.evaluate(async () => { const { readFileText } = await import('./js/services/file-content-cache.js'); const { state } = await import('./js/state.js'); return readFileText(state.inputFiles.fileOf(window.__GBDRAW_APP__.files.t_color)); })).toBe(input.colors);
-        const activePath = testInfo.outputPath('combined.gbdraw-session.json.gz');
-        const active = JSON.parse(gunzipSync(await download(restored, 'Save Session', activePath)));
+        const activePath = testInfo.outputPath('combined.gbdraw');
+        const active = (await download(restored, 'Save Session', activePath), await readSessionFile(activePath));
         expect(active.resources).toEqual(saved.resources);
         const svgPath = testInfo.outputPath('combined.svg');
         const pendingSvg = restored.waitForEvent('download');

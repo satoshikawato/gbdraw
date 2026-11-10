@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.utils.session_drawing_view import drawing_view
+from tests.utils.session_files import read_session_payload
 from gbdraw.exceptions import ValidationError
 from gbdraw.web_support.similarity_alignment import (
     resolve_similarity_alignment_json,
@@ -260,7 +261,7 @@ def test_web_crop_after_presentation_reverse_uses_source_coordinates() -> None:
 
 BGC_SESSION = (
     Path(__file__).resolve().parents[1]
-    / "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json"
+    / "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw"
 )
 
 
@@ -275,7 +276,7 @@ def bgc_og18(tmp_path_factory):
     from gbdraw.session_request_codec import decode_canonical_typed_resource
     from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 
-    session = drawing_view(json.loads(BGC_SESSION.read_text()))
+    session = drawing_view(read_session_payload(BGC_SESSION))
     resource = decode_canonical_typed_resource(
         base64.b64decode(session["resources"]["comparison-orthogroups"]["data"]),
         value_kind="orthogroupResult", expected=OrthogroupResult | OrthogroupGraphResult,

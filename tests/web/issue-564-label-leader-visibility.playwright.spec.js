@@ -139,7 +139,7 @@ test('fresh Linear visibility is atomic through reflow, Save/Load, regeneration,
       };
     })).toEqual(countersBefore);
 
-    const saved = testInfo.outputPath('issue-564-hidden-linear.gbdraw-session.json.gz');
+    const saved = testInfo.outputPath('issue-564-hidden-linear.gbdraw');
     await download(page, 'Save Session', saved);
     fresh = await load(browser, saved);
     await fresh.evaluate(() => window.__GBDRAW_APP__.syncLabelEditor());
