@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from dataclasses import replace
 from tempfile import TemporaryDirectory
-from typing import Any, Literal, Mapping, Optional, Sequence, cast
+from typing import Any, Literal, Mapping, Optional, Sequence, TypedDict, cast
 from .labels.label_style import DEFAULT_LABEL_LINE, DEFAULT_LABEL_PROTECTION, LABEL_LINES, LABEL_PROTECTIONS
 from .io.cli_tables import (
     ConservationTableEntry,
@@ -29,6 +29,7 @@ from .api.options import (
     LosatSearchOptions,
     CircularMultiRecordOptions,
     CircularOutputOptions,
+    ONE_CIRCLE_GAP_DEGREES_RANGE,
     CircularRequestTrackOptions,
     ColorOptions,
     RingGenomeFiles,
@@ -61,7 +62,7 @@ from .api.input_summary import InputWarningKey, log_input_summary
 from .features.overrides import log_feature_identity_notices
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
-from .mode_profiles import CIRCULAR_MODE_PROFILE, ComparisonThresholds
+from .mode_profiles import CIRCULAR_MODE_PROFILE, ComparisonThresholds, resolve_mode_profile_overrides
 from .tracks import (
     CircularTrackSlot,
     ScalarSpec,
@@ -272,6 +273,91 @@ def _cli_conservation_genomes(args: argparse.Namespace) -> list[str | list[str] 
     return list(args.conservation_sequence or []) or None
 
 
+def _add_record_layout_args(parser: argparse.ArgumentParser) -> None:
+    """The options that lay several records out: a grid canvas, or one after another on one circle
+    (``CircularMultiRecordOptions``)."""
+
+    parser.add_argument(
+        '--multi_record_canvas',
+        help='Place multiple records on one shared canvas using automatic grid layout (default: False).',
+        action='store_true')
+    parser.add_argument(
+        '--one_circle',
+        help=(
+            'Draw all records one after another on one circle, each on its own arc with its own ticks and GC '
+            'content (default: False). GC skew is off and GC content is drawn in percent unless set.'
+        ),
+        action='store_true')
+    # The defaults are the API's (``CircularMultiRecordOptions``), which also checks the ranges.
+    defaults = CircularMultiRecordOptions()
+    low, high = ONE_CIRCLE_GAP_DEGREES_RANGE
+    parser.add_argument(
+        '--one_circle_gap_degrees',
+        help=(
+            f'Gap between records on one circle, in degrees ({low:g} to {high:g}; '
+            f'default: {defaults.one_circle_gap_degrees}).'
+        ),
+        type=argparse_float,
+        default=defaults.one_circle_gap_degrees)
+    parser.add_argument(
+        '--one_circle_min_length',
+        metavar='BP',
+        help=(
+            'Records shorter than this are left off the circle and counted in the centre text, also with '
+            f'--hide_definition (default: {defaults.one_circle_min_length}).'
+        ),
+        type=argparse_integer,
+        default=defaults.one_circle_min_length)
+    parser.add_argument(
+        '--one_circle_no_record_band',
+        help='Leave out the band that names each record on one circle.',
+        action='store_true')
+
+
+class _OneCircleLayoutFields(TypedDict):
+    """The ``CircularMultiRecordOptions`` fields the one-circle options set."""
+
+    record_layout: Literal["grid", "one_circle"]
+    one_circle_gap_degrees: float
+    one_circle_min_length: int
+    one_circle_record_band: bool
+
+
+def _one_circle_layout_fields(args: argparse.Namespace) -> _OneCircleLayoutFields:
+    """The ``CircularMultiRecordOptions`` fields the one-circle options set."""
+
+    if args.one_circle and args.multi_record_canvas:
+        raise ValidationError(
+            "--one_circle and --multi_record_canvas are two layouts of several records; choose one.",
+            diagnostic={"code": "INPUT_INVALID", "reason": "FIELDS"},
+        )
+    return {
+        "record_layout": "one_circle" if args.one_circle else "grid",
+        "one_circle_gap_degrees": args.one_circle_gap_degrees,
+        "one_circle_min_length": args.one_circle_min_length,
+        "one_circle_record_band": not args.one_circle_no_record_band,
+    }
+
+
+def _profile_values(args: argparse.Namespace) -> dict[str, object]:
+    """The CLI's values of the mode profile's config paths: as typed, else the profile's, one circle's on one
+    circle (``resolve_mode_profile_overrides``, the API's rule). The CLI writes its whole config, so the API's
+    profile step never reaches it."""
+
+    typed: dict[str, object] = {}
+    if args.show_skew_typed:
+        typed["canvas.show_skew"] = args.show_skew
+    if args.gc_content_mode is not None:
+        typed["objects.gc_content.mode"] = args.gc_content_mode
+    return resolve_mode_profile_overrides("circular", typed, one_circle=args.one_circle)
+
+
+def _shown_skew(args: argparse.Namespace) -> bool:
+    """Whether the figure draws GC skew: as typed, else the profile's default, which one circle turns off."""
+
+    return bool(_profile_values(args)["canvas.show_skew"])
+
+
 def _get_args(
     args,
     *,
@@ -407,6 +493,7 @@ def _get_args(
         parser,
         show_gc_default=CIRCULAR_MODE_PROFILE.show_gc,
         show_skew_default=CIRCULAR_MODE_PROFILE.show_skew,
+        typed_dests=frozenset({"show_skew"}),  # One circle draws no skew unless asked (``_shown_skew``).
     )
     _add_depth_track_source_args(parser, mode="circular")
     _add_depth_track_tick_args(parser)
@@ -541,10 +628,7 @@ def _get_args(
         help='Legend position (default: "right"; "left", "right", "top", "bottom", "upper_left", "upper_right", "lower_left", "lower_right", "none")',
         type=str,
         default="right")
-    parser.add_argument(
-        '--multi_record_canvas',
-        help='Place multiple records on one shared canvas using automatic grid layout (default: False).',
-        action='store_true')
+    _add_record_layout_args(parser)
     parser.add_argument(
         '--multi_record_size_mode',
         help='Size mode for multi-record circular canvas ("auto", "linear", "equal"; default: "auto").',
@@ -1160,7 +1244,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     center_reserved_radius: Optional[float] = args.center_reserved_radius
     label_font_size: Optional[float] = args.label_font_size
     show_gc: bool = args.show_gc
-    show_skew: bool = args.show_skew
+    show_skew: bool = _shown_skew(args)
     depth_track_groups: list[list[str]] | None = args.depth_track
     show_depth: bool = bool(depth_track_groups)
     depth_color: str | None = args.depth_color
@@ -1234,7 +1318,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     )
     gc_content_width: Optional[float] = args.gc_content_width
     gc_content_radius: Optional[float] = args.gc_content_radius
-    gc_content_mode: str | None = args.gc_content_mode
+    gc_content_mode = cast("str | None", _profile_values(args).get("objects.gc_content.mode"))
     gc_content_min_percent: Optional[float] = args.gc_content_min_percent
     gc_content_max_percent: Optional[float] = args.gc_content_max_percent
     gc_content_show_axis: bool | None = args.gc_content_show_axis
@@ -1542,19 +1626,18 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     request_records = record_manifest.records
 
     canonical_request: CircularDiagramRequest | CircularBatchRequest
-    if multi_record_canvas:
+    if multi_record_canvas or args.one_circle:
         canonical_request = CircularDiagramRequest(
             records=request_records,
             options=request_options,
             layout=CircularMultiRecordOptions(
                 # argparse restricts --multi_record_size_mode to these choices.
-                multi_record_size_mode=cast(
-                    'Literal["linear", "auto", "equal"]', multi_record_size_mode
-                ),
+                multi_record_size_mode=cast('Literal["linear", "auto", "equal"]', multi_record_size_mode),
                 multi_record_min_radius_ratio=multi_record_min_radius_ratio,
                 multi_record_column_gap_ratio=multi_record_column_gap_ratio,
                 multi_record_row_gap_ratio=multi_record_row_gap_ratio,
                 multi_record_positions=multi_record_positions or None,
+                **_one_circle_layout_fields(args),
             ),
             output=_render_output_request(
                 output_prefix or "out",

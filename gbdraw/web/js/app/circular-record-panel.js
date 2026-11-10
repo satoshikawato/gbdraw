@@ -9,6 +9,7 @@ import { circularDrawingRecordSet, circularRecordEntries, circularRecordSelectio
 import { cardHoldsRecordKey, circularRecordsToDraw, recordKeyExpansion } from '../services/record-draw-selection.js';
 import { circularSourceInputs } from '../services/input-types.js';
 import { msg, t, tm, tn } from '../utils/i18n.js';
+import { circularRecordLayoutOf } from '../services/one-circle-layout.js';
 import { RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
 import { buildDefaultMultiRecordPositions } from './run-analysis.js';
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
@@ -154,11 +155,14 @@ export const createCircularRecordPresentation = ({
     const inspected = circularRecordDiscoveryState.value.status === 'ready';
     // The automatic option describes the all-records choice: the ON records it draws.
     const drawnCount = circularRecordsToDraw(entries, drawing.recordsOff).length;
+    const layout = circularRecordLayoutOf(drawing);
     // OV-379: a source whose records are not read says so, as the Linear select does.
     const automaticLabel = circularRecordDiscoveryState.value.status === 'deferred'
       ? tm(RECORDS_NOT_INSPECTED_LABEL)
-      // OV-2839, D-11: the canvas draws every ON record in one figure; the label names it.
-      : drawing.form.multi_record_canvas && entries.length > 1
+      // OV-2839, D-11: the canvas and one circle draw every ON record in one figure; the label names the layout.
+      : layout === 'one_circle' && entries.length > 1
+        ? (drawnCount < entries.length ? tn(entries.length, '{drawn} of {count} record (One circle)', '{drawn} of {count} records (One circle)', { drawn: drawnCount }) : t('All records (One circle)'))
+      : layout === 'grid' && entries.length > 1
         ? (drawnCount < entries.length ? tn(entries.length, '{drawn} of {count} record (Multi-Record Canvas)', '{drawn} of {count} records (Multi-Record Canvas)', { drawn: drawnCount }) : t('All records (Multi-Record Canvas)'))
         : entries.length > 1 || drawing.adv.circular_grouping_intent === 'batch'
           ? (drawnCount < entries.length ? tn(entries.length, '{drawn} of {count} record (separate diagrams)', '{drawn} of {count} records (separate diagrams)', { drawn: drawnCount }) : t('All records (separate diagrams)'))
@@ -200,7 +204,8 @@ export const createCircularRecordPresentation = ({
   // unavailable, in the order the sidebar explains it; '' when they are not.
   const circularOwnRecordBlock = computed(() => {
     const drawing = state.activeDrawing();
-    if (drawing.form.multi_record_canvas) return 'multi-record-canvas';
+    const layout = circularRecordLayoutOf(drawing);
+    if (layout !== 'separate') return layout === 'one_circle' ? 'one-circle' : 'multi-record-canvas';
     if (circularRecordDiscoveryState.value.status !== 'ready') return 'not-inspected';
     const entries = circularRecordPresentationEntries();
     const selection = circularRecordSelection(entries, drawing.form.circular_record_selector);
@@ -209,10 +214,12 @@ export const createCircularRecordPresentation = ({
       ? '' : 'no-single-record';
   });
   const circularSingleRecordPresentationEnabled = computed(() => mode.value === 'circular' && !circularOwnRecordBlock.value);
+  // The shown drawing's record layout (`circularRecordLayoutOf`), which the layout checkboxes and texts name.
+  const circularRecordLayout = computed(() => circularRecordLayoutOf(state.activeDrawing()));
   return {
     getCircularRecordOrderLabel, circularRecordDiscoveryState, circularRecordInspectionEnabled, inspectCircularSourceRecords,
     circularDrawnRecordCount, circularRecordPresentationOptions, circularRecordPresentationError, circularOwnRecordBlock,
-    circularSingleRecordPresentationEnabled
+    circularSingleRecordPresentationEnabled, circularRecordLayout
   };
 };
 

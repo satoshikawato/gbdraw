@@ -488,6 +488,61 @@ test('Session CLI feature density tracks survive Web Generate', async ({ browser
   }
 });
 
+test('Session CLI one circle loads its layout, Generates the CLI figure, saves it, and Reset returns to the grid', async ({ browser }, testInfo) => {
+  test.setTimeout(900_000);
+  const file = await cli('circular', ['--gbk', mito, lambda, '--one_circle', '--one_circle_gap_degrees', '2.5',
+    '--one_circle_no_record_band'], testInfo, 'one-circle');
+  const session = await readSession(file);
+  expect(shownSavedDrawing(session).renderRequest.layout).toMatchObject({
+    recordLayout: 'one_circle', oneCircleGapDegrees: 2.5, oneCircleRecordBand: false
+  });
+  const run = await load(browser, file, { width: 1600, height: 1000 });
+  try {
+    const settings = () => run.page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      const checked = (selector) => document.querySelector(selector)?.checked;
+      return {
+        canvas: app.form.multi_record_canvas, layout: app.adv.circular_record_layout, gap: app.adv.one_circle_gap_degrees,
+        minLength: app.adv.one_circle_min_length, band: app.adv.one_circle_record_band,
+        grid: checked('[data-circular-canvas-setting]'), oneCircle: checked('[data-circular-one-circle-setting]'),
+        shown: Boolean(document.querySelector('[data-capture="one-circle-controls"]'))
+      };
+    });
+    expect(await settings()).toEqual({
+      canvas: true, layout: 'one_circle', gap: 2.5, minLength: 1000, band: false, grid: false, oneCircle: true, shown: true
+    });
+    const stored = shownSavedDrawing(session).results[0].content;
+    await generateAndWaitForResult(run.page);
+    const generated = (await snapshot(run.page)).selected;
+    expect(await run.page.evaluate(svgSemantics, generated)).toEqual(await run.page.evaluate(svgSemantics, stored));
+
+    const saved = run.page.waitForEvent('download');
+    const outcome = await evaluateWithRetainedPromise(run.page, async () => {
+      window.__GBDRAW_APP__.sessionTitle = 'one-circle';
+      return await window.__GBDRAW_APP__.saveSessionWithTitle();
+    });
+    expect(outcome.status).toBe('saved');
+    const webFile = testInfo.outputPath('web-one-circle.gbdraw-session.json.gz');
+    await (await saved).saveAs(webFile);
+    const webDrawing = shownSavedDrawing(await readSession(webFile));
+    expect(webDrawing.renderRequest.layout).toMatchObject({
+      recordLayout: 'one_circle', oneCircleGapDegrees: 2.5, oneCircleMinLength: 1000, oneCircleRecordBand: false
+    });
+    expect(webDrawing.config.adv).toMatchObject({
+      circular_record_layout: 'one_circle', one_circle_gap_degrees: 2.5, one_circle_record_band: false
+    });
+
+    await evaluateWithRetainedPromise(run.page, async () => { await window.__GBDRAW_APP__.resetSettings(); });
+    await settleLive(run.page);
+    expect(await settings()).toEqual({
+      canvas: true, layout: 'grid', gap: 1, minLength: 1000, band: true, grid: true, oneCircle: false, shown: false
+    });
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
+
 // OV-3079, OV-3155: a CLI stack that names no Axis index draws each slot on its own side (a set's row without a side
 // outside or above, a Linear features slot without a side below). The Session it saves, loaded and generated in the
 // Web, draws the CLI's figure: the region set stays outside (above) the Axis, and Overlay set rows paint where Python

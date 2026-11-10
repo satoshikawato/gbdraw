@@ -406,6 +406,10 @@ export const MODE_PROFILE_DATA = deepFreeze({
       "px"
     ]
   },
+  "gcContentModes": [
+    "deviation",
+    "percent"
+  ],
   "labelStyleChoices": {
     "line": [
       "none",
@@ -478,6 +482,10 @@ export const MODE_PROFILE_DATA = deepFreeze({
         "skew": false
       }
     }
+  },
+  "oneCircleConfigOverrides": {
+    "canvas.show_skew": false,
+    "objects.gc_content.mode": "percent"
   },
   "regionDrawing": {
     "notCarriedKinds": [

@@ -103,6 +103,9 @@ class RecordInputSummary:
     # False when the track stack has no features track (``slots_draw_features``): no feature is drawn, and
     # ``features`` is empty.
     features_track: bool = True
+    # The shortest record one circle draws, when this record is shorter and so not drawn
+    # (``gbdraw.layout.record_units.left_off_circle``); ``features`` is then empty.
+    left_off_circle_under_bp: int | None = None
 
     @property
     def drawn_features(self) -> int:
@@ -242,6 +245,7 @@ def summarize_inputs(
     comparisons: Sequence[ComparisonTableTally] = (),
     draws_features: bool = True,
     annotation_sets_left_out: Sequence[str] = (),
+    left_off_circle: Mapping[int, int] | None = None,
 ) -> InputSummary:
     """The input summary of the drawn ``records`` (aligned with their ``provenance``).
 
@@ -249,12 +253,15 @@ def summarize_inputs(
     arguments are the ones the drawing reads. ``draws_features`` is false when
     the track stack has no features track: no feature is counted as drawn.
     ``annotation_sets_left_out`` names the region annotation sets the track
-    stack draws nothing of.
+    stack draws nothing of. ``left_off_circle`` maps the index of each record one circle leaves out to the
+    shortest record it draws.
     """
 
     summaries = []
+    left_off = left_off_circle or {}
     for index, (record, item) in enumerate(zip(records, provenance, strict=True)):
         source_length = item.source_length if item.source_length is not None else len(record.seq)
+        under_bp = left_off.get(index)
         summaries.append(RecordInputSummary(
             record_index=index,
             record_id=str(record.id),
@@ -273,8 +280,9 @@ def summarize_inputs(
                 specific_color_rules=specific_color_rules,
                 record_features=record_features[index] if record_features else None,
                 types_left_out_at_load=item.feature_types_left_out_at_load,
-            ) if draws_features else (),
+            ) if draws_features and under_bp is None else (),
             features_track=draws_features,
+            left_off_circle_under_bp=under_bp,
         ))
     return InputSummary(
         records=tuple(summaries),
@@ -325,6 +333,11 @@ def _record_line(record: RecordInputSummary) -> str:
         if record.region is not None
         else f"{record.drawn_length:,} bp"
     )
+    if record.left_off_circle_under_bp is not None:
+        return (
+            f"{_record_label(record)}, {place}, {extent}: not drawn, shorter than "
+            f"{record.left_off_circle_under_bp:,} bp, the shortest record drawn on one circle."
+        )
     if not record.features_track:
         return f"{_record_label(record)}, {place}, {extent}: drew no features (no enabled features track slot)."
     drawn = [(item.feature_type, item.drawn) for item in record.features if item.drawn]
@@ -412,8 +425,9 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
             _record_subject(record),
         )
         for record in summary.records
-        # A stack without a features track draws none by request; the inputs are not the reason.
-        if record.features_track and record.drawn_features == 0
+        # A stack without a features track draws none by request, and one circle leaves a short record out (its
+        # line says so); the inputs are not the reason.
+        if record.features_track and record.left_off_circle_under_bp is None and record.drawn_features == 0
     ]
     for table in summary.comparisons:
         tally = table.tally

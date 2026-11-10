@@ -68,7 +68,7 @@ def _compute_case(radius_px: float, layout: str, side: str, width_px: float | No
         feature_dict={"a": _Feature()},
     )
     payload = _serialize_circular_track_slot_geometry(
-        drawn=RecordAxisInput(record, "record", unset_record_transform(record)),
+        drawn=((0, RecordAxisInput(record, "record", unset_record_transform(record))),),
         radial_layout=radial_layout,
         layout_slots=slots,
         base_radius_px=radius_px,

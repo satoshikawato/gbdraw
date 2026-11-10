@@ -160,6 +160,7 @@ from .api.options import (
     LINEAR_DEFAULT_PLOT_TITLE_POSITION,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
+    ONE_CIRCLE_GAP_DEGREES_RANGE,
     CircularOutputOptions,
     CircularRequestTrackOptions,
     ColorOptions,
@@ -222,6 +223,11 @@ FEATURE_OVERRIDE_SCHEMA = 9
 STORED_REGION_FIELDS: frozenset[str] = frozenset({"selector", "start", "end", "reverseComplement"})
 # Schema 10 writes a record's spans as ``windows`` (D-01); earlier schemas wrote one ``region``, read as one window.
 RECORD_WINDOWS_SCHEMA = 10
+# Schema 10 writes the settings of a Circular Multi-Record request that draws its records on one circle; a request
+# without them, and every earlier schema, draws a grid.
+RECORD_LAYOUT_SCHEMA = 10
+# The ``CircularMultiRecordOptions`` fields of those settings (the request writes them in camel case).
+ONE_CIRCLE_LAYOUT_OPTIONS = frozenset({"record_layout", "one_circle_gap_degrees", "one_circle_min_length", "one_circle_record_band"})
 SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset(
     {1, 2, 5, 6, 7, 8, 9, CANONICAL_REQUEST_SCHEMA}
 )
@@ -1977,6 +1983,12 @@ def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
             if layout.multi_record_positions is not None
             else None
         ),
+        # A grid writes none of the circle's settings (``ONE_CIRCLE_LAYOUT_OPTIONS``).
+        **(
+            {_camel(name): getattr(layout, name) for name in sorted(ONE_CIRCLE_LAYOUT_OPTIONS)}
+            if layout.record_layout == "one_circle"
+            else {}
+        ),
     }
 
 
@@ -2004,7 +2016,12 @@ def _decode_circular_layout(
         "multiRecordRowGapRatio",
         "multiRecordPositions",
     }
-    _require_exact_fields(layout, path="renderRequest.layout", required=required)
+    _require_exact_fields(
+        layout, path="renderRequest.layout", required=required,
+        optional=frozenset(map(_camel, ONE_CIRCLE_LAYOUT_OPTIONS)) if schema >= RECORD_LAYOUT_SCHEMA else frozenset(),
+    )
+    # A setting the request leaves out is its default.
+    one_circle = {name: layout[_camel(name)] for name in ONE_CIRCLE_LAYOUT_OPTIONS if _camel(name) in layout}
     positions = layout["multiRecordPositions"]
     if positions is not None and (
         not isinstance(positions, list)
@@ -2022,6 +2039,7 @@ def _decode_circular_layout(
         multi_record_column_gap_ratio=layout["multiRecordColumnGapRatio"],
         multi_record_row_gap_ratio=layout["multiRecordRowGapRatio"],
         multi_record_positions=tuple(positions) if positions is not None else None,
+        **one_circle,
     )
     _validate_dataclass_contract(result, path="layout", error="decode")
     return result
@@ -6329,13 +6347,13 @@ def describe_canonical_request() -> dict[str, Any]:
     })
     data(LinearRecordTranslation)
     layouts = {
-        # CircularMultiRecordOptions.__post_init__: a radius ratio in (0, 1], gaps >= 0.
-        "circular": union(empty, data(CircularMultiRecordOptions, "CircularLayout", replace={
-            "multi_record_min_radius_ratio": bound(
-                CircularMultiRecordOptions, "multi_record_min_radius_ratio", exclusiveMinimum=0, maximum=1
-            ),
+        # CircularMultiRecordOptions.__post_init__: radius ratio in (0, 1], gaps >= 0, one-circle gap ``ONE_CIRCLE_GAP_DEGREES_RANGE``.
+        "circular": union(empty, data(CircularMultiRecordOptions, "CircularLayout", optional=ONE_CIRCLE_LAYOUT_OPTIONS, replace={
+            "multi_record_min_radius_ratio": bound(CircularMultiRecordOptions, "multi_record_min_radius_ratio", exclusiveMinimum=0, maximum=1),
             "multi_record_column_gap_ratio": bound(CircularMultiRecordOptions, "multi_record_column_gap_ratio", minimum=0),
             "multi_record_row_gap_ratio": bound(CircularMultiRecordOptions, "multi_record_row_gap_ratio", minimum=0),
+            "one_circle_gap_degrees": bound(CircularMultiRecordOptions, "one_circle_gap_degrees", minimum=ONE_CIRCLE_GAP_DEGREES_RANGE[0], maximum=ONE_CIRCLE_GAP_DEGREES_RANGE[1]),
+            "one_circle_min_length": bound(CircularMultiRecordOptions, "one_circle_min_length", minimum=0),
         }, defaults={
             _camel(item.name): getattr(CircularMultiRecordOptions(), item.name)
             for item in fields(CircularMultiRecordOptions) if item.name != "multi_record_positions"

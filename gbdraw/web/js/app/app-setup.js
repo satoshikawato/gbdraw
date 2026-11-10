@@ -32,6 +32,7 @@ import {
 } from '../services/feature-visibility.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { DEFAULT_LINEAR_OUTPUT_PREFIX } from '../utils/download-names.js';
+import { ONE_CIRCLE_LIMITS } from '../services/one-circle-layout.js';
 import { catalogNameIndex } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
@@ -98,6 +99,7 @@ import {
   getCommittedCanonicalRenderRequest,
   committedLinearRecordCards,
   committedSettingNotePredicate,
+  committedOneCircleChange,
   committedTrackHideDrawing,
   commitLiveSettingValues,
   readCommittedCanonicalRevision,
@@ -149,7 +151,7 @@ import { copyTextToClipboard } from '../utils/clipboard.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { readHostedBuild } from '../utils/hosted-build.js';
 import { withNewDrawingDefaults } from '../services/reset.js';
-import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES, changedTrackHides } from '../services/setting-application.js';
+import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES, SETTING_NOTE_ONE_CIRCLE_CHANGE, changedTrackHides } from '../services/setting-application.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
   disposeDiagramGenerationWorker,
@@ -453,8 +455,15 @@ const shownResultFeatures = (recordKey) => {
   });
 };
 
-export const createAppSetup = () => {
+// The two setting-note readers that the Live setting notes inject: whether a note applies and whether the pending
+// layout change is to One circle.
+const provideSettingNoteReaders = () => {
   provide(SETTING_NOTE_APPLIES, committedSettingNotePredicate);
+  provide(SETTING_NOTE_ONE_CIRCLE_CHANGE, committedOneCircleChange);
+};
+
+export const createAppSetup = () => {
+  provideSettingNoteReaders();
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES,
     payload
@@ -762,7 +771,6 @@ export const createAppSetup = () => {
     pendingDiscoveryOf, requestRecordListAfterUpload, listedDrawingOf, rebindAnnotationRecords,
     refreshLinearRecords: linearRecordSelector.refresh
   });
-  const { changeCircularMultiRecordCanvas } = createCircularMultiRecordCanvas({ state, rebindAnnotationRecords });
   // Bumped by each edit of the displayed Result's root (R1).
   const resultEditRevision = shallowRef(0);
   // Counts the Result roots the binder made ready: a History restore can mount a root whose content equals the
@@ -1385,6 +1393,7 @@ export const createAppSetup = () => {
     state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, estimateRecordLengths: readCircularEstimateLengths,
     changeTrackVisibility: retireShownLegendStyles
   });
+  const { chooseCircularRecordLayout } = createCircularMultiRecordCanvas({ state, rebindAnnotationRecords, projectCircularSkewHidden: circularTrackSlotEditor.projectCircularSkewHidden });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({
     state, changeTrackLayout, changeTrackVisibility: retireShownLegendStyles
   });
@@ -3077,7 +3086,7 @@ export const createAppSetup = () => {
   const {
     getCircularRecordOrderLabel, circularRecordDiscoveryState, circularRecordInspectionEnabled, inspectCircularSourceRecords,
     circularDrawnRecordCount, circularRecordPresentationOptions, circularRecordPresentationError, circularOwnRecordBlock,
-    circularSingleRecordPresentationEnabled
+    circularSingleRecordPresentationEnabled, circularRecordLayout
   } = createCircularRecordPresentation({
     state, mode, semanticMutationAvailable, sessionOperationAvailability, shownDrawingOfMode, refreshCircularRecordOrder, shownRecordIds
   });
@@ -3941,7 +3950,7 @@ export const createAppSetup = () => {
     showCircularTicksSlot,
     DEFAULT_LINEAR_OUTPUT_PREFIX,
     setCircularRecordPresentationSelector,
-    changeCircularMultiRecordCanvas,
+    chooseCircularRecordLayout, circularRecordLayout, ONE_CIRCLE_LIMITS,
     setCircularSourceFile, addCircularSourceFiles, removeCircularSourceCard, canMoveCircularSource, moveCircularSourceCard, circularFileCards,
     replaceInputFile: inputReplacement.replaceInputFile,
     uploadCircularSourceFile,

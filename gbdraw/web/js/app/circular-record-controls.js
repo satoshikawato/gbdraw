@@ -22,12 +22,14 @@ import { circularRangesWithoutCard, circularRecordEntries, circularRecordRange }
 import { msg } from '../utils/i18n.js';
 import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../services/layout-preferences.js';
 import { settingsScrollOwner } from '../services/settings-sections.js';
+import { chooseRecordLayout } from '../services/one-circle-layout.js';
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
 /** @import { LinearSeqWindow } from '../services/drawing/inputs.js' */
 /** @import { CircularListRecord } from '../services/record-discovery.js' */
 /** @import { RevealSetting } from './settings-pane.js' */
+/** @import { CircularRecordLayoutChoice } from '../services/one-circle-layout.js' */
 
 const { computed, nextTick, watch } = window.Vue;
 
@@ -37,13 +39,16 @@ const { computed, nextTick, watch } = window.Vue;
  * @typedef {object} CircularMultiRecordCanvasPorts
  * @property {WebState} state
  * @property {() => void} rebindAnnotationRecords Rebinds the shown drawing's annotations to its record catalog (R10).
+ * @property {(drawing: DrawingState, hidden: boolean) => void} projectCircularSkewHidden Writes the drawing's
+ *   Hide GC Skew and projects it onto its track rows, without the Hide GC Skew checkbox's question: a layout's
+ *   own value hides no row for good (its marked rows come back when the layout is left).
  */
 
 /**
  * Registers nothing; the root calls it after its `rebindAnnotationRecords`.
  * @param {CircularMultiRecordCanvasPorts} ports
  */
-export const createCircularMultiRecordCanvas = ({ state, rebindAnnotationRecords }) => {
+export const createCircularMultiRecordCanvas = ({ state, rebindAnnotationRecords, projectCircularSkewHidden }) => {
   // A Circular drawing whose Multi-Record Canvas is on and has no multi-record
   // sides stored gets the toggle's smart defaults. Load, its rollback, and a
   // History restore install the sides they read or captured (R11, D-15-48).
@@ -53,13 +58,23 @@ export const createCircularMultiRecordCanvas = ({ state, rebindAnnotationRecords
       ? circularMultiRecordDefaults(drawing.layoutPreferences) : null;
     if (defaults) updateActiveLayoutPreference(drawing.layoutPreferences, 'circular', true, defaults);
   };
-  // The Multi-Record Canvas checkbox, after its `v-model` wrote the shown
-  // drawing: in the control's History step.
+  // After the record layout choice wrote the shown drawing: in the control's History step.
   const changeCircularMultiRecordCanvas = () => {
     storeCircularMultiRecordDefaults(state.activeDrawing());
     rebindAnnotationRecords();
   };
-  return { changeCircularMultiRecordCanvas };
+  // The record layout choice (PD-OI-019, `chooseRecordLayout`): separate figures, the Multi-Record Canvas grid,
+  // one circle, or (`'left'`) the layout one circle left, with its GC values; one control, one History step.
+  /** @param {CircularRecordLayoutChoice | 'left'} choice */
+  const chooseCircularRecordLayout = (choice) => {
+    const drawing = state.activeDrawing();
+    const skewHidden = chooseRecordLayout(drawing, choice);
+    if (skewHidden !== null && skewHidden !== Boolean(drawing.form.suppress_skew)) {
+      projectCircularSkewHidden(drawing, skewHidden);
+    }
+    changeCircularMultiRecordCanvas();
+  };
+  return { chooseCircularRecordLayout };
 };
 
 /**

@@ -11,6 +11,7 @@ from ....features.factory import FeatureBuildResult
 from ....features.objects import FeatureObject
 from ....labels.circular_types import CircularLabel
 from ....layout.circular import CircularFeatureRenderContext
+from ....layout.record_transform import circular_display_length
 from ...drawers.circular.labels import LabelDrawer
 from ...drawers.circular.features import FeatureDrawer
 from ....configurators import FeatureDrawingConfigurator
@@ -117,7 +118,7 @@ class SeqRecordGroup:
         record_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
         record_group.attribs["data-gbdraw-slot-id"] = self.slot_id
         record_group.attribs["data-gbdraw-slot-renderer"] = "features"
-        record_length: int = len(self.gb_record.seq)
+        record_length: int = circular_display_length(self.gb_record, self.render_context.circle)
 
         record_group = self.draw_record(feature_dict, record_length, record_group)
         return record_group

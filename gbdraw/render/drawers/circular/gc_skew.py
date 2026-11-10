@@ -8,6 +8,7 @@ from ....configurators import GcSkewConfigurator
 from ....layout.circular import RadialBand
 from ....layout.circular_ink import CircularInk, CircularInkProfile, CircularInkRing, stroke_pad_px
 from ....svg.circular_tracks import (
+    circle_unit_turns,
     circular_gc_skew_line,
     generate_circle_path_desc,
     generate_circular_gc_skew_path_desc,
@@ -48,7 +49,9 @@ class SkewDrawer:
         base = float(radius) * float(norm_factor)
         pad = stroke_pad_px(self.skew_stroke_color, self.skew_stroke_width)
         area = CircularInkProfile.between(line.positions, line.radii, record_length=record_len, base_px=base, pad_px=pad)
-        return (area, CircularInkRing(RadialBand(base - pad, base + pad))) if pad > 0 else (area,)
+        # The baseline closes along the record's own arc (``circle_unit_turns``), the whole circle for a record alone.
+        baseline = CircularInkRing(RadialBand(base - pad, base + pad), *circle_unit_turns(record_transform))
+        return (area, baseline) if pad > 0 else (area,)
 
     def draw(
         self,

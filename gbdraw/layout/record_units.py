@@ -13,13 +13,15 @@ by gives its orientation, length and topology.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION, record_identity_key, record_window_span
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.exceptions import ValidationError
+from gbdraw.layout.record_coordinates import CirclePlace, RecordDisplayTransform
 from gbdraw.layout.record_labels import record_map_span
 from gbdraw.layout.record_transform import bind_record_transforms
 
@@ -99,4 +101,70 @@ def record_units(
     return tuple(units)
 
 
-__all__ = ["RecordUnit", "record_units"]
+@dataclass(frozen=True)
+class CircleUnits:
+    """Records drawn one after another on one circle, in drawing order, with a gap between neighbours.
+
+    ``placed`` pairs each drawn unit with where it lies on the circle (``CirclePlace``: its first display base
+    and the circle's display length, records and gaps together, which the drawing reads as the record length).
+    A gap is ``gap_bp`` display bases; half a gap lies before the first unit and half after the last, so the
+    gaps are equal round the circle. ``hidden`` holds the units shorter than the shortest drawn length: they are
+    not drawn, and the figure says how many there are.
+    """
+
+    placed: tuple[tuple[RecordUnit, CirclePlace], ...]
+    hidden: tuple[RecordUnit, ...]
+    gap_bp: int
+
+    @property
+    def display_length(self) -> int:
+        return self.placed[0][1].length
+
+
+def left_off_circle(unit: RecordUnit, min_length_bp: int) -> bool:
+    """Whether one circle leaves ``unit`` out: it is shorter than ``min_length_bp``, the shortest record drawn."""
+
+    return unit.length < min_length_bp
+
+
+def circle_units(units: Sequence[RecordUnit], *, gap_degrees: float, min_length_bp: int) -> CircleUnits:
+    """Lay ``units`` out on one circle: each unit's arc is its length at one scale for the whole circle, and
+    ``gap_degrees`` separates neighbours. Units shorter than ``min_length_bp`` are left out and counted."""
+
+    if not math.isfinite(gap_degrees) or gap_degrees < 0:
+        raise ValidationError(
+            "The gap between records on one circle must be zero or more degrees.",
+            diagnostic={"code": "INPUT_INVALID", "reason": "NONNEGATIVE"},
+        )
+    drawn = [unit for unit in units if not left_off_circle(unit, min_length_bp)]
+    hidden = tuple(unit for unit in units if left_off_circle(unit, min_length_bp))
+    if not drawn:
+        raise ValidationError(
+            f"Every record is shorter than {min_length_bp:,} bp, the shortest record drawn on one circle; "
+            "lower that length to draw them.",
+            diagnostic={"code": "NO_RECORDS"},
+        )
+    gaps = len(drawn)
+    if gaps * gap_degrees >= 360.0:
+        raise ValidationError(
+            f"{gaps} records with gaps of {gap_degrees:g} degrees leave no room on one circle; use a smaller gap.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
+    bases = sum(unit.length for unit in drawn)
+    gap_bp = math.ceil(gap_degrees * bases / (360.0 - gaps * gap_degrees)) if gap_degrees > 0 else 0
+    display_length = bases + gaps * gap_bp
+    spans: list[tuple[int, int]] = []
+    offset = gap_bp // 2
+    for unit in drawn:
+        spans.append((offset, unit.length))
+        offset += unit.length + gap_bp
+    longest = max(unit.length for unit in drawn)
+    record_spans = tuple(spans)
+    placed = tuple(
+        (unit, CirclePlace(start, display_length, longest, position, record_spans))
+        for position, (unit, (start, _)) in enumerate(zip(drawn, spans, strict=True))
+    )
+    return CircleUnits(placed, hidden, gap_bp)
+
+
+__all__ = ["CircleUnits", "RecordUnit", "circle_units", "left_off_circle", "record_units"]

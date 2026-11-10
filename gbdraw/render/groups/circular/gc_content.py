@@ -10,7 +10,7 @@ from ....configurators import GcContentConfigurator
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_transform import unset_record_transform
+from gbdraw.layout.record_transform import circular_display_length, unset_record_transform
 
 class GcContentGroup:
     """
@@ -36,7 +36,7 @@ class GcContentGroup:
         self.radius: float = radius
         self.gc_config: GcContentConfigurator = gc_config
         self.gb_record: SeqRecord = gb_record
-        self.record_len: int = len(self.gb_record.seq)
+        self.record_len: int = circular_display_length(gb_record, self.record_transform)
         self.gc_df: DataFrame = gc_df
         self.track_width: float = track_width
         self.norm_factor = float(norm_factor_override)

@@ -351,6 +351,7 @@ const LINEAR_EDIT_HINT = msg('Edit this record in its File card in the sidebar.'
 const CIRCULAR_EDIT_HINTS = {
   'not-inspected': msg('Inspect source records in the sidebar to edit this record\'s label.'),
   'multi-record-canvas': msg('Multi-Record Canvas uses a grid. Turn it off to select one record.'),
+  'one-circle': msg('One circle draws every record. Turn it off to select one record.'),
   'no-single-record': msg('Select one record to edit crop, orientation, and title lines.')
 };
 /** @typedef {keyof typeof CIRCULAR_EDIT_HINTS} CircularOwnRecordBlock */

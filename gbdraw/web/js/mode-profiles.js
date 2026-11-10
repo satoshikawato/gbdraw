@@ -2,6 +2,7 @@
 import { MODE_PROFILE_DATA } from './mode-profiles.generated.js';
 import { diagnosticError } from './utils/error-normalization.js';
 import { DECIMAL_NUMBER_PATTERN } from './utils/optional-positive-number.js';
+import { textChoice } from './utils/field-reading.js';
 
 /**
  * The shape of the generated `MODE_PROFILE_DATA` (tools/generate_mode_profiles.py)
@@ -10,6 +11,7 @@ import { DECIMAL_NUMBER_PATTERN } from './utils/optional-positive-number.js';
  * @typedef {{ integer: boolean, maximum: number | null, minimum: number, reason: string }} ComparisonDomain
  * @typedef {'none' | 'under'} LabelLine
  * @typedef {'none' | 'halo' | 'box'} LabelProtection
+ * @typedef {'deviation' | 'percent'} GcContentMode
  * @typedef {{
  *   comparison: { alignmentLength: number, bitscore: number, evalue: number, identity: number },
  *   labelStyle: { line: LabelLine, protection: LabelProtection, italicGeneLabels: boolean },
@@ -22,8 +24,10 @@ import { DECIMAL_NUMBER_PATTERN } from './utils/optional-positive-number.js';
  *   comparisonDomains: Record<string, ComparisonDomain>,
  *   defaultFontFamily: string,
  *   featureTypes: string[],
+ *   gcContentModes: GcContentMode[],
  *   labelStyleChoices: { line: LabelLine[], protection: LabelProtection[] },
  *   modes: Record<ModeProfileName, ModeProfile>,
+ *   oneCircleConfigOverrides: { 'canvas.show_skew': boolean, 'objects.gc_content.mode': GcContentMode },
  *   version: number
  * }} ModeProfileData
  * @typedef {{ bitscore: number, evalue: string, identity: number, alignment_length: number }} ComparisonFilters
@@ -77,6 +81,18 @@ const valuesEquivalent = (left, right) => {
 };
 
 export const MODE_PROFILE_VERSION = /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).version;
+/** What one circle draws where the user left it unset (Python's `ONE_CIRCLE_CONFIG_OVERRIDES`). */
+export const ONE_CIRCLE_PROFILE = Object.freeze({
+  showSkew: /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).oneCircleConfigOverrides['canvas.show_skew'],
+  gcContentMode: /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).oneCircleConfigOverrides['objects.gc_content.mode']
+});
+/** The values of `objects.gc_content.mode` (Python's `GcContentMode`). @type {readonly GcContentMode[]} */
+export const GC_CONTENT_MODES = Object.freeze([.../** @type {ModeProfileData} */ (MODE_PROFILE_DATA).gcContentModes]);
+/**
+ * The one reader of a stored GC content mode: the Advanced setting and the mode one circle left
+ * (`readOneCircleLeft`). Another value reads as deviation, the packaged mode, and is reported lost.
+ */
+export const readGcContentMode = textChoice(GC_CONTENT_MODES, /** @type {GcContentMode} */ ('deviation'));
 export const MODE_DEFAULT_FEATURE_TYPES = Object.freeze([.../** @type {ModeProfileData} */ (MODE_PROFILE_DATA).featureTypes]);
 /** The packaged text font list (config.toml `objects.text.font_family`). */
 export const PACKAGED_FONT_FAMILY = /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).defaultFontFamily;

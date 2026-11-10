@@ -151,6 +151,8 @@ from gbdraw.diagrams.circular.assemble import (
     plan_circular_annotation_slots,
 )
 from gbdraw.diagrams.circular.parts import (
+    CircularCircleUnit,
+    CircularOneCircle,
     CircularPresentationInputs,
     CircularRecordData,
     CircularTrackInputs,
@@ -238,6 +240,7 @@ from gbdraw.layout.linear_wrap import (
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import FeatureAnchorPlacement, resolve_record_row_positions
 from gbdraw.layout.record_transform import bind_record_transforms
+from gbdraw.layout.record_units import circle_units, record_units
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
 from gbdraw.layout.spatial import Aabb
 from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
@@ -301,6 +304,7 @@ from gbdraw.tracks import (
     parse_linear_track_slots,
     parse_nonnegative_integer,
 )
+from gbdraw.analysis.feature_density import FeatureDensityLayer, FeatureDensityTrack
 from gbdraw.diagrams.feature_density import feature_density_legend, feature_density_record_layers
 from gbdraw.tracks.parsing import (
     check_feature_density_slots,
@@ -309,7 +313,12 @@ from gbdraw.tracks.parsing import (
     with_feature_density_slots,
 )
 
-from .assembly_inputs import CircularAssemblyInputs, CircularRecordContext, LinearAssemblyInputs
+from .assembly_inputs import (
+    CircularAssemblyInputs,
+    CircularOneCircleInputs,
+    CircularRecordContext,
+    LinearAssemblyInputs,
+)
 from .prepared import ResolvedFeatureInputs
 
 if TYPE_CHECKING:
@@ -617,6 +626,21 @@ def _build_circular_dinucleotide_dataframes(
     return {
         nt: render_stage("gc_skew_data", skew_df, record, window, step, nt, circular=circular) for nt in sorted(nts)
     }
+
+
+def _circular_gc_frames(
+    record: SeqRecord,
+    *,
+    dinucleotide: str,
+    window: int,
+    step: int,
+    nts: set[str],
+    circular: bool,
+) -> tuple[DataFrame, dict[str, DataFrame]]:
+    """A record's ``skew_df`` frames (``_build_circular_dinucleotide_dataframes``) and, first, the frame of the
+    figure's ``dinucleotide``, the one the GC content track reads (empty when no slot reads it)."""
+    frames = _build_circular_dinucleotide_dataframes(record, window=window, step=step, nts=nts, circular=circular)
+    return frames.get(dinucleotide.upper(), DataFrame()), frames
 
 
 def _has_conservation_inputs(
@@ -2702,10 +2726,7 @@ def assemble_circular_diagram_from_record(
     default_colors = resolved_feature_inputs.default_colors
     feature_table = resolved_feature_inputs.feature_visibility_table
 
-    cfg = _apply_circular_plot_title_font_size_override(
-        cfg=cfg,
-        plot_title_font_size=inputs.plot_title_font_size,
-    )
+    cfg = _apply_circular_plot_title_font_size_override(cfg=cfg, plot_title_font_size=inputs.plot_title_font_size)
     record_depth_tracks = (
         [list(context.precomputed_depth_track_specs)]
         if context.precomputed_depth_track_specs is not None
@@ -2747,14 +2768,10 @@ def assemble_circular_diagram_from_record(
     selected_features_set = (
         DEFAULT_SELECTED_FEATURES if inputs.selected_features_set is None else inputs.selected_features_set
     )
-    normalized_plot_title_position = _resolve_circular_plot_title_position(
-        str(inputs.plot_title_position)
-    )
+    normalized_plot_title_position = _resolve_circular_plot_title_position(str(inputs.plot_title_position))
     normalized_plot_title = _normalize_plot_title(inputs.plot_title)
     show_plot_title = False
-    effective_definition_profile: CircularDefinitionProfile = (
-        context.definition_profile
-    )
+    effective_definition_profile: CircularDefinitionProfile = context.definition_profile
     if context.definition_profile == "full":
         show_plot_title = normalized_plot_title_position != "none"
         effective_definition_profile = _circular_record_definition_profile(
@@ -2901,14 +2918,18 @@ def assemble_circular_diagram_from_record(
     record_transform = bind_record_transforms(
         [gb_record], None if context.record_transform is None else [context.record_transform]
     )[0]
-    dinucleotide_dataframes = _build_circular_dinucleotide_dataframes(
+    gc_df, dinucleotide_dataframes = _circular_gc_frames(
         gb_record,
+        dinucleotide=str(inputs.dinucleotide),
         window=int(window),
         step=int(step),
         nts=requested_nts,
         circular=record_transform.is_circular,
     )
-    gc_df = dinucleotide_dataframes.get(str(inputs.dinucleotide).upper(), DataFrame())
+    one_circle = _one_circle_drawing(
+        context.one_circle, str(inputs.dinucleotide), int(window), int(step), requested_nts, float(identity),
+        inputs.feature_density_tracks,
+    )
     if cfg.canvas.show_depth and depth_config is not None:
         if precomputed_depth_track_list:
             resolved_depth_tracks = precomputed_depth_track_list
@@ -2952,6 +2973,7 @@ def assemble_circular_diagram_from_record(
         profile=profile,
         legend=legend_effective,
         gb_record=gb_record,
+        axis_length=None if one_circle is None else one_circle.display_length,
     )
     feature_config = FeatureDrawingConfigurator(
         color_table=color_table,
@@ -3000,10 +3022,7 @@ def assemble_circular_diagram_from_record(
             conservation_tracks=conservation_tracks,
             conservation_min_identity=float(identity),
             dinucleotide_dataframes=dinucleotide_dataframes,
-            feature_density=context.feature_density if context.feature_density is not None else feature_density_record_layers(
-                [gb_record], inputs.feature_density_tracks,
-                windows=feature_density_windows([len(gb_record.seq)], cfg, window=inputs.window, step=inputs.step),
-                transforms=[record_transform])[0],
+            feature_density=_record_feature_density(context, one_circle, gb_record, inputs, cfg, record_transform),
         ),
         CircularTrackInputs(
             circular_track_slots=parsed_circular_track_slots,
@@ -3031,6 +3050,7 @@ def assemble_circular_diagram_from_record(
         _composition_inputs(
             cfg, title_content, normalized_plot_title_position, requested_canvas=context.requested_canvas
         ),
+        one_circle,
     )
     _attach_circular_label_layouts(result.drawing, [result.label_layout])
     return result.drawing
@@ -3087,6 +3107,167 @@ def _canvas_legend_table_and_ring_names(
     return legend_table, ring_names
 
 
+def _has_depth_input(inputs: CircularAssemblyInputs) -> bool:
+    """Whether any depth input reaches the figure: a table or file, a track, a cell of a track table, or a track
+    resolved before (the Web)."""
+
+    cells = (*(inputs.depth_track_tables or ()), *(inputs.depth_track_files or ()))
+    return (
+        inputs.depth_table is not None or bool(inputs.depth_file) or bool(inputs.depth_tracks)
+        or bool(inputs.depth_tables) or bool(inputs.depth_files)
+        or any(cell is not None for row in cells for cell in row)
+        or any(inputs._resolved_depth_tracks or ())
+    )
+
+
+def _refuse_one_circle_tables(inputs: CircularAssemblyInputs) -> None:
+    """Refuse the track tables several records on one circle do not draw yet: depth and conservation."""
+
+    if _has_depth_input(inputs):
+        raise ValidationError(
+            "Depth tracks are not drawn when several records share one circle.",
+            diagnostic={"code": "TRACK_INVALID", "reason": "ONE_CIRCLE_DEPTH"},
+        )
+    if inputs.conservation_blast_files or inputs.conservation_dataframes:
+        raise ValidationError(
+            "Conservation rings are not drawn when several records share one circle.",
+            diagnostic={"code": "TRACK_INVALID", "reason": "ONE_CIRCLE_CONSERVATION"},
+        )
+
+
+def _record_feature_density(
+    context: CircularRecordContext,
+    one_circle: CircularOneCircle | None,
+    gb_record: SeqRecord,
+    inputs: CircularAssemblyInputs,
+    cfg: GbdrawConfig,
+    record_transform: RecordDisplayTransform,
+) -> Mapping[str, FeatureDensityLayer] | None:
+    """The record's feature density layers: as its caller computed them for the records drawn together, the first
+    drawn record's on one circle (on the circle's shared scale), else its own."""
+
+    if context.feature_density is not None:
+        return context.feature_density
+    if one_circle is not None:
+        return one_circle.units[0].record.feature_density
+    return feature_density_record_layers(
+        [gb_record], inputs.feature_density_tracks,
+        windows=feature_density_windows([len(gb_record.seq)], cfg, window=inputs.window, step=inputs.step),
+        transforms=[record_transform],
+    )[0]
+
+
+def _one_circle_drawing(
+    one_circle_inputs: CircularOneCircleInputs | None,
+    dinucleotide: str,
+    window: int,
+    step: int,
+    nts: set[str],
+    conservation_min_identity: float,
+    feature_density_tracks: Sequence[FeatureDensityTrack] | None,
+) -> CircularOneCircle | None:
+    """The records of one circle as the drawing reads them: each drawn record's GC frames at the circle's window
+    and step, its feature density layers on the scale the drawn records share, and its transform placed on the
+    circle. None when the record has its circle to itself (no ``one_circle_inputs``)."""
+
+    if one_circle_inputs is None:
+        return None
+    drawn = [unit.record_index for unit, _place in one_circle_inputs.layout.placed]
+    density = dict(zip(drawn, feature_density_record_layers(
+        [one_circle_inputs.records[index] for index in drawn],
+        feature_density_tracks,
+        windows=[(window, step)] * len(drawn),
+        transforms=[one_circle_inputs.transforms[index] for index in drawn],
+    ), strict=True))
+
+    def unit_data(record_index: int) -> CircularRecordData:
+        unit_record = one_circle_inputs.records[record_index]
+        gc_df, frames = _circular_gc_frames(
+            unit_record, dinucleotide=dinucleotide, window=window, step=step, nts=nts,
+            circular=one_circle_inputs.transforms[record_index].is_circular,
+        )
+        return CircularRecordData(
+            gb_record=unit_record,
+            gc_df=gc_df,
+            dinucleotide_dataframes=frames,
+            conservation_min_identity=conservation_min_identity,
+            feature_density=density[record_index],
+        )
+
+    circle_layout = one_circle_inputs.layout
+    return CircularOneCircle(
+        units=tuple(
+            CircularCircleUnit(
+                unit_data(unit.record_index),
+                one_circle_inputs.transforms[unit.record_index].with_circle(place, unit.length),
+                unit.record_index,
+            )
+            for unit, place in circle_layout.placed
+        ),
+        display_length=circle_layout.display_length,
+        hidden_count=len(circle_layout.hidden),
+        min_length_bp=one_circle_inputs.min_length_bp,
+        record_band=one_circle_inputs.record_band,
+    )
+
+
+def _assemble_one_circle(
+    records: Sequence[SeqRecord],
+    inputs: CircularAssemblyInputs,
+    layout: CircularMultiRecordOptions,
+    record_transforms: Sequence[RecordDisplayTransform] | None,
+    record_presentations: Sequence[RecordPresentation] | None,
+) -> Drawing:
+    """Draw ``records`` one after another on one circle: the one-record assembly of the first drawn record, with
+    the others on the same circle (``CircularRecordContext.one_circle``)."""
+
+    transforms = tuple(bind_record_transforms(records, record_transforms))
+    circle_layout = circle_units(
+        record_units(records, transforms),
+        gap_degrees=layout.one_circle_gap_degrees,
+        min_length_bp=layout.one_circle_min_length,
+    )
+    if circle_layout.hidden:
+        logger.info(
+            "One circle: %s of %s records are under %s bp and not drawn.",
+            f"{len(circle_layout.hidden):,}", f"{len(records):,}", f"{layout.one_circle_min_length:,}",
+        )
+    _refuse_one_circle_tables(inputs)
+    first = circle_layout.placed[0][0].record_index
+    drawn_indexes = [unit.record_index for unit, _place in circle_layout.placed]
+    record_features = inputs._resolved_record_features
+    # One GC window and step for the bases of the records the circle draws, unless the caller set them.
+    [(auto_window, auto_step)] = record_sliding_windows(
+        "circular", (sum(unit.length for unit, _place in circle_layout.placed),), inputs.cfg
+    )
+    return assemble_circular_diagram_from_record(
+        records[first],
+        replace(
+            inputs,
+            window=auto_window if inputs.window is None else inputs.window,
+            step=auto_step if inputs.step is None else inputs.step,
+            _resolved_record_features=(
+                tuple(record_features[index] for index in drawn_indexes) if record_features else record_features
+            ),
+        ),
+        _record_context=CircularRecordContext(
+            record_transform=transforms[first],
+            record_presentation=record_presentations[first] if record_presentations else None,
+            one_circle=CircularOneCircleInputs(
+                tuple(records), transforms, circle_layout, layout.one_circle_min_length, layout.one_circle_record_band
+            ),
+        ),
+    )
+
+
+def _multi_record_layout(layout: object) -> CircularMultiRecordOptions:
+    """The layout of a drawing of several Circular records: as given, else the default grid."""
+
+    if layout is not None and not isinstance(layout, CircularMultiRecordOptions):
+        raise ValidationError("layout must be CircularMultiRecordOptions or None.")
+    return CircularMultiRecordOptions() if layout is None else layout
+
+
 def assemble_circular_diagram_from_records(
     records: Sequence[SeqRecord],
     inputs: CircularAssemblyInputs,
@@ -3101,9 +3282,9 @@ def assemble_circular_diagram_from_records(
         raise ValidationError("cfg must be GbdrawConfig")
     if not records:
         raise ValidationError("records is empty")
-    if layout is not None and not isinstance(layout, CircularMultiRecordOptions):
-        raise ValidationError("layout must be CircularMultiRecordOptions or None")
-    layout = CircularMultiRecordOptions() if layout is None else layout
+    layout = _multi_record_layout(layout)
+    if layout.record_layout == "one_circle":
+        return _assemble_one_circle(records, inputs, layout, _record_transforms, _record_presentations)
     thresholds = ComparisonThresholds(
         evalue=inputs.evalue,
         bitscore=inputs.bitscore,
@@ -3855,11 +4036,13 @@ def label_fit_row(
 
 def _circular_builder_options(
     options: CircularDiagramOptions | None,
+    *,
+    one_circle: bool = False,
 ) -> CircularDiagramOptions:
     if options is None:
-        return resolve_circular_diagram_options(CircularDiagramOptions())
+        return resolve_circular_diagram_options(CircularDiagramOptions(), one_circle=one_circle)
     if isinstance(options, CircularDiagramOptions):
-        return resolve_circular_diagram_options(options)
+        return resolve_circular_diagram_options(options, one_circle=one_circle)
     raise ValidationError("options must be CircularDiagramOptions.")
 
 
@@ -4298,6 +4481,25 @@ def build_linear_diagram_result(
     return result
 
 
+# The GC content track of several records on one circle: as wide as this share of its usual width (D-12).
+ONE_CIRCLE_GC_WIDTH_SHARE = 0.5
+
+
+def _one_circle_config(cfg: GbdrawConfig, set_paths: frozenset[str]) -> GbdrawConfig:
+    """The geometry several records on one circle take where the caller's config overrides leave it: the GC
+    content track half as wide (D-12); the profile sets their GC defaults (``ONE_CIRCLE_CONFIG_OVERRIDES``).
+    A value the caller sets is kept."""
+
+    canvas = cfg.canvas
+    if not any(path.startswith("canvas.circular.track_ratio_factors") for path in set_paths):
+        factors = {
+            size: [values[0], values[1] * ONE_CIRCLE_GC_WIDTH_SHARE, *values[2:]]
+            for size, values in canvas.circular.track_ratio_factors.items()
+        }
+        canvas = replace(canvas, circular=replace(canvas.circular, track_ratio_factors=factors))
+    return replace(cfg, canvas=canvas)
+
+
 def build_circular_multi_diagram(
     records: Sequence[SeqRecord],
     *,
@@ -4310,17 +4512,16 @@ def build_circular_multi_diagram(
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
     _label_fit_warn_search_seconds: float = WARN_SEARCH_SECONDS,
 ) -> Drawing:
-    """Build a circular grid using mode-specific typed options."""
+    """Build a circular grid, or records on one circle (``layout.record_layout``), using mode-specific typed
+    options."""
 
-    options = _circular_builder_options(options)
-    if layout is not None and not isinstance(layout, CircularMultiRecordOptions):
-        raise ValidationError(
-            "layout must be CircularMultiRecordOptions or None."
-        )
-    layout = layout or CircularMultiRecordOptions()
+    layout = _multi_record_layout(layout)
+    options = _circular_builder_options(options, one_circle=layout.record_layout == "one_circle")
     output = options.output
     tracks = options.tracks
     cfg = _resolve_diagram_options_config(options)
+    if layout.record_layout == "one_circle":
+        cfg = _one_circle_config(cfg, _set_config_paths(options))
     # Read every file once: the label fit rows reassemble the figure, on the
     # Web after its staged files are deleted (OV-720, OV-732).
     conservation_inputs = read_conservation_inputs(

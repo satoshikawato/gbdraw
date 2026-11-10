@@ -563,6 +563,8 @@ class RecordSourceMetadata(NamedTuple):
     organelle: str | None
     # The record's lineage (GenBank ORGANISM lines), highest taxon first.
     lineage: tuple[str, ...] = ()
+    # The source feature's ``chromosome`` qualifier as written ("IV"); ``replicon`` names it ("Chromosome IV").
+    chromosome: str | None = None
 
 
 def infer_record_source_metadata(record: SeqRecord) -> RecordSourceMetadata:
@@ -574,6 +576,7 @@ def infer_record_source_metadata(record: SeqRecord) -> RecordSourceMetadata:
     strain = ""
     replicon: str | None = None
     organelle: str | None = None
+    chromosome: str | None = None
 
     for feature in getattr(record, "features", []):
         if getattr(feature, "type", None) != "source":
@@ -588,7 +591,8 @@ def infer_record_source_metadata(record: SeqRecord) -> RecordSourceMetadata:
             strain = str(qualifiers["strain"][0]).strip()
 
         if "chromosome" in qualifiers and qualifiers["chromosome"]:
-            replicon = f"Chromosome {str(qualifiers['chromosome'][0]).strip()}"
+            chromosome = str(qualifiers["chromosome"][0]).strip()
+            replicon = f"Chromosome {chromosome}"
         elif "plasmid" in qualifiers and qualifiers["plasmid"]:
             replicon = str(qualifiers["plasmid"][0]).strip()
 
@@ -601,6 +605,7 @@ def infer_record_source_metadata(record: SeqRecord) -> RecordSourceMetadata:
         replicon=replicon,
         organelle=organelle,
         lineage=lineage,
+        chromosome=chromosome,
     )
 
 

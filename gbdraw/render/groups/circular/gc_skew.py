@@ -10,7 +10,7 @@ from ....configurators import GcSkewConfigurator
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_transform import unset_record_transform
+from gbdraw.layout.record_transform import circular_display_length, unset_record_transform
 
 class GcSkewGroup:
     """
@@ -36,7 +36,7 @@ class GcSkewGroup:
         self.radius: float = radius
         self.track_width: float = track_width
         self.skew_config: GcSkewConfigurator = skew_config
-        self.record_len: int = len(self.gb_record.seq)
+        self.record_len: int = circular_display_length(self.gb_record, self.record_transform)
         self.skew_group: Group = Group(id=group_id)
         self.norm_factor = float(norm_factor_override)
         self.dinucleotide: str = self.skew_config.dinucleotide

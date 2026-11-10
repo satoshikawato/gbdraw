@@ -825,12 +825,14 @@ def _validate_linear_placements(
 
 def _resolve_circular_request_options(
     options: object,
+    layout: object = None,
 ) -> CircularDiagramOptions:
     if not isinstance(options, CircularDiagramOptions):
         raise ValidationError(
             "Circular request options must be CircularDiagramOptions."
         )
-    return resolve_circular_diagram_options(options)
+    one_circle = isinstance(layout, CircularMultiRecordOptions) and layout.record_layout == "one_circle"
+    return resolve_circular_diagram_options(options, one_circle=one_circle)
 
 
 @dataclass(frozen=True)
@@ -859,7 +861,7 @@ class CircularDiagramRequest:
         object.__setattr__(
             self,
             "options",
-            _resolve_circular_request_options(self.options),
+            _resolve_circular_request_options(self.options, self.layout),
         )
         if self.layout is not None and not isinstance(
             self.layout, CircularMultiRecordOptions

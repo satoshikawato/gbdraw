@@ -23,9 +23,11 @@ from ....svg.circular_ticks import (
     generate_circular_tick_paths,
     generate_circular_tick_labels,
 )
+from ....svg.circular_tracks import within_record_arc
 
 
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_coordinates import CirclePlace, RecordDisplayTransform
+from gbdraw.layout.record_transform import circular_display_length
 
 
 def _closest_label_gap_px(
@@ -77,7 +79,13 @@ class TickGroup:
         self.tick_group = Group(id=track_slot_svg_id(slot_id, renderer="ticks"))
         self.tick_group.attribs["data-gbdraw-slot-id"] = slot_id
         self.tick_group.attribs["data-gbdraw-slot-renderer"] = "ticks"
-        self.total_len: int = len(self.gb_record.seq)
+        self.total_len: int = circular_display_length(gb_record, record_transform)
+        place = None if record_transform is None else record_transform.circle
+        # The positions ticks run over: the record's own bases (on a shared circle, numbered from its start, at the
+        # interval and in the unit of the circle's longest record, with no tick at the record's start).
+        self.tick_extent: int = len(self.gb_record.seq)
+        self.scale_length: int = self.total_len if place is None else place.scale_length
+        self.first_tick: int = 0
         cfg = profile.config
         ticks_config = cfg.objects.ticks
         self.tick_width = ticks_config.tick_width
@@ -99,11 +107,13 @@ class TickGroup:
 
     def set_tick_size(self) -> None:
         tick_large, tick_small = get_circular_tick_intervals(
-            self.total_len,
+            self.scale_length,
             manual_interval=self.manual_interval,
         )
         self.tick_large: int = tick_large
         self.tick_small: int = tick_small
+        if self.scale_length != self.total_len:
+            self.first_tick = tick_large
 
     def _tick_labels(self, ticks: list[int]) -> list[tuple[str, float, CircularTickLabelGeometry]]:
         return circular_tick_labels(
@@ -129,21 +139,66 @@ class TickGroup:
         """Which large ticks carry a label (OV-3020): every ``label_stride``-th (``scale_label_stride``), with their
         gaps measured along the circle. Every tick keeps its mark at the interval, Auto or typed."""
 
-        ticks = [tick for tick in range(0, self.total_len, self.tick_large) if tick != 0]
-        labels = self._tick_labels(ticks)
-        self.label_stride: int = scale_label_stride(
-            lambda stride: _closest_label_gap_px(labels[stride - 1 :: stride], self.total_len), self.font_size
+        ticks = [tick for tick in range(0, self.tick_extent, self.tick_large) if tick != 0]
+        # On a circle several records share, every record labels the same ticks of its own numbering: the
+        # stride the circle's longest record would take at the circle's scale, so neighbours' labels keep apart.
+        probe = (
+            self._tick_labels(ticks)
+            if self.scale_length == self.total_len
+            else circular_tick_labels(
+                self.radius, self.total_len, "large",
+                [tick for tick in range(self.tick_large, self.scale_length, self.tick_large)],
+                self.font_size, self.font_family, self.track_type, self.separate_strands,
+                label_side=self.label_side, tick_side=self.tick_side, tick_length_px=self.tick_length_px,
+                tick_width=float(self.tick_width), length_reference_radius_px=float(self.geometry.radius),
+                # The circle's longest record, from the circle's start: its labels' text and spacing.
+                record_transform=RecordDisplayTransform(self.scale_length, 1, 1, None, False).with_circle(
+                    CirclePlace(0, self.total_len, self.scale_length), self.scale_length
+                ),
+                tick_interval=self.tick_large, length_threshold=self.length_threshold,
+            )
         )
-        self.labelled_ticks: list[int] = ticks[self.label_stride - 1 :: self.label_stride]
+        self.label_stride: int = scale_label_stride(
+            lambda stride: _closest_label_gap_px(probe[stride - 1 :: stride], self.total_len), self.font_size
+        )
+        self.labelled_ticks: list[int] = self._labels_within_record(ticks[self.label_stride - 1 :: self.label_stride])
+
+    def _labels_within_record(self, ticks: list[int]) -> list[int]:
+        """The ticks whose label lies within its record's arc on a circle several records share (OV-3113): a label
+        that would run past the record's start or end, over the gap and onto its neighbour, is left out; its tick
+        keeps its mark. A record alone keeps every label."""
+
+        transform = self.record_transform
+        labels = [] if transform is None or transform.circle is None else self._tick_labels(ticks)
+        if not labels:  # A record alone, or no labels drawn at all.
+            return ticks
+        kept = []
+        for (_, position, label), tick in zip(labels, ticks, strict=True):
+            if within_record_arc(*self._label_turns(position, label), transform):
+                kept.append(tick)
+        return kept
+
+    def _large_ticks(self) -> list[int]:
+        """The positions of the large tick marks: every interval over the record's own bases (on a shared circle,
+        from one interval past the record's start)."""
+
+        return list(range(self.first_tick, self.tick_extent, self.tick_large))
+
+    def _label_turns(self, tick: float, label: CircularTickLabelGeometry) -> tuple[float, float]:
+        """The turns of the circle from the top that a label's letters span, centred on its tick (its display
+        place) at its path radius; not wrapped past 1."""
+
+        half_turn = 0.5 * label.bbox_width_px / max(1.0, label.path_radius_px) / (2.0 * math.pi)
+        turn = float(tick) / self.total_len
+        return turn - half_turn, turn + half_turn
 
     def add_elements_to_group(self) -> Group:
-        ticks_large = list(range(0, self.total_len, self.tick_large))
         size: str = "large"
         tick_paths_large: list[Path] = generate_circular_tick_paths(
             self.radius,
             self.total_len,
             size,
-            ticks_large,
+            self._large_ticks(),
             self.tick_width,
             self.track_type,
             self.separate_strands,
@@ -189,7 +244,7 @@ class TickGroup:
             self.radius,
             self.total_len,
             "large",
-            list(range(0, self.total_len, self.tick_large)),
+            self._large_ticks(),
             self.track_type,
             self.separate_strands,
             tick_side=self.tick_side,
@@ -205,10 +260,9 @@ class TickGroup:
 
         rings: list[CircularInkRing] = []
         for _, tick, label in self._tick_labels(self.labelled_ticks):
-            half_turn = 0.5 * label.bbox_width_px / max(1.0, label.path_radius_px) / (2.0 * math.pi)
-            turn = float(tick) / self.total_len
+            start, end = self._label_turns(tick, label)
             band = RadialBand(label.radial_inner_px, label.radial_outer_px)
-            rings.append(CircularInkRing(band, (turn - half_turn) % 1.0, (turn + half_turn) % 1.0))
+            rings.append(CircularInkRing(band, start % 1.0, end % 1.0))
         return rings
 
     def _label_backings(self) -> list[SectorBacking]:

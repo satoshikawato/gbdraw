@@ -281,10 +281,12 @@ test('a Circular record popup without its own fields names the cause', () => {
   };
   assert.equal(hint('not-inspected'), 'Inspect source records in the sidebar to edit this record\'s label.');
   assert.equal(hint('multi-record-canvas'), 'Multi-Record Canvas uses a grid. Turn it off to select one record.');
+  assert.equal(hint('one-circle'), 'One circle draws every record. Turn it off to select one record.');
   assert.equal(hint('no-single-record'), 'Select one record to edit crop, orientation, and title lines.');
   assert.ok(sidebar.includes(`>{{ t('${hint('no-single-record')}') }}</p>`), 'the sidebar shows the no-single-record sentence');
-  // The sidebar offers the Multi-Record Canvas link in place of the sentence (ui-copy-diet D-03).
-  assert.ok(sidebar.includes(`@click="showCircularCanvasSetting" class="mt-1 text-xs text-blue-600">{{ t('Show Multi-Record Canvas setting') }}</button>`));
+  // The sidebar offers the link to the layout's setting in place of the sentence (ui-copy-diet D-03), named by the
+  // record layout.
+  assert.ok(sidebar.includes(`@click="showCircularCanvasSetting" class="mt-1 text-xs text-blue-600">{{ circularRecordLayout === 'one_circle' ? t('Show One circle setting') : t('Show Multi-Record Canvas setting') }}</button>`));
 });
 
 // A Linear file that draws several records: the drawn record id names the

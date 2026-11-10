@@ -19,6 +19,7 @@ from gbdraw.auto_sizes import (
 from gbdraw.comparisons.identity_scale import IDENTITY_SCALE_PATHS
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.labels import LinearLabelScope
+from gbdraw.config.models.objects import GcContentMode
 from gbdraw.config.toml import load_config_toml
 from gbdraw.core.figure_length import figure_length_unit_table
 from gbdraw.diagrams.circular.presets import circular_auto_slot_sizes, circular_track_preset_table
@@ -35,6 +36,7 @@ from gbdraw.mode_profiles import (
     DEFAULT_FEATURE_TYPES,
     MODE_PROFILE_VERSION,
     MODE_PROFILES,
+    ONE_CIRCLE_CONFIG_OVERRIDES,
 )
 from gbdraw.tracks.circular import CircularTrackRendererName
 from gbdraw.tracks.parsing import FEATURE_DENSITY_SLOT_ID_PREFIX
@@ -101,6 +103,10 @@ def mode_profiles_payload() -> dict[str, object]:
             "everyFeatureType": FeatureQuery().feature_type,
         },
         "featureTypes": list(DEFAULT_FEATURE_TYPES),
+        # The values of objects.gc_content.mode.
+        "gcContentModes": list(get_args(GcContentMode)),
+        # The values a Circular drawing of records on one circle takes where the user left them unset.
+        "oneCircleConfigOverrides": dict(ONE_CIRCLE_CONFIG_OVERRIDES),
         # The units of canvas.figure_width and canvas.figure_height (gbdraw/core/figure_length.py): the Figure size
         # field's unit choices and the size line's conversion and decimals.
         "figureLength": figure_length_unit_table(),

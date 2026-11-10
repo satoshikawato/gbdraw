@@ -17,7 +17,7 @@ import { detectedTopologyNote } from './services/record-display-model.js';
 import { specificRuleHasQualifier } from './services/specific-color-rules.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsScrollOwner, settingsShortText, settingsView } from './services/settings-sections.js';
-import { SETTING_NOTE_APPLIES, settingApplicationNote, settingClassNote, settingClockLabel } from './services/setting-application.js';
+import { SETTING_NOTE_APPLIES, SETTING_NOTE_ONE_CIRCLE_CHANGE, settingApplicationNote, settingClassNote, settingClockLabel } from './services/setting-application.js';
 import { prefetchPyodideBootAssets } from './services/pyodide-assets.js';
 import { isInputFileRef } from './services/history-files.js';
 import { projectPreviewSurface } from './app/ui.js';
@@ -371,7 +371,8 @@ export const SettingsSectionTitle = {
 // applies at once shows nothing; an export-only row shows its note as a line.
 // A live setting row the shown Result cannot draw applies on Generate (the
 // injected `SETTING_NOTE_APPLIES` predicate of the committed request, made
-// once per render). An `item` (an annotation item, a Linear row) states that
+// once per render; `SETTING_NOTE_ONE_CIRCLE_CHANGE` names a pending change
+// that enters or leaves One circle). An `item` (an annotation item, a Linear row) states that
 // one item's value; `application` replaces the row's class where it follows
 // state (Palette Instant Preview); `id` names the description, which the
 // one control of a field references through aria-describedby. While the note
@@ -388,8 +389,10 @@ export const SettingNote = {
   /** @param {{ setting: SettingApplicationId, item: LiveSettingItem | null, application: SettingApplicationClass | null, id: string | null }} props */
   setup: (props) => {
     const appliesFor = /** @type {(item: LiveSettingItem | null) => (requestPath: string) => boolean} */ (inject(SETTING_NOTE_APPLIES, () => () => true));
+    const oneCircleChange = /** @type {() => boolean} */ (inject(SETTING_NOTE_ONE_CIRCLE_CHANGE, () => false));
     return {
-      note: computed(() => (props.application ? settingClassNote(props.application) : settingApplicationNote(props.setting, appliesFor(props.item)))),
+      note: computed(() => (props.application ? settingClassNote(props.application)
+        : settingApplicationNote(props.setting, appliesFor(props.item), oneCircleChange()))),
       label: computed(settingClockLabel)
     };
   },

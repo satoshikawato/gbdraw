@@ -12,7 +12,7 @@ import { loadPageVue } from './helpers/vue-runtime.mjs';
 const Vue = loadPageVue();
 globalThis.window = { Vue, setTimeout, clearTimeout, innerWidth: 1440 };
 const { SettingNote, HelpTip } = await import('../../gbdraw/web/js/components.js');
-const { SETTING_APPLICATION, SETTING_NOTE_APPLIES, settingApplicationNote } = await import('../../gbdraw/web/js/services/setting-application.js');
+const { SETTING_APPLICATION, SETTING_NOTE_APPLIES, SETTING_NOTE_ONE_CIRCLE_CHANGE, settingApplicationNote } = await import('../../gbdraw/web/js/services/setting-application.js');
 const { t, tm } = await import('../../gbdraw/web/js/utils/i18n.js');
 
 const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
@@ -60,7 +60,7 @@ const textOf = (node) => [...all(node)].filter((inside) => inside.tag === '#text
 const classes = (node) => (node.attributes.class || '').split(/\s+/);
 
 /** Renders `<setting-note>` with the given props and committed-request predicate. */
-const render = (props, applies = () => true) => {
+const render = (props, applies = () => true, oneCircleChange = false) => {
   body = element('body');
   const root = element('div');
   const { createRenderer, h } = Vue;
@@ -70,6 +70,7 @@ const render = (props, applies = () => true) => {
   app.config.globalProperties.t = t;
   app.config.globalProperties.tm = tm;
   app.provide(SETTING_NOTE_APPLIES, () => applies);
+  app.provide(SETTING_NOTE_ONE_CIRCLE_CHANGE, () => oneCircleChange);
   app.mount(root);
   return { root, body, unmount: () => app.unmount() };
 };
@@ -110,6 +111,12 @@ test('no live row renders "Live edit"; a live row with a Generate part shows the
   const description = [...all(partial.body)].find((node) => node.attributes.id === button.attributes['aria-describedby']);
   assert.match(textOf(description), /the position applies on Generate after the Multi-Record Canvas change/);
   partial.unmount();
+  // A change that enters or leaves One circle names One circle.
+  const oneCircle = render({ setting: 'legend' }, (path) => path !== 'diagramOptions.output.legend', true);
+  const clock = [...all(oneCircle.root)].find((node) => node.tag === 'button');
+  const text = [...all(oneCircle.body)].find((node) => node.attributes.id === clock.attributes['aria-describedby']);
+  assert.match(textOf(text), /the position applies on Generate after the One circle change/);
+  oneCircle.unmount();
 });
 
 test('the id a control references names an element whether the note shows the clock or nothing', () => {

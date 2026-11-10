@@ -226,7 +226,9 @@ under "Cited ids without a record".
   - `tests/web/run-analysis-derived-cache.test.mjs`
   - `tests/web/run-info.test.mjs`
 
-- [PD-OI-019](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-019-fresh-web-multi-record-layout-defaults): Fresh Web multi-record layout defaults. ACCEPTED, concern `diagram-generation.web-multi-record-layout-defaults`, scenario revision 1.
+- [PD-OI-019](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-019-fresh-web-multi-record-layout-defaults): Fresh Web multi-record layout defaults. ACCEPTED, concern `diagram-generation.web-multi-record-layout-defaults`, scenario revision 2, supersedes scenario revision 1.
+  - `tests/web/one-circle-layout.test.mjs`
+  - `tests/web/session-cli-compatibility.test.mjs`
 
 - [PD-OI-020](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-020-losat-total-thread-allocation-and-control-agreement): LOSAT total-thread allocation and control agreement. ACCEPTED, concern `diagram-generation.losat-total-thread-allocation`, scenario revision 1.
 

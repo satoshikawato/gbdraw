@@ -68,6 +68,35 @@ class CircularTrackInputs:
     annotation_record_index: int = 0
 
 
+@dataclass(frozen=True, slots=True)
+class CircularCircleUnit:
+    """One record drawn on a circle it shares with other records.
+
+    ``transform`` places it there (``RecordDisplayTransform.circle``); ``record_index`` is its index among the
+    figure's records, which its record key, its feature inputs and its groups read.
+    """
+
+    record: CircularRecordData
+    transform: RecordDisplayTransform
+    record_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class CircularOneCircle:
+    """Several records drawn one after another on one circle (``gbdraw.layout.record_units.circle_units``).
+
+    ``units`` are the drawn records in drawing order; ``hidden_count`` records shorter than ``min_length_bp``
+    are not drawn, and the definition says how many there are. ``display_length`` is the circle's length in
+    display bases, records and gaps together. ``record_band``: a band outside the tracks names the records.
+    """
+
+    units: tuple[CircularCircleUnit, ...]
+    display_length: int
+    hidden_count: int
+    min_length_bp: int
+    record_band: bool
+
+
 class CircularPlannedTracks(NamedTuple):
     """What annotation planning made of one record's track inputs, and what the drawing reads of them.
 

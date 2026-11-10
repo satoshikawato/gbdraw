@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Mapping, Optional, Sequence
 
+from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
 from gbdraw.analysis.collinearity import (
@@ -48,6 +49,7 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.features.placement import ResolvedRecordFeatureInputs
 from gbdraw.labels.linear import FeatureLabelRows
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_units import CircleUnits
 from gbdraw.layout.record_placement import FeatureAnchorPlacement
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
 from gbdraw.linear_comparison import LinearComparison
@@ -171,6 +173,20 @@ class LinearAssemblyInputs(DiagramAssemblyInputs):
     _feature_label_rows: FeatureLabelRows | None = None
 
 
+@dataclass(frozen=True)
+class CircularOneCircleInputs:
+    """The records of a figure drawn on one circle: every record and the transform it is drawn by, by index,
+    and where each drawn record lies on the circle (``circle_units``)."""
+
+    records: tuple[SeqRecord, ...]
+    transforms: tuple[RecordDisplayTransform, ...]
+    layout: CircleUnits
+    # Records shorter than this are left out of the circle and counted (``layout.hidden``).
+    min_length_bp: int
+    # Whether a band outside the tracks tells the records apart and names them.
+    record_band: bool
+
+
 @dataclass(frozen=True, kw_only=True)
 class CircularRecordContext:
     """Per-record values a multi-record or builder caller hands one Circular record.
@@ -195,3 +211,5 @@ class CircularRecordContext:
     record_transform: RecordDisplayTransform | None = None
     record_presentation: RecordPresentation | None = None
     requested_canvas: bool = True
+    # Several records drawn one after another on one circle (this record is the first drawn).
+    one_circle: CircularOneCircleInputs | None = None

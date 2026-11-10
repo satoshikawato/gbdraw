@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
@@ -17,11 +19,21 @@ def calculate_gc_percent(seq: object) -> float:
     """Calculate GC percentage for a sequence-like object, counted as the GC track counts: over its known bases
     (A, C, G, T), 0 when it has none (OV-2799)."""
 
-    sequence = counted_sequence(seq)
-    known = len(sequence) - sequence.count(b"N")
+    return gc_percent_of_sequences((seq,))
+
+
+def gc_percent_of_sequences(seqs: Iterable[object]) -> float:
+    """The GC percentage of several sequence-like objects taken together, counted as the GC track counts: over
+    their known bases (A, C, G, T), 0 when they have none (OV-2799)."""
+
+    gc_count = 0
+    known = 0
+    for seq in seqs:
+        sequence = counted_sequence(seq)
+        gc_count += sequence.count(b"G") + sequence.count(b"C")
+        known += len(sequence) - sequence.count(b"N")
     if not known:
         return 0.0
-    gc_count = sequence.count(b"G") + sequence.count(b"C")
     return round(100.0 * gc_count / known, 2)
 
 

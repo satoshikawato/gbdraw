@@ -517,6 +517,15 @@ const replaceObjectContents = (target, source) => {
   return target;
 };
 
+// The Dinucleotide setting and a row's dinucleotide are inputs of the Hide
+// GC projection (TK-09), so their edits run it (R10). It reads only the drawing.
+/** @param {DrawingState} drawing */
+const projectCircularSuppressControls = (drawing) => {
+  const slots = drawing.adv.circular_track_slots;
+  applyCircularSuppressControlsToSlots(slots, drawing.form, drawing.adv.nt)
+    .forEach((slot, index) => replaceObjectContents(slots[index], slot));
+};
+
 /** @param {DrawingState} drawing */
 const circularGeometryShortcutsForState = (drawing) => ({
   featureWidth: drawing?.adv?.feature_width_circular,
@@ -1545,15 +1554,6 @@ export const createCircularTrackSlotEditor = ({
     if (event?.target) event.target.checked = nextChecked;
   };
 
-  // The Dinucleotide setting and a row's dinucleotide are inputs of the Hide
-  // GC projection (TK-09), so their edits run it here (R10).
-  /** @param {DrawingState} drawing */
-  const projectCircularSuppressControls = (drawing) => {
-    const slots = drawing.adv.circular_track_slots;
-    applyCircularSuppressControlsToSlots(slots, drawing.form, drawing.adv.nt)
-      .forEach((slot, index) => replaceObjectContents(slots[index], slot));
-  };
-
   /** @param {unknown} value */
   const setCircularDinucleotide = (value) => {
     const drawing = state.activeDrawing();
@@ -1588,6 +1588,11 @@ export const createCircularTrackSlotEditor = ({
     const drawing = state.activeDrawing();
     return setCircularSuppressControl(drawing, 'gc_skew', checked, event);
   };
+
+  /** A record layout's Hide GC Skew (one circle draws none), projected onto the rows as the checkbox does, marks included, without its question, so the marked rows come back when the layout is left (R10). @param {DrawingState} drawing @param {boolean} hidden */
+  const projectCircularSkewHidden = (drawing, hidden) => changeTrackVisibility(() => {
+    drawing.form.suppress_skew = hidden; normalizeSlots(drawing);
+  });
 
   /**
    * @param {CircularTrackSlot | null | undefined} slot @param {unknown} enabled
@@ -1952,6 +1957,7 @@ export const createCircularTrackSlotEditor = ({
     }),
     setCircularGcSuppressed,
     setCircularSkewSuppressed,
+    projectCircularSkewHidden,
     setCircularDinucleotide,
     setCircularTrackSlotNt,
     canAddCircularTrackRenderer,

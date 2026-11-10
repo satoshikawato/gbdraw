@@ -29,6 +29,7 @@ import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
 import { FRESH_PROTEIN_COMPARISON_DEFAULTS, ORTHOGROUP_INFERENCE_VERSION, SCALAR_AXIS_LABELS, SESSION_PNG_DPI_CHOICES } from '../contracts/schema.generated.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
+import { ONE_CIRCLE_ADV_DEFAULTS } from './one-circle-layout.js';
 /** @import { ObjectShape } from '../utils/contract-shape.js' */
 import { DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION } from './losat-normalization.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
@@ -132,7 +133,7 @@ export const createDefaultAdv = (mode = 'circular') => ({
   gc_content_tick_font_size: null, comparison_height: null, pairwise_match_style: mode === 'linear' ? 'curve' : 'ribbon', ...comparisonStateForMode(mode), identity_scale: null, scale_interval: null,
   scale_font_size: null, ruler_label_font_size: null, scale_stroke_width: null, scale_stroke_color: null, ruler_label_color: null, circular_grouping_intent: 'auto',
   multi_record_size_mode: 'auto', multi_record_min_radius_ratio: 0.55, multi_record_column_gap_ratio: 0.10, multi_record_row_gap_ratio: 0.05,
-  multi_record_positions: [], tick_label_font_size: null, plot_title_font_size: null, keep_full_definition_with_plot_title: false, show_definition: true,
+  multi_record_positions: [], ...ONE_CIRCLE_ADV_DEFAULTS, tick_label_font_size: null, plot_title_font_size: null, keep_full_definition_with_plot_title: false, show_definition: true,
   center_reserved_radius: null, feature_width_circular: null, depth_width_circular: null, gc_content_width_circular: null, gc_content_radius_circular: null,
   gc_skew_width_circular: null, gc_skew_radius_circular: null, circular_track_slots_enabled: false,
   circular_track_slots_schema_version: CIRCULAR_TRACK_SLOT_SCHEMA_VERSION, circular_track_slots_axis_index: null, circular_track_slots: createDefaultCircularTrackSlots(),

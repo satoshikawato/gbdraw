@@ -488,7 +488,9 @@ def circular_tick_marks(
     )
     marks: list[TickMark] = []
     for tick in ticks:
-        if record_transform is not None and record_transform.start_coordinate is not None:
+        if record_transform is not None and record_transform.circle is not None:
+            tick = record_transform.source_boundary_to_display_offset(tick)
+        elif record_transform is not None and record_transform.start_coordinate is not None:
             tick = record_transform.source_base_to_display_index(tick or 1)
         prox_x: float = prox_radius * math.cos(math.radians(360.0 * (tick / total_len) - 90))
         prox_y: float = prox_radius * math.sin(math.radians(360.0 * (tick / total_len) - 90))
@@ -604,9 +606,14 @@ def circular_tick_labels(
     if normalized_side in {"none", ""}:
         return []
     labels: list[tuple[str, float, CircularTickLabelGeometry]] = []
+    # The length the labels are written for: on a circle several records share, its longest record's.
+    place = None if record_transform is None else record_transform.circle
+    label_length = total_len if place is None else place.scale_length
     for tick in ticks:
-        label_text = _format_tick_label_text(tick, total_len, tick_interval)
-        if record_transform is not None and record_transform.start_coordinate is not None:
+        label_text = _format_tick_label_text(tick, label_length, tick_interval)
+        if record_transform is not None and record_transform.circle is not None:
+            tick = record_transform.source_boundary_to_display_offset(tick)
+        elif record_transform is not None and record_transform.start_coordinate is not None:
             tick = record_transform.source_base_to_display_index(tick)
         geometry = resolve_circular_tick_label_geometry(
             center_radius_px=radius,

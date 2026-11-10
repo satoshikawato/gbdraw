@@ -208,6 +208,14 @@ empty list (`tests/fixtures/ring-genome-files-vectors.json`, read by both). The 
 allocated as `conservation-fasta-files-<i>-<n>`. This change entered schema 10 before schema 10 reached `main`, so
 the schema does not change again.
 
+Request schema 10 also lets a Circular request draw several records one after another on one circle (issue #200):
+`renderRequest.layout` may carry `recordLayout` (`"grid"` or `"one_circle"`), `oneCircleGapDegrees`,
+`oneCircleMinLength` and `oneCircleRecordBand`. The writer writes all four only for `"one_circle"`, so a grid layout
+encodes as before; the reader reads an absent key as its default (`grid`, 1.0 degree, 1000 bp, band on) and refuses the
+keys in a request of schema 9 or older (`ONE_CIRCLE_LAYOUT_OPTIONS` and `RECORD_LAYOUT_SCHEMA` in
+`gbdraw/session_request_codec.py`). The Web app does not read them yet. This adds no request schema (schema 10 has not
+reached `main`). `tests/test_session_request_codec.py` holds the positive and refusal cases.
+
 A Circular drawing of Session 51 keeps the window of its record that its Start/End fields cannot hold, one window
 across the origin of a circular record (start after end, PD-OI-122), in `config.form.circular_windows`: a list of
 `{start, end, reverseComplement, column}` as the request writes it, empty for a record drawn whole or in one ordered

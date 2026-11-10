@@ -54,9 +54,11 @@ const {
   installShownDrawing
 } = sessionConfig;
 const {
-  CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest, committedFeatureVisibilityMatches, linearRecordGridRows,
+  CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest, committedFeatureVisibilityMatches, linearRecordGridRows, projectCanonicalSessionRequest,
   projectCommittedEditorIntent
 } = await import('../../gbdraw/web/js/services/session-request.js');
+const { chooseRecordLayout, circularRecordLayoutOf } = await import('../../gbdraw/web/js/services/one-circle-layout.js');
+const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { inheritSavedComparison } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
 const { validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
@@ -208,6 +210,44 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
     }
   });
 }
+
+// PD-OI-019 scenario revision 2: a CLI Session of one circle loads as one circle with the command's GC content
+// (percent) and Hide GC Skew, and leaving one circle returns to Multi-Record Canvas with a new document's values
+// (review r2 finding 4).
+await test('a CLI one-circle Session loads as one circle and leaves it for the grid with a new document\'s GC values', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-one-circle-'));
+  try {
+    const output = path.join(directory, 'one-circle');
+    const file = `${output}.gbdraw-session.json.gz`;
+    execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', mito, lambda, '--one_circle',
+      '--one_circle_gap_degrees', '2.5', '-o', output, '--session_output', file], {
+      cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+    });
+    const bytes = gunzipSync(await readFile(file));
+    const session = JSON.parse(bytes);
+    const view = savedDrawingView(session, session.ui.activeDrawingId);
+    assert.equal(view.renderRequest.layout.recordLayout, 'one_circle');
+    const fresh = { form: createDefaultForm(), adv: createDefaultAdv('circular') };
+    const left = { layout: 'grid', gc_content_mode: fresh.adv.gc_content_mode, suppress_skew: fresh.form.suppress_skew };
+    // The projection of the stored request alone.
+    const projected = projectCanonicalSessionRequest({ renderRequest: view.renderRequest, resources: session.resources });
+    assert.deepEqual([projected.config.form.multi_record_canvas, projected.config.form.suppress_skew], [true, true]);
+    assert.deepEqual([projected.config.adv.circular_record_layout, projected.config.adv.one_circle_gap_degrees,
+      projected.config.adv.gc_content_mode, projected.config.adv.one_circle_left], ['one_circle', 2.5, 'percent', left]);
+    // Load, then leave one circle.
+    const result = await load(bytes);
+    assert.equal(result.status, 'ok', result.error?.stack);
+    const drawing = state.activeDrawing();
+    assert.equal(circularRecordLayoutOf(drawing), 'one_circle');
+    assert.deepEqual([drawing.adv.gc_content_mode, drawing.form.suppress_skew, drawing.adv.one_circle_left], ['percent', true, left]);
+    const skew = chooseRecordLayout(drawing, 'left');
+    assert.equal(circularRecordLayoutOf(drawing), 'grid');
+    assert.deepEqual([drawing.adv.gc_content_mode, skew, drawing.adv.one_circle_left],
+      [fresh.adv.gc_content_mode, fresh.form.suppress_skew, null]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 // A v42 CLI Linear BLAST sidecar written by first-parent main (provenance in
 // tests/fixtures/sessions/se06-main-linear-blast-cli.provenance.json) keeps its
