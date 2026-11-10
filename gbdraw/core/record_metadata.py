@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Literal, NamedTuple, TypedDict, TypeVar
 from Bio.SeqFeature import ExactPosition, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.core.sequence_spans import sequence_spans
 from gbdraw.core.text import parse_mixed_content_text
 
 if TYPE_CHECKING:
@@ -62,7 +63,6 @@ def held_record_origin(record: SeqRecord) -> RecordOrigin | None:
 
 
 # The bases ``record_content_digest`` reads at a time.
-_DIGEST_SPAN = 1 << 20
 
 
 def record_content_digest(record: SeqRecord) -> str:
@@ -75,10 +75,8 @@ def record_content_digest(record: SeqRecord) -> str:
 
     digest = hashlib.blake2b(digest_size=16)
     digest.update(f"{record.id}\0{record.name}\0{record.description}\0".encode())
-    # A slice at a time: a slice of a record sequence reads only its bases, so the digest holds no copy of them.
-    sequence = record.seq
-    for start in range(0, len(sequence), _DIGEST_SPAN):
-        digest.update(bytes(sequence[start : start + _DIGEST_SPAN]))
+    for span in sequence_spans(record.seq):  # a span at a time: the digest holds no copy of the sequence
+        digest.update(span)
     digest.update(
         "".join(f"\0{feature.type}\0{feature.location}\0{feature.qualifiers!r}" for feature in record.features).encode()
     )

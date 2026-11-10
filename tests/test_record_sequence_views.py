@@ -31,6 +31,7 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.analysis import skew
 from gbdraw.analysis.gc import calculate_gc_percent
 from gbdraw.analysis.windows import cut_digest
+from gbdraw.core import sequence_spans as sequence_spans_module
 from gbdraw.core.record_metadata import record_content_digest
 from gbdraw.exceptions import InputFileError
 from gbdraw.io import record_sequences
@@ -267,7 +268,8 @@ def test_sequences_a_view_cannot_read_take_biopython_s_own_operations() -> None:
 
 
 def test_same_bases_reads_a_span_at_a_time(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(record_sequences, "_SPAN_BASES", 3)
+    monkeypatch.setattr(sequence_spans_module, "SPAN_BASES", 3)
+    assert list(sequence_spans_module.sequence_spans(b"ACGTACG")) == [b"ACG", b"TAC", b"G"]
     assert same_bases(Seq("ACGTACGTA"), sequence_view(Seq("TACGTACGTAC"), 1, 10))
     assert not same_bases(Seq("ACGTACGTA"), Seq("ACGTACGTT"))
     assert not same_bases(Seq("ACGT"), Seq("ACGTA"))
@@ -328,23 +330,52 @@ def test_gc_windows_of_a_record_past_the_cache_hold_no_copy_of_it(
     reversed_crop = crop_record_to_region(record, _spec(2_000_001, 20_000_000, True), circular=True)
     tracemalloc.start()
     try:
-        for drawn in (record, crop, reversed_crop):
-            skew.skew_df(drawn, 100_000, 50_000, "GC", circular=True)
+        windows = [skew.skew_df(drawn, 100_000, 50_000, "GC", circular=True) for drawn in (record, crop, reversed_crop)]
         gc_percent = calculate_gc_percent(record.seq)
         _, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
     assert gc_percent == expected_gc
+    pd.testing.assert_frame_equal(windows[2], _old_skew_df(reversed_crop, 100_000, 50_000, circular=True))
     assert peak < 12 << 20, peak  # the copies took 2 bytes per base of each: 36 MB and more for the crop alone
 
 
+@pytest.mark.parametrize("chunk", [1, 3, 8, 13, 64])
+def test_the_windows_of_a_reversed_crop_count_as_a_copy_at_any_chunk_size(
+    chunk: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reversed piece is read forward and reversed a chunk at a time; no chunk boundary changes a window."""
+
+    rng = np.random.default_rng(chunk)
+    bases = np.frombuffer(b"ACGTNacgt", dtype=np.uint8)[rng.integers(0, 9, size=5_000, dtype=np.uint8)].tobytes()
+    (record,) = read_sequence_file_records(str(_fasta(tmp_path, bases)), "fasta")
+    record.annotations["topology"] = "circular"
+    monkeypatch.setattr(skew, "_COUNT_CHUNK", chunk)
+    for spec in (_spec(1_001, 4_000, True), _spec(4_001, 1_000, True)):
+        drawn = crop_record_to_region(record, spec, circular=True)
+        for circular in (True, False):
+            pd.testing.assert_frame_equal(skew.skew_df(drawn, 200, 70, "GC", circular=circular),
+                                          _old_skew_df(drawn, 200, 70, circular=circular))
+
+
+def _fasta(tmp_path: Path, bases: bytes) -> Path:
+    path = tmp_path / "bases.fasta"
+    path.write_bytes(b">bases\n" + b"\n".join(bases[i : i + 70] for i in range(0, len(bases), 70)) + b"\n")
+    return path
+
+
 def _old_crop_genbank(path: Path, out: Path, start: int, end: int) -> None:
-    """``crop_genbank``'s run before: its own parse of the first record, and a copy of the crop's bases."""
+    """``crop_genbank``'s run before: its own parse of the first record, and a copy of the crop's bases.
+
+    The feature keys are given their INSDC spelling, as the shared reader gives them (D-G1b-5): the one change in
+    what it writes from a file both read.
+    """
 
     from gbdraw.crop_genbank import check_start_end_coords, crop_and_shift_features, write_cropped_genbank
-    from gbdraw.io.input_text import LineStream, read_sequence_text
+    from gbdraw.io.input_text import LineStream, canonicalize_feature_types, read_sequence_text
 
     record = read_sequence_text(path, lambda lines: next(SeqIO.parse(LineStream(lines), "genbank")))
+    canonicalize_feature_types(record.features)
     start_0, end_0 = check_start_end_coords(len(record.seq), start, end, str(record.id))
     cropped = SeqRecord(record.seq[start_0:end_0], id=record.id, name=record.name, description=record.description,
                         dbxrefs=record.dbxrefs.copy(), annotations=record.annotations)
@@ -362,8 +393,12 @@ def test_crop_genbank_writes_what_it_wrote_with_its_own_parse(
     path = TESTS / name
     try:
         (record, *_) = read_flat_file_records(str(path))
-    except Exception:  # noqa: BLE001 - a file the readers refuse is not cropped either way
-        pytest.skip("not a readable GenBank file")
+    except Exception as refusal:  # noqa: BLE001 - a file both refuse is not cropped either way
+        try:
+            _old_crop_genbank(path, tmp_path / "old.gb", 1, 10)
+        except Exception:  # noqa: BLE001
+            pytest.skip("neither reader reads it")
+        pytest.fail(f"crop_genbank read this file with its own parse; the shared reader refuses it: {refusal}")
     if not record.seq.defined or not record.annotations.get("accessions"):
         pytest.skip("no sequence or accession to crop")
     length = len(record.seq)
@@ -379,6 +414,38 @@ def test_crop_genbank_writes_what_it_wrote_with_its_own_parse(
         assert bytes(SeqIO.read(out, "genbank").seq) == bytes(record.seq)[start - 1 : end]
         return
     assert out.read_bytes() == (tmp_path / "old.gb").read_bytes()
+
+
+def test_crop_genbank_writes_feature_keys_in_their_insdc_spelling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A key written in another case (``cds``, ``Misc_Feature``) is written as the drawing reads it (D-G1b-5)."""
+
+    from gbdraw import crop_genbank
+
+    text = (TESTS / "test_inputs/NC_001416.gb").read_text()
+    text = text.replace("     CDS             ", "     cds             ").replace(
+        "     misc_feature    ", "     Misc_Feature    ")
+    source = tmp_path / "lower.gb"
+    source.write_text(text)
+    out = tmp_path / "out.gb"
+    monkeypatch.setattr("sys.argv", ["crop_genbank", "-i", str(source), "-o", str(out), "-s", "1", "-e", "48502"])
+    crop_genbank.main()
+    keys = {feature.type for feature in SeqIO.read(out, "genbank").features}
+    assert {"CDS", "misc_feature"} <= keys and not {"cds", "Misc_Feature"} & keys
+
+
+def test_crop_genbank_reads_an_embl_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``crop_genbank`` reads the flat files the drawing reads, EMBL among them; its own parse read only GenBank."""
+
+    from gbdraw import crop_genbank
+
+    out = tmp_path / "out.gb"
+    source = TESTS / "fixtures/input_variants/easyfig72_embl.embl"
+    monkeypatch.setattr("sys.argv", ["crop_genbank", "-i", str(source), "-o", str(out), "-s", "101", "-e", "700"])
+    crop_genbank.main()
+    (record,) = read_flat_file_records(str(source))
+    assert bytes(SeqIO.read(out, "genbank").seq) == bytes(record.seq)[100:700]
 
 
 @pytest.mark.parametrize("name", ["fixtures/input_variants/cgview7_multi_record.gbff", "fixtures/b_dup_ids.gb"])
