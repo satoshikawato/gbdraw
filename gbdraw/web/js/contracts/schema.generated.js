@@ -450,6 +450,58 @@ export const RECORD_SOURCE_FILES = Object.freeze({
   ])
 });
 
+// gbdraw/session_request_codec.py: describe_feature_density_track_words()
+export const FEATURE_DENSITY_TRACK_WORDS = Object.freeze([
+  Object.freeze({
+    word: 'id',
+    path: Object.freeze(['id'])
+  }),
+  Object.freeze({
+    word: 'type',
+    path: Object.freeze(['query', 'featureType'])
+  }),
+  Object.freeze({
+    word: 'qualifier',
+    path: Object.freeze(['query', 'qualifier'])
+  }),
+  Object.freeze({
+    word: 'value',
+    path: Object.freeze(['query', 'value'])
+  }),
+  Object.freeze({
+    word: 'min_length',
+    path: Object.freeze(['query', 'minLength'])
+  }),
+  Object.freeze({
+    word: 'max_length',
+    path: Object.freeze(['query', 'maxLength'])
+  }),
+  Object.freeze({
+    word: 'metric',
+    path: Object.freeze(['metric'])
+  }),
+  Object.freeze({
+    word: 'style',
+    path: Object.freeze(['style'])
+  }),
+  Object.freeze({
+    word: 'window',
+    path: Object.freeze(['window'])
+  }),
+  Object.freeze({
+    word: 'step',
+    path: Object.freeze(['step'])
+  }),
+  Object.freeze({
+    word: 'color',
+    path: Object.freeze(['color'])
+  }),
+  Object.freeze({
+    word: 'caption',
+    path: Object.freeze(['caption'])
+  })
+]);
+
 // gbdraw/core/record_metadata.py: organism_name_rule_data()
 export const ORGANISM_NAME_RULE = Object.freeze({
   nonOrganismNames: Object.freeze(['artificial sequence', 'cloning vector', 'expression vector', 'synthetic construct', 'unidentified', 'unidentified cloning vector', 'unidentified organism', 'unknown', 'unknown organism', 'vector']),

@@ -1160,26 +1160,68 @@ test('a Session 51 with a 180 x 180 mm figure size loads both sides into the for
   }
 });
 
+// The request Generate builds from a drawing's draft. It reads the Legend rows of the loaded Result's SVG; Node has no
+// SVG parser, and no row matters to the feature density cases.
+const draftRequest = async (drawing) => {
+  const parser = globalThis.DOMParser;
+  globalThis.DOMParser = class { parseFromString() { return { documentElement: { localName: 'none' } }; } };
+  try {
+    return (await sessionConfig.projectDraftRequest(state, drawing, {
+      linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: []
+    })).envelope.renderRequest;
+  } finally {
+    globalThis.DOMParser = parser;
+  }
+};
+const densityFixture = () => JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw-session.json.gz', import.meta.url))));
+
+// OV-3174, the Circular size shortcut: with Use custom stack off, a feature width sends the stack the Web builds, and
+// that stack keeps a row per feature density track after the features row, as Python's implicit stack does.
+test('a Circular size shortcut keeps the feature density rows in the stack it sends (OV-3174)', async () => {
+  resetDrawings();
+  loadDialogs.length = 0;
+  assert.equal((await load(densityFixture())).status, 'ok');
+  const drawing = state.activeDrawing();
+  assert.equal(drawing.adv.circular_track_slots_enabled, false);
+  drawing.adv.feature_width_circular = 30;
+  const slots = (await draftRequest(drawing)).diagramOptions.tracks.circularTrackSlots;
+  const ids = slots.map(({ id }) => id);
+  assert.deepEqual(ids.slice(ids.indexOf('features') + 1, ids.indexOf('features') + 3), ['density_genes', 'density_trna'], JSON.stringify(ids));
+  assert.deepEqual(slots.filter(({ renderer }) => renderer === 'feature_density').map(({ params }) => params.track), ['genes', 'trna']);
+});
+
+// OV-3173: a CLI Session whose stack names feature density rows loads them as density rows with their tracks, and the
+// request Generate builds sends them back unchanged.
+test('a CLI Session whose stack names feature density rows loads them and sends them back (OV-3173)', async () => {
+  const fixture = densityFixture();
+  const rows = ['features:features', 'density_genes:feature_density@track=genes', 'gc_content:dinucleotide_content'];
+  const request = fixture.drawings[0].renderRequest.diagramOptions.tracks;
+  request.circularTrackSlots = rows.map((token) => {
+    const [head, options] = token.split('@');
+    const [id, renderer] = head.split(':');
+    return { kind: 'circularTrackSlot', id, renderer, enabled: true, side: null, radius: null, width: null, z: 0,
+      params: options ? Object.fromEntries([options.split('=')]) : {}, innerGapPx: null, outerGapPx: null };
+  });
+  request.circularTrackAxisIndex = 0;
+  resetDrawings();
+  loadDialogs.length = 0;
+  assert.equal((await load(fixture)).status, 'ok');
+  const drawing = state.activeDrawing();
+  assert.deepEqual(drawing.adv.circular_track_slots.map(({ id, renderer, params }) => [id, renderer, params.track ?? null]),
+    [['features', 'features', null], ['density_genes', 'feature_density', 'genes'], ['gc_content', 'dinucleotide_content', null]]);
+  const sent = (await draftRequest(drawing)).diagramOptions.tracks.circularTrackSlots;
+  assert.deepEqual(sent.map(({ id, renderer }) => `${id}:${renderer}`), ['features:features', 'density_genes:feature_density', 'gc_content:dinucleotide_content']);
+  assert.deepEqual(loadDialogs.flatMap((dialog) => dialog.items), []);
+});
+
 // OV-3031: a Session the CLI wrote with two feature density tracks
 // (tests/fixtures/sessions/HmmtDNA-feature-density.v51-cli.provenance.json) loads the tracks into the drawing's draft
 // (`adv.feature_density_tracks`); the request Generate builds from the draft carries them, Save writes them into the
 // drawing's config and its request, and Load of that Save reads them back, with no repair row.
 test('a CLI Session with feature density tracks keeps them through Load, the Generate request and Save', async () => {
-  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw-session.json.gz', import.meta.url))));
+  const fixture = densityFixture();
   const tracks = fixture.drawings[0].renderRequest.diagramOptions.featureDensityTracks;
   assert.deepEqual(tracks.map(({ id }) => id), ['genes', 'trna']);
-  // The request reads the Legend rows of the loaded Result's SVG; Node has no SVG parser, and no row matters here.
-  const draftRequest = async (drawing) => {
-    const parser = globalThis.DOMParser;
-    globalThis.DOMParser = class { parseFromString() { return { documentElement: { localName: 'none' } }; } };
-    try {
-      return (await sessionConfig.projectDraftRequest(state, drawing, {
-        linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: []
-      })).envelope.renderRequest;
-    } finally {
-      globalThis.DOMParser = parser;
-    }
-  };
   resetDrawings();
   loadDialogs.length = 0;
   assert.equal((await load(fixture)).status, 'ok');

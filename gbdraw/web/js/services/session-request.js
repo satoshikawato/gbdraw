@@ -162,7 +162,7 @@ import { liftLegacyRenderRequest } from './legacy-render-request.js';
 /** @import { StoredLeafReadings } from './stored-leaf-readings.js' */
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from './linear-wrap-form.js';
 import { FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH, figureLengthFormValue } from './figure-size-form.js';
-import { projectFeatureDensityTracks, requestFeatureDensityTracks } from './feature-density-tracks.js';
+import { featureDensityTrackIds, projectFeatureDensityTracks, requestFeatureDensityTracks } from './feature-density-tracks.js';
 import { NO_STORED_READINGS } from './stored-leaf-readings.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
@@ -3505,6 +3505,7 @@ const buildTrackPlan = ({
   });
   const depth = { omitUnsourcedDepth, depthRows: depthSourceRowsForRequest({ mode, filesData, recordCount }) };
   const annotationSetIds = annotationSetIdsForState(drawing);
+  const featureDensityTracks = featureDensityTrackIds(drawing.adv);
 
   if (circular && drawing.adv.circular_track_slots_enabled) {
     const validation = assertedCustomTrackPlan({
@@ -3514,6 +3515,7 @@ const buildTrackPlan = ({
       trackType: drawing.form.track_type,
       depthTrackCount,
       annotationSetIds,
+      featureDensityTracks,
       conservationSeries: conservationSeriesForValidation({
         drawing,
         filesData,
@@ -3545,6 +3547,7 @@ const buildTrackPlan = ({
       trackType: drawing.form.linear_track_layout,
       depthTrackCount,
       annotationSetIds,
+      featureDensityTracks,
       conservationSeries: []
     }, depth);
     const depthRequested = validation.enabledSlots.some(
@@ -3574,7 +3577,8 @@ const buildTrackPlan = ({
           showGc: !drawing.form.suppress_gc,
           showSkew: !drawing.form.suppress_skew,
           showTicks: drawing.form.show_scale !== false,
-          preset: drawing.form.track_type
+          preset: drawing.form.track_type,
+          featureDensityTrackIds: featureDensityTracks
         }),
         shortcuts
       );
@@ -3593,6 +3597,7 @@ const buildTrackPlan = ({
         trackType: drawing.form.track_type,
         depthTrackCount,
         annotationSetIds,
+        featureDensityTracks,
         conservationSeries: []
       }));
       return {

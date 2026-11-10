@@ -3,7 +3,7 @@
 // normalization and legacy migration, axis and feature placement, and the
 // request payload, as the request, Session and Gallery services read them. The
 // Circular track-slot editor (app/circular-track-slots.js) edits it.
-import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
+import { normalizeTrackIndex, parseDepthTrackIndexIdentity } from './depth-track-state.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptionalCircularScalar, parseOptionalPixel } from './track-slot-validation.js';
@@ -12,6 +12,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
 import { ownEntry } from '../utils/own-entry.js';
+import { featureDensitySlotId, insertFeatureDensitySlots, normalizeFeatureDensitySlotParams } from './feature-density-tracks.js';
 
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
@@ -40,16 +41,10 @@ import { ownEntry } from '../utils/own-entry.js';
  * @property {unknown} [params]
  */
 
-const SUPPORTED_RENDERERS = [
-  'features',
-  'ticks',
-  'dinucleotide_content',
-  'dinucleotide_skew',
-  'depth',
-  'sequence_conservation',
-  'annotations',
-  'spacer'
-];
+// The renderers a Circular slot may name, in Python's order (gbdraw/tracks/circular.py `CircularTrackRendererName`,
+// through mode-profiles.generated.js).
+/** @type {readonly string[]} */
+const SUPPORTED_RENDERERS = MODE_PROFILE_DATA.modes.circular.trackRenderers;
 
 // The renderer names a slot may use beside the supported ones, as Python reads
 // them on a spec string and on a slot object (gbdraw/tracks/circular.py
@@ -78,6 +73,7 @@ export const DEFAULT_SLOT_IDS = {
   dinucleotide_content: 'gc_content',
   dinucleotide_skew: 'gc_skew',
   depth: 'depth',
+  feature_density: 'density',
   sequence_conservation: 'conservation',
   annotations: 'annotations',
   spacer: 'spacer'
@@ -226,16 +222,7 @@ export const normalizeOptionalPlacement = (value) => {
   return normalizePlacement(value);
 };
 
-/**
- * @param {unknown} value
- * @returns {number | null}
- */
-export const normalizeTrackIndex = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  if (!Number.isInteger(numeric) || numeric < 0) return null;
-  return numeric;
-};
+export { normalizeTrackIndex };
 
 /**
  * @param {unknown} value
@@ -755,6 +742,8 @@ const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset 
  * @property {boolean} [showSkew]
  * @property {boolean} [showTicks]
  * @property {string} [preset] circular track preset (`tuckin`, `middle`, `spreadout`)
+ * @property {readonly string[]} [featureDensityTrackIds] The drawing's feature density tracks: one row each after
+ *   the Features row.
  */
 
 /**
@@ -768,7 +757,8 @@ export const createDefaultCircularTrackSlots = ({
   showGc = true,
   showSkew = true,
   showTicks = true,
-  preset = 'tuckin'
+  preset = 'tuckin',
+  featureDensityTrackIds = []
 } = {}) => {
   void nt;
   void preset;
@@ -815,8 +805,18 @@ export const createDefaultCircularTrackSlots = ({
       renderer: 'dinucleotide_skew'
     }));
   }
+  insertFeatureDensitySlots(slots, null, featureDensityTrackIds, circularFeatureDensitySlot);
   return slots;
 };
+
+/**
+ * The row that draws feature density track `track` in a stack the Web builds.
+ * @param {string} track
+ * @returns {CircularTrackSlot}
+ */
+const circularFeatureDensitySlot = (track) => makeSlot({
+  id: featureDensitySlotId(track), renderer: 'feature_density', params: { track }
+});
 
 // Shortcut -> diagnostic field (the Web control's adv key).
 const CIRCULAR_GEOMETRY_SHORTCUT_FIELDS = Object.freeze({
@@ -1001,6 +1001,7 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
     normalizeAnnotationSlotParams(params, `[${index}].params`, losses);
     if (side === null) side = 'outside';
   }
+  if (renderer === 'feature_density') normalizeFeatureDensitySlotParams(params);
 
   return makeSlot({
     id: cleanToken(source.id, fallbackId),

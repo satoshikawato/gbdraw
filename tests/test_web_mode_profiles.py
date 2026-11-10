@@ -105,3 +105,20 @@ def test_mode_profiles_carry_the_region_drawing_vocabularies() -> None:
         "notCarriedKinds": list(get_args(NotCarriedKind)),
         "refusalReasons": list(get_args(StartAfterEndReason)),
     }
+
+
+def test_mode_profiles_carry_each_modes_track_renderers_in_python_order() -> None:
+    """The Web's slot models, slot editors and slot validation read the renderer names from here (one list per
+    mode, Python's ``*TrackRendererName``), so a renderer Python adds reaches the Web without a hand-kept copy."""
+
+    from typing import get_args
+
+    from gbdraw.tracks.circular import SUPPORTED_CIRCULAR_TRACK_RENDERERS, CircularTrackRendererName
+    from gbdraw.tracks.linear import SUPPORTED_LINEAR_TRACK_RENDERERS, LinearTrackRendererName
+    from gbdraw.web_support.mode_profile_data import mode_profiles_payload
+
+    modes = mode_profiles_payload()["modes"]  # type: ignore[index]
+    assert modes["circular"]["trackRenderers"] == list(get_args(CircularTrackRendererName))
+    assert modes["linear"]["trackRenderers"] == list(get_args(LinearTrackRendererName))
+    assert set(modes["circular"]["trackRenderers"]) == SUPPORTED_CIRCULAR_TRACK_RENDERERS
+    assert set(modes["linear"]["trackRenderers"]) == SUPPORTED_LINEAR_TRACK_RENDERERS

@@ -192,6 +192,7 @@ from ...tracks.parsing import (
     slot_legend_label,
     slots_draw_features,
     check_feature_density_slots,
+    feature_density_slot_id,
     with_feature_density_slots,
 )
 from ...analysis.feature_density import FeatureDensityLayer
@@ -2383,7 +2384,7 @@ def _linear_slot_plan(
             linear_track_slots,
             density_ids,
             lambda track_id: LinearTrackSlot(
-                id=f"density_{track_id}", renderer="feature_density", side="below", params={"track": track_id}
+                id=feature_density_slot_id(track_id), renderer="feature_density", side="below", params={"track": track_id}
             ),
         )
     check_feature_density_slots(linear_track_slots, density_ids)

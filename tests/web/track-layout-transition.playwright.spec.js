@@ -254,6 +254,12 @@ test('Linear Row actions run from the menu, and Delete moves focus to the next r
   test.setTimeout(300000);
   const page = await load(browser, LAMBDA);
   try {
+    // Lambda's Session has GC off, and Use custom stack builds the stack the simple controls draw (#1836).
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      app.setTrackShown('show_gc', true);
+      app.setTrackShown('show_skew', true);
+    });
     await openStack(page, 'linear');
     await page.getByRole('checkbox', { name: 'Use custom stack', exact: true }).check();
     if (await page.locator('[data-capture^="linear-track-slot-"]').count() === 0) {
@@ -401,7 +407,12 @@ const openReachFixture = async (browser, mode) => {
     await page.locator('[data-setting="region-annotations"] input[type=file]').first()
       .setInputFiles({ name: 'regions.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(REGIONS_TSV) });
     await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().annotationSets.length)).toBe(1);
-    await page.evaluate(() => window.__GBDRAW_APP__.setLinearTrackSlotsEnabled(true));
+    // Lambda's Session has GC off, and Use custom stack builds the stack the simple controls draw (#1836).
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      app.setTrackShown('show_gc', true);
+      app.setLinearTrackSlotsEnabled(true);
+    });
     await addReachRow(page, { id: 'tint', anchor: 'features', to: 'gc_content', setId: 'marks', mode });
   }
   return page;

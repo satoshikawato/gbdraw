@@ -33,6 +33,12 @@ from gbdraw.mode_profiles import (
     MODE_PROFILE_VERSION,
     MODE_PROFILES,
 )
+from gbdraw.tracks.circular import CircularTrackRendererName
+from gbdraw.tracks.parsing import FEATURE_DENSITY_SLOT_ID_PREFIX
+from gbdraw.tracks.linear import LinearTrackRendererName
+
+# The track renderers of each mode, in Python's order: the Web's slot models, editors and checks read them.
+_TRACK_RENDERERS = {"circular": CircularTrackRendererName, "linear": LinearTrackRendererName}
 
 
 def _camel_threshold_name(name: str) -> str:
@@ -77,6 +83,9 @@ def mode_profiles_payload() -> dict[str, object]:
             }
             for name, domain in COMPARISON_THRESHOLD_DOMAINS.items()
         },
+        # The id of the slot that draws a feature density track in a stack the reader did not write: this prefix
+        # and the track's id (gbdraw/tracks/parsing.py `feature_density_slot_id`).
+        "featureDensitySlotIdPrefix": FEATURE_DENSITY_SLOT_ID_PREFIX,
         "featureTypes": list(DEFAULT_FEATURE_TYPES),
         # The units of canvas.figure_width and canvas.figure_height (gbdraw/core/figure_length.py): the Figure size
         # field's unit choices and the size line's conversion and decimals.
@@ -113,6 +122,8 @@ def mode_profiles_payload() -> dict[str, object]:
                 },
                 # The config leaf of the mode's fixed identity colour scale (an ``[MIN, MAX]`` override).
                 "identityScalePath": IDENTITY_SCALE_PATHS[mode],
+                # The renderers a track slot of the mode may name (gbdraw/tracks/<mode>.py).
+                "trackRenderers": list(get_args(_TRACK_RENDERERS[mode])),
             }
             for mode, profile in MODE_PROFILES.items()
         },

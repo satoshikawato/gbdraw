@@ -25,6 +25,7 @@ import { cliRecordKey, expandedRecordKey, recordKeyExpansion, recordSelectorNumb
 import { parseSpecificRules, serializeSpecificRules } from '../services/file-imports.js';
 import {
   CIRCULAR_SLOT_UNREAD_PARAM_KEYS,
+  FEATURE_DENSITY_TRACK_WORDS,
   FEATURE_INSTANCE_SEPARATOR,
   LINEAR_SLOT_UNREAD_PARAM_KEYS,
   RECORD_SOURCE_FILES
@@ -33,7 +34,7 @@ import { inputSequenceSource, inputTypeOfSourceKind, recordSourceFilesOf } from 
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from '../services/linear-wrap-form.js';
 import { unitRecordsOf } from '../services/linear-units.js';
 import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
-/** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureDensityTrack, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LinearUnitRecord, LinearUnitRecords } from '../services/linear-units.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
@@ -626,7 +627,7 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
 
 const DIAGRAM_OPTION_FIELDS = new Set([
   'configOverrides', 'tracks', 'output', 'colors', 'selectedFeaturesSet', 'featureShapes',
-  'dinucleotide', 'window', 'step', 'depthWindow', 'depthStep', 'depthTracks',
+  'dinucleotide', 'window', 'step', 'depthWindow', 'depthStep', 'depthTracks', 'featureDensityTracks',
   'plotTitle', 'plotTitleFontSize', 'evalue', 'bitscore', 'identity', 'alignmentLength',
   'featureVisibilityTableFile', 'labelWhitelistFile', 'qualifierPriorityFile',
   'qualifierPriorityTable', 'labelOverrideFile', 'annotations', 'pairwiseMatchStyle',
@@ -798,6 +799,12 @@ const validateCurrentSemanticCoverage = (request) => {
     'featureVisibilityTableFile', 'labelWhitelistFile', 'qualifierPriorityFile',
     'qualifierPriorityTable', 'labelOverrideFile'
   ]).forEach((field) => coverResourceRef(coverage, options[field], `diagramOptions.${field}`));
+  (options.featureDensityTracks ?? []).forEach((track, index) => {
+    const path = `diagramOptions.featureDensityTracks[${index}]`;
+    coverObject(coverage, track, path, FEATURE_DENSITY_TRACK_WORDS.map(({ path: [field] }) => field));
+    coverObject(coverage, track.query, `${path}.query`, FEATURE_DENSITY_TRACK_WORDS
+      .filter(({ path: [field] }) => field === 'query').map(({ path: [, key] }) => key));
+  });
   (Array.isArray(options.depthTracks) ? options.depthTracks : []).forEach((track, index) => {
     const path = `diagramOptions.depthTracks[${index}]`;
     coverObject(coverage, track, path, [
@@ -1642,6 +1649,7 @@ const TRACK_PARAM_KEYS = Object.freeze({
     dinucleotide_content: new Set(['nt', 'legend_label']),
     dinucleotide_skew: new Set(['nt', 'positive_color', 'negative_color', 'legend_label']),
     depth: new Set(['track_index', 'legend_label']),
+    feature_density: new Set(['track', 'legend_label']),
     sequence_conservation: new Set(['track_index', 'source_index', 'legend_label']),
     annotations: new Set(ANNOTATION_TRACK_PARAM_KEYS),
     spacer: new Set(['legend_label'])
@@ -1651,6 +1659,7 @@ const TRACK_PARAM_KEYS = Object.freeze({
     dinucleotide_content: new Set(['nt', 'legend_label']),
     dinucleotide_skew: new Set(['nt', 'positive_color', 'negative_color', 'legend_label']),
     depth: new Set(['track_index', 'legend_label']),
+    feature_density: new Set(['track', 'legend_label']),
     annotations: new Set(ANNOTATION_TRACK_PARAM_KEYS),
     spacer: new Set(['legend_label'])
   }
@@ -1870,6 +1879,64 @@ const placedLinearSides = (slots, axisIndex, nt) => {
 };
 
 /**
+ * The value at a word's path in a request track (`FEATURE_DENSITY_TRACK_WORDS`), or undefined.
+ * @param {CanonicalFeatureDensityTrack} track
+ * @param {readonly string[]} path
+ * @returns {unknown}
+ */
+const featureDensityTrackValue = (track, path) => path.reduce(
+  (/** @type {unknown} */ owner, key) => (isPlainObject(owner) ? owner[key] : undefined), track
+);
+
+// Read a track's words back with the CLI's rules (gbdraw/analysis/feature_density.py `parse_feature_density_words`:
+// a word splits at its first "=", the key lowercased and given once, the value stripped, an empty value unset) and
+// require each field to read as the track's own value. A value the words cannot carry makes the recipe unavailable.
+/**
+ * @param {readonly string[]} words
+ * @param {CanonicalFeatureDensityTrack} track
+ */
+const assertFeatureDensityWordsLossless = (words, track) => {
+  /** @type {Map<string, string>} */
+  const read = new Map();
+  const unavailable = () => recipeUnavailable(msg('a feature density track has a value the CLI words cannot carry.'));
+  words.forEach((word) => {
+    const at = word.indexOf('=');
+    const key = word.slice(0, at).trim().toLowerCase();
+    if (at < 0 || read.has(key)) throw unavailable();
+    read.set(key, word.slice(at + 1).trim());
+  });
+  FEATURE_DENSITY_TRACK_WORDS.forEach(({ word, path }) => {
+    const value = featureDensityTrackValue(track, path);
+    const expected = value === null || value === undefined ? '' : String(value);
+    if ((read.get(word) ?? '') !== expected) throw unavailable();
+  });
+};
+
+/**
+ * The `--feature_density_track` words of a request track: `key=value` for each field it sets, in Python's order
+ * (`FEATURE_DENSITY_TRACK_WORDS`, gbdraw/analysis/feature_density.py `feature_density_track_words`), read back
+ * before they are written.
+ * @param {CanonicalFeatureDensityTrack} track
+ * @returns {string[]}
+ */
+const featureDensityTrackWords = (track) => {
+  const words = FEATURE_DENSITY_TRACK_WORDS.flatMap(({ word, path }) => {
+    const value = featureDensityTrackValue(track, path);
+    return value === null || value === undefined ? [] : [`${word}=${String(value)}`];
+  });
+  assertFeatureDensityWordsLossless(words, track);
+  return words;
+};
+
+/**
+ * @param {string[]} args
+ * @param {CanonicalRenderRequest['diagramOptions']} options
+ */
+const appendFeatureDensityOptions = (args, options) => {
+  (options.featureDensityTracks ?? []).forEach((track) => args.push('--feature_density_track', ...featureDensityTrackWords(track)));
+};
+
+/**
  * @param {string[]} args
  * @param {CanonicalRenderRequest} request
  */
@@ -2085,6 +2152,7 @@ const appendDiagramOptions = (args, request, files, colorTablePath, units) => {
   }
   appendResourceOptions(args, options, files, colorTablePath);
   appendDepthOptions(args, { ...options, mode: request.mode }, files);
+  appendFeatureDensityOptions(args, options);
   appendTrackOptions(args, request);
   appendComparisonOptions(args, request, files, units);
 };

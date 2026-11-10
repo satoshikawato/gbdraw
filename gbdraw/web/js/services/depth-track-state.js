@@ -308,6 +308,34 @@ export const isRecordMajorDepthFileMatrix = (value) => (
 );
 
 /**
+ * A slot's track index as both stack models read it: a non-negative integer, else null.
+ * @param {unknown} value
+ * @returns {number | null}
+ */
+export const normalizeTrackIndex = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || numeric < 0) return null;
+  return numeric;
+};
+
+/**
+ * The Depth series a row added to a stack draws: the first of the `available` series that no enabled Depth row
+ * draws, else 0. Both stack editors add a Depth row with it.
+ * @param {readonly ({ enabled?: unknown, renderer?: unknown, params?: { track_index?: unknown } } | null | undefined)[]} rows
+ * @param {number} available
+ * @returns {number}
+ */
+export const nextDepthSlotTrackIndex = (rows, available) => {
+  const claimed = new Set(rows
+    .filter((row) => row?.enabled !== false && row?.renderer === 'depth')
+    .map((row) => normalizeTrackIndex(row?.params?.track_index)));
+  let trackIndex = 0;
+  while (trackIndex < available && claimed.has(trackIndex)) trackIndex += 1;
+  return trackIndex < available ? trackIndex : 0;
+};
+
+/**
  * @param {unknown} value
  * @param {string} [fieldName]
  * @returns {number}

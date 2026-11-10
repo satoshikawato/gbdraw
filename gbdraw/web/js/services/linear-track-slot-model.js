@@ -3,7 +3,7 @@
 // normalization and schema migration, axis placement, and the request payload,
 // as the request, Session and Gallery services read them. The Linear
 // track-slot editor (app/linear-track-slots.js) edits it.
-import { parseDepthTrackIndexIdentity, syncDepthSlotLabels } from './depth-track-state.js';
+import { normalizeTrackIndex, parseDepthTrackIndexIdentity, syncDepthSlotLabels } from './depth-track-state.js';
 /** @import { RawDepthTrackConfig } from './depth-track-state.js' */
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
@@ -11,6 +11,8 @@ import { requireCurrentLinearTrackLayout } from './current-option-values.js';
 import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptionalPixel } from './track-slot-validation.js';
 import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
 import { noteReplacedLeaf } from '../utils/field-reading.js';
+import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
+import { featureDensitySlotId, insertFeatureDensitySlots, normalizeFeatureDensitySlotParams } from './feature-density-tracks.js';
 
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
 
@@ -59,14 +61,10 @@ import { noteReplacedLeaf } from '../utils/field-reading.js';
  * }} LinearSlotSpec
  */
 
-const SUPPORTED_RENDERERS = [
-  'features',
-  'dinucleotide_content',
-  'dinucleotide_skew',
-  'depth',
-  'annotations',
-  'spacer'
-];
+// The renderers a Linear slot may name, in Python's order (gbdraw/tracks/linear.py `LinearTrackRendererName`,
+// through mode-profiles.generated.js).
+/** @type {readonly string[]} */
+const SUPPORTED_RENDERERS = MODE_PROFILE_DATA.modes.linear.trackRenderers;
 
 /** @type {Record<string, string>} */
 export const RENDERER_ALIASES = {
@@ -82,6 +80,7 @@ export const DEFAULT_SLOT_IDS = {
   dinucleotide_content: 'gc_content',
   dinucleotide_skew: 'gc_skew',
   depth: 'depth',
+  feature_density: 'density',
   annotations: 'annotations',
   spacer: 'spacer'
 };
@@ -154,13 +153,7 @@ export const normalizeNt = (value, fallback = 'GC') => {
   return text || fallback;
 };
 
-/** @param {unknown} value */
-export const normalizeTrackIndex = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  if (!Number.isInteger(numeric) || numeric < 0) return null;
-  return numeric;
-};
+export { normalizeTrackIndex };
 
 /** @param {unknown} value @param {string} field */
 const normalizePxText = (value, field) => {
@@ -203,6 +196,8 @@ export const defaultSlot = (renderer, overrides = {}) => {
  * @property {boolean} [showSkew]
  * @property {string} [nt] dinucleotide of the GC tracks
  * @property {unknown} [trackLayout] linear track layout (`above`, `middle`, `below`), checked when the side is read
+ * @property {readonly string[]} [featureDensityTrackIds] The drawing's feature density tracks: one row each after
+ *   the Features row.
  */
 
 /**
@@ -215,7 +210,8 @@ export const createDefaultLinearTrackSlots = ({
   showGc = false,
   showSkew = false,
   nt = 'GC',
-  trackLayout = 'middle'
+  trackLayout = 'middle',
+  featureDensityTrackIds = []
 } = {}) => {
   const slots = [
     defaultSlot('features', {
@@ -247,8 +243,19 @@ export const createDefaultLinearTrackSlots = ({
       params: { nt: normalizeNt(nt) }
     }));
   }
+  insertFeatureDensitySlots(slots, null, featureDensityTrackIds, linearFeatureDensitySlot);
   return slots;
 };
+
+/**
+ * The row that draws feature density track `track` in a stack the Web builds: below the axis, as Python places it
+ * (gbdraw/diagrams/linear/assemble.py).
+ * @param {string} track
+ * @returns {LinearTrackSlot}
+ */
+const linearFeatureDensitySlot = (track) => defaultSlot('feature_density', {
+  id: featureDensitySlotId(track), side: 'below', params: { track }
+});
 
 /**
  * @param {unknown} value
@@ -312,6 +319,7 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
         }
       }
       if (renderer === 'annotations') normalizeAnnotationSlotParams(params, `[${index}].params`, losses);
+      if (renderer === 'feature_density') normalizeFeatureDensitySlotParams(params);
       let id = String(slot.id || DEFAULT_SLOT_IDS[renderer] || `slot_${index + 1}`).trim();
       if (!id) id = `slot_${index + 1}`;
       if (usedIds.has(id)) id = `${id}_${index + 1}`;
@@ -337,6 +345,19 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
     })
     .filter((slot) => slot.renderer !== 'features' || (hasFeature && slot.id));
 };
+
+/**
+ * The stacks a drawing holds when no Session saved one: a new drawing's (the default stack of
+ * services/session-active-config-contract.js, which also stands for a stack the Load refuses) and the stack the
+ * Load reads from an empty list (the normalizer's fallback).
+ * @param {string} [nt]
+ * @param {unknown} [trackLayout]
+ * @returns {LinearTrackSlot[][]}
+ */
+export const linearStacksNoSessionSaved = (nt, trackLayout) => [
+  createDefaultLinearTrackSlots(),
+  normalizeLinearTrackSlots([], nt, trackLayout)
+];
 
 /** @param {LinearSlotPlacementInput | null | undefined} slot */
 export const effectiveLinearSlotPlacement = (slot) => {

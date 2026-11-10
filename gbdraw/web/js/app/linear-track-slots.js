@@ -8,6 +8,7 @@ import {
   depthTrackEditDefaults,
   depthSourceLoss,
   depthTrackMatrixWidth,
+  nextDepthSlotTrackIndex,
   reconcileManagedDepthSlots,
   shownAfterSourceChange
 } from '../services/depth-track-state.js';
@@ -23,7 +24,8 @@ import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
-import { OVERLAY_ANNOTATION_PARAMS, annotationSetForNewRow, annotationSetIdsOf, automaticAnnotationTrackSlots, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { featureDensityTrackIds, nextFeatureDensitySlotTrack } from '../services/feature-density-tracks.js';
+import { OVERLAY_ANNOTATION_PARAMS, annotationSetForNewRow, annotationSetIdsOf, automaticAnnotationTrackSlots, isUnsavedDefaultStack, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
 import {
@@ -36,6 +38,7 @@ import {
   effectiveLinearSlotPlacement,
   enforceSingleLinearOnAxisSlot,
   inferLinearTrackAxisIndexFromSlots,
+  linearStacksNoSessionSaved,
   normalizeColorParam,
   normalizeLinearTrackSlots,
   normalizeNt,
@@ -69,6 +72,7 @@ const RENDERER_LABELS = {
   dinucleotide_content: msg('Dinucleotide content'),
   dinucleotide_skew: msg('Dinucleotide skew'),
   depth: msg('Depth'),
+  feature_density: msg('Feature density'),
   annotations: msg('Annotations'),
   spacer: msg('Spacer')
 };
@@ -106,7 +110,8 @@ const defaultLinearStackSlots = (drawing) => {
       showGc: Boolean(drawing.form.show_gc),
       showSkew: Boolean(drawing.form.show_skew),
       nt: drawing.adv.nt,
-      trackLayout: drawing.form.linear_track_layout
+      trackLayout: drawing.form.linear_track_layout,
+      featureDensityTrackIds: featureDensityTrackIds(drawing.adv)
     })
   ];
 };
@@ -152,6 +157,9 @@ export const buildLinearTrackSlotSpec = (slot, { includeEnabled = false, include
   if (normalized.renderer === 'depth') {
     const trackIndex = normalizeTrackIndex(params.track_index);
     parts.push(`track_index=${trackIndex === null ? 0 : trackIndex}`);
+  }
+  if (normalized.renderer === 'feature_density' && normalizeOptionalText(params.track)) {
+    parts.push(`track=${String(params.track).trim()}`);
   }
   if (normalized.renderer === 'dinucleotide_content' || normalized.renderer === 'dinucleotide_skew') {
     parts.push(`nt=${normalizeNt(params.nt)}`);
@@ -251,6 +259,7 @@ export const createLinearTrackSlotEditor = ({
     depthTrackCount: linearAvailableDepthTrackCountForDrawing(drawing),
     depthSourcedTrackIndexes: linearSourcedDepthTrackIndexesForDrawing(drawing),
     annotationSetIds: annotationSetIds(drawing),
+    featureDensityTracks: drawing.adv.feature_density_tracks,
     conservationSeries: []
   });
 
@@ -355,6 +364,7 @@ export const createLinearTrackSlotEditor = ({
       supported: true,
       annotationSetCount: annotationSetIds(drawing).length,
       depthSeriesCount: linearAvailableDepthTrackCountForDrawing(drawing),
+      featureDensityTrackCount: drawing.adv.feature_density_tracks.length,
       featuresRowEnabled: drawing.adv.linear_track_slots.some((/** @type {OptionalLinearSlot} */ slot) => (
         slot?.enabled !== false && normalizeRenderer(slot?.renderer) === 'features'
       ))
@@ -382,6 +392,7 @@ export const createLinearTrackSlotEditor = ({
     if (renderer === 'features') return false;
     if (renderer === 'annotations') return annotationSetIds(drawing).length > 0;
     if (renderer === 'depth') return linearAvailableDepthTrackCountForDrawing(drawing) > 0;
+    if (renderer === 'feature_density') return drawing.adv.feature_density_tracks.length > 0;
     return true;
   };
 
@@ -509,8 +520,10 @@ export const createLinearTrackSlotEditor = ({
     if (sessionBusy) return sessionBusy;
     drawing.adv.linear_track_slots_enabled = Boolean(enabled);
     if (!drawing.adv.linear_track_slots_enabled) return;
-    // The stack it turns on holds the rows of the Region Annotation sets it does not name (D-35).
     const rows = drawing.adv.linear_track_slots;
+    // A stack no Session saved is built from the simple controls, with the feature density rows (OV-3174).
+    if (isUnsavedDefaultStack(rows, linearStacksNoSessionSaved(drawing.adv.nt, drawing.form.linear_track_layout))) return resetLinearTrackSlotsFromSimpleControls();
+    // The stack it turns on holds the rows of the Region Annotation sets it does not name (D-35).
     drawing.adv.linear_track_slots_axis_index = prependMissingAnnotationTrackSlots(rows, axisIndexForCurrentLinearSlots(drawing, rows),
       drawing.annotationSets, 'linear', (added) => normalizeLinearTrackSlots(added, drawing.adv.nt, drawing.form.linear_track_layout));
   };
@@ -544,16 +557,9 @@ export const createLinearTrackSlotEditor = ({
         : {}
     });
     if (normalizedRenderer === 'depth') {
-      const available = linearAvailableDepthTrackCountForDrawing(drawing);
-      const claimed = new Set(
-        drawing.adv.linear_track_slots
-          .filter((/** @type {OptionalLinearSlot} */ candidate) => candidate?.enabled !== false && normalizeRenderer(candidate?.renderer) === 'depth')
-          .map((/** @type {OptionalLinearSlot} */ candidate) => normalizeTrackIndex(candidate?.params?.track_index))
-          .filter((/** @type {number | null} */ trackIndex) => trackIndex !== null)
-      );
-      let trackIndex = 0;
-      while (trackIndex < available && claimed.has(trackIndex)) trackIndex += 1;
-      slot.params.track_index = trackIndex < available ? trackIndex : 0;
+      slot.params.track_index = nextDepthSlotTrackIndex(drawing.adv.linear_track_slots, linearAvailableDepthTrackCountForDrawing(drawing));
+    } else if (normalizedRenderer === 'feature_density') {
+      slot.params.track = nextFeatureDensitySlotTrack(drawing.adv.feature_density_tracks, drawing.adv.linear_track_slots);
     }
     drawing.adv.linear_track_slots.push(slot);
     normalizeCurrentSlots(drawing);
@@ -836,6 +842,9 @@ export const createLinearTrackSlotEditor = ({
     }
     if (slot.renderer === 'dinucleotide_content' || slot.renderer === 'dinucleotide_skew') {
       slot.params.nt = normalizeNt(slot.params.nt, normalizeNt(drawing.adv.nt));
+    }
+    if (slot.renderer === 'feature_density' && !slot.params.track) {
+      slot.params.track = nextFeatureDensitySlotTrack(drawing.adv.feature_density_tracks, drawing.adv.linear_track_slots);
     }
     if (slot.renderer === 'annotations') {
       slot.side = slot.side === 'overlay' ? 'overlay' : 'above';

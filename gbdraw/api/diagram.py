@@ -300,7 +300,12 @@ from gbdraw.tracks import (
     parse_nonnegative_integer,
 )
 from gbdraw.diagrams.feature_density import feature_density_legend, feature_density_record_layers
-from gbdraw.tracks.parsing import check_feature_density_slots, slot_dinucleotide, with_feature_density_slots
+from gbdraw.tracks.parsing import (
+    check_feature_density_slots,
+    feature_density_slot_id,
+    slot_dinucleotide,
+    with_feature_density_slots,
+)
 
 from .assembly_inputs import CircularAssemblyInputs, CircularRecordContext, LinearAssemblyInputs
 from .prepared import ResolvedFeatureInputs
@@ -973,7 +978,9 @@ def _with_circular_density_slots(
                 show_gc=show_gc, show_skew=show_skew, dinucleotide=inputs.dinucleotide,
             ),
             track_ids,
-            lambda track_id: CircularTrackSlot(id=f"density_{track_id}", renderer="feature_density", params={"track": track_id}),
+            lambda track_id: CircularTrackSlot(
+                id=feature_density_slot_id(track_id), renderer="feature_density", params={"track": track_id}
+            ),
         )
     check_feature_density_slots(slots, track_ids)
     return slots

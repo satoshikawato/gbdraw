@@ -221,7 +221,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-055](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-055-valid-bindings-after-failed-generate) | Valid bindings after failed Generate | ACCEPTED | web.generate.failed-source-binding-continuation | 1 | — | 0 |
 | [PD-OI-056](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-056-feature-search-all-field-scope) | Feature search All-field scope | ACCEPTED | web.feature-search.all-field-scope | 1 | — | 0 |
 | [PD-OI-057](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-057-keyboard--and-touch-reachable-help-tips) | Keyboard- and touch-reachable help tips | ACCEPTED | web.help-tip.reachability | 1 | — | 2 |
-| [PD-OI-058](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-058-managed-depth-track-row-lifecycle) | Managed Depth track-row lifecycle | ACCEPTED | web.depth.managed-slot-lifecycle | 1 | — | 4 |
+| [PD-OI-058](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-058-managed-depth-track-row-lifecycle) | Managed Depth track-row lifecycle | ACCEPTED | web.depth.managed-slot-lifecycle | 1 | — | 5 |
 | [PD-OI-059](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-059-when-the-definition-settings-apply) | When the definition settings apply | ACCEPTED | web.circular.definition-application | 3 | scenario revision 2 | 7 |
 | [PD-OI-060](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-060-when-the-diagram-wide-stroke-settings-apply) | When the diagram-wide stroke settings apply | ACCEPTED | web.stroke.application | 2 | scenario revision 1 | 2 |
 | [PD-OI-061](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-061-legend-rename-collisions-for-every-entry) | Legend rename collisions for every entry | ACCEPTED | web.legend.rename-collision | 5 | scenario revision 4 | 10 |
@@ -410,6 +410,7 @@ are listed under "Cited ids without a record".
   - `tests/web/depth-track-session.playwright.spec.js`
   - `tests/web/gui-audit-20260930-options.playwright.spec.js`
   - `tests/web/track-layout-transition.playwright.spec.js`
+  - `tests/web/track-slot-row-edits.test.mjs`
 - [PD-OI-059](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-059-when-the-definition-settings-apply)
   - `tests/web/definition-replay-visual-state.playwright.spec.js`
   - `tests/web/history-generated-authority.playwright.spec.js`

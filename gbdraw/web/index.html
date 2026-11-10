@@ -4878,6 +4878,23 @@
                                                     <div v-if="linearTrackSlotIssue(entry.slot, entry.index)" class="rounded border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] text-red-700" role="alert">
                                                         {{ linearTrackSlotIssue(entry.slot, entry.index) }}
                                                     </div>
+                                                    <div v-if="entry.slot.renderer === 'feature_density'" class="grid grid-cols-2 gap-1">
+                                                        <div class="track-slot-field">
+                                                            <span class="track-slot-field-label">{{ t('feature density track') }} <help-tip :id="`help-linear-slot-density-track-${entry.index}`" :text="t('The feature density track this row draws, by its id.')"></help-tip></span>
+                                                            <select
+                                                                :aria-label="t('Linear track slot {id} feature density track', { id: entry.slot.id })"
+                                                                :aria-describedby="`help-linear-slot-density-track-${entry.index}`"
+                                                                v-model="entry.slot.params.track"
+                                                                class="form-input px-1 py-0.5 text-[10px]"
+                                                                :disabled="!semanticMutationAvailable">
+                                                                <option v-for="track in adv.feature_density_tracks" :key="`linear-density-option-${track.id}`" :value="track.id">{{ track.id }}</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="track-slot-field">
+                                                            <span class="track-slot-field-label">{{ t('legend label') }} <help-tip :id="`help-linear-slot-density-legend-label-${entry.index}`" :text="t('Name of this row in the diagram legend. Leave blank to use the caption of its track, or else its query in words.')"></help-tip></span>
+                                                            <input v-model.trim="entry.slot.params.legend_label" :aria-label="t('Linear track slot {id} Track legend label', { id: entry.slot.id })" :aria-describedby="`help-linear-slot-density-legend-label-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Legend label')" :disabled="!semanticMutationAvailable">
+                                                        </div>
+                                                    </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">{{ t('dinucleotide') }} <help-tip :id="`help-linear-slot-dinucleotide-${entry.index}`" :text="t('Dinucleotide used for this content/skew track, such as GC or AT.')"></help-tip></span>
@@ -5259,6 +5276,23 @@
                                                                 :placeholder="depthSeriesDefaultName(normalizeDepthSlotTrackIndex(entry.slot))"
                                                                 :disabled="!semanticMutationAvailable"
                                                             >
+                                                        </div>
+                                                    </div>
+                                                    <div v-if="entry.slot.renderer === 'feature_density'" class="grid grid-cols-2 gap-1">
+                                                        <div class="track-slot-field">
+                                                            <span class="track-slot-field-label">{{ t('feature density track') }} <help-tip :id="`help-circular-slot-density-track-${entry.index}`" :text="t('The feature density track this row draws, by its id.')"></help-tip></span>
+                                                            <select
+                                                                :aria-label="t('Circular track slot {id} feature density track', { id: entry.slot.id })"
+                                                                :aria-describedby="`help-circular-slot-density-track-${entry.index}`"
+                                                                v-model="entry.slot.params.track"
+                                                                class="form-input px-1 py-0.5 text-[10px]"
+                                                                :disabled="!semanticMutationAvailable">
+                                                                <option v-for="track in adv.feature_density_tracks" :key="`circular-density-option-${track.id}`" :value="track.id">{{ track.id }}</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="track-slot-field">
+                                                            <span class="track-slot-field-label">{{ t('legend label') }} <help-tip :id="`help-circular-slot-density-legend-label-${entry.index}`" :text="t('Name of this row in the diagram legend. Leave blank to use the caption of its track, or else its query in words.')"></help-tip></span>
+                                                            <input v-model.trim="entry.slot.params.legend_label" :aria-label="t('Circular track slot {id} Track legend label', { id: entry.slot.id })" :aria-describedby="`help-circular-slot-density-legend-label-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Legend label')" :disabled="!semanticMutationAvailable">
                                                         </div>
                                                     </div>
                                                     <details class="track-slot-more" :data-track-slot-more="entry.slot.id" :open="circularTrackSlotOptionsOpen(entry.slot)" @toggle="setCircularTrackSlotOptionsOpen(entry.slot, $event)">

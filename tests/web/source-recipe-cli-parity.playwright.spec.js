@@ -39,12 +39,23 @@ const slotLabel = async (page, slot, text) => {
   await field.press('Tab');
 };
 
-const useCustomStack = async (page) => {
-  const button = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
+const useCustomStack = async (page, mode = 'circular') => {
+  const button = page.locator(`button[aria-controls="${mode}-custom-track-slots-panel"]`);
   await reveal(button);
   if (await button.getAttribute('aria-expanded') !== 'true') await button.click();
-  await page.getByText('Use custom stack', { exact: true }).locator('input').check();
+  await page.getByText('Use custom stack', { exact: true }).locator('visible=true').locator('input').check();
 };
+
+// Two feature density tracks of the drawing (#199): a heatmap of CDS counts and a histogram of CDS coverage.
+const DENSITY_TRACKS = [
+  { id: 'cds', query: { featureType: 'CDS', qualifier: null, value: null, minLength: null, maxLength: null },
+    metric: 'count', style: 'heatmap', window: 1000, step: 250, color: null, caption: null },
+  { id: 'cover', query: { featureType: 'CDS', qualifier: 'product', value: 'protein', minLength: 100, maxLength: null },
+    metric: 'coverage', style: 'histogram', window: 1000, step: 250, color: '#d9944a', caption: 'CDS cover' }
+];
+const setDensityTracks = (page) => page.evaluate((tracks) => { window.__GBDRAW_APP__.adv.feature_density_tracks = tracks; }, DENSITY_TRACKS);
+const densityRows = (page, mode) => page.evaluate((key) => window.__GBDRAW_APP__.adv[key]
+  .filter((slot) => slot.renderer === 'feature_density').map((slot) => slot.params.track), `${mode}_track_slots`);
 
 // [name, change, { lossy }]. A lossy probe must yield an unavailable recipe.
 const CIRCULAR = [
@@ -76,6 +87,16 @@ const CIRCULAR = [
       .some((slot) => slot.renderer === 'sequence_conservation' && slot.params?.managed))).toBe(true);
     return [table];
   }],
+  // #199 E4, OV-3118: feature density rows added in the custom stack, and their tracks, replay in the CLI.
+  ['feature density tracks in a custom stack', async (page) => {
+    await setDensityTracks(page);
+    await setApp(page, () => {
+      const app = window.__GBDRAW_APP__;
+      app.addCircularTrackSlot('feature_density');
+      app.addCircularTrackSlot('feature_density');
+    });
+    await expect.poll(() => densityRows(page, 'circular')).toEqual(['cds', 'cover']);
+  }],
   ['track legend label with "," and " #"', async (page) => {
     await useCustomStack(page);
     await slotLabel(page, 'gc_skew', 'GC skew (1 kb, AT-rich)');
@@ -96,6 +117,13 @@ const LINEAR = [
     app.setLinearCardWindow(app.linearSeqs[0], 0, 'end', 3800);
     app.linearSeqs[1].region_reverse = true;
   })],
+  // #199 E4, OV-3174: Use custom stack keeps the feature density tracks the simple stack drew, and the recipe replays
+  // them (OV-3118).
+  ['feature density tracks in a custom stack', async (page) => {
+    await setDensityTracks(page);
+    await useCustomStack(page, 'linear');
+    await expect.poll(() => densityRows(page, 'linear')).toEqual(['cds', 'cover']);
+  }],
   // Without a ruler-label font the CLI ruler labels follow --scale_font_size.
   ['ruler scale font without a ruler-label font', (page) => setApp(page, () => {
     const app = window.__GBDRAW_APP__;

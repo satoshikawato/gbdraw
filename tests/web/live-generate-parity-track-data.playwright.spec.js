@@ -1428,7 +1428,9 @@ const UNDO_SESSIONS = {
   linear: { session: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', record: 'NC_001416.1', set: 'marks', tint: 'tint' }
 };
 // A stack with one Depth row, `mark` anchored on it, and a tint row that
-// extends to the GC content row, generated.
+// extends to the GC content row, generated. Lambda's Session has GC off, and
+// Use custom stack builds the stack the simple controls draw (#1836), so GC
+// content is turned on first.
 const openReachingRows = async (browser, mode) => {
   const { session, record, set } = UNDO_SESSIONS[mode];
   const page = await load(browser, session);
@@ -1438,7 +1440,11 @@ const openReachingRows = async (browser, mode) => {
       buffer: Buffer.from(`set_id\tid\tmark\trecord\tstart\tend\nmarks\tm1\thighlight\t${record}\t100\t900\n`)
     });
     await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().annotationSets.length)).toBe(1);
-    await page.evaluate(() => window.__GBDRAW_APP__.setLinearTrackSlotsEnabled(true));
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      app.setTrackShown('show_gc', true);
+      app.setLinearTrackSlotsEnabled(true);
+    });
   }
   await evaluateWithRetainedPromise(page, async ({ stackMode, tsv, setId }) => {
     const { state } = await import('./js/state.js');

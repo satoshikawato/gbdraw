@@ -24,7 +24,8 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'), join(tempRoot, 'mode-profiles.generated.js'));
 // The services the slot editors import.
 for (const leaf of ['conservation-series.js', 'current-option-values.js', 'depth-track-state.js', 'linear-label-visibility.js', 'losat-normalization.js',
-  'track-slot-display.js', 'track-slot-validation.js', 'circular-track-slot-model.js', 'linear-track-slot-model.js', 'track-legend-rows.js']) {
+  'track-slot-display.js', 'track-slot-validation.js', 'circular-track-slot-model.js', 'linear-track-slot-model.js', 'track-legend-rows.js',
+  'feature-density-tracks.js', 'json-clone.js']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf), join(tempRoot, 'services', leaf));
 }
 
@@ -34,6 +35,7 @@ const { paramsKeptOnRendererChange } = await import(pathToFileURL(join(tempRoot,
 const { askTrackSourceRemoval, askingAnnotationTrackAdd, askingTrackRowRemoval, askingTrackRowSwitch } = await import(pathToFileURL(join(tempRoot, 'app', 'track-slot-edits.js')));
 const { depthSeriesRemovalLoss, depthSourceLoss, dropInvalidManagedDepthSlots, isDefaultManagedDepthSlot, reconcileManagedDepthSlots } = await import(pathToFileURL(join(tempRoot, 'services', 'depth-track-state.js')));
 const { normalizeLinearTrackSlots, placeLinearStackForGenerate } = await import(pathToFileURL(join(tempRoot, 'services', 'linear-track-slot-model.js')));
+const { createDefaultAdv } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 
 const depthFile = { name: 'a.depth.tsv', size: 1, lastModified: 1 };
 
@@ -48,6 +50,7 @@ const circularState = (slots, { showDepth = false, depthFiles = [] } = {}) => wi
     features: ['CDS'],
     feature_shapes: { CDS: 'arrow' },
     depth_tracks: [],
+    feature_density_tracks: [],
     feature_width_circular: null,
     depth_width_circular: null,
     gc_content_width_circular: null,
@@ -69,6 +72,7 @@ const linearState = (slots, { showDepth = false, depthFiles = [] } = {}) => with
     linear_track_slots_axis_index: 0,
     linear_track_slots: structuredClone(slots),
     depth_tracks: [],
+    feature_density_tracks: [],
     depth_height: null,
     gc_height: null
   },
@@ -1309,3 +1313,61 @@ for (const stackOn of [true, false]) {
     assert.equal(editor.state.adv.pending_marker, 'kept');
   });
 }
+
+// #1836 review r1 finding 1: a row changed away from Feature density drops `track` (Python refuses it on any other
+// renderer), and a row changed to Feature density draws the first track no row draws yet, as Add does.
+test('a row changed from or to Feature density drops or picks its track, in both modes', () => {
+  for (const [mode, open] of Object.entries(MODES)) {
+    const row = mode === 'circular' ? circularRow : linearRow;
+    const { state, slots, setRenderer, issue } = open([
+      row('features', 'features', {}, mode === 'circular' ? 'inside' : 'overlay'),
+      row('density_genes', 'feature_density', { track: 'genes' }), row('sp', 'spacer')
+    ]);
+    state.adv.feature_density_tracks = [{ id: 'genes' }, { id: 'ltr' }];
+    setRenderer(slots()[1], 'spacer');
+    assert.deepEqual(slots()[1].params, {}, `${mode}: density -> spacer`);
+    assert.equal(issue(1), '', `${mode}: the former density row has no issue`);
+    setRenderer(slots()[2], 'feature_density');
+    assert.equal(slots()[2].params.track, 'genes', `${mode}: spacer -> density picks the first undrawn track`);
+    setRenderer(slots()[1], 'feature_density');
+    assert.equal(slots()[1].params.track, 'ltr', `${mode}: the next one picks the next undrawn track`);
+  }
+});
+
+// #1836 review r1 finding 4: Use custom stack builds a stack no Session saved (the mode's stack of an empty list) from
+// the simple controls, with a row per feature density track; it adds no row to a stack the user changed, so density
+// rows the user deleted do not come back (as PD-OI-058 decides for Depth rows).
+test('Use custom stack adds feature density rows only to the stack no Session saved, in both modes', () => {
+  for (const [mode, open] of Object.entries(MODES)) {
+    const row = mode === 'circular' ? circularRow : linearRow;
+    const own = [row('features', 'features', {}, mode === 'circular' ? 'inside' : 'overlay'), row('sp', 'spacer')];
+    const edited = open(own);
+    edited.state.adv.feature_density_tracks = [{ id: 'genes' }];
+    edited.turnOn(false);
+    edited.turnOn(true);
+    assert.deepEqual(edited.slots().map(({ id }) => id), ['features', 'sp'], `${mode}: a stack the user changed keeps its rows`);
+
+    const unsaved = open([]);
+    unsaved.state.adv.feature_density_tracks = [{ id: 'genes' }];
+    unsaved.editor[mode === 'circular' ? 'normalizeCircularTrackSlots' : 'normalizeLinearTrackSlots'](unsaved.state.activeDrawing());
+    unsaved.turnOn(false);
+    unsaved.turnOn(true);
+    const ids = unsaved.slots().map(({ id }) => id);
+    assert.equal(ids[ids.indexOf('features') + 1], 'density_genes', `${mode}: ${JSON.stringify(ids)}`);
+  }
+});
+
+// #1836 CI round 3: a new Linear drawing holds the stack its contract default gives (no GC rows), not the stack a
+// Load reads from an empty list; Use custom stack builds that stack too from the simple controls, so the rows match
+// what the simple stack draws (here GC content and skew on) and a feature density row follows the features row.
+test('Use custom stack builds a new Linear drawing\'s stack from the simple controls, with the feature density rows', () => {
+  for (const normalizeFirst of [false, true]) {
+    const fresh = MODES.linear(createDefaultAdv('linear').linear_track_slots);
+    fresh.state.adv.feature_density_tracks = [{ id: 'genes' }];
+    if (normalizeFirst) fresh.editor.normalizeLinearTrackSlots(fresh.state.activeDrawing());
+    fresh.turnOn(false);
+    fresh.turnOn(true);
+    const ids = fresh.slots().map(({ id }) => id);
+    assert.deepEqual(ids, ['features', 'density_genes', 'gc_content', 'gc_skew'], `normalized first: ${normalizeFirst}`);
+  }
+});

@@ -2329,3 +2329,57 @@ test('a placed File card of several records with a comparison has no Source reci
   assert.equal(recipe.available, false);
   assert.match(recipe.unavailableReason, /a comparison cannot be bound losslessly to its source records/);
 });
+
+// OV-3118: a request with feature density tracks writes each track as --feature_density_track words in Python's
+// spelling (`FEATURE_DENSITY_TRACK_WORDS`, gbdraw/analysis/feature_density.py `feature_density_track_words`), and
+// the slots that name them by id; Python reads the words back as the request's tracks. A value the words cannot
+// carry (blank around it) makes the recipe unavailable.
+test('feature density tracks have their CLI words in the Source recipe of either mode (OV-3118)', async () => {
+  const tracks = [
+    { id: 'genes', query: { featureType: 'gene', qualifier: null, value: null, minLength: null, maxLength: null },
+      metric: 'count', style: 'heatmap', window: null, step: null, color: null, caption: null },
+    { id: 'ltr', query: { featureType: 'repeat_region', qualifier: 'rpt_type', value: 'long_terminal=repeat', minLength: 100, maxLength: 7000 },
+      metric: 'coverage', style: 'histogram', window: 50000, step: 10000, color: '#d9944a', caption: 'LTR, % of 50 kb' }
+  ];
+  for (const [session, mode] of [[circularGallerySession, 'circular'], [linearGallerySession, 'linear']]) {
+    const request = structuredClone(session);
+    request.renderRequest.diagramOptions.featureDensityTracks = structuredClone(tracks);
+    const recipe = await buildSourceRecipe(request);
+    assert.equal(recipe.available, true, `${mode}: ${recipe.unavailableReason}`);
+    const groups = recipe.args.flatMap((arg, index) => {
+      if (arg !== '--feature_density_track') return [];
+      const end = recipe.args.findIndex((next, at) => at > index && next.startsWith('--'));
+      return [recipe.args.slice(index + 1, end < 0 ? undefined : end)];
+    });
+    assert.deepEqual(groups[0], ['id=genes', 'type=gene', 'metric=count', 'style=heatmap'], mode);
+    const read = await evaluatePython([
+      'from gbdraw.analysis.feature_density import feature_density_track_words, parse_feature_density_words',
+      'result = [list(feature_density_track_words(parse_feature_density_words(words, where="recipe"))) for words in payload]'
+    ].join('\n'), groups);
+    assert.deepEqual(read, groups, `${mode}: the words read back as themselves`);
+    assert.equal(groups[1].includes('value=long_terminal=repeat'), true, JSON.stringify(groups[1]));
+    assert.equal(groups[1].includes('caption=LTR, % of 50 kb'), true, JSON.stringify(groups[1]));
+    await assertCliParserAccepts(recipe);
+
+    // A custom stack's rows name their track (E4 recipe probe: the rows lost track=, and the CLI refused the recipe).
+    const stacked = structuredClone(request);
+    const row = (id, renderer, params = {}) => (mode === 'circular'
+      ? { kind: 'circularTrackSlot', id, renderer, enabled: true, side: null, radius: null, width: null, z: 0, params, innerGapPx: null, outerGapPx: null }
+      : { kind: 'linearTrackSlot', id, renderer, enabled: true, side: renderer === 'features' ? 'overlay' : 'below', height: null, spacing: null, z: 0, params });
+    stacked.renderRequest.diagramOptions.tracks[`${mode}TrackSlots`] = [
+      row('features', 'features'), row('density_genes', 'feature_density', { track: 'genes' }), row('ltr_cover', 'feature_density', { track: 'ltr' })
+    ];
+    stacked.renderRequest.diagramOptions.tracks[`${mode}TrackAxisIndex`] = 0;
+    const stackedRecipe = await buildSourceRecipe(stacked);
+    assert.equal(stackedRecipe.available, true, `${mode}: ${stackedRecipe.unavailableReason}`);
+    const rows = stackedRecipe.args.filter((_, index) => stackedRecipe.args[index - 1] === `--${mode}_track_slot`);
+    assert.deepEqual(rows.filter((token) => token.includes(':feature_density')).map((token) => token.match(/[@,]track=([^,]*)/)?.[1]),
+      ['genes', 'ltr'], `${mode}: ${rows.join(' | ')}`);
+
+    const blank = structuredClone(request);
+    blank.renderRequest.diagramOptions.featureDensityTracks[1].caption = ' padded ';
+    const unavailable = await buildSourceRecipe(blank);
+    assert.equal(unavailable.available, false, mode);
+    assert.match(unavailable.unavailableReason, /feature density track/);
+  }
+});

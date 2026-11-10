@@ -216,7 +216,12 @@ run('track-geometry circular: a Center Reserved Radius change is live and equals
   await expectLiveUnit(page, 'Circular center reserved radius', () => commitValue(input, radius),
     (request) => request.diagramOptions.tracks.centerReservedRadius === radius);
 });
+// Lambda's Session has GC off, and Use custom stack builds the stack the simple controls draw (#1836), so the case
+// turns GC content on first to have such a row.
 run('track-geometry linear: a custom-stack row Height change is live and equals a Generate', LAMBDA, async (page) => {
+  const gc = page.locator('input[aria-describedby~="help-linear-show-gc-content"]');
+  await reveal(gc);
+  if (!(await gc.isChecked())) await gc.click();
   if (await enableCustomStack(page, 'linear')) await generateNow(page);
   const row = (await linearSlotRows(page)).find((slot) => slot.renderer !== 'features' && slot.renderer !== 'depth');
   expect(row, 'the stack has a row that is neither features nor Depth').toBeTruthy();
