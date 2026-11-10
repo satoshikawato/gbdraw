@@ -1394,13 +1394,13 @@
       "id": "concern:unit-coordinate-map-base",
       "concern": "Where a window's coordinate map starts (its start, or its end when the unit is reversed)",
       "pythonOwner": [
-        "gbdraw/api/record_planning.py:_anchor_center_on_unit"
+        "gbdraw/io/regions.py:_crop_record_to_region"
       ],
       "jsOwner": [
         "gbdraw/web/js/services/record-display-model.js"
       ],
       "vector": null,
-      "reason": "Python's alignment offset follows the crop's coordinate-map base rule that the crop and the Web's windows share.",
+      "reason": "The crop writes a window's coordinate-map base (its start), and gbdraw/io/record_select.py:reverse_records moves a reversed unit's base to its end; the Web's windows compute both again (cropDisplayStart).",
       "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
       "source": "review of the multi-contig-locus campaign (record windows); the twin is on dev with no shared vector"
     },
