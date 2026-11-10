@@ -1599,13 +1599,15 @@ class _AnnotationLabelRoom:
         band: RadialBand,
         axis: CircularAxisLayout,
         side: str,
-        params: Mapping[str, Any],
+        params: AnnotationTrackParams,
         covers_slots: bool,
         clears: RadialBand | None = None,
     ) -> float:
         return self._room(band, _label_rings(axis.paint_band_px, clears), side, params, covers_slots).px
 
-    def drops_labels(self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any]) -> bool:
+    def drops_labels(
+        self, band: RadialBand, axis: CircularAxisLayout, side: str, params: AnnotationTrackParams
+    ) -> bool:
         return self._room(band, _label_rings(axis.paint_band_px, None), side, params, False).drops_labels
 
     def _room(
@@ -1613,11 +1615,10 @@ class _AnnotationLabelRoom:
         band: RadialBand,
         rings: tuple[RadialBand, ...],
         side: str,
-        params: Mapping[str, Any],
+        params: AnnotationTrackParams,
         covers_slots: bool,
     ) -> CircularLabelRoom:
-        track_params = annotation_track_params_from_mapping(params)
-        key = (band, rings, side, track_params, covers_slots)
+        key = (band, rings, side, params, covers_slots)
         room = self._measured.get(key)
         if room is None:
             room = self._measured[key] = circular_annotation_label_room(
@@ -1627,7 +1628,7 @@ class _AnnotationLabelRoom:
                 band=band,
                 side=side,
                 font_family=self._font_family,
-                params=track_params,
+                params=params,
                 rings=rings,
                 covers_slots=covers_slots,
             )

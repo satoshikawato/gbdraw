@@ -277,10 +277,10 @@ write-up of a release.
 - Changed: in Linear with the default Middle layout, the labels of a region
   overlay with `cover_anchor` and `layer=underlay`, such as the automatic row
   of labelled highlights, stand below the features instead of above them,
-  where feature labels stand. Lambda with a 20 pt highlight label: 159 to
-  157 px tall; with feature labels drawn, 768 to 756 px and 0 warned region
-  label overlaps instead of 5. Overlays with `to_slot` keep their labels on
-  their layer's side (OV-3223).
+  where feature labels stand. Lambda with seven 20 pt highlight labels: 159
+  to 157 px tall; with feature labels drawn, 768 to 756 px and 0 warned
+  region label overlaps instead of 5. Overlays with `to_slot` keep their
+  labels on their layer's side (OV-3223).
 - Fixed: in Circular, the labels of such a region overlay could be drawn on the
   CDS arrows (`layer=foreground`) or hidden under them (`layer=underlay`) when
   the feature lanes reach outside the axis circle (`--track_type spreadout` or

@@ -79,12 +79,14 @@ class AnnotationLabelRoom(Protocol):
         band: RadialBand,
         axis: CircularAxisLayout,
         side: str,
-        params: Mapping[str, Any],
+        params: AnnotationTrackParams,
         covers_slots: bool,
         clears: RadialBand | None = None,
     ) -> float: ...
 
-    def drops_labels(self, band: RadialBand, axis: CircularAxisLayout, side: str, params: Mapping[str, Any]) -> bool: ...
+    def drops_labels(
+        self, band: RadialBand, axis: CircularAxisLayout, side: str, params: AnnotationTrackParams
+    ) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -762,7 +764,7 @@ def _span_label_rooms_by_slot(
         extent = _span_extent(annotation)
         span_rooms.setdefault(holder.slot_id, []).append(
             _SpanLabelRoom(
-                _bound_span_label_room(room, axis, intent.slot, extent),
+                _bound_span_label_room(room, axis, intent.side, annotation, extent),
                 extent,
                 float(intent.width_px),
                 overlay_labels_clear_anchor(intent.side, annotation, feature_ids) is not None,
@@ -824,11 +826,15 @@ def _span_room_band(resolved: CircularResolvedSlot, extent: SpanExtent, width_px
 
 
 def _bound_span_label_room(
-    room: AnnotationLabelRoom, axis: CircularAxisLayout, overlay: NormalizedCircularTrackSlot, extent: SpanExtent
+    room: AnnotationLabelRoom,
+    axis: CircularAxisLayout,
+    side: str,
+    annotation: AnnotationTrackParams,
+    extent: SpanExtent,
 ) -> Callable[[RadialBand, RadialBand | None], float]:
     # An overlay that spans nothing places its labels from its own mark, as the drawer does (``spans_slots`` unset).
     covers_slots = extent != "own"
-    return lambda band, clears: room(band, axis, overlay.side, overlay.params, covers_slots, clears)
+    return lambda band, clears: room(band, axis, side, annotation, covers_slots, clears)
 
 
 def _anchor_glyph_band(anchor: CircularResolvedSlot) -> RadialBand | None:
@@ -864,16 +870,30 @@ def _with_span_label_room(intent: _RadialSlotIntent, resolved: CircularResolvedS
     )
 
 
+def _annotation_params(slot: NormalizedCircularTrackSlot) -> AnnotationTrackParams:
+    """The typed params of an Annotations slot, which the slot normalizer always sets."""
+
+    if slot.annotation is None:
+        raise ValueError(f"Annotations slot {slot.id!r} has no annotation params")
+    return slot.annotation
+
+
 def _bound_label_room(
     room: AnnotationLabelRoom | None, axis: CircularAxisLayout, slot: NormalizedCircularTrackSlot
 ) -> Callable[[RadialBand], float] | None:
-    return None if room is None else lambda band: room(band, axis, slot.side, slot.params, False)
+    if room is None:
+        return None
+    annotation = _annotation_params(slot)
+    return lambda band: room(band, axis, slot.side, annotation, False)
 
 
 def _bound_drops_labels(
     room: AnnotationLabelRoom | None, axis: CircularAxisLayout, slot: NormalizedCircularTrackSlot
 ) -> Callable[[RadialBand], bool] | None:
-    return None if room is None else lambda band: room.drops_labels(band, axis, slot.side, slot.params)
+    if room is None:
+        return None
+    annotation = _annotation_params(slot)
+    return lambda band: room.drops_labels(band, axis, slot.side, annotation)
 
 
 class _SlotAt(NamedTuple):
