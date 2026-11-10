@@ -86,6 +86,11 @@ const BOOT_ASSET_PREFETCH_LANES = 2;
  * cache does not key on. A lane stops at its first network error; the Worker
  * requests a file the cache lacks again. Nothing is downloaded when the
  * browser asks to save data, or once a diagram Worker has started booting.
+ * Each body is read as a Blob and dropped: the browser keeps a large Blob's
+ * bytes in its own storage, so the prefetch leaves nothing in the page's
+ * memory. Read as a stream, each chunk became an ArrayBuffer of the page,
+ * tens of MiB of garbage that stayed until the page was next collected,
+ * often during the Generate that follows (OV-3343).
  */
 export const prefetchPyodideBootAssets = () => {
   if (bootAssetsRequested) return;
@@ -96,7 +101,7 @@ export const prefetchPyodideBootAssets = () => {
     const url = pending.shift();
     if (!url) return;
     fetch(url, { priority: 'low' })
-      .then((response) => response.body?.pipeTo(new WritableStream()))
+      .then((response) => response.blob())
       .then(next, () => {});
   };
   for (let lane = 0; lane < BOOT_ASSET_PREFETCH_LANES; lane += 1) next();
