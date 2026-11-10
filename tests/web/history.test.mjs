@@ -1909,7 +1909,7 @@ const createLayoutPreferences = () => ({
     entries: [{ id: 'derived-evidence-a' }]
   };
   const rawCacheValueA = { text: 'raw-a\n' };
-  const derivedCacheValueA = { payload: { id: 'derived-a' } };
+  const derivedCacheValueA = { payload: { id: 'derived-a' }, rawKeys: ['raw-a'] };
   // A row names its drawing (`LosatCacheInfoEntry.drawingId`): a step installs its drawing's rows (OV-3207).
   const losatCacheInfoA = [{ key: 'raw-a', drawingId: 'circular' }];
   const appliedPaletteColorsA = { CDS: '#54bcf8' };
@@ -2202,6 +2202,9 @@ const createLayoutPreferences = () => ({
     [1]
   );
   let installedResults = null;
+  // An install reads the current searches, which other drawings may name (D-196); the capture above read none.
+  state.losatCache.value = new Map();
+  state.losatDerivedCache.value = new Map();
   snapshots.installGeneratedArtifactOwnerSet(originalOwnerSet, {
     drawing: state.activeDrawing(),
     installResults: (nextResults) => {
@@ -2246,7 +2249,7 @@ const createLayoutPreferences = () => ({
     entries: [{ id: 'derived-evidence-b' }]
   };
   const rawCacheValueB = { text: 'raw-b\n' };
-  const derivedCacheValueB = { payload: { id: 'derived-b' } };
+  const derivedCacheValueB = { payload: { id: 'derived-b' }, rawKeys: ['raw-b'] };
   const losatCacheInfoB = [{ key: 'raw-b', drawingId: 'circular' }];
   state.proteinIdentityManifest.value = proteinIdentityManifestB;
   state.legacyProteinRawCandidates.value = legacyProteinRawCandidatesB;

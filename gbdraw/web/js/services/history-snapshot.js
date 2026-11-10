@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 /** @import { ArtifactSlot, FeatureEditorStatus } from './artifact-slot.js' */
+/** @import { HeldLosatEvidence } from './losat-cache.js' */
 /** @import { DrawnInputSummary } from './input-summary.js' */
 /** @import { ExtractedFeature } from './feature-metadata-extraction.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
@@ -24,7 +25,7 @@ import {
   ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, FEATURE_EDITOR_STATUS_IDLE, createArtifactSlot, createArtifactSlotStore
 } from './artifact-slot.js';
 import { toRaw } from '../utils/vue-raw.js';
-import { losatRowsAfterStep, losatSearchesAfterStep } from './losat-cache.js';
+import { liveLosatEvidence, losatRowsAfterStep } from './losat-cache.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
 /** @import { CanvasPadding, CanvasSlice } from './drawing/canvas.js' */
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
@@ -887,6 +888,24 @@ const checkpointCatalogFeatures = (snapshot) => {
 };
 
 /**
+ * The LOSAT rows and caches a Generate, an Undo, a Redo, or a failed Generate's rollback of drawing `drawingId` leaves
+ * (D-196): the other drawings' rows stay, the drawing's are the owner set's (OV-3207, OV-3212), and the caches keep
+ * what the rows, the held drawings and the drawings' protein identity manifests name; a rollback keeps the owner set's
+ * caches whole (`liveLosatEvidence`).
+ * @param {{ rows: readonly { key: unknown, drawingId: DrawingId }[], cache: ReadonlyMap<unknown, unknown> }} current The state's rows and cache.
+ * @param {{ losatCacheInfo?: readonly { key: unknown, drawingId: DrawingId }[] | null, losatCache?: ReadonlyMap<unknown, unknown> | null,
+ *   losatDerivedCache?: ReadonlyMap<unknown, { rawKeys?: readonly unknown[] }> | null, proteinIdentityManifest?: unknown }} ownerSet
+ * @param {DrawingId} drawingId
+ * @param {{ rollback: boolean, held: HeldLosatEvidence, keptManifests: readonly unknown[] }} named
+ */
+const losatAfterStep = (current, ownerSet, drawingId, { rollback, held, keptManifests }) => {
+  const rows = losatRowsAfterStep(current.rows, drawingId, ownerSet.losatCacheInfo || []);
+  return { rows, ...liveLosatEvidence({ rows, held, rollback, manifests: [ownerSet.proteinIdentityManifest, ...keptManifests] }, {
+    cache: ownerSet.losatCache || new Map(), derived: ownerSet.losatDerivedCache || new Map()
+  }, current.cache) };
+};
+
+/**
  * @template {DrawingView} D
  * @param {HistorySnapshotServiceOptions<D>} options
  */
@@ -953,6 +972,8 @@ export const createHistorySnapshotService = ({
     captures[name] = typeof capture === 'function' ? capture : null;
   };
 
+  /** @type {() => HeldLosatEvidence} D-196: the History router's, registered once the router exists (R13). */
+  let heldLosatEvidence = () => ({ rows: [], manifests: [] });
   /** @param {HistorySnapshotRuntimeOwner | null} owner */
   const setGeneratedArtifactRuntimeOwner = (owner) => {
     generatedArtifactRuntimeOwner = (
@@ -1067,9 +1088,9 @@ export const createHistorySnapshotService = ({
     /**
      * `drawing` receives the owner set's color rules and queued palette: the
      * drawing whose Generate commits it or whose History handle restores it.
-     * @type {{ drawing: D, selectedResultIndex?: number, installResults?: ((results: SvgResultEntry[]) => unknown) | null }}
+     * @type {{ drawing: D, selectedResultIndex?: number, installResults?: ((results: SvgResultEntry[]) => unknown) | null, rollback?: boolean }}
      */
-    { drawing, selectedResultIndex = 0, installResults = null }
+    { drawing, selectedResultIndex = 0, installResults = null, rollback = false }
   ) => {
     if (!ownerSet || typeof ownerSet !== 'object') {
       throw new Error('A generated artifact owner set is required.');
@@ -1119,20 +1140,13 @@ export const createHistorySnapshotService = ({
       ownerSet.trackSlotResolvedGeometry ?? null
     );
     setGeneratedArtifactRef(state.proteinIdentityManifest, ownerSet.proteinIdentityManifest);
-    setGeneratedArtifactRef(
-      state.legacyProteinRawCandidates,
-      ownerSet.legacyProteinRawCandidates
-    );
-    setGeneratedArtifactRef(
-      state.legacyProteinDerivedEvidence,
-      ownerSet.legacyProteinDerivedEvidence
-    );
-    // The project's LOSAT rows and searches stay; `drawing`'s rows are the owner set's (OV-3207, OV-3212).
-    const losatRows = losatRowsAfterStep(getGeneratedArtifactRef(state.losatCacheInfo, []), drawing.id, ownerSet.losatCacheInfo || []);
-    const losatSearches = getGeneratedArtifactRef(state.losatCache, new Map());
-    setGeneratedArtifactRef(state.losatCache, losatSearchesAfterStep(ownerSet.losatCache || new Map(), losatSearches, losatRows));
-    setGeneratedArtifactRef(state.losatDerivedCache, ownerSet.losatDerivedCache || new Map());
-    setGeneratedArtifactRef(state.losatCacheInfo, losatRows);
+    setGeneratedArtifactRef(state.legacyProteinRawCandidates, ownerSet.legacyProteinRawCandidates);
+    setGeneratedArtifactRef(state.legacyProteinDerivedEvidence, ownerSet.legacyProteinDerivedEvidence);
+    const losat = losatAfterStep({ rows: getGeneratedArtifactRef(state.losatCacheInfo, []), cache: getGeneratedArtifactRef(state.losatCache, new Map()) },
+      ownerSet, drawing.id, { rollback, held: heldLosatEvidence(), keptManifests: artifactSlots.kept().map((slot) => slot.values.proteinIdentityManifest) });
+    setGeneratedArtifactRef(state.losatCache, losat.cache);
+    setGeneratedArtifactRef(state.losatDerivedCache, losat.derived);
+    setGeneratedArtifactRef(state.losatCacheInfo, losat.rows);
     if (ownerSet.matchSequenceOwner) {
       state.matchSequenceRegistry?.replaceTrustedOwner?.(ownerSet.matchSequenceOwner);
     }
@@ -1225,9 +1239,9 @@ export const createHistorySnapshotService = ({
   // OV-2212: the shown artifact is still the one the fingerprint names while
   // the drawing's own artifact values are the ones its Generate committed: these
   // artifact slot values and the match-sequence owner, by reference. The project
-  // LOSAT and protein values and the alignment draft are not the drawing's (each
-  // Generate installs its own, so a Generate in another drawing replaces them):
-  // the fingerprint covers what of them the Result drew, and the compact
+  // LOSAT values and the alignment draft are not the drawing's (a Generate in
+  // another drawing replaces them), and Clear empties its protein manifest: the
+  // fingerprint covers what of them the Result drew, and the compact
   // signature covers the alignment plan and record translations, by value.
   /** @type {readonly (typeof ARTIFACT_SLOT_KEYS)[number][]} */
   const TRANSPORT_IDENTITY_SLOT_KEYS = Object.freeze([
@@ -1473,7 +1487,7 @@ export const createHistorySnapshotService = ({
   const restoreGeneratedArtifactHandle = async (
     /** @type {StoredGeneratedArtifactHandle | null | undefined} */
     handle,
-    { clearFailedGeneratePresentation = false } = {}
+    { clearFailedGeneratePresentation = false, rollback = false } = {}
   ) => {
     if (!handle || handle.kind !== 'GeneratedArtifactHandle' || !handle.drawingId) return false;
     const { drawingId } = handle;
@@ -1506,7 +1520,7 @@ export const createHistorySnapshotService = ({
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
       installGeneratedArtifactOwnerSet(handle.ownerSet, {
         drawing,
-        selectedResultIndex: ui.selectedResultIndex
+        selectedResultIndex: ui.selectedResultIndex, rollback
       });
       applyFeatureIntentData(state, drawing, mutableIntent.features || {});
       setGeneratedArtifactRef(
@@ -1998,6 +2012,10 @@ export const createHistorySnapshotService = ({
     restoreGeneratedArtifactHandle,
     setGeneratedArtifactIdentity,
     setGeneratedArtifactRuntimeOwner,
+    setHeldLosatEvidence: (/** @type {() => HeldLosatEvidence} */ read) => { heldLosatEvidence = read; },
+    // Clear LOSAT results: each drawing not shown keeps an empty protein identity manifest (D-197).
+    emptyKeptProteinIdentityManifests: () => artifactSlots.kept().forEach((slot) => writeArtifactValues(slot.drawingId, {
+      proteinIdentityManifest: ARTIFACT_SLOT_EMPTY.proteinIdentityManifest() })),
     setAfterApplyHistoryIntent,
     snapshotSignature
   };

@@ -461,7 +461,9 @@ into the `[Unreleased]` list below.
   of a drawing, or the Undo or Redo of a drawing's Generate removed another
   drawing's results from its LOSAT results list and from **Save Raw LOSAT
   TSV**, and a Session saved afterwards lost their file names. Those results
-  now stay listed with their names (OV-3196, OV-3201, OV-3207).
+  now stay listed with their names. After another Linear drawing's protein
+  (LOSATP) Generate, a Linear drawing's protein pairs also still download,
+  and a Session saved then keeps them (OV-3196, OV-3201, OV-3207, OV-3213).
 - Fixed (Web app): **Save Raw LOSAT TSV** of a drawing also saved the LOSAT
   results of the project's other drawings, and **Clear N LOSAT results** and
   **Save Raw LOSAT TSV** counted and saved twice a table that two similarity

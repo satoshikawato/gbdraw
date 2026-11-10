@@ -17,6 +17,7 @@ import { msg, t, tm } from '../utils/i18n.js';
 /** @import { ProjectListStep } from '../services/history.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
 /** @import { LosatCacheInfoEntry } from '../services/config.js' */
+/** @import { HeldLosatEvidence } from '../services/losat-cache.js' */
 /** @import { AskChoice, AskText } from './app-messages.js' */
 /** @import { DiagnosticError } from '../utils/error-normalization.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
@@ -119,6 +120,16 @@ const copyNamePhrase = (name, number) => (
  */
 const newTabIndex = (tabs, after) => (after === null ? tabs.length : tabs.findIndex((tab) => tab.id === after) + 1);
 
+/**
+ * What a list step holds of LOSAT evidence (D-196): while its drawing is out, the drawing's rows and its slot's protein
+ * identity manifest; while it is in, the rows another drawing left under its ID.
+ * @param {boolean} out @param {HeldDrawing} held @param {HeldLosatRows} left
+ * @returns {HeldLosatEvidence}
+ */
+const heldEvidence = (out, held, left) => (out
+  ? { rows: held.losatRows, manifests: held.slot ? [held.slot.values.proteinIdentityManifest] : [] }
+  : { rows: left, manifests: [] });
+
 /** @param {DrawingListPorts} ports */
 export const createDrawingList = ({
   drawingTabs, shownDrawingId, switchBusy, drawingOf, drawingHasResult, drawingHasEdits, boundFileIdsOf, createDrawing, styleDrawing, copyDrawing,
@@ -161,10 +172,12 @@ export const createDrawingList = ({
     // it got before the Undo) from this step; the rows its reused ID had go back on the Undo.
     /** @type {HeldLosatRows} */
     let left = [];
+    let out = false;
     const add = (first = false) => {
       addDrawing(drawing, name, newTabIndex(drawingTabs(), after));
       if (first) addDrawingHistory(drawingId);
       left = putHeld(drawingId, held);
+      out = false;
       showDrawingNow(drawingId);
     };
     runListStep(label, {
@@ -173,7 +186,9 @@ export const createDrawingList = ({
       undo: () => {
         showDrawingNow(before);
         held = removeDrawing(drawingId, left);
-      }
+        out = true;
+      },
+      heldLosatEvidence: () => heldEvidence(out, held, left)
     });
     return drawingId;
   });
@@ -285,6 +300,7 @@ export const createDrawingList = ({
       let held = { slot: null, losatRows: [] };
       /** @type {HeldLosatRows} */
       let left = [];
+      let out = false;
       // The step keeps the files only this drawing binds until it is evicted.
       const fileIds = [...boundFileIdsOf(drawingId)];
       // The switch settles the drawing's open step while its History is still a member.
@@ -294,16 +310,20 @@ export const createDrawingList = ({
           showDrawingNow(after);
           removeDrawingHistory(drawingId);
           held = removeDrawing(drawingId, left);
+          out = true;
         },
         redo: () => {
           showDrawingNow(after);
           held = removeDrawing(drawingId, left);
+          out = true;
         },
         undo: () => {
           addDrawing(drawing, name, index);
           left = putHeld(drawingId, held);
+          out = false;
           showDrawingNow(before);
-        }
+        },
+        heldLosatEvidence: () => heldEvidence(out, held, left)
       });
       return drawingId;
     });

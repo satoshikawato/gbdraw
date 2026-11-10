@@ -35,12 +35,14 @@ const SWAPPED = [
   'pairwiseMatchFactors',
   'editableLabels', 'generatedLegendPosition', 'generatedMultiRecordCanvas',
   'generatedCircularPlotTitlePosition', 'appliedPaletteName', 'appliedPaletteColors',
-  'similarityAlignmentResetReceipt', 'originalLegendColors', 'originalSvgStroke'
+  'similarityAlignmentResetReceipt', 'originalLegendColors', 'originalSvgStroke',
+  // D-197: the manifest the drawing's LOSAT protein rows resolve in.
+  'proteinIdentityManifest'
 ];
 // Draft and project state that sits in today's owner set or beside it.
 const KEPT = [
   'pendingPaletteName', 'pendingPaletteColors', 'losatCache', 'losatDerivedCache', 'losatCacheInfo',
-  'proteinIdentityManifest', 'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence',
+  'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence',
   'similarityAlignmentPlan', 'linearRecordTranslations', 'legendEntries', 'deletedLegendEntries',
   // The Legend owner keeps each Result's inventory; the slot carries it as `legendInventory`.
   'originalLegendOrder'
@@ -68,14 +70,15 @@ const fillCircularArtifact = async () => {
     generatedMultiRecordCanvas: true, generatedCircularPlotTitlePosition: 'top',
     appliedPaletteName: 'tableau', appliedPaletteColors: { CDS: '#111111' },
     similarityAlignmentResetReceipt: null,
-    originalLegendColors: { CDS: '#111111' }, originalSvgStroke: { color: '#000000', width: 1 }
+    originalLegendColors: { CDS: '#111111' }, originalSvgStroke: { color: '#000000', width: 1 },
+    proteinIdentityManifest: { schema: 2, proteinSets: {}, recordAnalyses: {}, recordInstances: {} }
   };
   Object.entries(values).forEach(([key, value]) => { state[key].value = value; });
   state.generatedDrawingId.value = modeDrawing(state, 'circular').id; // the displayed artifact is Circular's
   const kept = {
     pendingPaletteName: 'pending', pendingPaletteColors: { CDS: '#222222' }, losatCache: new Map([['k', {}]]),
     losatDerivedCache: new Map([['d', {}]]), losatCacheInfo: [{ edgeKey: 'e' }],
-    proteinIdentityManifest: { schema: 2, proteinSets: {} }, legacyProteinRawCandidates: { schema: 1, entries: [] },
+    legacyProteinRawCandidates: { schema: 1, entries: [] },
     legacyProteinDerivedEvidence: { schema: 1, entries: [] }, similarityAlignmentPlan: { groupId: 'g' },
     linearRecordTranslations: [{ recordKey: 'r', x: 1, y: 2 }], legendEntries: [{ caption: 'CDS' }],
     deletedLegendEntries: [{ caption: 'gene' }], originalLegendOrder: ['CDS', 'tRNA']

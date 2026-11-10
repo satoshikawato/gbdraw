@@ -6,6 +6,7 @@ import {
 } from './runtime-test-hooks.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 /** @import { DrawingId } from './drawing-view.js' */
+/** @import { HeldLosatEvidence } from './losat-cache.js' */
 /** @import { ControlDescription } from '../utils/control-description.js' */
 
 // tests/web/history-inputs.test.mjs loads this module with its own imports
@@ -398,8 +399,9 @@ const checkpointSvgBytes = (checkpoint) => (
  *   redraw once it is restored (`figureRestored`, D-174); `undefined`: not known.
  * @property {(() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>) | null} [captureGeneratedArtifactHandle]
  *   The snapshot service's capture of the generated artifact for a replacement step.
- * @property {((handle: HistoryArtifactHandle, options: { clearFailedGeneratePresentation: boolean }) => unknown) | null} [restoreGeneratedArtifactHandle]
- *   The snapshot service's restore of a captured handle; History awaits it.
+ * @property {((handle: HistoryArtifactHandle, options: { clearFailedGeneratePresentation: boolean, rollback: boolean }) => unknown) | null} [restoreGeneratedArtifactHandle]
+ *   The snapshot service's restore of a captured handle; History awaits it. `rollback`: the handle a failed
+ *   replacement restores, not an Undo or a Redo.
  * @property {(value: unknown) => string} [signatureFor]
  *   The signature that detects a change; JSON by default.
  * @property {HistoryBudgetOptions['estimateFileBytes']} [estimateFileBytes]
@@ -1809,16 +1811,17 @@ export const createHistoryManager = ({
 
   /**
    * @param {HistoryArtifactHandle} handle
-   * @param {{ refreshIntent?: boolean }} [options]
+   * @param {{ refreshIntent?: boolean, rollback?: boolean }} [options]
    */
-  const restoreArtifactHandle = async (handle, { refreshIntent = true } = {}) => {
+  const restoreArtifactHandle = async (handle, { refreshIntent = true, rollback = false } = {}) => {
     if (typeof restoreGeneratedArtifactHandle !== 'function') {
       throw new Error('Generated artifact replacement requires a restore owner.');
     }
     restoring.value = true;
     try {
       await restoreGeneratedArtifactHandle(handle, {
-        clearFailedGeneratePresentation: true
+        clearFailedGeneratePresentation: true,
+        rollback
       });
     } finally {
       restoring.value = false;
@@ -1873,7 +1876,7 @@ export const createHistoryManager = ({
             clearCurrentCheckpoint();
           } else {
             recordStructuralMetric('generatedArtifactRollbackCount', 1);
-            await restoreArtifactHandle(transaction.before, { refreshIntent: false });
+            await restoreArtifactHandle(transaction.before, { refreshIntent: false, rollback: true });
           }
           await restoreReplacementIntentCheckpoint(
             transaction.beforeIntentCheckpoint,
@@ -2266,9 +2269,12 @@ export const createHistoryManager = ({
  * @property {() => void} undo
  * @property {() => Iterable<string>} [fileIds] After `apply`: the files a drawing it takes out binds, which
  *   the step keeps stored until it is evicted (R11, R16-3).
- * @typedef {{ redo: () => void, undo: () => void, added: DrawingId[], removed: DrawingId[] }} ProjectListPart
+ * @property {() => HeldLosatEvidence} [heldLosatEvidence] The LOSAT rows and protein identity manifests the step holds
+ *   as it is now: those of a drawing it took out, or the rows another drawing left under the ID of one it put back (D-196).
+ * @typedef {{ redo: () => void, undo: () => void, added: DrawingId[], removed: DrawingId[],
+ *   heldLosatEvidence?: () => HeldLosatEvidence }} ProjectListPart
  *   A list step with the drawings it gave a History (`addMember`) and took one
- *   from (`removeMember`) when it was applied.
+ *   from (`removeMember`) when it was applied, and the LOSAT rows it holds.
  * @typedef {{
  *   type: 'project', label: string, sequence: number, parts: ProjectPart[], session: IntentEntry | null,
  *   list: ProjectListPart | null, byteSize: number, fileIds: Set<string>, detail: HistoryStepDetail | null
@@ -2361,6 +2367,17 @@ const projectStepFileIds = (parts, heldFileIds) => {
   const fileIds = new Set(heldFileIds);
   parts.forEach(({ entry }) => entry.fileIds.forEach((id) => fileIds.add(id)));
   return fileIds;
+};
+
+/**
+ * D-196: the LOSAT rows and protein identity manifests the drawings out of the list hold for the project steps
+ * `entries`, those that still exist.
+ * @param {readonly ProjectEntry[]} entries
+ * @returns {HeldLosatEvidence}
+ */
+const heldLosatEvidenceOf = (entries) => {
+  const held = entries.flatMap(({ list }) => (list?.heldLosatEvidence ? [list.heldLosatEvidence()] : []));
+  return { rows: held.flatMap(({ rows }) => rows), manifests: held.flatMap(({ manifests }) => manifests) };
 };
 
 /** @param {HistoryRouterOptions} options */
@@ -2724,6 +2741,7 @@ export const createHistoryRouter = ({
 
   const own = {
     managerOf,
+    heldLosatEvidence: () => heldLosatEvidenceOf(projectEntries()),
     revision: { get value() { return projectRevision.value + managerOf(activeDrawingId()).revision.value; } },
     undo: () => (walks.value > 0 ? Promise.resolve(false) : traverse('undo')),
     redo: () => (walks.value > 0 ? Promise.resolve(false) : traverse('redo')),
@@ -2867,7 +2885,7 @@ export const createHistoryRouter = ({
       }
       const added = [...managers.keys()].filter((drawingId) => !before.has(drawingId));
       recordProjectStep(label, ++sequence, [], sessionStep(label), null, removed, {
-        redo: step.redo, undo: step.undo, added, removed: removed.map((held) => held.drawingId)
+        redo: step.redo, undo: step.undo, added, removed: removed.map((held) => held.drawingId), heldLosatEvidence: step.heldLosatEvidence
       }, step.fileIds?.() ?? []);
     },
     markSavePoint: () => {

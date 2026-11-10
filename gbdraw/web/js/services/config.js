@@ -907,8 +907,16 @@ const setCommittedCanonicalSession = (next, conservationPairs) => {
 let loadedTrackSettings = null;
 /** @type {ReturnType<typeof adoptCurrentSessionResources> | null} */
 let activeSessionResourceTable = null;
-/** @type {Record<string, any> | null} */
-let adoptedProteinIdentityManifest = null;
+// The protein identity manifests a current Session's Load adopted after its
+// preflight validated them: Save and the import snapshot keep them as they
+// are, and copy any other (each drawing holds its own, D-197).
+/** @type {WeakSet<object>} */
+const adoptedProteinIdentityManifests = new WeakSet();
+/** @param {unknown} manifest @returns {any} */
+const keptProteinIdentityManifest = (manifest) => {
+  const raw = toRaw(manifest);
+  return isPlainObject(raw) && adoptedProteinIdentityManifests.has(raw) ? raw : cloneJsonData(raw);
+};
 // Current-session preflight receipts pair each adopted cache value with the
 // exact manifest that already validated its protein references and raw text.
 const adoptedLosatCacheValues = new WeakMap();
@@ -3347,7 +3355,8 @@ const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedF
  * One saved Result set as Load reads it: a drawing's entry of the 50
  * document, or the committed set as Load projected it.
  * @typedef {{ renderRequest: Record<string, any>, results: Record<string, any>[], editorState?: unknown,
- *   ui?: unknown, runMetadata?: unknown }} LoadedResultSet
+ *   ui?: unknown, runMetadata?: unknown, proteinIdentityManifest?: unknown }} LoadedResultSet
+ *   `proteinIdentityManifest`: the drawing's own, unvalidated (D-197).
  */
 /**
  * @param {LoadedResultSet} set
@@ -3400,7 +3409,9 @@ const buildLoadedArtifactSlot = (set, {
       appliedPaletteColors: cloneColors(readPaletteColors(ui.appliedPaletteColors).value),
       similarityAlignmentResetReceipt: editorState.alignmentResetReceipt ?? null,
       originalLegendColors: keptLegend.originalColors,
-      originalSvgStroke: editorState.originalSvgStroke
+      originalSvgStroke: editorState.originalSvgStroke,
+      // The set's own manifest, adopted once it validates (D-197).
+      proteinIdentityManifest: loadedProteinIdentityManifest(set.proteinIdentityManifest, { adoptCurrent: true })
     },
     legendInventory: keptLegend.originalOrder,
     matchSequenceOwner: state.matchSequenceRegistry?.buildSourceOwner?.([
@@ -3938,19 +3949,22 @@ const restoredLosatCacheInfoIdentity = (drawing, entry, places) => {
   };
 };
 
+/**
+ * The project's raw LOSAT entries Save writes, one per key, with the manifest a current Session's Load validated each
+ * adopted protein entry with (`validatedWith`); each drawing writes those of them its own manifest resolves
+ * (`losatEntriesResolvingIn`).
+ * @returns {{ entries: Record<string, unknown>[], validatedWith: WeakMap<object, unknown> }}
+ */
 const serializeLosatCache = () => {
   const cacheMap = state.losatCache?.value;
-  if (!cacheMap || cacheMap.size === 0) {
-    return { entries: [], validatedManifest: null, manifestValidated: false };
-  }
-  const manifest = state.proteinIdentityManifest.value;
-  const rawManifest = toRaw(manifest);
+  /** @type {WeakMap<object, unknown>} */
+  const validatedWith = new WeakMap();
+  if (!cacheMap || cacheMap.size === 0) return { entries: [], validatedWith };
   /** @type {LosatCacheInfoEntry[]} */
   const info = Array.isArray(state.losatCacheInfo.value) ? state.losatCacheInfo.value : [];
   /** @type {Record<string, unknown>[]} */
   const entries = [];
   const seen = new Set();
-  const prevalidatedProteinEntries = new WeakSet();
 
   /**
    * @param {string} key
@@ -3974,12 +3988,7 @@ const serializeLosatCache = () => {
       display: Boolean(infoEntry.display),
       ...losatCacheInfoIdentity(infoEntry)
     };
-    if (
-      classifyRawLosatCacheEntry(entry) === 'protein-current'
-      && adoptedLosatCacheValues.get(rawCached) === rawManifest
-    ) {
-      prevalidatedProteinEntries.add(entry);
-    }
+    if (adoptedLosatCacheValues.has(rawCached)) validatedWith.set(entry, adoptedLosatCacheValues.get(rawCached));
     return entry;
   };
 
@@ -4001,33 +4010,33 @@ const serializeLosatCache = () => {
     if (!isCurrentRawLosatCacheEntry(value)) return;
     entries.push(buildEntry(key, value));
   });
+  return { entries, validatedWith };
+};
 
-  // A replaced source can leave earlier bindings in the live cache. Persist
-  // only protein evidence that the Session's current manifest can resolve.
+/**
+ * A drawing's raw LOSAT entries that Save writes beside its protein identity manifest: a protein entry only when the
+ * drawing's own manifest resolves it (D-197; a replaced source can leave earlier bindings in the cache), reusing the
+ * validation of a current Session's Load when it validated the entry with this manifest.
+ * @param {readonly Record<string, unknown>[]} entries `losatEntriesOfDrawing`'s.
+ * @param {unknown} manifest The drawing's manifest, valid (Save checked it).
+ * @param {WeakMap<object, unknown>} validatedWith `serializeLosatCache`'s.
+ * @returns {Record<string, unknown>[]}
+ */
+const losatEntriesResolvingIn = (entries, manifest, validatedWith) => {
   /** @type {ReturnType<typeof buildValidatedProteinIdentityIndex>} */
   let identityIndex = null;
-  let reusedValidation = false;
   try {
-    return {
-      entries: entries.filter((entry) => {
-        if (classifyRawLosatCacheEntry(entry) !== 'protein-current') return true;
-        if (prevalidatedProteinEntries.has(entry)) {
-          reusedValidation = true;
-          recordStructuralMetric('sessionSaveProteinRawTextValidationReuseCount');
-          return true;
-        }
-        if (!identityIndex) {
-          identityIndex = buildValidatedProteinIdentityIndex(manifest);
-        }
-        if (!identityIndex) {
-          throw new Error('Save Session requires a valid protein identity manifest.');
-        }
-        recordStructuralMetric('sessionSaveProteinRawTextValidationCount');
-        return validateProteinRawEntryReferences(entry, manifest, { identityIndex });
-      }),
-      validatedManifest: identityIndex || reusedValidation ? manifest : null,
-      manifestValidated: Boolean(identityIndex || reusedValidation)
-    };
+    return entries.filter((entry) => {
+      if (classifyRawLosatCacheEntry(entry) !== 'protein-current') return true;
+      if (validatedWith.get(entry) === toRaw(manifest)) {
+        recordStructuralMetric('sessionSaveProteinRawTextValidationReuseCount');
+        return true;
+      }
+      identityIndex ??= buildValidatedProteinIdentityIndex(manifest);
+      if (!identityIndex) throw new Error('Save Session requires a valid protein identity manifest.');
+      recordStructuralMetric('sessionSaveProteinRawTextValidationCount');
+      return validateProteinRawEntryReferences(entry, manifest, { identityIndex });
+    });
   } finally {
     if (identityIndex) releaseValidatedProteinIdentityIndex(identityIndex);
   }
@@ -4211,17 +4220,23 @@ const applyLosatDerivedCache = (entries, legacyEvidence = null, { adoptCurrent =
  * @param {{ adoptCurrent?: boolean, valid?: boolean }} [options] `valid`: what Load's check found.
  */
 const applyProteinIdentityManifest = (manifest, { adoptCurrent = false, valid = validateProteinIdentityManifest(manifest) } = {}) => {
-  if (!valid) {
-    state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
-    adoptedProteinIdentityManifest = null;
-    return;
-  }
+  state.proteinIdentityManifest.value = loadedProteinIdentityManifest(manifest, { adoptCurrent, valid });
+};
+
+/**
+ * A drawing's saved protein identity manifest as Load installs it (D-197): the empty one when Load's check found it
+ * invalid, else adopted as it is from a current Session, or a copy.
+ * @param {unknown} manifest Unvalidated: `validateProteinIdentityManifest` admits it or it is dropped.
+ * @param {{ adoptCurrent?: boolean, valid?: boolean }} [options] `valid`: what Load's check found.
+ * @returns {ProteinIdentityManifest}
+ */
+const loadedProteinIdentityManifest = (manifest, { adoptCurrent = false, valid = validateProteinIdentityManifest(manifest) } = {}) => {
+  if (!valid) return emptyProteinIdentityManifest();
   // `valid`: `validateProteinIdentityManifest` admitted it.
   const admitted = /** @type {ProteinIdentityManifest} */ (manifest);
-  state.proteinIdentityManifest.value = adoptCurrent
-    ? admitted
-    : cloneJsonData(admitted);
-  adoptedProteinIdentityManifest = adoptCurrent ? admitted : null;
+  if (!adoptCurrent) return cloneJsonData(admitted);
+  adoptedProteinIdentityManifests.add(admitted);
+  return admitted;
 };
 
 /** @param {unknown} groups Saved similarity groups. @returns {string[]} */
@@ -5639,11 +5654,7 @@ const captureSessionImportSnapshot = (shownDrawingId) => ({
   runState: buildRunStateData(),
   losatCache: state.losatCache.value,
   losatDerivedCache: state.losatDerivedCache.value,
-  proteinIdentityManifest: toRaw(state.proteinIdentityManifest.value)
-    === adoptedProteinIdentityManifest
-    ? toRaw(state.proteinIdentityManifest.value)
-    : cloneJsonData(state.proteinIdentityManifest.value),
-  adoptedProteinIdentityManifest,
+  proteinIdentityManifest: keptProteinIdentityManifest(state.proteinIdentityManifest.value),
   legacyProteinRawCandidates: cloneJsonData(state.legacyProteinRawCandidates.value),
   legacyProteinDerivedEvidence: cloneJsonData(state.legacyProteinDerivedEvidence.value),
   losatCacheInfo: cloneJsonData(state.losatCacheInfo.value),
@@ -5679,10 +5690,7 @@ const restoreSessionImportSnapshot = async (snapshot, restoreHistoryMembers) => 
     state.richFeaturePopup.value = snapshot.richFeaturePopup;
     state.losatCache.value = snapshot.losatCache;
     state.losatDerivedCache.value = snapshot.losatDerivedCache;
-    adoptedProteinIdentityManifest = snapshot.adoptedProteinIdentityManifest;
-    state.proteinIdentityManifest.value = snapshot.proteinIdentityManifest === adoptedProteinIdentityManifest
-      ? snapshot.proteinIdentityManifest
-      : cloneJsonData(snapshot.proteinIdentityManifest);
+    state.proteinIdentityManifest.value = keptProteinIdentityManifest(snapshot.proteinIdentityManifest);
     state.legacyProteinRawCandidates.value = cloneJsonData(snapshot.legacyProteinRawCandidates);
     state.legacyProteinDerivedEvidence.value = cloneJsonData(snapshot.legacyProteinDerivedEvidence);
     state.losatCacheInfo.value = cloneJsonData(snapshot.losatCacheInfo);
@@ -5990,7 +5998,6 @@ const resetSessionProject = () => {
   setCommittedCanonicalSession(null, NO_CONSERVATION_PAIRS);
   loadedTrackSettings = null;
   activeSessionResourceTable = null;
-  adoptedProteinIdentityManifest = null;
   resetProject(state);
   resetLayoutState(state);
   resetRightDrawerState(state);
@@ -6645,11 +6652,7 @@ const exportSessionDocument = async (
   }
 
   recordSessionLifecycleEvent('session-save-projection-start');
-  const {
-    entries: losatEntries,
-    validatedManifest,
-    manifestValidated
-  } = serializeLosatCache();
+  const { entries: losatEntries, validatedWith } = serializeLosatCache();
   // Each drawing's Results, catalog and committed request; its slice's
   // unmanaged overrides are checked against its own mode (PD-OI-009, OV-106).
   const parts = [];
@@ -6711,19 +6714,18 @@ const exportSessionDocument = async (
   const legacyDerivedEvidence = normalizeLegacyDerivedEvidence(
     state.legacyProteinDerivedEvidence.value
   );
-  if (
-    (!manifestValidated || validatedManifest !== state.proteinIdentityManifest.value)
-    && !validateProteinIdentityManifest(state.proteinIdentityManifest.value)
-  ) {
-    throw new Error('Save Session requires a valid protein identity manifest.');
-  }
+  // Each drawing writes its own protein identity manifest (D-197): a drawing without an artifact has the empty one.
+  const proteinIdentityManifests = parts.map(({ artifact }) => {
+    const manifest = artifact ? artifact.proteinIdentityManifest : emptyProteinIdentityManifest();
+    if (!adoptedProteinIdentityManifests.has(toRaw(manifest)) && !validateProteinIdentityManifest(manifest)) {
+      throw new Error('Save Session requires a valid protein identity manifest.');
+    }
+    return manifest;
+  });
   // The project's original-name hints, from every drawing's request metadata; the Session file holds the inputs' bytes.
   const resourceOriginalNames = Object.assign({}, ...built.written.map(({ webFiles }) => webFiles.resourceOriginalNames ?? {}));
   const writtenResources = await encodeSessionResources(built.resources, resourceOriginalNames);
   const createdAt = new Date().toISOString();
-  const proteinIdentityManifest = toRaw(state.proteinIdentityManifest.value) === adoptedProteinIdentityManifest
-    ? toRaw(state.proteinIdentityManifest.value)
-    : cloneJsonData(state.proteinIdentityManifest.value);
   const legacyArtifacts = buildSessionLegacyArtifacts({
     legacyRawCandidates,
     legacyDerivedEvidence
@@ -6765,9 +6767,12 @@ const exportSessionDocument = async (
         } : {}),
         modes: { [saved.mode]: slice },
         ...(preservedCliOptions.has(saved.id) ? { cliOptions: cloneJsonData(preservedCliOptions.get(saved.id)) } : {}),
-        losatCache: { entries: losatEntriesOfDrawing(built.written[index].renderRequest, conservationPairs, losatEntries, editorState?.featureCatalog ?? null) },
+        losatCache: { entries: losatEntriesResolvingIn(
+          losatEntriesOfDrawing(built.written[index].renderRequest, conservationPairs, losatEntries, editorState?.featureCatalog ?? null),
+          proteinIdentityManifests[index], validatedWith
+        ) },
         losatDerivedCache: { entries: [] },
-        proteinIdentityManifest,
+        proteinIdentityManifest: keptProteinIdentityManifest(proteinIdentityManifests[index]),
         ...(cliInvocation ? { cliInvocation } : {})
       }
     };
@@ -8050,7 +8055,7 @@ const importSessionDocument = async (e, options = {}) => {
       if (at === undefined || !catalog) return;
       // Each Result is read as a stored one (`normalizeLogicalResults`).
       const results = /** @type {Record<string, unknown>[]} */ (entry.results);
-      const set = { renderRequest, results, editorState: entry.editorState, ui: entry.ui, runMetadata: entry.runMetadata };
+      const set = { ...entry, renderRequest, results };
       // The set's request metadata is its own drawing's, read as the opened
       // drawing's is (`drawingViewOf`), never the opened drawing's (OV-1872).
       const { webFiles } = drawingViewOf(upgraded, entry);
@@ -8314,7 +8319,7 @@ const importSessionDocument = async (e, options = {}) => {
           results: data.results,
           editorState: data.editorState,
           ui,
-          runMetadata: projectionResult?.artifactState?.runMetadata
+          runMetadata: projectionResult?.artifactState?.runMetadata, proteinIdentityManifest: loadedProteinManifest
         }, {
           ...slotOptions,
           featureCatalog: validatedSessionCatalog,

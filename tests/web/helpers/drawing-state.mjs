@@ -74,7 +74,8 @@ export const DRAWING_KEYS = Object.freeze([
 ]);
 
 // What a Generate produces and shows: the Results and their catalog, run facts,
-// generated Legend inventory and colors, and the user's offsets on the Result.
+// generated Legend inventory and colors, the user's offsets on the Result, and
+// the protein identity manifest its LOSAT protein rows resolve in.
 export const ARTIFACT_KEYS = Object.freeze([
   'results', 'selectedResultIndex', 'lastRunInfo', 'trackSlotResolvedGeometry', 'annotationWarnings',
   'featureIdentityNotices', 'featureEditRemovalCount', 'comparisonWarnings', 'labelFitReports', 'inputSummaries',
@@ -84,12 +85,13 @@ export const ARTIFACT_KEYS = Object.freeze([
   'appliedPaletteName', 'appliedPaletteColors', 'extractedFeatures', 'biologicalFeatures', 'featureCatalog',
   'featureRecordIds', 'editableLabels', 'originalLegendOrder', 'originalLegendColors', 'originalSvgStroke',
   'legendCurrentOffset', 'diagramOffset', 'lengthBarUserOffset', 'plotTitleUserOffset',
-  'generatedLegendPosition', 'generatedDrawingId', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition'
+  'generatedLegendPosition', 'generatedDrawingId', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition',
+  'proteinIdentityManifest'
 ]);
 
 // Inputs and caches that every drawing shares.
 export const PROJECT_KEYS = Object.freeze([
-  'sessionTitle', 'inputFiles', 'losatCache', 'losatDerivedCache', 'losatCacheInfo', 'proteinIdentityManifest',
+  'sessionTitle', 'inputFiles', 'losatCache', 'losatDerivedCache', 'losatCacheInfo',
   'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence'
 ]);
 

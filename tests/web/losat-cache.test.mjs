@@ -1239,3 +1239,40 @@ for (const { left, right, suffix, queryWindow = null, subjectWindow = null, expe
   assert.equal(cache.losatEntryDrawingKind({ queryUid: 'a', subjectUid: 'b' }), 'linear');
   assert.equal(cache.losatEntryDrawingKind({}), 'linear');
 }
+
+// #1777 round 16 (D-196, D-199): the one liveness rule of a History install. A search lives while a row in the state,
+// a row a held drawing keeps, or a drawing's protein identity manifest names it; a held drawing names only what is
+// cached now (a Clear's searches stay gone); a converted payload lives while every search it read lives; a rollback
+// installs the step's caches whole.
+{
+  const entry = (key) => ({ key });
+  const derived = (rawKeys) => ({ rawKeys });
+  const none = { rows: [], manifests: [] };
+  const step = {
+    cache: new Map([['row', entry('row')], ['stale', entry('stale')], ['protein-key', proteinEntry], ['held', entry('held')]]),
+    derived: new Map([['live', derived(['row', 'protein-key'])], ['dead', derived(['row', 'stale'])], ['bare', {}]])
+  };
+  const current = new Map([['other', entry('other')], ['held-now', entry('held-now')]]);
+  const live = cache.liveLosatEvidence({
+    rows: [{ key: 'row' }, { key: 'other' }], held: { rows: [{ key: 'held' }, { key: 'held-now' }], manifests: [] },
+    manifests: [manifest], rollback: false
+  }, step, current);
+  // (a) rows in the state, from the step or the current cache; (c) the manifest's protein search; (b) the held row
+  // only for the search cached now ('held' is only in the step: a Clear removed it since).
+  assert.deepEqual([...live.cache.keys()].sort(), ['held-now', 'other', 'protein-key', 'row']);
+  assert.deepEqual([...live.derived.keys()], ['live'], 'a payload lives only with all its searches, and one without rawKeys never');
+  // A manifest that does not resolve the search names nothing.
+  const unresolved = cache.liveLosatEvidence({ rows: [], held: none, manifests: [{ ...manifest, recordInstances: {} }], rollback: false },
+    step, new Map());
+  assert.deepEqual([...unresolved.cache.keys()], []);
+  // A held drawing's manifest names a protein search that is cached now.
+  const heldManifest = cache.liveLosatEvidence({ rows: [], held: { rows: [], manifests: [manifest] }, manifests: [], rollback: false },
+    { cache: new Map(), derived: new Map() }, new Map([['protein-key', proteinEntry]]));
+  assert.deepEqual([...heldManifest.cache.keys()], ['protein-key']);
+  // The step's own Maps when nothing is dropped (OV-2210), and the step whole on a rollback.
+  const whole = { cache: new Map([['row', entry('row')]]), derived: new Map([['p', derived(['row'])]]) };
+  const kept = cache.liveLosatEvidence({ rows: [{ key: 'row' }], held: none, manifests: [], rollback: false }, whole, new Map());
+  assert.equal(kept.cache, whole.cache);
+  assert.equal(kept.derived, whole.derived);
+  assert.equal(cache.liveLosatEvidence({ rows: [], held: none, manifests: [], rollback: true }, step, current), step);
+}

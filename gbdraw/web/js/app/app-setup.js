@@ -904,6 +904,7 @@ export const createAppSetup = () => {
       });
     }
   });
+  historySnapshots.setHeldLosatEvidence(history.heldLosatEvidence); // D-196: what the steps that still exist hold.
   // The choice in flight of a popup choice dialog: its busy state and its close (D-12).
   const dialogChoice = createDialogChoice({ mutationPending: history.mutationPending, runUndoable: history.runUndoable, ref });
   // Confirmations ask with the app's choice dialog (no native confirm).
@@ -1809,10 +1810,9 @@ export const createAppSetup = () => {
     installGeneratedArtifactOwnerSet: historySnapshots.installGeneratedArtifactOwnerSet,
     installRedrawnArtifact: historySnapshots.installRedrawnArtifact,
     restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
+    emptyKeptProteinIdentityManifests: historySnapshots.emptyKeptProteinIdentityManifests,
     setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
-    runGeneratedArtifactReplacement: (...args) => (
-      history.runUndoableArtifactReplacement(...args)
-    ),
+    runGeneratedArtifactReplacement: (...args) => history.runUndoableArtifactReplacement(...args),
     previewRuntime,
     nextTick,
     onGeneratedArtifactCheckpointCapture: ({ phase, diagnostics } = {}) => {

@@ -967,9 +967,10 @@ const rewriteMappedProteinReferences = (value, idMap) => {
 /**
  * @param {Map<string, LosatDerivedCacheEntry> | null | undefined} cacheMap
  * @param {string} key
- * @param {{ mode: unknown, payload: Record<string, unknown> | null | undefined, manifest: unknown }} entry
+ * @param {{ mode: unknown, payload: Record<string, unknown> | null | undefined, manifest: unknown, rawKeys: readonly string[] }} entry
+ *   `rawKeys`: the raw searches it is converted from, which name it (`liveLosatEvidence`).
  */
-const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) => {
+const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest, rawKeys }) => {
   if (!cacheMap || !key || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return null;
   }
@@ -979,7 +980,8 @@ const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) =
     idEncoding: 'runtime-handle-v1',
     key,
     mode: String(mode || ''),
-    payload: stripRuntimeCacheStats(payload)
+    payload: stripRuntimeCacheStats(payload),
+    rawKeys
   };
   if (
     !isLosatDerivedCacheEntry(entry, { allowLegacy: false }) ||
@@ -1685,7 +1687,10 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   Installs an owner set as the displayed artifact, its color rules and queued palette into `drawing`.
  * @property {(drawingId: DrawingState['id'], redrawn: RedrawnArtifact, options: { installResults: (results: SvgResultEntry[]) => void }) => void} installRedrawnArtifact
  *   The artifact owner's install of a label rerender into its Result's drawing (OV-111).
- * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
+ * @property {(handle: HistoryArtifactHandle, options: { rollback: boolean }) => unknown} restoreGeneratedArtifactHandle
+ *   `rollback`: a failed Generate restores the handle it replaced, whose LOSAT caches stay whole (D-196 (c)).
+ * @property {() => void} [emptyKeptProteinIdentityManifests] Empties the protein identity manifest each drawing not
+ *   shown keeps in its artifact slot (Clear LOSAT results, D-197).
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
  * @property {((label: string, execute: (before: HistoryArtifactHandle | null) => any, options?: HistoryStepOptions<Record<string, any>>) => Promise<Record<string, any>>) | null} [runGeneratedArtifactReplacement]
  *   History's undoable replacement of the generated artifact.
@@ -1753,6 +1758,7 @@ export const createRunAnalysis = ({
   installGeneratedArtifactOwnerSet,
   installRedrawnArtifact,
   restoreGeneratedArtifactHandle,
+  emptyKeptProteinIdentityManifests = () => {},
   setGeneratedArtifactIdentity = null,
   runGeneratedArtifactReplacement = null,
   previewRuntime = null,
@@ -2053,7 +2059,7 @@ export const createRunAnalysis = ({
       recordStructuralMetric('generatedArtifactRollbackCount', 1);
       const currentAlert = errorLog.value;
       try {
-        await restoreGeneratedArtifactHandle(handle);
+        await restoreGeneratedArtifactHandle(handle, { rollback: true });
       } finally {
         // Snapshot restoration clones presentation. Retain the notification
         // that owned the rollback boundary, without deriving its cause here.
@@ -4777,9 +4783,7 @@ export const createRunAnalysis = ({
               }
               if (useDerivedProteinPayloadCache && !convertedPayload?.error) {
                 setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {
-                  mode: blastpMode,
-                  payload: convertedPayload,
-                  manifest: workingProteinIdentityManifest
+                  mode: blastpMode, payload: convertedPayload, manifest: workingProteinIdentityManifest, rawKeys: proteinCacheKeys ?? []
                 });
               }
             }
@@ -6444,6 +6448,7 @@ export const createRunAnalysis = ({
     losatCache.value = new Map();
     losatDerivedCache.value = new Map();
     proteinIdentityManifest.value = emptyProteinIdentityManifest();
+    emptyKeptProteinIdentityManifests();
     legacyProteinRawCandidates.value = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] };
     legacyProteinDerivedEvidence.value = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
     losatCacheInfo.value = [];

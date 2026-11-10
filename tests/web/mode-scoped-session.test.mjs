@@ -1451,6 +1451,48 @@ test('Save writes into each Session 51 drawing the LOSAT entries of its own Line
   assert.deepEqual(keysOf('linear-2'), [`${entry.key}-second`]);
 });
 
+// #1777 round 16 (D-197, OV-3213): the protein identity manifest is each drawing's. Load installs each drawing's own
+// field (the shown one in the state, another in its slot) and Save writes each drawing's back; a Session whose writer
+// gave every drawing one shared manifest (Session 46 to 50, upgraded by copying it into each drawing) loads it into
+// each drawing alike. The Session's shape and version do not change.
+test('Load and Save keep each Session 51 drawing\'s own protein identity manifest (D-197)', async () => {
+  const feature = (letter) => `f_${letter.repeat(64)}`;
+  /** A valid schema-2 manifest of one record instance per uid, named by `tag`. */
+  const manifestOf = (tag, uids) => ({
+    schema: 2,
+    proteinSets: Object.fromEntries(uids.map((uid, index) => [`sha256:set-${tag}-${uid}`,
+      { schema: 1, proteins: [{ featureAnalysisId: feature('ab'[index]), aaSha256: 'ab'[index].repeat(64) }] }])),
+    recordAnalyses: Object.fromEntries(uids.map((uid) => [`sha256:analysis-${tag}-${uid}`,
+      { schema: 1, recordSourceId: uid, proteinSetHash: `sha256:set-${tag}-${uid}` }])),
+    recordInstances: Object.fromEntries(uids.map((uid, index) => [uid, {
+      schema: 2, recordAnalysisId: `sha256:analysis-${tag}-${uid}`, runtimeBindingHash: `sha256:runtime-${tag}-${uid}`,
+      displayBindingHash: `sha256:display-${tag}-${uid}`, runtimeIds: { [feature('ab'[index])]: `h_${'ab'[index].repeat(26)}` },
+      featureMetadata: { [feature('ab'[index])]: { displayAlias: `protein-${tag}-${uid}`, exportOrdinal: null } }
+    }]))
+  });
+  for (const shared of [false, true]) {
+    const session = v49Session('drawings-linear-pair-losat');
+    const uids = session.drawings.find((entry) => entry.id === 'linear').losatCache.entries.flatMap(({ queryUid, subjectUid }) => [queryUid, subjectUid]);
+    const manifests = { linear: manifestOf('first', uids), 'linear-2': manifestOf(shared ? 'first' : 'second', uids) };
+    session.drawings.forEach((entry) => { entry.proteinIdentityManifest = manifests[entry.id]; });
+    session.ui.activeDrawingId = 'linear';
+    resetDrawings();
+    const loaded = await loadKeepingSlots(session);
+    assertLoadedDrawings(session, loaded);
+    const slotOf = (id) => [loaded.opening, ...loaded.stashed].find((slot) => slot?.drawingId === id);
+    assert.deepEqual(state.proteinIdentityManifest.value, manifests.linear, `shared ${shared}: the shown drawing's`);
+    assert.deepEqual(slotOf('linear-2').values.proteinIdentityManifest, manifests['linear-2'], `shared ${shared}: linear-2's slot`);
+    assert.notEqual(slotOf('linear-2').values.proteinIdentityManifest, state.proteinIdentityManifest.value, 'two objects');
+    const result = await exportSession(`protein-manifests-${shared}`, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+    assert.equal(result.status, 'saved', result.error?.message);
+    const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+    assert.equal(saved.version, session.version);
+    for (const id of ['linear', 'linear-2']) {
+      assert.deepEqual(saved.drawings.find((entry) => entry.id === id).proteinIdentityManifest, manifests[id], `shared ${shared}: ${id} saved`);
+    }
+  }
+});
+
 // #1540 (OV-2379): rows the gbdraw 0.14.4 Web engine searched (`runtime.version: null`) for a search the
 // current build gives alike are reused. Load merges both Linear drawings' entries into the one cache with
 // that record, the reuse rule takes each of them, and Save writes each record back into its own drawing.
