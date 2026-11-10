@@ -47,7 +47,8 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
     newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}, labelReflowProcessing: { value:false },
     editableLabels: { value: [] }, manualPriorityRules: [],
     deletedLegendEntries: { value: [] }, dormantLegendEntries: { value: [] }, legendStrokeOverrides: {},
-    specificRulePresets: [], selectedSpecificPreset: { value: '' }, specificRulePresetLoading: { value: false }
+    specificRulePresets: [], selectedSpecificPreset: { value: '' }, specificRulePresetLoading: { value: false },
+    svgContainer: { value: null }, originalLegendOrder: { value: [] }, displayedResultMetadata: () => null
   };
   // The automatic rerender's busy flag, with the Vue `watch` the owner waits on.
   const watchers = new Set();
@@ -712,6 +713,7 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
   const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'CDS' };
   const state = {
     manualSpecificRules: [rule], svgContainer: mounted([['CDS', '#54bcf8'], ['CDS [#ff0000]', '#ff0000']]),
+    displayedResultMetadata: () => null, extractedFeatures: ref([]),
     results: ref([]), selectedResultIndex: ref(0),
     legendEntries: ref([
       { caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' },
@@ -743,6 +745,7 @@ test('the Legend editor recolors every row a merged row stands for, a rule row t
     manualSpecificRules: [rule],
     // Python drew CDS in its palette color; its Legend color makes it the rule's swatch.
     svgContainer: mounted([['CDS', '#54bcf8'], ['CDS [#ff0000]', '#ff0000', { display: 'none', 'data-legend-merged': 'CDS' }]]),
+    displayedResultMetadata: () => null, extractedFeatures: ref([]),
     results: ref([]), selectedResultIndex: ref(0),
     legendEntries: ref([
       { caption: 'CDS', originalCaption: 'CDS', color: '#ff0000' },
@@ -943,6 +946,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   const state = {
     featureCatalog: { value: catalog }, selectedResultIndex: { value: 0 },
     results: { value: [{ name: 'result-0.svg', content: '<svg />' }] }, svgContainer: { value: { querySelector: () => svg } },
+    displayedResultMetadata: () => null, originalLegendOrder: { value: [] },
     manualSpecificRules: [], featureColorOverrides: {}, featureOverrides: {}, featureVisibilityManualRules: [],
     svgResultIdentity: { value: 'result' }, addedLegendCaptions: { value: new Set() },
     legendEntries: { value: [] }, deletedLegendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},
@@ -1022,13 +1026,14 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   state.legendEntries.value = [{ caption: 'beta', color: '#112233' }, { caption: 'CDS [#ff0000]', color: '#ff0000' },
     { caption: 'CDS', originalCaption: 'CDS', color: '#808080' }];
   const shownSvg = state.svgContainer;
+  const shownOrder = state.originalLegendOrder;
   state.originalLegendOrder = { value: ['beta', 'CDS [#ff0000]', 'CDS'] };
   state.svgContainer = mounted([['beta', '#112233'], ['CDS [#ff0000]', '#ff0000'], ['CDS', '#808080']]);
   assert.equal(await actions.commitSpecificRules(() => ({ rules: [tagRule('Y', 'beta'), redCds, tagRule('A', 'delta')], legend: [0, 1, 2, 'CDS'] }),
     'Rename legend item'), true, 'renderer row');
   assert.deepEqual(orders.at(-1), ['beta', 'CDS [#ff0000]', 'delta', 'CDS'], 'a rule row keyed apart from the renderer row');
   state.svgContainer = shownSvg;
-  delete state.originalLegendOrder;
+  state.originalLegendOrder = shownOrder;
   // OV-2193 (review L3 of #1467): the rule owner's `reviseColorRules`, the
   // Legend editor's rename. Rules renamed onto a listed row move just before
   // its first rule; a move that would change the rule coloring a feature
