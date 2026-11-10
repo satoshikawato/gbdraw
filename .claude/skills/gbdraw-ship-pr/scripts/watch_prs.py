@@ -3,9 +3,14 @@
 check, a check that ended cancelled once nothing is pending, or all checks green.
 
 Usage: watch_prs.py --prs 940 941 [--prs-file FILE] [--repo OWNER/NAME] [--interval 300]
+                    [--once] [--seen-file FILE]
 
 Run it under Monitor or in the background; each printed line is one event.
 `--prs-file` is re-read every cycle, so PR numbers can be added while it runs.
+A head counts as green only when every workflow run of that head has finished: a
+queued run has no check runs yet, so its checks alone would look green too early.
+`--once` keeps no memory between calls; with `--seen-file FILE` the lines already
+printed are kept in FILE, so a repeated `--once` prints only new events.
 """
 from __future__ import annotations
 
@@ -47,14 +52,26 @@ def main():
     parser.add_argument('--repo')
     parser.add_argument('--interval', type=int, default=300, help='seconds between polls (default 300)')
     parser.add_argument('--once', action='store_true', help='poll once and exit')
+    parser.add_argument('--seen-file', help='keep the printed event lines here, so a later run prints only new ones')
     args = parser.parse_args()
     repo = args.repo or default_repo()
     seen = set()
+    if args.seen_file:
+        try:
+            with open(args.seen_file, encoding='utf-8') as handle:
+                seen.update(handle.read().splitlines())
+        except OSError:
+            pass
 
     def emit(key, line):
-        if key not in seen:
-            seen.add(key)
-            print(line, flush=True)
+        if key in seen or line in seen:
+            return
+        seen.add(key)
+        seen.add(line)
+        print(line, flush=True)
+        if args.seen_file:
+            with open(args.seen_file, 'a', encoding='utf-8') as handle:
+                handle.write(line + '\n')
 
     while True:
         for n in pr_numbers(args):
@@ -79,7 +96,9 @@ def main():
                     continue
                 by_name[run['name']].append(run)
             latest = {name: max(rs, key=lambda r: r['id']) for name, rs in by_name.items()}
-            pending = any(r['status'] != 'completed' for r in latest.values())
+            workflow_runs = gh_api(f'repos/{repo}/actions/runs?head_sha={sha}&per_page=100')
+            runs_open = workflow_runs is None or any(r['status'] != 'completed' for r in workflow_runs['workflow_runs'])
+            pending = runs_open or any(r['status'] != 'completed' for r in latest.values())
             fails = sorted(name for name, r in latest.items() if r['conclusion'] in FAILED)
             if fails:
                 emit((n, sha, 'f', tuple(fails)), f'PR #{n} ({sha[:8]}) FAILED: {", ".join(fails)}')
