@@ -105,8 +105,10 @@ import {
 } from './record-draw-selection.js';
 import { cardUids, requestRecordFile } from './session-drawings-upgrade.js';
 import {
+  distinctSchemeIndexes,
   orderedConservationSources,
   readRingColorScheme,
+  readSchemeIndex,
   ringDrawnPositions,
   ringGenomeFilesInRingOrder,
   ringKeysOfFiles
@@ -957,7 +959,9 @@ const OV3054_RING_FILL = '#4e79a7';
  * by the file's name, never by its place in the series, which the user may have changed since the request drew. Among
  * rings of one file name, an entry takes the one at its `sourceIndex`, usually the request ring it was read from in
  * those Sessions (after a Remove without a Generate, the kept entry's place; the pairing is then never worse than by
- * series order). Without a Circular request, and for an entry with no ring, the colour stays.
+ * series order). Without a Circular request, and for an entry with no ring, the colour stays. A paired entry that keeps
+ * its own colour takes its ring's drawn position as its scheme index too (`distinctSchemeIndexes`), so no two rings
+ * share an index.
  * @param {Record<string, unknown>} holder The draft's `circularConservation`.
  * @param {PromotedRequestReading} request
  */
@@ -978,10 +982,14 @@ const releaseOv3054RingFill = (holder, { schemeRings }) => {
   });
   pair((entry, ring) => ring.sourceKey !== null && String(entry.sourceKey ?? '') === ring.sourceKey);
   pair((entry, ring) => Boolean(ring.fileName) && String(entry.fileName ?? '') === ring.fileName);
+  // Every paired entry takes its request ring's drawn position, also one that keeps its own colour, and an entry no
+  // request ring names keeps its index unless a paired entry holds it, so no two rings share an index.
+  const indexes = distinctSchemeIndexes(series, new Map([...ringOf].map(([index, ring]) => [index, ring.position])));
   holder.series = series.map((entry, index) => {
-    const ring = ringOf.get(index);
-    return ring && isPlainRecord(entry) && String(entry.color).toLowerCase() === OV3054_RING_FILL
-      ? { ...entry, color: null, schemeIndex: ring.position } : entry;
+    if (!isPlainRecord(entry)) return entry;
+    const released = ringOf.has(index) && String(entry.color).toLowerCase() === OV3054_RING_FILL;
+    const kept = !ringOf.has(index) && readSchemeIndex(entry.schemeIndex, index) === indexes[index];
+    return kept ? entry : { ...entry, ...(released ? { color: null } : {}), schemeIndex: indexes[index] };
   });
 };
 /** @type {readonly PromotedPreservedOverride[]} */

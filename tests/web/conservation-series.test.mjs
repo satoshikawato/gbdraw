@@ -170,8 +170,10 @@ test('a hand-set colour survives a scheme switch and a reorder; re-assignment ch
     ['#8fc4c0', '#81a5cc', '#123456'], 'with re-assignment off a colour stays with its genome');
   const drawing = { circularConservation: { series, colorScheme: 'ten' }, adv: { circular_track_slots_enabled: false } };
   assert.equal(reassignDrawnRingColors(drawing), true);
-  assert.deepEqual(series.map(({ color, schemeIndex }) => [color, schemeIndex]), [[null, 0], [null, 1], ['#123456', 1]],
-    'the button gives each scheme ring its position and keeps the hand-set colour');
+  assert.deepEqual(series.map(({ color, schemeIndex }) => [color, schemeIndex]), [[null, 0], [null, 1], ['#123456', 2]],
+    'the button gives each ring its position, the hand-set one too, and keeps the hand-set colour (fix round 13)');
+  assert.deepEqual(orderedConservationSources([a, b, c], { series, colorScheme: 'ten' }).map(({ color }) => color),
+    ['#81a5cc', '#e5a972', '#123456'], 'the re-assignment changes scheme colours only');
   assert.equal(reassignDrawnRingColors(drawing), false, 'a second press changes nothing');
 });
 

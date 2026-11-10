@@ -343,6 +343,27 @@ test('a v0.14.5 Web Session whose stack reorders the rings opens with the colour
   assert.deepEqual(drawn(circular.circularConservation), drawn(replay), 'the colours equal the CLI replay\'s');
 });
 
+// Fix round 13: a ring D-38 leaves with its own colour takes the drawn position of its request ring as its scheme index,
+// as the released rings do, so no two rings share an index: its colour stays, and Use the scheme color later gives
+// it the colour of its own place, not that of the ring drawn where its series place is.
+test('a v0.14.5 Web Session ring that keeps its own colour takes its drawn position, so no two rings share an index', async () => {
+  const { adoptPromotedPreservedOverrides } = await import('../../gbdraw/web/js/services/session-request.js');
+  const session = ringSchemeSession();
+  const slot = (id, renderer, params) => ({ kind: 'circularTrackSlot', id, renderer, enabled: true, side: null, radius: null,
+    width: null, z: 0, params, innerGapPx: null, outerGapPx: null });
+  const ring = (trackIndex) => slot(`ring_${trackIndex}`, 'sequence_conservation', { track_index: String(trackIndex) });
+  session.renderRequest.diagramOptions.tracks.circularTrackSlots = [slot('features', 'features', {}), ring(2), ring(1), ring(3)];
+  const stored = structuredClone(session.modes.circular.config);
+  const [ring1, ring2, ring3] = stored.circularConservation.series;
+  stored.circularConservation.series = [{ ...ring1, color: '#123456' }, ring2, ring3,
+    { ...ring2, fileName: 'gone.blast', label: 'gone', schemeIndex: 0 }];
+  const { config } = adoptPromotedPreservedOverrides(stored, {}, 'circular', session.renderRequest, session.resources);
+  const series = config.circularConservation.series;
+  assert.deepEqual(series.map(({ label, color, schemeIndex }) => [label, color, schemeIndex ?? null]),
+    [['ring1', '#123456', 1], ['ring2', null, 0], ['ring3', null, 2], ['gone', '#4e79a7', 3]],
+    'the kept colour stays with its drawn position; an entry no request ring names leaves the indexes they hold');
+});
+
 // D-38 releases the fill only when the draft's Circular request is known to name no ring colour. A draft without a
 // Circular request (a Session 46-50 whose one request is Linear, a flat draft whose request is Linear, or none) keeps
 // its ring colours: what its rings drew is not known.

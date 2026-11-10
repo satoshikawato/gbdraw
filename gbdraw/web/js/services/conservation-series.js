@@ -164,8 +164,9 @@ export const ringDrawnPositions = (count, slots) => {
 export const ringOwnColor = (entry) => normalizeOptionalHexColor(entry?.color);
 
 /**
- * Re-assign the scheme colours to the current order (PD-OI-110): each ring without its own colour takes the scheme
- * index of its drawn position (`positions`, by series place); a hand-set colour stays.
+ * Re-assign the scheme colours to the current order (PD-OI-110): each ring takes the scheme index of its drawn
+ * position (`positions`, by series place). A ring with its own colour keeps the colour and takes its position too,
+ * so no two rings share an index and the scheme colour it shows after 「スキームの色を使う」 is that of its place.
  * @param {{ color?: unknown, schemeIndex?: unknown }[]} series
  * @param {readonly number[]} positions
  * @returns {boolean} Whether an index changed.
@@ -173,11 +174,35 @@ export const ringOwnColor = (entry) => normalizeOptionalHexColor(entry?.color);
 export const reassignRingSchemeIndexes = (series, positions) => {
   let changed = false;
   series.forEach((entry, place) => {
-    if (ringOwnColor(entry) || entry.schemeIndex === positions[place]) return;
+    if (entry.schemeIndex === positions[place]) return;
     entry.schemeIndex = positions[place];
     changed = true;
   });
   return changed;
+};
+
+/**
+ * The scheme indexes of a series some of whose places must take given indexes (`fixed`, by series place, each index
+ * once): every other entry keeps its index (a stored one, else its place) unless a fixed or earlier entry holds it,
+ * and then takes the first index none holds, so no two rings share an index.
+ * @param {readonly unknown[]} series
+ * @param {ReadonlyMap<number, number>} fixed
+ * @returns {number[]}
+ */
+export const distinctSchemeIndexes = (series, fixed) => {
+  const taken = new Set(fixed.values());
+  return series.map((entry, place) => {
+    const given = fixed.get(place);
+    if (given !== undefined) return given;
+    const stored = entry && typeof entry === 'object' ? /** @type {{ schemeIndex?: unknown }} */ (entry).schemeIndex : undefined;
+    let index = readSchemeIndex(stored, place);
+    if (taken.has(index)) {
+      index = 0;
+      while (taken.has(index)) index += 1;
+    }
+    taken.add(index);
+    return index;
+  });
 };
 
 /**

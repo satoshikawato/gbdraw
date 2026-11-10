@@ -256,7 +256,9 @@ names no ring colour (`diagramOptions.conservationColors`) and whose slot stack 
 Session without a Web draft) as `schemeIndex`. A series entry finds its request ring by the key of the ring's file
 among the request's ring files (`ringKeysOfFiles` over `conservationBlastFiles` and their resources), else by the
 file's name (the entries a CLI Session's projection wrote hold an empty `sourceKey`), never by its place in the series,
-which the user may have changed before the Save; an entry no request ring names keeps its colour. A request that names
+which the user may have changed before the Save; a ring whose colour stays its own takes its request ring's drawn
+position as `schemeIndex` too, and an entry no request ring names keeps its colour and its index unless a ring holds
+that index (then the first free one), so no two rings share an index. A request that names
 ring colours, a request whose slot stack cannot be read (the projection refuses it), and a draft with no Circular
 request (a Session 46-50 whose one request is Linear, a flat draft whose request is Linear, or none), keep the draft's
 ring colours as its rings' own. Sessions up to 50 (gbdraw 0.14.5) kept the

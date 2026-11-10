@@ -1155,7 +1155,8 @@ the ring drops it. A scheme color stays with its ring when you reorder the
 rings, with the arrows or in the custom stack. **Re-assign colors when tracks
 are reordered** (off by default) gives the scheme colors out again in the drawn
 order after each reorder, and **Re-assign colors in the current order** does so
-once; neither changes a ring's own color. Under **Same color** both are
+once; neither changes a ring's own color, and **Use the scheme color** then
+gives such a ring the scheme color of its place. Under **Same color** both are
 unavailable and a reorder gives out no colors, so the rings keep the scheme
 colors they had when you switch back. A ring added after a removal takes the first scheme color that
 no ring uses. Each of these changes is one Undo step. A CLI or Python Session
