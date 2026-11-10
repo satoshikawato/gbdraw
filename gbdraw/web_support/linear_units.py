@@ -539,7 +539,7 @@ def plan_record_places_json(records_json: str) -> str:
 
 def describe_card_window_plan() -> dict[str, dict[str, Shape]]:
     """The requests and the answers of :func:`plan_card_windows_json` and :func:`plan_record_places_json`, and the
-    answers of :func:`plan_genome_scales_json` and of the ring planner
+    answers of :func:`plan_genome_scales_json`, and the ring planner's ring lengths and answers
     (``gbdraw.web_support.comparison_sequences.plan_ring_scales_json``), as named shapes of
     :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py)."""
 
