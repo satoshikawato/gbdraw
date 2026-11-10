@@ -42,7 +42,6 @@ import copy
 import functools
 import itertools
 import os
-import queue
 import re
 import threading
 import warnings
@@ -256,11 +255,29 @@ def _expanded_at(point: GzipPoint) -> int:
     return point.expanded
 
 
-_END = object()
+class _Ahead:
+    """What the expansion thread and the parse pass share: the blocks made and not yet read, and which side waits.
+
+    Each side wakes the other only when that one waits (a flag set under the condition before it looks), so a
+    block passes without a handoff while neither waits.
+    """
+
+    def __init__(self) -> None:
+        self.made: deque[bytes] = deque()
+        self.turn = threading.Condition()
+        self.reader_waits = False
+        self.maker_waits = False
+        self.done = False
+        self.stop = False
+        self.error: BaseException | None = None
+
+    def wake(self) -> None:
+        with self.turn:
+            self.turn.notify()
 
 
 def _ahead(blocks: Iterator[bytes]) -> Iterator[bytes]:
-    """``blocks``, made on a thread of their own up to ``_AHEAD_BLOCKS`` ahead of the reader.
+    """``blocks``, made on a thread of their own while it is fewer than ``_AHEAD_BLOCKS`` ahead of the reader.
 
     zlib lets go of the interpreter lock while it expands, so a gzip input expands
     beside the parse pass's own work. Where no thread can start (Pyodide), the
@@ -268,19 +285,28 @@ def _ahead(blocks: Iterator[bytes]) -> Iterator[bytes]:
     stops the thread before the file is closed.
     """
 
-    made: queue.Queue[object] = queue.Queue(maxsize=_AHEAD_BLOCKS)
-    stop = threading.Event()
+    shared = _Ahead()
 
     def make() -> None:
         try:
             for block in blocks:
-                if stop.is_set():
+                shared.made.append(block)
+                if shared.reader_waits:
+                    shared.wake()
+                if len(shared.made) >= _AHEAD_BLOCKS:
+                    with shared.turn:
+                        shared.maker_waits = True
+                        while len(shared.made) >= _AHEAD_BLOCKS and not shared.stop:
+                            shared.turn.wait()
+                        shared.maker_waits = False
+                if shared.stop:
                     break
-                made.put(block)
-        except BaseException as error:  # handed to the reader, which raises it
-            made.put(error)
+        except BaseException as error:  # handed to the reader, which raises it after the blocks before it
+            shared.error = error
         finally:
-            made.put(_END)
+            with shared.turn:
+                shared.done = True
+                shared.turn.notify_all()
 
     thread = threading.Thread(target=make, name="gbdraw-gzip-ahead", daemon=True)
     try:
@@ -288,17 +314,27 @@ def _ahead(blocks: Iterator[bytes]) -> Iterator[bytes]:
     except RuntimeError:  # no threads here
         yield from blocks
         return
-    item: object = None
     try:
-        while (item := made.get()) is not _END:
-            if isinstance(item, BaseException):
-                raise item
-            assert isinstance(item, bytes)
-            yield item
+        while True:
+            if shared.made:
+                block = shared.made.popleft()
+                if shared.maker_waits:
+                    shared.wake()
+                yield block
+                continue
+            with shared.turn:
+                shared.reader_waits = True
+                while not shared.made and not shared.done:
+                    shared.turn.wait()
+                shared.reader_waits = False
+                if not shared.made:
+                    break
+        if shared.error is not None:
+            raise shared.error
     finally:
-        stop.set()
-        while item is not _END:
-            item = made.get()
+        with shared.turn:
+            shared.stop = True
+            shared.turn.notify_all()
         thread.join()
 
 
