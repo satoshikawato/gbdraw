@@ -821,15 +821,16 @@ export const createAppSetup = () => {
   // A restore, or Reset Settings, that rewrites the rules: the rule owner
   // follows the rules `write` replaced. A checkpoint figure History recorded
   // as drawn shows its rules as Python draws them, so its restore asks for no
-  // rerender (D-24 (OV-731)).
+  // rerender (D-24 (OV-731)); one recorded as not drawn is drawn again by
+  // History's own one request (D-174), so the rule owner adds none.
   /**
    * @template T
    * @param {DrawingState} drawing
    * @param {() => Promise<T>} write
-   * @param {{ drawn: boolean }} [restored]
+   * @param {{ drawn?: boolean | undefined }} [restored] `drawn`: History's record of a checkpoint figure; unset when unknown.
    * @returns {Promise<T>}
    */
-  const followRuleEdits = async (drawing, write, { drawn } = { drawn: false }) => {
+  const followRuleEdits = async (drawing, write, { drawn } = {}) => {
     // The rule owner follows the shown drawing; a drawing that is not shown
     // follows its rules when it is shown again (D-15-51).
     if (drawing !== state.activeDrawing()) return write();
@@ -837,7 +838,7 @@ export const createAppSetup = () => {
     specificRuleRestorePorts.retainRulesForRestore(previousRules);
     try {
       const written = await write();
-      if (!drawn) specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
+      if (drawn === undefined) specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
       return written;
     } finally {
       specificRuleRestorePorts.retainRulesForRestore([]);
