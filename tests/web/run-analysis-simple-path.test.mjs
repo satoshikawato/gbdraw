@@ -230,8 +230,10 @@ const {
   showDiagramProgress
 } = await import('../../gbdraw/web/js/app/run-analysis.js');
 const {
+  linearComparisonEdgeKey,
   resolveLinearComparisonPlan
 } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
+const { cardRecordFacts } = await import('../../gbdraw/web/js/services/linear-card-windows.js');
 const {
   applyEditorStateData,
   applyFeatureStateData,
@@ -1757,6 +1759,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   let committedRenderRequest = null;
   let committedCanonicalSession = null;
   const recordDisplayRows = { value: [] };
+  // The record selector's reads (OV-3227): a card with a selector reads the record it names, a card without one every
+  // record of its file (`wholeFileRecords`); a card in `unreadCards` (a loaded Session's) is read by
+  // `readLinearCardRecords`.
+  const wholeFileRecords = new Map();
+  const unreadCards = new Set();
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
@@ -1777,6 +1784,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       catalog: { mode: 'linear', status: 'ready', records: [] },
       error: ''
     }),
+    linearCardRecord: (_drawing, card) => cardRecordFacts(unreadCards.has(card.uid) ? []
+      : card.region_record_id ? [{ recordId: card.region_record_id, recordLength: 8 }] : wholeFileRecords.get(card.uid) ?? []),
+    readLinearCardRecords: async () => { unreadCards.clear(); },
     prepareCandidateCommit: ({
       generationResponse,
       catalogAdmission,
@@ -2494,6 +2504,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       )));
     }
     assert.equal(losatCalls, 3, 'the first Generate searched and the second reused its raw results');
+    // OV-3227: the File name field's default is the name Generate gave each pair, the cards' record IDs.
+    const thirteenNames = state.losatCacheInfo.value.map(({ filename }) => filename);
+    assert.deepEqual(thirteenNames.slice(0, 2), ['REC1.REC2.losatn.tsv', 'REC2.REC3.losatn.tsv']);
+    assert.deepEqual(state.losatCacheInfo.value.map(({ edgeKey }) => runner.getLosatPairDefaultName(state.activeDrawing(), edgeKey)),
+      thirteenNames);
     assert.match(thirteenWatches[0].timing, /FASTA cache hits=1, .*JS FASTA=1, Worker FASTA=0/);
     assert.match(thirteenWatches[1].timing, /FASTA cache hits=14, .*JS FASTA=0, Worker FASTA=0/);
     assert.equal(thirteenWatches[1].fastaDigests, 0);
@@ -2749,6 +2764,40 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.deepEqual(await runner.runAnalysis(twoPlanNow()), { status: 'ok' }, JSON.stringify(state.errorLog.value));
     assert.deepEqual([...new Set(searched.map((fasta) => fasta.split('\n')[0]))].sort(), ['>G1', '>G2']);
     modeDrawing(state, 'linear').inputType.value = 'gb';
+
+    // OV-3227: a card with no record selector over a file of several records (a loaded Session's card) is named by
+    // its number among the drawn cards, by Generate and the File name field alike, also when the card before it is
+    // drawn in two windows and so searches as two units; the first record its search reads does not name it. A pair
+    // row saved with no name downloads under that name once the cards' records are read.
+    const pairsFile = new AuditFile([['P1', 'P2', 'P3'].map((id) => [
+      `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', '        1 acgtacgt', '//'
+    ].join('\n')).join('\n') + '\n'], 'pairs.gb');
+    const pairCard = (uid, recordId, windows = []) => ({
+      uid, gb: bound(pairsFile), gff: null, fasta: null, depth: null, blast: null, losat_gencode: 1, losat_filename: '',
+      definition: '', record_subtitle: '', region_record_id: recordId, region_start: null, region_end: null,
+      region_reverse: false, windows
+    });
+    const span = (start, end) => ({ start, end, reverseComplement: false, column: null });
+    state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length,
+      pairCard('pair-1', 'P1', [span(1, 4), span(5, 8)]), pairCard('pair-2', ''), pairCard('pair-3', 'P3'));
+    wholeFileRecords.set('pair-2', ['P1', 'P2', 'P3'].map((recordId) => ({ recordId, recordLength: 8 })));
+    state.activeDrawing().losatProgram.value = 'blastn';
+    state.losatCacheInfo.value = [];
+    state.losatCache.value = new Map();
+    const pairsResult = result('whole-file-card.svg', 'whole-file-card');
+    workerResponses.push(response(pairsResult, validCatalog(pairsResult.name)));
+    assert.deepEqual(await runner.runAnalysis(twoPlanNow()), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    const pairRows = state.losatCacheInfo.value;
+    assert.deepEqual(pairRows.map(({ filename }) => filename).sort(),
+      ['P1.seq_2.losatn.w1.tsv', 'P1.seq_2.losatn.w2.tsv', 'seq_2.P3.losatn.tsv']);
+    const wholeFilePair = linearComparisonEdgeKey('pair-2', 'pair-3');
+    assert.equal(runner.getLosatPairDefaultName(state.activeDrawing(), wholeFilePair), 'seq_2.P3.losatn.tsv');
+    state.losatCacheInfo.value = pairRows.map((row) => (row.edgeKey === wholeFilePair ? { ...row, filename: '' } : row));
+    unreadCards.add('pair-3');
+    assert.equal(runner.getLosatPairDefaultName(state.activeDrawing(), wholeFilePair), '', 'no default before the read');
+    downloadedFilename = '';
+    await runner.downloadLosatPair(state.activeDrawing(), wholeFilePair, '');
+    assert.equal(downloadedFilename, 'seq_2.P3.losatn.tsv');
   } finally {
     state.similarityAlignmentPlan.value = null;
     state.linearRecordTranslations.value = [];

@@ -5,12 +5,13 @@
 // `planCardWindows` reads the records as the request writes them, with the drawing's row order and captions); until
 // it answers, the card shows neither. The shown-drawing readers pass the state, the shown drawing of a mode, the
 // record a card draws, the helper and the record display rows as ports; the edits are services/linear-card-windows.js.
-import { cardRecordFacts, cardWindowList } from '../services/linear-card-windows.js';
+import { cardWindowList } from '../services/linear-card-windows.js';
 import { windowBases } from '../services/record-options.js';
 import { linearLayoutCells } from '../services/linear-record-layout.js';
 import { t } from '../utils/i18n.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, WebState } from '../state.js' */
 /** @import { LinearSeqWindow } from '../services/drawing/inputs.js' */
+/** @import { CardRecordFacts } from '../services/linear-card-windows.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { RequestRecordDisplayRow, linearCardWindowPlanRecords } from '../services/session-request.js' */
 /** @import { CardWindowPlan, CardWindowRecordInput } from '../contracts/card-windows.generated.js' */
@@ -38,8 +39,8 @@ const { computed, ref, watch } = window.Vue;
  * @property {WebState} state
  * @property {(drawingMode: DiagramMode) => DrawingState | null} shownDrawingOfMode The shown drawing when it is of that mode.
  * @property {(drawing: DrawingState, seq: LinearSeq) => SequenceRecord | null} linearSeqRecord The record a card draws, once read.
- * @property {(drawing: DrawingState, seq: LinearSeq) => SequenceRecord[]} linearSeqDrawnRecords The records a card draws,
- *   once read: its chosen record, else every record of its file.
+ * @property {(drawing: DrawingState, seq: LinearSeq) => CardRecordFacts} linearCardRecord What a card's record list says
+ *   of the records it draws (app/shown-drawing-readers.js), the one owner of a card's record ID and length.
  * @property {(payload: { records: CardWindowRecordInput[] }) => Promise<{ result?: unknown }>} planCardWindows
  *   The Worker helper that plans the windows' numbers and omitted lengths.
  * @property {() => RequestRecordDisplayRow[]} recordDisplayRows The record display rows the request reads.
@@ -55,12 +56,12 @@ const cardWindowPlanOf = (result) => {
 
 /** @param {LinearCardWindowReaderPorts} ports */
 export const createLinearCardWindowReaders = ({
-  state, shownDrawingOfMode, linearSeqRecord, linearSeqDrawnRecords, planCardWindows, cardWindowPlanRecords,
+  state, shownDrawingOfMode, linearSeqRecord, linearCardRecord, planCardWindows, cardWindowPlanRecords,
   recordDisplayRows
 }) => {
   /** @param {DrawingState} drawing @param {LinearSeq} seq */
   const cardRecordOf = (drawing, seq) => ({
-    ...cardRecordFacts(linearSeqDrawnRecords(drawing, seq)),
+    ...linearCardRecord(drawing, seq),
     circular: linearSeqRecord(drawing, seq)?.detectedTopology === 'circular'
   });
   // The payload Python plans for the shown Linear drawing ('' while no drawn card has several windows, a record is not

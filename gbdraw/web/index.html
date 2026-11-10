@@ -3899,7 +3899,7 @@
                                                 @click="downloadLosatPair(pair.edgeKey, pair.draft?.losatFilenameActive ? pair.draft.losatFilename : pair.resolved?.losatFilenameActive ? pair.resolved.losatFilename : '')"
                                                 class="btn btn-secondary px-1.5 py-0.5 text-[10px]"
                                             ><i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}</button>
-                                            <details class="linear-pair-file-name min-w-0 flex-1">
+                                            <details class="linear-pair-file-name min-w-0 flex-1" @toggle="$event.currentTarget.open && readShownRecords('linear')">
                                                 <summary class="text-[10px] font-normal text-slate-500" :aria-label="t('Raw LOSAT file name for #{from} to #{to}', { from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })">{{ t('File name') }}</summary>
                                                 <label class="linear-primary-label block" :for="`linear-raw-name-${pair.edgeKey}`">{{ t('Raw LOSAT filename') }}</label>
                                                 <input
@@ -3936,7 +3936,7 @@
                                                         @click="downloadLosatPair(windowPair.edgeKey, pair.resolved?.windowLosatFilenames?.[windowPair.edgeKey] || '')"
                                                         class="btn btn-secondary px-1.5 py-0.5 text-[10px]"
                                                     ><i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}</button>
-                                                    <details class="linear-pair-file-name min-w-0 flex-1">
+                                                    <details class="linear-pair-file-name min-w-0 flex-1" @toggle="$event.currentTarget.open && readShownRecords('linear')">
                                                         <summary class="text-[10px] font-normal text-slate-500" :aria-label="t('Raw LOSAT file name for #{from} to #{to}', { from: linearWindowPairSide(pair.queryIndex, windowPair.queryWindow), to: linearWindowPairSide(pair.subjectIndex, windowPair.subjectWindow) })">{{ t('File name') }}</summary>
                                                         <label class="linear-primary-label block" :for="`linear-raw-name-${windowPair.edgeKey}`">{{ t('Raw LOSAT filename') }}</label>
                                                         <input

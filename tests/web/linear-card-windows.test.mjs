@@ -19,7 +19,7 @@ globalThis.window = {
 const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
   addCardWindow, cardWindowList, editCardWindow, orientLinearCard, windowSpanOf,
-  removeCardWindow, UNKNOWN_CARD_RECORD, catalogCardRecord
+  removeCardWindow, UNKNOWN_CARD_RECORD, cardRecordFacts, catalogCardRecord
 } = await import('../../gbdraw/web/js/services/linear-card-windows.js');
 const {
   linearCardRequestedCircular, linearCardWindowPlanRecords, linearDrawingUnitPlaces, linearDrawingWindowsOf, linearWindowsPayload
@@ -155,7 +155,7 @@ const shownWindows = async (cards, { length, topology = 'linear', entries = null
   const readers = createLinearCardWindowReaders({
     state: { activeDrawing: () => drawing }, shownDrawingOfMode: () => drawing,
     linearSeqRecord: (_drawing, card) => (drawnRecords(_drawing, card).length === 1 ? drawnRecords(_drawing, card)[0] : null),
-    linearSeqDrawnRecords: drawnRecords,
+    linearCardRecord: (_drawing, card) => cardRecordFacts(drawnRecords(_drawing, card)),
     planCardWindows: (payload) => { asked = pythonCardWindowPlan(payload); return asked; },
     cardWindowPlanRecords: linearCardWindowPlanRecords, recordDisplayRows: () => []
   });
