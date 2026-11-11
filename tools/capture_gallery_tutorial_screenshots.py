@@ -498,10 +498,22 @@ def add_step_text_validation(
         for operation in as_array(step.get("operations"))
         if isinstance(operation, dict) and isinstance(operation.get("capture"), dict)
     ]
+    open_selects = [
+        spec
+        for capture in captures
+        for spec in as_array(capture.get("openSelect"))
+        + ([capture["openSelect"]] if isinstance(capture.get("openSelect"), dict) else [])
+        if isinstance(spec, dict)
+    ]
     if any("cardTitle" in capture for capture in captures):
         result.errors.append(
             f"{context.label}: a capture finds its card by text (cardTitle), which matches the first card "
             "that names it anywhere; give selector \".card[data-settings-section='<key>']\"."
+        )
+    if any("cardTitle" in spec or "selectIndex" in spec for spec in open_selects):
+        result.errors.append(
+            f"{context.label}: an openSelect finds its select by card text and position (cardTitle, "
+            "selectIndex); give its selector, for example \"select[aria-label='Palette']\"."
         )
     actions = [json.dumps(action, ensure_ascii=False) for capture in captures for action in as_array(capture.get("actions"))]
     if any(CAPTURE_POSITION_PICK.search(action) for action in actions):
@@ -966,23 +978,11 @@ def apply_open_select_overlays(page, open_select: Any) -> None:
             return matches[nth] || null;
           };
 
-          const selectInCard = (cardTitle, selectIndex = 0) => {
-            const titleKey = normalizeKey(cardTitle);
-            const cards = Array.from(document.querySelectorAll('.card'));
-            const card = cards.find((candidate) => {
-              const header = candidate.querySelector('.card-header, summary');
-              return normalizeKey(header?.textContent || '').includes(titleKey);
-            });
-            if (!card) return null;
-            return Array.from(card.querySelectorAll('select'))[Number(selectIndex || 0)] || null;
-          };
-
           const resolveSelect = (spec) => {
             if (spec.selector) {
               const selected = document.querySelector(spec.selector);
               if (selected?.tagName === 'SELECT') return selected;
             }
-            if (spec.cardTitle) return selectInCard(spec.cardTitle, spec.selectIndex);
             if (spec.label) return selectNearLabel(spec.label, Number(spec.nth || 0));
             return null;
           };
@@ -1523,13 +1523,14 @@ def hide_settings_pane_under_popup(page) -> None:
 
 def hide_page_around_settings_pane(page) -> None:
     """An open-select crop shows a settings control and its menu, which may reach past the
-    Settings pane: hide the rest of the page (header, Result, footer), so the crop's edge cuts
-    no figure, button or text there (OV-3374). Everything keeps its place."""
+    Settings pane: hide the rest of the page (header, Result, the footer's text), so the crop's
+    edge cuts no figure, button or text there (OV-3395). Everything keeps its place, and the
+    footer itself stays: the pane's Generate bar is anchored to it and would hide with it."""
 
     page.evaluate(
         """
         () => {
-          document.querySelectorAll('.app-header, #result-pane, [data-app-footer]').forEach((element) => {
+          document.querySelectorAll('.app-header, #result-pane, [data-app-footer] > *').forEach((element) => {
             element.style.setProperty('visibility', 'hidden', 'important');
           });
         }

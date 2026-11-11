@@ -1253,6 +1253,12 @@ def test_capture_finds_its_card_by_section_identity_not_by_text() -> None:
     capture_tool.add_step_text_validation(
         result, _manual_context(3), step({"selector": ".card[data-settings-section='layout']"})
     )
+    capture_tool.add_step_text_validation(
+        result, _manual_context(4), step({"openSelect": {"selectedLabel": "orchid", "cardTitle": "Colors", "selectIndex": 1}})
+    )
+    capture_tool.add_step_text_validation(
+        result, _manual_context(5), step({"openSelect": [{"selectedLabel": "orchid", "selector": "select[aria-label='Palette']"}]})
+    )
 
-    assert [error.split(":")[0] for error in result.errors] == [_manual_context(2).label]
-    assert "cardTitle" in result.errors[0]
+    assert [error.split(":")[0] for error in result.errors] == [_manual_context(2).label, _manual_context(4).label]
+    assert "cardTitle" in result.errors[0] and "selectIndex" in result.errors[1]
