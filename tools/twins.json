@@ -1462,6 +1462,20 @@
       "reason": "The Web writes the Adjacent plan's edges before Generate asks the Worker for its unit plan; Generate displays a grid pair only when such an edge gave it a search, so if the JS rows (normalizeLinearComparisonRows) and the gridRow of linearRecordPlacements disagree, the pair's ribbon is dropped without a refusal.",
       "retireWhen": "the Web takes the plan's adjacent edges from the Python unit plan (Worker) instead of its own copy",
       "source": "review of PR #1883 (OV-3248); the twin is on dev with no shared vector"
+    },
+    {
+      "id": "vector:tests/fixtures/ring_drawn_position_vectors.json",
+      "concern": "The drawn order of the Circular comparison rings that the Ring colors scheme colours follow (PD-OI-110)",
+      "pythonOwner": [
+        "gbdraw/analysis/conservation.py:_drawn_ring_colors"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/conservation-series.js:ringDrawnPositions"
+      ],
+      "vector": "tests/fixtures/ring_drawn_position_vectors.json",
+      "reason": "Session Load reads a CLI Session's ring scheme colours and the 0.14.5 Web fill (D-38) from the stored request without starting the Python Worker, and the Web re-assigns scheme colours in the drawn order on a reorder; the vector pins the Web's drawn positions over a stack (or none) to the order Python draws the rings in.",
+      "retireWhen": "the Session or the request carries each ring's drawn position from Python, or Load asks the Python owner (Worker)",
+      "source": "#1860 fix round 13 review"
     }
   ]
 }
