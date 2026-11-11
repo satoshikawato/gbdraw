@@ -237,6 +237,7 @@ import {
   IMPORTED_COMPARISON_DISPOSITIONS,
   createImportedComparisonIntentState,
   inheritSavedComparison,
+  inheritUnitPlans,
   followCommittedComparison,
   inheritedPipelineSearch,
   storedProteinResultMode,
@@ -1062,6 +1063,9 @@ const linearSearchOf = async (drawing, cards, draftPlan, inherit, placesOf, runH
   }) : null;
   return { unitSearch: inherited?.unitSearch ?? await generateUnitSearch(cards, draftPlan, placesOf, runHelper), inherited };
 };
+
+/** Python's plan of the drawn units (`planLinearUnits`), in the diagram Worker. @param {LinearUnitPlanPayload} payload */
+const planLinearUnits = (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload);
 
 // Every LOSAT run's executor: the parallel runner, or the one a browser test installs.
 /**
@@ -3631,8 +3635,7 @@ export const createRunAnalysis = ({
         // writes is a unit's (OV-2738); an inherited pipeline searches with its own settings (OV-3003).
         const { unitSearch, inherited } = await linearSearchOf(drawing, linearSeqs, /** @type {LinearComparisonResolution} */ (
           activeComparisonPlanSnapshot), useSavedComparison,
-        linearDrawingUnitPlaces(drawing, catalogRecordOf),
-        (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PLAN_LINEAR_UNITS, payload));
+        linearDrawingUnitPlaces(drawing, catalogRecordOf), planLinearUnits);
         const searchDrawing = inherited ? savedPipelineSearchDrawing(drawing, inherited.pipeline) : drawing;
         if (inherited) requestDrawing = savedPipelineSearchDrawing(requestDrawing, inherited.pipeline);
         searchedSavedPipeline = inherited !== null;
@@ -5079,7 +5082,9 @@ export const createRunAnalysis = ({
       // Inherit copies the drawing's own saved comparison, which its Imported comparison state holds: a drawing
       // without a Result has no committed Session (OV-3001).
       if (useSavedComparison) {
-        inheritSavedComparison({ candidate: canonical, source: drawing.importedComparisonIntent.source, searched: searchedSavedPipeline });
+        const { source } = drawing.importedComparisonIntent;
+        const units = await inheritUnitPlans({ candidate: canonical, source, runHelper: planLinearUnits });
+        inheritSavedComparison({ candidate: canonical, source, searched: searchedSavedPipeline, units });
       }
       // A ring LOSAT search reports positions on the whole reference file (D-25); Python puts its rows in the
       // search frame of the records this request draws, as every ring table is (PD-OI-073), before the request

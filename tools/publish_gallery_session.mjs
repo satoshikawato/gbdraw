@@ -72,6 +72,18 @@ const runPython = (task, source, args, input) => new Promise((resolve, reject) =
   child.stdin.end(input);
 });
 
+// Python's plan of the drawn units, as the diagram Worker's `planLinearUnits` gives it.
+const PLAN_LINEAR_UNITS = `
+import json, sys
+from gbdraw.web_support.linear_units import plan_linear_units_json
+payload = json.load(sys.stdin)
+print(plan_linear_units_json(json.dumps(payload['records']), json.dumps(payload['pairs'])))
+`;
+/** @param {{ records: unknown[], pairs: unknown[] }} payload */
+const pythonLinearUnitPlan = async (payload) => ({
+  result: JSON.parse(await runPython('unit plan', PLAN_LINEAR_UNITS, [], JSON.stringify(payload)))
+});
+
 /** @type {import('../gbdraw/web/js/services/gallery-session-publication.js').PublicationDraftSplit} */
 const pythonDraftSplit = async (draft, context) => JSON.parse(
   await runPython('draft split', SPLIT_DRAFT, [], JSON.stringify({ draft, context }))
@@ -88,6 +100,7 @@ const {
   readRequest: readPublishedRenderRequest,
   projectRequest: projectCanonicalSessionRequest,
   resolveComparisonPlan: resolveLinearComparisonPlan,
+  planLinearUnits: pythonLinearUnitPlan,
   splitDraft: pythonDraftSplit
 });
 

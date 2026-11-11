@@ -498,9 +498,9 @@ test('isCurrentFeature is a pure check of the committed record, its bound source
       selector: { kind: 'recordIndex', index: 1 } }
   ] };
   const sources = [
-    { scope: 'linear', sourceUid: 'seq-a', source: genbank, paired: null },
-    { scope: 'linear', sourceUid: 'seq-b', source: gff, paired: fasta },
-    { scope: 'linear', sourceUid: 'seq-c', source: genbank, paired: null }
+    { drawingId: 'linear', scope: 'linear', sourceUid: 'seq-a', source: genbank, paired: null },
+    { drawingId: 'linear', scope: 'linear', sourceUid: 'seq-b', source: gff, paired: fasta },
+    { drawingId: 'linear', scope: 'linear', sourceUid: 'seq-c', source: genbank, paired: null }
   ];
   const saved = new Map([['a', genbank], ['b-gff', gff], ['b-fasta', fasta], ['c', genbank]]);
   const binding = { request, sources, boundSources: sources.map((entry) => ({ ...entry })),
@@ -516,6 +516,8 @@ test('isCurrentFeature is a pure check of the committed record, its bound source
   // A source replaced after the request was committed is not the bound one.
   assert.equal(current('seq-a', { sources: [{ ...sources[0], source: {} }, ...sources.slice(1)] }), false);
   assert.equal(current('seq-a', { boundSources: binding.boundSources.slice(1) }), false);
+  // A card of the same uid and file in another drawing is not the bound one (Find in other files reuses the uids).
+  assert.equal(current('seq-a', { boundSources: binding.boundSources.map((entry) => ({ ...entry, drawingId: 'linear-2' })) }), false);
   // Both the primary input and its paired FASTA match the committed Session.
   assert.equal(current('seq-a', { matchesSavedSource: () => false }), false);
   assert.equal(current('seq-b:1', { matchesSavedSource: (file, resourceId) => resourceId !== 'b-fasta' }), false);
@@ -528,7 +530,7 @@ test('a feature whose record key is not text is not current, with a source drawn
   const request = { mode: 'linear', records: [
     { recordKey: 'card', cardinality: 'all', source: { kind: 'genbank', resourceId: 'a' }, selector: null }
   ] };
-  const sources = [{ scope: 'linear', sourceUid: 'card', source: file, paired: null }];
+  const sources = [{ drawingId: 'linear', scope: 'linear', sourceUid: 'card', source: file, paired: null }];
   const binding = { request, sources, boundSources: sources.map((entry) => ({ ...entry })), matchesSavedSource: () => true };
   assert.equal(isCurrentFeature({ record_key: 'card:1' }, binding), true);
   for (const feature of [{}, { record_key: null }, { recordKey: 'card:1' }, { record_key: 5 }, { record_key: ['card:1'] },
@@ -677,6 +679,17 @@ test('alignment orients the shown drawing\'s card when another drawing has a car
   assert.equal(source.linearSeqs[0].region_reverse, false);
   model.controls.restoreAlignmentOrientationIntent(shown, checkpoint);
   assert.equal(shown.linearSeqs[0].region_reverse, false);
+});
+
+// A Linear record's orientation owner is its card when that card draws it alone in the record's own drawing, also when
+// the shown drawing has no card of that uid (a History checkpoint captures every drawing's drafts).
+test('a record\'s orientation owner is counted in its own drawing, not the shown one', () => {
+  const model = circularControls({ linear: true });
+  const row = { ...model.controls.rows.value.find((entry) => entry.sourceUid === 'record-2') };
+  const { shown, source } = addSourceDrawingOfSameUids(model.state);
+  assert.equal(model.controls.captureTargetDraft({ ...row, drawingId: source.id }).ownerUid, 'record-2');
+  shown.linearSeqs.splice(1, 1);
+  assert.equal(model.controls.captureTargetDraft({ ...row, drawingId: source.id }).ownerUid, 'record-2');
 });
 
 test('Circular discovery metadata belongs only to the current source and complete input pair', () => {

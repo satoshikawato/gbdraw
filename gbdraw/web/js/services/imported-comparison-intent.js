@@ -1,14 +1,15 @@
 // @ts-check
 /** @import { LinearSeq } from './drawing/inputs.js' */
 /** @import { LinearComparisonEdge, LinearComparisonLayoutRow, LinearComparisonResolution } from './linear-comparisons.js' */
-/** @import { LinearUnitPlanPayload, LinearUnitRecord, LinearUnitSearch, LinearCardPlacesOf } from './linear-units.js' */
+/** @import { LinearDrawnUnit, LinearUnitPlan, LinearUnitPlanPayload, LinearUnitRecord, LinearUnitSearch, LinearCardPlacesOf } from './linear-units.js' */
+/** @import { CanonicalRecordWindow } from '../contracts/request.generated.js' */
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
 import { COMPARISON_THRESHOLD_KEYS } from '../mode-profiles.js';
 import {
   LINEAR_COMPARISON_MODES, LINEAR_COMPARISON_SOURCES, createLinearComparisonEdge, resolveLinearComparisonPlan
 } from './linear-comparisons.js';
 import {
-  drawsSeveralUnits, planLinearUnitSearch, savedPairsUnitSearch, unitRecordInputs, unitRecordsOf
+  drawsSeveralUnits, planLinearUnitSearch, readLinearUnitPlan, savedPairsUnitSearch, unitRecordInputs, unitRecordsOf
 } from './linear-units.js';
 import { readStoredCollinearityParams } from './losat-normalization.js';
 import { diagnosticError } from '../utils/error-normalization.js';
@@ -86,6 +87,12 @@ import { toRaw } from '../utils/vue-raw.js';
  * What Generate's Inherit searches for a saved LOSATP pipeline (`inheritedPipelineSearch`): the pipeline, the searches
  * of its unit pairs, and the score thresholds the saved request sets (`SavedComparisonSource.thresholds`).
  * @typedef {{ pipeline: SavedPipeline, unitSearch: LinearUnitSearch, thresholds: SavedComparisonSource['thresholds'] }} InheritedPipelineSearch
+ */
+/** Runs the Worker helper `planLinearUnits`. @typedef {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} LinearUnitPlanner */
+/**
+ * The drawn units Python plans (`planLinearUnits`) for the saved records and for the records a request draws: Inherit
+ * carries each saved unit index to the drawn unit of the same unit key and window (`inheritUnitPlans`).
+ * @typedef {{ saved: LinearUnitPlan, candidate: LinearUnitPlan }} InheritUnitPlans
  */
 /**
  * A History checkpoint of a commit that carries the saved comparison: the caller's checkpoint and the drawn units of
@@ -718,41 +725,77 @@ const inheritChoiceRequired = (reason) => diagnosticError('COMPARISON_CHOICE_REQ
   { operation: 'generate' });
 
 /**
+ * Python's plans of the drawn units of the saved records and of `candidateRecords` (`InheritUnitPlans`), or null when
+ * neither draws a record in several windows: each unit is then a record (`drawsSeveralUnits`), found by its key.
+ * @param {readonly SavedUnitInput[]} savedRecords
+ * @param {readonly SavedUnitInput[]} candidateRecords
+ * @param {LinearUnitPlanner} runHelper
+ * @returns {Promise<InheritUnitPlans | null>}
+ */
+const planUnitsOf = async (savedRecords, candidateRecords, runHelper) => {
+  if (!drawsSeveralUnits(savedRecords) && !drawsSeveralUnits(candidateRecords)) return null;
+  /** @param {readonly SavedUnitInput[]} records */
+  const plan = async (records) => {
+    /** @type {LinearUnitPlanPayload} */
+    const payload = { records: records.map(({ recordKey: key, windows }) => (
+      { recordKey: key, windows: /** @type {CanonicalRecordWindow[]} */ (windows), gridRow: null })), pairs: [] };
+    return readLinearUnitPlan((await runHelper(payload)).result, payload);
+  };
+  return { saved: await plan(savedRecords), candidate: await plan(candidateRecords) };
+};
+
+/**
+ * The plans `inheritSavedComparison` carries a saved comparison into `candidate` by (Generate's Inherit, Gallery
+ * publication's rebuild).
+ * @param {{ candidate: { renderRequest?: SavedRenderRequest }, source: SavedComparisonSource | null, runHelper: LinearUnitPlanner }} input
+ * @returns {Promise<InheritUnitPlans | null>}
+ */
+export const inheritUnitPlans = ({ candidate, source: held, runHelper }) => {
+  const source = toRaw(held);
+  const records = Array.isArray(candidate.renderRequest?.records) ? candidate.renderRequest.records : [];
+  return source === null ? Promise.resolve(null) : planUnitsOf(source.records, unitInputsOf(records), runHelper);
+};
+
+/** @param {LinearDrawnUnit['window']} saved @param {LinearDrawnUnit['window']} drawn */
+const sameWindow = (saved, drawn) => (saved === null || drawn === null ? saved === drawn
+  : saved.start === drawn.start && saved.end === drawn.end && saved.reverseComplement === drawn.reverseComplement);
+
+/**
  * The saved index of a drawn unit, carried into a request that draws `candidateRecords`. The saved indexes count drawn
- * units (OV-2995). Python plans the units from the records' keys and windows (`planLinearUnits`): one per window of a
- * record, in its window list's order, else the record itself (`record_drawn_windows`). A request that draws the same
- * records in the same windows draws the same units, in the order of its records, which Load may change
- * (`normalizeWebGridColumnOrdering`, OV-3365): each saved unit is found by its record's key and its window. A request
- * whose windows differ draws other units. Without windows a unit is a record, found by its key.
+ * units (OV-2995), which Python plans (`units`, `planUnitsOf`). Each saved unit is the candidate's unit of the same
+ * unit key and window, wherever the request draws it: Load may order the records differently (OV-3365), and two
+ * windows of one record may draw the same span (D-18). A request that draws other units asks for the choice. Without
+ * a record drawn in several windows a unit is a record, found by its key.
  * @param {SavedComparisonSource} source
  * @param {readonly SavedUnitInput[]} candidateRecords
+ * @param {InheritUnitPlans | null} units Python's plans of the two, when either draws a record in several windows.
  * @returns {(value: unknown) => number}
  */
-const savedIndexCarrier = (source, candidateRecords) => {
+const savedIndexCarrier = (source, candidateRecords, units) => {
   const committedRecords = source.records;
+  if (drawsSeveralUnits(committedRecords) || drawsSeveralUnits(candidateRecords)) {
+    if (units === null) throw new Error('Inherit needs the unit plans of records drawn in several windows.');
+    const candidateIndex = new Map(units.candidate.units.map((unit, index) => [unit.unitKey, index]));
+    const carried = units.saved.units.map((unit) => {
+      const index = candidateIndex.get(unit.unitKey);
+      return index !== undefined && sameWindow(unit.window, units.candidate.units[index].window) ? index : -1;
+    });
+    if (carried.length !== candidateIndex.size || carried.includes(-1)) throw inheritChoiceRequired('INHERIT_UNITS_CHANGED');
+    return (value) => {
+      const index = carried[Number(value)];
+      if (!Number.isInteger(Number(value)) || index === undefined) throw inheritChoiceRequired('INHERIT_UNITS_CHANGED');
+      return index;
+    };
+  }
   /** @type {Map<string, number>} */
   const candidateIndexByKey = new Map();
   candidateRecords.forEach(({ recordKey: key }, index) => {
     if (candidateIndexByKey.has(key)) throw inheritChoiceRequired();
     candidateIndexByKey.set(key, index);
   });
-  const windowed = drawsSeveralUnits(committedRecords) || drawsSeveralUnits(candidateRecords);
-  /** @param {unknown} window */
-  const span = (window) => (isObject(window) ? [window.start, window.end, window.reverseComplement] : window);
-  /** @param {readonly SavedUnitInput[]} unitInputs @returns {string[]} Each drawn unit's record key and window. */
-  const drawnUnits = (unitInputs) => unitInputs.flatMap(({ recordKey: key, windows }) => (windows.length > 0
-    ? windows.map((window) => JSON.stringify([key, span(window)])) : [JSON.stringify([key])]));
-  const savedUnits = drawnUnits(committedRecords);
-  const candidateUnitIndex = new Map(drawnUnits(candidateRecords).map((unit, index) => [unit, index]));
-  if (windowed && (candidateUnitIndex.size !== savedUnits.length || !savedUnits.every((unit) => candidateUnitIndex.has(unit)))) {
-    throw inheritChoiceRequired('INHERIT_UNITS_CHANGED');
-  }
   return (value) => {
     const sourceIndex = Number(value);
-    if (windowed && Number.isInteger(sourceIndex) && sourceIndex >= 0 && sourceIndex < savedUnits.length) {
-      return /** @type {number} */ (candidateUnitIndex.get(savedUnits[sourceIndex]));
-    }
-    if (windowed || !Number.isInteger(sourceIndex) || !committedRecords[sourceIndex]) throw inheritChoiceRequired('INHERIT_UNITS_CHANGED');
+    if (!Number.isInteger(sourceIndex) || !committedRecords[sourceIndex]) throw inheritChoiceRequired('INHERIT_UNITS_CHANGED');
     const candidateIndex = candidateIndexByKey.get(committedRecords[sourceIndex].recordKey);
     if (candidateIndex === undefined) throw inheritChoiceRequired('INHERIT_UNITS_CHANGED');
     return candidateIndex;
@@ -794,7 +837,8 @@ export const inheritedPipelineSearch = async ({ source: held, cards, placesOf, r
   const source = toRaw(held);
   const pipeline = source === null ? null : searchedPipelineOf(source);
   if (source === null || pipeline === null) return null;
-  const carry = savedIndexCarrier(source, unitRecordInputs(cards, placesOf));
+  const candidate = unitRecordInputs(cards, placesOf);
+  const carry = savedIndexCarrier(source, candidate, await planUnitsOf(source.records, candidate, runHelper));
   /** @param {LinearComparisonEdge[]} edges The selected record pairs; none plans the records of adjacent rows. */
   const losatPlan = (edges) => requirePlan(resolveLinearComparisonPlan({
     ...plan,
@@ -821,12 +865,13 @@ export const inheritedPipelineSearch = async ({ source: held, cards, placesOf, r
  * Generate's Inherit: puts the saved comparison of a drawing (`source`, its Imported comparison state's) into the
  * request Generate built without one. A comparison it cannot carry into this request (its drawn windows or records
  * changed) asks for the choice in the Comparison panel (`COMPARISON_CHOICE_REQUIRED`). When Generate `searched` the
- * saved pipeline (`inheritedPipelineSearch`), the request keeps what the search wrote in its place.
+ * saved pipeline (`inheritedPipelineSearch`), the request keeps what the search wrote in its place. `units` are
+ * Python's plans of the saved and the candidate's drawn units (`inheritUnitPlans`).
  * @template {{ renderRequest?: SavedRenderRequest, resources: SavedResources }} C
- * @param {{ candidate: C, source: SavedComparisonSource | null, searched?: boolean }} inherit
+ * @param {{ candidate: C, source: SavedComparisonSource | null, searched?: boolean, units?: InheritUnitPlans | null }} inherit
  * @returns {C}
  */
-export const inheritSavedComparison = ({ candidate, source: held, searched = false }) => {
+export const inheritSavedComparison = ({ candidate, source: held, searched = false, units = null }) => {
   // The drawing state holds the source behind a Vue proxy; a resource descriptor goes into the request as it is.
   const source = toRaw(held);
   if (!isObject(candidate?.renderRequest)) throw inheritChoiceRequired();
@@ -834,7 +879,7 @@ export const inheritSavedComparison = ({ candidate, source: held, searched = fal
   const candidateRecords = Array.isArray(candidate.renderRequest.records)
     ? candidate.renderRequest.records
     : [];
-  const remapIndex = savedIndexCarrier(source, unitInputsOf(candidateRecords));
+  const remapIndex = savedIndexCarrier(source, unitInputsOf(candidateRecords), units);
   const searchedPipeline = searched ? searchedPipelineOf(source) : null;
   const searchedComparisons = searched && Array.isArray(candidate.renderRequest.comparisons)
     ? candidate.renderRequest.comparisons : [];

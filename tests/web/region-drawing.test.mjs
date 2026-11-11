@@ -548,7 +548,9 @@ result = json.dumps(plan_linear_units(payload['records'], payload['pairs']))
   // Generate's request after Inherit: the draft request without a comparison of its own, then the inherited one.
   const candidate = structuredClone((await projectOf(made)).envelope);
   candidate.renderRequest.comparisons = [];
-  intents.inheritSavedComparison({ candidate, source: made.importedComparisonIntent.source });
+  const { source: saved } = made.importedComparisonIntent;
+  intents.inheritSavedComparison({ candidate, source: saved,
+    units: await intents.inheritUnitPlans({ candidate, source: saved, runHelper: planLinearUnits }) });
   const inherited = candidate.renderRequest.comparisons.find((comparison) => comparison.kind === 'generatedProteinComparison');
   assert.deepEqual(inherited.pairs, [
     { queryRecordIndex: 0, subjectRecordIndex: 2 }, { queryRecordIndex: 1, subjectRecordIndex: 2 }

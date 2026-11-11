@@ -18,12 +18,23 @@ import {
 } from '../../gbdraw/web/js/services/linear-units.js';
 import {
   inheritSavedComparison,
+  inheritUnitPlans,
   inheritedPipelineSearch,
   savedComparisonSource
 } from '../../gbdraw/web/js/services/imported-comparison-intent.js';
 import { pythonLinearUnitPlan } from './helpers/linear-unit-plan.mjs';
 
 const pythonPlan = pythonLinearUnitPlan;
+/** Python's `planLinearUnits`, as the diagram Worker runs it. */
+const planLinearUnits = async (payload) => ({ result: pythonPlan(payload) });
+/**
+ * Generate's Inherit after its searches: Python plans the saved and the drawn units, and the comparison is carried by
+ * them (`inheritUnitPlans`).
+ * @param {Parameters<typeof inheritSavedComparison>[0]} input
+ */
+const inheritPlanned = async (input) => inheritSavedComparison({
+  ...input, units: await inheritUnitPlans({ candidate: input.candidate, source: input.source, runHelper: planLinearUnits })
+});
 /**
  * The places the request writes for the drawn cards (`linearDrawingUnitPlaces`, the request's own owner), with the
  * Record Layout's rows when `rows` is given.
@@ -202,10 +213,10 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
   const inherited = await search(saved([[0, 2], [1, 3]]));
   assert.ok(inherited);
   assert.deepEqual(inherited.pipeline.settings, settings);
-  // Python plans the units of the drawn cards; the Web derives no unit itself.
-  assert.deepEqual(asked, [{
-    records: cards.map((card) => ({ recordKey: card.uid, windows: windowsOf(card), gridRow: null })), pairs: []
-  }]);
+  // Python plans the units of the saved records and of the drawn cards, which Inherit carries the saved indexes by,
+  // then those of the searches; the Web derives no unit itself.
+  const unitPlan = { records: cards.map((card) => ({ recordKey: card.uid, windows: windowsOf(card), gridRow: null })), pairs: [] };
+  assert.deepEqual(asked, [unitPlan, unitPlan, unitPlan]);
   const { resolution, sequences } = inherited.unitSearch;
   assert.equal(resolution.valid, true, resolution.error);
   assert.equal(resolution.hasLosatIntent, true);
@@ -225,7 +236,7 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
     },
     resources: { searched: { kind: 'canonical-tsv' } }
   };
-  inheritSavedComparison({ candidate, source: saved([[0, 2], [1, 3]]), searched: true });
+  await inheritPlanned({ candidate, source: saved([[0, 2], [1, 3]]), searched: true });
   assert.deepEqual(candidate.renderRequest.comparisons, searched);
   assert.deepEqual(candidate.renderRequest.diagramOptions, { bitscore: 40 });
   // A pipeline that names no pairs (a CLI Session before 0.15.0) searches what Python's Pairwise searches without
@@ -233,7 +244,7 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
   asked.length = 0;
   const adjacent = await search(saved([]));
   assert.ok(adjacent);
-  assert.deepEqual(asked.map((payload) => payload.pairs), [[{ queryRecordKey: 'a', subjectRecordKey: 'b', source: 'losat' }]]);
+  assert.deepEqual(asked.map((payload) => payload.pairs), [[], [], [{ queryRecordKey: 'a', subjectRecordKey: 'b', source: 'losat' }]]);
   const adjacentSpecs = buildLosatJobSpecs({
     resolution: adjacent.unitSearch.resolution, recordCount: adjacent.unitSearch.sequences.length,
     recordUids: adjacent.unitSearch.sequences.map((seq) => seq.uid),
@@ -251,15 +262,16 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
   asked.length = 0;
   await assert.rejects(search(saved([[0, 2]], [cards[0], createLinearSeq({ uid: 'b', windows: [window(10, 90)] })])),
     (error) => error.code === 'COMPARISON_CHOICE_REQUIRED' && error.context?.reason === 'INHERIT_UNITS_CHANGED');
-  assert.deepEqual(asked, []);
+  assert.deepEqual(asked.map((payload) => payload.pairs), [[], []], 'the two unit plans, and no search');
 });
 
 // OV-3365: Load orders the cards of a request Python wrote (`normalizeWebGridColumnOrdering`), and that order can differ
-// from the order the request stores its records in, which the saved unit indexes count. Inherit finds each saved unit
-// in the cards by its record and window, so the first Generate searches exactly the saved unit pairs, whatever the
-// order. The cases: the drawing Find in other files writes for the Vibrio plasmids (a row of contig 80 in two windows
-// at columns 1 and 4, contig 79 at column 2 and contig 86 at column 3), and a row of B in two windows at columns 2 and
-// 3 before A at column 1, with C in the next row.
+// from the order the request stores its records in, which the saved unit indexes count. Inherit carries each saved
+// unit to the drawn unit of the same key and window in Python's plans, so the first Generate searches exactly the saved
+// unit pairs. The cases: the drawing Find in other files writes for the Vibrio plasmids (a row of contig 80 in two
+// windows at columns 1 and 4, contig 79 at column 2 and contig 86 at column 3), which Load orders 79, 80, 86; a row of
+// A in two windows and B at column 2, which Load orders B, A; and A drawn twice in the same span (D-18, "+ Add window"
+// on an uncropped card), whose order Load keeps.
 test('Inherit carries each saved unit pair to the same windows when Load orders the cards differently', async () => {
   const settings = { proteinBlastpMaxHits: 3, proteinBlastpCandidateLimit: null };
   const cases = [
@@ -272,23 +284,36 @@ test('Inherit carries each saved unit pair to the same windows when Load orders 
         { recordKey: 'contig-79', presentation: { gridRow: 3, gridColumn: 2 }, windows: [] },
         { recordKey: 'contig-86', presentation: { gridRow: 3, gridColumn: 3 }, windows: [window(1, 27527)] }
       ],
+      loaded: ['reference', 'plasmid', 'contig-79', 'contig-80', 'contig-86'],
       // Units in stored order: reference 0, plasmid 1, contig 80's windows 2 and 3, contig 79 4, contig 86 5.
       pairs: [[0, 1], [1, 2], [1, 3], [1, 4], [1, 5]]
     },
     {
       records: [
-        { recordKey: 'B', presentation: { gridRow: 1, gridColumn: null }, windows: [window(1, 100, false, 2), window(201, 300, false, 3)] },
-        { recordKey: 'A', presentation: { gridRow: 1, gridColumn: 1 }, windows: [] },
-        { recordKey: 'C', presentation: { gridRow: 2, gridColumn: 1 }, windows: [] }
+        { recordKey: 'R', presentation: { gridRow: 1, gridColumn: 1 }, windows: [] },
+        { recordKey: 'C', presentation: { gridRow: 3, gridColumn: 1 }, windows: [] },
+        { recordKey: 'A', presentation: { gridRow: 2, gridColumn: null }, windows: [window(1, 100, false, 1), window(201, 300, false, 3)] },
+        { recordKey: 'B', presentation: { gridRow: 2, gridColumn: 2 }, windows: [] }
       ],
-      // Units in stored order: B's windows 0 and 1, A 2, C 3.
-      pairs: [[0, 3], [1, 3], [2, 3]]
+      loaded: ['R', 'B', 'A', 'C'],
+      // Units in stored order: R 0, C 1, A's windows 2 and 3, B 4.
+      pairs: [[0, 2], [0, 3], [0, 4]]
+    },
+    {
+      records: [
+        { recordKey: 'A', presentation: { gridRow: 1, gridColumn: null }, windows: [window(1, 100, false, 1), window(1, 100, false, 2)] },
+        { recordKey: 'B', presentation: { gridRow: 2, gridColumn: 1 }, windows: [] }
+      ],
+      loaded: ['A', 'B'],
+      // Units in stored order: A's two windows of one span 0 and 1, B 2.
+      pairs: [[0, 2], [1, 2]]
     }
   ];
-  for (const { records, pairs } of cases) {
+  for (const { records, loaded, pairs } of cases) {
     const byKey = new Map(records.map((record) => [record.recordKey, record]));
     const cardOf = (record) => createLinearSeq({ uid: record.recordKey, windows: record.windows.map((entry) => ({ ...entry })) });
     const cards = normalizeWebGridColumnOrdering(records).records.map((record) => cardOf(byKey.get(record.recordKey)));
+    assert.deepEqual(cards.map((card) => card.uid), loaded, 'the order Load gives the cards');
     const rows = records.map((record) => ({ uid: record.recordKey, row: record.presentation.gridRow }));
     // The identity of each unit, in a list of records' unit order: Python's plan of those records names it.
     const unitsOf = (keys) => pythonPlan({ records: keys.map((key) => ({ recordKey: key, windows: byKey.get(key).windows,
@@ -305,7 +330,7 @@ test('Inherit carries each saved unit pair to the same windows when Load orders 
       resources: {}
     });
     const inherited = await inheritedPipelineSearch({
-      source, cards, placesOf: placesOf(rows), runHelper: async (payload) => ({ result: pythonPlan(payload) }),
+      source, cards, placesOf: placesOf(rows), runHelper: planLinearUnits,
       requirePlan: requireLinearComparisonPlanSnapshot, plan: { sequences: cards, recordsOff: [], layout: rows }
     });
     assert.ok(inherited);
@@ -316,6 +341,15 @@ test('Inherit carries each saved unit pair to the same windows when Load orders 
     const candidate = { renderRequest: { records: cards.map((card) => ({ recordKey: card.uid,
       windows: linearWindowsPayload(card, { arranged: true, ordinal: 1, record: { length: null, id: '' } }) })),
       diagramOptions: {}, comparisons: [] }, resources: {} };
-    assert.doesNotThrow(() => inheritSavedComparison({ candidate, source, searched: true }));
+    await inheritPlanned({ candidate, source, searched: true });
+    // A saved comparison copied as saved names the same units by their place in this request.
+    const copied = { renderRequest: { ...structuredClone(candidate.renderRequest), comparisons: [] }, resources: {} };
+    const tables = savedComparisonSource({ renderRequest: { schema: 10, mode: 'linear', records: source.records, diagramOptions: {},
+      comparisons: pairs.map(([queryRecordIndex, subjectRecordIndex]) => ({ kind: 'precomputedProteinComparison',
+        resourceId: 'protein', encoding: 'canonicalTsv', queryRecordIndex, subjectRecordIndex })) },
+    resources: { protein: { kind: 'canonical-tsv' } } });
+    await inheritPlanned({ candidate: copied, source: tables });
+    assert.deepEqual(copied.renderRequest.comparisons.map((table) => `${cardUnits[table.queryRecordIndex]} ${cardUnits[table.subjectRecordIndex]}`),
+      pairs.map(([query, subject]) => `${storedUnits[query]} ${storedUnits[subject]}`));
   }
 });

@@ -241,6 +241,22 @@ const linearDisplaySources = (drawing, linearRecordsFor, linearWindowsOf) => dra
 // R13: the Linear record selector's three readers and History's undoable step
 // arrive as ports; this owner holds neither owner.
 /**
+ * A source's record rows, each with its drawing, crop, orientation and pair; the selector '' builds a row for every
+ * record of the source's files.
+ * @param {DrawingRecordSource} source @param {unknown} [selector]
+ */
+const sourceRows = (source, selector = source.selector) => buildRecordDisplayRows({ ...source, selector }).map((row) => (
+  { ...row, drawingId: source.drawingId, ...source.cropOf(row), reverse: source.reverse, paired: source.paired }));
+/**
+ * The record rows a drawing shows, from its sources (`sourcesOf`). A source whose selector does not read builds none:
+ * its selector control shows the error.
+ * @param {readonly DrawingRecordSource[]} sources
+ */
+const shownRows = (sources) => sources.filter((source) => source.shown).flatMap((source) => {
+  try { return source.source ? sourceRows(source) : []; } catch { return []; }
+});
+
+/**
  * @param {RecordDisplayControlsOptions} options
  */
 export const createRecordDisplayControls = ({
@@ -261,16 +277,8 @@ export const createRecordDisplayControls = ({
     ? circularDisplaySources(drawing) : linearDisplaySources(drawing, linearRecordsFor, linearWindowsOf));
   // The sources of every drawing, in the drawings' order.
   const sources = computed(() => state.drawingList().flatMap(sourcesOf));
-  const allRows = computed(() => sources.value.flatMap((source) => source.source
-    ? buildRecordDisplayRows({ ...source, selector: '' }).map((row) => ({ ...row, drawingId: source.drawingId,
-        ...source.cropOf(row), reverse: source.reverse, paired: source.paired })) : []));
-  const rows = computed(() => sourcesOf(state.activeDrawing()).filter((source) => source.shown)
-    .flatMap((source) => {
-      try {
-        return source.source ? buildRecordDisplayRows(source).map((row) => ({ ...row, drawingId: source.drawingId,
-          ...source.cropOf(row), reverse: source.reverse, paired: source.paired })) : [];
-      } catch { return []; } // Existing selector control owns its visible validation error.
-    }));
+  const allRows = computed(() => sources.value.flatMap((source) => (source.source ? sourceRows(source, '') : [])));
+  const rows = computed(() => shownRows(sourcesOf(state.activeDrawing())));
   // A drawing's drafts on the rows of their sources (OV-278). An edit of a
   // draft first writes them there, within its own step.
   /** @param {DrawingState} drawing */
@@ -287,11 +295,12 @@ export const createRecordDisplayControls = ({
   // N-09). A row that is the only record its card draws writes it there; the
   // row override remains only for Circular and for a Linear card that draws
   // several records.
+  // The rows are counted in the row's own drawing: another drawing can hold a card of the same uid.
   /** @param {DrawingState} drawing the row's drawing @param {{ scope: string, sourceUid: string } | null | undefined} row */
   const linearOrientationOwner = (drawing, row) => {
     if (row?.scope !== 'linear') return null;
     const sequence = drawing.linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === row.sourceUid);
-    return sequence && rows.value.filter((entry) => entry.scope === 'linear'
+    return sequence && shownRows(sourcesOf(drawing)).filter((entry) => entry.scope === 'linear'
       && entry.sourceUid === row.sourceUid).length === 1 ? sequence : null;
   };
   /** @param {DrawingState} drawing @param {RecordDisplayRow} row @param {RecordDisplayDraft} draft @param {boolean | null} reverseComplement */
