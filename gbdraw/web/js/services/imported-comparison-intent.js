@@ -12,6 +12,8 @@ import {
   drawsSeveralUnits, planLinearUnitSearch, readLinearUnitPlan, savedPairsUnitSearch, unitRecordInputs, unitRecordsOf
 } from './linear-units.js';
 import { readStoredCollinearityParams } from './losat-normalization.js';
+import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
+import { shapeViolations } from '../utils/contract-shape.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
 import { toRaw } from '../utils/vue-raw.js';
@@ -86,7 +88,10 @@ import { toRaw } from '../utils/vue-raw.js';
 /**
  * What Generate's Inherit searches for a saved LOSATP pipeline (`inheritedPipelineSearch`): the pipeline, the searches
  * of its unit pairs, and the score thresholds the saved request sets (`SavedComparisonSource.thresholds`).
- * @typedef {{ pipeline: SavedPipeline, unitSearch: LinearUnitSearch, thresholds: SavedComparisonSource['thresholds'] }} InheritedPipelineSearch
+ * `units` are Python's plans of the saved and the drawn units it carried the pairs by, which the request's Inherit
+ * carries the saved comparison's other indexes by too (`inheritSavedComparison`).
+ * @typedef {{ pipeline: SavedPipeline, unitSearch: LinearUnitSearch, thresholds: SavedComparisonSource['thresholds'],
+ *   units: InheritUnitPlans | null }} InheritedPipelineSearch
  */
 /** Runs the Worker helper `planLinearUnits`. @typedef {(payload: LinearUnitPlanPayload) => Promise<{ result?: unknown }>} LinearUnitPlanner */
 /**
@@ -725,6 +730,14 @@ const inheritChoiceRequired = (reason) => diagnosticError('COMPARISON_CHOICE_REQ
   { operation: 'generate' });
 
 /**
+ * Whether each window is a request window (`CanonicalRecordWindow`, the shape Python's decoder reads).
+ * @param {readonly unknown[]} windows
+ * @returns {windows is CanonicalRecordWindow[]}
+ */
+const areRecordWindows = (windows) => windows.every((window) => shapeViolations(window,
+  { kind: 'ref', name: 'CanonicalRecordWindow' }, CANONICAL_REQUEST_DESCRIPTION.types, 'window').length === 0);
+
+/**
  * Python's plans of the drawn units of the saved records and of `candidateRecords` (`InheritUnitPlans`), or null when
  * neither draws a record in several windows: each unit is then a record (`drawsSeveralUnits`), found by its key.
  * @param {readonly SavedUnitInput[]} savedRecords
@@ -737,8 +750,11 @@ const planUnitsOf = async (savedRecords, candidateRecords, runHelper) => {
   /** @param {readonly SavedUnitInput[]} records */
   const plan = async (records) => {
     /** @type {LinearUnitPlanPayload} */
-    const payload = { records: records.map(({ recordKey: key, windows }) => (
-      { recordKey: key, windows: /** @type {CanonicalRecordWindow[]} */ (windows), gridRow: null })), pairs: [] };
+    const payload = { records: records.map(({ recordKey: key, windows }) => {
+      // A window that is no request window (a damaged Session) names no unit: the comparison is not carried.
+      if (!areRecordWindows(windows)) throw inheritChoiceRequired('INHERIT_UNITS_CHANGED');
+      return { recordKey: key, windows, gridRow: null };
+    }), pairs: [] };
     return readLinearUnitPlan((await runHelper(payload)).result, payload);
   };
   return { saved: await plan(savedRecords), candidate: await plan(candidateRecords) };
@@ -775,6 +791,10 @@ const savedIndexCarrier = (source, candidateRecords, units) => {
   const committedRecords = source.records;
   if (drawsSeveralUnits(committedRecords) || drawsSeveralUnits(candidateRecords)) {
     if (units === null) throw new Error('Inherit needs the unit plans of records drawn in several windows.');
+    const planned = [...new Set(units.candidate.units.map((unit) => unit.recordKey))];
+    if (JSON.stringify(planned) !== JSON.stringify(candidateRecords.map(({ recordKey: key }) => key))) {
+      throw new Error('The unit plan is not of the records the request draws.');
+    }
     const candidateIndex = new Map(units.candidate.units.map((unit, index) => [unit.unitKey, index]));
     const carried = units.saved.units.map((unit) => {
       const index = candidateIndex.get(unit.unitKey);
@@ -838,7 +858,8 @@ export const inheritedPipelineSearch = async ({ source: held, cards, placesOf, r
   const pipeline = source === null ? null : searchedPipelineOf(source);
   if (source === null || pipeline === null) return null;
   const candidate = unitRecordInputs(cards, placesOf);
-  const carry = savedIndexCarrier(source, candidate, await planUnitsOf(source.records, candidate, runHelper));
+  const units = await planUnitsOf(source.records, candidate, runHelper);
+  const carry = savedIndexCarrier(source, candidate, units);
   /** @param {LinearComparisonEdge[]} edges The selected record pairs; none plans the records of adjacent rows. */
   const losatPlan = (edges) => requirePlan(resolveLinearComparisonPlan({
     ...plan,
@@ -858,7 +879,7 @@ export const inheritedPipelineSearch = async ({ source: held, cards, placesOf, r
       ({ queryRecordKey, subjectRecordKey }) => createLinearComparisonEdge({
         queryUid: queryRecordKey, subjectUid: subjectRecordKey, source: LINEAR_COMPARISON_SOURCES.LOSAT, included: true
       }))));
-  return { pipeline, unitSearch, thresholds: source.thresholds };
+  return { pipeline, unitSearch, thresholds: source.thresholds, units };
 };
 
 /**

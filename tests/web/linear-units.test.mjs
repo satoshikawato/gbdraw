@@ -353,3 +353,22 @@ test('Inherit carries each saved unit pair to the same windows when Load orders 
       pairs.map(([query, subject]) => `${storedUnits[query]} ${storedUnits[subject]}`));
   }
 });
+
+// A saved window that is no request window (a hand-edited or damaged Session) is not sent to Python: Inherit asks for
+// the choice in the Comparison panel, as for any comparison it cannot carry.
+test('Inherit asks for the choice when a saved window is malformed', async () => {
+  const records = [
+    { recordKey: 'A', windows: [window(1, 100, false, 1), { start: 'x', end: 200, reverseComplement: false, column: 2 }] },
+    { recordKey: 'B', windows: [] }
+  ];
+  const source = savedComparisonSource({
+    renderRequest: { schema: 10, mode: 'linear', diagramOptions: {}, records,
+      comparisons: [{ kind: 'precomputedProteinComparison', resourceId: 'protein', encoding: 'canonicalTsv',
+        queryRecordIndex: 0, subjectRecordIndex: 2 }] },
+    resources: { protein: { kind: 'canonical-tsv' } }
+  });
+  const candidate = { renderRequest: { records: [{ recordKey: 'A', windows: [window(1, 100, false, 1), window(101, 200, false, 2)] },
+    { recordKey: 'B', windows: [] }], diagramOptions: {}, comparisons: [] }, resources: {} };
+  await assert.rejects(inheritPlanned({ candidate, source }),
+    (error) => error.code === 'COMPARISON_CHOICE_REQUIRED' && error.context?.reason === 'INHERIT_UNITS_CHANGED');
+});

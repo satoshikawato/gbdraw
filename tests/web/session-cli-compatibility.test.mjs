@@ -59,7 +59,15 @@ const {
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { chooseRecordLayout, circularRecordLayoutOf } = await import('../../gbdraw/web/js/services/one-circle-layout.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
-const { inheritSavedComparison } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
+const { inheritSavedComparison, inheritUnitPlans } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
+const { pythonLinearUnitPlan } = await import('./helpers/linear-unit-plan.mjs');
+/**
+ * Generate's Inherit of a drawing's saved comparison (run-analysis.js): Python plans the saved and the drawn units
+ * (`inheritUnitPlans`), and the comparison is carried by them.
+ * @param {{ renderRequest: object, resources: object }} candidate @param {unknown} source
+ */
+const inheritAsGenerate = async (candidate, source) => inheritSavedComparison({ candidate, source,
+  units: await inheritUnitPlans({ candidate, source, runHelper: async (payload) => ({ result: pythonLinearUnitPlan(payload) }) }) });
 const { validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -303,7 +311,7 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
         sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup'
       })
     });
-    inheritSavedComparison({ candidate, source: state.activeDrawing().importedComparisonIntent.source });
+    await inheritAsGenerate(candidate, state.activeDrawing().importedComparisonIntent.source);
     const records = candidate.renderRequest.records;
     const [comparison] = candidate.renderRequest.comparisons.filter(item => item.kind === 'nucleotideBlast');
     assert.deepEqual([records[comparison.queryRecordIndex].recordKey, records[comparison.subjectRecordIndex].recordKey],
@@ -410,10 +418,6 @@ resave_python(Path(${JSON.stringify(file)}), Path(${JSON.stringify(resaved)}))
 // draft. The legacy migrator states the adjacent LOSATP comparison its CLI drew,
 // so Generate rebuilds it; without --protein_blastp_mode the same sidecar has
 // no Web comparison draft (No comparison).
-// OV-296: a Session the Python API saved with listed LOSATP pairs (no Web
-// draft, no cliInvocation) stays a read-only comparison, as before this fix:
-// Load states no plan, and Inherit saved comparison keeps the listed pairs
-// rather than every adjacent pair.
 // OV-3382: Load of a Python API Linear Session whose LOSATP Pairwise pipeline lists the pair (0, 1) of three records:
 // the Comparison controls hold the pipeline, the listed pair as their Selected pair, and Generate's request from the
 // controls runs that pair only. Returns the drawing.
@@ -893,7 +897,7 @@ const nextGenerate = async () => {
       plan: drawing.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
       losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat.blastp.mode
     }) : null });
-  if (inherit) inheritSavedComparison({ candidate, source: drawing.importedComparisonIntent.source });
+  if (inherit) await inheritAsGenerate(candidate, drawing.importedComparisonIntent.source);
   return candidate;
 };
 

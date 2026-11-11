@@ -3125,7 +3125,8 @@ export const createRunAnalysis = ({
       // The comparison plan the request writes: over drawn units in Linear mode (OV-2738).
       let requestComparisonPlan = activeComparisonPlanSnapshot;
       let requestDrawnUnits = /** @type {LinearUnitSearch | null} */ (null); // The units its comparison indexes count.
-      let searchedSavedPipeline = false; // Whether it searched the saved pipeline Inherit runs (OV-3003).
+      /** @type {InheritedPipelineSearch | null} */
+      let searchedSavedPipeline = null; // The saved pipeline Inherit runs, when it searched it (OV-3003).
       // The rings the ring searches read and their tables, in ring order (`losatRequestRings`); none without a search.
       /** @type {SearchedRingAdoption['searched']} */ let searchedRings = [];
       /** @type {{ name: string, text: string }[]} */ let searchedRingTables = [];
@@ -3648,7 +3649,7 @@ export const createRunAnalysis = ({
         linearDrawingUnitPlaces(drawing, catalogRecordOf), planLinearUnits);
         const searchDrawing = inherited ? savedPipelineSearchDrawing(drawing, inherited.pipeline) : drawing;
         if (inherited) requestDrawing = savedPipelineSearchDrawing(requestDrawing, inherited.pipeline);
-        searchedSavedPipeline = inherited !== null;
+        searchedSavedPipeline = inherited;
         const { resolution: unitResolution, sequences: unitSeqs } = unitSearch;
         const unitPlaces = searchUnitPlaces(unitSearch);
         const hasComparisonIntent = unitResolution.hasComparisonIntent === true;
@@ -5093,8 +5094,10 @@ export const createRunAnalysis = ({
       // without a Result has no committed Session (OV-3001).
       if (useSavedComparison) {
         const { source } = drawing.importedComparisonIntent;
-        const units = await inheritUnitPlans({ candidate: canonical, source, runHelper: planLinearUnits });
-        inheritSavedComparison({ candidate: canonical, source, searched: searchedSavedPipeline, units });
+        // A searched pipeline's search planned the same records: its plans carry the rest of the comparison too.
+        const units = searchedSavedPipeline
+          ? searchedSavedPipeline.units : await inheritUnitPlans({ candidate: canonical, source, runHelper: planLinearUnits });
+        inheritSavedComparison({ candidate: canonical, source, searched: searchedSavedPipeline !== null, units });
       }
       // A ring LOSAT search reports positions on the whole reference file (D-25); Python puts its rows in the
       // search frame of the records this request draws, as every ring table is (PD-OI-073), before the request
