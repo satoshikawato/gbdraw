@@ -461,7 +461,10 @@ U+0085 are spaces, and the byte order mark U+FEFF is not. What it cannot use
 is repaired instead of refused, and each repair is a row in the dialog:
 
 - an unknown setting is dropped;
-- an invalid value is reset to its default or left unset;
+- an invalid value is reset to its default or left unset; a Circular track
+  slot's inner or outer gap below zero, for example, reads as Auto, and so
+  does a number too large to hold (such as `1e400`) in any number setting.
+  The CLI and the Python API refuse both;
 - an unreadable entry of a list is dropped;
 - a part that cannot be read is left out with the settings inside it, or
   replaced by its default when it has one;

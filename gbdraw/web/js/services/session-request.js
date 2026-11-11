@@ -151,7 +151,7 @@ import { classifyOptionalPositiveNumber, integerSettingOr, projectOptionalNumber
 import { diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
 import { loadRepair } from '../utils/load-repairs.js';
 import { repairByDescription } from '../utils/contract-repair.js';
-import { isPlainObject } from '../utils/contract-shape.js';
+import { isPlainObject, shapeViolations } from '../utils/contract-shape.js';
 import { DEFINITION_LINE_STYLE_KINDS, requireDefinitionLineFontSizes } from './definition-line-style-state.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { drawsOneCircle, oneCircleAdvOfLayout, oneCircleLeftOfRequest, oneCircleRequestLayout } from './one-circle-layout.js';
@@ -6351,6 +6351,10 @@ const requestCircularTrackSlots = (tracks, defaultNt, preset) => {
     : null;
 };
 
+const CIRCULAR_SLOT_FIELDS = /** @type {import('../utils/contract-shape.js').ObjectShape} */ (
+  CANONICAL_REQUEST_DESCRIPTION.types.CanonicalCircularTrackSlot
+).fields;
+
 /** @param {unknown} slot */
 const projectCurrentCanonicalCircularSlot = (slot) => {
   if (
@@ -6360,8 +6364,9 @@ const projectCurrentCanonicalCircularSlot = (slot) => {
     ))
   ) throw new Error('Current canonical circular track slot uses an obsolete shape.');
   for (const field of ['innerGapPx', 'outerGapPx']) {
-    const value = slot[field];
-    if (value !== null && value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
+    // The gap's domain is the request description's; the stored-request reader repaired a gap outside it
+    // (OV-3237).
+    if (shapeViolations(slot[field] ?? null, CIRCULAR_SLOT_FIELDS[field], CANONICAL_REQUEST_DESCRIPTION.types, field).length) {
       throw new Error(`Canonical Circular track ${field} must be a nonnegative finite number or null.`);
     }
   }

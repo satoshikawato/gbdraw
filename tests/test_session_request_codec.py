@@ -2501,6 +2501,35 @@ def test_annotation_targets_and_styles_round_trip(tmp_path: Path) -> None:
     assert encode_canonical_request(decoded).payload == encoded.payload
 
 
+@pytest.mark.parametrize(
+    "path",
+    [("target", "start"), ("target", "end"), ("lane",)],
+)
+def test_an_infinite_annotation_coordinate_is_a_decoding_error(tmp_path: Path, path: tuple[str, ...]) -> None:
+    """Python's json reads `1e400` as inf; the integer reading of a coordinate or a lane
+    refuses it as the decoder's error, not an OverflowError (OV-3390)."""
+    record = SeqRecord(Seq("ATGCGC" * 20), id="memory-record", annotations={"molecule_type": "DNA"})
+    annotation = RegionAnnotation("coordinates", CoordinateSpan(parse_record_selector("#1"), 2, 20), lane=1)
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(record)),),
+        options=LinearDiagramOptions(
+            annotations=AnnotationOptions(sets=(AnnotationSet("review", (annotation,)),))
+        ),
+    )
+    encoded = encode_canonical_request(request)
+    payload = copy.deepcopy(encoded.payload)
+    stored = payload["diagramOptions"]["annotations"]["sets"][0]["annotations"][0]
+    for key in path[:-1]:
+        stored = stored[key]
+    stored[path[-1]] = json.loads("1e400")
+    with pytest.raises(CanonicalRequestDecodingError, match="could not be converted"):
+        decode_canonical_request(
+            payload,
+            resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+            output_directory=tmp_path / "output",
+        )
+
+
 def test_linear_placements_overrides_slots_and_feature_identity_round_trip(
     tmp_path: Path,
 ) -> None:

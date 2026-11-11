@@ -50,6 +50,13 @@ def test_the_checker_reports_python_s_reading_of_a_json_difference(difference: d
     assert _rows(json.loads(difference["text"]), difference["shape"]) == difference["python"]
 
 
+@pytest.mark.parametrize("text", ["NaN", "Infinity", "-Infinity", "1e400"])
+def test_python_reads_no_non_finite_number_as_a_number(text: str) -> None:
+    """Python's json reads these as numbers; JSON has none, so no number field takes one.
+    ``JSON.parse`` refuses the first three and reads ``1e400`` as Infinity (the vector above)."""
+    assert _rows(json.loads(text), {"kind": "number"}) == [{"path": "value", "reason": "wrong-kind"}]
+
+
 @pytest.mark.parametrize("vector", VECTORS["spellings"], ids=lambda vector: vector["id"])
 def test_a_literal_reads_each_spelling_as_its_name(vector: dict[str, Any]) -> None:
     shape = vector["shape"]

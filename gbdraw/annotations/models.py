@@ -122,7 +122,8 @@ class CoordinateSpan:
             raise ValidationError("Annotation coordinates must be integers.")
         try:
             start, end = int(self.start), int(self.end)
-        except (TypeError, ValueError) as exc:
+        # An infinite coordinate (`1e400` in JSON) has no integer (OV-3390).
+        except (TypeError, ValueError, OverflowError) as exc:
             raise ValidationError("Annotation coordinates must be integers.") from exc
         if start < 1 or end < 1:
             raise ValidationError("Annotation coordinates are 1-based and must be >= 1.")
@@ -346,9 +347,13 @@ class RegionAnnotation:
                 "Annotation mark must be 'line', 'bracket', 'band', or 'highlight'."
             )
         if self.lane is not None:
-            if isinstance(self.lane, bool) or int(self.lane) < 0:
+            try:
+                lane = None if isinstance(self.lane, bool) else int(self.lane)
+            except OverflowError as exc:  # an infinite lane (`1e400` in JSON) has no integer (OV-3390)
+                raise ValidationError("Annotation lane must be a non-negative integer.") from exc
+            if lane is None or lane < 0:
                 raise ValidationError("Annotation lane must be a non-negative integer.")
-            object.__setattr__(self, "lane", int(self.lane))
+            object.__setattr__(self, "lane", lane)
         if self.style is not None and not isinstance(self.style, RegionAnnotationStyle):
             raise ValidationError("Annotation style must be RegionAnnotationStyle or None.")
         if self.strand not in {None, "+", "-"}:

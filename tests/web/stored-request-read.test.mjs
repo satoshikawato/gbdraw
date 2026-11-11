@@ -526,6 +526,60 @@ test('the schema 5 to 7 promotion leaves a record that is not an object to the r
   }
 });
 
+test('a Circular track gap below zero or not finite takes its default with a row, as a gap that is no number does (OV-3237)', async () => {
+  // Python's request reader refuses such a gap (CircularRequestTrackOptions reads it with parse_optional_pixel);
+  // the request description carries that domain, and JSON has no infinite number (`1e400` reads as Infinity), so
+  // the Web reader repairs it like any other unreadable gap.
+  const session = gallery('HmmtDNA_ATskew');
+  const at = 'renderRequest.diagramOptions.tracks.circularTrackSlots';
+  for (const [inner, outer] of [[-1, -0.5], [Infinity, -1e-9], ['10', true]]) {
+    const result = readRequest(session, (request) => {
+      Object.assign(request.diagramOptions.tracks.circularTrackSlots[1], { innerGapPx: inner, outerGapPx: outer });
+    });
+    assert.deepEqual(rows(result), [
+      { code: 'setting-replaced', path: `${at}[1].innerGapPx` }, { code: 'setting-replaced', path: `${at}[1].outerGapPx` }
+    ], String(inner));
+    assert.deepEqual(result.value.diagramOptions, session.renderRequest.diagramOptions, String(inner));
+  }
+  // Zero, also negative zero, is a gap Python reads.
+  const zero = readRequest(session, (request) => {
+    Object.assign(request.diagramOptions.tracks.circularTrackSlots[1], { innerGapPx: 0, outerGapPx: -0 });
+  });
+  assert.deepEqual(rows(zero), []);
+  // At Load, through the file's text, in the shown drawing and in another one, the gap is listed, never an
+  // unrecognized failure.
+  const fileOf = (document, stored) => new File(
+    [JSON.stringify(document).replace('"stored-gap"', stored)], 'session.json', { type: 'application/json' }
+  );
+  const loadFile = async (file) => {
+    const dialogs = [];
+    const result = await importSession({ target: { files: [file], value: 'selected' } }, {
+      transformLegacyResultSvg, confirmLoadRepairs: async (dialog) => { dialogs.push(dialog.items); return true; }
+    });
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    return dialogs.flat();
+  };
+  const replaced = (place, field) => `Settings: the value of ${place}${at}[1].${field} cannot be used; its default is used.`;
+  for (const [field, stored] of [['innerGapPx', '-1'], ['outerGapPx', '-1'], ['innerGapPx', '1e400'], ['outerGapPx', '-1e400']]) {
+    const shown = clone(session);
+    shown.renderRequest.diagramOptions.tracks.circularTrackSlots[1][field] = 'stored-gap';
+    assert.deepEqual(await loadFile(fileOf(asSaved(shown), stored)), [replaced('drawings[0].', field)], `${field} ${stored}`);
+    assert.equal(getCommittedCanonicalSession().renderRequest.diagramOptions.tracks.circularTrackSlots[1][field], null);
+  }
+  const { drawingOrigin, ...view } = session;
+  const { drawingOrigin: _shownOrigin, ...shownView } = clone(session);
+  shownView.renderRequest.diagramOptions.tracks.circularTrackSlots[1].innerGapPx = 'stored-gap';
+  const two = sessionDocumentOfViews([{ ...drawingOrigin, view }, { id: 'second', name: 'Second', view: shownView }], drawingOrigin.id);
+  assert.deepEqual(await loadFile(fileOf(two, '-1')), [replaced('drawings[1].', 'innerGapPx')]);
+  // A Session 50 (one drawing, its request at the top) whose request holds the slots.
+  const older = fixture('REGEX-scalar-axes.v50-cli0145.gbdraw-session.json.gz');
+  Object.assign(older.renderRequest.diagramOptions.tracks, {
+    circularTrackSlots: clone(session.renderRequest.diagramOptions.tracks.circularTrackSlots), circularTrackAxisIndex: null
+  });
+  older.renderRequest.diagramOptions.tracks.circularTrackSlots[1].innerGapPx = 'stored-gap';
+  assert.deepEqual(await loadFile(fileOf(older, '-1')), [replaced('', 'innerGapPx')]);
+});
+
 test('a CLI or older Session whose request only loses a part loads with its Results, as before the reader (F2, F3)', async () => {
   for (const name of ['cli-linear-tables.v41', 'cli-linear-tables.v42', 'se08-main-linear-cli.v42',
     'cli-linear-tables.v44', 'scale-interval-zero-circular-cli.v44', 'precomputed-ring-unlabelled-cli.v44']) {

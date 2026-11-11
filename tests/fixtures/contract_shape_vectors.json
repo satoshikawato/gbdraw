@@ -1126,6 +1126,67 @@
      "reason": "unknown-key"
     }
    ]
+  },
+  {
+   "id": "number-that-overflows-at-a-number",
+   "note": "JSON has no infinite number: both readers read 1e400 as infinity, which no number field takes.",
+   "shape": {
+    "kind": "number"
+   },
+   "text": "1e400",
+   "python": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ],
+   "web": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "negative-number-that-overflows-at-a-bounded-number",
+   "note": "-1e400 reads as minus infinity: a wrong kind before its bound.",
+   "shape": {
+    "kind": "number",
+    "minimum": 0
+   },
+   "text": "-1e400",
+   "python": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ],
+   "web": [
+    {
+     "path": "value",
+     "reason": "wrong-kind"
+    }
+   ]
+  },
+  {
+   "id": "number-that-overflows-at-an-integer",
+   "note": "Infinity is no integer in either reader.",
+   "shape": {
+    "kind": "integer"
+   },
+   "text": "1e400",
+   "python": [
+    {
+     "path": "value",
+     "reason": "non-integer"
+    }
+   ],
+   "web": [
+    {
+     "path": "value",
+     "reason": "non-integer"
+    }
+   ]
   }
  ],
  "spellings": [
@@ -1605,6 +1666,51 @@
    "id": "annotation-color-hex-before-a-character-python-reads-as-a-space",
    "type": "CanonicalAnnotationColor",
    "value": "#abc\u001c",
+   "violations": []
+  },
+  {
+   "id": "circular-slot-gap-below-zero",
+   "type": "CanonicalCircularTrackSlot",
+   "value": {
+    "kind": "circularTrackSlot",
+    "id": "gc",
+    "renderer": "dinucleotide_content",
+    "enabled": true,
+    "side": null,
+    "radius": null,
+    "width": null,
+    "z": 0,
+    "params": {},
+    "innerGapPx": -1,
+    "outerGapPx": -0.5
+   },
+   "violations": [
+    {
+     "path": "value.innerGapPx",
+     "reason": "out-of-range"
+    },
+    {
+     "path": "value.outerGapPx",
+     "reason": "out-of-range"
+    }
+   ]
+  },
+  {
+   "id": "circular-slot-gap-of-zero",
+   "type": "CanonicalCircularTrackSlot",
+   "value": {
+    "kind": "circularTrackSlot",
+    "id": "gc",
+    "renderer": "dinucleotide_content",
+    "enabled": true,
+    "side": null,
+    "radius": null,
+    "width": null,
+    "z": 0,
+    "params": {},
+    "innerGapPx": 0,
+    "outerGapPx": -0.0
+   },
    "violations": []
   }
  ]

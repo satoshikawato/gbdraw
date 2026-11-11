@@ -6329,7 +6329,7 @@ const pixelGapDraft = projectCanonicalSessionRequest(pixelGapSession).config.adv
 assert.equal(pixelGapDraft.inner_gap_px, '10');
 assert.equal(pixelGapDraft.outer_gap_px, '0');
 assert.equal(pixelGapDraft.enabled, false);
-for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
+for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN, -1, -0.5]) {
   const invalidSession = structuredClone(pixelGapSession);
   invalidSession.renderRequest.diagramOptions.tracks.circularTrackSlots[0].innerGapPx = invalid;
   assert.throws(() => projectCanonicalSessionRequest(invalidSession), /innerGapPx must be a nonnegative finite number/);

@@ -31,6 +31,9 @@ ADMISSION = describe_session_admission()
 BAND_ROOT = {version: band["root"] for band in ADMISSION["bands"] for version in band["versions"]}
 # JSON Schema reads 1.0 as the integer 1, as JSON.parse does; Python's json reads a float.
 READ_AS_THE_WEB_READS = {"integral-fraction-at-an-integer"}
+# A JSON Schema number is any JSON number text, 1e400 too. Python's json and JSON.parse read that text as
+# infinity, which the checkers refuse (no number field takes one; OV-3237); the published schema cannot say so.
+SCHEMA_TAKES_ANY_NUMBER_TEXT = {"number-that-overflows-at-a-number"}
 # Sessions that hold a retired value, which stored_json_files() leaves out.
 RETIRED_SESSIONS = sorted((REPO_ROOT / "tests" / "retired_sessions").glob("*.gbdraw-session.json*"))
 
@@ -128,7 +131,7 @@ def test_the_schema_reads_a_json_difference_as_python_does(difference: dict[str,
     reading = "web" if difference["id"] in READ_AS_THE_WEB_READS else "python"
     fits = _validator(_shape_schema(difference["shape"])).is_valid(json.loads(difference["text"]))
 
-    assert fits == (difference[reading] == [])
+    assert fits == (difference[reading] == [] or difference["id"] in SCHEMA_TAKES_ANY_NUMBER_TEXT)
 
 
 @pytest.mark.parametrize("vector", SHAPE_VECTORS["requestTypes"], ids=lambda vector: vector["id"])

@@ -25,6 +25,7 @@ from gbdraw.io.cli_tables import read_circular_track_table
 from gbdraw.session_request_codec import (
     CanonicalRequestDecodingError,
     decode_canonical_request,
+    describe_canonical_request,
     encode_canonical_request,
 )
 from gbdraw.tracks import (
@@ -197,6 +198,24 @@ def test_typed_slot_reader_does_not_accept_pixel_text(mode, field, invalid, tmp_
     assert getattr(slot, "inner_gap_px" if mode == "circular" else "height") == (
         10 if mode == "circular" else ScalarSpec(10, "px")
     )
+
+
+@pytest.mark.parametrize("field", ["innerGapPx", "outerGapPx"])
+def test_circular_gap_below_zero_is_refused_and_described(field, tmp_path):
+    """The reader refuses a gap below zero, and the request description the Web
+    Load repairs by carries that domain (OV-3237)."""
+    encoded = _encoded("circular")
+    paths = {}
+    for resource in encoded.resources:
+        target = tmp_path / resource.name
+        target.write_bytes(resource.content)
+        paths[resource.resource_id] = target
+    payload = copy.deepcopy(encoded.payload)
+    payload["diagramOptions"]["tracks"]["circularTrackSlots"][0][field] = -1
+    with pytest.raises(CanonicalRequestDecodingError, match="must be nonnegative"):
+        decode_canonical_request(payload, resource_paths=paths, output_directory=tmp_path)
+    shape = describe_canonical_request()["types"]["CanonicalCircularTrackSlot"]["fields"][field]
+    assert shape == {"kind": "union", "options": [{"kind": "number", "minimum": 0}, {"kind": "null"}]}
 
 
 @pytest.mark.parametrize(
