@@ -125,7 +125,7 @@ const svgContent = typedComputed(() => {
 
 // Distinguish a new artifact even when its initial SVG bytes repeat a prior
 // artifact whose mounted DOM has since been edited. Live edits keep this ID.
-const svgResultIdentity = computed(() => (
+const svgResultIdentity = typedComputed(() => (
   getCommittedSvgResultRuntimeIdentity(results.value[selectedResultIndex.value])
 ));
 

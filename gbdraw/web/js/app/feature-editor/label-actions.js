@@ -650,7 +650,7 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
  *   resolver read of its diagram options.
  * @property {((feature: LabelFeature, mode: string, options?: { triggerReflow?: boolean }) => unknown) | null} [setFeatureVisibility]
  *   The visibility owner's transition: Show feature and label sets Feature visibility through it.
- * @property {() => boolean | Promise<boolean | { error: any }>} [prepareDrawnFeatureMatches]
+ * @property {() => boolean | Promise<boolean | import('../rule-matching.js').RuleTableRejection>} [prepareDrawnFeatureMatches]
  *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads (Label On asks the blocker of it).
  * @property {import('../rule-matching.js').RulePreparationOptions['evaluate']} evaluateLabelRules
  *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
@@ -1432,8 +1432,8 @@ export const createFeatureLabelActions = ({
   /** @param {DrawingState} drawing @param {string} featureId @param {LabelApply} apply */
   const applyLabelOn = async (drawing, featureId, apply) => {
     // The blocker reads Python's rule matches; prepared ones answer at once.
-    const prepared = /** @type {any} */ (prepareDrawnFeatureMatches());
-    if (typeof prepared?.then === 'function') await prepared;
+    const prepared = prepareDrawnFeatureMatches();
+    if (typeof prepared === 'object') await prepared;
     const feature = featureById(drawing, featureId);
     const diagramOptions = getCommittedRequest()?.diagramOptions;
     const blocker = labelOnBlocker(drawing, feature, diagramOptions);

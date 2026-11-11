@@ -22,14 +22,48 @@ from gbdraw.labels.filtering import DEFAULT_LABEL_PRIORITY, _build_label_overrid
 from gbdraw.legend.table import feature_legend_row_order, feature_type_rows
 
 
-def _visibility_table(rules: list[dict]) -> DataFrame:
+class VisibilityRuleRow(TypedDict):
+    """A Feature visibility rule row as the Web's rule table holds it, in the
+    fields the visibility rule evaluation reads (`_visibility_table`)."""
+
+    recordId: str
+    featureType: str
+    qualifier: str
+    value: str
+    action: str
+
+
+class LabelRuleRow(TypedDict):
+    """A Label TSV row in the fields the label rule evaluation reads; the row's
+    index stands for its label text."""
+
+    recordId: str
+    featureType: str
+    qualifier: str
+    valueRegex: str
+
+
+class RuleEvaluationResult(TypedDict):
+    """The answer of :func:`evaluate_rules_json`, per feature in payload order:
+    `matches` holds the indexes of the color or visibility rules it matches
+    (color rules in precedence order), `priorities` the rank of each color
+    match (aligned with `matches`), and `winners` the index of the color or
+    label rule that decides it, -1 for none. A list a kind does not answer is
+    empty."""
+
+    matches: list[list[int]]
+    winners: list[int]
+    priorities: list[list[int]]
+
+
+def _visibility_table(rules: Sequence[VisibilityRuleRow]) -> DataFrame:
     return DataFrame([dict(
         record_id=rule["recordId"], feature_type=rule["featureType"],
         qualifier=rule["qualifier"], value=rule["value"], action=rule["action"],
     ) for rule in rules])
 
 
-def _compile_visibility_rows(rules: list[dict]) -> list[dict | None]:
+def _compile_visibility_rows(rules: Sequence[VisibilityRuleRow]) -> list[dict | None]:
     """The draft rows as Generate compiles the visibility table, with None for
     a row that Generate skips as a header. A table Generate rejects raises
     Generate's error, which names the row."""
@@ -175,9 +209,12 @@ class SynthesizedColorRules(TypedDict):
     legend: list[int | str] | None
 
 
-def describe_rule_synthesis() -> dict[str, dict[str, Shape]]:
-    """The request and the answer of :func:`synthesize_color_rules_json` as named
-    shapes of :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py)."""
+def describe_rule_helpers() -> dict[str, dict[str, Shape]]:
+    """What the two rule helpers read and answer, as named shapes of
+    :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py): the request
+    and the answer of :func:`synthesize_color_rules_json`, and the rule rows of
+    each kind and the answer of :func:`evaluate_rules_json` (its features are
+    `RuleFeaturePayload`)."""
 
     types_: dict[str, Shape] = {}
 
@@ -189,7 +226,8 @@ def describe_rule_synthesis() -> dict[str, dict[str, Shape]]:
             return ref(hint.__name__)
         return None
 
-    for root in (SynthesizeColorRulesRequest, SynthesizedColorRules):
+    for root in (SynthesizeColorRulesRequest, SynthesizedColorRules,
+                 ColorRuleCondition, VisibilityRuleRow, LabelRuleRow, RuleEvaluationResult):
         special(root)
     return {"types": types_}
 
@@ -223,20 +261,22 @@ def _winners(features: Sequence[_MatchFeature], rules: Sequence[ColorRuleConditi
 
 
 def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color") -> str:
-    features = [_match_feature(item) for item in json.loads(features_json)]
+    features = [_match_feature(item) for item in cast(list[RuleFeaturePayload], json.loads(features_json))]
     rules = json.loads(rules_json)
     if kind == "color":
-        color_rules = _indexed_color_rules(rules)
+        color_rules = _indexed_color_rules(cast(list[ColorRuleCondition], rules))
     elif kind == "visibility":
-        visibility_rules = _compile_visibility_rows(rules)
+        visibility_rules = _compile_visibility_rows(cast(list[VisibilityRuleRow], rules))
     elif kind == "label":
         rows = [dict(record_id=r["recordId"], feature_type=r["featureType"],
                      qualifier=r["qualifier"], value=r["valueRegex"], label_text=str(i))
-                for i, r in enumerate(rules)]
+                for i, r in enumerate(cast(list[LabelRuleRow], rules))]
         label_rules = _build_label_override_rules(DataFrame(rows)) or []
     else:
         raise ValueError("Unknown rule kind")
-    matches, winners, priorities = [], [], []
+    matches: list[list[int]] = []
+    winners: list[int] = []
+    priorities: list[list[int]] = []
     for item in features:
         feature = SimpleNamespace(type=item["type"], qualifiers=item["qualifiers"])
         selector = dict(item["selector"])
@@ -258,13 +298,13 @@ def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color"
             winner = _resolve_label_override(feature, feature.type, feature.qualifiers,
                                              item["label"], label_rules, record, selector=selector)
             winners.append(int(winner) if winner is not None else -1)
-    return json.dumps({"matches": matches, "winners": winners, "priorities": priorities})
+    return json.dumps(RuleEvaluationResult(matches=matches, winners=winners, priorities=priorities))
 
 
 _EXACT_SPECIAL = re.compile(r"[.*+?^${}()|[\]\\]")
 # The qualifiers an exact condition reads besides a label text (Owner R-07).
 _CONDITION_QUALIFIERS = ("product", "gene")
-_REQUEST_DESCRIPTION = describe_rule_synthesis()
+_REQUEST_DESCRIPTION = describe_rule_helpers()
 
 # An exact condition: (feature type, qualifier, pattern). A target of `hash`
 # rules: (feature type, feature instance).

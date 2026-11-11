@@ -151,7 +151,7 @@ export {
  * The visibility owner's preparation of the rule matches `resolveFeatureDrawn`
  * reads. Strict, it rejects when the color preparation fails and resolves to
  * false when it is stale.
- * @typedef {(options?: { strict?: boolean, view?: boolean }) => boolean | Promise<boolean | { error: any }>} PrepareDrawnFeatureMatchesPort
+ * @typedef {import('../rule-matching.js').RulePreparation['prepareDrawn']} PrepareDrawnFeatureMatchesPort
  */
 
 /**

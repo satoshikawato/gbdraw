@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { ShowNotice } from '../app-messages.js' */
+import { visibilityTableError } from '../rule-matching.js';
 import {
   applyFeatureVisibilityOverrideChanges,
   buildFeatureVisibilityChanges,
@@ -477,10 +478,10 @@ export const createFeatureVisibilityActions = ({
    * @returns {Promise<VisibilityProjectionOutcome>}
    */
   const projectOnce = async (drawing, run, { legend, show }) => {
-    const prepared = /** @type {any} */ (await prepareDrawn());
-    if (run !== projectionRun) return { status: prepared?.error ? 'rejected' : 'superseded' };
-    if (prepared?.error) {
-      state.errorLog.value = normalizeUserFacingError(prepared.error, { operation: 'evaluateRules', stage: 'rule-validation' });
+    const error = visibilityTableError(await prepareDrawn());
+    if (run !== projectionRun) return { status: error ? 'rejected' : 'superseded' };
+    if (error) {
+      state.errorLog.value = normalizeUserFacingError(error, { operation: 'evaluateRules', stage: 'rule-validation' });
       ruleTableError = state.errorLog.value; // As the error log holds it (a reactive copy).
       return { status: 'rejected' };
     }
