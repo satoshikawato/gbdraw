@@ -118,6 +118,21 @@ assert.equal(
   currentEditablePipeline.disposition,
   IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
 );
+// OV-3382: a schema-9 request that main's Python writer saved with unset collinearity parameters (null) reads them as
+// the defaults its description gives, as Python reads None, so the controls hold it.
+const mainNullParametersPipeline = classifyImportedComparisonIntent({
+  renderRequest: request([{
+    kind: 'generatedProteinComparison',
+    mode: 'pairwise',
+    pairs: [{ queryRecordIndex: 0, subjectRecordIndex: 1 }],
+    settings: { ...currentPipelineSettings, collinearityParams: null }
+  }], { schema: 9 }),
+  resources
+});
+assert.equal(
+  mainNullParametersPipeline.disposition,
+  IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+);
 const currentPipelineWithLegacyAlignment = classifyImportedComparisonIntent({
   renderRequest: request([{
     kind: 'generatedProteinComparison',

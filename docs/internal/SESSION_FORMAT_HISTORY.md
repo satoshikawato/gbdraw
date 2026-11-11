@@ -351,6 +351,26 @@ full config the v0.14.5 CLI wrote) and `HmmtDNA-wrap-5kb.v50-web0145.gbdraw-sess
 draft a v0.14.5 Web Save wrote), read by `tests/test_scalar_axis_tick_labels.py`; the Web Load records of the
 legacy fixtures (`legacy-request-load.expected.json`) hold the numbered drafts.
 
+## Unreleased: unset collinearity parameters are written as their defaults
+
+No Session or request version changes. A `generatedProteinComparison` holds `settings.collinearityParams`, which may be
+`null` or a `lossless` object; every Python reader reads `null` as `LosslessCollinearityParameters()`. main's codec
+(`_encode_pipeline_value` in `gbdraw/session_request_codec.py`) wrote `null` for options that leave the parameters
+unset: Sessions the Python API saves, and the drawing Find in other files derives from a drawing without a LOSATP
+comparison. The Web and the CLI always wrote the object. The Web comparison classifier
+(`services/imported-comparison-intent.js`) could not hold `null` in the Comparison controls, so such a comparison
+opened as "Saved comparison preserved as read-only" (OV-3382).
+
+The codec now writes the defaults as the object, and the request description gives that object as the field's
+default (`describe_canonical_request()`, `request-shape.generated.js`, the JSON Schema), so a repair of an unreadable
+value fills it too. The Web reads a stored `null` as that described default (`readStoredCollinearityParams` in
+`services/losat-normalization.js`). A request without saved Web controls (a CLI or Python API Session, a drawing Find
+in other files creates) that lists the pairs of a LOSATP Pairwise pipeline now loads them as the Selected pairs of the
+Comparison controls; before, it loaded the adjacent pairs (`projectCanonicalSessionRequest` in
+`services/session-request.js`). The `null` reader stays: main writes it at request schema 9. Fixture:
+`tests/fixtures/sessions/python-api-linear-pairs.v50.gbdraw-session.json.gz` (main's Python API, `null`), run by
+`tests/web/session-cli-compatibility.test.mjs`.
+
 ## Unreleased: the Web reads request text patterns as Python does
 
 No Session or request version changes, and no writer changes. Six text values of a canonical request have a

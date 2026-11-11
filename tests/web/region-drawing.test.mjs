@@ -554,6 +554,71 @@ result = json.dumps(plan_linear_units(payload['records'], payload['pairs']))
     { queryRecordIndex: 0, subjectRecordIndex: 2 }, { queryRecordIndex: 1, subjectRecordIndex: 2 }
   ]);
 });
+test('OV-3382: a drawing Find in other files creates with one window per record has an editable comparison', async () => {
+  // Python derives the drawing (`locate_web_json`, LOSAT faked as `gbdraw locate`'s tests fake it); every record
+  // draws one window, so the Comparison controls hold its LOSAT pairs and Generate runs them as the controls say.
+  const intents = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
+  const genomes = JSON.parse(await evaluatePython(`
+import json, tempfile
+from pathlib import Path
+from tests.test_locate_command import _genomes
+paths = _genomes(Path(tempfile.mkdtemp()))
+result = json.dumps({name: paths[name].read_text() for name in ('ref', 'a', 'b')})
+`, {}));
+  const source = withNewDrawingDefaults(state, createDrawingState('find-editable', 'linear'));
+  state.addDrawing(source, 'Find editable', state.drawingTabs.value.length);
+  installShownDrawing(source.id);
+  source.inputType.value = 'gb';
+  source.linearSeqs.splice(0, Infinity, ...Object.entries(genomes).map(([name, text]) => createLinearSeq({
+    uid: name, gb: state.inputFiles.registerFile(new File([text], `${name}.gb`, { type: 'text/plain', lastModified: 1 }))
+  })));
+  Object.assign(source.form, { labels_mode: 'none' });
+  const sent = await projectOf(source);
+  const reply = JSON.parse(await evaluatePython(`${STAGE}
+from pathlib import Path
+from gbdraw.comparisons.losat_runtime import run_losat_search
+from gbdraw.web_support.locate import locate_web_json
+from tests.test_locate_command import _fake_losat
+losat = _fake_losat(Path(directory))
+def call(step, value):
+    return json.loads(locate_web_json(
+        json.dumps(payload['canonicalRequest']), json.dumps(paths), directory, json.dumps({'step': step, step: value})))
+search = {'reference': {'recordKey': 'ref', 'windows': [{'start': 1501, 'end': 8100, 'reverseComplement': False}]},
+          'targets': ['a', 'b'], 'program': 'tlosatn'}
+outcomes = [{'fileKey': job['fileKey'], 'error': None,
+             'text': run_losat_search('tlosatn', job['queryFasta'], job['subjectFasta'], losat_bin=losat)}
+            for job in call('search', search)['jobs']]
+plan = call('plan', {'search': search, 'outcomes': outcomes,
+                     'options': {'evalue': 1e-2, 'bitscore': 50.0, 'identity': 0.0, 'alignmentLength': 0}})['plan']
+kept = [{'fileKey': file['file_key'], 'column': item['window']['column'], 'start': item['window']['start'],
+         'end': item['window']['end'], 'reverseComplement': item['window']['reverse_complement']}
+        for file in plan['files'] for item in file['windows']]
+result = json.dumps(call('drawing', {'plan': plan, 'choices': kept, 'labels': {}, 'adaptSizes': True}))
+`, { canonicalRequest: sent.envelope.renderRequest, staged: await stagedFiles(sent.envelope.renderRequest, sent.envelope.resources) }));
+  assert.equal(reply.status, 'derived', JSON.stringify(reply));
+  const derived = reply.drawing;
+  assert.ok(derived.renderRequest.records.every((record) => (record.windows ?? []).length <= 1), 'one window per record');
+  const saved = derived.renderRequest.comparisons.find((comparison) => comparison.kind === 'generatedProteinComparison');
+  assert.equal(saved.pairs.length, reply.pairs.length);
+  assert.ok(saved.pairs.length > 0);
+
+  const outcome = await drawingList.newDrawingFromRegion(source.id, { derived, sent }, 'search');
+  assert.equal(outcome.status, 'ok');
+  const made = state.drawingOf(outcome.drawingId);
+  assert.equal(made.importedComparisonIntent.disposition, intents.IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
+  assert.deepEqual(intents.importedComparisonExecution({ intent: made.importedComparisonIntent, draftResolution: null }),
+    { ok: true, mode: 'draft' }, 'Generate follows the Comparison controls');
+  // The controls hold the saved window pairs as the Selected pairs, so the draft request runs those pairs.
+  assert.equal(made.linearComparisonPlan.mode, 'selected');
+  const uidOf = (index) => made.linearSeqs[index].uid;
+  assert.deepEqual(
+    made.linearComparisonPlan.edges.map((edge) => [edge.queryUid, edge.subjectUid, edge.source, edge.included]),
+    saved.pairs.map((pair) => [uidOf(pair.queryRecordIndex), uidOf(pair.subjectRecordIndex), 'losat', true])
+  );
+  const generated = (await projectOf(made)).envelope.renderRequest.comparisons
+    .find((comparison) => comparison.kind === 'generatedProteinComparison');
+  assert.deepEqual(generated.pairs, saved.pairs);
+});
 // A Linear drawing with one card whose file holds two records: the card draws both.
 const recordB = genbankRecord('recB', 900, [[51, 300, 'B1'], [501, 800, 'B2']], 'linear');
 test('(a) regions of two records of one file are one Linear drawing bound to that one file', async () => {

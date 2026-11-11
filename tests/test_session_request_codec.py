@@ -2043,6 +2043,54 @@ def test_collinear_pipeline_ignores_legacy_derived_comparison_pairs(
     assert reencoded_pipeline["pairs"] == []
 
 
+def test_pipeline_writes_default_collinearity_parameters_as_lossless_object(
+    tmp_path: Path,
+) -> None:
+    """OV-3382: options without collinearity parameters write the defaults every reader uses."""
+    gbk_a = _source_file(tmp_path / "a.gbk")
+    gbk_b = _source_file(tmp_path / "b.gbk")
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(source=GenBankInputSource(gbk_a)),
+            RecordInput(source=GenBankInputSource(gbk_b)),
+        ),
+        options=LinearDiagramOptions(
+            losat_search=LosatSearchOptions(program="losatp", losatp_mode="pairwise"),
+        ),
+    )
+    assert request.options.collinearity_params is None
+    encoded = encode_canonical_request(request)
+    pipeline = next(
+        item
+        for item in encoded.payload["comparisons"]
+        if item["kind"] == "generatedProteinComparison"
+    )
+    defaults = LosslessCollinearityParameters()
+    assert pipeline["settings"]["collinearityParams"] == {
+        "kind": "lossless",
+        "parameters": {
+            "minAnchors": defaults.min_anchors,
+            "maxUnitGap": defaults.max_unit_gap,
+            "maxDiagonalDrift": defaults.max_diagonal_drift,
+            "maxConflicts": defaults.max_conflicts,
+            "mergeOrientation": defaults.merge_orientation,
+        },
+    }
+
+    # main's writer (schema 9) wrote null for unset parameters; that request still reads, as unset.
+    main_form = _payload_for_schema(encoded, 9)
+    next(
+        item for item in main_form["comparisons"] if item["kind"] == "generatedProteinComparison"
+    )["settings"]["collinearityParams"] = None
+    decoded = decode_canonical_request(
+        main_form,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert isinstance(decoded, LinearDiagramRequest)
+    assert decoded.options.collinearity_params is None
+
+
 def test_file_backed_options_and_typed_config_round_trip(tmp_path: Path) -> None:
     source = _source_file(tmp_path / "record.gbk")
     table_file = _source_file(tmp_path / "rules.tsv", "key\tvalue\nCDS\tkeep\n")

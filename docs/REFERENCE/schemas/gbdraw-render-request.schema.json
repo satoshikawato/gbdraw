@@ -2799,7 +2799,16 @@
               "type": "null"
             }
           ],
-          "default": null
+          "default": {
+            "kind": "lossless",
+            "parameters": {
+              "minAnchors": 1,
+              "maxUnitGap": 0,
+              "maxDiagonalDrift": 0,
+              "maxConflicts": 1,
+              "mergeOrientation": "strand"
+            }
+          }
         },
         "collinearityUnitMode": {
           "enum": [

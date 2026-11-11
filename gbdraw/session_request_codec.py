@@ -4563,9 +4563,12 @@ def _encode_comparisons(
     pairs = search.pairs if search is not None else None
     protein_mode = losatp_analysis_mode(search)
     settings = _encode_protein_settings(options)
+    # A request that sets its collinearity parameters (the CLI and the Web
+    # always do) keeps its pipeline settings, as one that changes any other.
     if (
         protein_mode != "none"
         or pairs is not None
+        or options.collinearity_params is not None
         or settings != _encode_protein_settings(_DEFAULT_LINEAR_OPTIONS)
     ):
         result.append(
@@ -4797,8 +4800,10 @@ def _decode_comparisons(
 
 def _encode_pipeline_value(key: str, name: str, value: object) -> Any:
     if name == "collinearity_params":
+        # Unset parameters are the dataclass defaults every reader runs with; one
+        # written form keeps the Web classifier able to project the pipeline.
         if value is None:
-            return None
+            value = LosslessCollinearityParameters()
         if not isinstance(value, LosslessCollinearityParameters):
             raise CanonicalRequestEncodingError(
                 "Unsupported collinearity parameter object."
@@ -6584,10 +6589,14 @@ def describe_canonical_request() -> dict[str, Any]:
                     for key, owner, name in _PROTEIN_SETTINGS_WIRE
                 },
                 optional=sorted(_OPTIONAL_PROTEIN_SETTINGS),
-                # A stored retired anchor mode reads as its replacement.
+                # A stored retired anchor mode reads as its replacement. Unset
+                # collinearity parameters read as what the encoder writes for them.
                 defaults={
                     **{key: _absent_protein_setting(key) for key in _OPTIONAL_PROTEIN_SETTINGS},
                     "collinearityAnchorMode": RETIRED_COLLINEARITY_ANCHOR_MODES["one_to_one"],
+                    "collinearityParams": _encode_pipeline_value(
+                        "collinearityParams", "collinearity_params", None
+                    ),
                 },
             )),
         },
@@ -6624,8 +6633,8 @@ def describe_canonical_request() -> dict[str, Any]:
             "output": _encode_output(RenderOutputRequest()),
         })))
     named("RenderRequest", union(*requests))
-    # A required field that holds null takes null where its stored value cannot be read: the encoder writes null
-    # for an unset value (OV-777). Null is no empty form where another value decides whether it may be null: a
+    # A required field that holds null takes null where its stored value cannot be read, unless its shape names
+    # another default: the encoder writes null for an unset value (OV-777). Null is no empty form where another value decides whether it may be null: a
     # decision's anchor and the anchor's identity (AlignmentRecordDecision.__post_init__; the plan finds its
     # reference by the identity), a slot list an axis index names (_validate_track_configuration), the edits of a
     # feature override (FeatureOverride: at least one edit), and the qualifier a feature query's value searches

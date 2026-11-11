@@ -317,3 +317,69 @@ test('Linear: a (-) window that covers a whole record is drawn reverse-complemen
   expect(found.pending).toBe(false);
   await expect(page.getByText('changes pending Generate')).toHaveCount(0);
 });
+
+// OV-3382: when every record of the new drawing draws one window, the Comparison controls hold its LOSAT pairs as
+// Selected pairs, so the Comparison card shows no saved read-only comparison and a changed LOSATP mode applies at the
+// next Generate, also when the source drawing had no comparison of its own.
+test('Linear: the drawing Create makes with one window per record takes a new LOSATP mode at Generate', async ({ page }) => {
+  test.setTimeout(900_000);
+  await openFresh(page);
+  await loadSessionFile(page, SESSION);
+  await generateAndWaitForResult(page);
+  // A source drawing without a comparison, as one whose Files were just added: its request sets no LOSATP settings.
+  await page.getByRole('button', { name: 'Set no comparison', exact: true }).click();
+  await generateAndWaitForResult(page);
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  let last = '';
+  await expect.poll(async () => {
+    const now = await page.evaluate(() => JSON.stringify(document.querySelector('.gbdraw-preview-surface').getBoundingClientRect()));
+    const settled = now === last;
+    last = now;
+    return settled;
+  }, { intervals: [250] }).toBe(true);
+  await page.locator('[data-region-select-toggle]').click();
+  const from = await axisPoint(page, 0, 2000.5);
+  const to = await axisPoint(page, 0, 20000.5);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 8 });
+  await page.mouse.up();
+  await page.locator('[data-preview-item-popup="region"] [data-region-find-in-files]').click();
+  const dialog = page.locator('[data-find-files-dialog]');
+  await expect(dialog.locator('[data-find-files-genes]')).toBeVisible({ timeout: 180_000 });
+  await dialog.locator('[data-find-files-search]').click();
+  await expect.poll(() => status(page), { timeout: 600_000 }).toBe('proposal');
+  await dialog.locator('[data-find-files-create]').click();
+  await expect(dialog).toHaveCount(0);
+  const windowCounts = await page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().linearSeqs
+    .map((seq) => (Array.isArray(seq.windows) ? seq.windows.length : 0)));
+  expect(Math.max(...windowCounts), 'every record draws one window').toBeLessThanOrEqual(1);
+
+  const card = page.locator('[data-linear-comparison-card]');
+  await card.scrollIntoViewIfNeeded();
+  const shots = process.env.FIND_FILES_SHOTS;
+  if (shots) await card.screenshot({ path: `${shots}/comparison-card-after-create.png` });
+  await expect(card.locator('[data-imported-comparison-resolution]')).toHaveCount(0);
+  // The controls hold the saved window pairs as the Selected pairs of LOSATP Pairwise.
+  const held = await page.evaluate(async () => {
+    const drawing = (await import('./js/state.js')).state.activeDrawing();
+    return { mode: drawing.linearComparisonPlan.mode, edges: drawing.linearComparisonPlan.edges.filter((edge) => edge.included).length };
+  });
+  expect(held.mode).toBe('selected');
+  expect(held.edges).toBeGreaterThan(0);
+
+  // Similarity groups compare all adjacent pairs, as in a drawing built by hand.
+  await card.getByRole('button', { name: 'Run LOSAT for all adjacent pairs', exact: true }).click();
+  const settings = page.locator('details[data-linear-comparison-disclosure="settings"]');
+  if (await settings.getAttribute('open') === null) await settings.locator('summary').click();
+  const losatpMode = page.getByRole('combobox', { name: 'LOSATP mode' });
+  await expect(losatpMode.locator('option[value="orthogroup"]')).toBeEnabled();
+  await losatpMode.selectOption('orthogroup');
+  await generateAndWaitForResult(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults().length)).toBeGreaterThan(0);
+  const kinds = await page.evaluate(async () => {
+    const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+    return getCommittedCanonicalSession().renderRequest.comparisons.map((comparison) => comparison.kind);
+  });
+  expect(kinds, 'Generate ran Similarity groups').toContain('orthogroupResult');
+});

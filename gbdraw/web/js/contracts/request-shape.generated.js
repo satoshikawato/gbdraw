@@ -1529,7 +1529,16 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       defaults: Object.freeze({
         collinearInferOrthogroups: true,
         collinearityAnchorMode: "rbh",
-        collinearityParams: null,
+        collinearityParams: Object.freeze({
+          kind: "lossless",
+          parameters: Object.freeze({
+            minAnchors: 1,
+            maxUnitGap: 0,
+            maxDiagonalDrift: 0,
+            maxConflicts: 1,
+            mergeOrientation: "strand"
+          })
+        }),
         losatpBin: null,
         losatpThreads: null,
         ncbiBlastpBin: null,

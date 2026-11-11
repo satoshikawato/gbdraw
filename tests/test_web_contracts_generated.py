@@ -359,16 +359,22 @@ def test_the_request_shape_module_is_the_description_as_frozen_data() -> None:
     assert re.search(r"\bany\b", source) is None
     assert (
         "defaults: Object.freeze({\n        collinearInferOrthogroups: true,\n"
-        "        collinearityAnchorMode: \"rbh\",\n        collinearityParams: null,"
+        "        collinearityAnchorMode: \"rbh\",\n        collinearityParams: Object.freeze({"
     ) in source
     assert describe_canonical_request()["types"]["CanonicalProteinComparisonSettings"]["defaults"] == {
         "collinearInferOrthogroups": True,
         # A stored anchor mode that was removed (one_to_one) reads as rbh (OV-2303).
         "collinearityAnchorMode": "rbh",
+        # Unset collinearity parameters read as the defaults the encoder writes (OV-3382).
+        "collinearityParams": {
+            "kind": "lossless",
+            "parameters": {
+                "minAnchors": 1, "maxUnitGap": 0, "maxDiagonalDrift": 0, "maxConflicts": 1, "mergeOrientation": "strand",
+            },
+        },
         # A required field that holds null takes null (OV-777).
         **{key: None for key in (
-            "collinearityParams", "losatpBin", "losatpThreads", "ncbiBlastpBin", "orthogroupMemberMaxHits",
-            "proteinBlastpCandidateLimit",
+            "losatpBin", "losatpThreads", "ncbiBlastpBin", "orthogroupMemberMaxHits", "proteinBlastpCandidateLimit",
         )},
     }
 

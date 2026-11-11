@@ -1,0 +1,11 @@
+{
+  "purpose": "Positive fixture of a request main's Python writer saved with unset collinearity parameters (collinearityParams null, request schema 9; OV-3382): a Python API Linear Session of three records whose LOSATP Pairwise pipeline lists one pair (0, 1). Load reads null as the parameters' defaults, so the Comparison controls hold the pipeline (EDITABLE) with the listed pair as their Selected pair.",
+  "sourceCommit": "033a3aa899a6966925df6f413bd29e4a2d342777 (origin/main, v0.14.5)",
+  "history": "Session 50 and request schema 9 are on main; main's codec writes null for unset collinearity parameters (docs/internal/SESSION_FORMAT_HISTORY.md)",
+  "route": "gbdraw.api.save_session_document(Path('main-python-api-pairs.gbdraw-session.json'), LinearDiagramRequest(records=(RecordInput(GenBankInputSource(Path(n))) for n in ('b_collide.gb', 'regex_rules.gb', 'forced_label_underlay.gb')), options=LinearDiagramOptions(losat_search=LosatSearchOptions(program='losatp', losatp_mode='pairwise', pairs=((0, 1),))))) run from a checkout of the source commit, the three files copied from tests/fixtures/ into the working directory",
+  "values": "renderRequest.comparisons[0]: kind generatedProteinComparison, mode pairwise, pairs [{queryRecordIndex 0, subjectRecordIndex 1}], settings.collinearityParams null",
+  "decompressedSha256": "8b07e9c1b56dc19de65b287415b0ddf553810e91c102d3a02b45c645e8acdfaa",
+  "compression": "gzip -n -9 (Python gzip, mtime 0, no file name)",
+  "sessionVersion": 50,
+  "requestSchema": 9
+}

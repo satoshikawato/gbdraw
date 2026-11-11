@@ -1069,6 +1069,12 @@ whether orthogroup inference was enabled. Sessions preserve each LOSATP mode's
 hit-limit drafts. A saved Collinear pipeline without `collinearInferOrthogroups`
 uses its historical inference behavior (ON); new state defaults to OFF on the
 Web, the CLI and the Python API.
+Collinear block parameters stored as `null` (written by the Python API of
+0.14.5 and earlier for unset parameters) read as their defaults in Python and
+in the Web; current writers store the defaults themselves.
+A Session without saved Web controls, such as one the CLI or the Python API
+writes, opens with its LOSATP comparison in the Comparison controls; the pairs
+a Pairwise comparison lists become its Selected pairs.
 In the Web, any derived result read from a Session loads unchanged and is
 recomputed once from the raw search rows when the analysis runs again.
 The Web, the CLI, and the Python API compute the cache key of a derived result

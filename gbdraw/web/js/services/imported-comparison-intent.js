@@ -10,6 +10,7 @@ import {
 import {
   drawsSeveralUnits, planLinearUnitSearch, savedPairsUnitSearch, unitRecordInputs, unitRecordsOf
 } from './linear-units.js';
+import { readStoredCollinearityParams } from './losat-normalization.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
 import { toRaw } from '../utils/vue-raw.js';
@@ -342,7 +343,7 @@ const generatedPipelineIsProjectable = ({ comparisons, pipeline }) => {
   // A disabled pipeline can carry CLI settings without any comparison work.
   if (pipeline.mode === 'none' && !storedProteinResultMode(comparisons)
     && (comparisons.length !== 1 || pipeline.pairs.length !== 0)) return false;
-  const collinearity = pipeline.settings?.collinearityParams;
+  const collinearity = readStoredCollinearityParams(pipeline.settings?.collinearityParams);
   if (!isObject(collinearity) || collinearity.kind !== 'lossless') return false;
   const parameters = collinearity.parameters;
   if (

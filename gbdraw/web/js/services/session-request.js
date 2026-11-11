@@ -237,7 +237,8 @@ import {
   readCollinearMergeOrientation,
   readCollinearSearchScope,
   readCollinearUnitMode,
-  readOrthogroupMembershipMode
+  readOrthogroupMembershipMode,
+  readStoredCollinearityParams
 } from './losat-normalization.js';
 import {
   canonicalComparisonResourceKind,
@@ -262,7 +263,7 @@ import {
   webBindingInputSlot,
   webFileBindingsWithoutDepth
 } from './session-resource-backing.js';
-import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
+import { LINEAR_COMPARISON_SOURCES, normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { createDefaultAdv, createDefaultForm, createDefaultLosatExecution } from './session-active-config-contract.js';
 import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
 import {
@@ -5721,7 +5722,7 @@ const projectGeneratedProteinPipeline = (
   if (Object.hasOwn(settings, 'alignOrthogroupFeature')) {
     throw new Error('Current canonical protein settings cannot contain legacy alignment state.');
   }
-  const parameters = settings.collinearityParams?.parameters || {};
+  const parameters = readStoredCollinearityParams(settings.collinearityParams)?.parameters || {};
   const mode = String(comparison.mode || 'orthogroup');
   const draftMode = mode === 'none' ? storedMode : mode;
   return {
@@ -5760,6 +5761,20 @@ const projectGeneratedProteinPipeline = (
       }
     }
   };
+};
+
+/**
+ * The comparison plan of a request without saved controls whose protein pipeline the controls hold: the pairs a
+ * Pairwise pipeline lists (projected to the LOSAT edges of `files.linearComparisons`) as Selected pairs (OV-3382),
+ * else the adjacent pairs.
+ * @param {ReturnType<typeof projectGeneratedProteinPipeline>} pipeline
+ * @param {readonly { source?: unknown }[] | undefined} projectedEdges
+ */
+const cliProteinPlan = (pipeline, projectedEdges) => {
+  const listed = (projectedEdges ?? []).filter((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT);
+  return normalizeLinearComparisonPlan(pipeline?.generatedProteinComparison.mode === 'pairwise' && listed.length > 0
+    ? { mode: 'selected', defaultSource: LINEAR_COMPARISON_SOURCES.LOSAT, edges: listed.map((edge) => ({ ...edge, included: true })) }
+    : { mode: 'adjacent' });
 };
 
 /**
@@ -6764,7 +6779,8 @@ export const projectCanonicalSessionRequest = ({
   ).some((/** @type {UnvalidatedFields<'kind'>} */ comparison) => comparison?.kind === 'generatedProteinComparison');
   // A CLI sidecar has no Web comparison draft, so its plan is the Web default
   // (No comparison) unless the projection states one. Its editable protein
-  // pipeline is the adjacent LOSATP comparison the CLI drew. Without -b or a
+  // pipeline is the adjacent LOSATP comparison the CLI drew, or the Selected
+  // pairs a Pairwise pipeline lists (built with the files below). Without -b or a
   // protein mode the CLI still writes its protein settings as a disabled
   // pipeline (mode `none`, no pairs): that draft selects no LOSATP program. A
   // read-only comparison (-b) reaches this projection as an empty list.
@@ -6772,9 +6788,7 @@ export const projectCanonicalSessionRequest = ({
   const cliLinearSidecar = initializeCliInputs && storedConfig == null
     && renderRequest.mode === 'linear';
   const cliDraftWithoutComparison = cliLinearSidecar && drawsNoComparison(committedComparisons);
-  const cliProteinPlan = cliLinearSidecar && projectedProteinPipeline && !cliDraftWithoutComparison
-    ? { linearComparisonPlan: normalizeLinearComparisonPlan({ mode: 'adjacent' }) }
-    : {};
+  const cliProteinDraft = Boolean(cliLinearSidecar && projectedProteinPipeline && !cliDraftWithoutComparison);
   const {
     blastSource: _cliBlastSource, losatProgram: _cliLosatProgram, ...cliProteinSettings
   } = projectedProteinPipeline?.config || {};
@@ -7579,7 +7593,7 @@ export const projectCanonicalSessionRequest = ({
       form,
       adv,
       ...(cliDraftWithoutComparison ? cliProteinSettings : projectedProteinPipeline?.config || {}),
-      ...cliProteinPlan,
+      ...(cliProteinDraft ? { linearComparisonPlan: cliProteinPlan(projectedProteinPipeline, files.linearComparisons) } : {}),
       colors: projectedDefaultColors,
       colorsAreOverrides: true,
       palette: options.colors?.defaultColorsPalette || 'default',
