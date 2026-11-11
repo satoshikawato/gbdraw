@@ -9,6 +9,9 @@ import { gunzipSync } from 'node:zlib';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const { pythonDraftSplit } = await import('./helpers/python-evaluator.mjs');
+const { pythonLinearUnitPlan } = await import('./helpers/linear-unit-plan.mjs');
+// Inherit carries a saved comparison by Python's plan of the drawn units (`planLinearUnits`).
+const planLinearUnits = async (payload) => ({ result: pythonLinearUnitPlan(payload) });
 // Publication's draft split is Python's (the bridge runs `split_draft_into_modes`); each call's context is kept.
 const splitContexts = [];
 const splitDraft = async (draft, context) => {
@@ -54,6 +57,7 @@ const {
   readRequest: readPublishedRenderRequest,
   projectRequest: projectCanonicalSessionRequest,
   resolveComparisonPlan: resolveLinearComparisonPlan,
+  planLinearUnits,
   splitDraft
 });
 
@@ -751,6 +755,7 @@ assert.rejects(
       readRequest: readPublishedRenderRequest,
       projectRequest: projectCanonicalSessionRequest,
       resolveComparisonPlan: resolveLinearComparisonPlan,
+      planLinearUnits,
       splitDraft
     });
     await assert.rejects(recolored.prepareGallerySessionForPublication(await loadSessionFile(stated)),
@@ -812,6 +817,7 @@ assert.rejects(
         readRequest: readPublishedRenderRequest,
         projectRequest: projectCanonicalSessionRequest,
         resolveComparisonPlan: resolveLinearComparisonPlan,
+        planLinearUnits,
         splitDraft
       });
       await assert.rejects(tampered.prepareGallerySessionForPublication(structuredClone(source)),

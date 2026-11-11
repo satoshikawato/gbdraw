@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingId } from './drawing-view.js' */
 import { storedRecordSourceResourceIds } from './input-types.js';
 /** @typedef {Record<string, unknown>} AliasSource Any object whose alias keys are read. */
 /** @typedef {{ valid: boolean, supplied: boolean, value: string }} TextAliasStatus */
@@ -39,6 +40,10 @@ import { storedRecordSourceResourceIds } from './input-types.js';
 /**
  * An input source of the record display (the File card and its optional pair).
  * @typedef {{ scope: string, sourceUid: string, source: unknown, paired?: unknown }} RecordDisplaySource
+ */
+/**
+ * A record display source of one drawing: card uids are unique within a drawing only.
+ * @typedef {RecordDisplaySource & { drawingId: DrawingId }} DrawingRecordDisplaySource
  */
 /**
  * A feature as `isCurrentFeature` reads it. A catalog feature's `record_key` is text
@@ -330,8 +335,8 @@ export const committedRecordUsesSource = (request, record, source) => source.sco
  * @param {RecordKeyedFeature} feature
  * @param {{
  *   request: CommittedRecordRequest | null | undefined,
- *   sources: RecordDisplaySource[],
- *   boundSources: RecordDisplaySource[],
+ *   sources: DrawingRecordDisplaySource[],
+ *   boundSources: DrawingRecordDisplaySource[],
  *   matchesSavedSource: (file: unknown, resourceId: string | undefined) => boolean
  * }} binding
  */
@@ -343,7 +348,8 @@ export const isCurrentFeature = (feature, { request, sources, boundSources, matc
   // The resource of each file of the record's source, in source order: the File card's, then a GFF3 file's FASTA.
   const [primaryId, pairedId] = storedRecordSourceResourceIds(record.source);
   return sources.some((source) => source.source && committedRecordUsesSource(request, record, source)
-    && boundSources.some((bound) => bound.scope === source.scope && bound.sourceUid === source.sourceUid
+    && boundSources.some((bound) => bound.drawingId === source.drawingId && bound.scope === source.scope
+      && bound.sourceUid === source.sourceUid
       && bound.source === source.source && bound.paired === source.paired)
     && matchesSavedSource(source.source, primaryId)
     && (!source.paired || matchesSavedSource(source.paired, pairedId)));

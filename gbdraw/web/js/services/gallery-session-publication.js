@@ -27,7 +27,7 @@ import { readCircularSourceRecords } from './record-discovery.js';
 import { circularSourceInputs } from './input-types.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import {
-  IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritSavedComparison
+  IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritSavedComparison, inheritUnitPlans
 } from './imported-comparison-intent.js';
 import { canonicalAnnotationParams, normalizeAnnotationSlotParams, validateCustomTrackPlan } from './track-slot-validation.js';
 const CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
@@ -51,6 +51,7 @@ const clone = (value) => value === undefined ? value : JSON.parse(JSON.stringify
 const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { Session51 } from './session-drawings-upgrade.js' */
+/** @import { LinearUnitPlanner } from './imported-comparison-intent.js' */
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
@@ -403,7 +404,11 @@ const rebuildIntent = async (session, owners) => {
     losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat?.blastp?.mode }) : null;
   const rebuilt = owners.buildRequest({ state, drawing, filesData: inherit ? { ...filesData, linearCanonicalComparisons: [] } : filesData,
     comparisonPlanSnapshot: plan });
-  if (inherit) inheritSavedComparison({ candidate: rebuilt, source: classification.source });
+  if (inherit) {
+    const { source } = classification;
+    const units = await inheritUnitPlans({ candidate: rebuilt, source, runHelper: owners.planLinearUnits });
+    inheritSavedComparison({ candidate: rebuilt, source, units });
+  }
   // A batch request holds one output per record (OV-267); each keeps its committed policy.
   const committedOutputs = outputEntries(session.renderRequest.output), rebuiltOutputs = outputEntries(rebuilt.renderRequest.output);
   if (!committedOutputs || !rebuiltOutputs || committedOutputs.length !== rebuiltOutputs.length) throw new Error('Gallery publication cannot preserve committed output metadata policy.');
@@ -501,8 +506,9 @@ const mergeReplayResources = (prepared, replayed) => {
  */
 /**
  * The owners a publication calls: the Session and request owners
- * (`services/session-request.js`), the draft split, and
- * the Linear comparison planner. Each takes and returns unvalidated documents.
+ * (`services/session-request.js`), the draft split, the Linear comparison
+ * planner, and Python's plan of the drawn units (`planLinearUnits`), which
+ * Inherit carries a saved comparison by. Each takes and returns unvalidated documents.
  * @typedef {object} GallerySessionPublicationOwners
  * @property {(input: Record<string, any>) => Promise<Record<string, any>>} assertRequestsEquivalent
  * @property {(input: Record<string, any>) => { renderRequest: CanonicalRenderRequest, resources: NonNullable<PublicationSession['resources']>, webFiles: Record<string, unknown> }} buildRequest
@@ -514,6 +520,7 @@ const mergeReplayResources = (prepared, replayed) => {
  *   request (`readPublishedRenderRequest`), refusing any repair.
  * @property {(input: Record<string, any>) => PublicationProjection} projectRequest
  * @property {(input: Record<string, any>) => any} resolveComparisonPlan
+ * @property {LinearUnitPlanner} planLinearUnits
  * @property {PublicationDraftSplit} splitDraft
  */
 

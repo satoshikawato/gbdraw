@@ -9,6 +9,7 @@ import {
   followCommittedComparison,
   importedComparisonExecution,
   inheritSavedComparison,
+  inheritUnitPlans,
   savedComparisonSource,
   resolveImportedComparisonAction,
   restoreImportedComparisonIntent,
@@ -16,6 +17,16 @@ import {
   withComparisonSourceCheckpoint
 } from '../../gbdraw/web/js/services/imported-comparison-intent.js';
 import { normalizeCaughtError, normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { pythonLinearUnitPlan } from './helpers/linear-unit-plan.mjs';
+
+/**
+ * Inherit as Generate runs it: Python plans the saved and the drawn units (`inheritUnitPlans`), then the comparison is
+ * carried by them.
+ * @param {Parameters<typeof inheritSavedComparison>[0]} input
+ */
+const inheritPlanned = async (input) => inheritSavedComparison({ ...input, units: await inheritUnitPlans({
+  candidate: input.candidate, source: input.source, runHelper: async (payload) => ({ result: pythonLinearUnitPlan(payload) })
+}) });
 
 const records = [
   {
@@ -390,27 +401,27 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
   // Inherit carries unit indexes into a request that draws the same units (the same records and windows), as saved.
   const committedWindowed = classify(cliRequest).source;
   const sameUnits = { renderRequest: request([], { schema: 10, records: structuredClone(windowedRecords) }), resources: {} };
-  inheritSavedComparison({ candidate: sameUnits, source: committedWindowed });
+  await inheritPlanned({ candidate: sameUnits, source: committedWindowed });
   assert.deepEqual(sameUnits.renderRequest.comparisons.map((comparison) => [comparison.queryRecordIndex, comparison.subjectRecordIndex]),
     [[0, 2], [1, 2], [undefined, undefined]]);
   // A draft whose windows changed draws other units: the saved indexes name none of them.
   const otherUnits = { renderRequest: request([], { schema: 10, records: [{ ...windowedRecords[0], windows: [window(1, 15000)] }, windowedRecords[1]] }), resources: {} };
   // Generate shows the choice in the Comparison panel and why, not the UNKNOWN fallback.
   /** @param {() => unknown} inherit */
-  const shownFailure = (inherit) => {
+  const shownFailure = async (inherit) => {
     try {
-      inherit();
+      await inherit();
     } catch (error) {
       return normalizeCaughtError(error, { operation: 'generate', stage: 'request-validation' });
     }
     assert.fail('Inherit did not refuse');
   };
-  const changed = shownFailure(() => inheritSavedComparison({ candidate: otherUnits, source: committedWindowed }));
+  const changed = await shownFailure(() => inheritPlanned({ candidate: otherUnits, source: committedWindowed }));
   assert.equal(changed.code, 'COMPARISON_CHOICE_REQUIRED');
   assert.match(changed.summary, /The drawn records or windows changed since the comparison was saved\. Choose Replace or Clear\./);
   assert.deepEqual(changed.actions, ['edit-comparison']);
   // A drawing that holds no saved comparison gets the same choice.
-  const missing = shownFailure(() => inheritSavedComparison({ candidate: structuredClone(sameUnits), source: null }));
+  const missing = await shownFailure(() => inheritPlanned({ candidate: structuredClone(sameUnits), source: null }));
   assert.equal(missing.code, 'COMPARISON_CHOICE_REQUIRED');
   assert.match(missing.summary, /This drawing holds no saved comparison to inherit\./);
   // Align flips record-a's windows and commits a candidate of the committed request, which keeps the comparison
@@ -420,11 +431,11 @@ assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
     windowedRecords[1]];
   const flippedDraft = () => ({ renderRequest: request([], { schema: 10, records: structuredClone(flippedRecords) }), resources: {} });
   const aligned = { ...classify(cliRequest), source: committedWindowed };
-  assert.equal(shownFailure(() => inheritSavedComparison({ candidate: flippedDraft(), source: aligned.source })).code,
+  assert.equal((await shownFailure(() => inheritPlanned({ candidate: flippedDraft(), source: aligned.source }))).code,
     'COMPARISON_CHOICE_REQUIRED');
   followCommittedComparison(aligned, { renderRequest: { ...cliRequest, records: flippedRecords }, resources });
   assert.deepEqual(aligned.source.records, flippedRecords.map(({ recordKey, windows }) => ({ recordKey, windows })));
-  const inherited = inheritSavedComparison({ candidate: flippedDraft(), source: aligned.source });
+  const inherited = await inheritPlanned({ candidate: flippedDraft(), source: aligned.source });
   assert.deepEqual(inherited.renderRequest.comparisons.map((comparison) => [comparison.queryRecordIndex, comparison.subjectRecordIndex]),
     [[0, 2], [1, 2], [undefined, undefined]]);
   // A drawing whose comparison is editable holds no source, and a commit gives it none.
