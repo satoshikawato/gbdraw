@@ -228,8 +228,12 @@ const referenceLine = (dialog, reply) => {
  */
 const referenceRows = ({ dialog, session, begin, current, step, fail }) => {
   let rowId = 0;
-  /** Counts the genes of the reference windows. */
-  const checkReference = async () => {
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let typing;
+  /** @type {((checked: Promise<void>) => void)[]} */
+  let waiting = [];
+  /** Counts the genes of the reference windows as they are now. */
+  const countGenes = async () => {
     const mine = begin();
     const input = referenceInput(dialog);
     const found = session();
@@ -249,6 +253,17 @@ const referenceRows = ({ dialog, session, begin, current, step, fail }) => {
     }
   };
   /**
+   * Counts the genes now. A count that waits for a pause in typing is dropped and answered by this one: it would read
+   * the same windows, and starting later it would discard a Search begun after this count.
+   */
+  const checkReference = () => {
+    clearTimeout(typing);
+    const checked = countGenes();
+    for (const done of waiting) done(checked);
+    waiting = [];
+    return checked;
+  };
+  /**
    * The row of the picked span: the Region popup names its record by key and gives the span in source coordinates on
    * the source strand, so on a circular record a Start after the End is a span across the origin.
    * @param {{ recordKey: string, start: number, end: number } | null} region
@@ -262,10 +277,6 @@ const referenceRows = ({ dialog, session, begin, current, step, fail }) => {
     }];
     return checkReference();
   };
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  let typing;
-  /** @type {((checked: Promise<void>) => void)[]} */
-  let waiting = [];
   /** Drops a count that waits for a pause in typing (the dialog closes). */
   const stopWaiting = () => {
     clearTimeout(typing);
@@ -279,11 +290,7 @@ const referenceRows = ({ dialog, session, begin, current, step, fail }) => {
     Object.assign(dialog, { status: 'checking', genes: null, referenceReason: '' });
     return new Promise((resolve) => {
       waiting.push(resolve);
-      typing = setTimeout(() => {
-        const checked = checkReference();
-        for (const done of waiting) done(checked);
-        waiting = [];
-      }, TYPING_PAUSE_MS);
+      typing = setTimeout(checkReference, TYPING_PAUSE_MS);
     });
   };
   /**

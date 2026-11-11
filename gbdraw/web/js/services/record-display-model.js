@@ -11,6 +11,7 @@ import { msg, t, tm } from '../utils/i18n.js';
 
 /** @import { RecordEntryInput } from './record-options.js' */
 /** @import { FieldReading } from '../utils/field-reading.js' */
+/** @import { DrawingId } from './drawing-view.js' */
 /** @typedef {'circular' | 'linear'} RecordDisplayScope */
 // The topology a file declares, one whole key each (`detectedTopology` of services/record-discovery.js).
 const DETECTED_TOPOLOGY_NOTES = Object.freeze({
@@ -128,18 +129,21 @@ export const reconcileRecordDisplayDrafts = (drafts, discoveredRows, replacedSou
 // '#1' whatever the record's place, because the projection does not read the
 // file. Once the source's rows are known, it belongs to the row of its source
 // with its record ID; a request selects only an ID that is unique in its file
-// (`buildDisambiguatedRecordEntries`). Returns `drafts` when no draft moves.
+// (`buildDisambiguatedRecordEntries`). The drafts are the drawing `drawingId`'s,
+// so only that drawing's rows bind them: a drawing Find in other files creates
+// has cards of its source drawing's uids. Returns `drafts` when no draft moves.
 /**
  * @template {Array<RecordDisplayDraftIdentity & { recordId?: unknown }>} Drafts the record ID is only compared
  * @param {Drafts} drafts
- * @param {Array<{ key: string, sourceUid: string, selector: string, recordId: string }>} rows
+ * @param {readonly { key: string, drawingId: DrawingId, sourceUid: string, selector: string, recordId: string }[]} rows
+ * @param {DrawingId} drawingId The drawing whose drafts they are.
  * @returns {Drafts}
  */
-export const bindRecordDisplayDrafts = (drafts, rows) => {
+export const bindRecordDisplayDrafts = (drafts, rows, drawingId) => {
   const taken = new Set(drafts.map(recordDisplayKey));
   let moved = false;
   const bound = drafts.map((draft) => {
-    const sourceRows = rows.filter((row) => row.sourceUid === draft.sourceUid);
+    const sourceRows = rows.filter((row) => row.drawingId === drawingId && row.sourceUid === draft.sourceUid);
     if (!draft.recordId || sourceRows.some((row) => row.selector === draft.selector
       && row.recordId === draft.recordId)) return draft;
     const named = sourceRows.filter((row) => row.recordId === draft.recordId);

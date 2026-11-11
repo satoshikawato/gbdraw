@@ -2316,7 +2316,7 @@ def _records_table_input(record: RecordsTableRecord, index: int) -> RecordInput:
             for row in ordered
         )
     topology = record.topology
-    return RecordInput(
+    drawn = RecordInput(
         source=source,
         cardinality=RecordCardinality.EXACTLY_ONE,
         selector=parse_record_selector(first.record_id),
@@ -2335,6 +2335,8 @@ def _records_table_input(record: RecordsTableRecord, index: int) -> RecordInput:
         ),
         record_key=f"{CLI_RECORD_KEY_PREFIX}{index + 1}",
     )
+    # A record drawn in one window carries its orientation on the window, as every request writer writes it.
+    return drawn.oriented(drawn.is_reversed) if len(drawn.windows) == 1 else drawn
 
 
 def record_input_manifest_from_table(path: str) -> RecordInputManifest:

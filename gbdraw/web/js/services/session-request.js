@@ -162,6 +162,7 @@ import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { UNKNOWN_CARD_RECORD, wholeRecordWindow, windowSpanOf } from './linear-card-windows.js';
 /** @import { CardRecordFacts } from './linear-card-windows.js' */
+/** @import { DrawingId } from './drawing-view.js' */
 /** @import { LayoutEntry } from './linear-record-layout.js' */
 /** @import { CardWindowRecordInput } from '../contracts/card-windows.generated.js' */
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
@@ -1803,7 +1804,7 @@ export const linearRecordGridRows = (drawing, seqs) => {
  * a card that lists windows has no one record of known length, or a window is one Generate refuses: the cards then
  * show no number and no omitted length.
  * @template {RequestLinearSeq} C
- * @param {Parameters<typeof linearRecordPlacements>[0] & { recordDisplayDrafts?: RecordDisplayDraft[] }} drawing
+ * @param {Parameters<typeof linearRecordPlacements>[0] & { id: DrawingId, recordDisplayDrafts?: RecordDisplayDraft[] }} drawing
  * @param {readonly C[]} seqs The drawn cards, in request order.
  * @param {(seq: C) => CardRecordFacts & { circular: boolean }} recordOf
  * @param {RequestRecordDisplayRow[]} recordDisplayRows
@@ -4764,8 +4765,9 @@ const buildKeptTrackParts = ({ drawing, filesData, recordCount, resolvedCircular
 const splitMemberGridRow = (cardRow, cardIndex, arranged) => (arranged ? cardRow ?? cardIndex + 1 : null);
 
 /**
- * A record display row as the request writer reads it (`buildRecordDisplayRows`): its record ID is text.
- * @typedef {RecordDisplayRow & { recordId: string }} RequestRecordDisplayRow
+ * A record display row as the request writer reads it (`buildRecordDisplayRows`): its record ID is text, and it
+ * names the drawing whose card it reads (`allRows` of app/record-display-options.js).
+ * @typedef {RecordDisplayRow & { recordId: string, drawingId: DrawingId }} RequestRecordDisplayRow
  */
 /**
  * A record of the record plan as the request writer reads its display: its selector, its windows and its own
@@ -4774,15 +4776,18 @@ const splitMemberGridRow = (cardRow, cardIndex, arranged) => (arranged ? cardRow
  */
 /**
  * The display and orientation the request writes for one record of the record plan: the display rows of its source
+ * in its drawing (`drawingId`; a drawing Find in other files creates has cards of its source drawing's uids, OV-3376)
  * that its selector selects (`selectedRows`), the transform of each (`transformFor`, its draft's
  * `requestedRecordTransform`), and the transform of the record drawn as one record (`wholeTransform`): its first
  * selected row's, else its own display, else the draft saved for its source and selector. The one owner of a request
  * record's `display` (`projectCanonicalRenderInput`, `linearCardRequestedCircular`).
- * @param {{ mode: string, sourceUid: string, record: RequestDisplayRecord, recordDisplayRows: readonly RequestRecordDisplayRow[],
+ * @param {{ drawingId: DrawingId, mode: string, sourceUid: string, record: RequestDisplayRecord,
+ *   recordDisplayRows: readonly RequestRecordDisplayRow[],
  *   drafts: readonly (RecordDisplayDraftIdentity & Partial<RecordDisplayDraft>)[] }} input
  */
-const requestRecordTransforms = ({ mode, sourceUid, record, recordDisplayRows, drafts }) => {
-  const sourceRows = recordDisplayRows.filter((row) => row.scope === mode && row.sourceUid === sourceUid);
+const requestRecordTransforms = ({ drawingId, mode, sourceUid, record, recordDisplayRows, drafts }) => {
+  const sourceRows = recordDisplayRows.filter((row) => row.drawingId === drawingId && row.scope === mode
+    && row.sourceUid === sourceUid);
   const selector = requestRecordSelector(record);
   const selectedRows = sourceRows.filter((row) => !selector
     || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
@@ -4812,12 +4817,13 @@ const requestRecordTransforms = ({ mode, sourceUid, record, recordDisplayRows, d
  * comparison search's extraction sends it with the card's window, so Python crops a window across the origin as the
  * drawing does (`drawn_circular`, gbdraw/layout/record_transform.py). `windows` are the card's windows as the request
  * writes them (`linearDrawingWindowsOf`).
- * @param {{ drawing: { recordDisplayDrafts?: RecordDisplayDraft[] }, card: RequestLinearSeq, index: number,
+ * @param {{ drawing: { id: DrawingId, recordDisplayDrafts?: RecordDisplayDraft[] }, card: RequestLinearSeq, index: number,
  *   recordDisplayRows: RequestRecordDisplayRow[], windows: CanonicalRecord['windows'] }} input
  * @returns {boolean | null}
  */
 export const linearCardRequestedCircular = ({ drawing, card, index, recordDisplayRows, windows }) => {
   return requestRecordTransforms({
+    drawingId: drawing.id,
     mode: 'linear',
     sourceUid: linearSeqRecordKey(card, index),
     record: {
@@ -4826,12 +4832,17 @@ export const linearCardRequestedCircular = ({ drawing, card, index, recordDispla
       presentation: { reverseComplement: linearPresentationReverse(card, windows) }
     },
     recordDisplayRows,
-    drafts: bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows)
+    drafts: bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows, drawing.id)
   }).wholeTransform().display.isCircular;
 };
 
 /**
- * @param {Record<string, any>} input
+ * What the request writer reads. The record display rows are typed (`RequestRecordDisplayRow`): a row names its
+ * drawing, and the writer reads only the rows of the drawing it writes.
+ * @typedef {{ [field: string]: any, recordDisplayRows?: readonly RequestRecordDisplayRow[] }} CanonicalRenderInput
+ */
+/**
+ * @param {CanonicalRenderInput} input
  * @returns {CanonicalRenderEnvelope}
  */
 const projectCanonicalRenderInput = ({
@@ -4880,14 +4891,14 @@ const projectCanonicalRenderInput = ({
   const webFiles = {};
   const recordPlan = buildRecords({ drawing, filesData, resources });
   const arrangedRows = Boolean(drawing.linearRecordLayoutEnabled?.value);
-  const drafts = bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows);
+  const drafts = bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows, drawing.id);
   /** @type {number[]} */
   const sourceInputIndexes = [];
   const records = recordPlan.records.flatMap((record, index) => {
     // The card the record reads: a Linear record card, a Circular source card.
     const sourceUid = recordPlan.recordSources[index];
     const { selectedRows, transformFor, wholeTransform } = requestRecordTransforms({
-      mode, sourceUid, record, recordDisplayRows, drafts
+      drawingId: drawing.id, mode, sourceUid, record, recordDisplayRows, drafts
     });
     if (record.cardinality === 'all' && selectedRows.length > 1) {
       const transforms = selectedRows.map(transformFor);

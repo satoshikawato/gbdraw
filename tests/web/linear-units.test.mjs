@@ -9,7 +9,7 @@ import { createLinearSeq } from '../../gbdraw/web/js/services/drawing/inputs.js'
 import { buildLosatJobSpecs, linearComparisonEdgeKey } from '../../gbdraw/web/js/services/linear-comparisons.js';
 import { losatSearchSequences } from '../../gbdraw/web/js/services/linear-sources.js';
 import {
-  linearDrawingUnitPlaces, linearWindowsPayload, requireLinearComparisonPlanSnapshot
+  linearDrawingUnitPlaces, linearWindowsPayload, normalizeWebGridColumnOrdering, requireLinearComparisonPlanSnapshot
 } from '../../gbdraw/web/js/services/session-request.js';
 import {
   linearUnitPlanPayload,
@@ -252,4 +252,70 @@ test('Inherit plans the LOSAT jobs of exactly the saved unit pairs of a pipeline
   await assert.rejects(search(saved([[0, 2]], [cards[0], createLinearSeq({ uid: 'b', windows: [window(10, 90)] })])),
     (error) => error.code === 'COMPARISON_CHOICE_REQUIRED' && error.context?.reason === 'INHERIT_UNITS_CHANGED');
   assert.deepEqual(asked, []);
+});
+
+// OV-3365: Load orders the cards of a request Python wrote (`normalizeWebGridColumnOrdering`), and that order can differ
+// from the order the request stores its records in, which the saved unit indexes count. Inherit finds each saved unit
+// in the cards by its record and window, so the first Generate searches exactly the saved unit pairs, whatever the
+// order. The cases: the drawing Find in other files writes for the Vibrio plasmids (a row of contig 80 in two windows
+// at columns 1 and 4, contig 79 at column 2 and contig 86 at column 3), and a row of B in two windows at columns 2 and
+// 3 before A at column 1, with C in the next row.
+test('Inherit carries each saved unit pair to the same windows when Load orders the cards differently', async () => {
+  const settings = { proteinBlastpMaxHits: 3, proteinBlastpCandidateLimit: null };
+  const cases = [
+    {
+      records: [
+        { recordKey: 'reference', presentation: { gridRow: 1, gridColumn: 1 }, windows: [] },
+        { recordKey: 'plasmid', presentation: { gridRow: 2, gridColumn: 1 }, windows: [window(32762, 32761, true)] },
+        { recordKey: 'contig-80', presentation: { gridRow: 3, gridColumn: null },
+          windows: [window(1, 13298, true, 1), window(13299, 30248, true, 4)] },
+        { recordKey: 'contig-79', presentation: { gridRow: 3, gridColumn: 2 }, windows: [] },
+        { recordKey: 'contig-86', presentation: { gridRow: 3, gridColumn: 3 }, windows: [window(1, 27527)] }
+      ],
+      // Units in stored order: reference 0, plasmid 1, contig 80's windows 2 and 3, contig 79 4, contig 86 5.
+      pairs: [[0, 1], [1, 2], [1, 3], [1, 4], [1, 5]]
+    },
+    {
+      records: [
+        { recordKey: 'B', presentation: { gridRow: 1, gridColumn: null }, windows: [window(1, 100, false, 2), window(201, 300, false, 3)] },
+        { recordKey: 'A', presentation: { gridRow: 1, gridColumn: 1 }, windows: [] },
+        { recordKey: 'C', presentation: { gridRow: 2, gridColumn: 1 }, windows: [] }
+      ],
+      // Units in stored order: B's windows 0 and 1, A 2, C 3.
+      pairs: [[0, 3], [1, 3], [2, 3]]
+    }
+  ];
+  for (const { records, pairs } of cases) {
+    const byKey = new Map(records.map((record) => [record.recordKey, record]));
+    const cardOf = (record) => createLinearSeq({ uid: record.recordKey, windows: record.windows.map((entry) => ({ ...entry })) });
+    const cards = normalizeWebGridColumnOrdering(records).records.map((record) => cardOf(byKey.get(record.recordKey)));
+    const rows = records.map((record) => ({ uid: record.recordKey, row: record.presentation.gridRow }));
+    // The identity of each unit, in a list of records' unit order: Python's plan of those records names it.
+    const unitsOf = (keys) => pythonPlan({ records: keys.map((key) => ({ recordKey: key, windows: byKey.get(key).windows,
+      gridRow: null })), pairs: [] }).units.map((unit) => unit.unitKey);
+    const storedUnits = unitsOf(records.map((record) => record.recordKey));
+    const cardUnits = unitsOf(cards.map((card) => card.uid));
+    const source = savedComparisonSource({
+      renderRequest: {
+        schema: 10, mode: 'linear', diagramOptions: {},
+        records: records.map(({ recordKey, windows }) => ({ recordKey, windows })),
+        comparisons: [{ kind: 'generatedProteinComparison', mode: 'pairwise', settings,
+          pairs: pairs.map(([queryRecordIndex, subjectRecordIndex]) => ({ queryRecordIndex, subjectRecordIndex })) }]
+      },
+      resources: {}
+    });
+    const inherited = await inheritedPipelineSearch({
+      source, cards, placesOf: placesOf(rows), runHelper: async (payload) => ({ result: pythonPlan(payload) }),
+      requirePlan: requireLinearComparisonPlanSnapshot, plan: { sequences: cards, recordsOff: [], layout: rows }
+    });
+    assert.ok(inherited);
+    const searched = inherited.unitSearch.resolution.edges.map((edge) => [cardUnits[edge.queryIndex], cardUnits[edge.subjectIndex]]);
+    assert.deepEqual(searched.map((pair) => pair.join(' ')).sort(),
+      pairs.map(([query, subject]) => `${storedUnits[query]} ${storedUnits[subject]}`).sort());
+    // Generate then writes the searched tables in place of the pipeline: Inherit accepts the cards' units.
+    const candidate = { renderRequest: { records: cards.map((card) => ({ recordKey: card.uid,
+      windows: linearWindowsPayload(card, { arranged: true, ordinal: 1, record: { length: null, id: '' } }) })),
+      diagramOptions: {}, comparisons: [] }, resources: {} };
+    assert.doesNotThrow(() => inheritSavedComparison({ candidate, source, searched: true }));
+  }
 });
