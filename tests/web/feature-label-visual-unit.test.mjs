@@ -105,7 +105,8 @@ const buildHarness = ({
     labelReflowRequestSeq: ref(0),
     labelReflowForceRequestSeq: ref(0),
     labelReflowLastError: ref(null),
-    ruleMatchingPending: ref(false)
+    ruleMatchingPending: ref(false),
+    errorLog: ref(null), processing: ref(false), labelReflowProcessing: ref(false), resultGenerationKey: ref(0)
   };
   const actions = createFeatureLabelActions({
     ref, computed: get => ({ get value() { return get(); } }),

@@ -174,13 +174,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   });
   const ruleFailure = ref(null);
   const canRetrySpecificRuleFailure = computed(() => Boolean(ruleFailure.value
-    && state.errorLog?.value === ruleFailure.value.error
+    && state.errorLog.value === ruleFailure.value.error
     && isRuleInputCurrent(ruleFailure.value.snapshot)
     && (!ruleFailure.value.presetId || selectedSpecificPreset.value === ruleFailure.value.presetId)));
   const canEditSpecificRuleFailure = computed(() => canRetrySpecificRuleFailure.value
     && Boolean(ruleFailure.value.input?.isConnected));
   const retrySpecificRuleFailure = () => {
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     return busy || (canRetrySpecificRuleFailure.value ? ruleFailure.value.retry() : false);
   };
   const editSpecificRuleFailure = () => {
@@ -283,7 +283,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    */
   const redrawsLegendFor = (drawing, before, after, { rows = null, replaced = new Map(), holdsRow = () => false } = {}) => {
     const kept = typeRowCaptions(after);
-    const svg = state.svgContainer?.value?.querySelector?.('svg');
+    const svg = state.svgContainer.value?.querySelector('svg');
     const drawnKeys = shownLegendKeys(svg);
     const added = new Set((rows?.add || []).map(({ caption }) => caption));
     const retired = new Set(rows?.retire || []);
@@ -302,7 +302,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       resultLegendRowKeys(state, drawing.mode, legendSourceContext(drawing, before), { byColor }),
       resultLegendRowKeys(state, drawing.mode, legendSourceContext(drawing, after), { byColor }),
       {
-        displayed: Number(state.selectedResultIndex?.value) || 0,
+        displayed: state.selectedResultIndex.value,
         shows,
         placed,
         firstRule: legendRuleOrder(before, { byColor }),
@@ -343,7 +343,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // of the inputs the candidate was prepared from counts, unless the rule
   // table changed, or the caller or a Session operation superseded this one.
   /** @returns {Promise<void>} */
-  const rerenderIdle = () => (state.labelReflowProcessing?.value
+  const rerenderIdle = () => (state.labelReflowProcessing.value
     ? new Promise((resolve) => {
       const stop = watch(state.labelReflowProcessing, (busy) => { if (!busy) { stop(); resolve(); } });
     })
@@ -439,7 +439,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    * @param {CommitSpecificRulesOptions} commitOptions
    */
   const runSpecificRuleWrite = async (drawing, build, label, commitOptions) => {
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     if (commitOptions.isCurrent?.() === false) return false;
     await rerenderIdle();
@@ -476,7 +476,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       const stale = reinstalled || state.results.value !== results || !isRuleInputCurrent(inputs);
       if (outcome || attempt === 2 || !stale || contentChanged()
         || commitOptions.isCurrent?.() === false
-        || state.sessionOperationAvailability?.()) return outcome;
+        || state.sessionOperationAvailability()) return outcome;
       await rerenderIdle();
     }
   };
@@ -505,7 +505,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     return runWhenPrepared(state, () => {
       const prepare = () => prepareRules(rules, { asGiven: true });
       return [isRulePrepared(rules)
-        || (state.labelReflowProcessing?.value ? rerenderIdle().then(prepare) : prepare())];
+        || (state.labelReflowProcessing.value ? rerenderIdle().then(prepare) : prepare())];
     }, commit, () => (appliedWrites !== writes ? runWithRuleMatches(rules, commit) : undefined));
   };
   /**
@@ -520,7 +520,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const commitOnce = async (drawing, rules, sourceRows, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], legendPlacement = null, joinsOpenStep = false } = {}, legendOrder = null) => {
     const candidate = await prepareRules(rules);
     if (!candidate) return false;
-    const current = () => !state.sessionOperationAvailability?.() && isCurrent()
+    const current = () => !state.sessionOperationAvailability() && isCurrent()
       && isRuleInputCurrent(candidate.snapshot);
     if (!current()) return false;
     const { intents, previousIntents, ownedCaptions, removedRuleRows, rekeyed, rendererRows } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
@@ -604,16 +604,16 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    */
   const commitPrepared = (drawing, build, label, afterCommit = () => {}, input = null) => queueRuleWrite(async () => {
     const snapshot = snapshotRuleInputs();
-    const previousError = state.errorLog?.value;
+    const previousError = state.errorLog.value;
     try {
       const applied = await runSpecificRuleWrite(drawing, build, label, { afterCommit });
-      if (applied && state.errorLog?.value === ruleFailure.value?.error) state.errorLog.value = null;
+      if (applied && state.errorLog.value === ruleFailure.value?.error) state.errorLog.value = null;
       if (applied) ruleFailure.value = null;
       return applied;
     } catch (cause) {
-      if (!isRuleInputCurrent(snapshot) || state.errorLog?.value !== previousError) return false;
+      if (!isRuleInputCurrent(snapshot) || state.errorLog.value !== previousError) return false;
       const error = normalizeUserFacingError(cause, { operation: 'evaluateRules', stage: 'resource-staging' });
-      if (state.errorLog) state.errorLog.value = error;
+      state.errorLog.value = error;
       ruleFailure.value = { error, snapshot, input, retry: () => commitPrepared(drawing, build, label, afterCommit, input) };
       return false;
     }
@@ -623,12 +623,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     ? current.map(rule => (rule === row ? revise(rule, patch) : rule)) : null);
   /** @param {SpecificColorRule} row @param {string} value */
   const editSpecificRulePattern = (row, value) => {
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     return busy || patternDrafts.edit(row, value);
   };
   /** @param {SpecificColorRule} row @param {HTMLInputElement | null} [input] */
   const revertSpecificRulePattern = (row, input = null) => {
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     // The field shows the stored pattern again once its draft is gone (`v-committed-value`).
     patternDrafts.revert(row);
@@ -636,7 +636,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   };
   /** @param {DrawingState} drawing @param {SpecificColorRule} row @param {string} value */
   const applySpecificRulePattern = async (drawing, row, value) => {
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     if (!drawing.manualSpecificRules.includes(row) || !isPatternEditAvailable()) return false;
     patternDrafts.suspend();
@@ -676,7 +676,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    */
   const setSpecificRuleField = (index, field, value, input = null) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!specificRuleFields.has(field)) return;
     const current = drawing.manualSpecificRules[index];
@@ -693,7 +693,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
 
   /** @param {DrawingState} drawing @param {number} index @param {number} offset */
   const moveSpecificRule = (drawing, index, offset) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const row = drawing.manualSpecificRules[index];
     return commitPrepared(drawing, (current) => {
@@ -726,7 +726,6 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // Entries are edited in place, so callers build it per operation, not once.
   const indexEditableLabels = () => {
     const index = new Map();
-    if (!Array.isArray(editableLabels.value)) return index;
     for (const entry of editableLabels.value) {
       const key = normalizeFeatureIdKey(entry?.featureId);
       if (key && !index.has(key)) index.set(key, entry);
@@ -794,7 +793,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
 
   const addCustomColor = () => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!newColorFeat.value) return;
     editDefaultColors(drawing, { [newColorFeat.value]: newColorVal.value });
@@ -803,19 +802,19 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   /** @param {string} value */
   const setLabelFilterMode = (value) => {
     const drawing = state.activeDrawing();
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     setDrawingLabelFilterMode(drawing.slices.labelTables, value);
   };
   /** @param {string} text */
   const setBlacklistText = (text) => {
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     setDrawingBlacklistText(state.activeDrawing().slices.labelTables, text);
   };
   const addWhitelistRule = () => {
     const drawing = state.activeDrawing();
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     addWhitelistRules(drawing.slices.labelTables, [{ feat: 'CDS', qual: 'product', key: '' }]);
   };
@@ -826,7 +825,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    */
   const setWhitelistRuleField = (rule, field, value) => {
     const drawing = state.activeDrawing();
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     setDrawingWhitelistRuleField(drawing.slices.labelTables, rule, field, value);
     return undefined;
@@ -834,21 +833,21 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   /** @param {number} index */
   const removeWhitelistRule = (index) => {
     const drawing = state.activeDrawing();
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     removeDrawingWhitelistRule(drawing.slices.labelTables, index);
   };
   /** @param {number} index */
   const removePriorityRule = (index) => {
     const drawing = state.activeDrawing();
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     removeDrawingPriorityRule(drawing.slices.labelTables, index);
   };
 
   const addPriorityRule = () => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!newPriorityRule.order) return;
     setPriorityRules(drawing.slices.labelTables, [{ feat: newPriorityRule.feat, order: newPriorityRule.order }]);
@@ -856,7 +855,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
 
   const addSpecificRule = async () => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     // OV-2435: the Add button is disabled without a qualifier, by this same check.
     if (!newSpecRule.val || !specificRuleHasQualifier(newSpecRule)) return;
@@ -878,7 +877,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
         cancelLabel: t('Edit pattern')
       });
       if (choice !== 'add' || newSpecRule.val !== pattern || !specificRuleHasQualifier(newSpecRule)) return;
-      const busy = state.sessionOperationAvailability?.();
+      const busy = state.sessionOperationAvailability();
       if (busy) return busy;
     }
 
@@ -942,7 +941,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
 
   const applySpecificRulePreset = async () => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (specificRulePresetLoading.value) return;
     const presetId = selectedSpecificPreset.value;
@@ -957,7 +956,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     // The preset takes its place in the write line when it is chosen.
     return queueRuleWrite(async () => {
       const presetContext = snapshotRuleInputs();
-      const previousError = state.errorLog?.value;
+      const previousError = state.errorLog.value;
       try {
         const rules = preset.rules.map((/** @type {SpecificRulePreset['rules'][number]} */ rule) => ({ ...rule }));
         return await runSpecificRuleWrite(drawing, () => rules, msg('Apply specific color preset'), {
@@ -972,9 +971,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
         });
       } catch (e) {
         if (selectedSpecificPreset.value !== presetId || !isRuleInputCurrent(presetContext)
-          || state.errorLog?.value !== previousError) return;
+          || state.errorLog.value !== previousError) return;
         const error = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'resource-staging' });
-        if (state.errorLog) state.errorLog.value = error;
+        state.errorLog.value = error;
         ruleFailure.value = { error, snapshot: presetContext, presetId, retry: applySpecificRulePreset };
       } finally {
         specificRulePresetLoading.value = false;
@@ -984,7 +983,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
 
   const addFeature = () => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (newFeatureToAdd.value && !drawing.adv.features.includes(newFeatureToAdd.value)) {
       drawing.adv.features.push(newFeatureToAdd.value);
@@ -1000,7 +999,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   /** @param {string} featureType */
   const removeFeature = (featureType) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const idx = drawing.adv.features.indexOf(featureType);
     if (idx >= 0) {
@@ -1022,7 +1021,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   /** @param {string} featureType @param {string} shape */
   const setFeatureShape = (featureType, shape) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!drawing.adv.feature_shapes || typeof drawing.adv.feature_shapes !== 'object') {
       drawing.adv.feature_shapes = {};

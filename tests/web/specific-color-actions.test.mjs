@@ -48,7 +48,8 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
     editableLabels: { value: [] }, manualPriorityRules: [],
     deletedLegendEntries: { value: [] }, dormantLegendEntries: { value: [] }, legendStrokeOverrides: {},
     specificRulePresets: [], selectedSpecificPreset: { value: '' }, specificRulePresetLoading: { value: false },
-    svgContainer: { value: null }, originalLegendOrder: { value: [] }, displayedResultMetadata: () => null
+    svgContainer: { value: null }, originalLegendOrder: { value: [] }, displayedResultMetadata: () => null,
+    errorLog: { value: null }, selectedResultIndex: { value: 0 }
   };
   // The automatic rerender's busy flag, with the Vue `watch` the owner waits on.
   const watchers = new Set();
@@ -950,7 +951,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
     manualSpecificRules: [], featureColorOverrides: {}, featureOverrides: {}, featureVisibilityManualRules: [],
     svgResultIdentity: { value: 'result' }, addedLegendCaptions: { value: new Set() },
     legendEntries: { value: [] }, deletedLegendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},
-    extractedFeatures: { value: [] }
+    extractedFeatures: { value: [] }, labelReflowProcessing: { value: false }, errorLog: { value: null }
   };
   state.extractedFeatures.value = [...resultCatalogFeatures(state, 'circular').renderedByIdentity.values()];
   const drawingState = withDrawings(state);

@@ -502,7 +502,7 @@ export const createFeatureColorActions = ({
     const { pythonRows } = context;
     const rows = draftLegendRows({
       legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
-      dormantLegendEntries: drawing.dormantLegendEntries.value, originalLegendOrder: originalLegendOrder.value || []
+      dormantLegendEntries: drawing.dormantLegendEntries.value, originalLegendOrder: originalLegendOrder.value
     });
     const draft = draftLegendRowColors({ ...context, paletteColors: appliedFeatureColors(state), drawnTracks: readDrawnTracks() });
     return Object.entries(drawing.legendStrokeOverrides).find(([caption]) => {
@@ -1188,7 +1188,7 @@ export const createFeatureColorActions = ({
    * @param {string | null} [requestedLegendName]
    */
   const requestFeatureColorChange = async (drawing, feat, color, requestedLegendName = null) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!feat) return;
     const scope = getFeatureStyleScope(feat, requestedLegendName);
@@ -1224,7 +1224,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {string} color */
   const updateClickedFeatureColor = async (drawing, color) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return;
     const feat = clickedFeature.value.feat;
@@ -1245,7 +1245,7 @@ export const createFeatureColorActions = ({
   // The popup's Legend name, typed or picked from the list of color-rule groups.
   /** @param {DrawingState} drawing @param {ColorRuleLegendGroup} [joinGroup] The picked group. */
   const commitLegendName = async (drawing, joinGroup) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return;
 
@@ -1289,7 +1289,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {string} choice */
   const handleLegendRenameChoice = async (drawing, choice) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const pendingRequest = legendRenameDialog.pendingRequest;
     if (!pendingRequest || choice === 'cancel') {
@@ -1365,7 +1365,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {string} choice */
   const handleColorScopeChoice = async (drawing, choice) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const { feat, color, matchingRule, legendName, existingCaptionColor, defaultColorType } = featureStyleScopeDialog;
     if (choice === 'cancel' || !feat || !color) {
@@ -1441,7 +1441,7 @@ export const createFeatureColorActions = ({
   // (`editEditorIntent` in app/editor-intent.js), which records Python's strokes.
   /** @param {DrawingState} drawing @param {string | null | undefined} strokeColor @param {unknown} strokeWidth */
   const updateClickedFeatureStroke = (drawing, strokeColor, strokeWidth) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
     const svg = getCurrentSvg();
@@ -1472,7 +1472,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {string | null | undefined} strokeColor @param {unknown} strokeWidth */
   const requestClickedFeatureStrokeChange = (drawing, strokeColor, strokeWidth) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
     const feat = clickedFeature.value.feat;
@@ -1500,7 +1500,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing */
   const resetClickedFeatureStroke = (drawing) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
     const svg = getCurrentSvg();
@@ -1533,7 +1533,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {string | null} value */
   const setClickedFeatureStrokeColorValue = (drawing, value) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
     const svg = getCurrentSvg();
@@ -1571,7 +1571,7 @@ export const createFeatureColorActions = ({
   /** @param {DrawingState} drawing @param {unknown} value */
   const setClickedFeatureStrokeWidthValue = (drawing, value) => {
     if (clickedFeature.value) clickedFeature.value.strokeWidthDraft = null; // The field shows the stored width again.
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
     const normalizedStrokeWidth = normalizeStrokeWidthValue(value);
@@ -1581,7 +1581,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing */
   const resetClickedFeatureFillColor = (drawing) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return;
     if (!svgContainer.value) return;
@@ -1616,7 +1616,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {string} choice */
   const handleResetColorChoice = async (drawing, choice) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     await doResetFillColor(drawing, choice);
     closeResetColorDialog();
@@ -1660,7 +1660,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {unknown} features @param {string} color @param {unknown} caption */
   const applyColorToSelectedFeatures = async (drawing, features, color, caption) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const targetFeatures = uniqueFeaturesBySvgId(features);
     const targetColor = resolveColorToHex(color) || String(color || '').trim();
@@ -1672,7 +1672,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {unknown} features @param {string | null} strokeColor @param {unknown} strokeWidth */
   const applyStrokeToSelectedFeatures = (drawing, features, strokeColor, strokeWidth) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const targetFeatures = uniqueFeaturesBySvgId(features);
     const svg = getCurrentSvg();
@@ -1737,7 +1737,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {string} choice */
   const handleStrokeScopeChoice = (drawing, choice) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const {
       feat,
@@ -1790,7 +1790,7 @@ export const createFeatureColorActions = ({
    * @param {LegendRowName | null} [customCaption] The name to caption the feature's rule with.
    */
   const setFeatureColor = async (drawing, feature, color, customCaption = null) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!feature || !getFeatureQualifier(feature)) return false;
     const caption = legendRowName(normalizeCaption(customCaption || getIndividualFeatureLabel(feature)));
@@ -1800,7 +1800,7 @@ export const createFeatureColorActions = ({
 
   /** @param {DrawingState} drawing @param {ColorFeature} feature @param {string | null} value @param {LegendRowName | null} [customCaption] */
   const setFeatureColorValue = async (drawing, feature, value, customCaption = null) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!feature) return false;
     if (value === null) {
