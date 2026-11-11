@@ -22,7 +22,7 @@ from gbdraw.api.diagram import assemble_circular_diagram_from_records
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.api.options import CircularDiagramOptions, CircularOutputOptions
-from gbdraw.api.requests import CircularBatchRequest, CircularDiagramRequest, RecordPresentation
+from gbdraw.api.requests import CircularDiagramRequest, RecordPresentation
 from gbdraw.auto_sizes import determine_length_parameter
 from gbdraw.configurators.bundle import DiagramConfigurators
 from gbdraw.configurators.legend import LegendMeasurement
@@ -2384,7 +2384,7 @@ def test_circular_cli_one_record_grid_uses_typed_multi_planner(
 
 
 @pytest.mark.circular
-def test_circular_cli_one_record_without_grid_uses_typed_batch(
+def test_circular_cli_one_record_without_grid_is_a_single_drawing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     stub_typed_request_export,
@@ -2419,10 +2419,13 @@ def test_circular_cli_one_record_without_grid_uses_typed_batch(
     )
     result = circular_cli_module.run_circular_from_namespace(args)
 
-    assert isinstance(result.canonical_request, CircularBatchRequest)
-    assert result.canonical_request.grouping == "batch"
-    assert result.canonical_request.outputs[0].output_directory == tmp_path
-    assert result.canonical_request.outputs[0].output_prefix == "one.batch"
+    # The command draws the record as a batch item; the run saves it as one single drawing (OV-3297).
+    assert isinstance(result.canonical_request, CircularDiagramRequest)
+    assert result.canonical_request.grouping == "single"
+    assert result.canonical_request.layout is None
+    assert result.canonical_request.output.output_directory == tmp_path
+    assert result.canonical_request.output.output_prefix == "one.batch"
+    assert [output.svg_path for output in result.outputs] == [tmp_path / "one.batch.svg"]
 
 
 @pytest.mark.circular

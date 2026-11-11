@@ -179,9 +179,9 @@ test('current and historical request projection keeps zero pixel gaps separate f
   for (const spacing of [0, '0px', { value: 0, unit: 'px' }, { value: 5, unit: 'px' }]) {
     const historical = structuredClone(tobacco);
     historical.renderRequest.schema = 2;
-    // The schema-2 writer wrote one Circular drawing with one output.
-    historical.renderRequest.grouping = 'single';
-    historical.renderRequest.output = historical.renderRequest.output[0];
+    // The schema-2 writer wrote one Circular drawing with one output, as the one-record Gallery Session does now.
+    assert.equal(historical.renderRequest.grouping, 'single');
+    assert.equal(Array.isArray(historical.renderRequest.output), false);
     delete historical.renderRequest.diagramOptions.featureOverrides;
     historical.renderRequest.diagramOptions.output.outputPrefix = 'legacy';
     delete historical.renderRequest.diagramOptions.featurePlacements;

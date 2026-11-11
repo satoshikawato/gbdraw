@@ -27,10 +27,9 @@ def chloroplast_session():
 
 
 def _build(document, tmp_path):
-    # The published Session is the CLI command's one-record batch.
+    # The published Session is the CLI command's one-record drawing (PD-OI-044).
     with materialize_session(document, output_directory=tmp_path) as materialized:
-        (item,) = plan_request(session_to_request(materialized)).item_plans()
-        return item.build()
+        return plan_request(session_to_request(materialized)).build()
 
 
 @pytest.mark.parametrize("separate", [False, True])

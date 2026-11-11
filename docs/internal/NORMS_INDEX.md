@@ -328,7 +328,9 @@ under "Cited ids without a record".
 
 - [PD-OI-043](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-043-pure-pixel-track-text-inputs): Pure pixel track text inputs. ACCEPTED, concern `tracks.pixel-text-input-domain`, scenario revision 1.
 
-- [PD-OI-044](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-044-applicable-circular-controls-and-truthful-record-discovery): Applicable Circular controls and truthful record discovery. ACCEPTED, concern `diagram-generation.circular-transform-discoverability`, scenario revision 5, supersedes scenario revision 4.
+- [PD-OI-044](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-044-applicable-circular-controls-and-truthful-record-discovery): Applicable Circular controls and truthful record discovery. ACCEPTED, concern `diagram-generation.circular-transform-discoverability`, scenario revision 6, supersedes scenario revision 5.
+  - `tests/test_chloroplast_placement.py`
+  - `tests/test_joint_display_placement_surfaces.py`
   - `tests/test_session_io.py`
   - `tests/test_window_source_session.py`
   - `tests/web/circular-file-cards.test.mjs`
