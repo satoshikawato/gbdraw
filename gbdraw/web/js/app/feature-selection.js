@@ -67,9 +67,7 @@ const TOOLBAR_EDGE_MARGIN_PX = 8;
 
 /**
  * The members of the `state.js` state that `applyFeatureSelectionClasses` reads.
- * @typedef {object} FeatureSelectionClassState
- * @property {{ value?: ReadonlySet<string> | null }} [selectedFeatureIds]
- * @property {{ value?: unknown }} [selectedFeatureAnchorId]
+ * @typedef {Pick<FeatureSelectionState, 'selectedFeatureIds' | 'selectedFeatureAnchorId'>} FeatureSelectionClassState
  */
 
 /** @param {unknown} value */
@@ -140,8 +138,8 @@ export const getSelectableFeatureTarget = (eventLike, svg) => {
  */
 export const applyFeatureSelectionClasses = (svg, state) => {
   if (!svg || !state) return;
-  const selected = state.selectedFeatureIds?.value || new Set();
-  const anchorId = normalizeFeatureSelectionId(state.selectedFeatureAnchorId?.value);
+  const selected = state.selectedFeatureIds.value;
+  const anchorId = normalizeFeatureSelectionId(state.selectedFeatureAnchorId.value);
   stripFeatureSelectionClasses(svg);
   svg.querySelectorAll(SELECTABLE_FEATURE_SELECTOR).forEach((element) => {
     const id = getElementSelectionId(element);
@@ -313,7 +311,7 @@ export const createFeatureSelection = ({
   let activeToolbarDrag = null;
   const toolbarOffset = reactive({ x: 0, y: 0 });
 
-  const getCurrentSvg = () => svgContainer.value?.querySelector?.('svg') || null;
+  const getCurrentSvg = () => svgContainer.value?.querySelector('svg') || null;
 
   /**
    * @param {unknown} message
@@ -439,7 +437,7 @@ export const createFeatureSelection = ({
     // An empty selection stays the same Set, so a plain click or a background
     // click re-renders nothing, and the Result is restyled only when it still
     // shows a selection class (OV-913).
-    const alreadyEmpty = !selectedFeatureIds.value?.size;
+    const alreadyEmpty = !selectedFeatureIds.value.size;
     if (!alreadyEmpty) selectedFeatureIds.value = new Set();
     selectedFeatureAnchorId.value = normalizeFeatureSelectionId(keepAnchorId);
     featureSelectionDrag.active = false;
@@ -464,11 +462,9 @@ export const createFeatureSelection = ({
   const getFeatureById = (featureId) => {
     const id = normalizeFeatureSelectionId(featureId);
     if (!id) return null;
-    const bySvgId = featuresBySvgId?.value instanceof Map ? featuresBySvgId.value : new Map();
+    const bySvgId = featuresBySvgId.value;
     return bySvgId.get(id) ||
-      (Array.isArray(extractedFeatures.value)
-        ? extractedFeatures.value.find((feature) => normalizeFeatureSelectionId(feature?.svg_id) === id)
-        : null) ||
+      extractedFeatures.value.find((feature) => normalizeFeatureSelectionId(feature?.svg_id) === id) ||
       null;
   };
 
@@ -495,7 +491,7 @@ export const createFeatureSelection = ({
     const elementIndex = getSelectableElementsById(svg);
     /** @type {RenderedFeatureGeometry[]} */
     const geometries = [];
-    (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((feature) => {
+    extractedFeatures.value.forEach((feature) => {
       const id = normalizeFeatureSelectionId(feature?.svg_id);
       if (!id) return;
       if (scope && getFeatureSelectionScope(feature) !== scope) return;
@@ -517,7 +513,7 @@ export const createFeatureSelection = ({
   const toggleFeatureSelection = (featureId) => {
     const id = normalizeFeatureSelectionId(featureId);
     if (!id || !getFeatureById(id)) return false;
-    const nextIds = new Set(selectedFeatureIds.value || []);
+    const nextIds = new Set(selectedFeatureIds.value);
     if (nextIds.has(id)) {
       nextIds.delete(id);
       replaceSelectedFeatureIds(nextIds, {
@@ -543,7 +539,7 @@ export const createFeatureSelection = ({
     const anchorId = normalizeFeatureSelectionId(selectedFeatureAnchorId.value);
     const anchor = getFeatureById(anchorId);
     if (!anchorId || !anchor) {
-      const nextIds = additive ? new Set(selectedFeatureIds.value || []) : new Set();
+      const nextIds = additive ? new Set(selectedFeatureIds.value) : new Set();
       nextIds.add(clickedId);
       replaceSelectedFeatureIds(nextIds, { anchorId: clickedId });
       closePreviewPopups();
@@ -612,7 +608,7 @@ export const createFeatureSelection = ({
         .map((entry) => entry.id);
     }
 
-    const nextIds = additive ? new Set(selectedFeatureIds.value || []) : new Set();
+    const nextIds = additive ? new Set(selectedFeatureIds.value) : new Set();
     rangeIds.forEach((id) => nextIds.add(id));
     replaceSelectedFeatureIds(nextIds, { anchorId });
     closePreviewPopups();
@@ -632,7 +628,7 @@ export const createFeatureSelection = ({
    * @param {boolean} [additive]
    */
   const selectIntersectingFeatures = (svg, marqueeRect, additive = false) => {
-    const nextIds = additive ? new Set(selectedFeatureIds.value || []) : new Set();
+    const nextIds = additive ? new Set(selectedFeatureIds.value) : new Set();
     const geometries = buildRenderedFeatureGeometry(svg);
     geometries.forEach((entry) => {
       if (rectsIntersect(entry.rect, marqueeRect)) {
@@ -758,7 +754,7 @@ export const createFeatureSelection = ({
     if (target?.closest?.('.feature-popup, .pairwise-match-popup, input, textarea, select, [contenteditable="true"]')) {
       return;
     }
-    if ((selectedFeatureIds.value || new Set()).size > 0) {
+    if (selectedFeatureIds.value.size > 0) {
       clearFeatureSelection({ clearStatus: true });
       event.preventDefault();
     }

@@ -31,6 +31,7 @@ export const fixture = (colors, rules, { slots = null } = {}) => {
   const state = { svgContent: ref('<svg/>'), extractedFeatures: ref([feature]), featuresBySvgId: ref(new Map([['f1', feature]])),
     appliedPaletteColors: ref(colors), manualSpecificRules: rules, featureColorOverrides: {}, legendColorOverrides: {},
     pairwiseMatchFactors: ref({}), results: ref([{ content: JSON.stringify({ fill: '#000000', depth: {} }) }]), selectedResultIndex: ref(0),
+    biologicalFeatures: ref([]), svgResultIdentity: ref(null),
     skipCaptureBaseConfig: ref(false), svgContainer: ref({ querySelector: () => svg }), adv: {}, mode: ref('circular'), form: { show_depth: true } };
   withDrawings(state);
   const rulePreparation = createRulePreparation({ state, evaluate: evaluatePythonRules });

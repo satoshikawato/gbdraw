@@ -46,6 +46,7 @@ test('resolveFeatureDrawn answers every shared case as should_render_feature doe
   // feature and one rule, so each case reads only its own rules.
   const state = {
     extractedFeatures: { value: features },
+    biologicalFeatures: { value: [] }, svgResultIdentity: { value: null }, mode: { value: 'circular' }, results: { value: [] }, selectedResultIndex: { value: 0 },
     featureOverrides: {},
     featureVisibilityManualRules: DRAWN.cases.flatMap((vector) => vector.visibilityRules || []),
     manualSpecificRules: DRAWN.cases.flatMap((vector) => vector.colorRules || [])
@@ -70,6 +71,7 @@ test('resolveFeatureDrawn is unknown until Python has matched the rule it reache
   const feature = catalogFeature('cds_fl1', 0);
   const state = {
     extractedFeatures: { value: [feature] },
+    biologicalFeatures: { value: [] }, svgResultIdentity: { value: null }, mode: { value: 'circular' }, results: { value: [] }, selectedResultIndex: { value: 0 },
     featureOverrides: {},
     featureVisibilityManualRules: [offRule('locus_tag', '^fl1$')],
     manualSpecificRules: []
@@ -101,6 +103,7 @@ test('resolveFeatureDrawn declines drawn-coordinate rules for a feature Python d
   const state = {
     extractedFeatures: { value: [] },
     biologicalFeatures: { value: [biological] },
+    svgResultIdentity: { value: null }, mode: { value: 'circular' }, results: { value: [] }, selectedResultIndex: { value: 0 },
     featureOverrides: {},
     featureVisibilityManualRules: [offRule('location', '^100\\.\\.700$')],
     manualSpecificRules: []

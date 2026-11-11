@@ -75,6 +75,8 @@ const actionState = {
   resultGenerationKey,
   results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
   selectedResultIndex,
+  // The fixture is its own drawing (withDrawings), so `mode` is the drawing's, as the visibility actions read it.
+  biologicalFeatures: ref([]), svgResultIdentity: ref(null), mode: 'circular',
   svgContainer: ref({
     querySelector: (selector) => (selector === 'svg' ? {} : null)
   }),
@@ -318,6 +320,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     resultGenerationKey: ref('generation-1'),
     results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
     selectedResultIndex: ref(0),
+    biologicalFeatures: ref([]), svgResultIdentity: ref(null), mode: 'circular',
     svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
     labelReflowProcessing: ref(false),
     errorLog: ref(null)
@@ -377,6 +380,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     resultGenerationKey: ref('generation-1'),
     results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
     selectedResultIndex: ref(0),
+    biologicalFeatures: ref([]), svgResultIdentity: ref(null), mode: 'circular',
     svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
     labelReflowProcessing: ref(false),
     errorLog: ref(null)
@@ -475,6 +479,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     resultGenerationKey: ref('generation-1'),
     results: ref([{ name: 'result-0.svg', content: '<svg />' }]),
     selectedResultIndex: ref(0),
+    biologicalFeatures: ref([]), svgResultIdentity: ref(null), mode: 'circular',
     svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
     labelReflowProcessing: ref(false),
     errorLog: ref(null)
@@ -581,6 +586,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     resultGenerationKey: ref('generation-1'),
     results: ref([{ name: 'result-0.svg', content: '<svg />' }]),
     selectedResultIndex: ref(0),
+    biologicalFeatures: ref([]), svgResultIdentity: ref(null), mode: 'circular',
     svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
     errorLog: ref(null)
   };
@@ -672,6 +678,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     resultGenerationKey: ref('generation-1'),
     results: ref([{ name: 'result-0.svg', content: '<svg />' }]),
     selectedResultIndex: ref(0),
+    biologicalFeatures: ref([]), svgResultIdentity: ref(null), mode: 'circular',
     svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
     errorLog: ref(null)
   };

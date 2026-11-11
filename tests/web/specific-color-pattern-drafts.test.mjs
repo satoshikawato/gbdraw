@@ -34,7 +34,8 @@ const setup = ({ features = [{ type: 'CDS', svg_id: 'one', qualifiers: { product
     addedLegendCaptions: { value: new Set() },
     legendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},
     svgContainer: { value: null }, originalLegendOrder: { value: [] }, displayedResultMetadata: () => null,
-    selectedResultIndex: { value: 0 }, labelReflowProcessing: { value: false }
+    selectedResultIndex: { value: 0 }, labelReflowProcessing: { value: false },
+    biologicalFeatures: { value: [] }, svgContent: { value: null }
   };
   const calls = [], history = [];
   let available = true;

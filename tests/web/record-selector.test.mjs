@@ -222,6 +222,8 @@ for (const [name, text] of [
 }
 
 const ref = (value) => ({ value });
+// The state.js members the selector reads besides the drawings, as state.js creates them.
+const selectorMembers = () => ({ sessionOperationAvailability: () => null, semanticFileWatchersSuppressed: ref(false), sessionImportRollbackInProgress: ref(false) });
 // One drawing per mode, as in state.js: the shown drawing follows `mode` and
 // holds the fixture's rows (`fixture.linearSeqs` is that drawing's array).
 const withShownDrawing = (fixture) => {
@@ -231,6 +233,7 @@ const withShownDrawing = (fixture) => {
 const fileA = { name: 'a.gb' };
 const fileB = { name: 'b.gb' };
 const state = {
+  ...selectorMembers(),
   mode: ref('linear'),
   inputType: ref('gb'),
   linearSeqs: [{ uid: 'row-a', gb: fileA, fasta: null, region_record_id: '' }]
@@ -291,6 +294,7 @@ assert.equal(Object.hasOwn(controller.selectorStateByDrawing.get('linear'), 'row
 assert.equal(Object.hasOwn(controller.selectorStateByDrawing.get('linear'), 'row-a'), true);
 
 const errorState = {
+  ...selectorMembers(),
   mode: ref('linear'),
   inputType: ref('gb'),
   linearSeqs: [{ uid: 'error-row', gb: null, fasta: null, region_record_id: 'LegacyRec' }]
@@ -317,6 +321,7 @@ assert.deepEqual(errorController.optionsFor(errorState.activeDrawing(), errorSta
 assert.equal(loggedErrors.length, 1);
 
 const lazyState = {
+  ...selectorMembers(),
   mode: ref('linear'),
   inputType: ref('gb'),
   linearSeqs: [{ uid: 'lazy-row', gb: fileA, fasta: null, region_record_id: '' }]
@@ -337,6 +342,7 @@ assert.equal(lazyReaderCalls, 1);
 assert.equal(lazyController.optionsFor(lazyState.activeDrawing(), lazyState.linearSeqs[0])[1].value, 'Lazy');
 
 const rollbackState = {
+  sessionOperationAvailability: () => null,
   mode: ref('linear'),
   inputType: ref('gb'),
   semanticFileWatchersSuppressed: ref(false),
@@ -377,6 +383,7 @@ rollbackState.semanticFileWatchersSuppressed.value = false;
 // reads again, and so does a failure that is not a property of the bytes.
 const reuseFiles = { gff: { name: 'm23.gff3' }, fasta: { name: 'mismatch.fasta' } };
 const reuseState = {
+  ...selectorMembers(),
   mode: ref('linear'),
   inputType: ref('gff'),
   linearSeqs: [{ uid: 'reuse-a', gff: reuseFiles.gff, fasta: reuseFiles.fasta, region_record_id: '' }]
@@ -454,7 +461,7 @@ assert.equal(readyController.optionsFor(reuseState.activeDrawing(), reuseState.l
   const fileA = genbank('RecA');
   const fileB = genbank('RecB');
   const tripState = {
-    inputType: { value: 'gb' }, mode: { value: 'linear' },
+    ...selectorMembers(), inputType: { value: 'gb' }, mode: { value: 'linear' },
     linearSeqs: [{ uid: 'trip-a', gb: fileA }, { uid: 'trip-b', gb: fileB }]
   };
   const trip = createLinearRecordSelector({
@@ -541,7 +548,7 @@ assert.equal(readyController.optionsFor(reuseState.activeDrawing(), reuseState.l
 {
   let shownId = 'linear';
   const pinState = {
-    mode: ref('linear'), inputType: ref('gb'),
+    ...selectorMembers(), mode: ref('linear'), inputType: ref('gb'),
     linearSeqs: [{ uid: 'pin-a', gb: { name: 'pin.gb' }, fasta: null, region_record_id: '' }]
   };
   pinState.activeDrawing = () => ({ id: shownId, mode: 'linear', inputType: pinState.inputType, linearSeqs: pinState.linearSeqs });
@@ -574,7 +581,7 @@ assert.equal(readyController.optionsFor(reuseState.activeDrawing(), reuseState.l
   let drawings = [source, copy];
   const recordsOf = new Map([[fileSource, 'SourceRec'], [fileCopy, 'CopyRec']]);
   const perDrawing = createLinearRecordSelector({
-    state: { drawingList: () => drawings },
+    state: { ...selectorMembers(), drawingList: () => drawings },
     reactive: (value) => value,
     recordReader: async ({ primaryFile }) => [{ selector: '#1', recordId: recordsOf.get(primaryFile), recordLength: 5 }]
   });
@@ -611,6 +618,7 @@ assert.equal(readyController.optionsFor(reuseState.activeDrawing(), reuseState.l
   ];
   for (const [code, recordReader] of failures) {
     const failedState = {
+      ...selectorMembers(),
       mode: ref('linear'),
       inputType: ref('gb'),
       linearSeqs: [{ uid: `failed-${code}`, gb: { name: 'input.gb' }, fasta: null, region_record_id: '' }]

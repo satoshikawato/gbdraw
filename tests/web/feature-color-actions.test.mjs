@@ -131,7 +131,9 @@ const { ruleMatcher } = await import(pathToFileURL(join(tempDir, 'services', 'ru
 const firstMatchingRule = (feature, rules) => ruleMatcher(rules).first(feature);
 // The rule owner's `runWithRuleMatches` for these fakes: the color matches of the rules, prepared once.
 const runWithRuleMatchesOf = (preparation, state) => (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit);
-const preparationState = { extractedFeatures, biologicalFeatures, manualSpecificRules };
+// The state.js members a rule preparation reads besides the features and rules, as state.js creates them.
+const preparationMembers = () => ({ svgResultIdentity: ref(null), mode: ref('circular'), results: ref([]), selectedResultIndex: ref(0) });
+const preparationState = { ...preparationMembers(), extractedFeatures, biologicalFeatures, manualSpecificRules };
 let legendSiblings = [featureB, hashOnlyFeature];
 let matchingRegexRule = specificRule;
 const preparedRuleSets = [];
@@ -140,6 +142,7 @@ const runWithRuleMatchesForActions = runWithRuleMatchesOf(actionsPreparation, pr
 const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor,
   state: withDrawings({
     results: ref([]),
+    svgContent: ref(null),
     selectedResultIndex: ref(0),
     appliedPaletteColors: ref({ CDS: '#cccccc' }),
     manualSpecificRules,
@@ -174,7 +177,7 @@ const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLege
     const rules = await build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
     if (!rules) return false;
     committedLegendIntents.push(previousLegendIntents);
-    const preparation = createRulePreparation({state:withDrawings({extractedFeatures,biologicalFeatures,manualSpecificRules}),evaluate:evaluatePythonRules});
+    const preparation = createRulePreparation({state:withDrawings({...preparationMembers(),extractedFeatures,biologicalFeatures,manualSpecificRules}),evaluate:evaluatePythonRules});
     const candidate = await preparation.prepareCandidate(rules);
     if (!candidate) return false;
     const drawn = new Set(extractedFeatures.value.map(feature => firstMatchingRule(feature, candidate.rules)));
@@ -852,13 +855,14 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const resetClicked = ref(null);
   const resetFeatures = ref([trnaA, trnaB, rrna]);
   const resetPreparation = createRulePreparation({
-    state: withDrawings({ extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules }),
+    state: withDrawings({ ...preparationMembers(), extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules }),
     evaluate: evaluatePythonRules,
     synthesize: synthesizePythonColorRules
   });
   const resetActions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor,
     state: withDrawings({
       results: ref([]),
+      svgContent: ref(null),
       selectedResultIndex: ref(0),
       appliedPaletteColors: ref({ tRNA: '#e8b441', rRNA: '#71ee7d' }),
       manualSpecificRules: resetRules,
@@ -958,7 +962,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const originalOrder = ref([...order]);
     // Catalog features: each has its catalog identity, here its rendered id in one record.
     const featureList = ref(features.map((feature) => ({ record_key: 'record-1', biological_feature_id: feature.svg_id, ...feature })));
-    const renameState = { extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules };
+    const renameState = { ...preparationMembers(), extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules };
     const renamePreparation = createRulePreparation({ state: withDrawings(renameState), evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules });
     // Python's rows of the displayed Result: the listed rows as Python drew them.
     /** @param {string} caption */
@@ -1685,10 +1689,10 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const fl1Clicked = ref(null);
   const fl1Features = ref([fl1]);
   const fl1Rules = [];
-  const fl1State = { extractedFeatures: fl1Features, biologicalFeatures: fl1Features, manualSpecificRules: fl1Rules };
+  const fl1State = { ...preparationMembers(), extractedFeatures: fl1Features, biologicalFeatures: fl1Features, manualSpecificRules: fl1Rules };
   const fl1Actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor,
     state: withDrawings({
-      results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ CDS: '#cccccc' }),
+      results: ref([]), svgContent: ref(null), selectedResultIndex: ref(0), appliedPaletteColors: ref({ CDS: '#cccccc' }),
       manualSpecificRules: fl1Rules, extractedFeatures: fl1Features, biologicalFeatures: fl1Features,
       featureColorOverrides: {}, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? fl1Svg : null }),
       displayedResultMetadata: () => null,

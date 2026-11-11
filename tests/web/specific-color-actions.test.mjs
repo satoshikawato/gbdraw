@@ -49,7 +49,8 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
     deletedLegendEntries: { value: [] }, dormantLegendEntries: { value: [] }, legendStrokeOverrides: {},
     specificRulePresets: [], selectedSpecificPreset: { value: '' }, specificRulePresetLoading: { value: false },
     svgContainer: { value: null }, originalLegendOrder: { value: [] }, displayedResultMetadata: () => null,
-    errorLog: { value: null }, selectedResultIndex: { value: 0 }
+    errorLog: { value: null }, selectedResultIndex: { value: 0 },
+    biologicalFeatures: { value: [] }, mode: { value: 'circular' }, svgContent: { value: null }
   };
   // The automatic rerender's busy flag, with the Vue `watch` the owner waits on.
   const watchers = new Set();
@@ -727,7 +728,7 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
   const legend = createLegendManager({ state: withDrawings(state), commitLegendRowRules: (build, label) => {
     committed.push({ rules: build(state.manualSpecificRules, (row, patch) => ({ ...row, ...patch })), label });
     return true;
-  }, readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
+  }, readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []) });
   assert.equal(legend.updateLegendEntryColor(1, '#00ff00'), true);
   assert.deepEqual(committed, [{ rules: [{ ...rule, color: '#00ff00' }], label: 'Change legend color' }]);
   assert.deepEqual([legend.legendRowHasRules(0), legend.legendRowHasRules(1)], [false, true]);
@@ -760,7 +761,7 @@ test('the Legend editor recolors every row a merged row stands for, a rule row t
     committed.push({ rules: build(state.manualSpecificRules, (row, patch) => ({ ...row, ...patch })), label });
     options?.afterCommit?.([]);
     return true;
-  }, readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
+  }, readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []) });
   assert.equal(legend.legendRowHasRules(0), true, 'the shown row stands for a rule row');
   assert.equal(legend.updateLegendEntryColor(0, '#00ff00'), true);
   assert.deepEqual(committed, [{ rules: [{ ...rule, color: '#00ff00' }], label: 'Change legend color' }]);
@@ -796,7 +797,7 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
     const committed = [];
     const defaults = [];
     const legend = createLegendManager({ state: withDrawings(state), commitLegendRowRules: () => assert.fail('no Legend editor commit'),
-      readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
+      readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []) });
     const popup = createFeatureColorActions({
       state: withDrawings(state), readDrawnTracks: () => [], getFeatureElements: () => [], getFeatureFillElements: () => [],
       readUserDefaultColor: () => null, setDefaultColor: (_drawing, type, color) => { defaults.push([type, color]); },
@@ -951,7 +952,9 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
     manualSpecificRules: [], featureColorOverrides: {}, featureOverrides: {}, featureVisibilityManualRules: [],
     svgResultIdentity: { value: 'result' }, addedLegendCaptions: { value: new Set() },
     legendEntries: { value: [] }, deletedLegendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},
-    extractedFeatures: { value: [] }, labelReflowProcessing: { value: false }, errorLog: { value: null }
+    extractedFeatures: { value: [] }, labelReflowProcessing: { value: false }, errorLog: { value: null },
+    // The fixture is its own drawing (withDrawings), so `mode` is the drawing's, as the Legend row keys read it.
+    biologicalFeatures: { value: [] }, mode: 'circular', svgContent: { value: null }
   };
   state.extractedFeatures.value = [...resultCatalogFeatures(state, 'circular').renderedByIdentity.values()];
   const drawingState = withDrawings(state);
@@ -1332,7 +1335,7 @@ test('a Legend recolor of a rule row made while an Add is pending applies after 
     legendStrokeOverrides:{},adv:{}});
   s.state.legendEntries.value=[{caption:'CDS',originalCaption:'CDS',color:'#54bcf8'},{caption:'B',originalCaption:'B',color:'#445566'}];
   assert.equal(await s.preparation.prepare(s.state.manualSpecificRules),true);
-  const legend=createLegendManager({state:s.state,commitLegendRowRules:s.actions.commitSpecificRules,readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, [])});
+  const legend=createLegendManager({state:s.state,commitLegendRowRules:s.actions.commitSpecificRules,readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, [])});
   assert.equal(legend.legendRowHasRules(1),true);
   const [add,release]=await held(s.actions.addSpecificRule());
   const recolored=legend.updateLegendEntryColor(1,'#000000');

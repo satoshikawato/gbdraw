@@ -41,7 +41,7 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
     extractedFeatures: ref(features), biologicalFeatures: ref(features), manualSpecificRules,
     svgResultIdentity: ref('one'), legendEntries: ref([{ caption: 'CDS', color: '#cccccc' }]),
     featureColorOverrides: {}, legendColorOverrides: {}, legendStrokeOverrides: {}, featureStrokeOverrides: {},
-    addedLegendCaptions: ref(new Set()), results: ref([]), selectedResultIndex: ref(0),
+    addedLegendCaptions: ref(new Set()), results: ref([]), selectedResultIndex: ref(0), mode: ref('circular'), svgContent: ref(null),
     svgContainer: ref({ querySelector: () => null }),
     clickedFeature: ref({ feat: features[0], svg_id: features[0].svg_id, legendName: '' }),
     featureStyleScopeDialog: { show: false }, resetColorDialog, legendRenameDialog: {},

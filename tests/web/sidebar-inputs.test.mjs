@@ -68,7 +68,9 @@ test('OV-379: an unread Linear record select says Not inspected', async () => {
   const { withModeDrawings } = await import(pathToFileURL(join(process.cwd(), 'tests/web/helpers/drawing-state.mjs')));
   const ref = (value) => ({ value });
   const rows = [{ uid: 'row-a', gb: { name: 'a.gb' }, fasta: null, region_record_id: '' }];
-  const state = withModeDrawings({ mode: ref('linear') }, {
+  const state = withModeDrawings({
+    mode: ref('linear'), semanticFileWatchersSuppressed: ref(false), sessionImportRollbackInProgress: ref(false)
+  }, {
     circular: {}, linear: { id: 'linear', mode: 'linear', inputType: ref('gb'), linearSeqs: rows }
   });
   let resolveRead;

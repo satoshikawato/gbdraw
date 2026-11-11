@@ -1126,7 +1126,7 @@ const buildHelperRequest = ({ group, members, reference, request, catalog,
  * @param {string[]} recordKeys
  */
 const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
-  Array.isArray(state.linearRecordTranslations?.value) ? state.linearRecordTranslations.value : [],
+  state.linearRecordTranslations.value,
   recordKeys
 );
 
@@ -1257,7 +1257,7 @@ export const createSimilarityAlignmentActions = ({
   // restores the plan also retires it (OV-382).
   const noticeState = ref({ text: '', whileNoPlan: false });
   const notice = computed(() => (
-    noticeState.value.whileNoPlan && state.similarityAlignmentPlan?.value ? '' : noticeState.value.text
+    noticeState.value.whileNoPlan && state.similarityAlignmentPlan.value ? '' : noticeState.value.text
   ));
   const repair = ref(null);
   // The user's drawer reference pick and the committed plan it was made
@@ -1311,9 +1311,9 @@ export const createSimilarityAlignmentActions = ({
   const captureArtifact = (groupId) => ({
     records: JSON.stringify(currentRequest()?.records || []),
     group: JSON.stringify(getOrthogroupById(groupId)),
-    selectedGroup: state.selectedOrthogroupId?.value,
+    selectedGroup: state.selectedOrthogroupId.value,
     resources: getCommittedSession()?.resources,
-    translations: JSON.stringify(state.linearRecordTranslations?.value || [])
+    translations: JSON.stringify(state.linearRecordTranslations.value)
   });
   const artifactIsCurrent = () => {
     if (!artifactStamp || !activeRequest) return false;
@@ -1404,7 +1404,7 @@ export const createSimilarityAlignmentActions = ({
 
   /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
   const clearCommittedPlan = (reason) => {
-    const hadPlan = Boolean(state.similarityAlignmentPlan?.value);
+    const hadPlan = Boolean(state.similarityAlignmentPlan.value);
     if (activeApply && typeof cancelRunAnalysis === 'function') cancelRunAnalysis();
     actionId += 1;
     clearDraft();
@@ -1589,7 +1589,7 @@ export const createSimilarityAlignmentActions = ({
       const request = buildHelperRequest({
         group, members, reference,
         request: activeBaseline.request,
-        catalog: state.featureCatalog?.value,
+        catalog: state.featureCatalog.value,
         recordCatalog: getRecordCatalog?.(),
         drawnSeqs: drawnLinearCards(),
         choices: []
@@ -1696,7 +1696,7 @@ export const createSimilarityAlignmentActions = ({
   // reference options and the Reset preview; record keys and hashes stay binding-only.
   const committedNames = computed(() => {
     const request = currentRequest();
-    const catalog = state.featureCatalog?.value;
+    const catalog = state.featureCatalog.value;
     return {
       records: recordNames({ recordKeys: (request?.records || []).map((/** @type {CommittedRecord} */ { recordKey }) => recordKey),
         request, linearSeqs: shownLinearCards(), catalog }),
@@ -1813,8 +1813,8 @@ export const createSimilarityAlignmentActions = ({
 
   const activePlanInspector = computed(() => {
     try {
-      return inspectActivePlan(state.similarityAlignmentPlan?.value, { linearSeqs: shownLinearCards(),
-        catalog: state.featureCatalog?.value, request: currentRequest() });
+      return inspectActivePlan(state.similarityAlignmentPlan.value, { linearSeqs: shownLinearCards(),
+        catalog: state.featureCatalog.value, request: currentRequest() });
     } catch (_error) {
       return null;
     }
@@ -1826,7 +1826,7 @@ export const createSimilarityAlignmentActions = ({
     names: committedNames.value.records }));
   /** @param {string} [scope] */
   const resetAlignment = async (scope = 'positions') => {
-    if (!state.similarityAlignmentPlan?.value) return {status:'noop'};
+    if (!state.similarityAlignmentPlan.value) return {status:'noop'};
     if (!['positions', 'positions-and-directions'].includes(scope)) return {status:'rejected'};
     if (scope === 'positions-and-directions' && resetPreview.value.disabledReason) return {status:'rejected'};
     if (busy.value) return {status:'busy'};
@@ -1845,9 +1845,9 @@ export const createSimilarityAlignmentActions = ({
       if (placement.directionsChange) {
         /** @type {AlignmentPlan} */
         const plan = current.request.layout.similarityAlignment;
-        const members = resetSourceMembers(plan, catalogNameIndex(state.featureCatalog?.value).rows);
+        const members = resetSourceMembers(plan, catalogNameIndex(state.featureCatalog.value).rows);
         const request = buildHelperRequest({group:{id:plan.groupId}, members,
-          reference:plan.reference, request:current.request, catalog:state.featureCatalog?.value,
+          reference:plan.reference, request:current.request, catalog:state.featureCatalog.value,
           recordCatalog:getRecordCatalog?.(), drawnSeqs:drawnLinearCards(), choices:planChoices(plan)});
         const vector = Object.fromEntries(orientations.map(direction => [direction.recordKey,direction.reverseComplement]));
         const helper = await runHelperOperation(resolveOperation, {request,
@@ -1902,7 +1902,7 @@ export const createSimilarityAlignmentActions = ({
       try { return [[anchorKey(anchorFromSource(member, 'Alignment member')), member]]; } catch (_error) { return []; }
     }));
     recordLabels = recordNames({ recordKeys: request.records.map(({ recordKey }) => recordKey),
-      request: canonicalRequest, linearSeqs: shownLinearCards(), catalog: state.featureCatalog?.value });
+      request: canonicalRequest, linearSeqs: shownLinearCards(), catalog: state.featureCatalog.value });
   };
 
   /** @param {unknown} reason */
@@ -1911,7 +1911,7 @@ export const createSimilarityAlignmentActions = ({
     status.value = 'idle';
     repair.value = deepFreeze({
       kind: 'reference',
-      groupId: state.similarityAlignmentPlan?.value?.groupId || '',
+      groupId: state.similarityAlignmentPlan.value?.groupId || '',
       reason: String(reason || t('The exact reference is no longer available.'))
     });
     publishNotice(t('Alignment needs repair: {reason}', { reason: repair.value.reason }));
@@ -1965,7 +1965,7 @@ export const createSimilarityAlignmentActions = ({
 
   const validateBeforeGenerate = async () => {
     const expectedActionId = ++actionId;
-    const plan = state.similarityAlignmentPlan?.value;
+    const plan = state.similarityAlignmentPlan.value;
     if (!plan) {
       repair.value = null;
       return { status: 'ok' };
@@ -1974,7 +1974,7 @@ export const createSimilarityAlignmentActions = ({
     if (state.mode.value !== 'linear') return { status: 'ok' };
     const group = getOrthogroupById(plan.groupId);
     const members = group ? getEnrichedOrthogroupMembers(group) : [];
-    const check = classifyPlanAgainstCatalog({ plan, catalogFeatures: catalogNameIndex(state.featureCatalog?.value).rows,
+    const check = classifyPlanAgainstCatalog({ plan, catalogFeatures: catalogNameIndex(state.featureCatalog.value).rows,
       groupAnchors: members.flatMap((member) => {
         try { return [anchorFromSource(member, 'Current Similarity Group member')]; } catch (_error) { return []; }
       }) });
@@ -1991,7 +1991,7 @@ export const createSimilarityAlignmentActions = ({
         members,
         reference: plan.reference,
         request: currentRequest(),
-        catalog: state.featureCatalog?.value,
+        catalog: state.featureCatalog.value,
         recordCatalog: getRecordCatalog?.(),
         drawnSeqs: drawnLinearCards(),
         choices: planChoices(plan)
@@ -2024,7 +2024,7 @@ export const createSimilarityAlignmentActions = ({
   /** @param {unknown} recordKeys */
   const retainForStableReorder = (recordKeys) => {
     const orderedKeys = (Array.isArray(recordKeys) ? recordKeys : []).map(String);
-    const plan = state.similarityAlignmentPlan?.value;
+    const plan = state.similarityAlignmentPlan.value;
     if (plan) {
       const decisions = new Map(plan.records.map((entry) => [entry.recordKey, entry]));
       if (orderedKeys.every((recordKey) => decisions.has(recordKey))) { // So each `get` below finds its decision.
@@ -2035,7 +2035,7 @@ export const createSimilarityAlignmentActions = ({
       }
     }
     const translations = new Map(
-      (state.linearRecordTranslations?.value || []).map((entry) => [entry?.recordKey, entry])
+      state.linearRecordTranslations.value.map((entry) => [entry?.recordKey, entry])
     );
     if (orderedKeys.every((recordKey) => translations.has(recordKey))) {
       state.linearRecordTranslations.value = orderedKeys.map(
@@ -2045,7 +2045,7 @@ export const createSimilarityAlignmentActions = ({
   };
 
   const beforeRecordDrag = () => {
-    pendingRecordDragBaseline = state.similarityAlignmentPlan?.value
+    pendingRecordDragBaseline = state.similarityAlignmentPlan.value
       ? baseline({ materializePlan: true })
       : null;
     return Boolean(pendingRecordDragBaseline);
@@ -2056,7 +2056,7 @@ export const createSimilarityAlignmentActions = ({
       pendingRecordDragBaseline = null;
       return false;
     }
-    const materializedPlan = state.similarityAlignmentPlan?.value;
+    const materializedPlan = state.similarityAlignmentPlan.value;
     installBaseState(pendingRecordDragBaseline);
     pendingRecordDragBaseline = null;
     materializedRecordDrag = clearCommittedPlan(msg('record moved manually.'));
@@ -2148,7 +2148,7 @@ export const createSimilarityAlignmentActions = ({
     resetDialogOpen,
     resetScope,
     openReset: () => {
-      if (!state.similarityAlignmentPlan?.value || busy.value) return;
+      if (!state.similarityAlignmentPlan.value || busy.value) return;
       error.value = null; resetScope.value = 'positions'; resetDialogOpen.value = true;
     },
     cancelReset: () => { if (!busy.value) resetDialogOpen.value = false; },

@@ -320,10 +320,10 @@ export const createRulePreparation = ({
   /** @returns {RuleFeature[]} */
   const features = () => {
     const catalog = toRaw(state.extractedFeatures.value);
-    const biology = toRaw(state.biologicalFeatures?.value);
+    const biology = toRaw(state.biologicalFeatures.value);
     if (!union || union.catalog !== catalog || union.biology !== biology) {
       union = { catalog, biology, union: [...new Set([
-        ...(state.extractedFeatures.value || []), ...(state.biologicalFeatures?.value || [])
+        ...state.extractedFeatures.value, ...state.biologicalFeatures.value
       ])] };
     }
     return union.union;
@@ -355,16 +355,16 @@ export const createRulePreparation = ({
     const { files } = drawing;
     return {
       catalog: state.extractedFeatures.value,
-      biology: state.biologicalFeatures?.value,
-      result: state.svgResultIdentity?.value,
-      mode: state.mode?.value,
+      biology: state.biologicalFeatures.value,
+      result: state.svgResultIdentity.value,
+      mode: state.mode.value,
       inputKind: drawing.inputType.value,
       // The Specific rules file (R16-4).
       file: files.t_color,
       linearFiles: drawing.linearSeqs
         .flatMap((/** @type {LinearSeq} */ sequence) => [sequence.gb, sequence.gff, sequence.fasta]),
-      resultNames: JSON.stringify((state.results?.value || []).map((/** @type {{ name?: unknown }} */ result) => result.name)),
-      selectedResult: state.selectedResultIndex?.value,
+      resultNames: JSON.stringify(state.results.value.map((/** @type {{ name?: unknown }} */ result) => result.name)),
+      selectedResult: state.selectedResultIndex.value,
       ...Object.fromEntries(drawingInputs.map(([key, input]) => [key, input.value])),
       // Physical source, palette, and selector inputs retain their identity while
       // request-owned comparison artifacts are published independently.
@@ -404,7 +404,7 @@ export const createRulePreparation = ({
   const retain = (rules = []) => { retained = rules; };
   /** @type {RulePreparation['prepare']} */
   const prepare = (rules = state.activeDrawing().manualSpecificRules, {
-    blocked = () => Boolean(state.sessionOperationAvailability?.()), view = false, ...options
+    blocked = () => Boolean(state.sessionOperationAvailability()), view = false, ...options
   } = {}) => {
     const targets = features();
     const draft = [...new Map([...rules, ...retained].map((rule) => [ruleKey(rule), { feat: rule.feat, qual: rule.qual, val: rule.val }])).values()];

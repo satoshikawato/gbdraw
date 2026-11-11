@@ -11,7 +11,8 @@ const setup = (evaluate = evaluatePythonRules) => {
   const features = ['NADH', 'β-lactamase', 'ı', 'other'].map((product, i) => ({
     type: 'CDS', svg_id: `f${i}`, qualifiers: { product: [product] }
   }));
-  const state = { extractedFeatures: { value: features }, files: { t_color: null }, circularSources: [], manualSpecificRules: [], svgResultIdentity: { value: 'one' } };
+  const state = { extractedFeatures: { value: features }, files: { t_color: null }, circularSources: [], manualSpecificRules: [], svgResultIdentity: { value: 'one' },
+    biologicalFeatures: { value: [] }, mode: { value: 'circular' }, results: { value: [] }, selectedResultIndex: { value: 0 } };
   return { state, features, preparation: createRulePreparation({ state: withDrawings(state), evaluate }) };
 };
 const rule = val => ({ feat: 'CDS', qual: 'product', val });

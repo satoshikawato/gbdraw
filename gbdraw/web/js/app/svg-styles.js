@@ -180,7 +180,7 @@ export const createSvgStyles = ({
       && colors.pairwise_match_min
       && colors.pairwise_match_max
     ) {
-      const committedPairwiseFactors = pairwiseMatchFactors.value || {};
+      const committedPairwiseFactors = pairwiseMatchFactors.value;
       let nextPairwiseFactors = committedPairwiseFactors;
       /**
        * @param {string} pathKey
