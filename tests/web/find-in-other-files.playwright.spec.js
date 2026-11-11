@@ -318,9 +318,9 @@ test('Linear: a (-) window that covers a whole record is drawn reverse-complemen
   await expect(page.getByText('changes pending Generate')).toHaveCount(0);
 });
 
-// OV-3382: when every record of the new drawing draws one window, the Comparison controls hold its LOSAT pairs, so the
-// Comparison card shows no saved read-only comparison and a changed LOSATP mode applies at the next Generate, also when
-// the source drawing had no comparison of its own.
+// OV-3382: when every record of the new drawing draws one window, the Comparison controls hold its LOSAT pairs as
+// Selected pairs, so the Comparison card shows no saved read-only comparison and a changed LOSATP mode applies at the
+// next Generate, also when the source drawing had no comparison of its own.
 test('Linear: the drawing Create makes with one window per record takes a new LOSATP mode at Generate', async ({ page }) => {
   test.setTimeout(900_000);
   await openFresh(page);
@@ -360,7 +360,16 @@ test('Linear: the drawing Create makes with one window per record takes a new LO
   const shots = process.env.FIND_FILES_SHOTS;
   if (shots) await card.screenshot({ path: `${shots}/comparison-card-after-create.png` });
   await expect(card.locator('[data-imported-comparison-resolution]')).toHaveCount(0);
+  // The controls hold the saved window pairs as the Selected pairs of LOSATP Pairwise.
+  const held = await page.evaluate(async () => {
+    const drawing = (await import('./js/state.js')).state.activeDrawing();
+    return { mode: drawing.linearComparisonPlan.mode, edges: drawing.linearComparisonPlan.edges.filter((edge) => edge.included).length };
+  });
+  expect(held.mode).toBe('selected');
+  expect(held.edges).toBeGreaterThan(0);
 
+  // Similarity groups compare all adjacent pairs, as in a drawing built by hand.
+  await card.getByRole('button', { name: 'Run LOSAT for all adjacent pairs', exact: true }).click();
   const settings = page.locator('details[data-linear-comparison-disclosure="settings"]');
   if (await settings.getAttribute('open') === null) await settings.locator('summary').click();
   const losatpMode = page.getByRole('combobox', { name: 'LOSATP mode' });

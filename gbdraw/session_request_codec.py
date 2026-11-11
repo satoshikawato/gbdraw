@@ -6589,10 +6589,14 @@ def describe_canonical_request() -> dict[str, Any]:
                     for key, owner, name in _PROTEIN_SETTINGS_WIRE
                 },
                 optional=sorted(_OPTIONAL_PROTEIN_SETTINGS),
-                # A stored retired anchor mode reads as its replacement.
+                # A stored retired anchor mode reads as its replacement. Unset
+                # collinearity parameters read as what the encoder writes for them.
                 defaults={
                     **{key: _absent_protein_setting(key) for key in _OPTIONAL_PROTEIN_SETTINGS},
                     "collinearityAnchorMode": RETIRED_COLLINEARITY_ANCHOR_MODES["one_to_one"],
+                    "collinearityParams": _encode_pipeline_value(
+                        "collinearityParams", "collinearity_params", None
+                    ),
                 },
             )),
         },
@@ -6629,8 +6633,8 @@ def describe_canonical_request() -> dict[str, Any]:
             "output": _encode_output(RenderOutputRequest()),
         })))
     named("RenderRequest", union(*requests))
-    # A required field that holds null takes null where its stored value cannot be read: the encoder writes null
-    # for an unset value (OV-777). Null is no empty form where another value decides whether it may be null: a
+    # A required field that holds null takes null where its stored value cannot be read, unless its shape names
+    # another default: the encoder writes null for an unset value (OV-777). Null is no empty form where another value decides whether it may be null: a
     # decision's anchor and the anchor's identity (AlignmentRecordDecision.__post_init__; the plan finds its
     # reference by the identity), a slot list an axis index names (_validate_track_configuration), the edits of a
     # feature override (FeatureOverride: at least one edit), and the qualifier a feature query's value searches

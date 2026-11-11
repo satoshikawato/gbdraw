@@ -2077,10 +2077,13 @@ def test_pipeline_writes_default_collinearity_parameters_as_lossless_object(
         },
     }
 
-    # main wrote null for unset parameters at the current schema; it still reads.
-    pipeline["settings"]["collinearityParams"] = None
+    # main's writer (schema 9) wrote null for unset parameters; that request still reads, as unset.
+    main_form = _payload_for_schema(encoded, 9)
+    next(
+        item for item in main_form["comparisons"] if item["kind"] == "generatedProteinComparison"
+    )["settings"]["collinearityParams"] = None
     decoded = decode_canonical_request(
-        encoded.payload,
+        main_form,
         resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
         output_directory=tmp_path / "output",
     )

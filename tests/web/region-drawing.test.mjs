@@ -608,8 +608,13 @@ result = json.dumps(call('drawing', {'plan': plan, 'choices': kept, 'labels': {}
   assert.equal(made.importedComparisonIntent.disposition, intents.IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
   assert.deepEqual(intents.importedComparisonExecution({ intent: made.importedComparisonIntent, draftResolution: null }),
     { ok: true, mode: 'draft' }, 'Generate follows the Comparison controls');
-  // The controls hold the saved window pairs (here every adjacent pair), so the draft request runs those pairs.
-  assert.deepEqual(made.linearComparisonPlan, { mode: 'adjacent', defaultSource: 'losat', edges: [] });
+  // The controls hold the saved window pairs as the Selected pairs, so the draft request runs those pairs.
+  assert.equal(made.linearComparisonPlan.mode, 'selected');
+  const uidOf = (index) => made.linearSeqs[index].uid;
+  assert.deepEqual(
+    made.linearComparisonPlan.edges.map((edge) => [edge.queryUid, edge.subjectUid, edge.source, edge.included]),
+    saved.pairs.map((pair) => [uidOf(pair.queryRecordIndex), uidOf(pair.subjectRecordIndex), 'losat', true])
+  );
   const generated = (await projectOf(made)).envelope.renderRequest.comparisons
     .find((comparison) => comparison.kind === 'generatedProteinComparison');
   assert.deepEqual(generated.pairs, saved.pairs);

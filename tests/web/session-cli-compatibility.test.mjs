@@ -415,7 +415,40 @@ resave_python(Path(${JSON.stringify(path.join(directory, 'protein.gbdraw-session
 // draft, no cliInvocation) stays a read-only comparison, as before this fix:
 // Load states no plan, and Inherit saved comparison keeps the listed pairs
 // rather than every adjacent pair.
-await test('a Python API Linear Session with listed LOSATP pairs keeps them through Inherit', async () => {
+// OV-3382: Load of a Python API Linear Session whose LOSATP Pairwise pipeline lists the pair (0, 1) of three records:
+// the Comparison controls hold the pipeline, the listed pair as their Selected pair, and Generate's request from the
+// controls runs that pair only. Returns the drawing.
+const assertListedPairHeld = async (bytes) => {
+  const pairs = [{ queryRecordIndex: 0, subjectRecordIndex: 1 }];
+  // A Session 50 of main holds one request at its top level.
+  const document = JSON.parse(bytes.toString('utf8'));
+  const { renderRequest } = document.drawings ? savedDrawingView(document, 'linear') : document;
+  assert.deepEqual(renderRequest.comparisons.map(item => [item.kind, item.mode, item.pairs]),
+    [['generatedProteinComparison', 'pairwise', pairs]]);
+  const result = await load(bytes);
+  assert.equal(result.status, 'ok', result.error?.stack);
+  const drawing = state.activeDrawing();
+  assert.equal(drawing.importedComparisonIntent.disposition, 'EDITABLE');
+  assert.deepEqual(
+    [drawing.losatProgram.value, drawing.losat.blastp.mode, drawing.linearComparisonPlan.mode],
+    ['blastp', 'pairwise', 'selected']
+  );
+  assert.deepEqual(drawing.linearComparisonPlan.edges.map((edge) => [edge.queryUid, edge.subjectUid, edge.source]),
+    [[drawing.linearSeqs[0].uid, drawing.linearSeqs[1].uid, 'losat']]);
+  const filesData = await serializeActiveRenderFiles(state, drawing);
+  assert.equal(filesData.linearSeqs.length, 3);
+  const candidate = buildCanonicalRenderRequest({ state, drawing,
+    filesData: { ...filesData, linearCanonicalComparisons: [] },
+    comparisonPlanSnapshot: resolveLinearComparisonPlan({
+      plan: drawing.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
+      losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat.blastp.mode
+    }) });
+  assert.deepEqual(candidate.renderRequest.comparisons.map(item => [item.kind, item.mode, item.pairs]),
+    [['generatedProteinComparison', 'pairwise', pairs]]);
+  return drawing;
+};
+
+await test('a Python API Linear Session with listed LOSATP pairs keeps them as the Selected pairs of the controls', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-web-'));
   try {
     const file = path.join(directory, 'pairs.gbdraw-session.json');
@@ -431,30 +464,25 @@ request = LinearDiagramRequest(
 )
 save_session_document(Path(${JSON.stringify(file)}), request)
 `], { cwd: root, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000 });
-    const session = savedDrawingView(JSON.parse(await readFile(file, 'utf8')), 'linear');
-    assert.equal(session.cliInvocation, undefined);
-    const pairs = [{ queryRecordIndex: 0, subjectRecordIndex: 1 }];
-    assert.deepEqual(session.renderRequest.comparisons.map(item => [item.kind, item.mode, item.pairs]),
-      [['generatedProteinComparison', 'pairwise', pairs]]);
-    const result = await load(await readFile(file));
-    assert.equal(result.status, 'ok', result.error?.stack);
-    const drawing = state.activeDrawing();
-    assert.equal(drawing.importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
-    assert.deepEqual(drawing.linearComparisonPlan, DEFAULT_PLAN);
-    const filesData = await serializeActiveRenderFiles(state, drawing);
-    assert.equal(filesData.linearSeqs.length, 3);
-    const candidate = buildCanonicalRenderRequest({ state, drawing,
-      filesData: { ...filesData, linearCanonicalComparisons: [] },
-      comparisonPlanSnapshot: resolveLinearComparisonPlan({
-        plan: drawing.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
-        losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat.blastp.mode
-      }) });
-    inheritSavedComparison({ candidate, source: state.activeDrawing().importedComparisonIntent.source });
-    assert.deepEqual(candidate.renderRequest.comparisons.map(item => [item.kind, item.mode, item.pairs]),
-      [['generatedProteinComparison', 'pairwise', pairs]]);
+    assert.equal(savedDrawingView(JSON.parse(await readFile(file, 'utf8')), 'linear').cliInvocation, undefined);
+    await assertListedPairHeld(await readFile(file));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+await test('a Session main\'s Python API wrote with unset collinearity parameters (null) loads them as the defaults', async () => {
+  // tests/fixtures/sessions/python-api-linear-pairs.v50.provenance.json
+  const drawing = await assertListedPairHeld(gunzipSync(await readFile(path.join(
+    root, 'tests/fixtures/sessions/python-api-linear-pairs.v50.gbdraw-session.json.gz'
+  ))));
+  // The defaults Python reads None as (LosslessCollinearityParameters).
+  const { blastp } = drawing.losat;
+  assert.deepEqual(
+    [blastp.collinearMinAnchors, blastp.collinearMaxUnitGap, blastp.collinearMaxDiagonalDrift,
+      blastp.collinearMaxConflictsInMergeGap, blastp.collinearMergeOrientation],
+    [1, 0, 0, 1, 'strand']
+  );
 });
 
 await test('a 0.13.0 CLI Linear protein sidecar keeps the adjacent LOSATP plan it drew', async () => {

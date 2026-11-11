@@ -2,7 +2,7 @@
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { readSpelling } from '../utils/contract-shape.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-/** @import { CanonicalLosslessCollinearityParameters, CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
+/** @import { CanonicalCollinearityParameters, CanonicalLosslessCollinearityParameters, CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
 /** @import { FieldReader } from '../utils/field-reading.js' */
 /** @import { LiteralShape, ObjectShape } from '../utils/contract-shape.js' */
 
@@ -22,6 +22,23 @@ const COMPARISON_SETTINGS = COMPARISON_SETTINGS_SHAPE.fields;
  */
 export const ABSENT_COLLINEAR_INFER_ORTHOGROUPS = /** @type {boolean} */ (
   /** @type {NonNullable<ObjectShape['defaults']>} */ (COMPARISON_SETTINGS_SHAPE.defaults).collinearInferOrthogroups
+);
+/**
+ * What unset collinearity parameters read as: the defaults Python's encoder
+ * writes for them (their description default), as every Python reader reads
+ * None. Requests main's Python writer saved hold null (OV-3382).
+ */
+const UNSET_COLLINEARITY_PARAMS = /** @type {CanonicalCollinearityParameters} */ (
+  /** @type {NonNullable<ObjectShape['defaults']>} */ (COMPARISON_SETTINGS_SHAPE.defaults).collinearityParams
+);
+/**
+ * A stored comparison's collinearity parameters, null read as the defaults.
+ * @template T
+ * @param {T} value
+ * @returns {Exclude<T, null> | CanonicalCollinearityParameters}
+ */
+export const readStoredCollinearityParams = (value) => (
+  value === null ? UNSET_COLLINEARITY_PARAMS : /** @type {Exclude<T, null>} */ (value)
 );
 /**
  * Each of the five is a literal with spellings (tests/web/current-option-values.test.mjs).
