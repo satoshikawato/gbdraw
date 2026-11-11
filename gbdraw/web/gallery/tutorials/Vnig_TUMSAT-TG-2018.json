@@ -393,8 +393,7 @@
             },
             "openSelect": {
               "selectedLabel": "orchid",
-              "cardTitle": "Colors",
-              "selectIndex": 1,
+              "selector": "select[aria-label='Palette']",
               "minWidth": 150,
               "placement": "right"
             },

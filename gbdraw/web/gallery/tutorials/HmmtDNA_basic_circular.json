@@ -113,7 +113,7 @@
                 "script": "const app = window.__GBDRAW_APP__; app.form.prefix = 'HmmtDNA_basic_circular'; app.form.species = '<i>Homo sapiens</i>'; app.form.track_type = 'middle'; app.form.separate_strands = true; app.form.suppress_gc = false; app.form.suppress_skew = false; app.form.labels_mode = 'out'; app.adv.circular_track_slots_enabled = false;"
               }
             ],
-            "cardTitle": "Basic",
+            "selector": ".card[data-settings-section='basic']",
             "cropPadding": 14,
             "assertAppState": {
               "mode": "circular",

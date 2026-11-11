@@ -485,23 +485,46 @@ def add_step_text_validation(
     step: dict[str, Any],
 ) -> None:
     """No step tells the reader to use the uploader's Session file chooser, which captures hide;
-    no capture action finds an element by position or reads the records the tool reads."""
+    no capture finds its card by text or an element by position, or does what the tool does for
+    every capture: read the records, hide the Settings pane under a popup."""
 
     if SESSION_FILE_CHOOSER_NAME.lower() in json.dumps(step, ensure_ascii=False).lower():
         result.errors.append(
             f"{context.label}: names {SESSION_FILE_CHOOSER_NAME}, which tutorial captures hide: "
             "the reader uploads the files and has no Session."
         )
-    actions = [
-        json.dumps(action, ensure_ascii=False)
+    captures = [
+        operation["capture"]
         for operation in as_array(step.get("operations"))
         if isinstance(operation, dict) and isinstance(operation.get("capture"), dict)
-        for action in as_array(operation["capture"].get("actions"))
     ]
+    open_selects = [
+        spec
+        for capture in captures
+        for spec in as_array(capture.get("openSelect"))
+        + ([capture["openSelect"]] if isinstance(capture.get("openSelect"), dict) else [])
+        if isinstance(spec, dict)
+    ]
+    if any("cardTitle" in capture for capture in captures):
+        result.errors.append(
+            f"{context.label}: a capture finds its card by text (cardTitle), which matches the first card "
+            "that names it anywhere; give selector \".card[data-settings-section='<key>']\"."
+        )
+    if any("cardTitle" in spec or "selectIndex" in spec for spec in open_selects):
+        result.errors.append(
+            f"{context.label}: an openSelect finds its select by card text and position (cardTitle, "
+            "selectIndex); give its selector, for example \"select[aria-label='Palette']\"."
+        )
+    actions = [json.dumps(action, ensure_ascii=False) for capture in captures for action in as_array(capture.get("actions"))]
     if any(CAPTURE_POSITION_PICK.search(action) for action in actions):
         result.errors.append(
             f"{context.label}: a capture action finds an element by position, which a new sibling "
             "shifts; find it by its id, data attribute or accessible name."
+        )
+    if any(".settings-pane" in action for action in actions):
+        result.errors.append(
+            f"{context.label}: a capture action changes the Settings pane; the tool hides it under "
+            "a popup for every capture (hide_settings_pane_under_popup)."
         )
     if any(read in action for action in actions for read in CAPTURE_RECORD_READS):
         result.errors.append(
@@ -715,6 +738,19 @@ SHOWN_RECORDS_READ_SCRIPT = """
     .every((seq) => !app.linearRecordSelectorDisabled(seq));
 }
 """
+
+
+def dismiss_session_notice(page) -> None:
+    """Close the `Session loaded` notice with its Dismiss button (OV-3369).
+
+    A tutorial reader uploaded the files and has no Session, so no capture shows the notice. It
+    stands above the Result: a popup that a capture places at a fixed height met the Preview
+    toolbar the notice moved down. Reset Settings, which a replay starts with, closes it too.
+    """
+
+    notice = page.locator("[data-app-notice]")
+    notice.locator(".app-notice-dismiss").click()
+    notice.wait_for(state="hidden")
 
 
 def inspect_shown_records(page) -> None:
@@ -942,23 +978,11 @@ def apply_open_select_overlays(page, open_select: Any) -> None:
             return matches[nth] || null;
           };
 
-          const selectInCard = (cardTitle, selectIndex = 0) => {
-            const titleKey = normalizeKey(cardTitle);
-            const cards = Array.from(document.querySelectorAll('.card'));
-            const card = cards.find((candidate) => {
-              const header = candidate.querySelector('.card-header, summary');
-              return normalizeKey(header?.textContent || '').includes(titleKey);
-            });
-            if (!card) return null;
-            return Array.from(card.querySelectorAll('select'))[Number(selectIndex || 0)] || null;
-          };
-
           const resolveSelect = (spec) => {
             if (spec.selector) {
               const selected = document.querySelector(spec.selector);
               if (selected?.tagName === 'SELECT') return selected;
             }
-            if (spec.cardTitle) return selectInCard(spec.cardTitle, spec.selectIndex);
             if (spec.label) return selectNearLabel(spec.label, Number(spec.nth || 0));
             return null;
           };
@@ -1066,10 +1090,6 @@ def resolve_capture_target(page, capture: dict[str, Any]):
     selector = as_text(capture.get("selector"))
     if selector:
         return page.locator(selector).first
-
-    card_title = as_text(capture.get("cardTitle"))
-    if card_title:
-        return page.locator(".card").filter(has_text=re.compile(re.escape(card_title), re.IGNORECASE)).first
 
     return None
 
@@ -1439,6 +1459,7 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
         session_path = resolve_gallery_reference(session_ref)
         if session_path is not None and session_path.exists():
             load_web_app_session(page, session_path)
+            dismiss_session_notice(page)
             # A loaded Session folds its Linear File cards. A tutorial reader uploaded
             # the files, so every capture shows the cards open.
             page.evaluate(
@@ -1483,6 +1504,38 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
             )
         )
         page.wait_for_timeout(100)
+
+
+def hide_settings_pane_under_popup(page) -> None:
+    """A popup a capture opens may sit over the Settings pane: hide the pane, so the crop
+    shows no settings around the popup. The pane keeps its place, so nothing moves."""
+
+    page.evaluate(
+        """
+        () => {
+          const popup = document.querySelector('.feature-popup');
+          if (!popup?.checkVisibility()) return;
+          document.querySelector('.settings-pane')?.style.setProperty('visibility', 'hidden', 'important');
+        }
+        """
+    )
+
+
+def hide_page_around_settings_pane(page) -> None:
+    """An open-select crop shows a settings control and its menu, which may reach past the
+    Settings pane: hide the rest of the page (header, Result, the footer's text), so the crop's
+    edge cuts no figure, button or text there (OV-3395). Everything keeps its place, and the
+    footer itself stays: the pane's Generate bar is anchored to it and would hide with it."""
+
+    page.evaluate(
+        """
+        () => {
+          document.querySelectorAll('.app-header, #result-pane, [data-app-footer] > *').forEach((element) => {
+            element.style.setProperty('visibility', 'hidden', 'important');
+          });
+        }
+        """
+    )
 
 
 def wait_for_css_transitions(page) -> None:
@@ -1545,6 +1598,9 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
         }
         """
     )
+    hide_settings_pane_under_popup(page)
+    if as_text(capture.get("crop")) == "openSelect":
+        hide_page_around_settings_pane(page)
     apply_open_select_overlays(page, capture.get("openSelect"))
     wait_for_css_transitions(page)
 
@@ -1577,7 +1633,7 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
     else:
         box = capture.get("boundingBox")
         if not isinstance(box, dict):
-            raise RuntimeError("capture metadata needs selector, cardTitle, crop=openSelect, or boundingBox.")
+            raise RuntimeError("capture metadata needs selector, crop=openSelect, or boundingBox.")
         clip = {
             "x": float(box["x"]),
             "y": float(box["y"]),

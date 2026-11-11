@@ -109,7 +109,7 @@
             "source": "webapp",
             "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
             "replayThrough": 2,
-            "cardTitle": "Input Genomes",
+            "selector": ".card[data-settings-section='input-genomes']",
             "cropPadding": 14,
             "actions": [
               {
@@ -134,7 +134,7 @@
           },
           "capture": {
             "source": "webapp",
-            "cardTitle": "Basic",
+            "selector": ".card[data-settings-section='basic']",
             "cropPadding": 14
           }
         }

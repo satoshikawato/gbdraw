@@ -71,7 +71,8 @@ const REASONS = Object.freeze({
   UNKNOWN_CONFIG_PATH: 'Remove unknown configuration overrides or use a supported setting.',
   CIRCULAR_SETTING: 'It applies only to Circular diagrams. Reset it under Preserved session settings, or switch to Circular.',
   // A record cut by Wrap Rows (gbdraw/layout/linear_wrap.py): what rows cannot draw, and the ways out. The Wrap Rows
-  // field shows the same text when it cannot be turned on (`reasonText`).
+  // field shows the same text while it is on and cannot be changed (`reasonText`), except WRAP_TRACK_LAYOUT, whose
+  // Track Layout step is spent then (`WRAPPED_BLOCKED_TEXT` in app/linear-wrap-field.js).
   WRAP: 'A wrapped figure draws no comparisons. Remove the comparison inputs (BLAST, comparison pairs, LOSAT, Similarity groups), or turn Wrap Rows off.',
   WRAP_TRACK_LAYOUT: 'Wrapped rows draw their tracks above or below the axis. Set Track Layout to Above or Below, move the feature track off the axis in Custom Track Slots, or turn Wrap Rows off.',
   WRAP_SCALE_STYLE: 'Each wrapped row draws a ruler on its axis. Set Scale Style to Ruler (Ticks), or turn Wrap Rows off.',

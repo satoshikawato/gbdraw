@@ -102,8 +102,8 @@ export const linearWrapFormPatch = (form, value) => (value === null
  * @property {boolean} featureTrackOnAxis Custom Track Slots put the feature track on the axis (side overlay).
  */
 /**
- * Python's refusal reason for each (gbdraw/layout/linear_wrap.py), so the field's hint and the Generate refusal
- * show one text (`reasonText`).
+ * Python's refusal reason for each (gbdraw/layout/linear_wrap.py), so the field's hint while Wrap Rows is on and the
+ * Generate refusal show one text (`reasonText`).
  * @typedef {'WRAP' | 'WRAP_GRID_ROW' | 'WRAP_RECORD_POSITION' | 'WRAP_TRACK_LAYOUT'} LinearWrapBlocker
  */
 /** @type {ReadonlyArray<[keyof LinearWrapBlockerInputs, LinearWrapBlocker]>} */

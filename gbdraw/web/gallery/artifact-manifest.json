@@ -75,20 +75,20 @@
       "sha256": "8a4b8119ec8ace918b100657bf509d080236a80b77ecc214dcb1f0c9b4cef7dd"
     },
     "gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": {
-      "bytes": 260538,
-      "sha256": "7aeeb6e8b451834c5373b12244d9f118b0c2f5d295278be2795798bec6755acd"
+      "bytes": 260724,
+      "sha256": "b5343b3d01fb70e44c2669c6bf1e06101f4a82280bded934ecb0076fef7c513b"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
       "bytes": 11842052,
       "sha256": "11d2c29312fa310078918e1ce61cb7f703cd64aa070b245dbff4a8b2069e5e1b"
     },
     "gallery/sessions/ecoli_o157_sakai_rings.gbdraw-session.json.gz": {
-      "bytes": 21340479,
-      "sha256": "548d0232382dbb59404835ca860d0d131c94a9f402849014b30cfe478f22bca9"
+      "bytes": 21340556,
+      "sha256": "5d9a98e6e19a862da4a093d2274864417abbc8cdb7ecdf740b40348cff5c8294"
     },
     "gallery/sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz": {
-      "bytes": 1072027,
-      "sha256": "d890c342dc185028529121aeeaecb2268d2ac7b7776fa58cccaa3936e4d202b0"
+      "bytes": 1072103,
+      "sha256": "47b3770525c5fd53851ac8bac05cff9aa631cce928b1be8e024081391017d896"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
       "bytes": 11557828,

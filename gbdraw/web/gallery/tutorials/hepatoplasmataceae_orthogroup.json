@@ -297,7 +297,7 @@
             "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
             "viewport": {
               "width": 1600,
-              "height": 1100
+              "height": 1500
             },
             "openDetails": ["Settings"],
             "actions": [
@@ -547,7 +547,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-stable-feature-id='fe826bac7']\"); const app = window.__GBDRAW_APP__; if (!popup || !target) throw new Error('DnaA popup bounds are unavailable.'); popup.style.width = '600px'; if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = 185; }"
+                "script": "const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-stable-feature-id='fe826bac7']\"); const app = window.__GBDRAW_APP__; if (!popup || !target) throw new Error('DnaA popup bounds are unavailable.'); popup.style.width = '600px'; if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = Math.round(document.querySelector('.preview-canvas').getBoundingClientRect().top) + 24; }"
               },
               {
                 "type": "wait",

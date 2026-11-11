@@ -94,7 +94,7 @@
       "source": "webapp",
       "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
       "replayThrough": 2,
-      "cardTitle": "Input Genomes",
+      "selector": ".card[data-settings-section='input-genomes']",
       "cropPadding": 14,
       "actions": [
        {
@@ -127,7 +127,7 @@
       "source": "webapp",
       "session": "./sessions/hepatoplasma_scabrum_depth.gbdraw-session.json.gz",
       "replayThrough": 2,
-      "cardTitle": "Basic",
+      "selector": ".card[data-settings-section='basic']",
       "cropPadding": 14,
       "assertAppState": {
        "mode": "circular"
