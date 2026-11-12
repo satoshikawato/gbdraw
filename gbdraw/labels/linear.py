@@ -17,7 +17,6 @@ from .label_style import LINEAR_LABEL_HEIGHT_MARGIN_EM, ROW_LABEL_GAP_EM, LabelF
 from .linear_types import LinearLabel, is_above_feature_label, is_horizontal_label, is_level_rotation
 from .policy import LabelRenderingPolicy
 from ..config.models import LinearRenderProfile
-from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
 from ..features.objects import FeatureObject
 from ..core.record_metadata import _source_feature_index
@@ -697,13 +696,14 @@ def _feature_track_positions(
     axis_gap_factor: float | None,
     feature_lane_geometry: LinearFeatureLaneGeometry | None,
 ) -> dict[str, _TrackPosition]:
-    """The track position of every feature with coordinates, from its lane (strand and track)."""
+    """The track position of every feature with coordinates, from its lane: its track and the strand it
+    is drawn on (``FeatureObject.strand``, as the feature drawer reads it)."""
 
     positions: dict[str, _TrackPosition] = {}
     for feature_id, feature_object in feature_dict.items():
         if len(feature_object.coordinates) == 0:
             continue
-        strand = get_strand(feature_object.coordinates[0].strand)
+        strand = feature_object.strand
         if feature_lane_geometry is not None:
             positions[feature_id] = feature_lane_geometry.lane_for(
                 strand=strand,
@@ -725,11 +725,10 @@ def _feature_track_positions(
 
 class _LabelSegment(NamedTuple):
     """The stretch of a feature that its label is centred on: its start and end x in the record's drawn
-    width, its strand, and its wrap row in a wrapped record (else None)."""
+    width, and its wrap row in a wrapped record (else None)."""
 
     start_x: float
     end_x: float
-    strand: str | None
     wrap_row: int | None
 
 
@@ -746,7 +745,6 @@ def _label_segment(feature_object: FeatureObject, context: _LinearLabelContext) 
             return None
         longest_segment_start: float = projected_segment.start
         longest_segment_end: float = projected_segment.end
-        coordinate_strand: str | None = projected_segment.strand
         if record_transform is not None and record_transform.wrap_length is not None:
             wrap_row = projected_segment.row
     else:
@@ -760,13 +758,10 @@ def _label_segment(feature_object: FeatureObject, context: _LinearLabelContext) 
                 longest_segment_start = start
                 longest_segment_end = end
                 longest_segment_length = segment_length
-        # The strand of the last part, not of the longest one (OV-3430).
-        coordinate_strand = get_strand(feature_object.coordinates[-1].strand)
     alignment_width = context.alignment_width
     return _LabelSegment(
         normalize_position_to_linear_track(longest_segment_start, genome_length, alignment_width),
         normalize_position_to_linear_track(longest_segment_end, genome_length, alignment_width),
-        coordinate_strand,
         wrap_row,
     )
 
@@ -876,6 +871,9 @@ def _linear_label_entry(
     if segment is None:
         return None
     feature_start_x, feature_end_x = segment.start_x, segment.end_x
+    # The strand of the feature's lane, so a label stays beside its feature when the parts lie on both
+    # strands (a trans-spliced gene): the side a label takes follows the lane, not one of its parts.
+    strand = feature_object.strand
     assignment = feature_object.placement
     secondary_below = (
         assignment is not None and assignment.side == "below"
@@ -885,7 +883,7 @@ def _linear_label_entry(
     feature_top_y, feature_y, feature_bottom_y = position
     pose: _AboveFeaturePose | None = None
     if context.above_feature:
-        below_feature = secondary_below or (context.strandedness and segment.strand != "positive")
+        below_feature = secondary_below or (context.strandedness and strand != "positive")
         pose = _above_feature_pose(width_px, height_px, position, context.rotation_deg, below_feature, feature_anchor_x)
         rotation_deg, text_anchor, label_y = pose.rotation_deg, pose.text_anchor, pose.middle_y
         label_anchor_x = feature_anchor_x - pose.label_keys["label_contact_x_offset"]
@@ -911,7 +909,7 @@ def _linear_label_entry(
         "middle_x": label_anchor_x,
         "width_px": width_px,
         "height_px": height_px,
-        "strand": segment.strand,
+        "strand": strand,
         "secondary_below": secondary_below,
         "feature_middle_y": feature_y,
         "feature_top_y": feature_top_y,
