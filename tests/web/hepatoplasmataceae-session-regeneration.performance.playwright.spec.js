@@ -409,6 +409,8 @@ const semanticSnapshot = (page) => page.evaluate(async () => {
     vbscriptUrl: isUnsafeAttribute('href', 'vbscript:msgbox(1)'),
     arbitrarySchemeUrl: isUnsafeAttribute('href', 'custom-danger:payload')
   };
+  // The catalog stores no sequence sources (schema 6); a record's ID is on its feature rows.
+  const recordIdOf = new Map(item.biologicalFeatures.map((row) => [row.recordKey, row.record_id]));
   const relationships = [...new Set((item.comparisonMatches || []).map((match) => (
     `${match.query_record_id}->${match.subject_record_id}`
   )))];
@@ -424,7 +426,7 @@ const semanticSnapshot = (page) => page.evaluate(async () => {
     catalogItemCount: catalog.items.length,
     catalogResultIndex: item.resultIndex,
     recordKeys: item.recordKeys,
-    recordIds: item.sequenceSources.map((source) => source.recordId),
+    recordIds: item.recordKeys.map((key) => recordIdOf.get(key) ?? null),
     renderedFeatureCount: item.features.length,
     biologicalFeatureCount: item.biologicalFeatures.length,
     orthogroupCount: item.orthogroups.length,
