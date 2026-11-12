@@ -32,3 +32,4 @@ Updated: <date time, timezone>  ·  Session: <session name>
 ## ID blocks
 
 - Bug IDs: <prefix>-<from>..<to>; next free: <id>
+- Lane: <lane id, or none>
