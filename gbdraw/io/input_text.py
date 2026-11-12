@@ -75,9 +75,9 @@ GZIP_SIGNATURE = b"\x1f\x8b"
 # A reader spreads it into its except tuple: ``except (ValueError, *GZIP_ERRORS)``.
 GZIP_ERRORS = (EOFError, zlib.error, gzip.BadGzipFile)
 
-# The most bytes a gzip input file expands to (512 MiB, the Web's cap on an expanded
-# Session too). The Web reads it from the generated contracts.
-MAX_EXPANDED_INPUT_BYTES = 512 * 1024 * 1024
+# The most bytes a gzip input file expands to (2 GiB). The Web reads it from the
+# generated contracts; its Session caps are separate constants in session-file.js.
+MAX_EXPANDED_INPUT_BYTES = 2 * 1024 * 1024 * 1024
 _MIB = 1024 * 1024
 # Expanded bytes are buffered 128 KiB at a time: with the default 8 KiB, lines read slower than gzip.open's.
 _READ_CHUNK = 128 * 1024

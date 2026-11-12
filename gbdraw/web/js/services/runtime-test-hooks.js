@@ -4,8 +4,8 @@ const testHooks = () => globalThis.__GBDRAW_TEST_HOOKS__;
 export const runtimeTestHooksEnabled = () => Boolean(testHooks());
 
 /**
- * A test's stand-in for a byte cap, so a browser case needs no file of 200 or
- * 512 MiB: a saved Session's caps, or the expanded size of a gzip input file.
+ * A test's stand-in for a byte cap, so a browser case needs no file of 200 MiB
+ * or more: a saved Session's caps, or the expanded size of a gzip input file.
  * @param {'maxExpandedSessionBytes' | 'maxExpandedInputBytes'} name The cap it stands in for.
  * @returns {number | undefined}
  */

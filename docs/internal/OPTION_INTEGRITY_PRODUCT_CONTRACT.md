@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `147`
+- Contract revision: `148`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -5609,6 +5609,36 @@ Status: active Product authority
     unchanged" sentences, for a container Session only) in its May retire,
     and what it keeps in its Must preserve. Older JSON Sessions keep every one
     of those sentences.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 148 changes: `PD-OI-116` gains scenario revision `2` (concern
+  `input.gzip-expansion-cap`, the outcome `A GZIP-INPUT-2GIB`). A
+  gzip-compressed input file is read up to 2 GiB (2,147,483,648 bytes)
+  expanded. Past that, the command line, the Python API, and the Web refuse it
+  and name the file and 2048 MiB. The Session limits follow the decision
+  `session.file-container`, and plain input files keep no size limit.
+  - On `2026-11-08` the Product Decision Owner `satoshikawato` chose
+    「2 GiB に上げる（推奨）」, one number for the command line, Python, and
+    the Web, when asked in another session; the question and its options are
+    in `INBOUND-from-umbrella-20261108.md` of the campaign
+    `large-inputs-20261106`. The 2 GiB case was measured on the command line
+    and in Chromium on `2026-11-08` and `2026-11-09`.
+  - On `2026-11-09` the Owner approved the complete receipt below as it was
+    shown, by 「Q3 受領書：承認」. The session drafted all fields; the Owner
+    approved them as written.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms. The scenario revision `1` receipt and JSON are kept as
+    they were approved.
+  - New receipt SHA-256: `PD-OI-116` scenario revision `2`
+    `2ae2f46de5c4a5f7ee52bf1f78ecab254d2efb119561e3cd52bbeb311aaac191`; the scenario revision `1` receipt SHA-256 was
+    `070023adf87f897aec2a277eb20400c190431e76ba327d997aebe0d1ff1f388e`.
+  - `PD-OI-116` scenario revision `2` supersedes scenario revision `1`; its May
+    retire names what is retired. Gzip inputs are read up to 2 GiB (2,147,483,648
+    bytes) expanded, not 512 MiB; the refusal names the file and 2048 MiB on
+    all three surfaces; the Session limits follow `session.file-container`;
+    plain inputs keep no limit.
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and the
@@ -13270,22 +13300,34 @@ Decision date: 2026-11-05
 ### PD-OI-116: gzip input expansion cap
 
 - Concern key: `input.gzip-expansion-cap`
-- Scenario revision: `1`
-- Supersedes: none. No earlier record fixed the size of an input file;
-  `PD-OI-099` fixes what the Web Load of a Session refuses, and the Session
-  limits stay as they are.
+- Scenario revision: `2`
+- Supersedes: `PD-OI-116`, scenario revision `1` (Revision 119 entry above). Scenario
+  revision `2` raises the cap from 512 MiB to 2 GiB and drops the term that
+  tied it to the Web's Session limit; its May retire names what is retired.
+  Scenario revision `1` superseded none: no earlier record fixed the size of
+  an input file; `PD-OI-099` fixes what the Web Load of a Session refuses.
 - Status: `ACCEPTED`
-- Selected outcome: `A GZIP-INPUT-512`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the Product Decision Owner's choice and approval of
+- Selected outcome: `A GZIP-INPUT-512` (scenario revision `1`) and
+  `A GZIP-INPUT-2GIB` (scenario revision `2`)
+- Normative outcome: exactly the complete approved scenario revision `2`
+  `PRODUCT_DECISION` receipt and its nine-field JSON representation below.
+  The scenario revision `1` receipt and JSON are kept as they were approved.
+- Decision source (scenario revision `1`): the Product Decision Owner's choice and approval of
   `2026-11-06` described in the Revision 119 entry above. The receipt and
   JSON below reproduce all nine fields of the approved receipt without
   translation or additional terms. The runtime that implements it merges with
   it (static Product Contract co-change); this record supplies no runtime
   acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `070023adf87f897aec2a277eb20400c190431e76ba327d997aebe0d1ff1f388e`.
+- Decision source (scenario revision `2`): the Product Decision Owner's choice
+  of `2026-11-08` and approval of `2026-11-09` described in the Revision 148
+  entry above. The receipt and JSON below reproduce all nine fields of the
+  approved receipt without translation or additional terms. The runtime,
+  tests, and documentation that implement it merge with it (static Product
+  Contract co-change); this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `2ae2f46de5c4a5f7ee52bf1f78ecab254d2efb119561e3cd52bbeb311aaac191`.
 
 ```text
 PRODUCT_DECISION
@@ -13315,6 +13357,40 @@ Decision date: 2026-11-06
   "acceptedResidualRisk": "約 21 Mbp を超えるゲノムの塩基ごとの depth 表を gzip のまま渡す場合は、展開が必要になる",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-06"
+}
+```
+
+Scenario revision `2` receipt (approved by `satoshikawato` on `2026-11-09`;
+the Revision 148 entry above):
+
+```text
+PRODUCT_DECISION
+Concern: input.gzip-expansion-cap（gzip 入力ファイルの展開サイズ上限）
+Scenario revision: 2
+Choice: A GZIP-INPUT-2GIB
+  - gzip 圧縮の入力ファイル（GenBank・DDBJ・EMBL、GFF3、FASTA、TSV 表、depth 表、比較結果の表）は、展開後 2 GiB（2,147,483,648 バイト）までを読む。それを超えるものは、CLI・Python API・Web のすべてで、ファイル名と 2048 MiB を示して拒否する。上限は CLI・Python API・Web で同じ 1 つの数値にする。
+  - 拒否したファイルは描画に使わない。展開して平文のファイルにすれば読める。
+  - 平文の入力ファイルは今までどおり大きさの上限なし。
+  - Session ファイルの上限は、Session ファイルの器の決定（session.file-container）のとおりで、この受領書では変えない。
+Rationale: 小さな .gz が数 GB に展開される圧縮爆弾で、CLI がメモリを使い切ること、Web のタブが落ちることを防ぐ。上限は 1 つの数値にする。改訂 1 の 512 MiB は、Web で Session に入る大きさに揃えた数値だったが、Session ファイルの器（session.file-container）で Session に入れる入力の大きさの上限がなくなり、その理由はなくなった。2 GiB なら、塩基ごとの depth 表を、1 行約 25 バイトで約 86 Mbp、配列名が短く 1 行約 19 バイトなら約 113 Mbp まで、gzip のまま読める。2026-11-08〜09 に、上限を 2 GiB にした計測用の版で、展開後 2,147,483,644 バイト（2 GiB の 4 バイト手前、112.9 Mbp、gzip で 358 MiB）の depth 表を、CLI（最大メモリ 581 MiB）と Web（Chromium、Generate 約 68 秒、タブのメモリ最大約 5.7 GiB）で描けた。Web は、入力の中身を写さずにファイルのままページから描画の処理へ渡す修正（OV-2749）を入れた版で測った。この修正がないと、Chromium は 2,047 MiB 以上の入力を描画の処理へ渡せず、Generate が止まる。この上限の変更は、その修正の後に入れる。Web の数値は、Session ファイルの器（session.file-container）の変更を入れる前の版で測った。その変更の後の版では、時間とメモリは変わりうる。2 GiB を 11.9 MiB 超える gzip は、CLI と Web がファイル名と 2048 MiB を示して断った。
+Must preserve: 2 GiB 以下の gzip 入力と、すべての平文入力の読み込み。拒否するときに、ファイル名と上限を示し、展開すれば読めると伝えること。Session の上限と形式（session.file-container）
+May retire: 展開後 2 GiB を超える gzip 入力を直接読むこと。改訂 1 の「Session ファイルの扱いは今のまま（Web は 200 MiB のファイルと展開後 512 MiB の上限、Python の Session の読み込みは上限なし）」（Session の上限は session.file-container が決める。Python の Session の読み込みは今までどおり上限なし）
+Accepted residual risk: 塩基ごとの depth 表で約 86〜113 Mbp を超えるゲノムを gzip のまま渡す場合は、展開が必要になる。上限に近い gzip 入力を Web で描くと、タブのメモリが数 GiB になり（2026-11-09 の計測で最大約 5.7 GiB）、メモリの少ない PC やスマホでは描けないことがある。小さな .gz でも、展開後 2 GiB 分の読み込みと処理（時間とメモリ）をさせられる（改訂 1 の 4 倍）。確かめたのは、この PC（Linux）の CLI と Chromium で depth 表を描くことだけで、Firefox、Safari、スマホは確かめていない。上限に近い GenBank・FASTA などの gzip は確かめていない。Web では描画の処理が使えるメモリが 4 GiB までなので、そうした入力は上限より前に描けないことがある。
+Owner: satoshikawato
+Decision date: 2026-11-09
+```
+
+```json
+{
+  "concern": "input.gzip-expansion-cap（gzip 入力ファイルの展開サイズ上限）",
+  "scenarioRevision": 2,
+  "choice": "A GZIP-INPUT-2GIB\n  - gzip 圧縮の入力ファイル（GenBank・DDBJ・EMBL、GFF3、FASTA、TSV 表、depth 表、比較結果の表）は、展開後 2 GiB（2,147,483,648 バイト）までを読む。それを超えるものは、CLI・Python API・Web のすべてで、ファイル名と 2048 MiB を示して拒否する。上限は CLI・Python API・Web で同じ 1 つの数値にする。\n  - 拒否したファイルは描画に使わない。展開して平文のファイルにすれば読める。\n  - 平文の入力ファイルは今までどおり大きさの上限なし。\n  - Session ファイルの上限は、Session ファイルの器の決定（session.file-container）のとおりで、この受領書では変えない。",
+  "rationale": "小さな .gz が数 GB に展開される圧縮爆弾で、CLI がメモリを使い切ること、Web のタブが落ちることを防ぐ。上限は 1 つの数値にする。改訂 1 の 512 MiB は、Web で Session に入る大きさに揃えた数値だったが、Session ファイルの器（session.file-container）で Session に入れる入力の大きさの上限がなくなり、その理由はなくなった。2 GiB なら、塩基ごとの depth 表を、1 行約 25 バイトで約 86 Mbp、配列名が短く 1 行約 19 バイトなら約 113 Mbp まで、gzip のまま読める。2026-11-08〜09 に、上限を 2 GiB にした計測用の版で、展開後 2,147,483,644 バイト（2 GiB の 4 バイト手前、112.9 Mbp、gzip で 358 MiB）の depth 表を、CLI（最大メモリ 581 MiB）と Web（Chromium、Generate 約 68 秒、タブのメモリ最大約 5.7 GiB）で描けた。Web は、入力の中身を写さずにファイルのままページから描画の処理へ渡す修正（OV-2749）を入れた版で測った。この修正がないと、Chromium は 2,047 MiB 以上の入力を描画の処理へ渡せず、Generate が止まる。この上限の変更は、その修正の後に入れる。Web の数値は、Session ファイルの器（session.file-container）の変更を入れる前の版で測った。その変更の後の版では、時間とメモリは変わりうる。2 GiB を 11.9 MiB 超える gzip は、CLI と Web がファイル名と 2048 MiB を示して断った。",
+  "mustPreserve": "2 GiB 以下の gzip 入力と、すべての平文入力の読み込み。拒否するときに、ファイル名と上限を示し、展開すれば読めると伝えること。Session の上限と形式（session.file-container）",
+  "mayRetire": "展開後 2 GiB を超える gzip 入力を直接読むこと。改訂 1 の「Session ファイルの扱いは今のまま（Web は 200 MiB のファイルと展開後 512 MiB の上限、Python の Session の読み込みは上限なし）」（Session の上限は session.file-container が決める。Python の Session の読み込みは今までどおり上限なし）",
+  "acceptedResidualRisk": "塩基ごとの depth 表で約 86〜113 Mbp を超えるゲノムを gzip のまま渡す場合は、展開が必要になる。上限に近い gzip 入力を Web で描くと、タブのメモリが数 GiB になり（2026-11-09 の計測で最大約 5.7 GiB）、メモリの少ない PC やスマホでは描けないことがある。小さな .gz でも、展開後 2 GiB 分の読み込みと処理（時間とメモリ）をさせられる（改訂 1 の 4 倍）。確かめたのは、この PC（Linux）の CLI と Chromium で depth 表を描くことだけで、Firefox、Safari、スマホは確かめていない。上限に近い GenBank・FASTA などの gzip は確かめていない。Web では描画の処理が使えるメモリが 4 GiB までなので、そうした入力は上限より前に描けないことがある。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-09"
 }
 ```
 

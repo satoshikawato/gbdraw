@@ -812,7 +812,7 @@ under "Cited ids without a record".
   - `tests/web/region-select.test.mjs`
   - `tests/web/sequence-search.test.mjs`
 
-- [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap): gzip input expansion cap. ACCEPTED, concern `input.gzip-expansion-cap`, scenario revision 1.
+- [PD-OI-116](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-116-gzip-input-expansion-cap): gzip input expansion cap. ACCEPTED, concern `input.gzip-expansion-cap`, scenario revision 2, supersedes scenario revision 1.
   - `tests/test_gzip_inputs.py`
   - `tests/web/annotations.test.mjs`
   - `tests/web/byte-utils-capped-stream.test.mjs`

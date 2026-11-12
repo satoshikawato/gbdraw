@@ -157,8 +157,8 @@ def test_a_long_file_name_is_named_as_the_page_names_it(small_cap: int, tmp_path
         assert context["inputName"] == (shown or name)
 
 
-def test_the_cap_is_512_mib() -> None:
-    assert input_text.MAX_EXPANDED_INPUT_BYTES == 536_870_912
+def test_the_cap_is_2_gib() -> None:
+    assert input_text.MAX_EXPANDED_INPUT_BYTES == 2_147_483_648
 
 
 def test_a_gzip_input_past_the_cap_is_refused_by_name(small_cap: int, tmp_path: Path) -> None:

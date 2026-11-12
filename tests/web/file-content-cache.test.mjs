@@ -104,10 +104,10 @@ assert.equal(await readFileText(plainNamedGz), 'LOCUS plain');
 
 // A gzip input expands to at most MAX_EXPANDED_INPUT_BYTES (Python's cap, from the
 // generated contracts): past it the read rejects with INPUT_UNREADABLE, naming the
-// file and the cap in MiB. A test hook stands in for the 512 MiB cap.
+// file and the cap in MiB. A test hook stands in for the 2 GiB cap.
 {
   const { MAX_EXPANDED_INPUT_BYTES } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
-  assert.equal(MAX_EXPANDED_INPUT_BYTES, 512 * 1024 * 1024);
+  assert.equal(MAX_EXPANDED_INPUT_BYTES, 2 * 1024 * 1024 * 1024);
   const cap = 1024 * 1024;
   const gzipOf = (name, size) => ({ name, async arrayBuffer() { return Uint8Array.from(gzipSync(Buffer.alloc(size, 0x41))).buffer; } });
   globalThis.__GBDRAW_TEST_HOOKS__ = { maxExpandedInputBytes: cap };

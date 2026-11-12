@@ -1164,7 +1164,7 @@ into the `[Unreleased]` list below.
   `tools/vendored-web-assets/package.json` lists the vendored npm packages so
   that Dependabot reports their advisories. The vendored files do not change.
 - Changed: a gzip-compressed input file (GenBank/DDBJ/EMBL, GFF3, FASTA, TSV
-  tables, depth files, comparison tables) is read up to 512 MiB expanded. A
+  tables, depth files, comparison tables) is read up to 2 GiB (2,048 MiB) expanded. A
   larger one is refused on the command line, in the Python API, and in the Web
   app with a message that names the file and the limit, because a small gzip
   file can expand to many gigabytes and use up the memory of the command line
