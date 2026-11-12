@@ -943,7 +943,7 @@ def _normalize_circular_track_slots(
 
 
 def _get_args(
-    args,
+    args: Sequence[str] | None,
     *,
     _allow_legacy_track_transport: bool = False,
 ) -> argparse.Namespace:
@@ -962,9 +962,13 @@ def _get_args(
     visualizing GC content, GC skew, and specific genomic features.
     """
     parser = _circular_parser()
-    args = parser.parse_args(args)
-    _validate_circular_args(parser, args, legacy_session=_allow_legacy_track_transport)
-    return args
+    namespace = parser.parse_args(args)
+    _validate_circular_args(
+        parser, namespace, legacy_session=_allow_legacy_track_transport
+    )
+    return namespace
+
+
 def replay_legacy_session(
     document: SessionDocument,
     session_request: SessionCliRequest,

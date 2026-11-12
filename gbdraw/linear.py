@@ -1173,7 +1173,7 @@ def _validate_collinear_args(parser: argparse.ArgumentParser, args: argparse.Nam
         parser.error("--collinear_max_paralog_links_per_orthogroup must be > 0")
 
 
-def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
+def _get_args(args: Sequence[str] | None, *, _legacy_session: bool = False) -> argparse.Namespace:
     """
     Parses command-line arguments for generating linear genome diagrams.
 
@@ -1193,9 +1193,9 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     """
     parser = _linear_parser()
     args_list = [str(token) for token in (args or [])]
-    args = parser.parse_args(args)
-    _validate_linear_args(parser, args, args_list, legacy_session=_legacy_session)
-    return args
+    namespace = parser.parse_args(args)
+    _validate_linear_args(parser, namespace, args_list, legacy_session=_legacy_session)
+    return namespace
 
 
 def replay_legacy_session(

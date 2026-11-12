@@ -80,4 +80,9 @@ def write_losat_output_files(
         commit_staged_outputs(staged, overwrite=overwrite)
 
 
-__all__ = ["parse_positive_int", "write_losat_output_files"]
+__all__ = [
+    "add_losat_runtime_args",
+    "add_losatn_task_arg",
+    "parse_positive_int",
+    "write_losat_output_files",
+]
