@@ -11,6 +11,7 @@
 /** @import { WebState } from '../state.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
 import { createFeatureLabelActions } from './feature-editor/label-actions.js';
+import { createLabelTableActions } from './feature-editor/label-table.js';
 import { createFeatureRuleActions } from './feature-editor/rule-actions.js';
 import { createFeatureSvgActions } from './feature-editor/svg-actions.js';
 import { createFeatureVisibilityActions } from './feature-editor/visibility-actions.js';
@@ -199,10 +200,15 @@ export const createFeatureEditor = ({
     showNotice
   });
   const labelActions = createFeatureLabelActions({
-    state, commitActiveResultEdit, currentResults, getResultIdentity, isRuleInputCurrent: rulePreparation.isCurrent, snapshotRuleInputs: rulePreparation.snapshot, ref, computed, watch, nextTick, getCommittedRequest, showNotice,
+    state, commitActiveResultEdit, currentResults, getResultIdentity, computed, watch, nextTick, getCommittedRequest,
     setFeatureVisibility: visibilityActions.setFeatureVisibility,
-    prepareDrawnFeatureMatches: visibilityActions.prepareDrawnFeatureMatches,
-    evaluateLabelRules
+    prepareDrawnFeatureMatches: visibilityActions.prepareDrawnFeatureMatches
+  });
+  // Load and Export Label TSV; the label owner writes the label edits a load makes.
+  const labelTableActions = createLabelTableActions({
+    state, ref, computed, isRuleInputCurrent: rulePreparation.isCurrent, snapshotRuleInputs: rulePreparation.snapshot, evaluateLabelRules, showNotice,
+    displayedFeatures: labelActions.displayedFeatures, labelFeature: labelActions.labelFeature, rowOf: labelActions.rowOf,
+    applyLabelTable: labelActions.applyLabelTable, rememberLabelImportNotice: labelActions.rememberLabelImportNotice
   });
   editorPorts.prepareDrawnFeatureMatches = visibilityActions.prepareDrawnFeatureMatches;
   editorPorts.applyFeatureVisibilityToLabels = labelActions.applyFeatureVisibilityToLabels;
@@ -332,11 +338,11 @@ export const createFeatureEditor = ({
     clearLabelBuildNotices: labelActions.clearLabelBuildNotices,
     moveDrawnLabelVisibility: labelActions.moveDrawnLabelVisibility,
     ...featureEditTableActions,
-    downloadLabelOverrideTable: labelActions.downloadLabelOverrideTable,
-    loadLabelOverrideTable: labelActions.loadLabelOverrideTable,
-    canRetryLabelImportFailure: labelActions.canRetryLabelImportFailure,
-    retryLabelImportFailure: labelActions.retryLabelImportFailure,
-    editLabelImportFailure: labelActions.editLabelImportFailure,
+    downloadLabelOverrideTable: labelTableActions.downloadLabelOverrideTable,
+    loadLabelOverrideTable: labelTableActions.loadLabelOverrideTable,
+    canRetryLabelImportFailure: labelTableActions.canRetryLabelImportFailure,
+    retryLabelImportFailure: labelTableActions.retryLabelImportFailure,
+    editLabelImportFailure: labelTableActions.editLabelImportFailure,
     updateClickedFeatureLabelText: labelActions.updateClickedFeatureLabelText,
     handleLabelTextScopeChoice: labelActions.handleLabelTextScopeChoice,
     handleHiddenLabelTextChoice: labelActions.handleHiddenLabelTextChoice,

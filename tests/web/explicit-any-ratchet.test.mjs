@@ -38,7 +38,6 @@ const EXPLICIT_ANY_BASELINE = {
   'app/circular-track-slots.js': 4,
   'app/feature-editor.js': 17,
   'app/feature-editor/feature-edit-table.js': 7,
-  'app/feature-editor/label-actions.js': 2,
   'app/feature-editor/placement-actions.js': 9,
   'app/feature-editor/rule-actions.js': 4,
   'app/feature-editor/svg-actions.js': 10,

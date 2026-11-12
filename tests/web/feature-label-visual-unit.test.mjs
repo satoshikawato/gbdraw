@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { LABEL_ABSENCE_REASONS, createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
+import { createLabelTableActions } from '../../gbdraw/web/js/app/feature-editor/label-table.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
@@ -108,8 +109,9 @@ const buildHarness = ({
     ruleMatchingPending: ref(false),
     errorLog: ref(null), processing: ref(false), labelReflowProcessing: ref(false), resultGenerationKey: ref(0)
   };
-  const actions = createFeatureLabelActions({
-    ref, computed: get => ({ get value() { return get(); } }),
+  const computed = get => ({ get value() { return get(); } });
+  const labelActions = createFeatureLabelActions({
+    computed,
     state: withDrawings(state),
     commitActiveResultEdit(reason) {
       assert.equal(reason, 'feature-label');
@@ -118,12 +120,15 @@ const buildHarness = ({
     },
     currentResults: () => state.results.value,
     getResultIdentity: () => 'result:1',
-    isRuleInputCurrent,
-    snapshotRuleInputs,
-    evaluateLabelRules,
-    showNotice,
     getCommittedRequest: () => (diagramOptions ? { diagramOptions } : null)
   });
+  // The label table owner, wired as app/feature-editor.js wires it.
+  const labelTableActions = createLabelTableActions({
+    state, ref, computed, isRuleInputCurrent, snapshotRuleInputs, evaluateLabelRules, showNotice,
+    displayedFeatures: labelActions.displayedFeatures, labelFeature: labelActions.labelFeature, rowOf: labelActions.rowOf,
+    applyLabelTable: labelActions.applyLabelTable, rememberLabelImportNotice: labelActions.rememberLabelImportNotice
+  });
+  const actions = { ...labelActions, ...labelTableActions };
   return { actions, mutations, state, svg };
 };
 
